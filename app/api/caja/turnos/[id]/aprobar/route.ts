@@ -11,6 +11,7 @@ import { aprobarCierre } from '@/lib/caja/core';
 import { db } from '@/lib/db/drizzle';
 import { users, teams } from '@/lib/db/schema';
 import { sendCajaCierreAprobadoEmail } from '@/lib/email';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 const schema = z.object({ observaciones: z.string().max(500).optional() });
 
@@ -98,6 +99,6 @@ async function notificarCajeroCierreAprobado(
     cuadrado:      diferencia === 0,
     aprobacionObs,
     teamName,
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
+    appUrl: baseDeEnlaces(),
   });
 }

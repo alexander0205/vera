@@ -25,8 +25,19 @@
  *     trescientas familias a la red local del portátil de alguien.
  */
 
-/** A dónde apunta el sistema cuando nadie dice otra cosa. */
-export const BASE_PUBLICA = 'https://facturacion-v2.zero.com.do';
+/**
+ * A dónde apunta el sistema cuando nadie dice otra cosa.
+ *
+ * `app.zero.com.do` porque es el host de la cuenta (`APP_HOST`) y el único
+ * donde `/reset-password` y compañía resuelven sin dar un salto de más — el
+ * proxy manda ahí toda ruta de cuenta que llegue por otro host.
+ *
+ * Antes era `facturacion-v2.zero.com.do`, que no es un dominio de producto sino
+ * un resto de la migración a v2. Todo funcionaba —los siete dominios son alias
+ * del mismo despliegue—, pero salía impreso en cada correo y, peor, dentro del
+ * enlace de pago que le llega al padre por WhatsApp.
+ */
+export const BASE_PUBLICA = 'https://app.zero.com.do';
 
 /**
  * ¿El host es de la máquina o de la red de casa?

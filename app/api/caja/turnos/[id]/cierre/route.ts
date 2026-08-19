@@ -15,6 +15,7 @@ import { solicitarCierre } from '@/lib/caja/core';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, users, teams } from '@/lib/db/schema';
 import { sendCajaCierreAprobacionEmail } from '@/lib/email';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 const cierreSchema = z.object({
   efectivoContado: z.number().min(0),   // DOP
@@ -132,6 +133,6 @@ async function notificarAdminsCierre(input: {
     diferenciaSigNo: diferencia < 0 ? '-' : '+',
     cierreObs:       resultado.turno.cierreObs ?? null,
     teamName,
-    aprobacionUrl:   `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/caja/aprobaciones`,
+    aprobacionUrl:   `${baseDeEnlaces()}/dashboard/caja/aprobaciones`,
   });
 }
