@@ -12,9 +12,11 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
-  PackagePlus, ArrowDownLeft, ArrowUpRight, Wrench, Loader2, Package,
+  PackagePlus, ArrowDownLeft, ArrowUpRight, ArrowDownCircle, ArrowUpCircle,
+  Wrench, Loader2, Package,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { Autocomplete } from '@/app/(dashboard)/dashboard/facturas/nueva/components/Autocomplete';
 
 interface Movimiento {
   id:             number;
@@ -36,6 +38,38 @@ interface ProductoBasico {
   nombre: string;
 }
 
+/** Producto para el buscador tipo tabla (referencia · nombre · descripción). */
+interface ProductoBusqueda {
+  id:          number;
+  nombre:      string;
+  descripcion: string | null;
+  referencia:  string | null;
+}
+
+/** Fila del dropdown de productos: referencia · nombre + descripción.
+ *  Mismo layout que el buscador de productos en facturas. */
+function renderProductoOption(p: ProductoBusqueda) {
+  return (
+    <div className="grid grid-cols-[5rem_1fr] items-start gap-x-3 gap-y-0.5">
+      <span
+        className="font-mono text-xs text-gray-500 truncate pt-0.5"
+        title={p.referencia ?? undefined}
+      >
+        {p.referencia || '—'}
+      </span>
+      <p className="min-w-0 font-medium truncate">{p.nombre}</p>
+      {p.descripcion && (
+        <p
+          className="col-span-2 min-w-0 truncate text-xs text-gray-500"
+          title={p.descripcion}
+        >
+          {p.descripcion}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const TIPO_LABELS: Record<string, string> = {
   VENTA:          'Venta',
   ENTRADA:        'Entrada',
@@ -55,6 +89,14 @@ const TIPO_ICONS: Record<string, React.ReactNode> = {
 };
 
 type TipoAjuste = 'ENTRADA' | 'AJUSTE_SALIDA' | 'AJUSTE_ENTRADA' | 'STOCK_INICIAL';
+
+/** Dirección del stock: STOCK_INICIAL/ENTRADA/AJUSTE_ENTRADA suman, AJUSTE_SALIDA resta. */
+const TIPO_SUMA: Record<TipoAjuste, boolean> = {
+  STOCK_INICIAL:  true,
+  ENTRADA:        true,
+  AJUSTE_ENTRADA: true,
+  AJUSTE_SALIDA:  false,
+};
 
 interface AjusteForm {
   productoId: string;
@@ -80,6 +122,7 @@ export function InventarioPageClient() {
   const [saving,      setSaving]          = useState(false);
   const [opError,     setOpError]         = useState<string | null>(null);
   const [ajusteOk,    setAjusteOk]        = useState<string | null>(null);
+  const [productoNombre, setProductoNombre] = useState('');
 
   const productoFilter = filterValues.productoId ?? '';
   const tipoFilter     = filterValues.tipo        ?? '';
@@ -123,12 +166,20 @@ export function InventarioPageClient() {
       setAjusteOk(`Stock actualizado: ${data.stockActual} unidades`);
       setShowAjuste(false);
       setAjuste(EMPTY_AJUSTE);
+      setProductoNombre('');
       cargar(productoFilter, tipoFilter);
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error');
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Buscador de productos tipo bien para el campo Producto del movimiento. */
+  async function buscarProductosBien(q: string): Promise<ProductoBusqueda[]> {
+    const res  = await fetch(`/api/productos?tipo=bien&q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    return data.productos ?? [];
   }
 
   const columns: DataTableColumn<Movimiento>[] = [
@@ -245,7 +296,7 @@ export function InventarioPageClient() {
           hint:  'Los movimientos aparecen aquí cuando emites facturas o haces ajustes manuales',
         }}
         headerActions={
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); }}>
+          <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); setProductoNombre(''); }}>
             <PackagePlus className="h-4 w-4 mr-2" />
             Nuevo ajuste
           </Button>
@@ -263,7 +314,17 @@ export function InventarioPageClient() {
             )}
 
             <div className="space-y-1.5">
-              <Label>Tipo de movimiento</Label>
+              <div className="flex items-center justify-between">
+                <Label>Tipo de movimiento</Label>
+                {/* Dirección del stock, visible al elegir el tipo (espejo de caja). */}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                  TIPO_SUMA[ajuste.tipo] ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'
+                }`}>
+                  {TIPO_SUMA[ajuste.tipo]
+                    ? <><ArrowDownCircle className="h-3 w-3" /> Suma stock</>
+                    : <><ArrowUpCircle className="h-3 w-3" /> Resta stock</>}
+                </span>
+              </div>
               <Select value={ajuste.tipo} onValueChange={(v) => setAjuste(a => ({ ...a, tipo: v as TipoAjuste }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -277,15 +338,16 @@ export function InventarioPageClient() {
 
             <div className="space-y-1.5">
               <Label>Producto</Label>
-              <Select value={ajuste.productoId} onValueChange={(v) => setAjuste(a => ({ ...a, productoId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecciona un producto..." /></SelectTrigger>
-                <SelectContent>
-                  {productos.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {productos.length === 0 && (
-                <p className="text-xs text-gray-400">No hay productos tipo bien con control de inventario activo.</p>
-              )}
+              {/* Mismo buscador tipo tabla (referencia + nombre + descripción) que en facturas. */}
+              <Autocomplete<ProductoBusqueda>
+                placeholder="Buscar producto por nombre o código..."
+                value={productoNombre}
+                onSearch={buscarProductosBien}
+                onSelect={(p) => { setAjuste(a => ({ ...a, productoId: String(p.id) })); setProductoNombre(p.nombre); }}
+                onClear={() => { setAjuste(a => ({ ...a, productoId: '' })); setProductoNombre(''); }}
+                renderOption={renderProductoOption}
+                dropdownMinWidth={420}
+              />
             </div>
 
             <div className="space-y-1.5">

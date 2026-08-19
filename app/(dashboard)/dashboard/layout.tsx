@@ -926,8 +926,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
   const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
+  // Shell fijo: `main` es único dueño del scroll. Evita scroll del documento
+  // al reducir ventana, que creaba una segunda barra junto a la del formulario.
   return (
-    <div className="flex h-[100dvh] bg-gray-50 overflow-hidden">
+    <div className="fixed inset-0 flex bg-gray-50 overflow-hidden">
       <GlobalSearch />
 
       {/* Sidebar — desktop (oculto cuando collapsed) */}
@@ -948,7 +950,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
 
       {/* Main column */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
         <DashboardTopBar
           teams={teams}
           activeTeamId={activeTeamId}
@@ -961,7 +963,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           onSwitch={handleSwitch}
         />
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto min-h-0">
           {children}
         </main>
       </div>
