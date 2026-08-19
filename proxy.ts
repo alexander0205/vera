@@ -149,18 +149,30 @@ export async function proxy(request: NextRequest) {
       });
     } catch (error) {
       console.error('Error updating session:', error);
-      // Con el MISMO domain con que se creó arriba: sin él se borra una cookie
-      // host-only que en prod no existe, y la sesión rota se queda puesta.
-      res.cookies.delete({
+
+      // El borrado va sobre la respuesta que DE VERDAD se devuelve.
+      //
+      // Antes se aplicaba a `res` y, en ruta protegida, se devolvía un
+      // `NextResponse.redirect` nuevo: `res` se tiraba entero y el borrado con
+      // él. O sea que fallaba justo en el caso que importa —sesión rota
+      // entrando a una ruta protegida—, y la cookie mala sobrevivía a todas las
+      // peticiones siguientes.
+      //
+      // Y con el MISMO domain con que se creó arriba: sin él se borra una
+      // cookie host-only que en producción no existe.
+      const salida = isProtectedRoute
+        ? NextResponse.redirect(new URL('/sign-in', request.url))
+        : res;
+
+      salida.cookies.delete({
         name: 'session',
         path: '/',
         ...(process.env.SESSION_COOKIE_DOMAIN
           ? { domain: process.env.SESSION_COOKIE_DOMAIN }
           : {}),
       });
-      if (isProtectedRoute) {
-        return NextResponse.redirect(new URL('/sign-in', request.url));
-      }
+
+      return salida;
     }
   }
 

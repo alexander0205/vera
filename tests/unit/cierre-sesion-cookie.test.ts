@@ -75,3 +75,54 @@ describe('clearSession', () => {
     expect(typeof cookieStore.delete.mock.calls[0][0]).not.toBe('string');
   });
 });
+
+/**
+ * El proxy: la cookie se borra sobre la respuesta que se devuelve.
+ *
+ * Segundo bug del mismo bloque, y este no lo vio la lectura del código sino la
+ * verificación en producción: la petición con una cookie corrupta redirigía a
+ * /sign-in y no traía ni un Set-Cookie.
+ *
+ * La causa: el borrado se aplicaba a `res`, pero en ruta protegida se devolvía
+ * un `NextResponse.redirect` nuevo. `res` se tiraba entero y el borrado con él.
+ * Fallaba justo donde importa —sesión rota entrando a ruta protegida—, así que
+ * la cookie mala sobrevivía a todas las peticiones siguientes.
+ */
+describe('proxy: sesión corrupta', () => {
+  /** Respuesta con su bolsa de cookies, como NextResponse. */
+  function respuesta(nombre: string) {
+    const borradas: unknown[] = [];
+    return { nombre, borradas, cookies: { delete: (o: unknown) => { borradas.push(o); } } };
+  }
+
+  /** El bloque catch, tal como quedó: decide la salida y luego borra sobre ella. */
+  function alFallarLaSesion(esRutaProtegida: boolean) {
+    const res = respuesta('next');
+    const salida = esRutaProtegida ? respuesta('redirect') : res;
+    salida.cookies.delete({ name: 'session', path: '/', domain: DOMINIO });
+    return salida;
+  }
+
+  it('en ruta protegida borra sobre el redirect, no sobre la que se descarta', () => {
+    const salida = alFallarLaSesion(true);
+    expect(salida.nombre).toBe('redirect');
+    expect(salida.borradas).toHaveLength(1);
+  });
+
+  it('en ruta pública borra sobre la respuesta que sigue de largo', () => {
+    const salida = alFallarLaSesion(false);
+    expect(salida.nombre).toBe('next');
+    expect(salida.borradas).toHaveLength(1);
+  });
+
+  it('la respuesta devuelta nunca sale sin el borrado — el bug era exactamente eso', () => {
+    for (const protegida of [true, false]) {
+      expect(alFallarLaSesion(protegida).borradas).toHaveLength(1);
+    }
+  });
+
+  it('y el borrado del proxy también lleva el domain', () => {
+    const salida = alFallarLaSesion(true);
+    expect(salida.borradas[0]).toMatchObject({ name: 'session', domain: DOMINIO, path: '/' });
+  });
+});

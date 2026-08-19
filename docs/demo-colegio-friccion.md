@@ -187,3 +187,37 @@ comprueba invitación pendiente, manda el correo.
 Vale la pena dejarlo escrito: el patrón correcto ya existía en el mismo archivo
 que el roto. `crearEmpresa` era la excepción, no la regla — y las 4 empresas
 huérfanas de producción se pueden recuperar desde esa pantalla.
+
+
+---
+
+## F-07 · El proxy borraba la cookie sobre una respuesta que tiraba · **ARREGLADO**
+
+**Cuándo:** verificando en producción que F-01 había quedado bien. Este no lo vio
+la lectura del código — lo destapó la comprobación empírica.
+
+**Cómo se vio:** una petición a una ruta protegida con una cookie de sesión
+corrupta debería responder con un `Set-Cookie` que la borra. No traía ninguno:
+
+```
+$ curl -D - https://app.zero.com.do/dashboard -H "Cookie: session=basura.invalida.token"
+HTTP/2 307
+location: https://app.zero.com.do/sign-in
+(sin set-cookie)
+```
+
+**Qué pasaba:** en el `catch` de `proxy.ts` el borrado se aplicaba a `res`, pero
+si la ruta era protegida se devolvía un `NextResponse.redirect` **nuevo**. `res`
+se descartaba entero y el borrado con él.
+
+Fallaba exactamente en el caso que importa —sesión rota entrando a una ruta
+protegida— y la cookie mala sobrevivía a todas las peticiones siguientes.
+
+**Arreglo:** se decide primero cuál es la respuesta de salida, se borra sobre
+esa, y se devuelve. El `domain` de F-01 se conserva.
+
+**Lección:** F-01 se dio por bueno con `tsc`, 570 tests y una lectura de los
+cuatro sitios. El quinto solo apareció al pedirle a producción que lo demostrara.
+Con un bug de sesión, la única prueba que vale es la respuesta HTTP.
+
+**Estado:** arreglado. **Sin desplegar** al momento de escribir esto.
