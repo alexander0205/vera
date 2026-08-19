@@ -10,7 +10,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -31,15 +30,27 @@ export function getInitials(name: string | null, email: string) {
 }
 
 export function ProfileDropdown({ user }: { user: UserInfo | null }) {
-  const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
   async function handleSignOut() {
     setAnchorEl(null);
     await fetch('/api/user', { method: 'DELETE' });
-    router.push('/sign-in');
-    router.refresh();
+
+    // Recarga entera, no `router.push`. Por dos razones, y cualquiera basta:
+    //
+    // 1. La caché del router del cliente guarda las respuestas RSC de las
+    //    pantallas por las que pasó el usuario que se acaba de ir. Una
+    //    navegación suave la conserva: quien entre después en ese mismo
+    //    navegador puede ver, al volver atrás, datos de la sesión anterior.
+    //    Cerrar sesión tiene que tirar esa caché, y solo la tira una carga
+    //    completa.
+    //
+    // 2. `/sign-in` es PPR y su shell estático va vacío (el <Suspense> de la
+    //    página no lleva fallback), así que la navegación suave pintaba el
+    //    hueco vacío y ahí se quedaba: pantalla en blanco al cerrar sesión,
+    //    que se arreglaba recargando a mano.
+    window.location.href = '/sign-in';
   }
 
   const menuItems = [

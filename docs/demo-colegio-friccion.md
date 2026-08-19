@@ -221,3 +221,57 @@ cuatro sitios. El quinto solo apareció al pedirle a producción que lo demostra
 Con un bug de sesión, la única prueba que vale es la respuesta HTTP.
 
 **Estado:** arreglado. **Sin desplegar** al momento de escribir esto.
+
+
+---
+
+## F-08 · Pantalla en blanco al cerrar sesión · **ARREGLADO**
+
+**Cuándo:** reportado por el dueño justo después de desplegar F-01. Primera
+sospecha: regresión mía. No lo era, pero mi arreglo la sacó a la luz.
+
+**Qué se veía:** cerrar sesión dejaba `/sign-in` completamente en blanco.
+Recargar a mano lo arreglaba.
+
+**Diagnóstico.** Dos cosas tenían que coincidir, y coincidían:
+
+1. **El shell de `/sign-in` estaba vacío.** `Login` lee `useSearchParams`, así
+   que va dentro de un `<Suspense>` — pero sin `fallback`. Con PPR el shell
+   estático de la ruta *es* lo que pinte el fallback, o sea nada: el HTML del
+   servidor traía 51 caracteres, solo el `<title>`. Reproducido con `curl` y
+   también en local. El propio HTML dice por qué el hueco no se rellena en
+   servidor:
+
+   ```html
+   <template data-dgst="BAILOUT_TO_CLIENT_SIDE_RENDERING"></template>
+   ```
+
+   Ese trozo lo pinta el cliente o no lo pinta nadie.
+
+2. **El logout navegaba suave.** `handleSignOut` hacía
+   `router.push('/sign-in')`, que sirve la entrada de la caché del router —el
+   shell vacío— sin ir al servidor. Sin JS que rellenara el hueco, ahí se
+   quedaba.
+
+Por eso una carga fresca del navegador se veía perfecta y solo fallaba viniendo
+de cerrar sesión.
+
+**Lo que se descartó por el camino:** el layout `(login)/layout.tsx` que se había
+agregado para Google Analytics. Se quitó, se reconstruyó y `/sign-in` seguía
+vacío — no era eso.
+
+**Arreglo, dos partes, cada una se sostiene sola:**
+
+- `handleSignOut` sale con `window.location.href`, carga completa. Además de
+  arreglar esto, **tira la caché del router**, que después de cerrar sesión
+  guarda respuestas RSC con datos del usuario que se acaba de ir.
+- `/sign-in` y `/sign-up` reciben `fallback={<EsqueletoDeAcceso />}`, en
+  `app/(login)/_esqueleto.tsx`, con el mismo marco de dos columnas para que no
+  salte al llegar el formulario. El shell pasó de 0 a 10 divs.
+
+**Prueba:** `tests/unit/pantalla-acceso-no-vacia.test.ts`, 9 casos. Son
+comprobaciones sobre el código y no un render, a propósito: el bug era
+justamente que en servidor no se renderiza. Verificado que atrapa: revertidas
+las dos partes, fallan 4.
+
+**Estado:** arreglado. **Sin desplegar** al momento de escribir esto.
