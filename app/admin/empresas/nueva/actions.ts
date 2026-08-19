@@ -3,11 +3,10 @@
 import { redirect } from 'next/navigation';
 import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/drizzle';
-import { teams, sequences, invitations, users, teamMembers } from '@/lib/db/schema';
+import { teams, sequences, invitations } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import { seedSystemRoles } from '@/lib/auth/permissions';
-import { eq, and } from 'drizzle-orm';
 
 export async function crearEmpresa(formData: FormData) {
   const admin = await getUser();
@@ -61,33 +60,36 @@ export async function crearEmpresa(formData: FormData) {
     { teamId: team.id, tipoEcf: '47', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: venc },
   ]);
 
-  // Invitar primer usuario si se indicó email
+  // Invitar primer usuario si se indicó email.
+  //
+  // Aquí NO se pregunta si el correo ya tiene cuenta. Antes sí, y era el bug:
+  // la consulta traía `users.id` de cualquier usuario de la plataforma —el
+  // leftJoin contra team_members no filtraba nada, porque lo que se miraba era
+  // `.length`— así que a un correo con cuenta en OTRA empresa no se le mandaba
+  // nada. La empresa quedaba creada, con sus secuencias, y sin un solo miembro
+  // ni forma de entrar. Sin error y sin aviso.
+  //
+  // La pregunta correcta sería «¿ya es miembro de ESTE team?», y en este punto
+  // la respuesta es siempre no: el team se acaba de crear dos líneas arriba.
+  // Por eso no se pregunta. Quien invita a un team que ya existe pasa por
+  // POST /api/equipo/invitaciones, que sí lo comprueba (innerJoin + teamId).
   if (inviteEmail) {
-    const existing = await db
-      .select({ id: users.id })
-      .from(users)
-      .leftJoin(teamMembers, and(eq(teamMembers.userId, users.id), eq(teamMembers.teamId, team.id)))
-      .where(eq(users.email, inviteEmail))
-      .limit(1);
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const [inv] = await db.insert(invitations).values({
+      teamId:    team.id,
+      email:     inviteEmail,
+      role:      'owner',
+      invitedBy: admin.id,
+      status:    'pending',
+      token,
+      expiresAt,
+    }).returning();
 
-    if (!existing.length) {
-      const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const [inv] = await db.insert(invitations).values({
-        teamId:    team.id,
-        email:     inviteEmail,
-        role:      'owner',
-        invitedBy: admin.id,
-        status:    'pending',
-        token,
-        expiresAt,
-      }).returning();
-
-      try {
-        await sendInvitationEmail(inviteEmail, admin.name, razonSocial, inv.token);
-      } catch (e) {
-        console.error('[crearEmpresa] Error sending invite email:', e);
-      }
+    try {
+      await sendInvitationEmail(inviteEmail, admin.name, razonSocial, inv.token);
+    } catch (e) {
+      console.error('[crearEmpresa] Error sending invite email:', e);
     }
   }
 

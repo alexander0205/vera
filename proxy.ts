@@ -149,7 +149,15 @@ export async function proxy(request: NextRequest) {
       });
     } catch (error) {
       console.error('Error updating session:', error);
-      res.cookies.delete('session');
+      // Con el MISMO domain con que se creó arriba: sin él se borra una cookie
+      // host-only que en prod no existe, y la sesión rota se queda puesta.
+      res.cookies.delete({
+        name: 'session',
+        path: '/',
+        ...(process.env.SESSION_COOKIE_DOMAIN
+          ? { domain: process.env.SESSION_COOKIE_DOMAIN }
+          : {}),
+      });
       if (isProtectedRoute) {
         return NextResponse.redirect(new URL('/sign-in', request.url));
       }

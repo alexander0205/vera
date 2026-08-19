@@ -46,6 +46,23 @@ export async function getSession() {
   return await verifyToken(session);
 }
 
+/**
+ * Borra la cookie de sesión. Cerrar sesión de verdad.
+ *
+ * Tiene que repetir el `domain` con el que se creó: una cookie solo se borra
+ * si el Set-Cookie que la mata lleva el MISMO domain. `delete('session')` a
+ * secas apunta a la cookie host-only, que en producción no existe —la nuestra
+ * vive en `.zero.com.do` para el SSO entre subdominios—, así que la real
+ * sobrevivía. Y como el redirect al login va después pase lo que pase, la
+ * pantalla decía «cerraste sesión» mientras `facturacion.*` seguía entrando.
+ *
+ * Por eso está aquí y no repetido en cada sitio: el domain se decide una vez,
+ * junto al que la crea.
+ */
+export async function clearSession() {
+  (await cookies()).delete({ name: 'session', path: '/', ...cookieDomain });
+}
+
 export async function setSession(user: NewUser, activeTeamId?: number) {
   const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const session: SessionData = {

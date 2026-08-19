@@ -93,6 +93,23 @@ async function eliminarMiembro(formData: FormData) {
   const userId = parseInt(formData.get('userId') as string);
   if (isNaN(teamId) || isNaN(userId)) return;
 
+  // No dejar la empresa sin nadie dentro. Sin esta guardia, quitar al último
+  // miembro la vuelve inalcanzable: nadie puede entrar, y desde aquí solo se
+  // podía cambiar el rol de quien ya estuviera adentro. Le pasó al team 23
+  // (COLEGIO MONTESSORI PEKE KINGS) el 2026-08-10 y quedó muerto.
+  //
+  // La cuenta se hace ANTES de borrar y sobre el team completo, no sobre los
+  // owners: aquí el problema no es quedarse sin propietario sino quedarse sin
+  // nadie. Para el último owner ya hay freno aparte en cambiarRolMiembro.
+  const miembros = await db
+    .select({ userId: teamMembers.userId })
+    .from(teamMembers)
+    .where(eq(teamMembers.teamId, teamId));
+
+  if (miembros.length <= 1) {
+    redirect(`/admin/empresas/${teamId}?error=ultimo_miembro`);
+  }
+
   await db.delete(teamMembers).where(
     and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))
   );

@@ -47,7 +47,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE() {
-  const { cookies } = await import('next/headers');
-  (await cookies()).delete('session');
+  const { clearSession } = await import('@/lib/auth/session');
+  await clearSession();
   return Response.json({ success: true });
 }

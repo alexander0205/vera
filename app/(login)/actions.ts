@@ -16,7 +16,7 @@ import {
   ActivityType,
   invitations
 } from '@/lib/db/schema';
-import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
+import { comparePasswords, hashPassword, setSession, clearSession } from '@/lib/auth/session';
 import { seedSystemRoles } from '@/lib/auth/permissions';
 import { redirect } from 'next/navigation';
 import { cookies, headers } from 'next/headers';
@@ -192,7 +192,7 @@ export async function signOut() {
     const userWithTeam = await getUserWithTeam(user.id);
     await logActivity(userWithTeam?.teamId, user.id, ActivityType.SIGN_OUT);
   }
-  (await cookies()).delete('session');
+  await clearSession();
 }
 
 const updatePasswordSchema = z.object({
@@ -300,7 +300,7 @@ export const deleteAccount = validatedActionWithUser(
         );
     }
 
-    (await cookies()).delete('session');
+    await clearSession();
     redirect('/sign-in');
   }
 );
@@ -325,38 +325,13 @@ export const updateAccount = validatedActionWithUser(
   }
 );
 
-const removeTeamMemberSchema = z.object({
-  memberId: z.number()
-});
-
-export const removeTeamMember = validatedActionWithUser(
-  removeTeamMemberSchema,
-  async (data, _, user) => {
-    const { memberId } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    if (!userWithTeam?.teamId) {
-      return { error: 'El usuario no pertenece a ninguna empresa' };
-    }
-
-    await db
-      .delete(teamMembers)
-      .where(
-        and(
-          eq(teamMembers.id, memberId),
-          eq(teamMembers.teamId, userWithTeam.teamId)
-        )
-      );
-
-    await logActivity(
-      userWithTeam.teamId,
-      user.id,
-      ActivityType.REMOVE_TEAM_MEMBER
-    );
-
-    return { success: 'Team member removed successfully' };
-  }
-);
-
-// inviteTeamMember (server action legacy) eliminado — el único camino de
-// invitación es POST /api/equipo/invitaciones (roles de team_roles + email).
+// removeTeamMember (server action legacy) eliminado, igual que inviteTeamMember.
+// No lo llamaba ninguna pantalla, pero seguía exportado: un server action
+// exportado es un endpoint HTTP con su propio id, exista o no una UI que lo
+// use. Y este no comprobaba NADA más allá de haber iniciado sesión — cualquier
+// miembro podía sacar a cualquier otro de su empresa, incluido el único
+// propietario, saltándose los dos frenos que sí tiene el camino bueno.
+//
+// Quitar miembros va por DELETE /api/equipo/miembros/[id]: solo el owner saca a
+// otros, cada quien puede salirse a sí mismo, y no deja borrar al único owner.
+// Los admin de plataforma usan eliminarMiembro en /admin/empresas/[id].
