@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const sessionId = searchParams.get('session_id');
 
   if (!sessionId) {
-    return NextResponse.redirect(new URL('/pricing', request.url));
+    return NextResponse.redirect(new URL('/dashboard/suscripcion', request.url));
   }
 
   try {
@@ -129,6 +129,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[checkout] Error handling successful checkout:', error);
     // Redirigir a pricing con error en lugar de /error (que no existe)
-    return NextResponse.redirect(new URL('/pricing?error=checkout', request.url));
+    return NextResponse.redirect(new URL('/dashboard/suscripcion?error=checkout', request.url));
   }
 }

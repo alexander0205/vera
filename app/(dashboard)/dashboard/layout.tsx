@@ -402,7 +402,7 @@ function SidebarContent({
             </Box>
             <Box
               component={Link}
-              href="/pricing?reason=no-plan"
+              href="/dashboard/suscripcion"
               onClick={onClose}
               sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, width: '100%', py: 1, borderRadius: '8px', bgcolor: '#fbbf24', color: '#78350f', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none', transition: 'background-color 0.15s', '&:hover': { bgcolor: '#fcd34d' } }}
             >

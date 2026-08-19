@@ -53,7 +53,7 @@ export async function createCheckoutSession({
     ],
     mode: 'subscription',
     success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.BASE_URL}/pricing`,
+    cancel_url: `${process.env.BASE_URL}/dashboard/suscripcion`,
     // Cliente ya conocido en Stripe, o su correo si es la primera compra.
     //
     // Los dos NO pueden ir juntos: Stripe rechaza la sesión si recibe
@@ -106,7 +106,7 @@ export async function createCustomerPortalSession(team: Team) {
   // portal —y por tanto sin poder actualizar su tarjeta— a quien tuviera la
   // columna vacía por un webhook viejo.
   if (!team.stripeCustomerId) {
-    redirect('/pricing');
+    redirect('/dashboard/suscripcion');
   }
 
   const configuration = await portalConfiguration();

@@ -109,7 +109,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error creando empresa');
-      router.push(BILLING_ENABLED ? '/pricing?new_company=1' : '/dashboard');
+      router.push(BILLING_ENABLED ? '/dashboard/suscripcion' : '/dashboard');
     } catch (e) {
       setCrearError(e instanceof Error ? e.message : 'Error desconocido');
       setCreando(false);
@@ -208,7 +208,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                     startIcon={<CreditCard size={14} />}
                     onClick={async () => {
                       if (!isActive) await fetch('/api/empresa/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId: empresa.id }) });
-                      router.push('/pricing?reason=no-plan');
+                      router.push('/dashboard/suscripcion');
                     }}
                     sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#c7d2fc', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe', borderColor: '#3658e1' } }}>
                     Elegir plan

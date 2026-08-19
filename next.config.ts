@@ -46,6 +46,26 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+
+  /**
+   * `/pricing` era una TERCERA pantalla de planes, heredada del template.
+   *
+   * Las buenas son `/precios` (la web pública) y `/dashboard/suscripcion` (la
+   * de dentro, que es donde de verdad se elige). `/pricing` no solo repetía:
+   * mandaba siempre al checkout, así que a una empresa que nunca tuvo plan le
+   * pedía tarjeta en lugar de abrirle la prueba —que es lo que hace la buena
+   * con `empezarPruebaAction`.
+   *
+   * Se borró la página y queda esta redirección porque hay enlaces vivos que no
+   * se pueden reescribir: el `cancel_url` de sesiones de Stripe ya abiertas, y
+   * el `urlUpgrade` que la API de emisión ya devolvió a quien tocó su límite.
+   * Permanente, que es lo que es.
+   */
+  async redirects() {
+    return [
+      { source: '/pricing', destination: '/dashboard/suscripcion', permanent: true },
+    ];
+  },
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser
   devIndicators: false,
   // pdf-parse / pdfjs-dist cargan su worker desde node_modules en runtime;

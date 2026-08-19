@@ -54,7 +54,7 @@ function tonoDe(estado: EstadoSuscripcion): keyof typeof TONOS {
  * sin plan no hay con qué trabajar, y dejarlo pasear por un dashboard que le
  * va a rechazar cada acción es peor que llevarlo directo a resolverlo.
  */
-const RUTAS_SIN_PLAN = ['/dashboard/suscripcion', '/pricing', '/cuenta'];
+const RUTAS_SIN_PLAN = ['/dashboard/suscripcion', '/cuenta'];
 
 export function BannerSuscripcion() {
   // Con el billing apagado no se pide nada: ni el request suelto por página.
