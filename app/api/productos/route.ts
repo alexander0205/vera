@@ -8,7 +8,7 @@ import { visibleEnFacturacion } from '@/lib/productos/visibilidad';
 import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { products, productVariants, productVariantAlmacenStock, almacenes } from '@/lib/db/schema';
+import { products, productVariants, productVariantAlmacenStock, productAlmacenStock, almacenes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, ilike, or, and, sql, getTableColumns, desc, asc } from 'drizzle-orm';
@@ -225,6 +225,23 @@ export async function POST(req: NextRequest) {
         if (filas.length > 0) {
           await tx.insert(productVariantAlmacenStock).values(filas);
         }
+      }
+    } else if (tipo === 'bien' && (controlaInventario ?? false) && (stockActual ?? 0) > 0) {
+      // Bien simple con stock inicial: sembrar su fila en el almacén por defecto,
+      // igual que las variantes. product_almacen_stock es lo que mira el POS; sin
+      // esta fila el producto nace agotado en la caja pese a tener stock, y
+      // editarlo después tampoco lo arreglaba (ver PUT). Aquí se siembra en el
+      // alta para que el conteo por almacén exista desde el primer día.
+      const [almacenDefault] = await tx
+        .select({ id: almacenes.id })
+        .from(almacenes)
+        .where(eq(almacenes.teamId, teamId))
+        .orderBy(desc(almacenes.esDefault), asc(almacenes.id))
+        .limit(1);
+      if (almacenDefault) {
+        await tx.insert(productAlmacenStock).values({
+          teamId, productId: prod.id, almacenId: almacenDefault.id, stockActual: stockActual ?? 0,
+        });
       }
     }
     return prod;

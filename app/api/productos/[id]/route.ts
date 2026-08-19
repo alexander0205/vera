@@ -167,9 +167,38 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     if (!reconciliaVariantes && stockActual !== undefined && existing.tipo === 'bien' && controla && stockActual !== existing.stock_actual) {
       const delta     = stockActual - existing.stock_actual;
       const esEntrada = delta > 0;
+
+      // El stock físico vive por almacén en product_almacen_stock, que es lo que
+      // miran el POS (lib/pos/catalogo) y el inventario. products.stock_actual es
+      // solo la cifra denormalizada de los listados. Sin este upsert, subir el
+      // stock aquí movía únicamente esa cifra y el producto seguía agotado en la
+      // caja —y ausente de su grilla si nunca tuvo fila de almacén, que es
+      // justo el caso del bien creado con stock 0. Se aplica el delta al almacén
+      // por defecto, espejo de /api/inventario/ajuste y del camino de variantes.
+      const [almacenDefault] = await tx
+        .select({ id: almacenes.id })
+        .from(almacenes)
+        .where(eq(almacenes.teamId, teamId))
+        .orderBy(desc(almacenes.esDefault), asc(almacenes.id))
+        .limit(1);
+
+      if (almacenDefault) {
+        await tx.execute(sql`
+          INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+          VALUES (${teamId}, ${prodId}, ${almacenDefault.id},
+            GREATEST(0, COALESCE((
+              SELECT stock_actual FROM product_almacen_stock
+              WHERE product_id = ${prodId} AND almacen_id = ${almacenDefault.id}
+            ), 0) + ${delta}))
+          ON CONFLICT (product_id, almacen_id)
+          DO UPDATE SET stock_actual = GREATEST(0, product_almacen_stock.stock_actual + ${delta})
+        `);
+      }
+
       await tx.insert(inventoryMovements).values({
         teamId,
         productoId:   prodId,
+        almacenId:    almacenDefault?.id ?? null,
         tipo:         esEntrada ? 'AJUSTE_ENTRADA' : 'AJUSTE_SALIDA',
         cantidad:     Math.abs(delta),
         esEntrada,
