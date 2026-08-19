@@ -44,6 +44,14 @@ export type PlanVista = {
    * esconder — si no vino, no existe.
    */
   precio: number | null;
+  /**
+   * Lo que le sale el mes por estudiante, ya dividido en el servidor.
+   *
+   * Va aparte del precio y no se calcula aquí porque en colegio `precio`
+   * llega en `null` a propósito: enviarlo para dividirlo en el navegador lo
+   * habría vuelto a publicar en el HTML, que es justo lo que se quitó.
+   */
+  porEstudiante: number | null;
   destacado: boolean;
   /**
    * `sinTope` en vez de la palabra: el lazo ES el infinito de la marca, y en
@@ -507,6 +515,20 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
  * Si ni el más alto alcanza, se dice —no se recomienda el más caro fingiendo
  * que le sirve.
  */
+/**
+ * Lo que le sale el mes por estudiante con SUS números, no con el tope del
+ * tramo: quien mueve la barra hasta 220 quiere saber lo suyo, y dividir entre
+ * los 300 del tope le daría una cifra más baja de la que va a pagar.
+ *
+ * Con céntimos porque son cifras de menos de dos dólares y redondeadas a
+ * entero saldrían todas iguales.
+ */
+function porAlumno(p: PlanVista, estudiantes: number): string {
+  const total = (p.porEstudiante ?? 0) * p.estudiantes;
+  const v = total / Math.max(1, estudiantes);
+  return `US$${v.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | 'colegio' }) {
   const [facturas, setFacturas] = useState(180);
   const [estudiantes, setEstudiantes] = useState(220);
@@ -588,6 +610,24 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
                     cuánto hay que migrar y de lo que ya tenga puesto. Escríbenos y lo armamos con
                     tus números.
                   </p>
+                  {/* La referencia por estudiante. Es la cifra con la que un
+                      director de verdad decide —la compara con lo que cobra de
+                      mensualidad—, y da una idea del orden de magnitud sin
+                      poner delante el total del tramo, que es lo que hace que
+                      se descarte antes de hablar. */}
+                  {sugerido.porEstudiante !== null && (
+                    <div className="mt-4 border-t border-white/15 pt-4">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-[family-name:var(--font-display)] text-[30px] font-semibold tracking-[-1.2px] tabular-nums">
+                          {porAlumno(sugerido, estudiantes)}
+                        </span>
+                        <span className="text-[12.5px] text-white/70">por estudiante / mes</span>
+                      </div>
+                      <div className="mt-1 text-[11.5px] text-white/60">
+                        Aproximado, con los {estudiantes.toLocaleString('es-DO')} estudiantes que pusiste arriba.
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>

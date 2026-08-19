@@ -94,6 +94,11 @@ export function topesDePlan(
       puntoDeVenta,
       contabilidad,
       NOTIFICACIONES,
+      // El colegio conecta SU PROPIO número: `elegirRemitente` usa el suyo
+      // cuando está conectado y solo cae al de Zero si no lo tiene. Por eso
+      // «con tu número» y no «incluido» a secas — es la diferencia entre que
+      // el padre vea el nombre del colegio o el nuestro.
+      { etiqueta: 'WhatsApp Business', valor: 'Con tu número' },
     ];
   }
 

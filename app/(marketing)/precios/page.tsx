@@ -211,6 +211,10 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
       // fuente. El precio sigue intacto en el catálogo para Stripe y para las
       // pantallas con sesión.
       precio: esColegio ? null : precio,
+      // Ya dividido aquí: es lo único de la cifra que sale hacia el navegador
+      // en la línea de colegio. Se divide entre el TOPE del tramo y el
+      // recomendador lo reescala a los estudiantes que ponga el visitante.
+      porEstudiante: plan.limits.estudiantes > 0 ? precio / plan.limits.estudiantes : null,
       destacado: plan.ui.highlighted,
       topes,
       incluyeTitulo: tituloIncluye(defs, i),
