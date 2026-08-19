@@ -14,12 +14,17 @@
  */
 
 import type { PlanDef } from './plans';
+import { CANALES_TEXTO } from '@/components/canales-aviso';
 
 export interface TopeDePlan {
   etiqueta: string;
+  /** Lo que se lee. Con `canales` puesto es además lo que oye un lector de
+   *  pantalla, porque en la tarjeta se dibujan iconos en su lugar. */
   valor: string;
   /** El catálogo lo guarda como `-1`. Quien pinta decide cómo se ve. */
   sinTope?: boolean;
+  /** Se pinta con los iconos de WhatsApp, SMS y correo (`CanalesAviso`). */
+  canales?: boolean;
 }
 
 const num = (n: number) => n.toLocaleString('es-DO');
@@ -33,12 +38,16 @@ const num = (n: number) => n.toLocaleString('es-DO');
  * existiendo y aplicándose (`limits.whatsappMensajes`); lo que deja de hacer
  * es anunciarse.
  *
- * Va igual en las dos líneas: un colegio le avisa a las familias y un negocio
- * a sus clientes, pero es la misma función.
+ * SOLO en la línea de colegio. Los avisos por WhatsApp y SMS son del módulo
+ * escolar: los planes de e-CF llevan `whatsappMensajes: -1`, que ahí no
+ * significa «ilimitado» sino «no aplica». Ponerlo también en sus tarjetas fue
+ * un error mío y estuvo publicado un rato prometiendo un canal que esos planes
+ * no tienen.
  */
 const NOTIFICACIONES: TopeDePlan = {
   etiqueta: 'Notificaciones a clientes',
-  valor: 'WhatsApp · SMS · correo',
+  valor: CANALES_TEXTO,
+  canales: true,
 };
 
 /**
@@ -56,20 +65,43 @@ export function topesDePlan(
     ? { etiqueta: 'Comprobantes/mes', valor: 'Sin tope', sinTope: true }
     : { etiqueta: 'Comprobantes/mes', valor: num(plan.limits.docs) };
 
+  // Lo que el plan ABRE, no lo que le limita. Sale de `modulos` y `features`
+  // y no escrito a mano: así una tarjeta no puede prometer un módulo que el
+  // plan no entrega, que es exactamente lo que pasó cuando se anunciaron
+  // avisos por WhatsApp en unos planes que no los llevan.
+  //
+  // La contabilidad tiene fila propia y no va escondida dentro de «sistema
+  // completo: contabilidad, inventario, caja…»: es lo que de verdad nos separa
+  // de la competencia, que la cobra aparte o no la tiene.
+  const contabilidad: TopeDePlan = {
+    etiqueta: 'Contabilidad',
+    valor: plan.features.includes('contabilidad-avanzada') ? 'Incluida' : 'No incluida',
+  };
+  const puntoDeVenta: TopeDePlan = {
+    etiqueta: 'Punto de venta',
+    valor: conPos || plan.modulos.includes('pos') ? 'Incluido' : 'No incluido',
+  };
+
   if (esColegio) {
     return [
       { etiqueta: 'Estudiantes', valor: `Hasta ${num(plan.limits.estudiantes)}` },
       { etiqueta: 'Usuarios', valor: num(plan.limits.users) },
-      NOTIFICACIONES,
       comprobantes,
+      {
+        etiqueta: 'Gobernanza del colegio',
+        valor: plan.modulos.includes('escolar') ? 'Incluida' : 'No incluida',
+      },
+      puntoDeVenta,
+      contabilidad,
+      NOTIFICACIONES,
     ];
   }
 
   return [
     comprobantes,
     { etiqueta: 'Usuarios', valor: num(plan.limits.users) },
-    NOTIFICACIONES,
-    { etiqueta: 'Punto de venta', valor: conPos ? 'Incluido' : 'No incluido' },
+    contabilidad,
+    puntoDeVenta,
   ];
 }
 

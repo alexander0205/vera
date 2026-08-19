@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { usePerfil } from './_perfil';
 import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
+import { CanalesAviso } from '@/components/canales-aviso';
 import { Cheque, Contenedor, Iconos } from '../_piezas';
 
 // ─── Lo que llega del servidor ───────────────────────────────────────────────
@@ -49,7 +50,7 @@ export type PlanVista = {
    * una fila que dice «Comprobantes/mes» dibuja mejor el «no se acaba» que
    * dos palabras que hay que leer.
    */
-  topes: { etiqueta: string; valor: string; sinTope?: boolean }[];
+  topes: { etiqueta: string; valor: string; sinTope?: boolean; canales?: boolean }[];
   incluyeTitulo: string;
   incluye: string[];
   /** Crudos, para el recomendador. -1 = sin tope / no aplica. */
@@ -272,7 +273,11 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                     // bloque quedaba desalineado.
                     <div key={t.etiqueta} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <span className={`whitespace-nowrap text-[11.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>{t.etiqueta}</span>
-                      {t.sinTope ? (
+                      {t.canales ? (
+                        <span className="ml-auto flex">
+                          <CanalesAviso tamano={13} color={oscuro ? 'rgba(255,255,255,.9)' : '#3b4252'} />
+                        </span>
+                      ) : t.sinTope ? (
                         <span className="ml-auto flex">
                           <LazoZero
                             alto={11}

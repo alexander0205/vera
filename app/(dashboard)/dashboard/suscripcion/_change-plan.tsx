@@ -36,6 +36,7 @@ import { Calendar, X, CircleSlash, TriangleAlert, Check, Info, MessageCircle } f
 import type { PlanDef } from '@/lib/config/plans';
 import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
 import { LazoZero } from '@/lib/marca/isotipo';
+import { CanalesAviso } from '@/components/canales-aviso';
 import type { MotivoCambio, RiesgoDeCambio, NivelDeCambio } from '@/lib/config/suscripcion';
 import {
   AZUL, NAVY, GRIS, ROJO, AMBAR, TINTA, BORDE, BORDE_TENUE, RADIO, TEXTO_MEDIO,
@@ -456,11 +457,16 @@ export function ChangePlan({
                   // legibles.
                   <Box key={t.etiqueta} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 1, rowGap: 0.25 }}>
                     <Typography sx={{ fontSize: '0.72rem', color: GRIS, whiteSpace: 'nowrap' }}>{t.etiqueta}</Typography>
-                    {t.sinTope
-                      // El lazo ES el infinito de la marca. En una columna
-                      // estrecha además ocupa menos que la palabra.
-                      ? <Box sx={{ ml: 'auto', display: 'flex' }}><LazoZero alto={11} titulo={t.valor} color={TEXTO_MEDIO} /></Box>
-                      : <Typography sx={{ ml: 'auto', fontSize: '0.72rem', fontWeight: 700, color: TEXTO_MEDIO, whiteSpace: 'nowrap' }}>{t.valor}</Typography>}
+                    {t.canales
+                      // Tres iconos en vez de «WhatsApp · SMS · correo»: el
+                      // texto ocupaba 141px en un hueco de 100 y pico y se
+                      // caía a la línea de abajo.
+                      ? <Box sx={{ ml: 'auto', display: 'flex' }}><CanalesAviso tamano={13} color={TEXTO_MEDIO} /></Box>
+                      : t.sinTope
+                        // El lazo ES el infinito de la marca. En una columna
+                        // estrecha además ocupa menos que la palabra.
+                        ? <Box sx={{ ml: 'auto', display: 'flex' }}><LazoZero alto={11} titulo={t.valor} color={TEXTO_MEDIO} /></Box>
+                        : <Typography sx={{ ml: 'auto', fontSize: '0.72rem', fontWeight: 700, color: TEXTO_MEDIO, whiteSpace: 'nowrap' }}>{t.valor}</Typography>}
                   </Box>
                 ))}
               </Box>
