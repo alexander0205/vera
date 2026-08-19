@@ -42,6 +42,15 @@ export type ResultadoAlta =
  * contraseña puede tener que salir hacia el checkout de Stripe y la de Google
  * no.
  */
+/**
+ * Lo que se dice cuando el alta no sale, venga de donde venga.
+ *
+ * Uno solo, y siempre el mismo, para que no se pueda deducir la causa. Ver el
+ * comentario de `yaExiste`.
+ */
+const MENSAJE_ALTA_FALLIDA =
+  'No se pudo crear la cuenta con ese correo. Si ya tienes una, entra en su lugar.';
+
 export async function darDeAlta(datos: DatosDeAlta): Promise<ResultadoAlta> {
   const email = datos.email.trim().toLowerCase();
 
@@ -49,9 +58,16 @@ export async function darDeAlta(datos: DatosDeAlta): Promise<ResultadoAlta> {
     .where(eq(users.email, email)).limit(1);
 
   if (yaExiste) {
-    // Mismo mensaje que en el login: decir «ese correo ya está registrado»
-    // convierte el formulario en un detector de qué correos tienen cuenta.
-    return { ok: false, error: 'No se pudo crear el usuario. Intenta de nuevo.' };
+    // El mensaje NO dice que el correo ya esté registrado, y es a propósito:
+    // confirmarlo convierte el formulario en un detector de qué correos tienen
+    // cuenta. Por eso es el mismo texto que cuando el alta falla por cualquier
+    // otra razón — quien pregunta no aprende nada.
+    //
+    // Lo que sí cambia es que ahora dice qué hacer. «Intenta de nuevo» manda a
+    // repetir exactamente lo que acaba de fallar; la salida real es entrar en
+    // vez de registrarse, y eso se puede sugerir sin afirmar nada, porque se
+    // sugiere siempre.
+    return { ok: false, error: MENSAJE_ALTA_FALLIDA };
   }
 
   const nuevo: NewUser = {
@@ -66,7 +82,7 @@ export async function darDeAlta(datos: DatosDeAlta): Promise<ResultadoAlta> {
   };
 
   const [usuario] = await db.insert(users).values(nuevo).returning();
-  if (!usuario) return { ok: false, error: 'No se pudo crear el usuario. Intenta de nuevo.' };
+  if (!usuario) return { ok: false, error: MENSAJE_ALTA_FALLIDA };
 
   let equipo: typeof teams.$inferSelect | undefined;
   let rol: string;
