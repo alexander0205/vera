@@ -213,6 +213,9 @@ export async function GET(_req: NextRequest) {
     cajaGraciaHoras:       team.cajaGraciaHoras,
     // Módulo POS — estado efectivo (columna legacy o módulo del plan)
     posHabilitado:         posEfectivo,
+    // ¿Tiene la empresa el módulo POS? Es lo que decide si la tarjeta POS de la
+    // configuración se muestra: un plan sin POS no debe ver ese interruptor.
+    posDisponible:         posEfectivo,
     posEscolarHabilitado:  team.posEscolarHabilitado,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)

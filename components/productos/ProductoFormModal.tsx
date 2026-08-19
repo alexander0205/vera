@@ -19,6 +19,7 @@ import {
 import {
   CANALES, aBanderas, desdeBanderas, defaultPorTipo, type DondeSeVende,
 } from '@/lib/productos/donde-se-vende';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Constantes / helpers (movidos desde productos/_page-client) ─────────────
 
@@ -91,6 +92,12 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
    */
   canalPorDefecto?: 'pos';
 }) {
+  // ¿La empresa tiene POS? Sin él, «¿dónde se vende?» no tiene dos opciones que
+  // ofrecer: todo se factura y punto. Ver el canal «Punto de venta» en un plan
+  // sin POS sugería un destino que no existe.
+  const { modules } = usePermissions();
+  const posDisponible = modules.includes('pos');
+
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
@@ -235,7 +242,10 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
         permiteVentaSinStock: form.permiteVentaSinStock,
         categoriaId:          form.categoriaId ? Number(form.categoriaId) : null,
         imagen:               form.imagen || null,
-        ...aBanderas(form.donde),
+        // Sin POS, un ítem NUEVO nace solo en facturación (el bloque está oculto,
+        // así que su default por tipo no se puede corregir a mano). En edición se
+        // respeta lo que ya tenía: no se le tocan las banderas a un producto viejo.
+        ...aBanderas(!posDisponible && !esEdicion ? 'facturacion' : form.donde),
       };
       if (!conVariantesEdit && !conVariantesNuevas) {
         body.stockActual = stockActual;
@@ -350,7 +360,10 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
                 Se ven las dos opciones de un vistazo y se marca la que toca,
                 sin abrir nada. Desmarcar las dos no se permite: un ítem que no
                 aparece en ningún lado no se puede vender. Ver
-                lib/productos/donde-se-vende.ts. */}
+                lib/productos/donde-se-vende.ts.
+                Solo con POS: sin ese módulo hay un único destino (facturación) y
+                la pregunta sobra. */}
+            {posDisponible && (
             <div className="space-y-1.5">
               <Label>¿Dónde se vende?</Label>
               <div className="flex flex-wrap gap-2">
@@ -404,6 +417,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
                 })}
               </div>
             </div>
+            )}
 
             {/* Unidad de medida */}
             <div className="space-y-1.5">

@@ -244,6 +244,11 @@ export default function ConfiguracionPage() {
   // Módulo punto de venta (POS)
   const [posHabilitado, setPosHabilitado]               = useState(false);
   const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
+  // ¿La empresa TIENE el módulo POS (por plan o adicional)? Distinto del toggle:
+  // el toggle es un ajuste dentro del módulo; esto decide si la tarjeta siquiera
+  // aparece. Sin él, un plan básico sin POS veía el interruptor «Punto de venta»
+  // como si pudiera contratarlo desde aquí. Estable: no lo mueve el toggle.
+  const [posDisponible, setPosDisponible]               = useState(false);
   // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
@@ -288,6 +293,7 @@ export default function ConfiguracionPage() {
         // Módulo POS
         setPosHabilitado(d.posHabilitado ?? false);
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
+        setPosDisponible(d.posDisponible ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
         setMetodosExigeComprobante(Array.isArray(d.metodosExigeComprobante) ? d.metodosExigeComprobante : []);
@@ -1253,6 +1259,10 @@ export default function ConfiguracionPage() {
       </Card>
 
       {/* ── Módulo Punto de Venta (POS) ─────────────────────────────────── */}
+      {/* Solo si la empresa contrató POS. El módulo se obtiene por plan o
+          adicional, no se enciende desde aquí: enseñar el interruptor a un plan
+          sin POS prometía algo que este toggle no entrega. */}
+      {posDisponible && (
       <Card>
         <CardHeader>
           <CardTitle>Punto de venta (POS)</CardTitle>
@@ -1302,6 +1312,7 @@ export default function ConfiguracionPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Equipo y permisos — solo roles con equipo:gestionar */}
       {canManageTeam && <EquipoCard />}
