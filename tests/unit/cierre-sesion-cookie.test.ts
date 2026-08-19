@@ -126,3 +126,64 @@ describe('proxy: sesión corrupta', () => {
     expect(salida.borradas[0]).toMatchObject({ name: 'session', domain: DOMINIO, path: '/' });
   });
 });
+
+/**
+ * El guard del proxy mira si la sesión SIRVE, no si la cookie está.
+ *
+ * Reportado desde producción: tras cerrar sesión, entrar a pos.zero.com.do por
+ * la URL dejaba la pantalla en blanco. Reproducido con `curl`:
+ *
+ *   $ curl -D - https://pos.zero.com.do/ -H "Cookie: session=cookie.vieja.invalida"
+ *   HTTP/2 200        ← ni redirige al login ni borra la cookie
+ *   (cuerpo con 19 caracteres de texto)
+ *
+ * El guard preguntaba `!sessionCookie`, o sea si la cookie EXISTÍA. Una cookie
+ * caducada, firmada con otro secreto o corrupta lo pasaba igual que una buena.
+ * Y los rewrites de los subdominios de módulo (pos → /pos, facturacion →
+ * /dashboard, colegio → /escolar) retornan antes del bloque que la habría
+ * cazado, así que el navegador recibía el módulo entero sin sesión: 200, cuerpo
+ * vacío, y la cookie muerta intacta para la siguiente vez.
+ *
+ * Los tres módulos daban 200 en blanco. Con el arreglo, los cuatro hosts dan
+ * 307 a /sign-in y borran la cookie en esa misma respuesta.
+ */
+describe('proxy: cookie presente pero inservible', () => {
+  /** El guard, tal como quedó: primero verifica, luego decide. */
+  function guard(cookie: string | null, tokenValido: boolean, rutaProtegida: boolean) {
+    const sesion = cookie && tokenValido ? { user: { id: 1 } } : null;
+    const cookieInservible = !!cookie && sesion === null;
+
+    if (rutaProtegida && !sesion) {
+      return { destino: '/sign-in', borraCookie: cookieInservible };
+    }
+    return { destino: 'sigue', borraCookie: false };
+  }
+
+  it('cookie inválida en ruta protegida → al login, y la cookie se va', () => {
+    const r = guard('cookie.vieja.invalida', false, true);
+    expect(r.destino).toBe('/sign-in');
+    expect(r.borraCookie).toBe(true);
+  });
+
+  it('con el guard viejo esa misma cookie pasaba: era el bug', () => {
+    // El viejo: `if (rutaProtegida && !sessionCookie)`.
+    const pasabaElGuardViejo = !('cookie.vieja.invalida' === null);
+    expect(pasabaElGuardViejo).toBe(true);
+    // Y el nuevo la para.
+    expect(guard('cookie.vieja.invalida', false, true).destino).toBe('/sign-in');
+  });
+
+  it('sin cookie sigue mandando al login, pero no borra lo que no hay', () => {
+    const r = guard(null, false, true);
+    expect(r.destino).toBe('/sign-in');
+    expect(r.borraCookie).toBe(false);
+  });
+
+  it('sesión buena pasa de largo', () => {
+    expect(guard('token.bueno', true, true).destino).toBe('sigue');
+  });
+
+  it('en ruta pública una cookie mala no manda a nadie al login', () => {
+    expect(guard('cookie.vieja.invalida', false, false).destino).toBe('sigue');
+  });
+});

@@ -275,3 +275,50 @@ justamente que en servidor no se renderiza. Verificado que atrapa: revertidas
 las dos partes, fallan 4.
 
 **Estado:** arreglado. **Sin desplegar** al momento de escribir esto.
+
+
+---
+
+## F-09 · Con la cookie vencida, los módulos servían una pantalla en blanco en vez de mandar al login · **ARREGLADO**
+
+**Cuándo:** reportado por el dueño. Entró, cerró sesión, y volvió por la URL:
+`facturacion.zero.com.do` lo mandó al login (bien), `pos.zero.com.do` se quedó
+en blanco.
+
+**Reproducido con `curl`** — cookie presente pero inservible:
+
+```
+$ curl -D - https://pos.zero.com.do/ -H "Cookie: session=cookie.vieja.invalida"
+HTTP/2 200          ← ni redirige al login ni borra la cookie
+(cuerpo: 19 caracteres de texto)
+```
+
+Los tres módulos igual: `pos.` 19 chars, `facturacion.` 51, `colegio.` 26.
+Sin cookie los cuatro hosts redirigían bien — el fallo pedía una cookie mala.
+
+**Qué pasaba.** El guard del proxy era:
+
+```ts
+if (isProtectedRoute && !sessionCookie) { … }   // ¿la cookie EXISTE?
+```
+
+Preguntaba por la **presencia**, no por la validez. Una cookie caducada, firmada
+con otro secreto o corrupta lo pasaba igual que una buena. Y los rewrites de los
+subdominios de módulo —`pos` → `/pos`, `facturacion` → `/dashboard`, `colegio`
+→ `/escolar`— retornan antes del bloque que sí verifica el token, así que se
+servía el módulo entero sin sesión.
+
+Es la misma familia que F-01 y F-07: el sistema *creía* que había sesión.
+
+**Arreglo:** el token se verifica arriba del todo, una sola vez, y el guard
+pregunta por `sesion`, no por la cookie. Si venía una cookie que no sirve, se va
+con esa misma respuesta —dejarla puesta condena a repetir el rodeo en cada
+petición. De paso: la raíz del host de cuenta decidía también por presencia y
+mandaba a `/cuenta` para que el guard rebotara de vuelta, y el token se estaba
+verificando dos veces por petición.
+
+**Verificado local con `SESSION_COOKIE_DOMAIN` puesta:** `pos.`, `facturacion.`,
+`colegio.` y `app.` responden 307 a `/sign-in` **y** borran la cookie en la
+misma respuesta.
+
+**Estado:** arreglado. **Sin desplegar** al momento de escribir esto.
