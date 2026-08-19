@@ -5,14 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { listarTerminales, crearTerminal } from '@/lib/pos/terminales';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 export async function GET() {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const terminales = await listarTerminales(auth.teamId);
   return NextResponse.json({ terminales });
@@ -31,7 +31,7 @@ const terminalSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('pos:configurar');
+  const auth = await requireModuleAndPermission('pos', 'pos:configurar');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
 

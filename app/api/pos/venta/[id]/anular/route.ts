@@ -20,7 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
@@ -33,7 +33,7 @@ const REQUIERE_NOTA_CREDITO = ['ACEPTADO', 'ACEPTADO_CONDICIONAL'];
 const schema = z.object({ modo: z.enum(['eliminar', 'unsettle']) });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('pos:anular');
+  const auth = await requireModuleAndPermission('pos', 'pos:anular');
   if (!auth.ok) return auth.response;
   const { teamId, user } = auth;
 

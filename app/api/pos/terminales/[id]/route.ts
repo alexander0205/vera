@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { actualizarTerminal, desactivarTerminal } from '@/lib/pos/terminales';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
@@ -22,7 +22,7 @@ const terminalSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('pos:configurar');
+  const auth = await requireModuleAndPermission('pos', 'pos:configurar');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
   const id = Number((await params).id);
@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('pos:configurar');
+  const auth = await requireModuleAndPermission('pos', 'pos:configurar');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
   const id = Number((await params).id);

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, asc } from 'drizzle-orm';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos, teams, users } from '@/lib/db/schema';
 
@@ -17,7 +17,7 @@ interface LineaTicket {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
 

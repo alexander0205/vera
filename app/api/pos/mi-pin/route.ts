@@ -11,12 +11,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 
 export async function GET() {
-  const auth = await requirePermission('pos:anular');
+  const auth = await requireModuleAndPermission('pos', 'pos:anular');
   if (!auth.ok) return auth.response;
   const { teamId, user } = auth;
 
@@ -32,7 +32,7 @@ export async function GET() {
 const schema = z.object({ pin: z.string().regex(/^\d{4,6}$/).nullable() });
 
 export async function PUT(req: NextRequest) {
-  const auth = await requirePermission('pos:anular');
+  const auth = await requireModuleAndPermission('pos', 'pos:anular');
   if (!auth.ok) return auth.response;
   const { teamId, user } = auth;
 

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { recargar, getMonederoView, escolarHabilitado } from '@/lib/pos/monedero';
 
@@ -16,7 +16,7 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
   if (!(await escolarHabilitado(teamId))) return NextResponse.json({ error: 'Capa escolar no habilitada' }, { status: 403 });

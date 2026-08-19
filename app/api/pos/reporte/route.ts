@@ -4,12 +4,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { getTurnoAbierto } from '@/lib/caja/core';
 import { getReporteTurno } from '@/lib/pos/reporte';
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
 

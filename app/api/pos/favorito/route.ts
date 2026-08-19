@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { products } from '@/lib/db/schema';
 
@@ -16,7 +16,7 @@ const schema = z.object({
 });
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
 
