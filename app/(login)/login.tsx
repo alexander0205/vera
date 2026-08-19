@@ -22,11 +22,17 @@ import { ActionState } from '@/lib/auth/middleware';
  */
 
 /**
- * Los tropiezos del login con Google, dichos en cristiano.
+ * Los tropiezos que traen a alguien de vuelta a esta pantalla, en cristiano.
  *
- * Cada clave la pone una redirección de /api/auth/google o de su callback. Se
- * traducen aquí y no allí porque el mensaje es cosa de la pantalla, y porque
- * un código en la URL no le dice nada a nadie.
+ * Cada clave la pone una redirección: /api/auth/google y su callback, el
+ * verificador de correo, y la página de invitaciones. Se traducen aquí y no
+ * allí porque el mensaje es cosa de la pantalla, y porque un código en la URL
+ * no le dice nada a nadie.
+ *
+ * Estaban solo los de Google. Los otros tres llegaban con su `?error=` y no
+ * encontraban traducción, así que `fallo` quedaba en null y la pantalla salía
+ * pelada — exactamente el fallo que el comentario de abajo describe y que ya se
+ * había arreglado para Google.
  */
 const MOTIVOS: Record<string, string> = {
   google_no_disponible: 'Entrar con Google no está disponible ahora mismo. Usa tu correo y contraseña.',
@@ -35,6 +41,20 @@ const MOTIVOS: Record<string, string> = {
   google_state: 'La sesión con Google no cuadró. Vuelve a intentarlo.',
   google_caducado: 'La sesión con Google caducó. Vuelve a intentarlo.',
   google: 'No pudimos completar la entrada con Google. Intenta de nuevo.',
+  expired: 'Ese enlace de verificación caducó. Entra y te mandamos uno nuevo.',
+  invalid: 'Ese enlace de verificación no es válido. Revisa que lo copiaste entero.',
+  invitacion_invalida: 'Esa invitación ya se usó, se canceló o caducó. Pídele otra a quien te invitó.',
+};
+
+/**
+ * Lo que NO salió mal, pero hay que decir igual.
+ *
+ * Aparte porque se pinta en verde y no en ámbar: quien abre dos veces el correo
+ * de verificación no ha roto nada —su cuenta está verificada— y llamarlo error
+ * es lo que hacía pensar que el registro había fallado.
+ */
+const AVISOS: Record<string, string> = {
+  ya_verificado: 'Tu correo ya estaba verificado. Entra con tu contraseña.',
 };
 
 export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
@@ -46,6 +66,7 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   // pulsaba «Continuar con Google», volvía a esta misma pantalla sin nada
   // escrito y no tenía forma de saber por qué.
   const fallo     = MOTIVOS[searchParams.get('error') ?? ''] ?? null;
+  const aviso     = AVISOS[searchParams.get('aviso') ?? ''] ?? null;
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     mode === 'signin' ? signIn : signUp,
     { error: '' }
@@ -127,6 +148,12 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             {fallo && (
               <p role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {fallo}
+              </p>
+            )}
+
+            {aviso && (
+              <p role="status" className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                {aviso}
               </p>
             )}
 
