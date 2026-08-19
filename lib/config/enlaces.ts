@@ -25,8 +25,19 @@
  *     trescientas familias a la red local del portátil de alguien.
  */
 
-/** A dónde apunta el sistema cuando nadie dice otra cosa. */
-export const BASE_PUBLICA = 'https://facturacion-v2.zero.com.do';
+/**
+ * A dónde apunta el sistema cuando nadie dice otra cosa.
+ *
+ * `app.zero.com.do` porque es el host de la cuenta (`APP_HOST`) y el único
+ * donde `/reset-password` y compañía resuelven sin dar un salto de más — el
+ * proxy manda ahí toda ruta de cuenta que llegue por otro host.
+ *
+ * Antes era `facturacion-v2.zero.com.do`, que no es un dominio de producto sino
+ * un resto de la migración a v2. Todo funcionaba —los siete dominios son alias
+ * del mismo despliegue—, pero salía impreso en cada correo y, peor, dentro del
+ * enlace de pago que le llega al padre por WhatsApp.
+ */
+export const BASE_PUBLICA = 'https://app.zero.com.do';
 
 /**
  * ¿El host es de la máquina o de la red de casa?
@@ -97,4 +108,71 @@ export function baseDeEnlaces(): string {
   if (vercel) return `https://${limpia(vercel).replace(/^https?:\/\//, '')}`;
 
   return BASE_PUBLICA;
+}
+
+
+/**
+ * Las tres variables que pueden decidir la base, en el orden en que mandan.
+ *
+ * Están juntas y en un solo sitio porque el fallo que esto previene nace justo
+ * de que estuvieran repartidas.
+ */
+const FUENTES_DE_BASE = [
+  'PLANTILLAS_BASE_URL',
+  'NEXT_PUBLIC_APP_URL',
+  'BASE_URL',
+] as const;
+
+/**
+ * Que las bases de enlaces no puedan estar mal sin que nadie se entere.
+ *
+ * El fallo que esto cierra ocurrió de verdad, y dos veces seguidas. Los enlaces
+ * de los correos salían apuntando a `facturacion-v2.zero.com.do` —un resto de
+ * la migración, no un dominio de producto—. Se cambió `NEXT_PUBLIC_APP_URL` y
+ * siguió saliendo igual, porque `PLANTILLAS_BASE_URL` se lee ANTES y conservaba
+ * el valor viejo. Nada avisó: la aplicación funcionaba, compilaba, desplegaba, y
+ * mandaba correos con una dirección equivocada.
+ *
+ * Dos comprobaciones, y las dos rompen el build en producción:
+ *
+ *  1. Una base puesta tiene que servir. Vacía, relativa o apuntando a una
+ *     dirección de casa, no sirve — y en producción eso mandaría a los padres
+ *     de un colegio a la red local del portátil de alguien.
+ *  2. Si hay más de una puesta, tienen que decir lo mismo. Que discrepen es
+ *     precisamente el estado que hizo invisible el fallo: la que manda es la
+ *     primera, y quien edita cualquier otra cree haber arreglado algo.
+ *
+ * Se rompe el build a propósito, y no se avisa por consola: un aviso en el log
+ * de un build es un aviso que nadie lee.
+ */
+export function validarBasesDeEnlaces(): void {
+  const puestas = FUENTES_DE_BASE
+    .map(clave => ({ clave, valor: (process.env[clave] ?? '').trim() }))
+    .filter(({ valor }) => valor !== '');
+
+  const problemas: string[] = [];
+
+  for (const { clave, valor } of puestas) {
+    if (!baseUsable(valor)) {
+      problemas.push(
+        `${clave}="${valor}" no sirve como base de enlaces: hace falta una URL absoluta ` +
+        `(https://…) y, en producción, que no apunte a una dirección local.`,
+      );
+    }
+  }
+
+  const distintas = new Set(puestas.map(({ valor }) => limpia(valor)));
+  if (distintas.size > 1) {
+    problemas.push(
+      `Las bases de enlaces no coinciden: ${puestas.map(p => `${p.clave}="${limpia(p.valor)}"`).join(', ')}. ` +
+      `Manda ${puestas[0].clave}; las demás no se leen, así que editarlas no cambia nada. ` +
+      `Ponlas iguales o deja solo una.`,
+    );
+  }
+
+  if (problemas.length === 0) return;
+
+  const mensaje = `\n⛔ Bases de enlaces mal configuradas:\n${problemas.map(p => `  - ${p}`).join('\n')}\n`;
+  console.error(mensaje);
+  if (process.env.NODE_ENV === 'production') throw new Error(mensaje);
 }

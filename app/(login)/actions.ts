@@ -150,7 +150,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const ipSignup = reqHeadersSignup.get('x-forwarded-for') ?? 'unknown';
   const rlSignup = rateLimit(`signup:${ipSignup}`, 5, 60_000);
   if (!rlSignup.allowed) {
-    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', email, password };
+    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', name, email, password };
   }
 
   // El alta es la MISMA que la de Google (lib/auth/alta.ts): crear usuario,
@@ -165,7 +165,11 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     inviteToken,
   });
 
-  if (!alta.ok) return { error: alta.error, email, password };
+  // `name` también, no solo email y contraseña: la pantalla lo repinta con
+  // `state.name` y sin devolverlo el campo volvía vacío en cada fallo. Fallar
+  // el registro y encima tener que reescribir el nombre es el momento en que
+  // la gente se va.
+  if (!alta.ok) return { error: alta.error, name, email, password };
 
   const { usuario: createdUser, equipo: createdTeam } = alta;
   await setSession(createdUser);

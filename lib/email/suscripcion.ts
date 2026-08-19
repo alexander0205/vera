@@ -12,6 +12,7 @@
 
 import { resend, assertSent } from '@/lib/email';
 import { PRUEBA, MORA, SOLO_LECTURA } from '@/lib/config/suscripcion';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 const DE = 'Zero <noreply@zero.com.do>';
 
@@ -24,7 +25,7 @@ function escapeHtml(s: string | null | undefined): string {
 
 /** URL de la pantalla de plan. Un solo sitio para no repetir la ruta. */
 function urlPlan(): string {
-  return `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/dashboard/suscripcion`;
+  return `${baseDeEnlaces()}/dashboard/suscripcion`;
 }
 
 /**

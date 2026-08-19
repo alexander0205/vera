@@ -31,6 +31,7 @@ import { BILLING_ENABLED } from '@/lib/config/billing';
 import { getTeamModules } from '@/lib/auth/modules';
 import { PLANS, getPlan } from '@/lib/config/plans';
 import { PlanSelect } from './_plan-select';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 /** -1 en el catálogo significa «sin tope»; 0 en estudiantes, «no aplica». */
 function limiteTexto(n: number): string {
@@ -419,7 +420,7 @@ export default async function EmpresaDetailPage({
     .where(and(eq(invitations.teamId, teamId), eq(invitations.status, 'pending')));
 
   const resendConfigured = !!(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_YOUR_KEY_HERE');
-  const inviteUrl = (tok: string) => `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${tok}`;
+  const inviteUrl = (tok: string) => `${baseDeEnlaces()}/invitations/accept?token=${tok}`;
 
   return (
     <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>

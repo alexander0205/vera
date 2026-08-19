@@ -13,6 +13,7 @@ import { sendInvitationEmail } from '@/lib/email';
 import { listTeamRoles } from '@/lib/auth/permissions';
 import { puedeAgregarUsuario } from '@/lib/config/plans';
 import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 const inviteSchema = z.object({
   // Normalizamos aquí: el email se guarda en minúsculas para que todas las
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
       expiresAt,
     }).returning();
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/invitations/accept?token=${inv.token}`;
+    const inviteUrl = `${baseDeEnlaces()}/invitations/accept?token=${inv.token}`;
 
     try {
       await sendInvitationEmail(email, user.name, teamData?.name ?? 'Zero', inv.token);

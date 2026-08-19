@@ -6,6 +6,7 @@ import { seguimientoDeDocumentos } from '@/lib/administracion-escolar/documentos
 import { crearEnlace, DIAS_VIGENCIA_ENLACE } from '@/lib/administracion-escolar/documentos-enlace';
 import { enviarEnlaceDocumentosEmail } from '@/lib/email/escolar-avisos';
 import { registrarAvisoExpediente } from '@/lib/administracion-escolar/avisos-expediente';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 /**
  * El recordatorio de documentos que falta entregar.
@@ -51,14 +52,13 @@ export async function GET(req: NextRequest) {
     || process.env.ESCOLAR_DOCUMENTOS_RECORDATORIO !== '1';
 
   // El origen público no sale de la petición del cron —que llega de la
-  // infraestructura, no de un navegador— sino de la variable de entorno.
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
-  if (!simulacro && !base) {
-    return NextResponse.json(
-      { error: 'Falta NEXT_PUBLIC_APP_URL: sin ella el enlace del correo no lleva a ninguna parte' },
-      { status: 500 },
-    );
-  }
+  // infraestructura, no de un navegador— sino de `baseDeEnlaces()`, que es
+  // quien decide esto en todo el sistema.
+  //
+  // Ya no hace falta el corte por variable ausente: `baseDeEnlaces()` nunca
+  // devuelve vacío ni relativo. Antes esto tumbaba el cron entero con un 500
+  // cuando faltaba la variable; ahora, como mucho, cae a la base por defecto.
+  const base = baseDeEnlaces().replace(/\/$/, '');
 
   const colegios = await db
     .select({ id: teams.id, nombre: teams.name })

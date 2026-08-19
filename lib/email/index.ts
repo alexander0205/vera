@@ -1,4 +1,5 @@
 import { Resend, type Attachment } from 'resend';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -28,7 +29,7 @@ function escapeHtml(s: string | null | undefined): string {
 }
 
 export async function sendPasswordResetEmail(email: string, token: string, name: string | null) {
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
+  const resetUrl = `${baseDeEnlaces()}/reset-password?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
@@ -82,7 +83,7 @@ export async function enviarAlertaEmail(asunto: string, mensaje: string): Promis
 }
 
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
-  const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+  const verifyUrl = `${baseDeEnlaces()}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
@@ -111,7 +112,7 @@ export async function sendInvitationEmail(
   teamName: string,
   token: string,
 ) {
-  const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${encodeURIComponent(token)}`;
+  const acceptUrl = `${baseDeEnlaces()}/invitations/accept?token=${encodeURIComponent(token)}`;
   const safeInvitedBy = escapeHtml(invitedByName) || 'Alguien';
   const safeTeam = escapeHtml(teamName);
   const res = await resend.emails.send({
