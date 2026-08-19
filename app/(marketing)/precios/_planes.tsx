@@ -266,16 +266,22 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
 
                 <div className={`mt-4 flex flex-col gap-2 border-y py-3.5 ${oscuro ? 'border-white/15' : 'border-[#edeff5]'}`}>
                   {p.topes.map(t => (
-                    <div key={t.etiqueta} className="flex items-baseline justify-between gap-2">
-                      <span className={`text-[11.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>{t.etiqueta}</span>
+                    // El valor baja de línea ENTERO cuando no cabe —`ml-auto`
+                    // en vez de `justify-between`—: con la columna estrecha,
+                    // «Notificaciones a clientes» se partía por la mitad y el
+                    // bloque quedaba desalineado.
+                    <div key={t.etiqueta} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className={`whitespace-nowrap text-[11.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>{t.etiqueta}</span>
                       {t.sinTope ? (
-                        <LazoZero
-                          alto={11}
-                          titulo={t.valor}
-                          color={oscuro ? 'rgba(255,255,255,.9)' : '#3b4252'}
-                        />
+                        <span className="ml-auto flex">
+                          <LazoZero
+                            alto={11}
+                            titulo={t.valor}
+                            color={oscuro ? 'rgba(255,255,255,.9)' : '#3b4252'}
+                          />
+                        </span>
                       ) : (
-                        <span className={`font-[family-name:var(--font-display)] text-[11.5px] font-semibold ${oscuro ? 'text-white/90' : 'text-[#3b4252]'}`}>
+                        <span className={`ml-auto whitespace-nowrap font-[family-name:var(--font-display)] text-[11.5px] font-semibold ${oscuro ? 'text-white/90' : 'text-[#3b4252]'}`}>
                           {t.valor}
                         </span>
                       )}

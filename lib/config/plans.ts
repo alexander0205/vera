@@ -194,7 +194,7 @@ export const PLANS: PlanDef[] = [
       description: 'Hasta 150 estudiantes',
       badgeColor: 'bg-gray-100 text-gray-700 border-gray-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 150 estudiantes', 'e-CF ilimitados', '2 usuarios', '300 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '8 horas de implementación'],
+      marketingFeatures: ['Hasta 150 estudiantes', 'e-CF ilimitados', '2 usuarios', '8 horas de implementación'],
     },
   },
   {
@@ -207,7 +207,7 @@ export const PLANS: PlanDef[] = [
       description: 'De 151 a 300 estudiantes',
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
       highlighted: true,
-      marketingFeatures: ['Hasta 300 estudiantes', 'e-CF ilimitados', '3 usuarios', '675 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '10.5 horas de implementación'],
+      marketingFeatures: ['Hasta 300 estudiantes', 'e-CF ilimitados', '3 usuarios', '10.5 horas de implementación'],
     },
   },
   {
@@ -220,7 +220,7 @@ export const PLANS: PlanDef[] = [
       description: 'De 301 a 500 estudiantes',
       badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 500 estudiantes', 'e-CF ilimitados', '5 usuarios', '1,200 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '14 horas de implementación'],
+      marketingFeatures: ['Hasta 500 estudiantes', 'e-CF ilimitados', '5 usuarios', '14 horas de implementación'],
     },
   },
   {
@@ -233,7 +233,7 @@ export const PLANS: PlanDef[] = [
       description: 'De 501 a 800 estudiantes',
       badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 800 estudiantes', 'e-CF ilimitados', '9 usuarios', '1,950 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '19 horas de implementación'],
+      marketingFeatures: ['Hasta 800 estudiantes', 'e-CF ilimitados', '9 usuarios', '19 horas de implementación'],
     },
   },
 ];

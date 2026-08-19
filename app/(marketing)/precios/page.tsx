@@ -20,6 +20,7 @@ import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, TarjetasContacto } from '../_piezas';
 import { Acordeon, type Pregunta } from '../_acordeon';
+import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
 import { Planes, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
 import { CierreDePrecios, PerfilProvider } from './_perfil';
 
@@ -189,23 +190,10 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
   const conPos = linea.addons.includes('pos') || esColegio;
 
   const planes: PlanVista[] = conPrecio.map(({ plan, precio }, i) => {
-    // `-1` es el «sin tope» del catálogo. La tarjeta lo pinta con el lazo.
-    const comprobantes = plan.limits.docs < 0
-      ? { etiqueta: 'Comprobantes/mes', valor: 'Sin tope', sinTope: true }
-      : { etiqueta: 'Comprobantes/mes', valor: num(plan.limits.docs) };
-
-    const topes: PlanVista['topes'] = esColegio
-      ? [
-          { etiqueta: 'Estudiantes', valor: `Hasta ${num(plan.limits.estudiantes)}` },
-          { etiqueta: 'Usuarios', valor: num(plan.limits.users) },
-          { etiqueta: 'Avisos WhatsApp/mes', valor: num(plan.limits.whatsappMensajes) },
-          comprobantes,
-        ]
-      : [
-          comprobantes,
-          { etiqueta: 'Usuarios', valor: num(plan.limits.users) },
-          { etiqueta: 'Punto de venta', valor: conPos ? 'Incluido' : 'No incluido' },
-        ];
+    // `-1` es el «sin tope» del catálogo; la tarjeta lo pinta con el lazo.
+    // Sale de `lib/config/plan-vista` porque la pantalla de suscripción enseña
+    // esta misma lista y tiene que decir los mismos números.
+    const topes = topesDePlan(plan, { conPos, esColegio });
 
     return {
       key: plan.key,
@@ -225,9 +213,7 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
       precio: esColegio ? null : precio,
       destacado: plan.ui.highlighted,
       topes,
-      // «Todo X, más» sale del plan anterior de la misma línea, no de un texto
-      // fijo: si mañana se reordena el catálogo, la escalera se reordena sola.
-      incluyeTitulo: i === 0 ? 'Incluye' : `Todo ${defs[i - 1].name}, más`,
+      incluyeTitulo: tituloIncluye(defs, i),
       incluye: plan.ui.marketingFeatures,
       docs: plan.limits.docs,
       usuarios: plan.limits.users,

@@ -34,9 +34,11 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Calendar, X, CircleSlash, TriangleAlert, Check, Info, MessageCircle } from 'lucide-react';
 
 import type { PlanDef } from '@/lib/config/plans';
+import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
+import { LazoZero } from '@/lib/marca/isotipo';
 import type { MotivoCambio, RiesgoDeCambio, NivelDeCambio } from '@/lib/config/suscripcion';
 import {
-  AZUL, NAVY, GRIS, ROJO, AMBAR, TINTA, BORDE, TEXTO_MEDIO,
+  AZUL, NAVY, GRIS, ROJO, AMBAR, TINTA, BORDE, BORDE_TENUE, RADIO, TEXTO_MEDIO,
   TONO_NIVEL, TONO_MOTIVO, type ClaveMotivo, usd,
 } from './_paleta';
 
@@ -131,31 +133,6 @@ interface Props {
 }
 
 // ─── Textos derivados del catálogo ───────────────────────────────────────────
-
-/**
- * Qué trae el plan, en una línea.
- *
- * Se arma de `limits` y no de `ui.marketingFeatures`: esa lista es copy de
- * portada («Sistema completo: contabilidad, inventario…») y es idéntica en los
- * ocho planes, así que en una rejilla donde hay que ELEGIR no distingue nada.
- * Lo que cambia entre planes son los topes.
- */
-function resumenDelPlan(plan: PlanDef, conPos: boolean): string {
-  const partes: string[] = [];
-
-  if (plan.limits.estudiantes >= 0) {
-    partes.push(`Hasta ${plan.limits.estudiantes.toLocaleString('es-DO')} estudiantes`);
-  }
-  partes.push(
-    plan.limits.docs < 0
-      ? 'Comprobantes sin tope'
-      : `${plan.limits.docs.toLocaleString('es-DO')} comprobantes/mes`,
-  );
-  partes.push(`${plan.limits.users} ${plan.limits.users === 1 ? 'usuario' : 'usuarios'}`);
-  if (conPos) partes.push('punto de venta incluido');
-
-  return partes.join(' · ');
-}
 
 const ICONO_NIVEL: Record<NivelDeCambio, typeof Info> = {
   actual:  Info,
@@ -395,10 +372,25 @@ export function ChangePlan({
         </Box>
       )}
 
-      {/* Una tarjeta por plan. auto-fit para que cuatro tramos quepan en
-          escritorio y bajen a una columna en un teléfono sin media queries. */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 1.5 }}>
-        {linea.planes.map(plan => {
+      {/* Una tarjeta por plan, con la misma anatomía que zero.com.do/precios:
+          nombre, para quién es, precio, los topes que de verdad distinguen un
+          plan de otro, y qué incluye. Antes aquí había una sola línea de
+          resumen, y quien está eligiendo entre cuatro tramos no puede comparar
+          cuatro párrafos — compara columnas.
+
+          Lo que NO se copia de la portada:
+
+          · El precio de colegio. Allí va en blanco a propósito («Precio a la
+            medida») porque una cifra publicada hace que el colegio grande se
+            descarte solo. Aquí la persona está a un clic de que se lo cobren:
+            esconderle lo que va a pagar sería otra cosa distinta.
+          · La cinta de «Más elegido». Es lenguaje de portada; quien mira esta
+            rejilla ya compró, y ese sitio lo ocupa algo que le importa más:
+            qué le pasa a ÉL si se cambia a este plan.
+          · El botón. Allí invita a registrarse o a hablar con alguien; aquí
+            abre el cambio de plan de verdad. */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(238px, 1fr))', gap: 2, alignItems: 'stretch' }}>
+        {linea.planes.map((plan, i) => {
           const riesgo = linea.riesgos[plan.key];
           // Sin riesgo calculado no se pinta la tarjeta: un plan sin veredicto
           // solo puede salir de un desajuste entre lo que el servidor evaluó y
@@ -412,17 +404,21 @@ export function ChangePlan({
           const programado = pendingPlan?.name === plan.name;
           const precio = linea.precios[plan.key] ?? plan.price;
           const conPos = linea.addons.includes('pos') || plan.modulos.includes('pos');
+          const esColegio = plan.familia === 'colegio';
+          const topes = topesDePlan(plan, { conPos, esColegio });
 
           return (
             <Box key={plan.key} sx={{
-              border: `1.5px solid ${tono.borde}`, bgcolor: tono.fondo, borderRadius: '14px',
-              p: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 1.375,
+              border: `1.5px solid ${tono.borde}`, bgcolor: tono.fondo, borderRadius: RADIO,
+              p: '20px 18px 18px', display: 'flex', flexDirection: 'column',
               opacity: veta ? 0.85 : 1,
               transition: 'box-shadow .18s',
               '&:hover': { boxShadow: '0 10px 26px rgba(15,17,24,.07)' },
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, minHeight: 22 }}>
-                <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: TINTA }}>{plan.name}</Typography>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: TINTA, letterSpacing: '-.2px' }}>
+                  {plan.name}
+                </Typography>
                 <Box component="span" sx={{
                   fontSize: '0.65rem', fontWeight: 700, letterSpacing: '.3px', whiteSpace: 'nowrap',
                   color: programado ? AMBAR : tono.chipColor,
@@ -433,21 +429,60 @@ export function ChangePlan({
                 </Box>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                <Typography sx={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-.5px', color: TINTA }}>
-                  {usd(precio)}
-                </Typography>
-                <Typography sx={{ fontSize: '0.78rem', color: GRIS }}>/mes</Typography>
-              </Box>
-
-              <Typography sx={{ fontSize: '0.78rem', color: TEXTO_MEDIO, lineHeight: 1.5, minHeight: 38 }}>
-                {resumenDelPlan(plan, conPos)}
+              {/* `minHeight` para que el precio de las cuatro tarjetas caiga a
+                  la misma altura aunque una descripción ocupe dos líneas. Sin
+                  esto la rejilla se ve descuadrada justo donde hay que
+                  comparar. */}
+              <Typography sx={{ mt: 0.75, fontSize: '0.78rem', lineHeight: 1.45, color: GRIS, minHeight: 34 }}>
+                {plan.ui.description}
               </Typography>
 
-              {/* El motivo más grave, en una línea. Es lo que evita el clic
-                  a ciegas: si le importa, abre; si no, sigue. */}
+              <Box sx={{ mt: 1.75, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-1px', color: TINTA }}>
+                  {usd(precio)}
+                </Typography>
+                <Typography sx={{ fontSize: '0.78rem', color: GRIS }}>/ mes</Typography>
+              </Box>
+
               <Box sx={{
-                display: 'flex', gap: 1, alignItems: 'flex-start', p: '9px 10px', borderRadius: '9px',
+                mt: 1.75, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1,
+                borderTop: `1px solid ${BORDE_TENUE}`, borderBottom: `1px solid ${BORDE_TENUE}`,
+              }}>
+                {topes.map(t => (
+                  // `flexWrap` con el valor empujado por `marginLeft: auto`:
+                  // en una columna estrecha «Notificaciones a clientes» partía
+                  // por la mitad y dejaba el bloque desalineado. Así lo que
+                  // baja de línea es el VALOR entero, y las dos partes quedan
+                  // legibles.
+                  <Box key={t.etiqueta} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 1, rowGap: 0.25 }}>
+                    <Typography sx={{ fontSize: '0.72rem', color: GRIS, whiteSpace: 'nowrap' }}>{t.etiqueta}</Typography>
+                    {t.sinTope
+                      // El lazo ES el infinito de la marca. En una columna
+                      // estrecha además ocupa menos que la palabra.
+                      ? <Box sx={{ ml: 'auto', display: 'flex' }}><LazoZero alto={11} titulo={t.valor} color={TEXTO_MEDIO} /></Box>
+                      : <Typography sx={{ ml: 'auto', fontSize: '0.72rem', fontWeight: 700, color: TEXTO_MEDIO, whiteSpace: 'nowrap' }}>{t.valor}</Typography>}
+                  </Box>
+                ))}
+              </Box>
+
+              {/* El motivo más grave, en una línea. Es lo que evita el clic
+                  a ciegas: si le importa, abre; si no, sigue.
+
+                  Esta caja es la que ABSORBE el sobrante de la tarjeta
+                  (`flexGrow`), y no es un capricho de maquetación: la rejilla
+                  estira las cuatro a la misma altura, y todo lo que va por
+                  debajo de aquí —botón, «incluye» y sus cuatro líneas— mide lo
+                  mismo en las cuatro. Así el botón cae a la misma altura en
+                  todas, con el aviso de una línea o con el de cuatro.
+
+                  Se probó antes con un `minHeight` fijo y no sirve: el mismo
+                  aviso ocupa dos líneas en una columna ancha y cuatro en una
+                  estrecha, así que la reserva o se queda corta o deja un hueco
+                  enorme. En una rejilla que existe para comparar, lo que hay
+                  que comparar tiene que estar a la misma altura. */}
+              <Box sx={{
+                mt: 1.75, display: 'flex', gap: 1, alignItems: 'flex-start', p: '9px 10px', borderRadius: '9px',
+                flexGrow: 1, minHeight: 44, boxSizing: 'border-box',
                 bgcolor: tono.avisoFondo, border: `1px solid ${tono.avisoBorde}`,
               }}>
                 <Icono size={14} color={tono.avisoColor} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -458,7 +493,7 @@ export function ChangePlan({
 
               {actual ? (
                 <Button fullWidth disabled disableElevation
-                  sx={{ height: 36, borderRadius: '9px', textTransform: 'none', fontSize: '0.78rem', fontWeight: 600, bgcolor: '#edeff5', color: GRIS, '&.Mui-disabled': { bgcolor: '#edeff5', color: GRIS } }}>
+                  sx={{ mt: 1.75, height: 42, borderRadius: '11px', textTransform: 'none', fontSize: '0.82rem', fontWeight: 600, bgcolor: '#edeff5', color: GRIS, '&.Mui-disabled': { bgcolor: '#edeff5', color: GRIS } }}>
                   Plan actual
                 </Button>
               ) : (
@@ -469,7 +504,8 @@ export function ChangePlan({
                   variant={riesgo.nivel === 'ok' ? 'contained' : 'outlined'}
                   startIcon={cargando === plan.key ? <CircularProgress size={12} color="inherit" /> : undefined}
                   sx={{
-                    height: 36, borderRadius: '9px', textTransform: 'none', fontSize: '0.78rem', fontWeight: 600,
+                    mt: 1.75, height: 42, borderRadius: '11px', textTransform: 'none',
+                    fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.2, px: 1.5,
                     ...(riesgo.nivel === 'ok'
                       ? { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: '#0c2059' } }
                       : veta
@@ -488,6 +524,21 @@ export function ChangePlan({
                         : `Cambiar a ${plan.name}`}
                 </Button>
               )}
+
+              {/* «Todo Básico, más» en vez de repetir la lista entera: lo que
+                  se decide en esta rejilla es el SALTO de un tramo al
+                  siguiente, no el plan desde cero. */}
+              <Typography sx={{ mt: 2.25, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: GRIS }}>
+                {tituloIncluye(linea.planes, i)}
+              </Typography>
+              <Box sx={{ mt: 1.25, display: 'flex', flexDirection: 'column', gap: 1.125 }}>
+                {plan.ui.marketingFeatures.map(f => (
+                  <Box key={f} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.125 }}>
+                    <Check size={13} color={AZUL} strokeWidth={2.6} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <Typography sx={{ fontSize: '0.72rem', lineHeight: 1.45, color: TEXTO_MEDIO }}>{f}</Typography>
+                  </Box>
+                ))}
+              </Box>
             </Box>
           );
         })}
