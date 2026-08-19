@@ -15,12 +15,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
-import { getTeamForUser, getUser } from '@/lib/db/queries';
+import { getTeamForUser, getUser, getUserTeams } from '@/lib/db/queries';
 import { planSugerido, preguntaDeTamano, type LineaKey } from '@/lib/onboarding/deducir';
 import { LogoZero } from '@/components/marca-zero';
 import { PasoEmpresa } from './_paso-empresa';
 import { PasoTamano } from './_paso-tamano';
 import { PasoPlan } from './_paso-plan';
+import { CancelarOnboarding } from './_cancelar-onboarding';
 
 export const metadata = { title: 'Bienvenido a Zero' };
 
@@ -48,6 +49,11 @@ export default async function BienvenidaPage({
   // Ya lo hizo: no se repite. Volver aquí a mano no rehace nada.
   if (equipo.onboardingCompletadoEn) redirect('/dashboard');
 
+  // Cancelar la creación solo se ofrece si hay OTRA empresa a la que volver:
+  // quien crea su primera empresa no tiene a dónde ir, y el onboarding sigue
+  // siendo obligatorio para ese caso.
+  const puedeCancelar = (await getUserTeams()).length > 1;
+
   const datos = (equipo.onboardingDatos as Datos) ?? {};
   const paso = equipo.onboardingPaso ?? 1;
 
@@ -73,7 +79,10 @@ export default async function BienvenidaPage({
       <header className="border-b border-gray-100 bg-white">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-6">
           <LogoZero alto={26} />
-          <p className="text-sm text-gray-400">{user.email}</p>
+          <div className="flex items-center gap-4">
+            {puedeCancelar && <CancelarOnboarding teamId={equipo.id} />}
+            <p className="text-sm text-gray-400">{user.email}</p>
+          </div>
         </div>
       </header>
 
