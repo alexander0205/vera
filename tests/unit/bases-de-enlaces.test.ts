@@ -28,8 +28,9 @@ describe('validarBasesDeEnlaces', () => {
 
   beforeEach(() => {
     for (const k of CLAVES) { previo[k] = process.env[k]; delete process.env[k]; }
-    // El guardián solo lanza en producción; es donde importa.
-    vi.stubEnv('NODE_ENV', 'production');
+    // El guardián solo lanza en un despliegue de producción de verdad.
+    // NODE_ENV no vale: `next build` lo pone en 'production' también en local.
+    vi.stubEnv('VERCEL_ENV', 'production');
   });
   afterEach(() => {
     for (const k of CLAVES) {
@@ -72,12 +73,13 @@ describe('validarBasesDeEnlaces', () => {
   });
 
   it('una dirección de casa rompe en producción', () => {
+    vi.stubEnv('NODE_ENV', 'production');
     process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
     expect(() => validarBasesDeEnlaces()).toThrow(/no sirve como base/);
   });
 
-  it('fuera de producción avisa pero no tumba el arranque', () => {
-    vi.stubEnv('NODE_ENV', 'development');
+  it('un build local con .env de desarrollo avisa, pero NO rompe', () => {
+    vi.stubEnv('VERCEL_ENV', 'preview');
     process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
     expect(() => validarBasesDeEnlaces()).not.toThrow();
   });

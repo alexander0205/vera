@@ -59,6 +59,39 @@ const itemSchema = z.object({
   variantId:              z.number().int().positive().optional().nullable(),
 });
 
+/**
+ * Las líneas que se GUARDAN para enseñar el documento.
+ *
+ * `items` es lo que se factura; `lineasJson` es la copia que la pantalla, el
+ * PDF y los reportes leen después. El formulario grande manda las dos, así que
+ * el hueco no se veía — pero quien llame a la API con solo `items` (una
+ * integración, un script, el módulo escolar facturando un cargo) obtenía un
+ * documento con su total correcto y la tabla de productos VACÍA.
+ *
+ * Pasó de verdad: 382 facturas del colegio, todas con `lineas_json` en NULL.
+ * Y el fallo dependía de la ruta —la de emisión ya caía a `items`, las dos de
+ * borrador guardaban `null`—, así que la misma petición daba un resultado u
+ * otro según el modo.
+ *
+ * Deriva de `items` en vez de exigir el campo porque `items` ya trae todo lo
+ * que la copia necesita: pedirlo dos veces es lo que permitió que se olvidara.
+ */
+function lineasParaGuardar(data: { lineasJson?: string; items: z.infer<typeof itemSchema>[] }): string {
+  return data.lineasJson ?? JSON.stringify(data.items.map(item => ({
+    productoId:         item.productoId ?? null,
+    variantId:          item.variantId ?? null,
+    nombreItem:         item.nombreItem,
+    descripcionItem:    item.descripcionItem,
+    cantidadItem:       item.cantidadItem,
+    precioUnitarioItem: item.precioUnitarioItem,
+    descuentoMonto:     item.descuentoMonto ?? 0,
+    tasaItbis:          item.tasaItbis ?? 0,
+    subtotalConItbis:   item.precioUnitarioItem * item.cantidadItem * (1 + (item.tasaItbis ?? 0)),
+    unidadMedida:       item.unidadMedidaItem,
+    indicadorBienoServicio: item.indicadorBienoServicio ?? 2,
+  })));
+}
+
 const retencionSchema = z.object({
   id:         z.string(),
   nombre:     z.string(),
@@ -871,7 +904,7 @@ export async function POST(request: NextRequest) {
             // Fecha custom (sin-ncf + permiso): solo sobreescribir cuando aplica,
             // para no pisar la fecha original de un borrador que se re-guarda.
             ...(fechaEmisionCustom ? { fechaEmision: fechaEmisionCustom } : {}),
-            lineasJson:           data.lineasJson ?? null,
+            lineasJson:           lineasParaGuardar(data),
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
             dependienteId:        data.dependienteId ?? null,
@@ -1057,7 +1090,7 @@ export async function POST(request: NextRequest) {
             razonModificacion:    data.razonModificacion || null,
             creditoGeneradoCents,
             fechaEmision:         fechaEmisionCustom ?? new Date(),
-            lineasJson:           data.lineasJson ?? null,
+            lineasJson:           lineasParaGuardar(data),
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
             createdBy:            user.id,
@@ -1349,7 +1382,7 @@ export async function POST(request: NextRequest) {
             origenDocumentoId:    padreDoc?.id ?? null,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
-            lineasJson:           data.lineasJson ?? JSON.stringify(data.items),
+            lineasJson:           lineasParaGuardar(data),
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
             createdBy:            uid,
@@ -1447,20 +1480,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Guardar en BD local (auditoría + PDFs + webhooks)
-    const lineasJsonParaGuardar = data.lineasJson
-      ?? JSON.stringify(data.items.map(item => ({
-          productoId:         item.productoId ?? null,
-          variantId:          item.variantId ?? null,
-          nombreItem:         item.nombreItem,
-          descripcionItem:    item.descripcionItem,
-          cantidadItem:       item.cantidadItem,
-          precioUnitarioItem: item.precioUnitarioItem,
-          descuentoMonto:     item.descuentoMonto ?? 0,
-          tasaItbis:          item.tasaItbis ?? 0,
-          subtotalConItbis:   item.precioUnitarioItem * item.cantidadItem * (1 + (item.tasaItbis ?? 0)),
-          unidadMedida:       item.unidadMedidaItem,
-          indicadorBienoServicio: item.indicadorBienoServicio ?? 2,
-        })));
+    const lineasJsonParaGuardar = lineasParaGuardar(data);
 
     const codigoEmit     = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
     const montoCtsEmit   = Math.round(totales.montoTotal * 100);

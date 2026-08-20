@@ -22,11 +22,22 @@ import { eq, and } from 'drizzle-orm';
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 
 /**
- * Listado paginado. Params: `q` (búsqueda), `estado`, `cursoId`, `limit`,
- * `offset`. Devuelve `{ estudiantes, total, sinMatricular, stats }` — `stats` es
- * global del team (no depende de la página ni de los filtros) y `sinMatricular`
- * cuenta los beneficiarios de Contactos que todavía no son alumnos, los filtre
- * la pantalla o no.
+ * Listado paginado. Params: `q` (búsqueda), `estado`, `cursoId`, y la página.
+ *
+ * La página se puede pedir de dos maneras y las dos valen: `pagina`/`porPagina`,
+ * que es la convención del resto de la API, o `limit`/`offset`, que es lo que
+ * esta ruta aceptaba antes y sigue usando la pantalla.
+ *
+ * Admitir las dos no es indecisión: pedir `porPagina=200` aquí NO fallaba —
+ * caía al defecto de 25 y devolvía 25 de 180 sin decir nada. Quien recorría el
+ * listado creyendo haberlo recorrido entero se dejaba 155 alumnos fuera, y el
+ * bucle terminaba «bien». Un parámetro que se ignora en silencio es peor que
+ * uno que se rechaza.
+ *
+ * Devuelve `{ estudiantes, total, sinMatricular, stats }` — `stats` es global
+ * del team (no depende de la página ni de los filtros) y `sinMatricular` cuenta
+ * los beneficiarios de Contactos que todavía no son alumnos, los filtre la
+ * pantalla o no.
  */
 export async function GET(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
@@ -34,8 +45,12 @@ export async function GET(req: NextRequest) {
   const { teamId } = auth;
   const sp = req.nextUrl.searchParams;
   const cursoId = Number(sp.get('cursoId')) || null;
-  const limit = Number(sp.get('limit')) || 25;
-  const offset = Number(sp.get('offset')) || 0;
+  // `porPagina` gana si viene, porque es la convención de la casa; si no, el
+  // `limit` de siempre. El tope real (200) lo pone listarEstudiantesEnriquecidos.
+  const porPagina = Number(sp.get('porPagina')) || 0;
+  const pagina    = Math.max(1, Number(sp.get('pagina')) || 1);
+  const limit  = porPagina || Number(sp.get('limit')) || 25;
+  const offset = porPagina ? (pagina - 1) * porPagina : (Number(sp.get('offset')) || 0);
   // Las dos a la vez: `stats` es del team entero y no depende del listado, así
   // que esperarla en fila añadía su tiempo al de la página sin motivo.
   const [{ estudiantes, total, sinMatricular }, stats] = await Promise.all([
