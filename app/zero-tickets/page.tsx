@@ -295,7 +295,7 @@ export default function ZeroTicketsPage() {
           </div>
           <button
             onClick={toggleAvailable}
-            className={`text-xs px-3 py-1.5 rounded ${available ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            className={`text-xs px-3 py-1.5 rounded ${available ? 'bg-[#3658e1] text-white' : 'bg-gray-200 text-gray-700'}`}
           >
             {available ? 'Disponible' : 'No disponible'}
           </button>
@@ -325,11 +325,11 @@ export default function ZeroTicketsPage() {
                 <button
                   key={t.id}
                   onClick={() => setSelectedId(t.id)}
-                  className={`w-full text-left px-4 py-3 border-b hover:bg-gray-50 ${waitBorderClass} ${selectedId === t.id ? 'bg-teal-50' : ''}`}
+                  className={`w-full text-left px-4 py-3 border-b hover:bg-gray-50 ${waitBorderClass} ${selectedId === t.id ? 'bg-[#eef1fd]' : ''}`}
                 >
                   <div className="flex justify-between items-center">
                     <span className="font-medium text-sm text-gray-900 flex items-center gap-1.5">
-                      {t.unread && <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />}
+                      {t.unread && <span className="w-2 h-2 rounded-full bg-[#3658e1] shrink-0" />}
                       {t.userName ?? t.userEmail}
                     </span>
                     <span className="flex items-center gap-1.5">
@@ -347,7 +347,7 @@ export default function ZeroTicketsPage() {
                           #{posicion} en cola
                         </span>
                       )}
-                      <span className={`text-xs ${t.status === 'esperando' ? 'text-amber-600' : t.status === 'abierto' ? 'text-teal-600' : 'text-gray-400'}`}>
+                      <span className={`text-xs ${t.status === 'esperando' ? 'text-amber-600' : t.status === 'abierto' ? 'text-[#3658e1]' : 'text-gray-400'}`}>
                         {t.status}
                       </span>
                     </span>
@@ -377,7 +377,7 @@ export default function ZeroTicketsPage() {
               </div>
               <div className="flex gap-2">
                 {!selected.assignedAgentId && (
-                  <button onClick={() => claim(selected.id)} className="text-xs px-3 py-1.5 rounded bg-teal-600 text-white hover:bg-teal-700">
+                  <button onClick={() => claim(selected.id)} className="text-xs px-3 py-1.5 rounded bg-[#3658e1] text-white hover:bg-[#2c46b4]">
                     Tomar ticket
                   </button>
                 )}
@@ -395,7 +395,7 @@ export default function ZeroTicketsPage() {
                 <button
                   onClick={() => toggleStatus(selected.id, selected.status)}
                   className={`text-xs px-3 py-1.5 rounded border ${
-                    selected.status === 'cerrado' ? 'border-teal-600 text-teal-700 hover:bg-teal-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    selected.status === 'cerrado' ? 'border-[#3658e1] text-[#3658e1] hover:bg-[#eef1fd]' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   {selected.status === 'cerrado' ? 'Reabrir' : 'Cerrar'}
@@ -413,7 +413,7 @@ export default function ZeroTicketsPage() {
                 const mine = m.senderType === 'agent';
                 return (
                   <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`inline-block max-w-[70%] rounded-lg px-3 py-2 text-sm ${mine ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                    <div className={`inline-block max-w-[70%] rounded-lg px-3 py-2 text-sm ${mine ? 'bg-[#3658e1] text-white' : 'bg-gray-100 text-gray-900'}`}>
                       {m.messageType === 'screenshot_request' && (
                         <div className="text-[11px] opacity-80 mb-1">📸 Pedido de captura</div>
                       )}
@@ -469,7 +469,7 @@ export default function ZeroTicketsPage() {
                         className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-gray-50"
                       >
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#dde3fa] text-[#3658e1]">
                             {CATEGORY_LABELS[cr.category] ?? cr.category}
                           </span>
                           <span className="text-sm font-medium text-gray-900">{cr.label}</span>
@@ -488,7 +488,7 @@ export default function ZeroTicketsPage() {
                   placeholder="Escribe una respuesta..."
                   className="flex-1 border rounded px-3 py-2 text-sm"
                 />
-                <button onClick={sendReply} disabled={sending} className="bg-teal-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+                <button onClick={sendReply} disabled={sending} className="bg-[#3658e1] text-white px-4 py-2 rounded text-sm disabled:opacity-50">
                   Enviar
                 </button>
               </div>
@@ -520,7 +520,7 @@ export default function ZeroTicketsPage() {
                 <div key={cr.id} className="border rounded-lg p-3 flex justify-between items-start gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#dde3fa] text-[#3658e1]">
                         {CATEGORY_LABELS[cr.category] ?? cr.category}
                       </span>
                       <span className="text-sm font-medium text-gray-900">{cr.label}</span>
@@ -578,7 +578,7 @@ export default function ZeroTicketsPage() {
                 <button
                   onClick={saveCannedResponse}
                   disabled={savingCanned || !formLabel.trim() || !formContent.trim()}
-                  className="text-xs px-3 py-1.5 rounded bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                  className="text-xs px-3 py-1.5 rounded bg-[#3658e1] text-white hover:bg-[#2c46b4] disabled:opacity-50"
                 >
                   {editingId ? 'Guardar cambios' : 'Agregar'}
                 </button>

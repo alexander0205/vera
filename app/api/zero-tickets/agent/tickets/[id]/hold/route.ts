@@ -17,18 +17,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'onHold inválido' }, { status: 400 });
   }
 
-  const [updated] = await db
-    .update(tickets)
-    .set({ onHold, updatedAt: new Date() })
-    .where(eq(tickets.id, ticketId))
-    .returning();
+  // El UPDATE y el INSERT no dependen uno del otro (el mensaje solo necesita
+  // el ticketId, que ya tenemos) — en serie duplicaban la espera de cada
+  // acción del agente contra una DB ya lenta de por sí. `allSettled` en vez
+  // de `all`: si el ticketId no existe, el INSERT revienta por la FK a
+  // `tickets` — con `all` eso tira un 500 en vez de dejar responder el 404
+  // limpio que ya sale de mirar el UPDATE.
+  const [updateResult, insertResult] = await Promise.allSettled([
+    db.update(tickets).set({ onHold, updatedAt: new Date() }).where(eq(tickets.id, ticketId)).returning(),
+    db.insert(ticketMessages).values({
+      ticketId,
+      senderType: 'system',
+      content: onHold ? 'Ticket puesto en espera.' : 'Ticket retomado, ya no está en espera.',
+    }),
+  ]);
+  const updated = updateResult.status === 'fulfilled' ? updateResult.value[0] : undefined;
   if (!updated) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
-
-  await db.insert(ticketMessages).values({
-    ticketId,
-    senderType: 'system',
-    content: onHold ? 'Ticket puesto en espera.' : 'Ticket retomado, ya no está en espera.',
-  });
+  if (insertResult.status === 'rejected') {
+    console.error('[zero-tickets/hold] error insertando mensaje de sistema', insertResult.reason);
+  }
 
   return NextResponse.json({ ticket: updated });
 }

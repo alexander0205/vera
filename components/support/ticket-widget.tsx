@@ -1,373 +1,150 @@
 'use client';
 
 /**
- * Widget flotante de Zero Tickets. Polling cada 1.5s mientras está abierto
- * (elegido en vez de WebSockets para v1 — ver docs/superpowers/plans/
- * 2026-08-14-zero-tickets.md). Historial vive en la DB, se recupera al montar.
+ * Widget flotante de Zero Tickets. La lógica vive en useTicketChat, compartida
+ * con /soporte (la ruta de pantalla completa).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { MessageCircle, Maximize2, X, Paperclip, Camera, Send } from 'lucide-react';
+import { useTicketChat } from '@/lib/hooks/useTicketChat';
+import { ImageLightbox } from '@/components/support/image-lightbox';
+import { CapturaOverlay } from '@/components/support/captura-overlay';
+import { MessageBubble } from '@/components/support/message-bubble';
 
-interface Attachment {
-  id: number;
-  fileName: string;
-  mimeType: string;
-  kind: 'image' | 'video' | 'file';
-}
-
-interface TicketMessage {
-  id: number;
-  senderType: 'user' | 'agent' | 'system';
-  messageType: 'text' | 'screenshot_request';
-  content: string | null;
-  createdAt: string;
-  attachment: Attachment | null;
-}
-
-interface Espera {
-  agentesDisponibles: number;
-  enCola: number;
-  esperaMinutos: number | null;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
-  ]);
-}
+const COLOR_MIO = '#3658e1';
+const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
+const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 
 export function TicketWidget() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<TicketMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [onHold, setOnHold] = useState(false);
-  const [agentTyping, setAgentTyping] = useState(false);
-  const [espera, setEspera] = useState<Espera | null>(null);
-  const [readByAgentAt, setReadByAgentAt] = useState<string | null>(null);
-  const [showRating, setShowRating] = useState(false);
-  const [ratingSubmitted, setRatingSubmitted] = useState(false);
-  const [ratingValue, setRatingValue] = useState(0);
-  const [ratingComment, setRatingComment] = useState('');
-  const [ratingLoading, setRatingLoading] = useState(false);
-  const ticketIdRef = useRef<number | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastTypingSentRef = useRef(0);
+  const chat = useTicketChat(open);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const prevStatusRef = useRef<string | null>(null);
-  const [canCapture, setCanCapture] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
-  async function poll() {
-    const res = await fetch('/api/zero-tickets/tickets');
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.ticket) {
-      ticketIdRef.current = data.ticket.id;
-      setMessages(data.messages);
-      setStatus(data.ticket.status);
-      setOnHold(Boolean(data.ticket.onHold));
-      setAgentTyping(Boolean(data.ticket.agentTyping));
-      setReadByAgentAt(data.ticket.lastReadByAgentAt);
-    }
-    setEspera(data.espera);
+  function scrollToBottom() {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }
 
-  useEffect(() => {
-    poll();
-  }, []);
-
-  useEffect(() => {
-    setCanCapture(
-      typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
-    );
-  }, []);
-
+  // Abrir el chat, o que llegue un mensaje nuevo, debe dejarte viendo lo más
+  // reciente — no el arranque de la conversación. Sin esto la captura de
+  // pantalla también salía mostrando el chat scrolleado arriba del todo,
+  // porque captura el DOM tal cual está en ese momento.
   useEffect(() => {
     if (!open) return;
-    poll();
-    pollRef.current = setInterval(poll, 1500);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    const justClosed = status === 'cerrado' && prevStatusRef.current !== 'cerrado';
-    prevStatusRef.current = status;
-    if (!justClosed) return;
-
-    fetch('/api/zero-tickets/tickets/rating')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.canRate) setShowRating(true);
-      })
-      .catch(() => {});
-  }, [status]);
-
-  async function submitRating() {
-    if (ratingValue < 1 || ratingLoading) return;
-    setRatingLoading(true);
-    try {
-      const res = await fetch('/api/zero-tickets/tickets/rating', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating: ratingValue, comment: ratingComment.trim() || undefined }),
-      });
-      if (res.ok) {
-        setShowRating(false);
-        setRatingSubmitted(true);
-      }
-    } finally {
-      setRatingLoading(false);
-    }
-  }
-
-  function onInputChange(value: string) {
-    setInput(value);
-    const now = Date.now();
-    if (now - lastTypingSentRef.current > 2000) {
-      lastTypingSentRef.current = now;
-      fetch('/api/zero-tickets/tickets/typing', { method: 'POST' }).catch(() => {});
-    }
-  }
-
-  async function send() {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput('');
-    setLoading(true);
-    try {
-      const res = await fetch('/api/zero-tickets/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text }),
-      });
-      if (res.ok) await poll();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function uploadFile(file: File) {
-    setLoading(true);
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch('/api/zero-tickets/tickets/attachments', { method: 'POST', body: form });
-      if (res.ok) await poll();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    await uploadFile(file);
-  }
-
-  async function captureScreenshot() {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
-      window.alert('Tu navegador no soporta captura de pantalla. Usá el botón de adjuntar archivo.');
-      return;
-    }
-    let stream: MediaStream | null = null;
-    let video: HTMLVideoElement | null = null;
-
-    // Corta el stream Y suelta la referencia del <video> — algunos navegadores
-    // (Firefox sobre todo) no apagan el indicador de "compartiendo pantalla"
-    // hasta que ningún elemento sigue apuntando al stream via srcObject, no
-    // alcanza con solo llamar track.stop().
-    function stopSharing() {
-      stream?.getTracks().forEach((t) => t.stop());
-      stream = null;
-      if (video) {
-        video.pause();
-        video.srcObject = null;
-      }
-    }
-
-    setLoading(true);
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-
-      video = document.createElement('video');
-      video.srcObject = stream;
-      video.muted = true;
-
-      await withTimeout(
-        new Promise<void>((resolve, reject) => {
-          if (!video) return reject(new Error('no video element'));
-          video.onloadedmetadata = () => resolve();
-          video.onerror = () => reject(new Error('video load error'));
-          video.play().catch(reject);
-        }),
-        8000,
-      );
-
-      // Asegura que haya al menos un frame pintado antes de capturar.
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('no 2d context');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // Corta la sesión de screen-share apenas tenemos el frame — antes de
-      // subir el archivo, no después.
-      stopSharing();
-
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) throw new Error('no blob');
-
-      const file = new File([blob], 'captura.png', { type: 'image/png' });
-      await uploadFile(file);
-    } catch {
-      // El usuario canceló el picker nativo o denegó el permiso, o se agotó el tiempo de espera — no alertamos.
-    } finally {
-      stopSharing();
-      setLoading(false);
-    }
-  }
+    scrollToBottom();
+  }, [open, chat.messages, chat.pending]);
 
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
+        title="Chatear con soporte"
         style={{
           position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
-          width: 56, height: 56, borderRadius: '50%', background: '#7c3aed',
-          color: 'white', border: 'none', fontSize: 24, cursor: 'pointer',
+          width: 56, height: 56, borderRadius: '50%', background: '#3658e1',
+          color: 'white', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         }}
       >
-        💬
+        <MessageCircle size={26} />
       </button>
     );
   }
 
   return (
+    <>
+    {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+    {(chat.busyStage === 'capturando' || chat.busyStage === 'subiendo') && (
+      <CapturaOverlay stage={chat.busyStage} />
+    )}
     <div
+      ref={panelRef}
       style={{
         position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
-        width: 340, height: 500, background: 'white', border: '1px solid #ddd',
-        borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        width: 360, height: 520, background: 'white',
+        borderRadius: 16, boxShadow: '0 12px 32px rgba(15, 23, 42, 0.18)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}
     >
-      <div style={{ background: '#7c3aed', color: 'white', padding: '8px 12px', display: 'flex', justifyContent: 'space-between' }}>
-        <span>Soporte</span>
-        <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+      <div style={{ background: '#3658e1', color: 'white', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>Soporte</span>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <Link
+            href="/dashboard/soporte"
+            title="Abrir en pantalla completa"
+            style={{ color: 'white', opacity: 0.9, display: 'flex', alignItems: 'center' }}
+          >
+            <Maximize2 size={16} />
+          </Link>
+          <button
+            onClick={() => setOpen(false)}
+            title="Cerrar"
+            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
-      {status === 'esperando' && espera && (
-        <div style={{ padding: '8px 10px', fontSize: 12, background: '#eef2ff', color: '#3730a3', textAlign: 'center' }}>
-          {espera.agentesDisponibles === 0
+      {chat.status === 'esperando' && chat.espera && (
+        <div style={{ padding: '8px 12px', fontSize: 12, background: '#fffbeb', color: '#92400e', textAlign: 'center', borderBottom: '1px solid #fde68a' }}>
+          {chat.espera.agentesDisponibles === 0
             ? 'Todos nuestros agentes están ocupados. Te vamos a responder pronto.'
-            : `Tiempo de espera estimado: ${espera.esperaMinutos} min (posición en cola: ${espera.enCola})`}
+            : `Tiempo de espera estimado: ${chat.espera.esperaMinutos} min (posición en cola: ${chat.espera.enCola})`}
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {messages.map((m, i) => {
+      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 10, background: '#f8fafc' }}>
+        {[...chat.messages, ...chat.pending].map((m, i) => {
           const key = m.id != null ? `msg-${m.id}` : `tmp-${i}`;
-          if (m.senderType === 'system') {
-            return (
-              <div key={key} style={{ alignSelf: 'center', fontSize: 11, color: '#888', textAlign: 'center' }}>
-                {m.content}
-              </div>
-            );
-          }
           const mine = m.senderType === 'user';
-          const leido = mine && readByAgentAt != null && new Date(m.createdAt) <= new Date(readByAgentAt);
-          const isScreenshotRequest = m.messageType === 'screenshot_request';
+          const leido = mine && chat.readByAgentAt != null && new Date(m.createdAt) <= new Date(chat.readByAgentAt);
           return (
-            <div
+            <MessageBubble
               key={key}
-              style={{
-                alignSelf: mine ? 'flex-end' : 'flex-start',
-                background: mine ? '#7c3aed' : '#0f766e',
-                color: 'white',
-                padding: '6px 10px', borderRadius: 12, maxWidth: '80%', fontSize: 14,
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {isScreenshotRequest && (
-                <div style={{ fontSize: 11, opacity: 0.85, marginBottom: 4 }}>📸 Pidieron una captura</div>
-              )}
-              {m.content}
-              {isScreenshotRequest && !mine && (
-                <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {canCapture && (
-                    <button
-                      onClick={captureScreenshot}
-                      disabled={loading}
-                      style={{
-                        background: 'white', color: '#0f766e', border: 'none', borderRadius: 6,
-                        padding: '6px 10px', fontSize: 12, cursor: loading ? 'default' : 'pointer', fontWeight: 600,
-                      }}
-                    >
-                      📸 Capturar pantalla
-                    </button>
-                  )}
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{
-                      background: 'white', color: '#0f766e', border: 'none', borderRadius: 6,
-                      padding: '6px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                    }}
-                  >
-                    📎 Adjuntar captura
-                  </button>
-                </div>
-              )}
-              {m.attachment && (
-                <div style={{ marginTop: 6 }}>
-                  {m.attachment.kind === 'image' && (
-                    <img src={`/api/zero-tickets/attachments/${m.attachment.id}`} alt={m.attachment.fileName} style={{ maxWidth: '100%', borderRadius: 6 }} />
-                  )}
-                  {m.attachment.kind === 'video' && (
-                    <video src={`/api/zero-tickets/attachments/${m.attachment.id}`} controls style={{ maxWidth: '100%', borderRadius: 6 }} />
-                  )}
-                  {m.attachment.kind === 'file' && (
-                    <a href={`/api/zero-tickets/attachments/${m.attachment.id}`} target="_blank" rel="noreferrer" style={{ color: 'white', textDecoration: 'underline', fontSize: 12 }}>
-                      📎 {m.attachment.fileName}
-                    </a>
-                  )}
-                </div>
-              )}
-              {mine && (
-                <div style={{ fontSize: 10, textAlign: 'right', marginTop: 2, opacity: 0.8 }}>
-                  {leido ? '✓✓' : '✓'}
-                </div>
-              )}
-            </div>
+              message={m}
+              mine={mine}
+              leido={leido}
+              colorMio={COLOR_MIO}
+              loading={chat.loading}
+              onCapture={() => chat.captureScreenshot(panelRef.current)}
+              onAttach={() => fileInputRef.current?.click()}
+              onImageClick={setLightbox}
+              onImageLoad={scrollToBottom}
+              capturaTitle={CAPTURA_TITLE}
+              adjuntoTitle={ADJUNTO_TITLE}
+            />
           );
         })}
-        {agentTyping && <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>El agente está escribiendo...</div>}
-        {loading && <div style={{ fontSize: 12, color: '#888' }}>enviando...</div>}
+        {chat.agentTyping && (
+          <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginLeft: 2 }}>El agente está escribiendo...</div>
+        )}
+        {chat.busyStage === 'enviando' && (
+          <div style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'flex-end', marginRight: 2 }}>enviando...</div>
+        )}
       </div>
 
-      {status === 'cerrado' && (
+      {chat.status === 'cerrado' && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#92400e', background: '#fef3c7', textAlign: 'center' }}>
           Este ticket fue cerrado. Escribe para reabrirlo.
         </div>
       )}
 
-      {showRating && (
-        <div style={{ padding: 10, background: '#f5f3ff', borderTop: '1px solid #ddd6fe', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 12, color: '#5b21b6', fontWeight: 600 }}>¿Cómo calificás la atención recibida?</div>
+      {chat.showRating && (
+        <div style={{ padding: 10, background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, color: '#334155', fontWeight: 600 }}>¿Cómo calificás la atención recibida?</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
-                onClick={() => setRatingValue(n)}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', padding: 0, lineHeight: 1, color: n <= ratingValue ? '#f59e0b' : '#d1d5db' }}
+                onClick={() => chat.setRatingValue(n)}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', padding: 0, lineHeight: 1, color: n <= chat.ratingValue ? '#f59e0b' : '#d1d5db' }}
                 aria-label={`${n} estrella${n > 1 ? 's' : ''}`}
               >
                 ★
@@ -375,67 +152,70 @@ export function TicketWidget() {
             ))}
           </div>
           <textarea
-            value={ratingComment}
-            onChange={(e) => setRatingComment(e.target.value)}
+            value={chat.ratingComment}
+            onChange={(e) => chat.setRatingComment(e.target.value)}
             placeholder="Comentario (opcional)"
             rows={2}
-            style={{ resize: 'none', border: '1px solid #ddd6fe', borderRadius: 6, padding: 6, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+            style={{ resize: 'none', border: '1px solid #e2e8f0', borderRadius: 6, padding: 6, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
           />
           <button
-            onClick={submitRating}
-            disabled={ratingValue < 1 || ratingLoading}
+            onClick={chat.submitRating}
+            disabled={chat.ratingValue < 1 || chat.ratingLoading}
             style={{
-              border: 'none', background: ratingValue < 1 || ratingLoading ? '#c4b5fd' : '#7c3aed', color: 'white',
-              borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: ratingValue < 1 || ratingLoading ? 'default' : 'pointer',
+              border: 'none', background: chat.ratingValue < 1 || chat.ratingLoading ? '#a8b8ee' : '#3658e1', color: 'white',
+              borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: chat.ratingValue < 1 || chat.ratingLoading ? 'default' : 'pointer',
             }}
           >
-            {ratingLoading ? 'Enviando...' : 'Enviar calificación'}
+            {chat.ratingLoading ? 'Enviando...' : 'Enviar calificación'}
           </button>
         </div>
       )}
 
-      {ratingSubmitted && (
+      {chat.ratingSubmitted && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#166534', background: '#dcfce7', textAlign: 'center' }}>
           ¡Gracias por tu calificación!
         </div>
       )}
 
-      {status === 'abierto' && onHold && (
+      {chat.status === 'abierto' && chat.onHold && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#334155', background: '#f1f5f9', textAlign: 'center' }}>
           Tu ticket está en espera mientras el agente investiga.
         </div>
       )}
 
       <div style={{ display: 'flex', borderTop: '1px solid #eee', alignItems: 'center' }}>
-        <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={onFileSelected} style={{ display: 'none' }} />
+        <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={chat.onFileSelected} style={{ display: 'none' }} />
         <button
           onClick={() => fileInputRef.current?.click()}
-          title="Adjuntar archivo"
-          style={{ border: 'none', background: 'none', fontSize: 18, padding: '0 8px', cursor: 'pointer' }}
+          title={ADJUNTO_TITLE}
+          style={{ border: 'none', background: 'none', padding: '0 8px', cursor: 'pointer', display: 'flex', color: '#64748b' }}
         >
-          📎
+          <Paperclip size={19} />
         </button>
-        {canCapture && (
-          <button
-            onClick={captureScreenshot}
-            title="Capturar pantalla"
-            disabled={loading}
-            style={{ border: 'none', background: 'none', fontSize: 18, padding: '0 8px', cursor: loading ? 'default' : 'pointer' }}
-          >
-            📸
-          </button>
-        )}
+        <button
+          onClick={() => chat.captureScreenshot(panelRef.current)}
+          title={CAPTURA_TITLE}
+          disabled={chat.loading}
+          style={{ border: 'none', background: 'none', padding: '0 8px', cursor: chat.loading ? 'default' : 'pointer', display: 'flex', color: '#64748b' }}
+        >
+          <Camera size={19} />
+        </button>
         <input
-          value={input}
-          onChange={(e) => onInputChange(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && send()}
+          value={chat.input}
+          onChange={(e) => chat.onInputChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && chat.send()}
           placeholder="Escribe un mensaje..."
           style={{ flex: 1, border: 'none', padding: 10, fontSize: 14, outline: 'none' }}
         />
-        <button onClick={send} style={{ border: 'none', background: '#7c3aed', color: 'white', padding: '0 16px', height: '100%', cursor: 'pointer' }}>
-          Enviar
+        <button
+          onClick={chat.send}
+          title="Enviar mensaje"
+          style={{ border: 'none', background: '#3658e1', color: 'white', padding: '0 16px', height: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        >
+          <Send size={17} />
         </button>
       </div>
     </div>
+    </>
   );
 }

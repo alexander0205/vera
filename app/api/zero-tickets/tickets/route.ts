@@ -115,9 +115,15 @@ export async function POST(req: NextRequest) {
 
     await db.update(tickets).set({ lastMessageAt: new Date(), updatedAt: new Date() }).where(eq(tickets.id, ticket.id));
 
-    notificarNuevoTicketSlack(teamId, user.name ?? user.email, content.trim()).catch((err) =>
-      console.error('[zero-tickets] error notificando Slack', err),
-    );
+    // Una vez que un agente toma el ticket, ya está mirando esta conversación
+    // (el panel de agentes hace poll cada 1.5s) — seguir mandando un Slack
+    // por cada mensaje de acá en más es ruido, no aviso. Solo notifica
+    // mientras el ticket sigue sin dueño.
+    if (!ticket.assignedAgentId) {
+      notificarNuevoTicketSlack(teamId, user.name ?? user.email, content.trim()).catch((err) =>
+        console.error('[zero-tickets] error notificando Slack', err),
+      );
+    }
 
     return NextResponse.json({ ticketId: ticket.id });
   } catch (err) {
@@ -155,7 +161,13 @@ export async function GET() {
     .where(eq(ticketMessages.ticketId, ticket.id))
     .orderBy(asc(ticketMessages.createdAt));
 
-  await db.update(tickets).set({ lastReadByUserAt: new Date() }).where(eq(tickets.id, ticket.id));
+  // El poll pega cada 1.5s mientras el chat está abierto — escribir acá en
+  // cada tick, aunque no haya nada nuevo que marcar como leído, multiplica
+  // los writes contra la DB por nada. Solo se actualiza si de verdad hay
+  // mensajes más nuevos que la última marca.
+  if (!ticket.lastReadByUserAt || ticket.lastMessageAt > ticket.lastReadByUserAt) {
+    await db.update(tickets).set({ lastReadByUserAt: new Date() }).where(eq(tickets.id, ticket.id));
+  }
 
   const espera = ticket.status === 'esperando' ? await calcularEspera() : null;
 

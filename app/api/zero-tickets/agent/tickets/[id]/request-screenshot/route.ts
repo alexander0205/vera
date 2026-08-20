@@ -13,19 +13,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const ticketId = parseInt(id, 10);
   if (Number.isNaN(ticketId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
-  const [msg] = await db
-    .insert(ticketMessages)
-    .values({
+  // Independientes entre sí — el UPDATE no necesita el id del mensaje
+  // insertado. En serie duplicaban la espera contra una DB ya lenta.
+  const now = new Date();
+  const [[msg]] = await Promise.all([
+    db.insert(ticketMessages).values({
       ticketId,
       senderType: 'agent',
       senderId: user.id,
       messageType: 'screenshot_request',
       content: 'Te pedimos que adjuntes una captura de pantalla para poder ayudarte mejor.',
-    })
-    .returning();
-
-  const now = new Date();
-  await db.update(tickets).set({ lastMessageAt: now, updatedAt: now, lastReadByAgentAt: now }).where(eq(tickets.id, ticketId));
+    }).returning(),
+    db.update(tickets).set({ lastMessageAt: now, updatedAt: now, lastReadByAgentAt: now }).where(eq(tickets.id, ticketId)),
+  ]);
 
   return NextResponse.json({ message: msg });
 }
