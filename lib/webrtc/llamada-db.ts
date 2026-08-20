@@ -35,16 +35,23 @@ export async function obtenerLlamadaVigente(ticketId: number): Promise<LlamadaVi
     && Date.now() - row.call.createdAt.getTime() > TIMEOUT_INVITACION_MS;
 
   if (vencida) {
-    await Promise.all([
-      db.update(ticketCalls)
+    await db.transaction(async (tx) => {
+      const expiradas = await tx
+        .update(ticketCalls)
         .set({ status: 'terminada', endedAt: new Date(), endedReason: 'timeout' })
-        .where(eq(ticketCalls.id, row.call.id)),
-      db.insert(ticketMessages).values({
+        .where(and(eq(ticketCalls.id, row.call.id), eq(ticketCalls.status, 'pendiente')))
+        .returning({ id: ticketCalls.id });
+
+      // Si no se afectó ninguna fila, otro poller ya la contestó o la
+      // expiró primero — no insertamos el mensaje de sistema.
+      if (expiradas.length === 0) return;
+
+      await tx.insert(ticketMessages).values({
         ticketId,
         senderType: 'system',
         content: 'Nadie respondió la llamada a tiempo.',
-      }),
-    ]);
+      });
+    });
     return null;
   }
 
