@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { mutate } from 'swr';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DocumentoIdentidadInput } from '@/components/administracion-escolar/DocumentoIdentidadInput';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -417,9 +418,13 @@ export default function ConfiguracionPage() {
               placeholder="MiTienda (opcional)" disabled={!canManage} />
           </div>
           <div className="space-y-1.5">
-            <Label>RNC</Label>
-            <Input value={rnc} onChange={e => setRnc(e.target.value)}
-              placeholder="130123456" maxLength={11} disabled={!canManage} />
+            <Label>RNC / Cédula</Label>
+            <DocumentoIdentidadInput
+              value={rnc}
+              onChange={setRnc}
+              disabled={!canManage}
+              tipos={['rnc', 'cedula']}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Teléfono</Label>

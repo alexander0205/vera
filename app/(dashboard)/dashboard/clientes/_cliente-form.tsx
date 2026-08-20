@@ -11,7 +11,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Users, Plus, X, ArrowLeft } from 'lucide-react';
-import { RncSearch } from '@/components/RncSearch';
+import { DocumentoIdentidadInput } from '@/components/shared/documento-identidad-input';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 
@@ -390,17 +390,16 @@ export default function ClienteForm({
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
           <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
-            RNC / Cédula
+            Documento (RNC / Cédula / Pasaporte)
           </Typography>
-          <RncSearch
-            placeholder="Buscar RNC, Cédula o razón social…"
-            value={form.rnc || undefined}
-            onSelect={(r) => setForm((f) => ({
+          <DocumentoIdentidadInput
+            busqueda
+            value={form.rnc}
+            onChange={(v) => setForm((f) => ({ ...f, rnc: v }))}
+            onSelectPadron={(r) => setForm((f) => ({
               ...f,
-              rnc: r.rnc,
               razonSocial: f.razonSocial.trim() ? f.razonSocial : r.nombre,
             }))}
-            onClear={() => setForm((f) => ({ ...f, rnc: '' }))}
             showSyncHint={false}
           />
         </Box>

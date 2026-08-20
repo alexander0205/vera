@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DocumentoIdentidadInput } from '@/components/administracion-escolar/DocumentoIdentidadInput';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
@@ -350,8 +351,8 @@ export default function PersonalClient() {
             <CampoForm label="Apellidos" id="apellidos">
               <Input id="apellidos" value={form.apellidos} onChange={(e) => setForm({ ...form, apellidos: e.target.value })} />
             </CampoForm>
-            <CampoForm label="Cédula" id="cedula">
-              <Input id="cedula" value={form.cedula} onChange={(e) => setForm({ ...form, cedula: e.target.value })} placeholder="000-0000000-0" />
+            <CampoForm label="Documento" id="cedula">
+              <DocumentoIdentidadInput id="cedula" value={form.cedula} onChange={(v) => setForm({ ...form, cedula: v })} />
             </CampoForm>
             <CampoForm label="Cargo" id="cargo">
               <Input

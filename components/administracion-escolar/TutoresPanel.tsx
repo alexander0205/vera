@@ -13,6 +13,7 @@ import {
 import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { Plus, Pencil, X, Loader2, Camera, User, Wallet } from 'lucide-react';
+import { DocumentoIdentidadInput } from './DocumentoIdentidadInput';
 
 export interface TutorVinculo {
   id: number;
@@ -426,10 +427,11 @@ export function TutoresPanel({
                         onChange={(e) => setNuevo((f) => ({ ...f, nombre: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Cédula *</Label>
-                      <Input value={nuevo.documento} placeholder="000-0000000-0"
+                      <Label>Documento *</Label>
+                      <DocumentoIdentidadInput
+                        value={nuevo.documento}
                         error={!!error && !nuevo.documento.trim()}
-                        onChange={(e) => setNuevo((f) => ({ ...f, documento: e.target.value }))} />
+                        onChange={(v) => setNuevo((f) => ({ ...f, documento: v }))} />
                     </div>
                   </div>
                 </div>

@@ -42,6 +42,23 @@ interface RncSearchProps {
   placeholder?: string;
   className?:   string;
   showSyncHint?: boolean;
+  /**
+   * Tipo elegido en el selector que envuelve este buscador. Cuando llega, la
+   * intención del usuario manda sobre la autodetección por largo: en `rnc` no
+   * se dispara la consulta de cédula (aunque teclee 11 dígitos), y en `cedula`
+   * se deja de rotular «Persona física» (redundante, ya lo dijo el selector).
+   * Sin este prop el componente se comporta como siempre (autodetecta).
+   */
+  tipo?: 'rnc' | 'cedula';
+  /** Avisa cada tecla: lo usa el envoltorio para sugerir cambiar de tipo. */
+  onQueryChange?: (texto: string) => void;
+  /**
+   * No mostrar el panel «no se encontró en el padrón / usar de todos modos».
+   * Lo usa el envoltorio que ya guarda solo el documento válido tecleado: ese
+   * panel flotaba encima del campo de abajo y ya no hace falta. Los resultados
+   * del padrón (cuando los hay) se siguen mostrando.
+   */
+  hideNoData?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,7 +77,7 @@ function esRncDigitos(v: string) { return /^\d{2,9}$/.test(v.trim()); }
 export function RncSearch({
   onSelect, value, onClear,
   placeholder = 'Buscar RNC, Cédula o razón social…',
-  showSyncHint = true,
+  showSyncHint = true, tipo, onQueryChange, hideNoData = false,
 }: RncSearchProps) {
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState<RncResult[]>([]);
@@ -72,6 +89,8 @@ export function RncSearch({
   const timer      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dropRef    = useRef<HTMLDivElement>(null);
+  /** ¿El usuario está tecleando aquí? Mientras sí, manda el texto local. */
+  const focusedRef = useRef(false);
 
   // ── Posición del dropdown (fixed / portal) ────────────────────────────────
 
@@ -103,14 +122,20 @@ export function RncSearch({
 
   // Sincroniza el texto del input con el valor seleccionado externamente
   // (mismo patrón que el Autocomplete de producto — sin "chip" verde).
+  //
+  // Pero NO mientras el usuario teclea: si el envoltorio actualiza `value` con
+  // cada tecla (p. ej. lo pone en '' porque el documento aún está a medias),
+  // este efecto pisaría el texto y lo borraría. Con el foco puesto manda el
+  // texto local; el `onBlur` ya re-sincroniza al soltar el campo.
   useEffect(() => {
-    setQuery(value ?? '');
+    if (!focusedRef.current) setQuery(value ?? '');
   }, [value]);
 
   // ── Búsqueda ──────────────────────────────────────────────────────────────
 
   async function handleInput(v: string) {
     setQuery(v);
+    onQueryChange?.(v);
     setNoData(false);
 
     const trimmed = v.trim();
@@ -124,7 +149,9 @@ export function RncSearch({
       try {
         const digitos = soloDigitos(trimmed);
 
-        if (esCedula(trimmed)) {
+        // La intención manda: con el selector en RNC no se consulta cédula,
+        // aunque el largo diera 11 — de eso se encarga la sugerencia de cambio.
+        if (esCedula(trimmed) && tipo !== 'rnc') {
           // ── Búsqueda de cédula ──────────────────────────────────────────
           const res  = await fetch(`/api/cedula/lookup?cedula=${digitos}`);
           const data = await res.json();
@@ -198,7 +225,9 @@ export function RncSearch({
 
   // ── Dropdown (portal) ─────────────────────────────────────────────────────
 
-  const dropdown = open && dropRect ? (
+  // Con `hideNoData`, el desplegable solo aparece si hay resultados de verdad:
+  // el estado «no encontrado» no se pinta (tapaba el campo siguiente).
+  const dropdown = open && dropRect && !(hideNoData && results.length === 0) ? (
     <Box
       ref={dropRef}
       sx={{
@@ -281,9 +310,12 @@ export function RncSearch({
                 }
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.nombreComercial || r.nombre}
+                    {/* Con el selector ya en Cédula, «Persona física» sobra: si no
+                        hay nombre real, se muestra el número en su lugar. */}
+                    {r.nombreComercial
+                      || (tipo === 'cedula' && r.nombre === 'Persona física' ? r.rnc : r.nombre)}
                   </Typography>
-                  {r.tipo === 'cedula' && r.nombre !== 'Persona física' && (
+                  {r.tipo === 'cedula' && r.nombre !== 'Persona física' && tipo !== 'cedula' && (
                     <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Persona física</Typography>
                   )}
                   {r.tipo === 'rnc' && r.nombreComercial && r.nombreComercial !== r.nombre && (
@@ -321,7 +353,7 @@ export function RncSearch({
         placeholder={placeholder}
         value={query}
         onChange={(e) => handleInput(e.target.value)}
-        onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+        onFocus={() => { focusedRef.current = true; if (results.length > 0) { calcRect(); setOpen(true); } }}
         /**
          * Escape cierra el desplegable, y ahí se queda.
          *
@@ -342,6 +374,8 @@ export function RncSearch({
           }
         }}
         onBlur={() => {
+          // Soltó el campo: los cambios externos de `value` vuelven a mandar.
+          focusedRef.current = false;
           setTimeout(() => {
             setOpen(false);
             // Restaurar el texto al valor seleccionado si el usuario no eligió otro.
