@@ -1,14 +1,16 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Info } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import type { EmpresaPerfil } from '../utils/types';
 import { describirMora } from '@/lib/cobranza/mora-calculo';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 export const MOTIVOS_NOTA = [
   { value: 'devolucion',   label: 'Devolución de mercancía',   codigo: 3 },
@@ -22,7 +24,6 @@ export const MOTIVOS_NOTA = [
 
 export type MotivoNota = typeof MOTIVOS_NOTA[number]['value'];
 
-// Condición de pago DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso/consumo.
 const CONDICIONES_PAGO = [
   { value: '1', label: 'De contado' },
   { value: '2', label: 'Crédito' },
@@ -44,17 +45,17 @@ const TIPOS_INGRESO = [
 // Tipos donde TipoIngresos NO aplica (campo prohibido en IdDoc): Compras, Gastos, Pagos Exterior.
 const SIN_TIPO_INGRESO = ['41', '43', '47'];
 
+/** Formatea YYYY-MM-DD → DD/MM/YYYY */
 interface Props {
   regla: TipoEcfRegla | undefined;
   tipoEcf: string;
   condicionPago: string;
   setCondicionPago: (v: string) => void;
-  /** Plazo de crédito en días (editable; arranca del default de la empresa). */
   diasParaPago: string;
   setDiasParaPago: (v: string) => void;
   tipoIngresos: string;
   setTipoIngresos: (v: string) => void;
-  /** Vencimiento derivado (YYYY-MM-DD) — se muestra read-only y en el info pill. */
+  /** Vencimiento derivado (YYYY-MM-DD) — se muestra solo lectura y en el aviso. */
   fechaLimitePago: string;
   /** Config de mora de la empresa, para avisar los términos al elegir crédito. */
   empresa?: EmpresaPerfil | null;
@@ -73,8 +74,10 @@ export function DetallesSection({
   sinPagoRegistrado = false,
 }: Props) {
   const esCredito = condicionPago === '2';
+  const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
 
-  // Descripción de la mora que aplicaría. null si la empresa no la tiene activa.
+  // Qué mora aplicaría si la factura vence sin pagarse. null si la empresa no
+  // la tiene activa — entonces no hay nada que advertir.
   const textoMora = empresa?.recargoMoraActivo
     ? describirMora(
         {
@@ -90,108 +93,110 @@ export function DetallesSection({
         (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
       )
     : null;
-  const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
 
   return (
-    <div className="space-y-4">
-      {/* Fila: Condición de pago · Plazo de vencimiento (días) · Vence el (fecha
-          read-only, derivada del plazo) · Tipo de ingresos. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div>
-          <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
-          <Select value={condicionPago} onValueChange={setCondicionPago}>
-            <SelectTrigger className="mt-1 h-10 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CONDICIONES_PAGO.map((c) => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-              ))}
-            </SelectContent>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+        <FormControl size="small" fullWidth>
+          <InputLabel sx={{ fontSize: '0.75rem' }}>Condición de pago</InputLabel>
+          <Select
+            value={condicionPago}
+            label="Condición de pago"
+            onChange={(e) => setCondicionPago(e.target.value)}
+            sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+          >
+            {CONDICIONES_PAGO.map((c) => (
+              <MenuItem key={c.value} value={c.value} sx={{ fontSize: '0.875rem' }}>{c.label}</MenuItem>
+            ))}
           </Select>
-        </div>
+        </FormControl>
 
-        <div>
-          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
-            Plazo de vencimiento {esCredito && <span className="text-red-500">*</span>}
-          </Label>
-          <div className="relative mt-1">
-            <Input
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: esCredito ? '#4b5563' : '#d1d5db', mb: 0.5 }}>
+            Plazo de vencimiento {esCredito && <Box component="span" sx={{ color: '#ef4444' }}>*</Box>}
+          </Typography>
+          <Box sx={{ position: 'relative', width: 112 }}>
+            <TextField
               type="number"
-              min={1}
+              size="small"
               value={diasParaPago}
               onChange={(e) => setDiasParaPago(e.target.value)}
               disabled={!esCredito}
-              className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
+              slotProps={{ htmlInput: { min: 1 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem', pr: '36px' } }}
             />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
-          </div>
-        </div>
+            <Typography sx={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#9ca3af', pointerEvents: 'none' }}>
+              días
+            </Typography>
+          </Box>
+        </Box>
 
-        <div>
-          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: esCredito ? '#4b5563' : '#d1d5db', mb: 0.5 }}>
             Vence el
-          </Label>
-          {/* Read-only: se recalcula solo cuando cambia el plazo de vencimiento. */}
-          <Input
-            type="date"
+          </Typography>
+          {/* Solo lectura: se recalcula solo cuando cambia el plazo. */}
+          <TextField
+            type="date" size="small" fullWidth disabled
             value={esCredito ? fechaLimitePago : ''}
-            readOnly
-            disabled
-            tabIndex={-1}
-            className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+            slotProps={{ htmlInput: { readOnly: true, tabIndex: -1 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
           />
-        </div>
+        </Box>
 
         {muestraTipoIngresos && (
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Tipo de ingresos</Label>
-            <Select value={tipoIngresos} onValueChange={setTipoIngresos}>
-              <SelectTrigger className="mt-1 h-10 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIPOS_INGRESO.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-
-      {/* Info: mora que aplicará si la factura vence sin pagarse */}
-      {esCredito && fechaLimitePago && textoMora && (
-        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
-          <p className="text-sm text-teal-900">
-            Si no se paga tras el vencimiento, se aplicará una mora de <span className="font-semibold">{textoMora}</span>
-          </p>
-        </div>
-      )}
-
-      {/* Contado sin pago: la factura queda por cobrar sin vencimiento ni mora.
-          No se cambia sola — la condición de pago se reporta a la DGII, así que
-          la decisión es del usuario; aquí solo se hace visible. */}
-      {!esCredito && condicionPago === '1' && sinPagoRegistrado && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-900">
-            <p>
-              Marcada <span className="font-semibold">de contado</span> pero sin pago registrado.
-              Queda por cobrar, sin fecha de vencimiento y sin generar mora.
-            </p>
-            <button
-              type="button"
-              onClick={() => setCondicionPago('2')}
-              className="mt-1.5 font-semibold underline underline-offset-2 hover:text-amber-950"
+          <FormControl size="small" fullWidth>
+            <InputLabel sx={{ fontSize: '0.75rem' }}>Tipo de ingresos</InputLabel>
+            <Select
+              value={tipoIngresos}
+              label="Tipo de ingresos"
+              onChange={(e) => setTipoIngresos(e.target.value)}
+              sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
             >
-              Cambiarla a crédito
-            </button>
-          </div>
-        </div>
+              {TIPOS_INGRESO.map((t) => (
+                <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.875rem' }}>{t.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+      </Box>
+
+      {/* Qué mora aplicará si vence sin pagarse. La fecha ya se ve arriba, así
+          que aquí lo que aporta es el recargo. */}
+      {esCredito && fechaLimitePago && textoMora && (
+        <Box sx={{ bgcolor: '#eef2fe', border: '1px solid #e0e7fd', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+          <Info size={16} color="#2a45c4" style={{ flexShrink: 0, marginTop: 2 }} />
+          <Typography sx={{ fontSize: '0.875rem', color: '#24377d' }}>
+            Si no se paga tras el vencimiento, se aplicará una mora de{' '}
+            <Box component="span" sx={{ fontWeight: 600 }}>{textoMora}</Box>
+          </Typography>
+        </Box>
       )}
 
-    </div>
+      {/* De contado sin pago: la factura queda por cobrar, sin vencimiento y sin
+          mora. No se cambia sola —la condición de pago se le reporta a la DGII,
+          así que la decisión es del usuario—; aquí solo se hace visible. */}
+      {!esCredito && condicionPago === '1' && sinPagoRegistrado && (
+        <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+          <Info size={16} color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />
+          <Box>
+            <Typography sx={{ fontSize: '0.875rem', color: '#78350f' }}>
+              Marcada <Box component="span" sx={{ fontWeight: 600 }}>de contado</Box> pero sin pago
+              registrado. Queda por cobrar, sin fecha de vencimiento y sin generar mora.
+            </Typography>
+            <Box component="button" type="button" onClick={() => setCondicionPago('2')}
+              sx={{
+                mt: 0.75, background: 'none', border: 'none', p: 0, cursor: 'pointer',
+                fontSize: '0.875rem', fontWeight: 600, color: '#78350f',
+                textDecoration: 'underline', textUnderlineOffset: '2px',
+                '&:hover': { color: '#451a03' },
+              }}>
+              Cambiarla a crédito
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+    </Box>
   );
 }

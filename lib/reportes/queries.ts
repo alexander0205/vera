@@ -15,7 +15,7 @@
 import { sql, and, eq, count, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos, users } from '@/lib/db/schema';
-import { diasVencido } from '@/lib/utils/format';
+import { getCuentasPorCobrar } from '@/lib/db/queries';
 import {
   VENTA_ESTADOS, TIPOS_VENTA, TIPO_NOTA_CREDITO, TIPO_ECF_NOMBRE,
   pRango, pVentaEstados, pTiposVenta, pNotaCredito, pVentaValida,
@@ -281,40 +281,52 @@ export interface AgingResumen {
   filas: FilaAging[];
 }
 
+/**
+ * Antigüedad de saldos. **Delega en `getCuentasPorCobrar`** en vez de tener su
+ * propia consulta.
+ *
+ * Antes tenía una consulta propia (`monto_total − pagos`) que difería de la
+ * pantalla de cuentas por cobrar en tres cosas, y las dos daban cifras
+ * distintas al mismo usuario para lo mismo:
+ *
+ *  1. **No restaba las notas de crédito** → inflaba la cartera. Medido en el
+ *     team 9: RD$78,295 aquí contra RD$77,245 en cobros, exactamente las tres
+ *     NC que este reporte ignoraba.
+ *  2. Otra definición de cobrable: solo e-CF aceptados, así que dejaba fuera
+ *     borradores con cobro en curso que la pantalla sí muestra.
+ *  3. Contaba las ND de mora como filas propias en vez de agruparlas en su
+ *     factura padre, así que el conteo de "facturas pendientes" salía alto.
+ *
+ * Ahora hay UNA sola definición de saldo y de cobrable, la de
+ * `docs/contabilidad-paso1-logica-saldo.md`. `vencida` y `diasVencido` vienen
+ * de Postgres en zona RD, no del `diasVencido()` de JS.
+ *
+ * Tope de 2000 filas: el mismo de `getCuentasPorCobrar`. Es un snapshot para
+ * mostrar en pantalla, no una fuente contable.
+ */
 export async function getAgingCxC(teamId: number): Promise<AgingResumen> {
-  const rows = await db.execute(sql`
-    SELECT d.id, d.encf,
-           coalesce(nullif(d.razon_social_comprador, ''), 'Consumidor Final') AS cliente,
-           d.fecha_limite_pago AS fecha_limite,
-           d.monto_total - coalesce((
-             SELECT sum(p.monto_centavos) FROM pagos_recibidos p WHERE p.ecf_document_id = d.id
-           ), 0) AS saldo
-    FROM ecf_documents d
-    WHERE d.team_id = ${teamId}
-      -- Cobrable = e-CF de venta emitido a DGII, o ticket sin-ncf no anulado.
-      AND (
-        (d.tipo_ecf IN ('31','32','33','44','45') AND d.estado IN ('ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'))
-        OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO','RECHAZADO'))
-      )
-      AND d.estado_pago IN ('PENDIENTE','PARCIAL')
-    ORDER BY d.fecha_limite_pago NULLS LAST
-  `);
+  const { cuentas } = await getCuentasPorCobrar(teamId, { limit: 2000, orden: 'vencimiento' });
 
   const buckets: AgingResumen['buckets'] = { 'porVencer': 0, '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
   const filas: FilaAging[] = [];
   let total = 0;
 
-  for (const raw of rows as unknown as Array<{ id: number; encf: string; cliente: string; fecha_limite: string | null; saldo: string }>) {
-    const saldo = Number(raw.saldo);
-    if (saldo <= 0) continue;
-    const dias = diasVencido(raw.fecha_limite);
+  for (const c of cuentas) {
+    const dias = c.diasVencido;
+    // `vencida` ya exige saldo de factura > 0; una cuenta que solo arrastra mora
+    // no está "vencida" y cae en porVencer, igual que en la pantalla de cobros.
     const cubeta: FilaAging['cubeta'] =
-      dias <= 0 ? 'porVencer' : dias <= 30 ? '0-30' : dias <= 60 ? '31-60' : dias <= 90 ? '61-90' : '90+';
-    buckets[cubeta] += saldo;
-    total += saldo;
+      !c.vencida ? 'porVencer' : dias <= 30 ? '0-30' : dias <= 60 ? '31-60' : dias <= 90 ? '61-90' : '90+';
+    buckets[cubeta] += c.saldo;
+    total += c.saldo;
     filas.push({
-      id: raw.id, encf: raw.encf, cliente: raw.cliente,
-      fechaLimite: raw.fecha_limite, diasVencido: dias, saldoCents: saldo, cubeta,
+      id: c.id,
+      encf: c.encf,
+      cliente: c.razonSocialComprador?.trim() || 'Consumidor Final',
+      fechaLimite: c.fechaLimitePago,
+      diasVencido: dias,
+      saldoCents: c.saldo,
+      cubeta,
     });
   }
 

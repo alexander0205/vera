@@ -1,0 +1,26 @@
+-- Ficha extendida del estudiante (misma forma que la ficha de SIGERD).
+-- Todo opcional; se llena a mano en el alta o llegará de SIGERD al reconciliar.
+ALTER TABLE "admin_escolar_estudiantes"
+  ADD COLUMN IF NOT EXISTS "nacionalidad"                 varchar(60),
+  ADD COLUMN IF NOT EXISTS "estado_civil"                 varchar(30),
+  ADD COLUMN IF NOT EXISTS "codigo_rne"                   varchar(40),
+  ADD COLUMN IF NOT EXISTS "telefono"                     varchar(30),
+  ADD COLUMN IF NOT EXISTS "celular"                      varchar(30),
+  ADD COLUMN IF NOT EXISTS "whatsapp"                     varchar(30),
+  ADD COLUMN IF NOT EXISTS "acta_estado"                  varchar(40),
+  ADD COLUMN IF NOT EXISTS "acta_numero"                  varchar(40),
+  ADD COLUMN IF NOT EXISTS "acta_municipio_jce"           varchar(120),
+  ADD COLUMN IF NOT EXISTS "acta_oficialia_jce"           varchar(120),
+  ADD COLUMN IF NOT EXISTS "acta_libro"                   varchar(30),
+  ADD COLUMN IF NOT EXISTS "acta_folio"                   varchar(30),
+  ADD COLUMN IF NOT EXISTS "acta_anio"                    varchar(10),
+  ADD COLUMN IF NOT EXISTS "dir_provincia"                varchar(80),
+  ADD COLUMN IF NOT EXISTS "dir_municipio"                varchar(80),
+  ADD COLUMN IF NOT EXISTS "dir_distrito_municipal"       varchar(80),
+  ADD COLUMN IF NOT EXISTS "dir_seccion"                  varchar(80),
+  ADD COLUMN IF NOT EXISTS "dir_barrio"                   varchar(120),
+  ADD COLUMN IF NOT EXISTS "dir_sub_barrio"               varchar(120),
+  ADD COLUMN IF NOT EXISTS "direccion"                    varchar(255),
+  ADD COLUMN IF NOT EXISTS "programa"                     varchar(80),
+  ADD COLUMN IF NOT EXISTS "tarjeta_solidaridad"          varchar(60),
+  ADD COLUMN IF NOT EXISTS "tarjeta_solidaridad_familiar" varchar(60);

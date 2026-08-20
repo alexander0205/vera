@@ -1,16 +1,172 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
+import {
+  moduleForHost, esHostApp, esRutaDeCuenta, MODULE_HOME,
+} from '@/lib/config/modules';
 
-const protectedRoutes = '/dashboard';
+const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar'];
+
+/**
+ * Quita la cookie de sesión de una respuesta.
+ *
+ * Con el MISMO `domain` con que se creó: sin él se borra una cookie host-only
+ * que en producción no existe y la mala se queda puesta. Espejo de
+ * `clearSession()` en lib/auth/session.ts, que aquí no se puede usar porque
+ * esto corre en el runtime del proxy y no tiene `cookies()` de next/headers.
+ */
+function borrarSesion(res: NextResponse) {
+  res.cookies.delete({
+    name: 'session',
+    path: '/',
+    ...(process.env.SESSION_COOKIE_DOMAIN
+      ? { domain: process.env.SESSION_COOKIE_DOMAIN }
+      : {}),
+  });
+}
+
+// Routing por subdominio (módulos del producto):
+// pos.zero.com.do → /pos · facturacion.zero.com.do → /dashboard.
+// moduleForHost vive en lib/config/modules.ts (testeable).
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('session');
-  const isProtectedRoute = pathname.startsWith(protectedRoutes);
 
-  if (isProtectedRoute && !sessionCookie) {
-    return NextResponse.redirect(new URL('/sign-in', request.url));
+  const hostActual = request.headers.get('host');
+  const mod = moduleForHost(hostActual);
+
+  /**
+   * La ruta que se va a SERVIR, que no siempre es la que pide el navegador.
+   *
+   * En los subdominios de módulo la raíz se sirve por rewrite: el navegador
+   * pide `/` y se le entrega `/pos`. Comparar el guard contra `/` dejaba la
+   * portada del POS, del panel y de colegios fuera de `protectedRoutes` —la
+   * pantalla por la que entra todo el mundo—, y la única defensa que quedaba
+   * era el guard de la propia página.
+   *
+   * Ese guard funciona (se comprobó: sin sesión el cuerpo llega vacío y con
+   * un REDIRECT dentro), pero una capa que se apaga sola cuando cambia el
+   * routing no es una capa. Resolver la ruta efectiva ANTES de mirar los
+   * permisos deja el proxy comprobando lo que de verdad se va a servir.
+   */
+  const rutaServida = mod && pathname === '/' ? MODULE_HOME[mod] : pathname;
+  const isProtectedRoute = protectedRoutes.some(p => rutaServida.startsWith(p));
+
+  /**
+   * La sesión, VERIFICADA. No basta con que la cookie esté.
+   *
+   * Antes el guard preguntaba `!sessionCookie`, o sea si la cookie existía. Una
+   * cookie caducada, firmada con otro secreto o simplemente corrupta pasaba el
+   * guard igual que una buena — y los rewrites de los subdominios de módulo
+   * retornan más abajo, antes del bloque que la habría cazado. Así que el
+   * navegador recibía el módulo entero sin sesión: HTTP 200, cuerpo vacío,
+   * pantalla en blanco, y la cookie muerta intacta para la siguiente vez.
+   *
+   * Se comprobó en producción con `Cookie: session=cookie.vieja.invalida`:
+   * pos., facturacion. y colegio. devolvían 200 con el cuerpo vacío en vez de
+   * mandar al login.
+   */
+  let sesion: Awaited<ReturnType<typeof verifyToken>> | null = null;
+  if (sessionCookie) {
+    try {
+      sesion = await verifyToken(sessionCookie.value);
+    } catch {
+      sesion = null;
+    }
+  }
+  const cookieInservible = !!sessionCookie && sesion === null;
+
+  if (isProtectedRoute && !sesion) {
+    const salida = NextResponse.redirect(new URL('/sign-in', request.url));
+    // Si venía una cookie que no sirve, se va con esta misma respuesta: dejarla
+    // puesta condena a repetir el rodeo en cada petición.
+    if (cookieInservible) borrarSesion(salida);
+    return salida;
+  }
+
+  // ── Entrar, registrarse y configurar la cuenta viven en app.zero.com.do ──
+  //
+  // Todo esto está condicionado a que APP_HOST exista. Sin esa variable el
+  // bloque entero no hace nada y la aplicación se comporta como siempre: es lo
+  // que permite subir este código a producción sin mover nada, y encender los
+  // subdominios después cambiando solo el entorno.
+  //
+  // La comparación contra `hostActual` no es de adorno: sin ella, un APP_HOST
+  // mal escrito —que `esHostApp()` no reconociera— produciría una redirección
+  // a sí mismo en bucle, y un bucle en /sign-in deja fuera a TODO el mundo,
+  // incluido quien tendría que entrar a arreglarlo.
+  const appHost = process.env.APP_HOST;
+  if (appHost && esRutaDeCuenta(pathname) && !esHostApp(hostActual) && hostActual !== appHost) {
+    const destino = new URL(request.url);
+    destino.host = appHost;
+    destino.protocol = 'https:';
+    return NextResponse.redirect(destino);
+  }
+
+  // ── NO se fuerza el salto de ruta de módulo a su subdominio ──────────────
+  //
+  // Antes aquí se redirigía CADA ruta de módulo (`/dashboard*`, `/pos*`,
+  // `/escolar*`) a su host propio (facturacion./pos./colegio.) cuando se pedía
+  // desde otro host. Eso rompía la navegación de App Router: un `<Link>` o el
+  // `redirect('/dashboard')` de un server-action hacen un fetch RSC
+  // same-origin (`?_rsc=`), y al responder un 307 cross-origin el navegador lo
+  // bloquea por CORS ("Redirect is not allowed for a preflight request") →
+  // "Failed to fetch RSC payload" → transición sucia que acababa en /sign-in.
+  // Solo pasaba en producción (en dev todo es un host, no hay cruce de origen).
+  //
+  // Como es un ÚNICO deployment sirviendo todos los hostnames, no hay nada que
+  // ganar forzando el salto: cada host puede servir cualquier ruta con el mismo
+  // código. Los subdominios siguen vivos para quien entra directo (el rewrite
+  // de la raíz de abajo), y los enlaces entre módulos que deben cambiar de host
+  // ya usan URL absoluta (`moduleUrl()`), que es navegación dura y sí cruza
+  // orígenes sin CORS. Ver decisión "Plan A" (aviso a Alex).
+
+  // Home del módulo según el host. Solo se toca la raíz (y /dashboard exacto
+  // en el host POS) — las rutas profundas quedan protegidas por los guards de
+  // página/módulo, no por el proxy.
+  //
+  // La raíz va por REWRITE y no por redirect: `pos.zero.com.do` sirve el POS
+  // sin que la barra acabe en `pos.zero.com.do/pos`, que era repetir el nombre
+  // del módulo dos veces. El `/dashboard` del host POS sí sigue siendo un
+  // redirect — ahí el usuario pidió otra cosa y hay que llevarlo, no
+  // disimularlo.
+  //
+  // El precio del rewrite: para el navegador la ruta es `/`, así que
+  // `usePathname()` devuelve `/` y no `/pos`. Quien resalta el menú o decide
+  // el módulo del buscador ya no puede deducirlo de la URL, y por eso ahora se
+  // lo pasamos como prop (ver `RailSecciones` y `GlobalSearch`). Sin esa parte
+  // el rewrite deja el menú sin nada marcado al entrar.
+  if (mod === 'pos') {
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/pos', request.url));
+    }
+    if (pathname === '/dashboard') {
+      // Post-login genérico apunta a /dashboard; en el host POS el destino es /pos.
+      return NextResponse.redirect(new URL('/pos', request.url));
+    }
+  } else if (mod === 'facturacion') {
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/dashboard', request.url));
+    }
+  } else if (mod === 'escolar') {
+    // colegio.zero.com.do — el módulo se llama `escolar` por dentro.
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/escolar', request.url));
+    }
+    if (pathname === '/dashboard') {
+      return NextResponse.redirect(new URL('/escolar', request.url));
+    }
+  } else if (esHostApp(hostActual) && pathname === '/') {
+    // En el host de la cuenta la raíz no es un panel: es entrar o administrar.
+    // Sin sesión, el guard de arriba ya habría mandado a /sign-in en las rutas
+    // protegidas; aquí se decide para la raíz, que no lo es.
+    // `sesion`, no `sessionCookie`: con una cookie inservible esto mandaba a
+    // /cuenta, que es protegida, para que el guard rebotara de vuelta. Un
+    // rodeo visible por nada.
+    const salida = NextResponse.redirect(new URL(sesion ? '/cuenta' : '/sign-in', request.url));
+    if (cookieInservible) borrarSesion(salida);
+    return salida;
   }
 
   // Pasar el pathname como header para que los Server Components puedan leerlo
@@ -19,15 +175,16 @@ export async function proxy(request: NextRequest) {
 
   let res = NextResponse.next({ request: { headers: requestHeaders } });
 
-  if (sessionCookie && request.method === 'GET') {
+  // Refrescar la sesión buena. `sesion` ya viene verificada de arriba, así que
+  // aquí no se vuelve a comprobar el token: se hacía dos veces por petición.
+  if (sesion && request.method === 'GET') {
     try {
-      const parsed = await verifyToken(sessionCookie.value);
       const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
       res.cookies.set({
         name: 'session',
         value: await signToken({
-          ...parsed,
+          ...sesion,
           expires: expiresInOneDay.toISOString()
         }),
         httpOnly: true,
@@ -35,14 +192,29 @@ export async function proxy(request: NextRequest) {
         // hace que el navegador no reenvíe la cookie y la sesión se "cae".
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        expires: expiresInOneDay
+        expires: expiresInOneDay,
+        // SSO entre subdominios (pos.* / facturacion.*): cookie a nivel de
+        // dominio raíz en prod (ej. ".zero.com.do"). Sin env → host-only (dev).
+        ...(process.env.SESSION_COOKIE_DOMAIN
+          ? { domain: process.env.SESSION_COOKIE_DOMAIN }
+          : {}),
       });
     } catch (error) {
+      // Aquí ya no se llega por un token inválido —eso lo caza el guard de
+      // arriba—, sino porque `signToken` falló al re-firmar. Se trata igual:
+      // sesión que no se puede sostener, fuera.
       console.error('Error updating session:', error);
-      res.cookies.delete('session');
-      if (isProtectedRoute) {
-        return NextResponse.redirect(new URL('/sign-in', request.url));
-      }
+
+      // El borrado va sobre la respuesta que DE VERDAD se devuelve. Antes se
+      // aplicaba a `res` y, en ruta protegida, se devolvía un
+      // `NextResponse.redirect` nuevo: `res` se tiraba entero y el borrado con
+      // él, justo en el caso que importa.
+      const salida = isProtectedRoute
+        ? NextResponse.redirect(new URL('/sign-in', request.url))
+        : res;
+
+      borrarSesion(salida);
+      return salida;
     }
   }
 

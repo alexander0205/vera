@@ -6,20 +6,34 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import { getRangosSecuencias, getLibroComprobantes } from '@/lib/contabilidad/secuencias';
 import { TIPO_ECF_NOMBRE } from '@/lib/reportes/shared';
 import { LibroFiltros } from './_filtros';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import LinearProgress from '@mui/material/LinearProgress';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
 
-/** Etiqueta y color en lenguaje de contabilidad (no el estado técnico). */
-const ESTADO_UI: Record<string, { label: string; cls: string }> = {
-  ACEPTADO:             { label: 'Válido',              cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  ACEPTADO_CONDICIONAL: { label: 'Válido (observado)',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  EN_PROCESO:           { label: 'Esperando DGII',      cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-  RECHAZADO:            { label: 'Rechazado',           cls: 'bg-red-50 text-red-700 border-red-200' },
-  ANULADO:              { label: 'Anulado',             cls: 'bg-gray-100 text-gray-600 border-gray-200' },
-  BORRADOR:             { label: 'Apartado',            cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
+
+/** Etiqueta y colores en lenguaje de contabilidad (no el estado técnico). */
+const ESTADO_UI: Record<string, { label: string; bg: string; fg: string; border: string }> = {
+  ACEPTADO:             { label: 'Válido',             bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
+  ACEPTADO_CONDICIONAL: { label: 'Válido (observado)', bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
+  EN_PROCESO:           { label: 'Esperando DGII',     bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' },
+  RECHAZADO:            { label: 'Rechazado',          bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
+  ANULADO:              { label: 'Anulado',            bg: '#f3f4f6', fg: '#4b5563', border: '#e5e7eb' },
+  BORRADOR:             { label: 'Apartado',           bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
 };
+const ESTADO_FALLBACK = { bg: '#f3f4f6', fg: '#4b5563', border: '#e5e7eb' };
 
 function dop(cents: number) {
   return (cents / 100).toLocaleString('es-DO', { style: 'currency', currency: 'DOP' });
@@ -33,7 +47,7 @@ export default async function SecuenciasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await requirePermission('reportes:ver');
+  await requirePermission('contabilidad:ver');
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 
@@ -64,70 +78,87 @@ export default async function SecuenciasPage({
   }
 
   return (
-    <section className="p-4 sm:p-6 max-w-[1400px] mx-auto">
-      <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-2">
-        <span>Contabilidad</span>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-teal-600 font-medium">Secuencias</span>
-      </div>
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto' }}>
+      {/* Breadcrumb */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Secuencias</Typography>
+      </Box>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Secuencias de comprobantes</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, mb: 3 }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+            Secuencias de comprobantes
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
             Todos los e-NCF emitidos y la factura a la que está atado cada uno.
-          </p>
-        </div>
-        <Link href="/dashboard/contabilidad/consulta-ncf"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium shrink-0">
-          <Search className="h-4 w-4" /> Consultar e-NCF
-        </Link>
-      </div>
+          </Typography>
+        </Box>
+        <Button
+          component="a"
+          href="/dashboard/contabilidad/consulta-ncf"
+          nativeButton={false}
+          variant="contained"
+          startIcon={<Search style={{ width: 16, height: 16 }} />}
+          sx={{ px: 2, py: 1, whiteSpace: 'nowrap', flexShrink: 0 }}
+        >
+          Consultar e-NCF
+        </Button>
+      </Box>
 
       {/* Alertas de rango */}
       {alertas.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <h2 className="text-sm font-semibold text-amber-800">Secuencias que requieren atención</h2>
-          </div>
-          <ul className="space-y-1 text-sm text-amber-900">
+        <Alert
+          severity="warning"
+          icon={<AlertTriangle style={{ width: 16, height: 16 }} />}
+          sx={{ mb: 2.5 }}
+        >
+          <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>Secuencias que requieren atención</AlertTitle>
+          <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             {alertas.map(r => (
-              <li key={r.id}>
+              <Box component="li" key={r.id} sx={{ fontSize: '0.875rem' }}>
                 <strong>e{r.tipoEcf}</strong> — {r.vencida
                   ? `rango vencido el ${r.fechaVencimiento ? fecha(r.fechaVencimiento) : '—'}`
                   : `quedan solo ${r.disponibles.toLocaleString('es-DO')} números disponibles`}
-              </li>
+              </Box>
             ))}
-          </ul>
-        </div>
+          </Box>
+        </Alert>
       )}
 
       {/* Rangos configurados */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
         {rangos.map(r => (
-          <div key={r.id} className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="flex items-baseline justify-between mb-1">
-              <span className="text-sm font-bold text-gray-900">e{r.tipoEcf}</span>
-              <span className="text-xs text-gray-400">{r.pctUsado}% usado</span>
-            </div>
-            <p className="text-xs text-gray-500 truncate mb-2">{TIPO_ECF_NOMBRE[r.tipoEcf] ?? r.nombre ?? '—'}</p>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
-              <div className={`h-full rounded-full ${r.porAgotarse ? 'bg-amber-500' : 'bg-teal-500'}`}
-                   style={{ width: `${r.pctUsado}%` }} />
-            </div>
-            <p className="text-xs text-gray-500 tabular-nums">
-              Próximo: <span className="font-mono font-medium text-gray-700">{r.actual.toLocaleString('es-DO')}</span>
+          <Box key={r.id} sx={{ ...CARD, p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>e{r.tipoEcf}</Typography>
+              <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{r.pctUsado}% usado</Typography>
+            </Box>
+            <Typography noWrap sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 1 }}>
+              {TIPO_ECF_NOMBRE[r.tipoEcf] ?? r.nombre ?? '—'}
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={Math.min(100, r.pctUsado)}
+              color={r.porAgotarse ? 'warning' : 'primary'}
+              sx={{ height: 6, borderRadius: 4, mb: 1, bgcolor: '#f3f4f6' }}
+            />
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>
+              Próximo:{' '}
+              <Box component="span" sx={{ fontFamily: 'monospace', fontWeight: 500, color: '#374151' }}>
+                {r.actual.toLocaleString('es-DO')}
+              </Box>
               {' · '}quedan {r.disponibles.toLocaleString('es-DO')}
-            </p>
-          </div>
+            </Typography>
+          </Box>
         ))}
         {rangos.length === 0 && (
-          <p className="col-span-full text-sm text-gray-400 bg-white border border-gray-200 rounded-xl p-6 text-center">
+          <Typography sx={{ ...CARD, gridColumn: '1 / -1', fontSize: '0.875rem', color: '#9ca3af', p: 3, textAlign: 'center' }}>
             No hay secuencias configuradas.
-          </p>
+          </Typography>
         )}
-      </div>
+      </Box>
 
       {/* Filtros */}
       <LibroFiltros
@@ -139,91 +170,118 @@ export default async function SecuenciasPage({
       />
 
       {/* Libro */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">
+      <Box sx={{ ...CARD, overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
             Comprobantes ({total.toLocaleString('es-DO')})
-          </h2>
-          <span className="text-xs text-gray-400">Página {page} de {totalPages}</span>
-        </div>
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Página {page} de {totalPages}</Typography>
+        </Box>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1000px]">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-2.5 text-left">e-NCF</th>
-                <th className="px-4 py-2.5 text-left">Tipo</th>
-                <th className="px-4 py-2.5 text-left">Estado</th>
-                <th className="px-4 py-2.5 text-left">Fecha</th>
-                <th className="px-4 py-2.5 text-left">Cliente</th>
-                <th className="px-4 py-2.5 text-right">Monto</th>
-                <th className="px-4 py-2.5 text-right">ITBIS</th>
-                <th className="px-4 py-2.5 text-left">Emitido por</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 1000 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>e-NCF</TableCell>
+                <TableCell>Tipo</TableCell>
+                <TableCell>Estado</TableCell>
+                <TableCell>Fecha</TableCell>
+                <TableCell>Cliente</TableCell>
+                <TableCell align="right">Monto</TableCell>
+                <TableCell align="right">ITBIS</TableCell>
+                <TableCell>Emitido por</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {filas.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400">
-                  No hay comprobantes con esos filtros.
-                </td></tr>
-              ) : filas.map(f => (
-                <tr key={f.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-900 whitespace-nowrap">{f.encf}</td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">e{f.tipoEcf}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border ${ESTADO_UI[f.estado]?.cls ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                      {ESTADO_UI[f.estado]?.label ?? f.estado}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fecha(f.fechaEmision)}</td>
-                  <td className="px-4 py-3 text-gray-700">
-                    {f.cliente ?? <span className="text-gray-300">Consumidor final</span>}
-                    {f.rncComprador && <span className="block text-xs text-gray-400 font-mono">{f.rncComprador}</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-900 font-medium whitespace-nowrap">{dop(f.montoTotal)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-500 whitespace-nowrap">{dop(f.totalItbis)}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{f.emitidoPor ?? '—'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center gap-3 justify-end">
-                      <Link href={`/dashboard/facturas/${f.id}`} className="text-xs text-teal-600 hover:underline font-medium">
-                        Factura
-                      </Link>
-                      {f.urlVerificacion && (
-                        <a href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
-                          title="Verificar en el portal de la DGII"
-                          className="text-gray-400 hover:text-teal-600">
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                <TableRow>
+                  <TableCell colSpan={9} sx={{ py: 6, textAlign: 'center', color: '#9ca3af' }}>
+                    No hay comprobantes con esos filtros.
+                  </TableCell>
+                </TableRow>
+              ) : filas.map(f => {
+                const e = ESTADO_UI[f.estado];
+                const tono = e ?? ESTADO_FALLBACK;
+                return (
+                  <TableRow key={f.id}>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#111827', whiteSpace: 'nowrap' }}>{f.encf}</TableCell>
+                    <TableCell sx={{ color: '#6b7280', whiteSpace: 'nowrap' }}>e{f.tipoEcf}</TableCell>
+                    <TableCell>
+                      <Box
+                        component="span"
+                        sx={{
+                          display: 'inline-block', fontSize: '0.75rem', fontWeight: 500,
+                          px: 1, py: 0.25, borderRadius: '9999px', whiteSpace: 'nowrap',
+                          bgcolor: tono.bg, color: tono.fg, border: `1px solid ${tono.border}`,
+                        }}
+                      >
+                        {e?.label ?? f.estado}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{fecha(f.fechaEmision)}</TableCell>
+                    <TableCell>
+                      {f.cliente ?? <Box component="span" sx={{ color: '#d1d5db' }}>Consumidor final</Box>}
+                      {f.rncComprador && (
+                        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', fontFamily: 'monospace' }}>{f.rncComprador}</Typography>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: '#111827', fontWeight: 500, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{dop(f.montoTotal)}</TableCell>
+                    <TableCell align="right" sx={{ color: '#6b7280', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{dop(f.totalItbis)}</TableCell>
+                    <TableCell sx={{ color: '#6b7280', fontSize: '0.75rem' }}>{f.emitidoPor ?? '—'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, justifyContent: 'flex-end' }}>
+                        <Link href={`/dashboard/facturas/${f.id}`} style={{ textDecoration: 'none' }}>
+                          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#3658e1', '&:hover': { textDecoration: 'underline' } }}>
+                            Factura
+                          </Typography>
+                        </Link>
+                        {f.urlVerificacion && (
+                          <Box
+                            component="a" href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
+                            title="Verificar en el portal de la DGII"
+                            sx={{ display: 'inline-flex', color: '#9ca3af', '&:hover': { color: '#3658e1' } }}
+                          >
+                            <ExternalLink style={{ width: 14, height: 14 }} />
+                          </Box>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Box>
 
         {/* Paginación */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-            <span className="text-xs text-gray-500">
+          <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
               Mostrando {((page - 1) * PAGE_SIZE + 1).toLocaleString('es-DO')}–
               {Math.min(page * PAGE_SIZE, total).toLocaleString('es-DO')} de {total.toLocaleString('es-DO')}
-            </span>
-            <div className="flex gap-2">
-              <Link href={pageHref(page - 1)} aria-disabled={page <= 1}
-                className={`px-3 py-1.5 text-sm rounded-lg border ${page <= 1 ? 'pointer-events-none opacity-40 border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                component="a" href={pageHref(page - 1)} nativeButton={false}
+                variant="outlined" color="inherit" size="small"
+                aria-disabled={page <= 1}
+                sx={{ color: '#374151', borderColor: '#d1d5db', ...(page <= 1 && { pointerEvents: 'none', opacity: 0.4 }) }}
+              >
                 Anterior
-              </Link>
-              <Link href={pageHref(page + 1)} aria-disabled={page >= totalPages}
-                className={`px-3 py-1.5 text-sm rounded-lg border ${page >= totalPages ? 'pointer-events-none opacity-40 border-gray-200 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
+              </Button>
+              <Button
+                component="a" href={pageHref(page + 1)} nativeButton={false}
+                variant="outlined" color="inherit" size="small"
+                aria-disabled={page >= totalPages}
+                sx={{ color: '#374151', borderColor: '#d1d5db', ...(page >= totalPages && { pointerEvents: 'none', opacity: 0.4 }) }}
+              >
                 Siguiente
-              </Link>
-            </div>
-          </div>
+              </Button>
+            </Box>
+          </Box>
         )}
-      </div>
-    </section>
+      </Box>
+    </Box>
   );
 }

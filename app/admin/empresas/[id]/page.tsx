@@ -4,14 +4,40 @@ import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users, invitations, activityLogs, ActivityType } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
+import { sincronizarConStripe } from '@/lib/payments/sincronizar';
 import { sendInvitationEmail } from '@/lib/email';
 import Link from 'next/link';
-import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight, CreditCard, RefreshCw } from 'lucide-react';
 import { ConfirmButton } from './confirm-button';
 import EcfApiSection from './_ecf-section';
 import { RoleSelect } from './_role-select';
 import { ROLE_KEYS } from '@/lib/config/roles';
 import { revalidatePath } from 'next/cache';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import TextField from '@mui/material/TextField';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import {
+  MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS, sanitizeModules,
+  withDependencies, dependentsOf, isBaseModule, withBaseModules, type ModuleKey,
+} from '@/lib/config/modules';
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { getTeamModules } from '@/lib/auth/modules';
+import { PLANS, getPlan } from '@/lib/config/plans';
+import { PlanSelect } from './_plan-select';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
+
+/** -1 en el catálogo significa «sin tope»; 0 en estudiantes, «no aplica». */
+function limiteTexto(n: number): string {
+  if (n < 0) return 'Ilimitado';
+  return String(n);
+}
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
 
@@ -67,6 +93,23 @@ async function eliminarMiembro(formData: FormData) {
   const teamId = parseInt(formData.get('teamId') as string);
   const userId = parseInt(formData.get('userId') as string);
   if (isNaN(teamId) || isNaN(userId)) return;
+
+  // No dejar la empresa sin nadie dentro. Sin esta guardia, quitar al último
+  // miembro la vuelve inalcanzable: nadie puede entrar, y desde aquí solo se
+  // podía cambiar el rol de quien ya estuviera adentro. Le pasó al team 23
+  // (COLEGIO MONTESSORI PEKE KINGS) el 2026-08-10 y quedó muerto.
+  //
+  // La cuenta se hace ANTES de borrar y sobre el team completo, no sobre los
+  // owners: aquí el problema no es quedarse sin propietario sino quedarse sin
+  // nadie. Para el último owner ya hay freno aparte en cambiarRolMiembro.
+  const miembros = await db
+    .select({ userId: teamMembers.userId })
+    .from(teamMembers)
+    .where(eq(teamMembers.teamId, teamId));
+
+  if (miembros.length <= 1) {
+    redirect(`/admin/empresas/${teamId}?error=ultimo_miembro`);
+  }
 
   await db.delete(teamMembers).where(
     and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))
@@ -138,6 +181,127 @@ async function toggleCajaHabilitada(formData: FormData) {
   if (isNaN(teamId)) return;
 
   await db.update(teams).set({ cajaHabilitada: habilitar }).where(eq(teams.id, teamId));
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
+// ─── Server Action: asignar plan a la empresa ────────────────────────────────
+//
+// Es la ÚNICA vía para poner un plan sin pasar por Stripe, y hace falta por
+// dos razones: las 22 empresas que ya existen nunca compraron nada (nacieron
+// antes del billing) y hay que darles el suyo, y de vez en cuando toca sostener
+// a un cliente mientras se arregla un pago.
+//
+// Marca `subscription_status = 'admin'`, que el ciclo de vida trata como acceso
+// concedido por nosotros: no caduca y ningún webhook lo pisa. Ver
+// lib/suscripcion/estado.ts.
+
+async function asignarPlan(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId  = parseInt(formData.get('teamId') as string);
+  const planKey = (formData.get('plan') as string ?? '').trim();
+  if (isNaN(teamId)) return;
+
+  // Cadena vacía = quitarle el plan. Se valida contra el catálogo para que un
+  // POST a mano no pueda dejar un plan_name que después no resuelva a nada.
+  const valido = planKey === '' || PLANS.some(p => p.key === planKey);
+  if (!valido) return;
+
+  // 'admin' solo mientras no haya una suscripción de Stripe de por medio: si
+  // la empresa YA paga, aquí solo se corrige la etiqueta del plan y su estado
+  // real no se toca — el comentario lo prometía y el código no lo cumplía:
+  // ponía 'admin' siempre, y una corrección de etiqueta a una empresa pagando
+  // le desconectaba el ciclo de vida real de Stripe.
+  const [fila] = await db
+    .select({ subId: teams.stripeSubscriptionId })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const tieneStripe = Boolean(fila?.subId);
+
+  await db.update(teams).set({
+    planName: planKey || null,
+    ...(tieneStripe ? {} : { subscriptionStatus: planKey ? 'admin' : null }),
+    updatedAt: new Date(),
+  }).where(eq(teams.id, teamId));
+
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
+// ─── Server Action: resincronizar contra Stripe ──────────────────────────────
+//
+// Reescribe la fila con lo que Stripe diga AHORA: plan, estado, fechas y
+// adicionales. Es el botón de «no me cuadra lo que veo»: un webhook perdido, un
+// cambio hecho a mano en el dashboard de Stripe, una migración a medias — en
+// vez de adivinar cuál columna quedó vieja, se copia todo de la fuente.
+// No toca cuentas 'admin' ni empresas sin cliente en Stripe con estado ya
+// vacío; ver lib/payments/sincronizar.ts.
+
+async function resincronizarStripe(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId = parseInt(formData.get('teamId') as string);
+  if (isNaN(teamId)) return;
+
+  await sincronizarConStripe(teamId);
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
+// ─── Server Action: toggle módulo del producto (facturación/pos) ─────────────
+//
+// A qué columna escribe depende de si el billing está encendido:
+//
+//  · apagado → modulosHabilitados. Los módulos son nuestros y esta columna es
+//    la fuente de verdad; nadie más opina.
+//  · encendido → modulosOverride. La fuente normal pasa a ser el plan, y esta
+//    pantalla queda para la excepción: regalar un módulo, montar una demo,
+//    sostener a un cliente mientras se arregla un pago.
+//
+// Escribir siempre en modulosHabilitados con el billing encendido sería un
+// toggle que se ve moverse en pantalla y no cambia nada, porque getTeamModules
+// leería el plan por encima. Ver la jerarquía en lib/auth/modules.ts.
+
+async function toggleModulo(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId = parseInt(formData.get('teamId') as string);
+  const modulo = formData.get('modulo') as ModuleKey;
+  const habilitar = formData.get('habilitar') === '1';
+  if (isNaN(teamId) || !MODULES.includes(modulo)) return;
+  // Los módulos base (facturación + administración) los tiene toda empresa y no
+  // se apagan: apagar administración dejaría al dueño sin acceso a su empresa.
+  if (isBaseModule(modulo) && !habilitar) return;
+
+  const [t] = await db
+    .select({ mods: teams.modulosHabilitados, override: teams.modulosOverride })
+    .from(teams).where(eq(teams.id, teamId)).limit(1);
+  if (!t) return;
+
+  // Con billing encendido se parte del override si ya existe; si no, de lo que
+  // hay habilitado hoy, para que el primer clic no le apague al cliente todo
+  // lo que ya tenía.
+  const current = sanitizeModules(
+    BILLING_ENABLED && t.override != null ? t.override : t.mods,
+  );
+  // Activar arrastra dependencias (escolar cobra con facturas → necesita
+  // Facturación); desactivar arrastra a los que dependen de él, si no el
+  // módulo dependiente queda encendido pero roto.
+  const next = withBaseModules(habilitar
+    ? withDependencies([...current, modulo])
+    : current.filter(m => m !== modulo && !dependentsOf(modulo).includes(m)));
+
+  // Compat legacy: posHabilitado sigue reflejando el módulo pos hasta retirar
+  // su último consumidor.
+  await db.update(teams).set({
+    ...(BILLING_ENABLED ? { modulosOverride: next } : { modulosHabilitados: next }),
+    ...(modulo === 'pos' ? { posHabilitado: habilitar } : {}),
+  }).where(eq(teams.id, teamId));
   revalidatePath(`/admin/empresas/${teamId}`);
 }
 
@@ -239,6 +403,11 @@ export default async function EmpresaDetailPage({
   const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
   if (!team) notFound();
 
+  // Lo que la empresa ve DE VERDAD, no lo que dice una columna suelta: con el
+  // billing encendido los módulos salen del plan, y pintar modulosHabilitados
+  // aquí mostraría un toggle apagado sobre un módulo que el cliente sí tiene.
+  const modulosActivos = await getTeamModules(teamId);
+
   const members = await db
     .select({ id: users.id, name: users.name, email: users.email, role: teamMembers.role, joinedAt: teamMembers.joinedAt })
     .from(teamMembers)
@@ -251,247 +420,402 @@ export default async function EmpresaDetailPage({
     .where(and(eq(invitations.teamId, teamId), eq(invitations.status, 'pending')));
 
   const resendConfigured = !!(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_YOUR_KEY_HERE');
-  const inviteUrl = (tok: string) => `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${tok}`;
+  const inviteUrl = (tok: string) => `${baseDeEnlaces()}/invitations/accept?token=${tok}`;
 
   return (
-    <div className="w-full space-y-6">
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
+
       {/* Breadcrumb */}
-      <div className="flex items-center gap-3">
-        <Link href="/admin/empresas" className="text-sm text-gray-500 hover:text-gray-700">← Empresas</Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">{team.razonSocial ?? team.name}</h1>
-        <Link
-          href={`/admin/empresas/${teamId}/editar`}
-          className="ml-auto text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-3 py-1.5 rounded-lg transition-colors"
-        >
-          Editar
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Link href="/admin/empresas" style={{ textDecoration: 'none' }}>
+          <Typography variant="body2" sx={{ color: '#6b7280', '&:hover': { color: '#374151' } }}>
+            ← Empresas
+          </Typography>
         </Link>
-      </div>
+        <Typography variant="body2" sx={{ color: '#d1d5db' }}>/</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', fontSize: '1.1rem' }}>
+          {team.razonSocial ?? team.name}
+        </Typography>
+        <Box sx={{ ml: 'auto' }}>
+          <Link href={`/admin/empresas/${teamId}/editar`} style={{ textDecoration: 'none' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              disableElevation
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                color: '#374151',
+                borderColor: '#e5e7eb',
+                bgcolor: '#f3f4f6',
+                fontWeight: 500,
+                fontSize: '0.8125rem',
+                '&:hover': { bgcolor: '#e5e7eb', borderColor: '#d1d5db' },
+              }}
+            >
+              Editar
+            </Button>
+          </Link>
+        </Box>
+      </Box>
 
       {/* Resend warning */}
       {!resendConfigured && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3">
-          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-medium">Emails no configurados</p>
-            <p className="text-xs mt-0.5">
-              <code className="bg-amber-100 px-1 rounded">RESEND_API_KEY</code> es placeholder.
-              Las invitaciones se crean pero el correo no se envía. Copia el enlace manualmente de la sección de invitaciones pendientes.
-            </p>
-          </div>
-        </div>
+        <Box sx={{
+          display: 'flex', alignItems: 'flex-start', gap: 1.5,
+          bgcolor: '#fffbeb', border: '1px solid #fde68a',
+          borderRadius: '8px', px: 2, py: 1.5,
+        }}>
+          <AlertTriangle style={{ width: 16, height: 16, color: '#92400e', marginTop: 2, flexShrink: 0 }} />
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#92400e' }}>
+              Emails no configurados
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#92400e', mt: 0.5, display: 'block' }}>
+              <code style={{ background: '#fef3c7', padding: '0 4px', borderRadius: 4 }}>RESEND_API_KEY</code>
+              {' '}es placeholder. Las invitaciones se crean pero el correo no se envía. Copia el enlace manualmente de la sección de invitaciones pendientes.
+            </Typography>
+          </Box>
+        </Box>
       )}
 
       {/* Feedback */}
       {ok === 'invitado'    && <Alert color="green" msg="✓ Invitación enviada." />}
       {ok === 'eliminado'   && <Alert color="green" msg="✓ Usuario eliminado de la empresa." />}
       {ok === 'actualizado' && <Alert color="green" msg="✓ Datos actualizados correctamente." />}
-      {ok === 'vinculado_ecf'      && <Alert color="green" msg="✓ Empresa vinculada a ecf-api." />}
+      {ok === 'vinculado_ecf'        && <Alert color="green" msg="✓ Empresa vinculada a ecf-api." />}
       {ok === 'ambiente_actualizado' && <Alert color="green" msg="✓ Ambiente DGII actualizado." />}
-      {ok === 'cert_subido'        && <Alert color="green" msg="✓ Certificado subido y activado." />}
-      {ok === 'cert_revocado'      && <Alert color="green" msg="✓ Certificado revocado." />}
-      {ok === 'rango_registrado'   && <Alert color="green" msg="✓ Rango NCF registrado en ecf-api." />}
-      {ok === 'rango_eliminado'    && <Alert color="green" msg="✓ Rango desactivado." />}
-      {ok === 'token_refrescado'   && <Alert color="green" msg="✓ Token DGII refrescado." />}
-      {ok === 'reenviado'          && <Alert color="green" msg="✓ Invitación reenviada." />}
-      {error === 'ya_miembro' && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
-      {error === 'reenvio_fallido'      && <Alert color="amber" msg="⚠ No se pudo reenviar el correo. Revisa la configuración de Resend." />}
-      {error === 'inv_no_encontrada'    && <Alert color="amber" msg="⚠ Invitación no encontrada o ya cancelada." />}
-      {error === 'empresa_no_encontrada' && <Alert color="amber" msg="⚠ Empresa no encontrada." />}
+      {ok === 'cert_subido'          && <Alert color="green" msg="✓ Certificado subido y activado." />}
+      {ok === 'cert_revocado'        && <Alert color="green" msg="✓ Certificado revocado." />}
+      {ok === 'rango_registrado'     && <Alert color="green" msg="✓ Rango NCF registrado en ecf-api." />}
+      {ok === 'rango_eliminado'      && <Alert color="green" msg="✓ Rango desactivado." />}
+      {ok === 'token_refrescado'     && <Alert color="green" msg="✓ Token DGII refrescado." />}
+      {ok === 'reenviado'            && <Alert color="green" msg="✓ Invitación reenviada." />}
+      {error === 'ya_miembro'             && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
+      {error === 'reenvio_fallido'        && <Alert color="amber" msg="⚠ No se pudo reenviar el correo. Revisa la configuración de Resend." />}
+      {error === 'inv_no_encontrada'      && <Alert color="amber" msg="⚠ Invitación no encontrada o ya cancelada." />}
+      {error === 'empresa_no_encontrada'  && <Alert color="amber" msg="⚠ Empresa no encontrada." />}
       {error?.startsWith('ecf_')   && <Alert color="amber" msg={`⚠ ecf-api: ${decodeURIComponent(error.slice(4))}`} />}
       {error?.startsWith('cert_')  && <Alert color="amber" msg={`⚠ Certificado: ${decodeURIComponent(error.slice(5))}`} />}
       {error?.startsWith('rango_') && <Alert color="amber" msg={`⚠ Rango: ${decodeURIComponent(error.slice(6))}`} />}
       {error?.startsWith('token_') && <Alert color="amber" msg={`⚠ Token DGII: ${decodeURIComponent(error.slice(6))}`} />}
 
-      {/* Datos fiscales — strip horizontal compacto */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Building2 className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Datos fiscales</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+      {/* Datos fiscales */}
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <Building2 style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Datos fiscales</Typography>
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' }, gap: '12px 24px' }}>
           <Item label="RNC"          value={team.rnc} mono />
           <Item label="Razón social" value={team.razonSocial} />
           <Item label="Comercial"    value={team.nombreComercial} />
           <Item label="Dirección"    value={team.direccion} />
           <Item label="Teléfono"     value={team.telefono} />
           <Item label="Email fact."  value={team.emailFacturacion} />
-          <Item label="Plan"         value={team.planName ?? 'Sin plan'} />
-          {/* Ambiente DGII se muestra en la sección ecf-api (fuente de verdad). */}
-        </div>
-      </div>
+        </Box>
+      </Box>
+
+      {/* Plan de la empresa */}
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <CreditCard style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Plan</Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <form action={asignarPlan} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <input type="hidden" name="teamId" value={teamId} />
+            <Box sx={{ minWidth: 260 }}>
+              <PlanSelect current={team.planName ?? ''} />
+            </Box>
+            <Button type="submit" variant="outlined" size="small" disableElevation
+              sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
+              Guardar plan
+            </Button>
+          </form>
+          {team.stripeCustomerId && team.subscriptionStatus !== 'admin' && (
+            <form action={resincronizarStripe}>
+              <input type="hidden" name="teamId" value={teamId} />
+              <Button type="submit" variant="outlined" size="small" disableElevation
+                startIcon={<RefreshCw style={{ width: 13, height: 13 }} />}
+                sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
+                Sincronizar con Stripe
+              </Button>
+            </form>
+          )}
+        </Box>
+
+        <Typography variant="caption" sx={{ color: '#9ca3af', display: 'block', mt: 1.5 }}>
+          {team.stripeSubscriptionId
+            ? 'Esta empresa tiene suscripción en Stripe. Cambiar el plan aquí NO cobra ni avisa a Stripe — úsalo solo para corregir. «Sincronizar» reescribe la fila con lo que Stripe diga ahora.'
+            : 'Sin suscripción en Stripe: el plan queda como acceso concedido por nosotros y no caduca.'}
+        </Typography>
+
+        {team.planName && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' }, gap: '12px 24px', mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
+            <Item label="Comprobantes/mes" value={limiteTexto(getPlan(team.planName).limits.docs)} />
+            <Item label="Usuarios"         value={limiteTexto(getPlan(team.planName).limits.users)} />
+            <Item label="Estudiantes"      value={limiteTexto(getPlan(team.planName).limits.estudiantes)} />
+            <Item label="Precio"           value={`US$${getPlan(team.planName).price}/mes`} />
+          </Box>
+        )}
+      </Box>
 
       {/* Módulos del equipo */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <ToggleRight className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Módulos</h2>
-        </div>
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <p className="text-sm font-medium text-gray-800">Cuadre de Caja</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <ToggleRight style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Módulos</Typography>
+        </Box>
+        {/* Módulos del producto — override manual del admin de plataforma.
+            Se recorre el catálogo (MODULES) para que un módulo nuevo aparezca
+            aquí solo: Administración Escolar no se vende por Stripe, así que
+            este toggle es su ÚNICA vía de activación. */}
+        {MODULES.map(mod => {
+          // Los módulos base los tiene toda empresa: se muestran siempre activos
+          // y sin botón, no hay nada que decidir sobre ellos.
+          const base = isBaseModule(mod);
+          const activo = base || modulosActivos.includes(mod);
+          const label = MODULE_LABELS[mod];
+          const desc = MODULE_DESCRIPTIONS[mod];
+          return (
+            <Box key={mod} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f3f4f6' }}>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>{label}</Typography>
+                <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>{desc}</Typography>
+              </Box>
+              {base ? (
+                <Chip
+                  size="small"
+                  icon={<ToggleRight style={{ width: 14, height: 14 }} />}
+                  label="Incluido"
+                  sx={{ bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fc', fontWeight: 500, fontSize: '0.75rem' }}
+                />
+              ) : (
+              <form action={toggleModulo}>
+                <input type="hidden" name="teamId" value={teamId} />
+                <input type="hidden" name="modulo" value={mod} />
+                <input type="hidden" name="habilitar" value={activo ? '0' : '1'} />
+                <Button
+                  type="submit"
+                  variant="outlined"
+                  size="small"
+                  disableElevation
+                  startIcon={activo
+                    ? <ToggleRight style={{ width: 16, height: 16 }} />
+                    : <ToggleLeft  style={{ width: 16, height: 16 }} />}
+                  sx={{
+                    textTransform: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 500,
+                    fontSize: '0.8125rem',
+                    ...(activo
+                      ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
+                      : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
+                    ),
+                  }}
+                >
+                  {activo ? 'Habilitado' : 'Deshabilitado'}
+                </Button>
+              </form>
+              )}
+            </Box>
+          );
+        })}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1 }}>
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Cuadre de Caja</Typography>
+            <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>
               Habilita el módulo de apertura, cierre y cuadre de turnos de caja para este equipo.
-            </p>
-          </div>
+            </Typography>
+          </Box>
           <form action={toggleCajaHabilitada}>
             <input type="hidden" name="teamId"    value={teamId} />
             <input type="hidden" name="habilitar" value={team.cajaHabilitada ? '0' : '1'} />
-            <button
+            <Button
               type="submit"
-              title={team.cajaHabilitada ? 'Deshabilitar caja' : 'Habilitar caja'}
-              className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-                team.cajaHabilitada
-                  ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-              }`}
+              variant="outlined"
+              size="small"
+              disableElevation
+              startIcon={team.cajaHabilitada
+                ? <ToggleRight style={{ width: 16, height: 16 }} />
+                : <ToggleLeft  style={{ width: 16, height: 16 }} />}
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                fontWeight: 500,
+                fontSize: '0.8125rem',
+                ...(team.cajaHabilitada
+                  ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
+                  : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
+                ),
+              }}
             >
-              {team.cajaHabilitada
-                ? <><ToggleRight className="w-4 h-4" /> Habilitada</>
-                : <><ToggleLeft  className="w-4 h-4" /> Deshabilitada</>}
-            </button>
+              {team.cajaHabilitada ? 'Habilitada' : 'Deshabilitada'}
+            </Button>
           </form>
-        </div>
+        </Box>
 
         {/* Límite de duración del turno — solo aplica con el módulo activo */}
         {team.cajaHabilitada && (
-          <form action={guardarLimiteCaja} className="border-t border-gray-100 pt-3 mt-1">
+          <Box component="form" action={guardarLimiteCaja} sx={{ borderTop: '1px solid #f3f4f6', pt: 1.5, mt: 0.5 }}>
             <input type="hidden" name="teamId" value={teamId} />
-            <p className="text-sm font-medium text-gray-800">Límite del turno</p>
-            <p className="text-xs text-gray-400 mt-0.5 mb-2">
+            <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Límite del turno</Typography>
+            <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, mb: 1, display: 'block' }}>
               Pasado el límite + la gracia, el cajero no puede facturar ni cobrar hasta cerrar caja.
               Gracia vacía o 0 = solo avisa. La empresa también puede ajustarlo desde su configuración.
-            </p>
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="text-xs text-gray-500">
-                Horas
-                <input
-                  type="number"
-                  name="limiteHoras"
-                  min={1}
-                  max={24}
-                  defaultValue={team.cajaLimiteHoras ?? ''}
-                  placeholder="sin límite"
-                  className="mt-1 block w-28 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800"
-                />
-              </label>
-              <label className="text-xs text-gray-500">
-                Avisar desde (min)
-                <input
-                  type="number"
-                  name="avisoMinutos"
-                  min={5}
-                  max={240}
-                  defaultValue={team.cajaAvisoMinutos ?? 60}
-                  className="mt-1 block w-32 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800"
-                />
-              </label>
-              <label className="text-xs text-gray-500">
-                Gracia (h)
-                <input
-                  type="number"
-                  name="graciaHoras"
-                  min={0}
-                  max={12}
-                  defaultValue={team.cajaGraciaHoras ?? ''}
-                  placeholder="no bloquea"
-                  className="mt-1 block w-28 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800"
-                />
-              </label>
-              <button
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5 }}>
+              <TextField
+                name="limiteHoras"
+                type="number"
+                size="small"
+                label="Horas"
+                placeholder="sin límite"
+                defaultValue={team.cajaLimiteHoras ?? ''}
+                slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: 1, max: 24 } }}
+                sx={{ width: 140, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+              />
+              <TextField
+                name="avisoMinutos"
+                type="number"
+                size="small"
+                label="Avisar desde (min)"
+                defaultValue={team.cajaAvisoMinutos ?? 60}
+                slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: 5, max: 240 } }}
+                sx={{ width: 160, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+              />
+              <TextField
+                name="graciaHoras"
+                type="number"
+                size="small"
+                label="Gracia (h)"
+                placeholder="no bloquea"
+                defaultValue={team.cajaGraciaHoras ?? ''}
+                slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: 0, max: 12 } }}
+                sx={{ width: 140, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+              />
+              <Button
                 type="submit"
-                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                variant="outlined"
+                size="small"
+                disableElevation
+                sx={{
+                  textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem',
+                  bgcolor: '#f9fafb', color: '#374151', borderColor: '#e5e7eb',
+                  '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' },
+                  height: 40,
+                }}
               >
                 Guardar
-              </button>
-            </div>
-          </form>
+              </Button>
+            </Box>
+          </Box>
         )}
-      </div>
+      </Box>
 
-      {/* Integración ecf-api — incluye tab Habilitación */}
+      {/* Integración ecf-api */}
       <EcfApiSection teamId={teamId} rnc={team.rnc} />
 
       {/* Miembros */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-          <Users className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Usuarios ({members.length})</h2>
-        </div>
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.5, borderBottom: '1px solid #f3f4f6' }}>
+          <Users style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>
+            Usuarios ({members.length})
+          </Typography>
+        </Box>
 
         {members.length === 0 ? (
-          <p className="text-sm text-gray-400 px-5 py-4">Sin usuarios. Invita al primero abajo.</p>
+          <Typography variant="body2" sx={{ color: '#9ca3af', px: 2.5, py: 2 }}>
+            Sin usuarios. Invita al primero abajo.
+          </Typography>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase">Usuario</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase">Rol</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase">Desde</th>
-                <th className="px-5 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>Usuario</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>Rol</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>Desde</TableCell>
+                <TableCell sx={{ borderBottom: '1px solid #f3f4f6' }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {(() => {
                 const ownerCount = members.filter(x => x.role === 'owner').length;
                 return members.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3">
-                    <p className="font-medium text-gray-900">{m.name ?? '—'}</p>
-                    <p className="text-xs text-gray-400">{m.email}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <RoleSelect
-                      teamId={teamId}
-                      userId={m.id}
-                      currentRole={m.role}
-                      isLastOwner={m.role === 'owner' && ownerCount <= 1}
-                      action={cambiarRolMiembro}
-                    />
-                  </td>
-                  <td className="px-5 py-3 text-xs text-gray-400">
-                    {new Date(m.joinedAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <ConfirmButton
-                      action={eliminarMiembro}
-                      message={`¿Eliminar a ${m.email} de esta empresa?`}
-                      className="text-xs text-red-500 hover:text-red-700 font-medium"
-                      fields={{ teamId, userId: m.id }}
-                    >
-                      Eliminar
-                    </ConfirmButton>
-                  </td>
-                </tr>
+                  <TableRow key={m.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                    <TableCell sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#111827' }}>{m.name ?? '—'}</Typography>
+                      <Typography variant="caption" sx={{ color: '#9ca3af' }}>{m.email}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <RoleSelect
+                        teamId={teamId}
+                        userId={m.id}
+                        currentRole={m.role}
+                        isLastOwner={m.role === 'owner' && ownerCount <= 1}
+                        action={cambiarRolMiembro}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <Typography variant="caption" sx={{ color: '#9ca3af' }}>
+                        {new Date(m.joinedAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <ConfirmButton
+                        action={eliminarMiembro}
+                        message={`¿Eliminar a ${m.email} de esta empresa?`}
+                        fields={{ teamId, userId: m.id }}
+                        color="error"
+                      >
+                        Eliminar
+                      </ConfirmButton>
+                    </TableCell>
+                  </TableRow>
                 ));
               })()}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Box>
 
       {/* Invitaciones pendientes */}
       {pendingInvites.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-            <Clock className="w-4 h-4 text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-700">Invitaciones pendientes ({pendingInvites.length})</h2>
-          </div>
-          <ul className="divide-y divide-gray-50">
+        <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.5, borderBottom: '1px solid #f3f4f6' }}>
+            <Clock style={{ width: 16, height: 16, color: '#9ca3af' }} />
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>
+              Invitaciones pendientes ({pendingInvites.length})
+            </Typography>
+          </Box>
+          <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none' }}>
             {pendingInvites.map(inv => (
-              <li key={inv.id} className="px-5 py-3 flex items-center gap-4">
-                <span className="text-sm text-gray-700 flex-shrink-0">{inv.email}</span>
-                <a
+              <Box
+                component="li"
+                key={inv.id}
+                sx={{ px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 2, borderBottom: '1px solid #f9fafb', '&:last-child': { borderBottom: 'none' } }}
+              >
+                <Typography variant="body2" sx={{ color: '#374151', flexShrink: 0 }}>{inv.email}</Typography>
+                <Typography
+                  component="a"
                   href={inviteUrl(inv.token)}
                   target="_blank"
-                  className="text-xs text-teal-600 hover:underline font-mono truncate flex-1 min-w-0"
+                  variant="caption"
+                  sx={{
+                    color: '#3658e1', fontFamily: 'monospace', flex: 1, minWidth: 0,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
                 >
                   {inviteUrl(inv.token)}
-                </a>
+                </Typography>
                 <ConfirmButton
                   action={reenviarInvitacion}
                   message="¿Reenviar correo de invitación?"
-                  className="text-xs text-teal-600 hover:text-teal-700 flex-shrink-0"
                   fields={{ invId: inv.id, teamId }}
                 >
                   Reenviar
@@ -499,47 +823,65 @@ export default async function EmpresaDetailPage({
                 <ConfirmButton
                   action={cancelarInvitacion}
                   message="¿Cancelar esta invitación?"
-                  className="text-xs text-gray-400 hover:text-red-500 flex-shrink-0"
                   fields={{ invId: inv.id, teamId }}
+                  color="error"
                 >
                   Cancelar
                 </ConfirmButton>
-              </li>
+              </Box>
             ))}
-          </ul>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {/* Invitar usuario */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <Mail className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Invitar usuario</h2>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Mail style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Invitar usuario</Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: '#6b7280', mb: 2, display: 'block' }}>
           {resendConfigured
             ? 'Le llegará un correo con el enlace para crear su cuenta.'
             : 'El correo no se enviará (Resend no configurado). Copia el enlace de la sección de arriba.'}
-        </p>
-        <form action={invitarUsuario} className="flex gap-3 items-end">
+        </Typography>
+        <form action={invitarUsuario}>
           <input type="hidden" name="teamId"   value={teamId} />
           <input type="hidden" name="teamName" value={team.razonSocial ?? team.name} />
-          <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-            <input
-              name="email" type="email" required placeholder="cliente@suempresa.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors whitespace-nowrap"
-          >
-            Enviar invitación
-          </button>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end' }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+                Email
+              </Typography>
+              <TextField
+                name="email"
+                type="email"
+                required
+                placeholder="cliente@suempresa.com"
+                size="small"
+                fullWidth
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+            </Box>
+            <Button
+              type="submit"
+              variant="contained"
+              disableElevation
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                bgcolor: '#3658e1',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                '&:hover': { bgcolor: '#2a45c4' },
+              }}
+            >
+              Enviar invitación
+            </Button>
+          </Box>
         </form>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -547,13 +889,15 @@ export default async function EmpresaDetailPage({
 
 function Alert({ color, msg }: { color: 'green' | 'amber'; msg: string }) {
   return (
-    <div className={`text-sm rounded-lg px-4 py-3 border ${
-      color === 'green'
-        ? 'bg-green-50 border-green-200 text-green-700'
-        : 'bg-amber-50 border-amber-200 text-amber-700'
-    }`}>
-      {msg}
-    </div>
+    <Box sx={{
+      px: 2, py: 1.5, borderRadius: '8px',
+      ...(color === 'green'
+        ? { bgcolor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d' }
+        : { bgcolor: '#fffbeb', border: '1px solid #fde68a', color: '#b45309' }
+      ),
+    }}>
+      <Typography variant="body2" sx={{ color: 'inherit' }}>{msg}</Typography>
+    </Box>
   );
 }
 
@@ -563,15 +907,30 @@ function Item({ label, value, mono, badge, badgeColor }: {
 }) {
   if (!value) return null;
   return (
-    <div>
-      <p className="text-xs text-gray-400">{label}</p>
+    <Box>
+      <Typography variant="caption" sx={{ color: '#9ca3af', display: 'block' }}>{label}</Typography>
       {badge ? (
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-          badgeColor === 'green' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-        }`}>{value}</span>
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-block', fontSize: '0.75rem', px: 1, py: '2px',
+            borderRadius: '999px', fontWeight: 500,
+            ...(badgeColor === 'green'
+              ? { bgcolor: '#f0fdf4', color: '#15803d' }
+              : { bgcolor: '#fffbeb', color: '#b45309' }
+            ),
+          }}
+        >
+          {value}
+        </Box>
       ) : (
-        <p className={`text-gray-800 ${mono ? 'font-mono' : ''}`}>{value}</p>
+        <Typography
+          variant="body2"
+          sx={{ color: '#1f2937', ...(mono ? { fontFamily: 'monospace' } : {}) }}
+        >
+          {value}
+        </Typography>
       )}
-    </div>
+    </Box>
   );
 }

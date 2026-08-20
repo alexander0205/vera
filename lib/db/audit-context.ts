@@ -26,17 +26,17 @@ export async function withAuditContext<T>(
   fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
-    if (ctx.userId != null) {
-      await tx.execute(sql`SELECT set_config('app.user_id', ${String(ctx.userId)}, true)`);
-    }
-    if (ctx.teamId != null) {
-      await tx.execute(sql`SELECT set_config('app.team_id', ${String(ctx.teamId)}, true)`);
-    }
-    if (ctx.actor) {
-      await tx.execute(sql`SELECT set_config('app.actor', ${ctx.actor}, true)`);
-    }
-    if (ctx.ip) {
-      await tx.execute(sql`SELECT set_config('app.ip', ${ctx.ip}, true)`);
+    // Un solo round-trip para todo el contexto. Antes eran hasta 4 SELECT
+    // secuenciales (cada uno ~142ms contra Neon en us-east-1) ANTES del trabajo
+    // real de cada escritura. Colapsados en una sentencia se ahorra ~1-3 saltos
+    // de red por operación escrita.
+    const sets = [];
+    if (ctx.userId != null) sets.push(sql`set_config('app.user_id', ${String(ctx.userId)}, true)`);
+    if (ctx.teamId != null) sets.push(sql`set_config('app.team_id', ${String(ctx.teamId)}, true)`);
+    if (ctx.actor)          sets.push(sql`set_config('app.actor', ${ctx.actor}, true)`);
+    if (ctx.ip)             sets.push(sql`set_config('app.ip', ${ctx.ip}, true)`);
+    if (sets.length > 0) {
+      await tx.execute(sql`SELECT ${sql.join(sets, sql`, `)}`);
     }
     return fn(tx);
   });

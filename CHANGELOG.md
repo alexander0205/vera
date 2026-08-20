@@ -4,6 +4,44 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.21.2 — 2026-08-12
+
+_1 commit(s) de mantenimiento no listados._
+
+## v1.21.1 — 2026-08-12
+
+### Arreglado
+
+- **novedades**: publicar el historial y que el release guarde el archivo
+
+## v1.21.0 — 2026-08-12
+
+### Nuevo
+
+- **nav**: recordar grupos abiertos, Caja bajo Inventario, fuera Alegra
+  - El estado abierto/cerrado de cada grupo del sidebar se guarda en localStorage. Quien cierra Contabilidad porque no la usa no tiene que volver a cerrarla cada vez que entra.
+  - Se lee DESPUÉS del primer render: tocar localStorage mientras se renderiza rompe la hidratación, porque el servidor no lo tiene y pinta otra cosa.
+  - El grupo de la ruta actual siempre termina abierto; si no, el ítem en el que estás quedaría escondido. Depende de qué grupo está activo y no del pathname, así que cerrar a mano el grupo en el que estás lo deja cerrado mientras te mueves dentro de él.
+  - Pasa a ir detrás de Inventario en vez de arriba del todo. Se abre una vez al día; Ingresos e Inventario se tocan a cada rato.
+  - Fuera de todo el producto: botones «Importar de Alegra» → «Importar CSV» en productos, clientes y facturas, sus modales, el estado «Histórica (Alegra)» → «Histórica (importada)» y las notas que se escriben en la BD al importar. También los comentarios de código en las rutas de import, lib/import/csv.ts, lib/ecf/categorias.ts, el template del PDF y el log de QA.
+  - Se conserva a propósito en .qa-report-persona.md: ahí Alegra es el competidor analizado, y borrarlo dejaría el documento sin sentido.
+- **factura**: header de una línea, contador de lista y Estado DGII legible
+  - Una sola fila que no envuelve. Cuando falta ancho cede el código, que se recorta con puntos suspensivos y guarda el completo en el title; antes la fila se partía en dos pisos. Verificado: alto fijo de 48px con un código corto, uno largo y uno absurdo, y sin desbordar a 760px.
+  - Fuera los badges de estado DGII y de cobro. El fiscal lo cuenta la tarjeta Estado DGII y el cobro las cifras de arriba; en el título eran una tercera copia de lo mismo.
+  - «Ver PDF» sube al header. Vivía solo en la barra inferior, así que en una factura larga había que recorrerla entera para verla impresa.
+  - «Enviar a DGII» deja de estar duplicado: se queda en la barra inferior, que es fija y sigue a la vista al hacer scroll. El header se va con el scroll, que es el peor sitio para la acción principal.
+  - Recorre la lista de la que se vino, con su filtro y su orden, no todos los documentos de la empresa: un contador global es un número sin significado.
+  - lib/hooks/useListaNavegacion.ts guarda el orden en sessionStorage (no en la URL, para no ensuciar los enlaces que la gente copia). DataTable reporta los ids ya ordenados, no los que llegaron del fetch — si no, ordenar por una columna dejaba las flechas siguiendo otro orden del que se ve.
+  - Sin contexto (link directo) no se muestra nada, en vez de flechas que saltan a documentos al azar.
+  - Sin e-CF: una frase. La anterior decía «un registro sin comprobante sin e-CF» —el mismo dato dos veces y mal escrito— y repetía el badge del título.
+  - Con e-CF: manda el e-NCF, que es lo que se viene a buscar. Antes eran cinco filas del mismo peso con el estado escrito dos veces. Código de seguridad y Track ID bajan de tono debajo de una línea.
+  - La tarjeta «Información del comprobante» repetía e-NCF, código de seguridad y Track ID justo debajo. Queda solo con lo que únicamente ella tiene —el documento que modifica, en notas de crédito y débito— y no se dibuja si no hay nada que contar.
+  - Modo compacto para la columna angosta: el encabezado se apila en vez de competir por el ancho, que era lo que partía el título en dos líneas y dejaba el recuadro de subir diminuto.
+
+### Arreglado
+
+- **ui**: barra inferior pegada al fondo y destinatario por defecto del cliente
+
 ## v1.20.1 — 2026-08-12
 
 ### Otros

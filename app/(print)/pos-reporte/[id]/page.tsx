@@ -6,6 +6,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 
 interface Reporte {
   turno: { id: number; estado: string; numeroCierre: string | null; aperturaAt: string; montoAperturaCentavos: number; terminalNombre: string | null; almacenNombre: string | null };
@@ -32,57 +34,64 @@ export default function PosReportePage() {
       .catch((e) => setError(typeof e === 'string' ? e : 'No se pudo cargar el reporte'));
   }, [id]);
 
-  if (error) return <div style={{ padding: 16, fontFamily: 'monospace' }}>{error}</div>;
-  if (!r) return <div style={{ padding: 16, fontFamily: 'monospace' }}>Cargando…</div>;
+  if (error) return <Box sx={{ padding: '16px', fontFamily: 'monospace' }}>{error}</Box>;
+  if (!r) return <Box sx={{ padding: '16px', fontFamily: 'monospace' }}>Cargando…</Box>;
 
   const row = (l: string, v: string, bold = false, k?: string | number) => (
-    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontWeight: bold ? 700 : 400 }}><span>{l}</span><span>{v}</span></div>
+    <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', fontWeight: bold ? 700 : 400 }}><Box component="span">{l}</Box><Box component="span">{v}</Box></Box>
   );
 
   return (
-    <div style={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: 12, color: '#000', lineHeight: 1.35 }}>
-      <div style={{ textAlign: 'center', marginBottom: 6 }}>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>CORTE {r.tipo}</div>
-        <div>{r.tipo === 'Z' ? 'Cierre de turno' : 'Lectura en curso'}</div>
-        {r.turno.terminalNombre && <div>{r.turno.terminalNombre}</div>}
-        {r.turno.numeroCierre && <div>{r.turno.numeroCierre}</div>}
-      </div>
+    <Box sx={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: '12px', color: '#000', lineHeight: 1.35 }}>
+      <Box sx={{ textAlign: 'center', marginBottom: '6px' }}>
+        <Box sx={{ fontWeight: 700, fontSize: '14px' }}>CORTE {r.tipo}</Box>
+        <Box>{r.tipo === 'Z' ? 'Cierre de turno' : 'Lectura en curso'}</Box>
+        {r.turno.terminalNombre && <Box>{r.turno.terminalNombre}</Box>}
+        {r.turno.numeroCierre && <Box>{r.turno.numeroCierre}</Box>}
+      </Box>
 
-      <div style={{ borderTop: '1px dashed #000', paddingTop: 4 }}>
-        <div>Turno #{r.turno.id} · {r.turno.estado}</div>
-        <div>Apertura: {new Date(r.turno.aperturaAt).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' })}</div>
-        {r.turno.almacenNombre && <div>Almacén: {r.turno.almacenNombre}</div>}
-      </div>
+      <Box sx={{ borderTop: '1px dashed #000', paddingTop: '4px' }}>
+        <Box>Turno #{r.turno.id} · {r.turno.estado}</Box>
+        <Box>Apertura: {new Date(r.turno.aperturaAt).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' })}</Box>
+        {r.turno.almacenNombre && <Box>Almacén: {r.turno.almacenNombre}</Box>}
+      </Box>
 
-      <div style={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: 4 }}>
-        <div style={{ fontWeight: 700 }}>Ventas por método</div>
-        {r.ventasPorMetodo.length === 0 ? <div style={{ color: '#444' }}>(sin ventas)</div>
+      <Box sx={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: '4px' }}>
+        <Box sx={{ fontWeight: 700 }}>Ventas por método</Box>
+        {r.ventasPorMetodo.length === 0 ? <Box sx={{ color: '#444' }}>(sin ventas)</Box>
           : r.ventasPorMetodo.map((v, i) => row(METODO[v.metodo] ?? v.metodo, fmt(v.total), false, 'm' + i))}
         {row('Total vendido', 'RD$ ' + fmt(r.totalVendidoCentavos), true)}
         {row('# ventas', String(r.numeroVentas))}
-      </div>
+      </Box>
 
-      <div style={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: 4 }}>
-        <div style={{ fontWeight: 700 }}>Efectivo (gaveta)</div>
+      <Box sx={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: '4px' }}>
+        <Box sx={{ fontWeight: 700 }}>Efectivo (gaveta)</Box>
         {row('Fondo apertura', fmt(r.esperado.montoApertura))}
         {row('Ventas efectivo', '+' + fmt(r.esperado.ventasEfectivo))}
         {row('Entradas', '+' + fmt(r.esperado.entradas))}
         {row('Salidas', '-' + fmt(r.esperado.salidas))}
         {row('Esperado en caja', 'RD$ ' + fmt(r.esperado.esperado), true)}
-      </div>
+      </Box>
 
-      <div style={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: 4 }}>
-        <div style={{ fontWeight: 700 }}>Más vendidos</div>
-        {r.topProductos.length === 0 ? <div style={{ color: '#444' }}>(sin detalle)</div>
+      <Box sx={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: '4px' }}>
+        <Box sx={{ fontWeight: 700 }}>Más vendidos</Box>
+        {r.topProductos.length === 0 ? <Box sx={{ color: '#444' }}>(sin detalle)</Box>
           : r.topProductos.map((p, i) => row(`${p.cantidad}× ${p.nombre}`, fmt(p.importeCentavos), false, 'p' + i))}
-      </div>
+      </Box>
 
-      <div style={{ textAlign: 'center', marginTop: 8 }}>
+      <Box sx={{ textAlign: 'center', marginTop: '8px' }}>
         {new Date().toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' })}
-      </div>
+      </Box>
 
-      <button onClick={() => window.print()} className="no-print" style={{ display: 'block', margin: '12px auto', padding: '6px 14px' }}>Imprimir</button>
-      <style>{`@media print { .no-print { display: none } @page { margin: 0 } }`}</style>
-    </div>
+      <Button
+        onClick={() => window.print()}
+        variant="outlined"
+        size="small"
+        sx={{ display: 'block', margin: '12px auto', padding: '6px 14px', textTransform: 'none', color: '#374151', borderColor: '#d1d5db', '@media print': { display: 'none' } }}
+      >
+        Imprimir
+      </Button>
+      <style>{`@media print { @page { margin: 0 } }`}</style>
+    </Box>
   );
 }

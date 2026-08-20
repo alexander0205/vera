@@ -6,15 +6,16 @@
  * Recibe los datos del perfil de empresa desde el server component padre.
  */
 import dynamic from 'next/dynamic';
-import { Loader2 } from 'lucide-react';
+import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 const NuevaFacturaForm = dynamic(() => import('./NuevaFacturaForm'), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+      <CircularProgress size={32} sx={{ color: '#3658e1' }} />
+    </Box>
   ),
 });
 

@@ -115,10 +115,10 @@ export function VariantesEditor({ onChange, resetSignal = 0 }: {
   return (
     <div className="rounded-lg border border-gray-200 p-4 space-y-3">
       <label className="flex items-center gap-2.5 cursor-pointer select-none">
-        <input type="checkbox" className="h-4 w-4 accent-teal-600"
+        <input type="checkbox" className="h-4 w-4 accent-zero-600"
           checked={variantesOn} onChange={(e) => setVariantesOn(e.target.checked)} />
         <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
-          <Layers className="h-4 w-4 text-teal-600" />
+          <Layers className="h-4 w-4 text-zero-600" />
           Este producto tiene variantes (tallas, colores…)
         </span>
       </label>
@@ -146,9 +146,9 @@ export function VariantesEditor({ onChange, resetSignal = 0 }: {
                 {eje.valores.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {eje.valores.map(v => (
-                      <span key={v} className="inline-flex items-center gap-1 bg-teal-100 text-teal-800 text-xs font-medium px-2 py-1 rounded-full">
+                      <span key={v} className="inline-flex items-center gap-1 bg-zero-100 text-zero-800 text-xs font-medium px-2 py-1 rounded-full">
                         {v}
-                        <button type="button" onClick={() => removeValor(idx, v)} className="hover:text-teal-950">
+                        <button type="button" onClick={() => removeValor(idx, v)} className="hover:text-zero-950">
                           <X className="h-3 w-3" />
                         </button>
                       </span>
@@ -173,7 +173,7 @@ export function VariantesEditor({ onChange, resetSignal = 0 }: {
 
             {ejes.length < 3 && (
               <button type="button" onClick={addEje}
-                className="flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900 font-medium">
+                className="flex items-center gap-1.5 text-sm text-zero-700 hover:text-zero-900 font-medium">
                 <Plus className="h-4 w-4" /> Agregar otro eje
               </button>
             )}

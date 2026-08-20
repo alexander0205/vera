@@ -1,7 +1,7 @@
 /**
  * POST /api/import/facturas
  *
- * Importa facturas históricas (CSV export de Alegra, sep=;, latin-1) →
+ * Importa facturas históricas (CSV de facturas exportado del sistema anterior (sep=;, latin-1)) →
  * ecfDocuments con estado HISTORICA (NO se envían a DGII). Solo para
  * tracking de cobranza y migración de histórico.
  *
@@ -20,6 +20,7 @@ import { ecfDocuments, clients, products } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireImport, readUpload, ImportError } from '@/lib/import/server';
 import { registrarPago } from '@/lib/db/queries';
+import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import {
   decodeBuffer, parseCsv, pick, normKey, toCents, toIsoDate, isPlaceholderRnc,
   type ImportRow, type ImportResult,
@@ -41,7 +42,7 @@ interface FacturaData {
   clienteNombre: string;
   clienteRnc: string | null;
   montoTotal: number;        // centavos
-  cobrada: boolean;          // ESTADO=Cobrada en Alegra → se registra pago full
+  cobrada: boolean;          // ESTADO=Cobrada en el origen → se registra pago full
   lineas: LineaData[];
 }
 
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
       const clienteNombre = pick(head, 'CLIENTE - NOMBRE', 'Cliente - Nombre', 'Cliente').trim();
       const rncDigits = pick(head, 'CLIENTE - RNC O CÉDULA', 'Cliente - RNC o Cédula', 'RNC/Cédula').replace(/\D/g, '');
       const clienteRnc = (!isPlaceholderRnc(rncDigits) && /^\d{9}$|^\d{11}$/.test(rncDigits)) ? rncDigits : null;
-      // ESTADO de Alegra (col 'ESTADO', distinta de 'ESTADO LEGAL'). 'Cobrada' → pago full.
+      // ESTADO del CSV (col 'ESTADO', distinta de 'ESTADO LEGAL'). 'Cobrada' → pago full.
       const cobrada = normKey(pick(head, 'ESTADO', 'Estado')) === 'cobrada';
 
       const lineas: LineaData[] = lineRows.map(r => {
@@ -164,6 +165,12 @@ export async function POST(req: NextRequest) {
           tasaItbis: 'exento',
           tipo: 'servicio',
           activo: 'true',
+          // Estos productos no los pidió nadie: se inventan para poder enganchar
+          // la línea de una factura histórica que se está importando. Salen de
+          // Facturación, que es de donde vienen, y no de la caja: aparecer en la
+          // grilla del POS por el mero hecho de haber importado el histórico es
+          // ruido que el comerciante no sabe de dónde salió.
+          ...banderasPorTipo('servicio'),
         }));
         for (let i = 0; i < productValues.length; i += 500) {
           await db.insert(products).values(productValues.slice(i, i + 500));
@@ -201,7 +208,7 @@ export async function POST(req: NextRequest) {
             tasaItbis:              'exento',
             indicadorBienoServicio: '2',
           }))),
-          notas: `Importada de Alegra (factura ${f.codigo})`,
+          notas: `Importada por CSV (factura ${f.codigo})`,
         };
       });
       const insertedDocs: { id: number; encf: string }[] = [];
@@ -212,7 +219,7 @@ export async function POST(req: NextRequest) {
         insertedDocs.push(...chunk);
       }
 
-      // 4. ESTADO=Cobrada en Alegra → registrar pago full (queda 'Pagada' en AR/export).
+      // 4. ESTADO=Cobrada en el CSV → registrar pago full (queda 'Pagada' en AR/export).
       const idByEncf = new Map(insertedDocs.map(d => [d.encf, d.id]));
       for (const f of parsed) {
         if (!f.cobrada) continue;
@@ -224,7 +231,7 @@ export async function POST(req: NextRequest) {
           montoCentavos:  f.montoTotal,
           metodo:         'otro',
           fechaPago:      f.fecha,
-          notas:          `Cobrada en Alegra (import factura ${f.codigo})`,
+          notas:          `Cobrada al importar (factura ${f.codigo})`,
           createdBy:      user.id,
         });
       }

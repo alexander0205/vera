@@ -1,7 +1,26 @@
 'use client';
 
 import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+
+const inputSx = {
+  '& .MuiOutlinedInput-root': {
+    borderRadius: '8px',
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3658e1', borderWidth: '2px' },
+  },
+} as const;
+
+const labelSx = {
+  display: 'block',
+  fontSize: '0.75rem',
+  fontWeight: 500,
+  color: '#374151',
+  mb: 0.5,
+} as const;
 
 export function ContactoForm() {
   const [nombre, setNombre] = useState('');
@@ -38,112 +57,151 @@ export function ContactoForm() {
 
   if (done) {
     return (
-      <div className="text-center py-8">
-        <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Solicitud recibida</h2>
-        <p className="text-gray-600">Te contactaremos pronto a <strong>{email}</strong>.</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 4 }}>
+        <CheckCircle size={48} style={{ color: '#10b981', display: 'block', margin: '0 auto 16px' }} />
+        <Typography component="h2" sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827', mb: 1 }}>
+          Solicitud recibida
+        </Typography>
+        <Typography sx={{ color: '#4b5563' }}>
+          Te contactaremos pronto a <strong>{email}</strong>.
+        </Typography>
+      </Box>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Solicita una integración</h2>
-        <p className="text-sm text-gray-500 mb-4">Completa el formulario y te contactaremos.</p>
-      </div>
+    <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box>
+        <Typography component="h2" sx={{ fontSize: '1.125rem', fontWeight: 600, color: '#111827', mb: 0.5 }}>
+          Solicita una integración
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 2 }}>
+          Completa el formulario y te contactaremos.
+        </Typography>
+      </Box>
 
       {error && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
-          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            bgcolor: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            px: 1.5,
+            py: 1,
+            fontSize: '0.875rem',
+            color: '#b91c1c',
+          }}
+        >
+          <AlertCircle size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+          <Box component="span">{error}</Box>
+        </Box>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Nombre <span className="text-red-500">*</span>
-          </label>
-          <input
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+        <Box>
+          <Typography component="label" sx={labelSx}>
+            Nombre <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+          </Typography>
+          <TextField
             type="text"
             required
+            size="small"
+            fullWidth
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+            sx={inputSx}
           />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Empresa <span className="text-red-500">*</span>
-          </label>
-          <input
+        </Box>
+        <Box>
+          <Typography component="label" sx={labelSx}>
+            Empresa <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+          </Typography>
+          <TextField
             type="text"
             required
+            size="small"
+            fullWidth
             value={empresa}
             onChange={(e) => setEmpresa(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+            sx={inputSx}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+        <Box>
+          <Typography component="label" sx={labelSx}>
+            Email <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+          </Typography>
+          <TextField
             type="email"
             required
+            size="small"
+            fullWidth
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+            sx={inputSx}
           />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Teléfono</label>
-          <input
+        </Box>
+        <Box>
+          <Typography component="label" sx={labelSx}>Teléfono</Typography>
+          <TextField
             type="tel"
+            size="small"
+            fullWidth
+            placeholder="+1 809 000-0000"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            placeholder="+1 809 000-0000"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+            sx={inputSx}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          ¿Cómo podemos ayudarte? <span className="text-red-500">*</span>
-        </label>
-        <textarea
+      <Box>
+        <Typography component="label" sx={labelSx}>
+          ¿Cómo podemos ayudarte? <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+        </Typography>
+        <TextField
           required
+          multiline
           rows={4}
+          size="small"
+          fullWidth
+          placeholder="Cuéntanos sobre tu negocio y qué tipo de integración necesitas..."
           value={mensaje}
           onChange={(e) => setMensaje(e.target.value)}
-          placeholder="Cuéntanos sobre tu negocio y qué tipo de integración necesitas..."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 resize-none"
+          sx={{ ...inputSx, '& .MuiOutlinedInput-input': { resize: 'none' } }}
         />
-      </div>
+      </Box>
 
-      <button
+      <Button
         type="submit"
+        variant="contained"
+        disableElevation
+        fullWidth
         disabled={sending}
-        className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors text-sm"
+        startIcon={sending ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : undefined}
+        sx={{
+          bgcolor: '#3658e1',
+          '&:hover': { bgcolor: '#2a45c4' },
+          '&.Mui-disabled': { opacity: 0.6, color: '#fff', bgcolor: '#3658e1' },
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: '0.875rem',
+          textTransform: 'none',
+          borderRadius: '8px',
+          py: 1.25,
+        }}
       >
-        {sending ? (
-          <>
-            <Loader2 className="animate-spin w-4 h-4" />
-            Enviando...
-          </>
-        ) : (
-          'Enviar solicitud'
-        )}
-      </button>
+        {sending ? 'Enviando...' : 'Enviar solicitud'}
+      </Button>
 
-      <p className="text-xs text-gray-400 text-center">
+      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>
         Te responderemos en menos de 24 horas hábiles.
-      </p>
-    </form>
+      </Typography>
+    </Box>
   );
 }

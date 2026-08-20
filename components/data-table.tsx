@@ -1,49 +1,36 @@
 'use client';
 
-/**
- * <DataTable> — tabla maestra reutilizable.
- *
- * Diseño objetivo: una sola implementación de tabla para TODOS los listados
- * de EmiteDO (facturas, clientes, productos, AR, recurrentes, etc.). Cuando
- * mejoras filtros, sort, export o accesibilidad — todo el sistema mejora.
- *
- * Uso típico:
- *
- *   <DataTable
- *     data={facturas}
- *     loading={loading}
- *     columns={[
- *       { id: 'encf',    header: 'e-NCF',  render: r => <Link>{r.encf}</Link> },
- *       { id: 'cliente', header: 'Cliente', sortable: true },
- *       { id: 'total',   header: 'Total',  align: 'right', render: r => fmtDOP(r.total) },
- *     ]}
- *     filters={[
- *       { type: 'search',     id: 'q',      placeholder: 'Buscar...' },
- *       { type: 'select',     id: 'estado', label: 'Estado', options: [...] },
- *       { type: 'daterange',  id: 'fecha',  label: 'Fechas' },
- *     ]}
- *     onFilterChange={f => fetchData(f)}
- *     bulkActions={[{ label: 'Anular', onClick: ids => bulkAnular(ids) }]}
- *     rowActions={r => [
- *       { icon: FileText, title: 'Ver PDF', onClick: () => openPdf(r.id) },
- *       { icon: Mail,     title: 'Enviar',  onClick: () => sendEmail(r) },
- *     ]}
- *     pagination={{ page, pageSize, total, onPageChange: setPage }}
- *     emptyState={{ icon: FileText, title: 'Sin facturas', cta: ... }}
- *     rowHref={r => `/dashboard/facturas/${r.id}`}
- *   />
- */
-
 import * as React from 'react';
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X, MoreVertical } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
-} from '@/components/ui/dropdown-menu';
+  Search, Filter, ChevronLeft, ChevronRight,
+  ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X, MoreVertical,
+} from 'lucide-react';
+import Link from 'next/link';
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import MuiTable from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
+import IconButton from '@mui/material/IconButton';
+import Checkbox from '@mui/material/Checkbox';
+import InputBase from '@mui/material/InputBase';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
+import Menu from '@mui/material/Menu';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Divider from '@mui/material/Divider';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ColumnAlign = 'left' | 'right' | 'center';
 export type ColumnBreakpoint = 'sm' | 'md' | 'lg' | 'xl';
@@ -51,22 +38,17 @@ export type ColumnBreakpoint = 'sm' | 'md' | 'lg' | 'xl';
 export interface DataTableColumn<T> {
   id:            string;
   header:        React.ReactNode;
-  /** Render custom para la celda. Default: row[id] como string. */
   render?:       (row: T) => React.ReactNode;
   align?:        ColumnAlign;
-  /** Oculta la columna por debajo del breakpoint indicado. */
   visibleAt?:    ColumnBreakpoint;
-  /** Ancho aproximado en px o "auto". */
   width?:        string | number;
-  /** Permite click en el header para ordenar. */
   sortable?:     boolean;
-  /** Llave para extraer valor de sort. Default: row[id]. */
   sortAccessor?: (row: T) => string | number | Date | null;
 }
 
 export interface DataTableFilterBase {
-  id:      string;
-  label?:  string;
+  id:     string;
+  label?: string;
 }
 
 export type DataTableFilter =
@@ -75,19 +57,18 @@ export type DataTableFilter =
   | (DataTableFilterBase & { type: 'daterange'; });
 
 export interface BulkAction<T> {
-  label:   string;
-  icon?:   React.ComponentType<{ className?: string }>;
+  label:    string;
+  icon?:    React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   variant?: 'default' | 'danger';
-  onClick: (selectedIds: (string | number)[], selectedRows: T[]) => void | Promise<void>;
+  onClick:  (selectedIds: (string | number)[], selectedRows: T[]) => void | Promise<void>;
 }
 
 export interface RowAction {
-  icon:    React.ComponentType<{ className?: string }>;
-  title:   string;
-  href?:   string;
+  icon:     React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  title:    string;
+  href?:    string;
   onClick?: () => void;
   variant?: 'default' | 'danger';
-  /** Si true, se muestra como botón ícono inline (antes del menú de 3 puntos). */
   primary?: boolean;
 }
 
@@ -99,24 +80,43 @@ export interface PaginationConfig {
 }
 
 export interface EmptyStateConfig {
-  icon?:  React.ComponentType<{ className?: string }>;
+  icon?:  React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   title:  string;
   hint?:  string;
   cta?:   React.ReactNode;
 }
 
 export interface DataTableProps<T> {
-  data:           T[];
-  columns:        DataTableColumn<T>[];
-  loading?:       boolean;
-  error?:         string | null;
-  rowId?:         (row: T) => string | number;
-  filters?:       DataTableFilter[];
-  filterValues?:  Record<string, string>;
+  data:            T[];
+  columns:         DataTableColumn<T>[];
+  loading?:        boolean;
+  error?:          string | null;
+  rowId?:          (row: T) => string | number;
+  filters?:        DataTableFilter[];
+  filterValues?:   Record<string, string>;
   onFilterChange?: (values: Record<string, string>) => void;
   bulkActions?:   BulkAction<T>[];
   rowActions?:    (row: T) => RowAction[];
   rowHref?:       (row: T) => string;
+  /**
+   * Contenido desplegable de la fila. Cuando se pasa, cada fila gana un
+   * chevron al inicio y esto se pinta en una fila extra debajo.
+   */
+  renderExpanded?: (row: T) => React.ReactNode;
+  /** Si devuelve false, esa fila no despliega ni muestra chevron. */
+  rowExpandable?: (row: T) => boolean;
+  /**
+   * Qué hacer al pulsar la fila. Gana sobre desplegar y sobre `rowHref`: si la
+   * pantalla define una acción propia para la fila, es la que el usuario
+   * espera. El chevron sigue desplegando por su cuenta.
+   */
+  onRowClick?:    (row: T) => void;
+  /** Estilos extra por fila — para marcar urgencia sin tener que leer la celda. */
+  rowSx?:         (row: T) => object;
+  /** Clases extra por fila. Mismo fin que `rowSx`, para quien use Tailwind. */
+  rowClassName?:  (row: T) => string;
+  /** Orden inicial. Sin esto la tabla sale en el orden en que llegan los datos. */
+  defaultSort?:   { columnId: string; dir: 'asc' | 'desc' };
   pagination?:    PaginationConfig;
   emptyState?:    EmptyStateConfig;
   /** Acciones extra en el header (export, "Nuevo X", etc.) */
@@ -131,35 +131,27 @@ export interface DataTableProps<T> {
   groupBy?:       (row: T) => string;
   /** Render del encabezado de cada grupo (clave, sus filas y el colSpan total). */
   renderGroupHeader?: (groupKey: string, rows: T[], colSpan: number) => React.ReactNode;
-  /**
-   * Contenido expandible por fila (filas hijas). Cuando se pasa, cada fila gana
-   * un chevron al inicio que muestra/oculta este contenido en una fila extra.
-   */
-  renderExpanded?: (row: T) => React.ReactNode;
-  /** Si false, la fila no muestra chevron ni se puede expandir. Default: true. */
-  rowExpandable?: (row: T) => boolean;
-  /** Clases extra por fila — para marcar urgencia sin leer la celda. */
-  rowClassName?: (row: T) => string;
-  /** Orden inicial de la tabla. Sin esto se muestra en el orden que llega. */
-  defaultSort?: { columnId: string; dir: 'asc' | 'desc' };
+  /** Ids en el orden que el usuario ve (filtrado + ordenado). Lo usa el
+   *  detalle para recorrer la lista con flechas. */
+  onVisibleRowsChange?: (ids: (string | number)[]) => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Breakpoint helpers ───────────────────────────────────────────────────────
 
-const BREAKPOINT_CLASS: Record<ColumnBreakpoint, string> = {
-  sm: 'hidden sm:table-cell',
-  md: 'hidden md:table-cell',
-  lg: 'hidden lg:table-cell',
-  xl: 'hidden xl:table-cell',
+const BREAKPOINT_SX: Record<ColumnBreakpoint, object> = {
+  sm: { display: { xs: 'none', sm: 'table-cell' } },
+  md: { display: { xs: 'none', md: 'table-cell' } },
+  lg: { display: { xs: 'none', lg: 'table-cell' } },
+  xl: { display: { xs: 'none', xl: 'table-cell' } },
 };
 
-function alignClass(a?: ColumnAlign): string {
-  if (a === 'right')  return 'text-right';
-  if (a === 'center') return 'text-center';
-  return 'text-left';
+function alignSx(a?: ColumnAlign) {
+  if (a === 'right')  return 'right' as const;
+  if (a === 'center') return 'center' as const;
+  return 'left' as const;
 }
 
-// ─── Componente ───────────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function DataTable<T>({
   data,
@@ -173,6 +165,12 @@ export function DataTable<T>({
   bulkActions = [],
   rowActions,
   rowHref,
+  renderExpanded,
+  rowExpandable,
+  onRowClick,
+  rowSx,
+  rowClassName,
+  defaultSort,
   pagination,
   emptyState,
   headerActions,
@@ -180,13 +178,10 @@ export function DataTable<T>({
   description,
   groupBy,
   renderGroupHeader,
-  renderExpanded,
-  rowExpandable,
-  rowClassName,
-  defaultSort,
+  onVisibleRowsChange,
 }: DataTableProps<T>) {
   const router = useRouter();
-  // Estado interno de filtros si no se controla externamente.
+  // Filter state
   const [internalFilters, setInternalFilters] = useState<Record<string, string>>({});
   const filterValues = filterValuesProp ?? internalFilters;
   const updateFilter = (id: string, value: string) => {
@@ -195,7 +190,7 @@ export function DataTable<T>({
     else setInternalFilters(next);
   };
 
-  // Sort interno (no soporta server-side sort por ahora — fácil de agregar).
+  // Sort state
   const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(
     defaultSort ? { id: defaultSort.columnId, dir: defaultSort.dir } : null,
   );
@@ -204,45 +199,48 @@ export function DataTable<T>({
     const col = columns.find(c => c.id === sortBy.id);
     if (!col?.sortable) return data;
     const accessor = col.sortAccessor ?? ((r: T) => (r as Record<string, unknown>)[sortBy.id] as string | number);
-    const sorted = [...data].sort((a, b) => {
+    return [...data].sort((a, b) => {
       const av = accessor(a); const bv = accessor(b);
       if (av == null) return 1; if (bv == null) return -1;
       if (av < bv) return sortBy.dir === 'asc' ? -1 : 1;
       if (av > bv) return sortBy.dir === 'asc' ? 1 : -1;
       return 0;
     });
-    return sorted;
   }, [data, sortBy, columns]);
 
-  // Bulk selection.
+  // El orden que el usuario tiene delante, ya filtrado y ordenado. Lo consume
+  // el detalle para las flechas «‹ 2 de 548 ›»: sin esto navegaría por el orden
+  // en que llegaron los datos, que deja de ser el visible en cuanto alguien
+  // toca un encabezado para ordenar.
+  const idsVisibles = useMemo(() => sortedData.map(rowId), [sortedData, rowId]);
+  // El callback suele venir como flecha inline, así que cambia de identidad en
+  // cada render. Guardarlo en un ref deja que el efecto dependa solo de los
+  // ids; si no, esto reescribiría el storage en cada render.
+  const cbVisibles = useRef(onVisibleRowsChange);
+  cbVisibles.current = onVisibleRowsChange;
+  const firmaIds = idsVisibles.join(',');
+  useEffect(() => {
+    cbVisibles.current?.(firmaIds ? firmaIds.split(',').map(Number) : []);
+  }, [firmaIds]);
+
+  // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const allSelected = sortedData.length > 0 && sortedData.every(r => selectedIds.has(rowId(r)));
-  const toggleAll = () => {
-    setSelectedIds(prev => {
-      if (allSelected) return new Set();
-      return new Set(sortedData.map(rowId));
-    });
-  };
-  const toggleOne = (id: string | number) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-  const selectedRows = useMemo(
-    () => sortedData.filter(r => selectedIds.has(rowId(r))),
-    [sortedData, selectedIds, rowId],
-  );
+  const toggleAll   = () => setSelectedIds(prev => allSelected ? new Set() : new Set(sortedData.map(rowId)));
+  const toggleOne   = (id: string | number) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const selectedRows = useMemo(() => sortedData.filter(r => selectedIds.has(rowId(r))), [sortedData, selectedIds, rowId]);
 
-  // Paginación client-side cuando NO se controla server-side vía `pagination`.
-  const serverPaginated = !!pagination;
-  const [clientPage, setClientPage] = useState(1);
+  // Pagination state
+  const serverPaginated   = !!pagination;
+  const [clientPage, setClientPage]         = useState(1);
   const [clientPageSize, setClientPageSize] = useState(25);
-  const clientTotalPages = Math.max(1, Math.ceil(sortedData.length / clientPageSize));
+  const clientTotalPages  = Math.max(1, Math.ceil(sortedData.length / clientPageSize));
+  const prevLenRef        = useRef(sortedData.length);
 
-  // Volver a página 1 cuando cambia el tamaño del dataset (búsqueda/filtro) o el sort.
-  const prevLenRef = useRef(sortedData.length);
   useEffect(() => {
     if (prevLenRef.current !== sortedData.length) {
       prevLenRef.current = sortedData.length;
@@ -258,37 +256,24 @@ export function DataTable<T>({
     ? sortedData
     : sortedData.slice((clientPage - 1) * clientPageSize, clientPage * clientPageSize);
 
-  // Vista unificada de paginación (server o client) para el pie de tabla.
   const pageView = serverPaginated
-    ? {
-        page: pagination!.page,
-        pageSize: pagination!.pageSize,
-        total: pagination!.total,
-        totalPages: Math.max(1, Math.ceil(pagination!.total / pagination!.pageSize)),
-        onChange: pagination!.onPageChange,
-      }
-    : {
-        page: clientPage,
-        pageSize: clientPageSize,
-        total: sortedData.length,
-        totalPages: clientTotalPages,
-        onChange: setClientPage,
-      };
+    ? { page: pagination!.page, pageSize: pagination!.pageSize, total: pagination!.total, totalPages: Math.max(1, Math.ceil(pagination!.total / pagination!.pageSize)), onChange: pagination!.onPageChange }
+    : { page: clientPage, pageSize: clientPageSize, total: sortedData.length, totalPages: clientTotalPages, onChange: setClientPage };
+
   const rangeFrom = pageView.total === 0 ? 0 : (pageView.page - 1) * pageView.pageSize + 1;
   const rangeTo   = Math.min(pageView.page * pageView.pageSize, pageView.total);
 
   const hasFilters = filters.length > 0;
   const hasBulk    = bulkActions.length > 0;
   const hasExpand  = !!renderExpanded;
-  const cols = columns.length + (hasBulk ? 1 : 0) + (rowActions ? 1 : 0) + (hasExpand ? 1 : 0);
+  const cols       = (hasBulk ? 1 : 0) + (hasExpand ? 1 : 0) + columns.length + (rowActions ? 1 : 0);
 
-  // Filas expandidas (filas hijas). Set de rowId.
-  const [expandedIds, setExpandedIds] = useState<Set<string | number>>(new Set());
-  const toggleExpand = (id: string | number) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+  const [abiertas, setAbiertas] = useState<Set<string | number>>(new Set());
+  const alternarFila = (id: string | number) => {
+    setAbiertas(prev => {
+      const sig = new Set(prev);
+      if (sig.has(id)) sig.delete(id); else sig.add(id);
+      return sig;
     });
   };
 
@@ -308,430 +293,667 @@ export function DataTable<T>({
   const grouped = !!groups;
 
   const renderRow = (row: T) => {
-    const id = rowId(row);
+    const id         = rowId(row);
     const isSelected = selectedIds.has(id);
-    const href = rowHref?.(row);
-    const canExpand = hasExpand && (rowExpandable ? rowExpandable(row) : true);
-    const isExpanded = expandedIds.has(id);
+    const href       = rowHref?.(row);
+    const puedeAbrir = hasExpand && (rowExpandable ? rowExpandable(row) : true);
+    const abierta    = abiertas.has(id);
     return (
       <React.Fragment key={String(id)}>
-      <tr
-        // `bg-white` explícito (no transparente) porque la celda de acciones va
-        // fija al borde derecho con `bg-inherit`: sin un color concreto en la
-        // fila, el contenido se vería pasar por debajo al desplazar.
-        className={`transition-colors ${isSelected ? 'bg-teal-50' : 'bg-white hover:bg-gray-50'} ${href || canExpand ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
-        // La fila entera responde: si tiene hijas, las despliega; si no, navega.
-        // El chevron sigue estando —es la señal de que hay algo debajo—, pero
-        // acertarle a un botón de 20px para ver el detalle era pedir puntería.
-        // Los clics que nacen en un checkbox, botón o enlace siguen siendo suyos.
-        onClick={href || canExpand ? (e) => {
+      <TableRow
+        hover={!isSelected}
+        selected={isSelected}
+        // La fila entera responde: si tiene contenido debajo lo despliega, y
+        // si no, navega. El chevron sigue ahí como señal de que hay algo, pero
+        // acertarle a un botón de 20px era pedir puntería.
+        onClick={href || puedeAbrir || onRowClick ? (e) => {
+          // Los clics que nacen en un checkbox, botón o enlace son suyos.
           const target = e.target as HTMLElement;
           if (target.closest('input,button,a,[role="menuitem"]')) return;
-          // Desplegar gana sobre navegar: si la fila tiene hijas, el clic las
-          // abre; si no, lleva al detalle.
-          if (canExpand) { toggleExpand(id); return; }
+          // La acción propia de la pantalla manda: para desplegar está el
+          // chevron, que va en su celda y no llega hasta aquí.
+          if (onRowClick) { onRowClick(row); return; }
+          // Desplegar gana sobre navegar: si hay hijas, el clic las abre.
+          if (puedeAbrir) { alternarFila(id); return; }
           // Navegación del cliente: `window.location` recargaba la app entera
-          // y perdía el estado de filtros y la sesión de datos ya cargada.
+          // y perdía el estado de filtros y los datos ya cargados.
           if (href) router.push(href);
         } : undefined}
+        sx={{
+          cursor:  href || puedeAbrir || onRowClick ? 'pointer' : 'default',
+          // Opaco a propósito, no `undefined`: la celda de acciones va fija
+          // al borde derecho heredando este color, y con la fila transparente
+          // el contenido se vería pasar por debajo al desplazar.
+          bgcolor: isSelected ? '#eef2fe' : '#fff',
+          '&.MuiTableRow-hover:hover': { bgcolor: '#fafafa' },
+          '& .MuiTableCell-root': { borderBottom: '1px solid #f3f4f6' },
+          ...(rowSx?.(row) ?? {}),
+        }}
+        className={rowClassName?.(row)}
       >
         {hasExpand && (
-          <td className="px-2 py-3 w-8" onClick={e => e.stopPropagation()}>
-            {canExpand && (
-              <button
-                type="button"
-                onClick={() => toggleExpand(id)}
-                aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
-                aria-expanded={isExpanded}
-                className="p-1 rounded hover:bg-gray-100 text-gray-400"
-              >
-                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </button>
+          <TableCell sx={{ width: 32, px: 0.5 }} onClick={e => e.stopPropagation()}>
+            {puedeAbrir && (
+              <IconButton size="small" onClick={() => alternarFila(id)}
+                aria-label={abierta ? 'Colapsar' : 'Expandir'} aria-expanded={abierta}
+                sx={{ color: '#9ca3af' }}>
+                {abierta ? <ChevronDown style={{ width: 16, height: 16 }} />
+                         : <ChevronRight style={{ width: 16, height: 16 }} />}
+              </IconButton>
             )}
-          </td>
+          </TableCell>
         )}
         {hasBulk && (
-          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-            <input
-              type="checkbox"
+          <TableCell padding="checkbox" sx={{ pl: 2 }} onClick={e => e.stopPropagation()}>
+            <Checkbox
               checked={isSelected}
               onChange={() => toggleOne(id)}
-              className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+              size="small"
+              color="primary"
             />
-          </td>
+          </TableCell>
         )}
         {columns.map(col => {
-          const breakpoint = col.visibleAt ? BREAKPOINT_CLASS[col.visibleAt] : '';
-          const content = col.render ? col.render(row) : ((row as Record<string, unknown>)[col.id] as React.ReactNode);
+          const content = col.render
+            ? col.render(row)
+            : ((row as Record<string, unknown>)[col.id] as React.ReactNode);
           return (
-            <td
+            <TableCell
               key={col.id}
-              className={`px-3 py-3 ${alignClass(col.align)} ${breakpoint}`}
+              align={alignSx(col.align)}
+              sx={{
+                fontSize: '0.875rem',
+                color:    '#374151',
+                py:       1.5,
+                ...(col.visibleAt ? BREAKPOINT_SX[col.visibleAt] : {}),
+              }}
             >
               {content}
-            </td>
+            </TableCell>
           );
         })}
         {rowActions && (() => {
-          const acts = rowActions(row);
+          const acts    = rowActions(row);
           const primary = acts.filter(a => a.primary);
           const rest    = acts.filter(a => !a.primary);
           return (
-            // Fija al borde derecho: en pantallas angostas la tabla se desplaza
-            // en horizontal y las acciones, que son la última columna, quedaban
-            // fuera de vista. Ahí es donde más falta hacen.
-            <td
-              className="sticky right-0 z-10 bg-inherit px-3 py-3 border-l border-gray-100"
+            // Fija al borde derecho: en pantallas angostas la tabla se
+            // desplaza en horizontal y las acciones, que son la última
+            // columna, quedaban fuera de vista. Ahí es donde más falta hacen.
+            <TableCell
               onClick={e => e.stopPropagation()}
+              sx={{
+                py: 0.75, position: 'sticky', right: 0, zIndex: 1,
+                bgcolor: 'inherit', borderLeft: 1, borderColor: 'divider',
+              }}
             >
-              <div className="flex items-center justify-end gap-0.5">
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.25 }}>
                 {primary.map((a, i) => <RowActionInline key={i} action={a} />)}
                 <RowActionsMenu actions={rest} />
-              </div>
-            </td>
+              </Box>
+            </TableCell>
           );
         })()}
-      </tr>
-      {canExpand && isExpanded && (
-        <tr className="bg-gray-50/50">
-          <td colSpan={cols} className="px-3 pb-3 pt-0">
+      </TableRow>
+
+      {puedeAbrir && abierta && (
+        <TableRow sx={{ bgcolor: '#fafafa' }}>
+          <TableCell colSpan={cols} sx={{ px: 1.5, pt: 0, pb: 1.5, borderBottom: '1px solid #f3f4f6' }}>
             {renderExpanded!(row)}
-          </td>
-        </tr>
+          </TableCell>
+        </TableRow>
       )}
       </React.Fragment>
     );
   };
 
   return (
-    <div className="space-y-3">
-      {/* ── Header opcional ── */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {/* Header */}
       {(title || description || headerActions) && (
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: 'space-between', gap: 1.5 }}>
           {(title || description) && (
-            <div>
-              {title && <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{title}</h1>}
-              {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
-            </div>
+            <Box>
+              {title && (
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                  {title}
+                </Typography>
+              )}
+              {description && (
+                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+                  {description}
+                </Typography>
+              )}
+            </Box>
           )}
-          {headerActions && <div className="flex items-center gap-2 flex-wrap">{headerActions}</div>}
-        </div>
+          {headerActions && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              {headerActions}
+            </Box>
+          )}
+        </Box>
       )}
 
-      {/* ── Card unificada: filtros + tabla + paginación ── */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-
-      {/* ── Filtros ── */}
-      {hasFilters && (
-        <div className="flex gap-2 flex-wrap items-center p-3 border-b border-gray-100 bg-gray-50/60">
-          {filters.map(f => {
-            if (f.type === 'search') {
-              return (
-                <div key={f.id} className="relative flex-1 min-w-48 max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden />
-                  <input
-                    type="text"
+      {/* Card */}
+      <Paper
+        elevation={0}
+        sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}
+      >
+        {/* Filters */}
+        {hasFilters && (
+          <Box
+            sx={{
+              display:    'flex',
+              gap:        1,
+              flexWrap:   'wrap',
+              alignItems: 'center',
+              p:          1.5,
+              borderBottom: '1px solid #f3f4f6',
+              bgcolor:    '#fafafa',
+            }}
+          >
+            {filters.map(f => {
+              if (f.type === 'search') {
+                return (
+                  <Box
+                    key={f.id}
+                    sx={{
+                      display:      'flex',
+                      alignItems:   'center',
+                      gap:          1,
+                      flex:         '1 1 200px',
+                      maxWidth:     360,
+                      bgcolor:      '#ffffff',
+                      border:       '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      px:           1.5,
+                      py:           0.875,
+                      transition:   'border-color 0.15s',
+                      '&:focus-within': { borderColor: '#3658e1', boxShadow: '0 0 0 3px rgba(13,148,136,0.1)' },
+                    }}
+                  >
+                    <Search style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
+                    <InputBase
+                      value={filterValues[f.id] ?? ''}
+                      onChange={e => updateFilter(f.id, e.target.value)}
+                      placeholder={f.placeholder ?? 'Buscar…'}
+                      sx={{ flex: 1, fontSize: '0.875rem' }}
+                    />
+                    {filterValues[f.id] && (
+                      <IconButton size="small" onClick={() => updateFilter(f.id, '')} sx={{ p: 0.25 }}>
+                        <X style={{ width: 12, height: 12 }} />
+                      </IconButton>
+                    )}
+                  </Box>
+                );
+              }
+              if (f.type === 'select') {
+                return (
+                  <Select
+                    key={f.id}
                     value={filterValues[f.id] ?? ''}
-                    onChange={e => updateFilter(f.id, e.target.value)}
-                    placeholder={f.placeholder ?? 'Buscar…'}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-              );
-            }
-            if (f.type === 'select') {
+                    onChange={e => updateFilter(f.id, e.target.value as string)}
+                    size="small"
+                    displayEmpty
+                    sx={{
+                      fontSize:     '0.875rem',
+                      borderRadius: '8px',
+                      minWidth:     140,
+                      bgcolor:      '#ffffff',
+                    }}
+                  >
+                    <MenuItem value=""><em>{f.placeholder ?? f.label ?? 'Todos'}</em></MenuItem>
+                    {f.options.map(o => (
+                      <MenuItem key={o.value} value={o.value} sx={{ fontSize: '0.875rem' }}>{o.label}</MenuItem>
+                    ))}
+                  </Select>
+                );
+              }
+              if (f.type === 'daterange') {
+                const desde = filterValues[`${f.id}_desde`] ?? '';
+                const hasta = filterValues[`${f.id}_hasta`] ?? '';
+                return (
+                  <Box key={f.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Filter style={{ width: 14, height: 14, color: '#9ca3af' }} />
+                    <Box
+                      component="input"
+                      type="date"
+                      value={desde}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateFilter(`${f.id}_desde`, e.target.value)}
+                      sx={{
+                        border: '1px solid #e5e7eb', borderRadius: '8px', px: 1.5, py: 0.875,
+                        fontSize: '0.8125rem', bgcolor: '#ffffff', outline: 'none',
+                        '&:focus': { borderColor: '#3658e1' },
+                      }}
+                    />
+                    <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>→</Box>
+                    <Box
+                      component="input"
+                      type="date"
+                      value={hasta}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateFilter(`${f.id}_hasta`, e.target.value)}
+                      sx={{
+                        border: '1px solid #e5e7eb', borderRadius: '8px', px: 1.5, py: 0.875,
+                        fontSize: '0.8125rem', bgcolor: '#ffffff', outline: 'none',
+                        '&:focus': { borderColor: '#3658e1' },
+                      }}
+                    />
+                    {(desde || hasta) && (
+                      <IconButton
+                        size="small"
+                        onClick={() => { updateFilter(`${f.id}_desde`, ''); updateFilter(`${f.id}_hasta`, ''); }}
+                        title="Limpiar fechas"
+                      >
+                        <X style={{ width: 14, height: 14 }} />
+                      </IconButton>
+                    )}
+                  </Box>
+                );
+              }
+              return null;
+            })}
+          </Box>
+        )}
+
+        {/* Bulk actions bar */}
+        {hasBulk && selectedIds.size > 0 && (
+          <Box
+            sx={{
+              display:    'flex',
+              alignItems: 'center',
+              gap:        1.5,
+              px:         2,
+              py:         1.25,
+              bgcolor:    '#eef2fe',
+              borderBottom: '1px solid #e0e7fd',
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.dark' }}>
+              {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+            </Typography>
+            {bulkActions.map((a, i) => {
+              const Icon    = a.icon;
+              const isDanger = a.variant === 'danger';
               return (
-                <select
-                  key={f.id}
-                  value={filterValues[f.id] ?? ''}
-                  onChange={e => updateFilter(f.id, e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                <Box
+                  key={i}
+                  component="button"
+                  onClick={() => a.onClick([...selectedIds], selectedRows)}
+                  sx={{
+                    display:     'flex',
+                    alignItems:  'center',
+                    gap:         0.5,
+                    fontSize:    '0.8125rem',
+                    fontWeight:  500,
+                    px:          1.5,
+                    py:          0.625,
+                    borderRadius: '8px',
+                    border:      '1px solid',
+                    borderColor: isDanger ? '#fecaca' : '#e5e7eb',
+                    color:       isDanger ? '#ef4444' : 'text.secondary',
+                    bgcolor:     'transparent',
+                    cursor:      'pointer',
+                    transition:  'all 0.15s',
+                    '&:hover':   { bgcolor: isDanger ? '#fef2f2' : 'grey.50' },
+                  }}
                 >
-                  <option value="">{f.placeholder ?? f.label ?? 'Todos'}</option>
-                  {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                  {Icon && <Icon style={{ width: 14, height: 14 }} />}
+                  {a.label}
+                </Box>
               );
-            }
-            if (f.type === 'daterange') {
-              const desde = filterValues[`${f.id}_desde`] ?? '';
-              const hasta = filterValues[`${f.id}_hasta`] ?? '';
-              return (
-                <div key={f.id} className="flex items-center gap-1.5">
-                  <Filter className="h-3.5 w-3.5 text-gray-400" aria-hidden />
-                  <input
-                    type="date"
-                    value={desde}
-                    onChange={e => updateFilter(`${f.id}_desde`, e.target.value)}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                  <span className="text-xs text-gray-400">→</span>
-                  <input
-                    type="date"
-                    value={hasta}
-                    onChange={e => updateFilter(`${f.id}_hasta`, e.target.value)}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                  {(desde || hasta) && (
-                    <button
-                      onClick={() => { updateFilter(`${f.id}_desde`, ''); updateFilter(`${f.id}_hasta`, ''); }}
-                      className="text-gray-400 hover:text-gray-600 p-1"
-                      title="Limpiar fechas"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            }
-            return null;
-          })}
-        </div>
-      )}
+            })}
+            <Box
+              component="button"
+              onClick={() => setSelectedIds(new Set())}
+              sx={{
+                ml:      'auto',
+                fontSize: '0.875rem',
+                color:   'text.secondary',
+                bgcolor:  'transparent',
+                border:  'none',
+                cursor:  'pointer',
+                '&:hover': { color: 'text.primary' },
+              }}
+            >
+              Cancelar
+            </Box>
+          </Box>
+        )}
 
-      {/* ── Bulk actions bar ── */}
-      {hasBulk && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-teal-50 border-b border-teal-100 px-4 py-2.5">
-          <span className="text-sm font-medium text-teal-800">{selectedIds.size} seleccionado(s)</span>
-          {bulkActions.map((a, i) => {
-            const Icon = a.icon;
-            const danger = a.variant === 'danger';
-            return (
-              <button
-                key={i}
-                onClick={() => a.onClick([...selectedIds], selectedRows)}
-                className={`flex items-center gap-1 text-sm px-3 py-1 rounded-lg border ${
-                  danger
-                    ? 'text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50'
-                    : 'text-gray-700 border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {Icon && <Icon className="h-3.5 w-3.5" />}
-                {a.label}
-              </button>
-            );
-          })}
-          <button onClick={() => setSelectedIds(new Set())} className="text-sm text-gray-500 hover:text-gray-700 ml-auto">
-            Cancelar
-          </button>
-        </div>
-      )}
-
-      {/* ── Tabla ── */}
-      <div>
+        {/* Table */}
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 8 }}>
+            <CircularProgress size={28} color="primary" />
+          </Box>
         ) : error ? (
-          <div className="p-6 text-center text-red-600 text-sm">{error}</div>
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="body2" color="error">{error}</Typography>
+          </Box>
         ) : sortedData.length === 0 ? (
-          <EmptyState config={emptyState} />
+          <EmptyStateView config={emptyState} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  {hasExpand && <th className="w-8 px-2 py-2.5" />}
+          <TableContainer>
+            <MuiTable size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                  {hasExpand && <TableCell sx={{ width: 32, px: 0.5 }} />}
                   {hasBulk && (
-                    <th className="w-10 px-3 py-2.5">
-                      <input
-                        type="checkbox"
+                    <TableCell padding="checkbox" sx={{ pl: 2 }}>
+                      <Checkbox
                         checked={allSelected}
+                        indeterminate={selectedIds.size > 0 && !allSelected}
                         onChange={toggleAll}
-                        className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        size="small"
+                        color="primary"
                       />
-                    </th>
+                    </TableCell>
                   )}
                   {columns.map(col => {
                     const isSorted = sortBy?.id === col.id;
-                    const breakpoint = col.visibleAt ? BREAKPOINT_CLASS[col.visibleAt] : '';
                     return (
-                      <th
+                      <TableCell
                         key={col.id}
+                        align={alignSx(col.align)}
                         style={col.width ? { width: typeof col.width === 'number' ? `${col.width}px` : col.width } : undefined}
-                        className={`px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wide ${alignClass(col.align)} ${breakpoint} ${col.sortable ? 'cursor-pointer select-none hover:text-gray-700' : ''}`}
                         onClick={col.sortable ? () => setSortBy(prev => {
                           if (!prev || prev.id !== col.id) return { id: col.id, dir: 'asc' };
-                          if (prev.dir === 'asc')         return { id: col.id, dir: 'desc' };
+                          if (prev.dir === 'asc') return { id: col.id, dir: 'desc' };
                           return null;
                         }) : undefined}
+                        sx={{
+                          fontWeight:    700,
+                          fontSize:      '0.6875rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          color:         '#6b7280',
+                          py:            1.25,
+                          cursor:        col.sortable ? 'pointer' : 'default',
+                          userSelect:    'none',
+                          borderBottom:  '1px solid #e5e7eb',
+                          ...(col.visibleAt ? BREAKPOINT_SX[col.visibleAt] : {}),
+                          '&:hover': col.sortable ? { color: '#374151' } : {},
+                        }}
                       >
-                        <span className="inline-flex items-center gap-1">
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                           {col.header}
                           {col.sortable && (
                             isSorted
                               ? (sortBy?.dir === 'asc'
-                                  ? <ChevronUp className="h-3 w-3 text-teal-600" />
-                                  : <ChevronDown className="h-3 w-3 text-teal-600" />)
-                              : <ChevronsUpDown className="h-3 w-3 opacity-30" />
+                                  ? <ChevronUp   style={{ width: 12, height: 12, color: '#3658e1' }} />
+                                  : <ChevronDown style={{ width: 12, height: 12, color: '#3658e1' }} />)
+                              : <ChevronsUpDown style={{ width: 12, height: 12, opacity: 0.3 }} />
                           )}
-                        </span>
-                      </th>
+                        </Box>
+                      </TableCell>
                     );
                   })}
+                  {/* Encabezado de la columna fija: mismo `sticky` que sus
+                      celdas, con más z-index para quedar por encima al
+                      desplazar, y fondo propio porque el de la cabecera no se
+                      hereda. */}
                   {rowActions && (
-                    <th className="sticky right-0 z-20 w-12 bg-gray-50 px-3 py-2.5 border-l border-gray-100" />
+                    <TableCell sx={{
+                      width: 48, borderBottom: '1px solid #e5e7eb',
+                      position: 'sticky', right: 0, zIndex: 2,
+                      bgcolor: 'grey.50', borderLeft: 1, borderColor: 'divider',
+                    }} />
                   )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {grouped
                   ? groups!.map(([key, rows]) => (
                       <React.Fragment key={`grp-${key}`}>
-                        <tr className="bg-gray-100/70 border-y border-gray-200">
-                          <td colSpan={cols} className="px-3 py-2">
+                        <TableRow sx={{ bgcolor: '#f3f4f6' }}>
+                          <TableCell colSpan={cols} sx={{ py: 1, borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb' }}>
                             {renderGroupHeader
                               ? renderGroupHeader(key, rows, cols)
                               : (
-                                <span className="text-xs font-semibold text-gray-700">
-                                  {key} <span className="text-gray-400 font-normal">· {rows.length}</span>
-                                </span>
+                                <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>
+                                  {key} <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>· {rows.length}</Box>
+                                </Typography>
                               )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                         {rows.map(renderRow)}
                       </React.Fragment>
                     ))
                   : pageData.map(renderRow)}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </MuiTable>
+          </TableContainer>
         )}
-      </div>
 
-      {/* ── Pie: paginación (siempre visible cuando hay datos) ── */}
-      {!loading && !error && sortedData.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2.5 border-t border-gray-100 bg-gray-50/40">
-          <div className="flex items-center gap-3">
-            {!serverPaginated && !grouped && (
-              <select
-                value={clientPageSize}
-                onChange={e => { setClientPageSize(Number(e.target.value)); setClientPage(1); }}
-                className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-                aria-label="Filas por página"
-              >
-                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / pág.</option>)}
-              </select>
+        {/* Footer pagination */}
+        {!loading && !error && sortedData.length > 0 && (
+          <Box
+            sx={{
+              display:        'flex',
+              flexDirection:  { xs: 'column', sm: 'row' },
+              alignItems:     { sm: 'center' },
+              justifyContent: 'space-between',
+              gap:            1,
+              px:             2,
+              py:             1.5,
+              borderTop:      '1px solid #f3f4f6',
+              bgcolor:        '#fafafa',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {!serverPaginated && !grouped && (
+                <Select
+                  value={clientPageSize}
+                  onChange={e => { setClientPageSize(Number(e.target.value)); setClientPage(1); }}
+                  size="small"
+                  sx={{ fontSize: '0.8125rem', borderRadius: '8px', minWidth: 'auto' }}
+                >
+                  {[10, 25, 50, 100].map(n => (
+                    <MenuItem key={n} value={n} sx={{ fontSize: '0.875rem' }}>{n} / pág.</MenuItem>
+                  ))}
+                </Select>
+              )}
+              <Typography variant="body2" color="text.secondary">
+                {grouped
+                  ? `${sortedData.length.toLocaleString()} fila(s) en ${groups!.length.toLocaleString()} grupo(s)`
+                  : `${rangeFrom.toLocaleString()}–${rangeTo.toLocaleString()} de ${pageView.total.toLocaleString()}`}
+              </Typography>
+            </Box>
+
+            {!grouped && pageView.totalPages > 1 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => pageView.onChange(Math.max(1, pageView.page - 1))}
+                  disabled={pageView.page === 1}
+                  sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '&:hover': { bgcolor: 'grey.50' } }}
+                >
+                  <ChevronLeft style={{ width: 16, height: 16 }} />
+                </IconButton>
+                <Typography variant="body2" color="text.secondary">
+                  Pág. {pageView.page} de {pageView.totalPages}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => pageView.onChange(Math.min(pageView.totalPages, pageView.page + 1))}
+                  disabled={pageView.page === pageView.totalPages}
+                  sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '&:hover': { bgcolor: 'grey.50' } }}
+                >
+                  <ChevronRight style={{ width: 16, height: 16 }} />
+                </IconButton>
+              </Box>
             )}
-            <p className="text-sm text-gray-500">
-              {grouped
-                ? `${sortedData.length.toLocaleString()} fila(s) en ${groups!.length.toLocaleString()} grupo(s)`
-                : `Mostrando ${rangeFrom.toLocaleString()}–${rangeTo.toLocaleString()} de ${pageView.total.toLocaleString()}`}
-            </p>
-          </div>
-          {!grouped && pageView.totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => pageView.onChange(Math.max(1, pageView.page - 1))}
-                disabled={pageView.page === 1}
-                className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
-                aria-label="Anterior"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-sm text-gray-700">Página {pageView.page} de {pageView.totalPages}</span>
-              <button
-                onClick={() => pageView.onChange(Math.min(pageView.totalPages, pageView.page + 1))}
-                disabled={pageView.page === pageView.totalPages}
-                className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
-                aria-label="Siguiente"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      </div>
-    </div>
+          </Box>
+        )}
+      </Paper>
+    </Box>
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-function EmptyState({ config }: { config?: EmptyStateConfig }) {
+function EmptyStateView({ config }: { config?: EmptyStateConfig }) {
   if (!config) {
     return (
-      <div className="py-16 text-center text-sm text-gray-400">Sin resultados</div>
+      <Box sx={{ py: 8, textAlign: 'center' }}>
+        <Typography variant="body2" color="text.secondary">Sin resultados</Typography>
+      </Box>
     );
   }
   const Icon = config.icon;
   return (
-    <div className="py-16 text-center">
-      {Icon && <Icon className="h-10 w-10 text-gray-200 mx-auto mb-3" />}
-      <p className="text-sm font-medium text-gray-700">{config.title}</p>
-      {config.hint && <p className="text-xs text-gray-500 mt-1">{config.hint}</p>}
-      {config.cta && <div className="mt-4">{config.cta}</div>}
-    </div>
+    <Box sx={{ py: 8, textAlign: 'center' }}>
+      {Icon && (
+        <Box sx={{ width: 48, height: 48, bgcolor: 'grey.100', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+          <Icon style={{ width: 24, height: 24, color: '#9ca3af' }} />
+        </Box>
+      )}
+      <Typography variant="body2" gutterBottom sx={{ fontWeight: 600, color: 'text.primary' }}>
+        {config.title}
+      </Typography>
+      {config.hint && (
+        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 2 }}>
+          {config.hint}
+        </Typography>
+      )}
+      {config.cta && <Box sx={{ mt: 2 }}>{config.cta}</Box>}
+    </Box>
   );
 }
 
 function RowActionInline({ action }: { action: RowAction }) {
-  const Icon = action.icon;
-  const danger = action.variant === 'danger';
-  // gray-400 sobre blanco se leía como icono desactivado y la gente no lo veía.
-  const cls = `p-1.5 rounded-lg transition-colors ${
-    danger
-      ? 'text-gray-500 hover:text-red-600 hover:bg-red-50'
-      : 'text-gray-500 hover:text-teal-700 hover:bg-teal-50'
-  }`;
+  const Icon    = action.icon;
+  const isDanger = action.variant === 'danger';
+
   if (action.href) {
     const external = action.href.startsWith('http') || action.href.startsWith('/api/');
     return (
-      <Link href={action.href} target={external ? '_blank' : undefined}
-        aria-label={action.title} title={action.title}
-        onClick={e => e.stopPropagation()} className={cls}>
-        <Icon className="h-4 w-4" />
-      </Link>
+      <Tooltip title={action.title} placement="top" arrow>
+        <IconButton
+          component={Link}
+          href={action.href}
+          target={external ? '_blank' : undefined}
+          size="small"
+          onClick={e => e.stopPropagation()}
+          sx={{
+            color:     isDanger ? 'error.main' : 'text.secondary',
+            borderRadius: '6px',
+            '&:hover': { bgcolor: isDanger ? '#fef2f2' : 'grey.100' },
+          }}
+        >
+          <Icon style={{ width: 16, height: 16 }} />
+        </IconButton>
+      </Tooltip>
     );
   }
+
   return (
-    <button type="button" aria-label={action.title} title={action.title}
-      onClick={e => { e.stopPropagation(); action.onClick?.(); }} className={cls}>
-      <Icon className="h-4 w-4" />
-    </button>
+    <Tooltip title={action.title} placement="top" arrow>
+      <IconButton
+        size="small"
+        onClick={e => { e.stopPropagation(); action.onClick?.(); }}
+        sx={{
+          color:     isDanger ? 'error.main' : 'text.secondary',
+          borderRadius: '6px',
+          '&:hover': { bgcolor: isDanger ? '#fef2f2' : 'grey.100' },
+        }}
+      >
+        <Icon style={{ width: 16, height: 16 }} />
+      </IconButton>
+    </Tooltip>
   );
 }
 
 function RowActionsMenu({ actions }: { actions: RowAction[] }) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const open = Boolean(anchorEl);
+
   if (!actions || actions.length === 0) return null;
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={e => e.stopPropagation()}
-          aria-label="Acciones"
-          title="Más acciones"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors data-[state=open]:bg-gray-100 data-[state=open]:text-gray-700"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+    <>
+      <IconButton
+        size="small"
+        onClick={e => { e.stopPropagation(); setAnchorEl(e.currentTarget); }}
+        sx={{
+          color:     'text.secondary',
+          borderRadius: '6px',
+          '&:hover': { bgcolor: 'grey.100' },
+        }}
+        aria-label="Acciones"
+        title="Más acciones"
+      >
+        <MoreVertical style={{ width: 16, height: 16 }} />
+      </IconButton>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={() => setAnchorEl(null)}
+        onClick={() => setAnchorEl(null)}
+        slotProps={{
+          paper: {
+            elevation: 0,
+            sx: {
+              borderRadius: '10px',
+              border:       '1px solid #e5e7eb',
+              boxShadow:    '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+              minWidth:     160,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
         {actions.map((a, i) => {
-          const Icon = a.icon;
-          const variant = a.variant === 'danger' ? 'destructive' : 'default';
+          const Icon    = a.icon;
+          const isDanger = a.variant === 'danger';
           if (a.href) {
             const external = a.href.startsWith('http') || a.href.startsWith('/api/');
             return (
-              <DropdownMenuItem key={i} asChild variant={variant}>
-                <Link href={a.href} target={external ? '_blank' : undefined}>
-                  <Icon className="h-4 w-4" />
-                  {a.title}
-                </Link>
-              </DropdownMenuItem>
+              <MenuItem
+                key={i}
+                component={Link}
+                href={a.href}
+                target={external ? '_blank' : undefined}
+                sx={{
+                  borderRadius: '6px',
+                  mx:           0.5,
+                  fontSize:     '0.875rem',
+                  color:        isDanger ? 'error.main' : 'text.primary',
+                  gap:          1,
+                  py:           '6px',
+                  '&:hover': { bgcolor: isDanger ? '#fef2f2' : 'grey.50' },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                  <Icon style={{ width: 16, height: 16 }} />
+                </ListItemIcon>
+                {a.title}
+              </MenuItem>
             );
           }
           return (
-            <DropdownMenuItem key={i} variant={variant} onSelect={() => a.onClick?.()}>
-              <Icon className="h-4 w-4" />
+            <MenuItem
+              key={i}
+              onClick={a.onClick}
+              sx={{
+                borderRadius: '6px',
+                mx:           0.5,
+                fontSize:     '0.875rem',
+                color:        isDanger ? 'error.main' : 'text.primary',
+                gap:          1,
+                py:           '6px',
+                '&:hover': { bgcolor: isDanger ? '#fef2f2' : 'grey.50' },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                <Icon style={{ width: 16, height: 16 }} />
+              </ListItemIcon>
               {a.title}
-            </DropdownMenuItem>
+            </MenuItem>
           );
         })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </Menu>
+    </>
   );
 }

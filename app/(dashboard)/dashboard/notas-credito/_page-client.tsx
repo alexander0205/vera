@@ -2,8 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import { Plus, FileText, Download, TrendingDown, CheckCircle, Clock, FileX } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
@@ -15,12 +17,11 @@ export interface NotaCredito {
   estado:               string;
   razonSocialComprador: string | null;
   montoTotal:           number;
-  fechaEmision:         string; // ISO
+  fechaEmision:         string;
   ncfModificado:        string | null;
   codigoModificacion:   number | null;
   razonModificacion:    string | null;
   origenDocumentoId:    number | null;
-  /** Padre con e-CF emitido → nota borrador "puede" enviarse a DGII. */
   padreEmitido:         boolean;
 }
 
@@ -32,23 +33,29 @@ const COD_MODIFICACION_LABEL: Record<number, string> = {
   5: 'Ref. consumo',
 };
 
-const ESTADO_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  ACEPTADO:             { label: 'Aceptado',    variant: 'default' },
-  ACEPTADO_CONDICIONAL: { label: 'Condicional', variant: 'secondary' },
-  EN_PROCESO:           { label: 'En Proceso',  variant: 'outline' },
-  RECHAZADO:            { label: 'Rechazado',   variant: 'destructive' },
-  BORRADOR:             { label: 'Sin emitir',    variant: 'outline' },
-  ANULADO:              { label: 'Anulado',     variant: 'secondary' },
-};
-
 const ESTADO_OPTIONS = [
   { value: 'ACEPTADO',             label: 'Aceptado' },
   { value: 'ACEPTADO_CONDICIONAL', label: 'Condicional' },
   { value: 'EN_PROCESO',           label: 'En Proceso' },
-  { value: 'BORRADOR',             label: 'Sin emitir' },
+  { value: 'BORRADOR',             label: 'Borrador' },
   { value: 'RECHAZADO',            label: 'Rechazado' },
   { value: 'ANULADO',              label: 'Anulado' },
 ];
+
+function EstadoChip({ estado, padreEmitido }: { estado: string; padreEmitido: boolean }) {
+  if (estado === 'BORRADOR' && padreEmitido) {
+    return <Chip label="Pendiente DGII" size="small" sx={{ bgcolor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontSize: '0.6875rem' }} />;
+  }
+  switch (estado) {
+    case 'ACEPTADO':             return <Chip label="Aceptado"    size="small" sx={{ bgcolor: '#16a34a', color: '#fff', fontSize: '0.6875rem' }} />;
+    case 'ACEPTADO_CONDICIONAL': return <Chip label="Condicional" size="small" sx={{ bgcolor: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: '0.6875rem' }} />;
+    case 'EN_PROCESO':           return <Chip label="En Proceso"  size="small" variant="outlined" sx={{ fontSize: '0.6875rem', borderColor: '#d1d5db', color: '#4b5563' }} />;
+    case 'RECHAZADO':            return <Chip label="Rechazado"   size="small" sx={{ bgcolor: '#dc2626', color: '#fff', fontSize: '0.6875rem' }} />;
+    case 'BORRADOR':             return <Chip label="Borrador"    size="small" variant="outlined" sx={{ fontSize: '0.6875rem', borderColor: '#d1d5db', color: '#4b5563' }} />;
+    case 'ANULADO':              return <Chip label="Anulado"     size="small" sx={{ bgcolor: '#f3f4f6', color: '#6b7280', fontSize: '0.6875rem' }} />;
+    default:                     return <Chip label={estado}      size="small" variant="outlined" sx={{ fontSize: '0.6875rem' }} />;
+  }
+}
 
 function exportCSV(rows: NotaCredito[]) {
   const headers = ['e-NCF', 'Factura origen', 'Motivo', 'Comprador', 'Monto (DOP)', 'Estado', 'Fecha'];
@@ -75,30 +82,28 @@ interface StatCardProps {
   label: string;
   value: string;
   sub:   string;
-  icon:  React.ComponentType<{ className?: string }>;
-  color: 'teal' | 'green' | 'amber' | 'gray';
+  Icon:  React.ComponentType<{ size?: number; color?: string }>;
+  bgcolor:    string;
+  iconColor:  string;
+  valueColor: string;
 }
 
-const COLOR_MAP = {
-  teal:  { bg: 'bg-teal-50',   icon: 'text-teal-600',  val: 'text-teal-700'  },
-  green: { bg: 'bg-green-50',  icon: 'text-green-600', val: 'text-green-700' },
-  amber: { bg: 'bg-amber-50',  icon: 'text-amber-600', val: 'text-amber-700' },
-  gray:  { bg: 'bg-gray-50',   icon: 'text-gray-400',  val: 'text-gray-700'  },
-};
-
-function StatCard({ label, value, sub, icon: Icon, color }: StatCardProps) {
-  const c = COLOR_MAP[color];
+function StatCard({ label, value, sub, Icon, bgcolor, iconColor, valueColor }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-4 py-3.5 flex items-center gap-3">
-      <div className={`${c.bg} p-2 rounded-lg shrink-0`}>
-        <Icon className={`h-4 w-4 ${c.icon}`} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-        <p className={`text-lg font-bold leading-tight ${c.val}`}>{value}</p>
-        <p className="text-[11px] text-gray-400">{sub}</p>
-      </div>
-    </div>
+    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.75, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ bgcolor, p: 1, borderRadius: '8px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={16} color={iconColor} />
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.6875rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {label}
+        </Typography>
+        <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: valueColor, lineHeight: 1.2 }}>
+          {value}
+        </Typography>
+        <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>{sub}</Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -121,7 +126,6 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
     const estado = filterValues['estado'];
     const desde  = filterValues['fecha_desde'];
     const hasta  = filterValues['fecha_hasta'];
-
     if (q) d = d.filter(x =>
       x.razonSocialComprador?.toLowerCase().includes(q) ||
       x.encf?.toLowerCase().includes(q) ||
@@ -141,9 +145,9 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
       header: 'e-NCF',
       sortable: true,
       render: d => (
-        <span className="font-mono text-sm font-medium">
+        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 600 }}>
           {d.encf && !d.encf.startsWith('BOR-') ? d.encf : (d.codigo ?? `#${d.id}`)}
-        </span>
+        </Typography>
       ),
     },
     {
@@ -151,14 +155,14 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
       header: 'Factura origen',
       visibleAt: 'md',
       render: d => {
-        if (!d.ncfModificado) return <span className="text-xs text-gray-300">—</span>;
+        if (!d.ncfModificado) return <Typography sx={{ fontSize: '0.75rem', color: '#d1d5db' }}>—</Typography>;
         const inner = (
-          <span className="font-mono text-xs text-blue-700 hover:text-blue-900 hover:underline">
+          <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#1d4ed8', '&:hover': { color: '#1e3a8a', textDecoration: 'underline' } }}>
             {d.ncfModificado}
-          </span>
+          </Typography>
         );
         return d.origenDocumentoId
-          ? <Link href={`/dashboard/facturas/${d.origenDocumentoId}`} onClick={e => e.stopPropagation()}>{inner}</Link>
+          ? <Link href={`/dashboard/facturas/${d.origenDocumentoId}`} onClick={e => e.stopPropagation()} style={{ textDecoration: 'none' }}>{inner}</Link>
           : inner;
       },
     },
@@ -170,16 +174,16 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
         const texto = d.razonModificacion?.trim() ||
           (d.codigoModificacion != null ? COD_MODIFICACION_LABEL[d.codigoModificacion] : null);
         return texto
-          ? <span className="text-xs text-gray-600 line-clamp-2 max-w-[180px]">{texto}</span>
-          : <span className="text-xs text-gray-300">—</span>;
+          ? <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 180 }}>{texto}</Typography>
+          : <Typography sx={{ fontSize: '0.75rem', color: '#d1d5db' }}>—</Typography>;
       },
     },
     {
       id: 'comprador',
       header: 'Comprador',
       render: d => d.razonSocialComprador
-        ? <span className="text-sm">{d.razonSocialComprador}</span>
-        : <span className="text-sm text-gray-400">Consumidor final</span>,
+        ? <Typography variant="body2">{d.razonSocialComprador}</Typography>
+        : <Typography variant="body2" sx={{ color: '#9ca3af' }}>Consumidor final</Typography>,
     },
     {
       id: 'monto',
@@ -187,23 +191,13 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
       align: 'right',
       sortable: true,
       sortAccessor: d => d.montoTotal,
-      render: d => <span className="text-sm font-medium whitespace-nowrap">{fmtDOP(d.montoTotal)}</span>,
+      render: d => <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtDOP(d.montoTotal)}</Typography>,
     },
     {
       id: 'estado',
       header: 'Estado',
       visibleAt: 'md',
-      render: d => {
-        if (d.estado === 'BORRADOR' && d.padreEmitido) {
-          return (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-              Pendiente DGII
-            </span>
-          );
-        }
-        const badge = ESTADO_BADGE[d.estado] ?? { label: d.estado, variant: 'outline' as const };
-        return <Badge variant={badge.variant}>{badge.label}</Badge>;
-      },
+      render: d => <EstadoChip estado={d.estado} padreEmitido={d.padreEmitido} />,
     },
     {
       id: 'fechaEmision',
@@ -211,7 +205,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
       visibleAt: 'md',
       sortable: true,
       sortAccessor: d => d.fechaEmision,
-      render: d => <span className="text-sm text-gray-500">{fmtFechaCorta(d.fechaEmision)}</span>,
+      render: d => <Typography variant="body2" sx={{ color: '#6b7280' }}>{fmtFechaCorta(d.fechaEmision)}</Typography>,
     },
   ];
 
@@ -221,15 +215,14 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
   ];
 
   return (
-    <section className="bg-[#eef0f7] min-h-full p-6 space-y-4">
-      {/* Tarjetas resumen */}
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {docs.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="Monto total"    value={fmtDOP(resumen.monto)}       sub="Notas activas"    icon={TrendingDown}  color="teal"  />
-          <StatCard label="Total notas"    value={String(resumen.count)}        sub="No anuladas"      icon={FileText}      color="gray"  />
-          <StatCard label="Enviadas DGII"  value={String(resumen.aceptadas)}    sub="Aceptadas"        icon={CheckCircle}   color="green" />
-          <StatCard label="Pendiente DGII" value={String(resumen.pendientes)}   sub="Sin emitir, listas" icon={Clock}        color="amber" />
-        </div>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, '@media (min-width: 1024px)': { gridTemplateColumns: 'repeat(4, 1fr)' } }}>
+          <StatCard label="Monto total"    value={fmtDOP(resumen.monto)}     sub="Notas activas"     Icon={TrendingDown}  bgcolor="#eef2fe" iconColor="#3658e1" valueColor="#2a45c4" />
+          <StatCard label="Total notas"    value={String(resumen.count)}      sub="No anuladas"       Icon={FileText}      bgcolor="#f9fafb" iconColor="#6b7280" valueColor="#374151" />
+          <StatCard label="Enviadas DGII"  value={String(resumen.aceptadas)}  sub="Aceptadas"         Icon={CheckCircle}   bgcolor="#f0fdf4" iconColor="#16a34a" valueColor="#15803d" />
+          <StatCard label="Pendiente DGII" value={String(resumen.pendientes)} sub="Borradores listos" Icon={Clock}         bgcolor="#fffbeb" iconColor="#d97706" valueColor="#92400e" />
+        </Box>
       )}
 
       <DataTable<NotaCredito>
@@ -240,7 +233,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
         rowHref={d => `/dashboard/notas-credito/${d.id}`}
         rowActions={rowActions}
         filters={[
-          { type: 'search',    id: 'q',     placeholder: 'Buscar por comprador, e-NCF, motivo…' },
+          { type: 'search',    id: 'q',      placeholder: 'Buscar por comprador, e-NCF, motivo…' },
           { type: 'select',    id: 'estado', label: 'Estado', options: ESTADO_OPTIONS, placeholder: 'Todos los estados' },
           { type: 'daterange', id: 'fecha' },
         ]}
@@ -253,31 +246,32 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
             ? 'Intenta ajustar la búsqueda o los filtros'
             : 'Las notas de crédito se usan para revertir o reducir facturas previas',
           cta: filtered.length === 0 && docs.length > 0 ? undefined : (
-            <Button asChild size="sm" className="bg-teal-600 hover:bg-teal-700">
-              <Link href="/dashboard/notas-credito/nueva">
-                <Plus className="h-4 w-4 mr-2" />
+            <Link href="/dashboard/notas-credito/nueva" style={{ textDecoration: 'none' }}>
+              <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva Nota de Crédito
-              </Link>
-            </Button>
+              </Button>
+            </Link>
           ),
         }}
         headerActions={
-          <div className="flex items-center gap-2">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {docs.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => exportCSV(filtered)}>
-                <FileX className="h-4 w-4 mr-2" />
+              <Button variant="outlined" size="small" startIcon={<FileX size={16} />}
+                onClick={() => exportCSV(filtered)}
+                sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}>
                 Exportar CSV
               </Button>
             )}
-            <Button asChild className="bg-teal-600 hover:bg-teal-700 rounded-lg">
-              <Link href="/dashboard/notas-credito/nueva">
-                <Plus className="h-4 w-4 mr-2" />
+            <Link href="/dashboard/notas-credito/nueva" style={{ textDecoration: 'none' }}>
+              <Button variant="contained" disableElevation startIcon={<Plus size={18} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva Nota de Crédito
-              </Link>
-            </Button>
-          </div>
+              </Button>
+            </Link>
+          </Box>
         }
       />
-    </section>
+    </Box>
   );
 }

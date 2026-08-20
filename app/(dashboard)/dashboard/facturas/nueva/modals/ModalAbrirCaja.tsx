@@ -78,7 +78,7 @@ export function ModalAbrirCaja({ open, onClose, onOpened }: {
       <DialogContent className="max-w-lg w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-teal-600" />Abrir caja para facturar
+            <Wallet className="h-5 w-5 text-zero-600" />Abrir caja para facturar
           </DialogTitle>
         </DialogHeader>
 
@@ -92,7 +92,7 @@ export function ModalAbrirCaja({ open, onClose, onOpened }: {
 
           {cargando ? (
             <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+              <Loader2 className="h-6 w-6 animate-spin text-zero-600" />
             </div>
           ) : (
             <>
@@ -107,7 +107,7 @@ export function ModalAbrirCaja({ open, onClose, onOpened }: {
                         onClick={() => setTerminalId(t.id)}
                         className={`rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-colors ${
                           terminalId === t.id
-                            ? 'border-teal-500 bg-teal-50 text-teal-800 ring-1 ring-teal-500'
+                            ? 'border-zero-500 bg-zero-50 text-zero-800 ring-1 ring-zero-500'
                             : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                         }`}
                       >
@@ -143,7 +143,7 @@ export function ModalAbrirCaja({ open, onClose, onOpened }: {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => { onClose(); setError(null); }} disabled={abriendo}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={abrir} disabled={abriendo || cargando}>
+          <Button className="bg-zero-600 hover:bg-zero-700 text-white" onClick={abrir} disabled={abriendo || cargando}>
             {abriendo ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Abriendo…</> : 'Abrir caja y continuar'}
           </Button>
         </DialogFooter>

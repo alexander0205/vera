@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2, Eye,
+  X, Wallet, Loader2, Archive, Wallet2, Eye, PanelRightOpen,
 } from 'lucide-react';
+import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
 import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
@@ -27,6 +28,10 @@ interface Cuenta {
   montoTotal:           number;
   totalItbis:           number;
   pagado:               number;
+  // Crédito de notas de crédito ya descontado del saldo de la factura. La API
+  // siempre lo devuelve; faltaba declararlo, y sin él la página enseñaba un
+  // saldo que descuenta notas sin nombrarlas en ninguna parte.
+  ncAplicado:           number;
   // saldo = saldoFactura + moraSaldo (TOTAL combinado a cobrar).
   saldo:                number;
   // Saldo SOLO de la factura (montoTotal − pagado).
@@ -59,6 +64,7 @@ export default function CuentasPorCobrarPage() {
     cliente: '', tipoDoc: '', estado: '', agrupar: '',
   });
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
+  const [detalle, setDetalle] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -119,7 +125,7 @@ export default function CuentasPorCobrarPage() {
           <Link
             href={`/dashboard/facturas/${c.id}`}
             title={c.codigo ?? `Factura #${c.id}`}
-            className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline"
+            className="whitespace-nowrap font-mono text-xs font-medium text-zero-600 hover:underline"
           >
             {c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}
           </Link>
@@ -251,12 +257,39 @@ export default function CuentasPorCobrarPage() {
     },
   ], []);
 
+  /**
+   * Fuera las columnas que no tienen nada que enseñar.
+   *
+   * Un colegio que cobra al contado no tiene vencimientos ni mora en ninguna
+   * fila: «Vence», «Atraso» y «Mora incluida» le ocupan un tercio del ancho
+   * para enseñar guiones, y empujan el saldo —lo único que se mira— fuera de
+   * la pantalla. Se decide sobre las filas ya cargadas, sin pedirle nada más
+   * al servidor.
+   *
+   * Se mira TODA la cartera y no solo lo filtrado: si desaparecieran al filtrar
+   * y volvieran al quitar el filtro, la tabla bailaría en cada clic.
+   */
+  const columnasVisibles = useMemo(() => {
+    const filas = data?.cuentas ?? [];
+    if (filas.length === 0) return columns;
+    const conDatos: Record<string, boolean> = {
+      vence:  filas.some(c => !!c.fechaLimitePago),
+      atraso: filas.some(c => c.diasVencido > 0),
+      mora:   filas.some(c => c.moraSaldo > 0),
+    };
+    return columns.filter(col => conDatos[col.id] ?? true);
+  }, [columns, data]);
+
   // Ambas inline y siempre visibles: sin menú de tres puntos. Cobrar es la
   // acción del día a día; el ojito entra al detalle sin tener que apuntarle
   // al código.
   const rowActions = (c: Cuenta): RowAction[] => [
     { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
-    { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${c.id}`, primary: true },
+    { icon: Eye, title: 'Ver factura', href: `/dashboard/facturas/${c.id}`, primary: true },
+    // Al final: el panel EXPLICA el saldo sin sacarte de la lista —de dónde
+    // sale, qué se pagó, qué mora se sumó— y por eso va después de las dos
+    // acciones que sí te llevan a otro sitio.
+    { icon: PanelRightOpen, title: 'Ver movimientos', onClick: () => setDetalle(c), primary: true },
   ];
 
   return (
@@ -272,7 +305,7 @@ export default function CuentasPorCobrarPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setHistoricaModal(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-zero-300 text-gray-700 hover:text-zero-700 text-sm font-medium rounded-lg transition-colors"
             title="Importar factura previa al uso de Zero (no va a DGII)"
           >
             <Archive className="h-4 w-4" />
@@ -316,7 +349,7 @@ export default function CuentasPorCobrarPage() {
         data={cuentasFiltradas}
         loading={loading}
         error={error}
-        columns={columns}
+        columns={columnasVisibles}
         filters={[
           { type: 'search', id: 'cliente', placeholder: 'Buscar cliente o RNC…' },
           {
@@ -358,6 +391,10 @@ export default function CuentasPorCobrarPage() {
         rowActions={rowActions}
         rowExpandable={c => (c.moraNotas?.length ?? 0) > 0}
         renderExpanded={c => <MoraHijas cuenta={c} />}
+        // Pulsar la fila abre el detalle: es lo que se quiere el 90% de las
+        // veces. El desglose de mora sigue a un chevron de distancia, y
+        // también está dentro del panel.
+        onRowClick={c => setDetalle(c)}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
@@ -383,6 +420,19 @@ export default function CuentasPorCobrarPage() {
             : 'Todas las facturas a crédito están saldadas.',
         }}
       />
+
+      {/* Panel lateral de detalle — se cierra al abrir el cobro para no apilar
+          dos capas encima de la lista. */}
+      {detalle && (
+        <DetallePanel
+          cuenta={detalle}
+          onClose={() => setDetalle(null)}
+          // Se cobra la fila de ESTA lista, no la que devuelve el panel: su
+          // `Cuenta` es más estrecha (sus notas de mora no traen monto ni
+          // estado) y el modal de cobro las necesita para el desglose.
+          onCobrar={() => { setPagoModal(detalle); setDetalle(null); }}
+        />
+      )}
 
       {/* Modal registrar pago */}
       {pagoModal && (
@@ -596,7 +646,7 @@ function PagoModal({
               value={fecha}
               onChange={e => setFecha(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
             />
           </div>
 
@@ -646,7 +696,7 @@ function PagoModal({
             <button
               type="submit"
               disabled={guardando || !valido}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+              className="px-4 py-2 bg-zero-600 hover:bg-zero-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
             >
               {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Registrar pago
@@ -713,7 +763,7 @@ function ResumenPago({
         <button
           type="button"
           onClick={onListo}
-          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg"
+          className="px-4 py-2 bg-zero-600 hover:bg-zero-700 text-white text-sm font-medium rounded-lg"
         >
           Listo
         </button>
@@ -803,7 +853,7 @@ function HistoricaModal({
                 onChange={e => setEncf(e.target.value.toUpperCase())}
                 placeholder="B01000000001 (opcional)"
                 maxLength={40}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500 font-mono"
               />
               <p className="text-[10px] text-gray-400 mt-1">Si lo dejas vacío se genera automáticamente.</p>
             </div>
@@ -815,7 +865,7 @@ function HistoricaModal({
                 onChange={e => setRnc(e.target.value)}
                 placeholder="131988032"
                 maxLength={20}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
           </div>
@@ -829,7 +879,7 @@ function HistoricaModal({
               required
               placeholder="Razón social del cliente"
               maxLength={255}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
             />
           </div>
 
@@ -842,7 +892,7 @@ function HistoricaModal({
                 value={fechaEmision}
                 onChange={e => setFechaEmision(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
             <div>
@@ -852,7 +902,7 @@ function HistoricaModal({
                 value={fechaLimite}
                 onChange={e => setFechaLimite(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
           </div>
@@ -869,7 +919,7 @@ function HistoricaModal({
                 onChange={e => setMontoDOP(e.target.value)}
                 required
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
             <div>
@@ -881,7 +931,7 @@ function HistoricaModal({
                 value={yaPagadoDOP}
                 onChange={e => setYaPagadoDOP(e.target.value)}
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
               <p className="text-[10px] text-gray-400 mt-1">Abonos previos al sistema.</p>
             </div>
@@ -895,7 +945,7 @@ function HistoricaModal({
               rows={2}
               maxLength={1000}
               placeholder="Factura preimpresa serie B01 julio 2025, etc."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
             />
           </div>
 
@@ -917,7 +967,7 @@ function HistoricaModal({
             <button
               type="submit"
               disabled={guardando}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+              className="px-4 py-2 bg-zero-600 hover:bg-zero-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
             >
               {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Agregar cuenta

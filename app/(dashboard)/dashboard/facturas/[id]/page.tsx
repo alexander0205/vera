@@ -11,13 +11,17 @@ import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ModalHeader } from '@/components/ui/modal-header';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   ArrowLeft, Download, FileText, RefreshCw, XCircle,
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
   Package, ChevronUp, Plus, MoreVertical, Send,
-  TrendingUp,
+  TrendingUp, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -34,9 +38,11 @@ import { ComprobantesCard } from '@/components/pagos/ComprobantesCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
-import { StickyNote, History as HistoryIcon } from 'lucide-react';
+import { StickyNote, History as HistoryIcon, Link2 } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useVolver } from '@/lib/hooks/useVolver';
+import { useListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
@@ -137,6 +143,8 @@ interface FacturaDetalle {
     rnc?: string;
     razonSocial?: string;
     email?: string;
+    /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+    emailCliente?: string;
     telefono?: string;
     direccion?: string;
   };
@@ -210,61 +218,59 @@ function EstadoDgiiCard({
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-        <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
+        <CheckCircle className="h-4 w-4 text-zero-600 shrink-0" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
         {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
           <button
             type="button"
             onClick={onConsultar}
             disabled={consultarStatus === 'loading'}
-            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1 disabled:opacity-50"
+            className="text-xs text-zero-600 hover:text-zero-800 flex items-center gap-1 disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${consultarStatus === 'loading' ? 'animate-spin' : ''}`} />
             Consultar
           </button>
         )}
       </header>
-      <div className="px-4 pb-4 md:px-5 flex items-start gap-4">
-        {/* Badge circular */}
-        <div className={`flex flex-col items-center justify-center rounded-lg ${badgeColor} px-3 py-3 shrink-0 min-w-[88px]`}>
-          <Icon className="h-7 w-7" />
-          <span className="text-xs font-semibold mt-1 text-center leading-tight">{cfg.label}</span>
+      {/* El e-NCF manda: es lo que se viene a buscar. Antes eran cinco filas
+          del mismo peso —con el estado escrito dos veces, en el recuadro y en
+          la primera fila— y había que leerlas todas para encontrarlo. */}
+      <div className="px-4 pb-4 md:px-5">
+        <div className={`flex items-center gap-2 rounded-lg ${badgeColor} px-3 py-2 mb-3`}>
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className="text-xs font-semibold leading-tight">{cfg.label}</span>
         </div>
-        {/* Detalle fields */}
-        <div className="flex-1 space-y-1.5 text-xs min-w-0">
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">Estado:</span>
-            <span className="text-gray-900 font-medium">{cfg.label}</span>
+
+        <p className="font-mono text-base text-gray-900 leading-tight truncate" title={factura.encf}>
+          {factura.encf}
+        </p>
+        <p className="text-[11px] text-gray-500 mt-0.5">
+          emitida {factura.createdAt ? fmtFechaHora(factura.createdAt) : fmtFechaCorta(factura.fechaEmision)}
+        </p>
+
+        {/* Lo que casi nunca se mira, más callado y debajo de una línea. */}
+        {(factura.codigoSeguridad || factura.fechaFirma || factura.trackId) && (
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5 text-[11px]">
+            {factura.codigoSeguridad && (
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Código de seguridad</span>
+                <span className="text-gray-700 font-mono">{factura.codigoSeguridad}</span>
+              </div>
+            )}
+            {factura.fechaFirma && (
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Fecha firma</span>
+                <span className="text-gray-700">{factura.fechaFirma}</span>
+              </div>
+            )}
+            {factura.trackId && (
+              <div className="flex justify-between gap-2 min-w-0">
+                <span className="text-gray-500 shrink-0">Track ID</span>
+                <span className="text-gray-400 font-mono truncate" title={factura.trackId}>{factura.trackId}</span>
+              </div>
+            )}
           </div>
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">e-NCF:</span>
-            <span className="text-gray-900 font-mono truncate">{factura.encf}</span>
-          </div>
-          {factura.codigoSeguridad && (
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Código de seguridad:</span>
-              <span className="text-gray-900 font-mono">{factura.codigoSeguridad}</span>
-            </div>
-          )}
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">Fecha emisión:</span>
-            <span className="text-gray-900">
-              {factura.createdAt ? fmtFechaHora(factura.createdAt) : fmtFechaCorta(factura.fechaEmision)}
-            </span>
-          </div>
-          {factura.fechaFirma && (
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Fecha firma:</span>
-              <span className="text-gray-900">{factura.fechaFirma}</span>
-            </div>
-          )}
-          {factura.trackId && (
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Track ID:</span>
-              <span className="text-gray-900 font-mono truncate" title={factura.trackId}>{factura.trackId}</span>
-            </div>
-          )}
-        </div>
+        )}
       </div>
       {dgiiMensajes.length > 0 && (
         <div className="px-4 pb-4 md:px-5">
@@ -282,7 +288,7 @@ function EstadoDgiiCard({
             href={verUrl}
             target="_blank"
             rel="noreferrer"
-            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-zero-700 hover:text-zero-800 border border-zero-200 hover:bg-zero-50 rounded-lg py-2 transition-colors"
           >
             Ver en DGII <ArrowLeft className="h-3.5 w-3.5 rotate-[135deg]" />
           </a>
@@ -377,6 +383,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const router   = useRouter();
   const docId    = params.id as string;
   const ui       = DOC_UI[variant];
+  // A esta pantalla se llega desde muchos sitios —la ficha de un estudiante,
+  // cuentas por cobrar, el buscador—, así que el listado es solo el respaldo.
+  const volver   = useVolver(ui.backHref);
+
+  // Posición dentro de la lista de la que se llegó, para las flechas del
+  // header. Va antes de cualquier return temprano: es un hook.
+  const navLista = useListaNavegacion(ui.backHref, Number(docId));
 
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -542,7 +555,28 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
   // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
-  const { can } = usePermissions();
+  const { can, modules } = usePermissions();
+  /** El enlace de pago es del módulo escolar: sin él no hay página que ofrecer. */
+  const esColegio = modules.includes('escolar');
+
+  /**
+   * Copia al portapapeles el enlace de pago del comprador.
+   *
+   * Se copia en vez de abrirlo: lo que se quiere hacer con él es pegarlo en un
+   * WhatsApp o un correo, no mirarlo. El servidor lo crea si no existe y
+   * comprueba que el contacto sea responsable de un alumno de este colegio.
+   */
+  async function copiarEnlacePago() {
+    try {
+      const r = await fetch(`/api/administracion-escolar/link-pago?facturaId=${docId}`);
+      const d = await r.json();
+      if (!r.ok) { toast.error(d.error ?? 'No se pudo obtener el enlace'); return; }
+      await navigator.clipboard.writeText(d.url);
+      toast.success(`Enlace copiado · referencia ${d.referencia}`);
+    } catch {
+      toast.error('No se pudo copiar el enlace');
+    }
+  }
   const { tipoVisible, enProduccion, ambiente } = useTiposDisponibles();
   const canCreate = can('facturas:crear');
   const canEdit   = can('facturas:editar');
@@ -559,7 +593,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando factura');
       setFactura(data);
-      setEmailTo(data.comprador?.email ?? '');
+      // Destinatario propuesto: primero el correo grabado en la factura; si el
+      // documento se creó sin él, el de la ficha del cliente. Muchas facturas
+      // viejas no lo traen y había que teclearlo a mano cada vez.
+      setEmailTo(data.comprador?.email || data.comprador?.emailCliente || '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -798,7 +835,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     );
   }
@@ -809,7 +846,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
           <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
           <p className="font-medium">{error ?? 'Documento no encontrado'}</p>
-          <Button variant="outline" className="mt-4" onClick={() => router.push(ui.backHref)}>
+          <Button variant="outline" className="mt-4" onClick={volver}>
             Volver a {ui.backLabel.toLowerCase()}
           </Button>
         </div>
@@ -833,7 +870,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // (encf ALG-), borrador (BOR-) y sin-ncf NUNCA fueron a DGII → sin estado
   // ni consulta DGII.
   const esEcfReal   = /^E\d/.test(factura.encf) && !['HISTORICA', 'BORRADOR'].includes(factura.estado);
-  // Sin e-CF real → se puede emitir a DGII (borrador, histórica de Alegra, sin-ncf).
+  // Sin e-CF real → se puede emitir a DGII (borrador, histórica importada, sin-ncf).
   const yaEnDgii    = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(factura.estado);
   const puedeEmitir = factura.estado !== 'ANULADO' && !yaEnDgii;
   const sinLineas   = factura.lineas.length === 0;
@@ -892,55 +929,89 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
     <section className="p-4 sm:p-6 min-h-full flex flex-col">
 
       {/* ─── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={ui.backHref}>
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">{ui.backLabel}</span>
-            </Link>
-          </Button>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-mono">
-                {factura.encf && !factura.encf.startsWith('BOR-')
-                  ? factura.encf
-                  : (factura.codigo ?? `${ui.noun} #${factura.id}`)}
-              </h1>
-              <EstadoBadge estado={factura.estado} />
-              {/* Estado de COBRO (independiente del estado DGII) */}
-              {facturaPagada ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                  Pagada
-                </span>
-              ) : saldo > 0 && pagadoDOP > 0 ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-                  Pago parcial
-                </span>
-              ) : null}
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {/* El tipo solo se escribe cuando aporta algo: si el documento no
-                  fue a la DGII, el badge de arriba ya dice "Sin comprobante" y
-                  repetirlo aquí era decir dos veces lo mismo en la misma línea. */}
-              {esEcfReal && (
-                <>
-                  <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
-                  <span className="mx-1.5">·</span>
-                </>
-              )}
-              Fecha: {fmtDateHora(factura.fechaEmision)}
-              {factura.fechaLimitePago && (
-                <>
-                  <span className="mx-1.5">·</span>
-                  Vencimiento: {fmtDate(factura.fechaLimitePago)}
-                </>
-              )}
-            </p>
-          </div>
+      {/* Una sola fila, sin envolver: cuando falta ancho el que cede es el
+          código (se recorta), no la fila entera partiéndose en dos pisos.
+          Los badges de estado DGII y de cobro salieron de aquí — el estado
+          fiscal lo cuenta la tarjeta Estado DGII y el cobro las cifras de
+          arriba; en el título eran una tercera copia. */}
+      <div className="flex items-center gap-3 mb-5 min-w-0">
+        {/* A esta pantalla se llega desde muchos sitios, así que el botón
+            vuelve a donde se vino y el listado queda solo como respaldo. */}
+        <Button variant="ghost" size="sm" onClick={volver} className="shrink-0">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">{ui.backLabel}</span>
+        </Button>
+
+        <div className="flex flex-col min-w-0 flex-1">
+          <h1
+            className="text-xl sm:text-2xl font-bold text-gray-900 font-mono truncate leading-tight"
+            title={factura.encf && !factura.encf.startsWith('BOR-') ? factura.encf : (factura.codigo ?? undefined)}
+          >
+            {factura.encf && !factura.encf.startsWith('BOR-')
+              ? factura.encf
+              : (factura.codigo ?? `${ui.noun} #${factura.id}`)}
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            {esEcfReal && (
+              <>
+                <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
+                <span className="mx-1.5">·</span>
+              </>
+            )}
+            {fmtDateHora(factura.fechaEmision)}
+            {factura.fechaLimitePago && (
+              <>
+                <span className="mx-1.5">·</span>
+                Vence {fmtDate(factura.fechaLimitePago)}
+              </>
+            )}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-2 justify-end shrink-0">
+          {/* Recorrer la lista de la que se vino. Solo aparece si este documento
+              estaba en ella; con link directo no hay contexto que recorrer. */}
+          {navLista && (
+            <div className="hidden md:flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 p-0.5 mr-1">
+              <Button
+                variant="ghost" size="sm"
+                className="h-7 w-7 p-0"
+                disabled={!navLista.anteriorId}
+                title="Anterior"
+                aria-label="Documento anterior"
+                onClick={() => navLista.anteriorId && router.push(`${ui.backHref}/${navLista.anteriorId}`)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-1.5 text-[11px] font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {navLista.posicion} de {navLista.total.toLocaleString('es-DO')}
+              </span>
+              <Button
+                variant="ghost" size="sm"
+                className="h-7 w-7 p-0"
+                disabled={!navLista.siguienteId}
+                title="Siguiente"
+                aria-label="Documento siguiente"
+                onClick={() => navLista.siguienteId && router.push(`${ui.backHref}/${navLista.siguienteId}`)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Ver PDF sube al header: vivía en la barra de abajo, así que en una
+              factura larga había que recorrerla entera para verla impresa. */}
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <FileText className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Ver PDF</span>
+            </a>
+          </Button>
+
           {puedePolling && (
             <Button
               variant="outline" size="sm"
@@ -952,20 +1023,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </Button>
           )}
 
-          {/* Acción principal del documento, junto al resto de acciones. Antes
-              vivía en una tarjeta del sidebar: el usuario tenía que buscar a la
-              derecha lo que iba a hacer en el 90% de los casos, y esa tarjeta
-              se comía el alto de la columna. */}
-          {!esEcfReal && puedeEmitir && canEmitir && (
-            <Button
-              size="sm"
-              className="bg-teal-600 hover:bg-teal-700 text-white"
-              onClick={triggerEnviarDgii}
-            >
-              <Send className="h-4 w-4 mr-1" />
-              {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
-            </Button>
-          )}
+          {/* «Enviar a DGII» no se repite aquí: vive en la barra inferior, que
+              es fija y sigue a la vista al recorrer la factura. El header, en
+              cambio, se va con el scroll — es el peor sitio para la acción
+              principal, y tenerla en los dos era el mismo botón dos veces. */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -984,7 +1045,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 }}
                 className="flex items-center gap-2 cursor-pointer"
               >
-                <Printer className="h-4 w-4 text-teal-600" />
+                <Printer className="h-4 w-4 text-zero-600" />
                 <div>
                   <p className="text-sm font-medium">Imprimir (predeterminada)</p>
                   <p className="text-xs text-gray-400 truncate max-w-[180px]">{printerLabel}</p>
@@ -1011,7 +1072,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Ticket className="h-4 w-4 text-teal-600" />
+                  <Ticket className="h-4 w-4 text-zero-600" />
                   <div>
                     <p className="text-sm font-medium">Factura pequeña (80mm)</p>
                     <p className="text-xs text-gray-400">PDF tirilla térmica</p>
@@ -1084,6 +1145,22 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   Duplicar
                 </DropdownMenuItem>
               )}
+              {/* El enlace de pago del padre. Solo en colegios: en una empresa
+                  normal el comprador no tiene una página donde ver su deuda y
+                  subir un comprobante.
+
+                  Va aquí y no solo en la ficha del alumno porque el caso de uso
+                  empieza en la factura: alguien la mira, ve que está pendiente,
+                  y quiere mandársela por donde sea. */}
+              {esColegio && (
+                <DropdownMenuItem
+                  onSelect={copiarEnlacePago}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Link2 className="h-4 w-4 text-gray-500" />
+                  Copiar enlace de pago
+                </DropdownMenuItem>
+              )}
               {canCreate && puedeCrearNota && (
                 <>
                   {/* Separadores por intención: arriba lo que hace con ESTE
@@ -1094,7 +1171,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
-                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                      className="flex items-center gap-2 cursor-pointer text-zero-700"
                     >
                       <Plus className="h-4 w-4" />
                       Crear nota de crédito
@@ -1103,7 +1180,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
-                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                      className="flex items-center gap-2 cursor-pointer text-zero-700"
                     >
                       <Plus className="h-4 w-4" />
                       Crear nota de débito
@@ -1163,7 +1240,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         <div className={`rounded-xl p-3 text-sm flex gap-2 mb-4 ${
           pollingStatus === 'error'
             ? 'bg-red-50 border border-red-200 text-red-700'
-            : 'bg-teal-50 border border-teal-200 text-teal-700'
+            : 'bg-zero-50 border border-zero-200 text-zero-700'
         }`}>
           {pollingStatus === 'error'
             ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -1212,19 +1289,19 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: si es NC/ND, link a la factura que modifica */}
           {factura.notaOrigen && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
-              <p className="text-sm text-teal-900">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
+              <p className="text-sm text-zero-900">
                 {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
                 <span className="font-semibold font-mono">{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</span>
                 {factura.codigoModificacion != null && (
-                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-teal-200 text-teal-800">
+                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-zero-200 text-zero-800">
                     {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
                   </span>
                 )}
               </p>
               <Link
                 href={`/dashboard/facturas/${factura.notaOrigen.id}`}
-                className="text-sm font-medium text-teal-700 hover:text-teal-800 whitespace-nowrap"
+                className="text-sm font-medium text-zero-700 hover:text-zero-800 whitespace-nowrap"
               >
                 Ver factura →
               </Link>
@@ -1233,15 +1310,15 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: NC del modelo nuevo → generó saldo a favor (no descontó la factura) */}
           {factura.tipoEcf === '34' && factura.creditoGeneradoCents != null && (
-            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+            <div className="rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
               {factura.creditoGeneradoCents > 0 ? (
-                <p className="text-sm text-violet-900">
+                <p className="text-sm text-zero-900">
                   Esta nota generó <span className="font-semibold">{fmtDOP(factura.creditoGeneradoCents / 100)}</span> de
                   saldo a favor del cliente — <span className="font-medium">no descontó la factura original</span>.
                   El cliente puede usarlo para pagar otras facturas.
                 </p>
               ) : (
-                <p className="text-sm text-violet-900">
+                <p className="text-sm text-zero-900">
                   Esta nota no generó saldo a favor: la factura original no tenía pagos registrados
                   (solo se acredita lo que el cliente ya pagó).
                 </p>
@@ -1359,8 +1436,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                     {ncAplicadoDOP > 0 && (
                       <tr>
                         <td colSpan={4} />
-                        <td className="py-1 px-2 text-right text-xs text-teal-700">Notas de crédito</td>
-                        <td className="py-1 px-2 text-right tabular-nums text-teal-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
+                        <td className="py-1 px-2 text-right text-xs text-zero-700">Notas de crédito</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-zero-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
                         <td />
                       </tr>
                     )}
@@ -1381,7 +1458,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full border-dashed text-teal-700 border-teal-300 hover:bg-teal-50"
+                  className="w-full border-dashed text-zero-700 border-zero-300 hover:bg-zero-50"
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
@@ -1580,7 +1657,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <TabsContent value="notas">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <StickyNote className="h-4 w-4 text-teal-600" />
+                  <StickyNote className="h-4 w-4 text-zero-600" />
                   <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
                 </div>
                 <EntityNotes entityType="factura" entityId={factura.id} />
@@ -1590,7 +1667,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <TabsContent value="historia">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <HistoryIcon className="h-4 w-4 text-teal-600" />
+                  <HistoryIcon className="h-4 w-4 text-zero-600" />
                   <h3 className="text-sm font-semibold text-gray-900">Historia de la factura</h3>
                 </div>
                 <EntityHistory docId={factura.id} encf={factura.encf} />
@@ -1619,7 +1696,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <Button
                   onClick={() => handleResetEmision(false)}
                   disabled={reseteando}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white h-9 text-sm disabled:opacity-50"
+                  className="w-full bg-zero-600 hover:bg-zero-700 text-white h-9 text-sm disabled:opacity-50"
                 >
                   Cancelar y reintentar con e-NCF nuevo
                 </Button>
@@ -1639,18 +1716,23 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           {!esEcfReal && puedeEmitir && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
               <div className="flex items-center gap-2 mb-2">
-                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" aria-hidden="true" />
+                <Clock className="h-4 w-4 text-gray-400 shrink-0" aria-hidden="true" />
                 <h2 className="text-sm font-semibold text-gray-900">Estado DGII</h2>
               </div>
-              <p className="text-xs text-gray-500 mb-3 leading-snug">
-                No emitida a la DGII. Es un registro {esBorrador ? 'sin comprobante' : 'histórico'} sin e-CF.
-                Genera un e-CF para enviarla a la DGII.
+              {/* Una frase. La anterior decía «un registro sin comprobante sin
+                  e-CF» —el mismo dato dos veces y mal escrito— y encima repetía
+                  lo que ya dice el título de la pantalla. El botón de emitir
+                  vive en el header, con el resto de las acciones. */}
+              <p className="text-xs text-gray-500 leading-snug">
+                {esBorrador
+                  ? 'Este documento aún no lleva comprobante fiscal. Puedes generarle un e-CF cuando lo necesites.'
+                  : 'Registro histórico: nunca se envió a la DGII y no lleva e-CF.'}
               </p>
               {/* Sin botones: emitir y editar viven en el encabezado y en la
                   barra inferior. Esta tarjeta solo informa en qué estado está
                   el documento frente a la DGII. */}
               {!canEdit && !canEmitir && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
                   <span>Para emitir o editar esta factura, pídele al administrador.</span>
                 </div>
@@ -1671,11 +1753,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 {factura.ncsAsociadas.map(nc => (
                   <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
                     <div className="min-w-0 flex-1">
-                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
+                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-zero-700 hover:underline truncate block">
                         {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Sin comprobante #${nc.id}`)}
                       </Link>
                       <div className="text-[10px] text-gray-500 mt-0.5 flex gap-1.5 flex-wrap items-center">
-                        <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
+                        <span className={nc.tipoEcf === '34' ? 'text-zero-700 font-medium' : 'text-orange-700 font-medium'}>
                           {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
                         </span>
                         {(nc.razonModificacion || nc.codigoModificacion != null) && (
@@ -1690,7 +1772,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                         <span>{fmtDate(nc.fechaEmision)}</span>
                       </div>
                     </div>
-                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-teal-700' : 'text-gray-800'}`}>
+                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-zero-700' : 'text-gray-800'}`}>
                       {nc.tipoEcf === '34' ? '−' : ''}RD$ {nc.montoTotalDOP}
                     </span>
                   </li>
@@ -1742,33 +1824,17 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </section>
           )}
 
-          {/* Info del comprobante — solo cuando hay e-CF real emitido a DGII */}
-          {esEcfReal && (
+          {/* Datos de la MODIFICACIÓN (solo notas de crédito/débito). El e-NCF,
+              el código de seguridad y el Track ID salieron de aquí: los muestra
+              la tarjeta Estado DGII, y tenerlos en las dos era leer lo mismo dos
+              veces seguidas en la misma columna. El tipo ya está en el subtítulo
+              del encabezado, escrito completo. */}
+          {esEcfReal && (factura.ncfModificado || factura.codigoModificacion != null || factura.razonModificacion) && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
               <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
-                Información del comprobante
+                Documento que modifica
               </h3>
               <dl className="space-y-2 text-xs">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">e-NCF</dt>
-                  <dd className="font-mono font-semibold text-gray-900 text-right break-all">{factura.encf}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">Tipo</dt>
-                  <dd className="text-gray-800 text-right">e-{factura.tipoEcf}</dd>
-                </div>
-                {factura.codigoSeguridad && (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-gray-500">Código seg.</dt>
-                    <dd className="font-mono font-bold text-teal-700 text-right">{factura.codigoSeguridad}</dd>
-                  </div>
-                )}
-                {factura.trackId && (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-gray-500">Track ID</dt>
-                    <dd className="font-mono text-gray-700 text-[10px] text-right break-all">{factura.trackId}</dd>
-                  </div>
-                )}
                 {factura.ncfModificado && (
                   <div className="flex justify-between gap-3">
                     <dt className="text-gray-500">NCF modificado</dt>
@@ -1826,40 +1892,27 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
       {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
           Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           type="button"
           variant="outline"
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-          onClick={() => router.push(ui.backHref)}
+          onClick={volver}
         >
           {esBorrador ? 'Cancelar' : 'Volver'}
         </Button>
 
+        {/* Ver PDF salió de aquí: ahora vive en el header, donde se alcanza sin
+            recorrer la factura entera. Abajo solo queda lo que cambia el
+            documento, para no tener el mismo botón dos veces en la pantalla. */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-          <Button
-            type="button"
-            variant="outline"
-            className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-            asChild
-          >
-            <a
-              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <FileText className="h-4 w-4 mr-1.5" />
-              Ver PDF
-            </a>
-          </Button>
-
           {puedeEmitir ? (
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto sm:items-center">
               {canEdit ? (
                 <Button
                   type="button"
                   variant="outline"
-                  className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
+                  className="text-zero-700 border-zero-300 hover:bg-zero-50 h-11 sm:h-9 w-full sm:w-auto"
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
@@ -1875,7 +1928,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               {canEmitir && (
                 <Button
                   type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   onClick={triggerEnviarDgii}
                 >
                   <Send className="h-4 w-4 mr-1.5" />
@@ -1888,7 +1941,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   disabled={esFinal && factura.estado === 'ANULADO'}
                 >
                   Acciones
@@ -2030,7 +2083,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 value={emailTo}
                 onChange={(e) => setEmailTo(e.target.value)}
                 placeholder="cliente@dominio.com"
-                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
               />
             </label>
           </div>
@@ -2041,7 +2094,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <Button
               onClick={handleSendEmail}
               disabled={sendingEmail || !emailTo}
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-zero-600 hover:bg-zero-700"
             >
               {sendingEmail
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
@@ -2054,10 +2107,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* Enviar a DGII */}
       <Dialog open={showEnviarDgii} onOpenChange={setShowEnviarDgii}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar a la DGII</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-4">
+          {/* El párrafo que antes iba suelto bajo el título es el subtítulo:
+              así el modal abre con una sola voz y no con dos bloques de texto. */}
+          <ModalHeader
+            title="Enviar a la DGII"
+            subtitle="Se asigna un e-NCF de tu secuencia activa y se envía el comprobante."
+          />
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-4">
             {enviandoDgiiError && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 space-y-2">
                 <div className="flex gap-2">
@@ -2082,54 +2138,50 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 )}
               </div>
             )}
-            <p className="text-sm text-gray-700">
-              Selecciona el tipo de comprobante fiscal para emitir esta factura a la DGII.
-              Se asignará un e-NCF de tu secuencia activa.
-            </p>
             <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-gray-600">Tipo de comprobante (e-CF)</label>
+              <Label htmlFor="dgii-tipo">Tipo de comprobante (e-CF)</Label>
               {esNota ? (
                 // El tipo de una nota es intrínseco al documento (e33 débito / e34
                 // crédito): no se puede cambiar al emitir. Se muestra fijo.
-                <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 flex items-center justify-between">
+                <div className="flex h-10 w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
                   <span>{TIPOS_EMIT_DGII.find(t => t.value === factura.tipoEcf)?.label ?? `e${factura.tipoEcf}`}</span>
                   <span className="text-[10px] uppercase tracking-wide text-gray-400">fijo</span>
                 </div>
               ) : (
-                <select
+                <NativeSelect
+                  id="dgii-tipo"
                   value={dgiiTipoEcf}
                   onChange={e => setDgiiTipoEcf(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   {/* El tipo propio del documento siempre visible: aunque aún no exista
                       secuencia (el server devuelve un error claro indicando crearla). */}
                   {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value) || t.value === factura.tipoEcf).map(t => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
-                </select>
+                </NativeSelect>
               )}
               {dgiiRegla && (
-                <p className="text-[11px] text-gray-500 leading-snug">{dgiiRegla.descripcion}</p>
+                <p className="text-xs leading-snug text-gray-500">{dgiiRegla.descripcion}</p>
               )}
             </div>
 
             {/* ─── Código de modificación (notas 33/34) ───────────────────── */}
             {(dgiiTipoEcf === '33' || dgiiTipoEcf === '34') && (
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-gray-600">
-                  Código de modificación<span className="text-red-500 ml-0.5">*</span>
-                </label>
-                <select
+                <Label htmlFor="dgii-codmod">
+                  Código de modificación<span className="ml-0.5 text-red-500">*</span>
+                </Label>
+                <NativeSelect
+                  id="dgii-codmod"
                   value={dgiiCodMod}
                   onChange={e => setDgiiCodMod(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   <option value="">Selecciona el motivo…</option>
                   {Object.entries(COD_MODIFICACION_LABEL).map(([code, label]) => (
                     <option key={code} value={code}>{code} — {label}</option>
                   ))}
-                </select>
-                <p className="text-[11px] text-gray-500 leading-snug">
+                </NativeSelect>
+                <p className="text-xs leading-snug text-gray-500">
                   Por qué esta nota modifica el comprobante original — lo exige la DGII.
                 </p>
               </div>
@@ -2143,20 +2195,22 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               dgiiRegla.requiereRazonSocial ||
               (dgiiTipoEcf === '32' && (parseFloat(factura.montos.montoTotalDOP) || 0) >= 250000)
             ) && (
-              <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-gray-700">
+              // Sin tarjeta gris alrededor: metía una caja dentro de la caja y
+              // hundía los dos campos que más importan. Se separa con una línea.
+              <div className="space-y-3 border-t border-gray-100 pt-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900">
                     {dgiiRegla.compradorLabel}
                     {(dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial) && (
-                      <span className="text-red-500 ml-0.5">*</span>
+                      <span className="ml-0.5 text-red-500">*</span>
                     )}
-                  </label>
+                  </p>
                   {factura.comprador.rnc && (
-                    <span className="text-[10px] text-gray-400">guardado en factura</span>
+                    <span className="shrink-0 text-xs text-gray-400">guardado en factura</span>
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] text-gray-600">{dgiiRegla.rncLabel}</label>
+                  <Label>{dgiiRegla.rncLabel}</Label>
                   <RncSearch
                     value={tempRnc ? `${tempRnc}${tempRazon ? ` · ${tempRazon}` : ''}` : ''}
                     onSelect={(r) => { setTempRnc(r.rnc); setTempRazon(r.nombre); }}
@@ -2165,13 +2219,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] text-gray-600">Razón social / nombre</label>
-                  <input
+                  <Label htmlFor="dgii-razon">Razón social / nombre</Label>
+                  <Input
+                    id="dgii-razon"
                     type="text"
                     value={tempRazon}
                     onChange={e => setTempRazon(e.target.value)}
                     placeholder="Nombre o razón social"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
@@ -2220,37 +2274,43 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
             {/* Numeración — próximo e-NCF, editable para resolver colisiones de secuencia */}
             {dgiiTipoEcf !== 'sin-ncf' && (
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-gray-600">Próximo e-NCF</label>
+              <div className="space-y-1.5 border-t border-gray-100 pt-4">
+                <Label htmlFor="dgii-ncf">Próximo e-NCF</Label>
                 {seqInfo == null ? (
-                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                  <p className="flex items-center gap-1 text-xs text-gray-400">
                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando numeración…
                   </p>
                 ) : seqInfo.sinSecuencia ? (
                   <p className="text-xs text-red-600">
                     No hay secuencia activa para e{dgiiTipoEcf}.{' '}
-                    <Link href="/dashboard/secuencias" className="underline font-medium">Crea una</Link>.
+                    <Link href="/dashboard/secuencias" className="font-medium underline">Crea una</Link>.
                   </p>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2">
+                    {/* El e-NCF completo y el número que lo genera, en la misma
+                        línea. Antes el campo ocupaba todo el ancho para un dato
+                        de un dígito, y parecía el control principal del modal
+                        cuando casi nadie lo toca. */}
+                    <div className="flex items-center gap-3">
                       <span className="font-mono text-sm font-semibold text-gray-900">
                         E{dgiiTipoEcf}{(ncfNum || '0').padStart(10, '0')}
                       </span>
+                      <Input
+                        id="dgii-ncf"
+                        type="number"
+                        value={ncfNum}
+                        onChange={e => setNcfNum(e.target.value)}
+                        aria-label="Siguiente número de e-NCF"
+                        className="w-24"
+                        style={{ width: '6rem' }}
+                      />
                       {seqInfo.disponibles >= 0 && (
-                        <span className="text-[11px] text-gray-400">{seqInfo.disponibles} disponibles</span>
+                        <span className="whitespace-nowrap text-xs text-gray-400">
+                          {seqInfo.disponibles} disponibles
+                        </span>
                       )}
                     </div>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={ncfNum}
-                      onChange={e => setNcfNum(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      aria-label="Siguiente número de e-NCF"
-                    />
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs leading-snug text-gray-400">
                       Si la DGII reporta el e-NCF como ya emitido, sube el siguiente número. No puede ser menor al actual.
                     </p>
                   </>
@@ -2258,13 +2318,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               </div>
             )}
 
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            {/* El aviso ya no es un bloque amarillo: la advertencia de verdad
+                está en el botón, que dice lo que hace. Aquí solo queda la nota
+                al pie, del tamaño de una nota al pie. */}
+            <p className="flex gap-2 border-t border-gray-100 pt-4 text-xs leading-snug text-gray-500">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
               <span>
-                Esta acción consume un número de la secuencia activa para el tipo seleccionado
-                y envía el comprobante a la DGII. No se puede deshacer.
+                Consume un número de la secuencia activa y envía el comprobante a la DGII.
+                No se puede deshacer.
               </span>
-            </div>
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEnviarDgii(false)} disabled={enviandoDgii}>
@@ -2273,7 +2336,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <Button
               onClick={handleEnviarDgii}
               disabled={enviandoDgii || !dgiiValidacion.ok}
-              className="bg-teal-600 hover:bg-teal-700"
             >
               {enviandoDgii
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
@@ -2302,7 +2364,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </div>
             <div className="flex flex-col gap-2 pt-2">
               <Button
-                className="bg-teal-600 hover:bg-teal-700 text-white"
+                className="bg-zero-600 hover:bg-zero-700 text-white"
                 onClick={() => {
                   setShowPagoMissingAlert(false);
                   document.querySelector('[data-pago-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });

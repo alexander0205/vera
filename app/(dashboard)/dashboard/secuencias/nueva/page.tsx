@@ -2,16 +2,22 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { ArrowLeft, Loader2, HelpCircle } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
+import { ArrowLeft, HelpCircle } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,110 +29,93 @@ function formatEncf(tipo: string, numero: number): string {
   return `E${tipo}${String(numero).padStart(10, '0')}`;
 }
 
-// ─── Tooltip decorativo ───────────────────────────────────────────────────────
-
-function Tip() {
-  return <HelpCircle className="h-3.5 w-3.5 text-gray-400 inline ml-1 align-middle" />;
+function Tip({ title }: { title?: string }) {
+  return (
+    <Tooltip title={title ?? ''} placement="top">
+      <HelpCircle style={{ height: 13, width: 13, color: '#9ca3af', display: 'inline', marginLeft: 4, verticalAlign: 'middle', cursor: 'help' }} />
+    </Tooltip>
+  );
 }
+
+const cardSx = {
+  bgcolor: '#fff',
+  border: '1px solid #f3f4f6',
+  borderRadius: '16px',
+  overflow: 'hidden',
+};
+
+const cardHeaderSx = {
+  px: 3,
+  py: 2.5,
+  borderBottom: '1px solid #f3f4f6',
+};
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function NuevaSecuenciaPage() {
   const router = useRouter();
+  const volver = useVolver('/dashboard/secuencias');
 
-  // ── Categoría y tipo ────────────────────────────────────────────────────────
   const [categoriaId, setCategoriaId] = useState(CATEGORIAS_ECF[0].id);
   const [tipoCodigo, setTipoCodigo]   = useState(CATEGORIAS_ECF[0].tipos[0].codigo);
+  const [nombre, setNombre]           = useState('');
+  const [desde,  setDesde]            = useState('1');
+  const [hasta,  setHasta]            = useState('1000');
+  const [venc,   setVenc]             = useState(addYears(1));
+  const [preferida, setPreferida]     = useState(false);
+  const [prefijo, setPrefijo]         = useState('');
+  const [pieDeFactura, setPieDeFactura] = useState('');
+  const [sucursal, setSucursal]       = useState('');
+  const [saving, setSaving]           = useState(false);
+  const [error,  setError]            = useState<string | null>(null);
 
-  // ── Campos del formulario ───────────────────────────────────────────────────
-  const [nombre, setNombre]                       = useState('');
-  const [desde,  setDesde]                        = useState('1');
-  const [hasta,  setHasta]                        = useState('1000');
-  const [venc,   setVenc]                         = useState(addYears(1));
-  const [preferida, setPreferida]                 = useState(false);
-  const [numeracionAutomatica]                    = useState(true); // siempre true por ahora
-  const [prefijo, setPrefijo]                     = useState('');
-  const [pieDeFactura, setPieDeFactura]           = useState('');
-  const [sucursal, setSucursal]                   = useState('');
-
-  // ── Estado UI ───────────────────────────────────────────────────────────────
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState<string | null>(null);
-
-  // ── Derivados ───────────────────────────────────────────────────────────────
-  const categoria    = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
+  const categoria      = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
   const tiposCategoria = categoria.tipos;
-  const tipoActual   = tiposCategoria.find(t => t.codigo === tipoCodigo) ?? tiposCategoria[0];
+  const tipoActual     = tiposCategoria.find(t => t.codigo === tipoCodigo) ?? tiposCategoria[0];
 
-  const esSinNcf       = tipoCodigo === 'sin-ncf';
-  // Fecha vencimiento: NO mostrar para e32, e34 ni sin-ncf
-  const showFechaVenc  = !esSinNcf && tipoCodigo !== '32' && tipoCodigo !== '34';
-  // Número final: NO mostrar para sin-ncf
+  const esSinNcf        = tipoCodigo === 'sin-ncf';
+  const showFechaVenc   = !esSinNcf && tipoCodigo !== '32' && tipoCodigo !== '34';
   const showNumeroFinal = !esSinNcf;
-  // Prefijo: SOLO para sin-ncf
-  const showPrefijo    = esSinNcf;
-  // Pie de factura: SOLO para factura-venta y nota-credito
-  const showPieFactura = categoriaId === 'factura-venta' || categoriaId === 'nota-credito';
+  const showPrefijo     = esSinNcf;
+  const showPieFactura  = categoriaId === 'factura-venta' || categoriaId === 'nota-credito';
 
   const desdeNum    = parseInt(desde)  || 0;
   const hastaNum    = parseInt(hasta)  || 0;
   const disponibles = showNumeroFinal ? Math.max(0, hastaNum - desdeNum + 1) : null;
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-
   function handleCategoriaChange(id: string) {
     setCategoriaId(id);
     const cat = CATEGORIAS_ECF.find(c => c.id === id) ?? CATEGORIAS_ECF[0];
     setTipoCodigo(cat.tipos[0].codigo);
-    // Resetear campos condicionales al cambiar categoría
     setPrefijo('');
     setPieDeFactura('');
   }
 
   function handleTipoChange(codigo: string) {
     setTipoCodigo(codigo);
-    // Resetear campos condicionales al cambiar tipo
     if (codigo !== 'sin-ncf') setPrefijo('');
     if (!showFechaVenc) setVenc(addYears(1));
   }
 
   async function handleGuardar() {
     setError(null);
-
-    // Validaciones
-    if (!nombre.trim()) {
-      setError('El nombre es obligatorio.');
-      return;
-    }
-    if (desdeNum < 1) {
-      setError('El número inicial debe ser mayor a 0.');
-      return;
-    }
-    if (showNumeroFinal && hastaNum < desdeNum) {
-      setError('El número final debe ser mayor o igual al número inicial.');
-      return;
-    }
-    if (showFechaVenc && !venc) {
-      setError('La fecha de vencimiento es obligatoria para este tipo de comprobante.');
-      return;
-    }
-    if (showFechaVenc && venc <= today()) {
-      setError('La fecha de vencimiento debe ser futura.');
-      return;
-    }
+    if (!nombre.trim()) { setError('El nombre es obligatorio.'); return; }
+    if (desdeNum < 1) { setError('El número inicial debe ser mayor a 0.'); return; }
+    if (showNumeroFinal && hastaNum < desdeNum) { setError('El número final debe ser mayor o igual al número inicial.'); return; }
+    if (showFechaVenc && !venc) { setError('La fecha de vencimiento es obligatoria para este tipo de comprobante.'); return; }
+    if (showFechaVenc && venc <= today()) { setError('La fecha de vencimiento debe ser futura.'); return; }
 
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
-        tipoEcf:          tipoCodigo,
-        nombre:           nombre.trim(),
-        desde:            desdeNum,
+        tipoEcf: tipoCodigo,
+        nombre: nombre.trim(),
+        desde: desdeNum,
         preferida,
-        numeracionAutomatica,
-        sucursal:         sucursal.trim() || undefined,
+        numeracionAutomatica: true,
+        sucursal: sucursal.trim() || undefined,
       };
-
-      if (showNumeroFinal)  payload.hasta         = hastaNum;
+      if (showNumeroFinal)  payload.hasta = hastaNum;
       if (showFechaVenc)    payload.fechaVencimiento = venc;
       if (showPrefijo && prefijo.trim()) payload.prefijo = prefijo.trim();
       if (showPieFactura && pieDeFactura.trim()) payload.pieDeFactura = pieDeFactura.trim();
@@ -145,329 +134,365 @@ export default function NuevaSecuenciaPage() {
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-
   return (
-    <div className="bg-[#eef0f7] min-h-full flex flex-col">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <Link
-          href="/dashboard/secuencias"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-2"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Secuencias
-        </Link>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Nueva numeración</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Crea una numeración para organizar y tener el control de tus comprobantes.{' '}
-            <a
-              href="https://ayuda.dgii.gov.do"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-teal-600 hover:underline"
-            >
-              Saber más
-            </a>
-          </p>
-        </div>
-      </div>
+      <Box sx={{ bgcolor: '#fff', borderBottom: '1px solid #e5e7eb', px: 3, py: 2.5 }}>
+        <Box component="button" type="button" onClick={volver}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1, p: 0, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', '&:hover': { color: '#111827' }, transition: 'color 0.15s' }}>
+          <ArrowLeft style={{ height: 14, width: 14 }} />
+          <Typography variant="caption" sx={{ fontSize: '0.8125rem' }}>Secuencias</Typography>
+        </Box>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', lineHeight: 1.3 }}>
+          Nueva numeración
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.25 }}>
+          Crea una numeración para organizar y tener el control de tus comprobantes.{' '}
+          <a
+            href="https://ayuda.dgii.gov.do"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#3658e1', textDecoration: 'none' }}
+          >
+            Saber más
+          </a>
+        </Typography>
+      </Box>
 
       {/* Contenido */}
-      <div className="flex-1 flex flex-col px-6 py-6 gap-5">
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', px: 3, py: 3, gap: 2.5 }}>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">
+          <Alert severity="error" onClose={() => setError(null)} sx={{ borderRadius: '10px' }}>
             {error}
-          </div>
+          </Alert>
         )}
 
         {/* CARD: Configuración general */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <Box sx={cardSx}>
 
-          {/* Header de la card con toggle Preferida */}
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-gray-800">Configuración general</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Agrega los datos principales de tu numeración</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600 font-medium">Preferida</span>
-              <button
-                type="button"
-                onClick={() => setPreferida(p => !p)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  preferida ? 'bg-teal-600' : 'bg-gray-200'
-                }`}
-                aria-label="Marcar como preferida"
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    preferida ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-              <HelpCircle className="h-3.5 w-3.5 text-gray-400" />
-            </div>
-          </div>
+          {/* Header con toggle Preferida */}
+          <Box sx={{ ...cardHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1f2937', fontSize: '0.9375rem' }}>
+                Configuración general
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#6b7280' }}>
+                Agrega los datos principales de tu numeración
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={preferida}
+                    onChange={(_, v) => setPreferida(v)}
+                    size="small"
+                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }}
+                  />
+                }
+                label={<Typography variant="body2" sx={{ color: '#374151', fontWeight: 500 }}>Preferida</Typography>}
+                labelPlacement="start"
+                sx={{ mx: 0, gap: 0.5 }}
+              />
+              <Tip title="La secuencia preferida se usará por defecto al crear comprobantes de este tipo." />
+            </Box>
+          </Box>
 
-          <div className="px-6 py-6 space-y-5">
+          <Box sx={{ px: 3, py: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
             {/* Row 1: Tipo de documento + Tipo e-CF */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Tipo de documento <span className="text-red-500">*</span>
-                </Label>
-                <Select value={categoriaId} onValueChange={handleCategoriaChange}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS_ECF.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Tipo <span className="text-red-500">*</span>
-                  <Tip />
-                </Label>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Tipo de documento *</InputLabel>
                 <Select
-                  value={tipoCodigo}
-                  onValueChange={handleTipoChange}
-                  disabled={tiposCategoria.length === 1}
+                  value={categoriaId}
+                  label="Tipo de documento *"
+                  onChange={e => handleCategoriaChange(e.target.value)}
+                  sx={{ borderRadius: '8px' }}
                 >
-                  <SelectTrigger className="h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposCategoria.map(t => (
-                      <SelectItem key={t.codigo} value={t.codigo}>
-                        {t.etiqueta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  {CATEGORIAS_ECF.map(c => (
+                    <MenuItem key={c.id} value={c.id}>{c.label}</MenuItem>
+                  ))}
                 </Select>
+              </FormControl>
+
+              <Box>
+                <FormControl size="small" fullWidth disabled={tiposCategoria.length === 1}>
+                  <InputLabel>
+                    Tipo * <Tip title="Código de e-CF según DGII" />
+                  </InputLabel>
+                  <Select
+                    value={tipoCodigo}
+                    label="Tipo *"
+                    onChange={e => handleTipoChange(e.target.value)}
+                    sx={{ borderRadius: '8px' }}
+                  >
+                    {tiposCategoria.map(t => (
+                      <MenuItem key={t.codigo} value={t.codigo}>{t.etiqueta}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 {tipoActual && (
-                  <p className="text-xs text-gray-400">{tipoActual.nombre}</p>
+                  <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>
+                    {tipoActual.nombre}
+                  </Typography>
                 )}
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             {/* Row 2: Numeración automática + Número inicial */}
-            <div className="grid grid-cols-2 gap-4 items-start">
-              {/* Numeración automática (checkbox estilo Alegra) */}
-              <div className="flex items-center gap-2 pt-1">
-                <div className="h-4 w-4 rounded border-2 border-teal-600 bg-teal-600 flex items-center justify-center shrink-0">
-                  <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 12 12">
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'start' }}>
+              {/* Numeración automática — siempre checked, visual-only */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pt: 0.5 }}>
+                <Box sx={{
+                  height: 16, width: 16, borderRadius: '4px',
+                  bgcolor: '#3658e1', border: '2px solid #3658e1',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <svg style={{ height: 10, width: 10, color: '#fff' }} fill="none" viewBox="0 0 12 12">
                     <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </div>
-                <span className="text-sm text-gray-700">Numeración automática</span>
-                <Tip />
-              </div>
+                </Box>
+                <Typography variant="body2" sx={{ color: '#374151' }}>Numeración automática</Typography>
+                <Tip title="El sistema asignará el siguiente número disponible automáticamente." />
+              </Box>
 
-              {/* Número inicial */}
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Número inicial <span className="text-red-500">*</span>
-                  <Tip />
-                </Label>
-                <Input
-                  className="h-10"
+              <Box>
+                <TextField
+                  label={
+                    <span>
+                      Número inicial *{' '}
+                      <Tip title="Primer número de esta secuencia" />
+                    </span>
+                  }
+                  size="small"
+                  fullWidth
                   type="number"
-                  min={1}
+                  slotProps={{ htmlInput: { min: 1 } }}
                   value={desde}
                   onChange={e => setDesde(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                 />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             {/* Row 3: Nombre + Número final (condicional) */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Nombre <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  className="h-10"
-                  placeholder="Ej: Facturas de crédito fiscal"
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
-                />
-              </div>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <TextField
+                label="Nombre *"
+                size="small"
+                fullWidth
+                placeholder="Ej: Facturas de crédito fiscal"
+                value={nombre}
+                onChange={e => setNombre(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
 
               {showNumeroFinal && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">
-                    Número final
-                    <Tip />
-                  </Label>
-                  <Input
-                    className="h-10"
+                <Box>
+                  <TextField
+                    label={
+                      <span>
+                        Número final <Tip title="Último número permitido en esta secuencia" />
+                      </span>
+                    }
+                    size="small"
+                    fullWidth
                     type="number"
-                    min={1}
+                    slotProps={{ htmlInput: { min: 1 } }}
                     value={hasta}
                     onChange={e => setHasta(e.target.value)}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                   />
                   {disponibles !== null && disponibles > 0 && (
-                    <p className="text-xs text-gray-400">
+                    <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>
                       {disponibles.toLocaleString('es-DO')} comprobantes
-                    </p>
+                    </Typography>
                   )}
-                </div>
+                </Box>
               )}
-            </div>
+            </Box>
 
             {/* Row 4: Fecha vencimiento (condicional) + Sucursal */}
-            <div className="grid grid-cols-2 gap-4">
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               {showFechaVenc && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">
-                    Fecha de vencimiento <span className="text-red-500">*</span>
-                    <Tip />
-                  </Label>
-                  <Input
-                    className="h-10"
-                    type="date"
-                    min={today()}
-                    value={venc}
-                    onChange={e => setVenc(e.target.value)}
-                  />
-                </div>
+                <TextField
+                  label={
+                    <span>
+                      Fecha de vencimiento * <Tip title="La DGII requiere fecha límite para la mayoría de e-NCF" />
+                    </span>
+                  }
+                  size="small"
+                  fullWidth
+                  type="date"
+                  slotProps={{ htmlInput: { min: today() } }}
+                  value={venc}
+                  onChange={e => setVenc(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
               )}
 
-              <div className={`space-y-1.5 ${!showFechaVenc ? 'col-span-1' : ''}`}>
-                <Label className="text-sm font-medium">
-                  Sucursal
-                  <Tip />
-                </Label>
-                <Input
-                  className="h-10"
-                  placeholder="Opcional"
-                  value={sucursal}
-                  onChange={e => setSucursal(e.target.value)}
-                />
-              </div>
-            </div>
+              <TextField
+                label={
+                  <span>
+                    Sucursal <Tip title="Identificador de punto de emisión (opcional)" />
+                  </span>
+                }
+                size="small"
+                fullWidth
+                placeholder="Opcional"
+                value={sucursal}
+                onChange={e => setSucursal(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+            </Box>
 
             {/* Row 5: Prefijo (solo sin-ncf) */}
             {showPrefijo && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">
-                    Prefijo
-                    <Tip />
-                  </Label>
-                  <Input
-                    className="h-10"
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                <Box>
+                  <TextField
+                    label={
+                      <span>
+                        Prefijo <Tip title="Se añade antes del número al generar el documento" />
+                      </span>
+                    }
+                    size="small"
+                    fullWidth
                     placeholder="Ej: FAC-"
-                    maxLength={20}
+                    slotProps={{ htmlInput: { maxLength: 20 } }}
                     value={prefijo}
                     onChange={e => setPrefijo(e.target.value)}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                   />
-                  <p className="text-xs text-gray-400">
+                  <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>
                     Se añadirá antes del número al generar el documento
-                  </p>
-                </div>
-              </div>
+                  </Typography>
+                </Box>
+              </Box>
             )}
 
-            {/* Row 6: Pie de factura (solo factura-venta y nota-credito) */}
+            {/* Row 6: Pie de factura */}
             {showPieFactura && (
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">
-                  Pie de factura
-                  <Tip />
-                </Label>
-                <Textarea
-                  className="resize-none text-sm"
+              <Box>
+                <TextField
+                  label={
+                    <span>
+                      Pie de factura <Tip title="Texto al pie del comprobante (condiciones, términos, etc.)" />
+                    </span>
+                  }
+                  size="small"
+                  fullWidth
+                  multiline
                   rows={3}
                   placeholder="Texto que aparecerá al pie del comprobante..."
-                  maxLength={2000}
+                  slotProps={{ htmlInput: { maxLength: 2000 } }}
                   value={pieDeFactura}
                   onChange={e => setPieDeFactura(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                 />
-                <p className="text-xs text-gray-400">
+                <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block', textAlign: 'right' }}>
                   {pieDeFactura.length}/2000 caracteres
-                </p>
-              </div>
+                </Typography>
+              </Box>
             )}
 
-          </div>
-        </div>
+          </Box>
+        </Box>
 
-        {/* Vista previa e-NCF (solo para tipos con número) */}
+        {/* Vista previa e-NCF */}
         {!esSinNcf && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-700">Vista previa del e-NCF</h2>
-            </div>
-            <div className="px-6 py-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Código</p>
-                  <span className="inline-block font-mono text-sm font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-1.5">
+          <Box sx={cardSx}>
+            <Box sx={cardHeaderSx}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151', fontSize: '0.8125rem' }}>
+                Vista previa del e-NCF
+              </Typography>
+            </Box>
+            <Box sx={{ px: 3, py: 2.5 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: showNumeroFinal ? '1fr 1fr 1fr' : '1fr 1fr', gap: 2, textAlign: 'center' }}>
+                <Box>
+                  <Typography variant="caption" sx={{ color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', mb: 0.75 }}>
+                    Código
+                  </Typography>
+                  <Box component="span" sx={{
+                    fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700,
+                    color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
+                    borderRadius: '8px', px: 1.5, py: 0.75, display: 'inline-block',
+                  }}>
                     e{tipoCodigo}
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Primer e-NCF</p>
-                  <p className="font-mono text-sm font-bold text-gray-900">
+                  </Box>
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', mb: 0.75 }}>
+                    Primer e-NCF
+                  </Typography>
+                  <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>
                     {desdeNum > 0 ? formatEncf(tipoCodigo, desdeNum) : '—'}
-                  </p>
-                </div>
+                  </Typography>
+                </Box>
                 {showNumeroFinal && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Último e-NCF</p>
-                    <p className="font-mono text-sm text-gray-500">
+                  <Box>
+                    <Typography variant="caption" sx={{ color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', mb: 0.75 }}>
+                      Último e-NCF
+                    </Typography>
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#6b7280' }}>
                       {hastaNum > 0 ? formatEncf(tipoCodigo, hastaNum) : '—'}
-                    </p>
-                  </div>
+                    </Typography>
+                  </Box>
                 )}
-              </div>
+              </Box>
+
               {showNumeroFinal && disponibles !== null && disponibles > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-center gap-2">
-                  <span className="text-sm text-gray-500">Total disponibles:</span>
-                  <span className="text-base font-bold text-teal-700">
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#6b7280' }}>Total disponibles:</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 700, color: '#2a45c4' }}>
                     {disponibles.toLocaleString('es-DO')} comprobantes
-                  </span>
-                </div>
+                  </Typography>
+                </Box>
               )}
-            </div>
-          </div>
+            </Box>
+          </Box>
         )}
 
-      </div>
+      </Box>
 
       {/* Bottom bar */}
-      <div className="sticky bottom-0 z-30 -mx-0 px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex items-center justify-between py-3">
-        <p className="text-sm text-gray-500">
-          Los campos con <span className="text-red-500">*</span> son obligatorios
-        </p>
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/secuencias">
-            <Button variant="outline" disabled={saving}>Cancelar</Button>
-          </Link>
+      <Box sx={{
+        position: 'sticky', bottom: 0, zIndex: 30,
+        px: 3, py: 1.5,
+        bgcolor: 'rgba(255,255,255,0.95)',
+        backdropFilter: 'blur(8px)',
+        borderTop: '1px solid #e5e7eb',
+        boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <Typography variant="body2" sx={{ color: '#6b7280' }}>
+          Los campos con <span style={{ color: '#ef4444' }}>*</span> son obligatorios
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Button
-            className="bg-teal-600 hover:bg-teal-700 text-white px-6"
-            onClick={handleGuardar}
+            variant="outlined"
             disabled={saving}
+            onClick={volver}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}
           >
-            {saving ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-            ) : (
-              'Guardar'
-            )}
+            Cancelar
           </Button>
-        </div>
-      </div>
-    </div>
+          <Button
+            variant="contained"
+            disableElevation
+            disabled={saving}
+            onClick={handleGuardar}
+            startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, px: 3 }}
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </Box>
+      </Box>
+
+    </Box>
   );
 }

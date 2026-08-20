@@ -3,8 +3,11 @@
 import useSWR from 'swr';
 import Link from 'next/link';
 import { ArrowLeft, ShoppingCart, Truck, CalendarClock, FileText, User } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 interface CompraItem {
   id:             number;
@@ -23,6 +26,7 @@ interface CompraDetalle {
   proveedorRnc:   string | null;
   referenciaEncf: string | null;
   notas:          string | null;
+  itbisCents:     number;
   montoTotal:     number;   // centavos
   registradoPor:  string;
   items:          CompraItem[];
@@ -35,29 +39,36 @@ const columnsItems: DataTableColumn<CompraItem>[] = [
     id: 'producto',
     header: 'Producto',
     render: it => (
-      <Link href={`/dashboard/productos/${it.productoId}`} className="min-w-0 block group">
-        <div className="text-sm text-gray-900 truncate group-hover:text-teal-700 group-hover:underline">{it.productoNombre}</div>
-        {it.referencia && <div className="font-mono text-[11px] text-gray-400">{it.referencia}</div>}
-      </Link>
+      <Box
+        component={Link}
+        href={`/dashboard/productos/${it.productoId}`}
+        sx={{
+          minWidth: 0, display: 'block', textDecoration: 'none',
+          '&:hover .MuiTypography-root:first-of-type': { color: '#2a45c4', textDecoration: 'underline' },
+        }}
+      >
+        <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productoNombre}</Typography>
+        {it.referencia && <Typography sx={{ fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af' }}>{it.referencia}</Typography>}
+      </Box>
     ),
   },
   {
     id: 'cantidad',
     header: 'Cantidad',
     align: 'right',
-    render: it => <span className="text-sm tabular-nums text-gray-700">{it.cantidad}</span>,
+    render: it => <Typography component="span" sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{it.cantidad}</Typography>,
   },
   {
     id: 'costoUnitario',
     header: 'Costo unit.',
     align: 'right',
-    render: it => <span className="text-sm tabular-nums text-gray-700">{fmtDOP(it.costoUnitario)}</span>,
+    render: it => <Typography component="span" sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{fmtDOP(it.costoUnitario)}</Typography>,
   },
   {
     id: 'subtotal',
     header: 'Subtotal',
     align: 'right',
-    render: it => <span className="text-sm font-bold text-gray-900 tabular-nums whitespace-nowrap">{fmtDOP(it.subtotal)}</span>,
+    render: it => <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtDOP(it.subtotal)}</Typography>,
   },
 ];
 
@@ -65,52 +76,58 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
   const { data, isLoading } = useSWR<{ compra?: CompraDetalle; error?: string }>(
     `/api/compras/local/${compraId}`, fetcher,
   );
+  const volver = useVolver('/dashboard/compras');
 
   const compra = data?.compra;
 
   if (!isLoading && !compra) {
     return (
-      <section className="p-4 sm:p-6">
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
-          <p className="text-sm text-gray-500">{data?.error ?? 'Compra no encontrada.'}</p>
-        </div>
-      </section>
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
+        <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 5, textAlign: 'center' }}>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>{data?.error ?? 'Compra no encontrada.'}</Typography>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <section className="p-4 sm:p-6 space-y-4">
-      <Link href="/dashboard/compras" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="h-4 w-4" /> Compras
-      </Link>
+    <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box
+        component="button"
+        type="button"
+        onClick={volver}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', p: 0, textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { color: '#374151' } }}
+      >
+        <ArrowLeft style={{ width: 16, height: 16 }} /> Compras
+      </Box>
 
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-          <ShoppingCart className="h-5 w-5 text-indigo-600" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 leading-tight">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <ShoppingCart color="#4f46e5" style={{ width: 20, height: 20 }} />
+        </Box>
+        <Box>
+          <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>
             Compra #{compra?.id ?? compraId}
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Compra registrada manualmente</p>
-        </div>
-      </div>
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>Compra registrada manualmente</Typography>
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Tarjeta icon={<Truck className="h-4.5 w-4.5 text-violet-600" />} bg="bg-violet-50" label="Proveedor">
-          <span className="text-sm font-bold text-gray-900">{compra?.proveedor ?? '—'}</span>
-          {compra?.proveedorRnc && <span className="block font-mono text-[11px] text-gray-400">{compra.proveedorRnc}</span>}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+        <Tarjeta icon={<Truck color="#7c3aed" style={{ width: 18, height: 18 }} />} bg="#f5f3ff" label="Proveedor">
+          <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>{compra?.proveedor ?? '—'}</Typography>
+          {compra?.proveedorRnc && <Typography sx={{ display: 'block', fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af' }}>{compra.proveedorRnc}</Typography>}
         </Tarjeta>
-        <Tarjeta icon={<CalendarClock className="h-4.5 w-4.5 text-amber-600" />} bg="bg-amber-50" label="Fecha">
-          <span className="text-sm font-bold text-gray-900">{compra ? fmtFechaCorta(compra.fecha) : '—'}</span>
+        <Tarjeta icon={<CalendarClock color="#d97706" style={{ width: 18, height: 18 }} />} bg="#fffbeb" label="Fecha">
+          <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>{compra ? fmtFechaCorta(compra.fecha) : '—'}</Typography>
         </Tarjeta>
-        <Tarjeta icon={<FileText className="h-4.5 w-4.5 text-sky-600" />} bg="bg-sky-50" label="e-NCF referencia">
-          <span className="font-mono text-xs font-bold text-gray-900">{compra?.referenciaEncf ?? '—'}</span>
+        <Tarjeta icon={<FileText color="#0284c7" style={{ width: 18, height: 18 }} />} bg="#f0f9ff" label="e-NCF referencia">
+          <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#111827' }}>{compra?.referenciaEncf ?? '—'}</Typography>
         </Tarjeta>
-        <Tarjeta icon={<User className="h-4.5 w-4.5 text-teal-600" />} bg="bg-teal-50" label="Registrado por">
-          <span className="text-sm font-bold text-gray-900">{compra?.registradoPor ?? '—'}</span>
+        <Tarjeta icon={<User color="#3658e1" style={{ width: 18, height: 18 }} />} bg="#eef2fe" label="Registrado por">
+          <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>{compra?.registradoPor ?? '—'}</Typography>
         </Tarjeta>
-      </div>
+      </Box>
 
       <DataTable<CompraItem>
         data={compra?.items ?? []}
@@ -121,20 +138,30 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
         emptyState={{ icon: ShoppingCart, title: 'Esta compra no tiene ítems', hint: '' }}
       />
 
-      <div className="flex justify-end">
-        <div className="rounded-xl border border-gray-200 bg-white px-5 py-3 flex items-center gap-6">
-          <span className="text-sm text-gray-500">Total de la compra</span>
-          <span className="text-lg font-bold text-gray-900 tabular-nums">{compra ? fmtDOP(compra.montoTotal) : '—'}</span>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Box>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Base de productos</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.montoTotal - compra.itbisCents) : '—'}</Typography>
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>ITBIS</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.itbisCents) : '—'}</Typography>
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Total compra</Typography>
+            <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.montoTotal) : '—'}</Typography>
+          </Box>
+        </Box>
+      </Box>
 
       {compra?.notas && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <p className="text-xs text-gray-500 mb-1">Notas</p>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{compra.notas}</p>
-        </div>
+        <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2.5 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 0.5 }}>Notas</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>{compra.notas}</Typography>
+        </Box>
       )}
-    </section>
+    </Box>
   );
 }
 
@@ -142,12 +169,12 @@ function Tarjeta({ icon, bg, label, children }: {
   icon: React.ReactNode; bg: string; label: string; children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-start gap-3">
-      <div className={`h-9 w-9 rounded-lg ${bg} flex items-center justify-center shrink-0`}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-xs text-gray-500">{label}</p>
+    <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+      <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</Typography>
         {children}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

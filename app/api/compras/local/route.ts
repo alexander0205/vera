@@ -26,6 +26,11 @@ const compraSchema = z.object({
   referenciaEncf:  z.string().max(40).optional().nullable(),
   notas:           z.string().max(1000).optional().nullable(),
   almacenId:       z.number().int().positive().optional().nullable(),
+  formaPago:       z.enum(['contado', 'credito']).default('credito'),
+  metodoPago:      z.enum(['efectivo', 'transferencia', 'tarjeta', 'cheque', 'deposito', 'otro']).default('efectivo'),
+  fechaVencimiento:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  /** Pesos DOP; se persiste en centavos junto con el total de la compra. */
+  itbis:           z.number().finite().min(0).default(0),
   items:           z.array(itemSchema).min(1, 'Debe incluir al menos un ítem'),
 });
 
@@ -50,7 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { proveedorRnc, proveedorNombre, fecha, referenciaEncf, notas, almacenId, items } = parsed.data;
+  const { proveedorRnc, proveedorNombre, fecha, referenciaEncf, notas, almacenId, itbis, formaPago, metodoPago, fechaVencimiento, items } = parsed.data;
 
   // Verificar que todos los productos pertenecen al team y son tipo bien
   const prods = await db
@@ -70,7 +75,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const montoTotal = items.reduce((s, i) => s + Math.round(i.costoUnitario * 100) * i.cantidad, 0);
+  const baseCents = items.reduce((s, i) => s + Math.round(i.costoUnitario * 100) * i.cantidad, 0);
+  const itbisCents = Math.round(itbis * 100);
+  const montoTotal = baseCents + itbisCents;
 
   const [compra] = await db.transaction(async (tx) => {
     const [c] = await tx.insert(comprasLocales).values({
@@ -80,7 +87,12 @@ export async function POST(req: NextRequest) {
       fecha:           fecha ?? new Date().toISOString().slice(0, 10),
       referenciaEncf:  referenciaEncf  || null,
       notas:           notas           || null,
+      itbisCents,
       montoTotal,
+      formaPago,
+      metodoPago,
+      fechaVencimiento: formaPago === 'credito' ? fechaVencimiento ?? null : null,
+      estadoPago: formaPago === 'contado' ? 'PAGADA' : 'PENDIENTE',
       createdBy: user.id,
     }).returning();
 

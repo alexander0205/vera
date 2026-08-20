@@ -1,8 +1,8 @@
 /**
- * Utilidades de importación CSV (migración desde Alegra u otros).
+ * Utilidades de importación CSV (migración desde otro sistema).
  *
  * - Decodifica buffers latin-1 (Windows-1252) o UTF-8 automáticamente.
- *   Las facturas exportadas de Alegra vienen en win1252 con `sep=;`.
+ *   Los CSV de facturas suelen venir en win1252 con `sep=;`.
  * - Parseo robusto con papaparse (campos con comillas, saltos embebidos).
  * - Matching de columnas tolerante a acentos/mayúsculas.
  */
@@ -46,7 +46,7 @@ export function parseCsv(text: string): Record<string, string>[] {
   let body = text.replace(/^﻿/, ''); // strip BOM
 
   // Directiva Excel `sep=;` en la primera línea → fija el delimitador.
-  // Algunos exports de Alegra la prefijan con basura (BOM mal codificado → "?").
+  // Algunos exports la prefijan con basura (BOM mal codificado → "?").
   let delimiter = '';
   const m = body.match(/^[?﻿\s]*sep=(.)\r?\n/i);
   if (m) {
@@ -111,7 +111,7 @@ export function toIsoDate(raw: string): string {
 }
 
 /**
- * Cédula/RNC placeholder (todo ceros o casi) que Alegra usa para consumidor
+ * Cédula/RNC placeholder (todo ceros o casi) que se usa para consumidor
  * final / clientes sin identificación. No sirve como RNC fiscal real.
  */
 export function isPlaceholderRnc(rnc: string): boolean {

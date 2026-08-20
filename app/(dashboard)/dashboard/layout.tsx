@@ -1,37 +1,43 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
-import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import {
   LayoutDashboard, Users, Package,
-  Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
-  TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
-  Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
-} from 'lucide-react';
-import { GlobalSearch } from '@/components/global-search';
-import { planHasFeature } from '@/lib/plans';
+  Settings, Plus,
+  TrendingDown, BarChart3, CreditCard,
+  Search, AlertCircle, Zap,
+  ShoppingCart, Wallet, BookOpen,
+  } from 'lucide-react';
+import { ModuleHeader } from '@/components/module-header';
+import { BannerSuscripcion } from '@/components/banner-suscripcion';
+import { RailArmazon } from '@/components/rail/RailArmazon';
+import { RailSecciones, EnlaceSeccion } from '@/components/rail/RailSecciones';
+import { ANCHO_ABIERTO, FUENTE_SECCION, TINTA } from '@/components/rail/estilos';
+import type { RailGrupo, RailItem, RailSeccion } from '@/components/rail/tipos';
+import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { PAGOS_ONLINE_ENABLED } from '@/lib/config/pagos-online';
+import { type UserInfo } from '@/components/profile-dropdown';
+
+// MUI imports
+import Box from '@mui/material/Box';
+import Drawer from '@mui/material/Drawer';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import Divider from '@mui/material/Divider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// La forma de una lista de menú es la misma en los cuatro módulos y vive en
+// components/rail/tipos. Aquí solo se le ponen los nombres de siempre.
 
-type NavGroup = {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  children: { href: string; label: string; plusHref?: string }[];
-};
-
-type NavItem = {
-  href: string;
-  icon: React.ElementType;
-  label: string;
-  exact?: boolean;
-};
+type NavGroup   = RailGrupo;
+type NavItem    = RailItem;
+type NavSeccion = RailSeccion;
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
@@ -44,8 +50,12 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
       { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
-      { href: '/dashboard/pagos/links',          label: 'Links de pago' },
-      { href: '/dashboard/pagos/pasarelas',      label: 'Pasarelas de pago' },
+      // Cobro por internet: oculto mientras no haya credenciales de producción
+      // de la pasarela. Ver lib/config/pagos-online.ts.
+      ...(PAGOS_ONLINE_ENABLED ? [
+        { href: '/dashboard/pagos/links',        label: 'Links de pago' },
+        { href: '/dashboard/pagos/pasarelas',    label: 'Pasarelas de pago' },
+      ] : []),
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
       { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
@@ -71,7 +81,7 @@ const GROUPS: NavGroup[] = [
     icon: ShoppingCart,
     children: [
       { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
-      { href: '/dashboard/gastos/nueva', label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
+      { href: '/dashboard/gastos',       label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
     ],
   },
   {
@@ -79,6 +89,17 @@ const GROUPS: NavGroup[] = [
     label: 'Contabilidad',
     icon: BookOpen,
     children: [
+      { href: '/dashboard/contabilidad/cuentas',      label: 'Catálogo de cuentas' },
+      { href: '/dashboard/contabilidad/libro-diario', label: 'Libro diario' },
+      { href: '/dashboard/contabilidad/nuevo-asiento', label: 'Nuevo asiento manual' },
+      { href: '/dashboard/contabilidad/mayor',        label: 'Mayor general' },
+      { href: '/dashboard/contabilidad/balance',      label: 'Balance de comprobación' },
+      { href: '/dashboard/contabilidad/estado-resultados', label: 'Estado de resultados' },
+      { href: '/dashboard/contabilidad/balance-general', label: 'Balance general' },
+      { href: '/dashboard/contabilidad/activos-fijos', label: 'Activos fijos' },
+      { href: '/dashboard/contabilidad/cuentas-por-pagar', label: 'Cuentas por pagar' },
+      { href: '/dashboard/contabilidad/cierre-ejercicio', label: 'Cierre de ejercicio' },
+      { href: '/dashboard/contabilidad/configuracion', label: 'Configuración contable' },
       { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
       { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
     ],
@@ -92,20 +113,25 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
-      { href: '/dashboard/habilitacion',   label: 'Activar facturación electrónica' },
-      { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
-      { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
-      { href: '/dashboard/api-keys',      label: 'API Keys' },
-      { href: '/dashboard/webhooks',      label: 'Webhooks' },
+      { href: '/dashboard/habilitacion',  label: 'Activar facturación electrónica' },
+      // Usuarios, roles y plan viven en el área de Administración (/cuenta):
+      // son del negocio, no de Facturación. Se llega por el switcher de módulo.
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
     ],
   },
 ];
 
-const TOP_ITEMS: NavItem[] = [
-  { href: '/dashboard',          icon: LayoutDashboard, label: 'Inicio',    exact: true },
-  { href: '/dashboard/clientes', icon: Users,           label: 'Contactos' },
-  { href: '/dashboard/reportes', icon: BarChart3,       label: 'Reportes'  },
+/** Secciones sin submenú. Van en la MISMA lista que los grupos: para el
+ *  usuario "Contactos" y "Contabilidad" son dos entradas del menú, y el orden
+ *  por uso no tendría sentido si vivieran en dos listas separadas.
+ *
+ *  Reportes ya no sale arriba junto a Contactos: se mira DESPUÉS de cerrar los
+ *  números, no antes de empezar el día, así que baja a debajo de Contabilidad
+ *  (ver `seccionesBase`). */
+const ITEMS: NavItem[] = [
+  { id: 'dashboard', href: '/dashboard',          icon: LayoutDashboard, label: 'Dashboard', exact: true },
+  { id: 'contactos', href: '/dashboard/clientes', icon: Users,           label: 'Contactos' },
+  { id: 'reportes',  href: '/dashboard/reportes', icon: BarChart3,       label: 'Reportes'  },
 ];
 
 // ─── Permission gating ──────────────────────────────────────────────────────
@@ -116,8 +142,6 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Top items
   '/dashboard/clientes':              'clientes:ver',
   '/dashboard/reportes':              'reportes:ver',
-
-  // Ingresos
   '/dashboard/facturas':              'facturas:ver',
   '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
@@ -128,8 +152,6 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/cotizaciones':          'cotizaciones:ver',
   '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',
   '/dashboard/facturas-recurrentes':  'facturas:ver',
-
-  // Inventario
   '/dashboard/productos':             'productos:ver',
   '/dashboard/categorias':            'productos:ver',
   '/dashboard/almacenes':             'productos:ver',
@@ -138,6 +160,9 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
+
+  // Administración Escolar no vive aquí: es otro módulo, con su propio nav en
+  // /escolar. El salto entre módulos lo ofrece RailModulos, al pie del menú.
 
   // Caja
   '/dashboard/caja':                  'caja:operar',
@@ -152,13 +177,27 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
 
+  // Contabilidad — el grupo llegó de main sin gate: cualquiera con dashboard
+  // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
+  '/dashboard/contabilidad/cuentas':      'contabilidad:ver',
+  '/dashboard/contabilidad/libro-diario':  'contabilidad:ver',
+  '/dashboard/contabilidad/nuevo-asiento': 'contabilidad:gestionar',
+  '/dashboard/contabilidad/mayor':         'contabilidad:ver',
+  '/dashboard/contabilidad/balance':       'contabilidad:ver',
+  '/dashboard/contabilidad/estado-resultados': 'contabilidad:ver',
+  '/dashboard/contabilidad/balance-general': 'contabilidad:ver',
+  '/dashboard/contabilidad/activos-fijos': 'contabilidad:ver',
+  '/dashboard/contabilidad/cuentas-por-pagar': 'contabilidad:ver',
+  '/dashboard/contabilidad/cierre-ejercicio': 'contabilidad:ver',
+  '/dashboard/contabilidad/configuracion': 'contabilidad:ver',
+  '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
+  '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',
+
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/habilitacion':          'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
   '/dashboard/equipo/permisos':       'equipo:gestionar',
-  '/dashboard/api-keys':              'configuracion:gestionar',
-  '/dashboard/webhooks':              'configuracion:gestionar',
   '/dashboard/impresoras':            'configuracion:ver',
 };
 
@@ -181,62 +220,11 @@ function canAccessHref(
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; habilitacionCompletadoAt: string | Date | null; }
-interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
-
-function getInitials(name: string | null, email: string) {
-  if (name) return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  return email.slice(0, 2).toUpperCase();
-}
-
-function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => void) {
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) cb();
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [ref, cb]);
-}
-
-// ─── Company switcher (top bar, light theme) ──────────────────────────────────
-
-// ─── Helpers visuales para empresas ──────────────────────────────────────────
-
-function CompanyAvatar({ team, size = 'sm' }: { team: Team; size?: 'sm' | 'md' }) {
-  const dim  = size === 'md' ? 'h-7 w-7' : 'h-6 w-6';
-  const text = size === 'md' ? 'text-xs'  : 'text-[11px]';
-  const label = (team.razonSocial ?? team.rnc ?? 'E')[0]?.toUpperCase() ?? 'E';
-
-  if (team.logo) {
-    return (
-      <img
-        src={team.logo}
-        alt={team.razonSocial ?? 'Logo'}
-        className={`${dim} rounded-md object-cover shrink-0`}
-      />
-    );
-  }
-  return (
-    <div className={`${dim} rounded-md bg-teal-600 flex items-center justify-center shrink-0`}>
-      <span className={`text-white font-bold ${text}`}>{label}</span>
-    </div>
-  );
-}
-
-function planBadgeStyle(planName: string | null) {
-  const p = planName?.toLowerCase();
-  if (!p) return null;
-  if (p === 'pro')      return 'bg-purple-50 text-purple-700 border-purple-200';
-  if (p === 'business') return 'bg-teal-50 text-teal-700 border-teal-100';
-  if (p === 'invoice')  return 'bg-orange-50 text-orange-700 border-orange-200';
-  if (p === 'starter')  return 'bg-blue-50 text-blue-700 border-blue-200';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
-}
-
-// ─── Plan helpers ─────────────────────────────────────────────────────────────
 
 function teamHasPlan(t: Team) {
-  // Empresa creada manualmente por admin → acceso sin Stripe
+  // Producto en desarrollo: sin billing no existe el concepto de "empresa sin
+  // plan", así que nada bloquea la navegación. Ver lib/config/billing.
+  if (!BILLING_ENABLED) return true;
   if (t.subscriptionStatus === 'admin') return true;
   const name = t.planName?.toLowerCase();
   if (!name || name === 'gratis') return false;
@@ -245,315 +233,40 @@ function teamHasPlan(t: Team) {
   return true;
 }
 
-// ─── Company switcher ─────────────────────────────────────────────────────────
+// ─── Sidebar Content ──────────────────────────────────────────────────────────
 
-function CompanySwitcher({
-  teams,
-  activeTeamId,
-  onSwitch,
-}: {
-  teams: Team[];
-  activeTeamId: number | null;
-  onSwitch: (teamId: number) => void;
-}) {
-  const router = useRouter();
-  const [open, setOpen]     = useState(false);
-  const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+// Los anchos, la escala de color (TINTA), la tipografía (FUENTE_SECCION) y los
+// tiempos de los desplegables son los MISMOS en los cuatro módulos y viven en
+// components/rail/estilos. Este archivo dejó de tener su copia el día que el
+// rediseño de aquí no llegó a POS, Escolar ni Administración.
 
-  useOutsideClick(ref, () => { setOpen(false); setSearch(''); });
-
-  const active   = teams.find(t => t.id === activeTeamId) ?? teams[0];
-  const filtered = teams.filter(t =>
-    !search ||
-    t.razonSocial?.toLowerCase().includes(search.toLowerCase()) ||
-    t.rnc?.includes(search)
-  );
-
-  async function switchTeam(teamId: number) {
-    if (teamId === activeTeamId) { setOpen(false); setSearch(''); return; }
-    setOpen(false);
-    setSearch('');
-    await fetch('/api/empresa/switch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ teamId }),
-    });
-    onSwitch(teamId);
-    const target = teams.find(t => t.id === teamId);
-    if (!target || !teamHasPlan(target)) {
-      router.push('/pricing?reason=no-plan');
-    } else {
-      // Siempre ir al inicio y refrescar data del servidor al cambiar de empresa
-      router.push('/dashboard');
-      router.refresh();
-    }
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      {/* Trigger */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 shadow-sm transition-colors max-w-xs"
-      >
-        <CompanyAvatar team={active ?? { id: 0, razonSocial: null, rnc: null, planName: null, role: '', logo: null }} size="sm" />
-        <span className="text-sm font-semibold text-gray-800 truncate max-w-[140px]">
-          {active?.razonSocial ?? active?.rnc ?? 'Mi empresa'}
-        </span>
-        {active && teamHasPlan(active) && planBadgeStyle(active.planName) && (
-          <span className={`hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${planBadgeStyle(active.planName)}`}>
-            {active.planName}
-          </span>
-        )}
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-xl shadow-xl border-2 border-gray-200 z-50 overflow-hidden">
-          {/* Search */}
-          {teams.length > 3 && (
-            <div className="p-2 border-b border-gray-100">
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5">
-                <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <input
-                  autoFocus
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar empresa..."
-                  className="flex-1 text-sm bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Lista */}
-          <div className="py-1 max-h-60 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-400 text-center">Sin resultados</p>
-            ) : filtered.map(t => {
-              const hasPlan = teamHasPlan(t);
-              const isActive = t.id === activeTeamId;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => switchTeam(t.id)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
-                >
-                  <CompanyAvatar team={t} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {t.razonSocial ?? t.rnc ?? 'Sin nombre'}
-                    </p>
-                    {t.rnc && <p className="text-xs text-gray-400 mt-0.5">RNC {t.rnc}</p>}
-                  </div>
-                  {isActive && (
-                    <Check className="h-4 w-4 text-teal-600 shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Footer — gestión de empresas movida al panel admin (no visible aquí) */}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Profile dropdown (top bar) ───────────────────────────────────────────────
-
-function ProfileDropdown({
-  user,
-  canSeeActivity,
-}: {
-  user: UserInfo | null;
-  canSeeActivity: boolean;
-}) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useOutsideClick(ref, () => setOpen(false));
-
-  async function handleSignOut() {
-    setOpen(false);
-    await fetch('/api/user', { method: 'DELETE' });
-    router.push('/sign-in');
-    router.refresh();
-  }
-
-  const menuItems = [
-    ...(user?.platformRole === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Panel admin' }] : []),
-    { href: '/dashboard/perfil',      icon: UserCircle, label: 'Mi perfil' },
-    { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
-    ...(canSeeActivity ? [{ href: '/dashboard/activity', icon: Activity, label: 'Actividad' }] : []),
-    { href: '/dashboard/security',    icon: Shield,     label: 'Seguridad' },
-    // /dashboard/empresas oculto — gestión solo desde panel admin
-  ];
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-      >
-        <div className="h-7 w-7 rounded-full bg-teal-600 flex items-center justify-center shrink-0">
-          <span className="text-white text-xs font-semibold">
-            {user ? getInitials(user.name, user.email) : '?'}
-          </span>
-        </div>
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <div className="absolute top-full right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900 truncate">{user?.name ?? user?.email}</p>
-            {user?.name && <p className="text-xs text-gray-400 truncate">{user.email}</p>}
-          </div>
-
-          {/* Items */}
-          <div className="py-1">
-            {menuItems.map(item => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <item.icon className="h-4 w-4 text-gray-400" />
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
-          {/* Sign out */}
-          <div className="border-t border-gray-100 py-1">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Top bar ──────────────────────────────────────────────────────────────────
-
-function DashboardTopBar({
-  teams,
-  activeTeamId,
-  user,
-  plan,
-  cajaHabilitada,
-  onMenuClick,
-  onToggleSidebar,
-  sidebarCollapsed,
-  onSwitch,
-}: {
-  teams: Team[];
-  activeTeamId: number | null;
-  user: UserInfo | null;
-  plan: string | null;
-  cajaHabilitada: boolean;
-  onMenuClick: () => void;
-  onToggleSidebar: () => void;
-  sidebarCollapsed: boolean;
-  onSwitch: (teamId: number) => void;
-}) {
-  const canSeeActivity = true;
-
-  return (
-    <header className="h-12 bg-white border-b border-gray-200 flex items-center gap-3 px-4 shrink-0 z-30">
-      {/* Hamburger — mobile only */}
-      <button
-        onClick={onMenuClick}
-        className="lg:hidden text-gray-500 hover:text-gray-700 -ml-1"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
-      {/* Toggle sidebar — desktop only */}
-      <button
-        onClick={onToggleSidebar}
-        className="hidden lg:flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md p-1 -ml-1 transition-colors"
-        aria-label={sidebarCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
-        title={sidebarCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
-      >
-        {sidebarCollapsed
-          ? <PanelLeftOpen className="h-5 w-5" />
-          : <PanelLeftClose className="h-5 w-5" />}
-      </button>
-
-      {/* Logo — visible en mobile siempre, y en desktop cuando sidebar oculto */}
-      <div className={`flex items-center gap-2 mr-1 ${sidebarCollapsed ? '' : 'lg:hidden'}`}>
-        <div className="h-6 w-6 bg-teal-600 rounded-md flex items-center justify-center shrink-0">
-          <span className="text-white font-black text-xs">z</span>
-        </div>
-        <span className="text-gray-900 font-bold text-sm">Zero</span>
-      </div>
-
-      {/* Company switcher */}
-      <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={onSwitch} />
-
-      {/* Turno de caja — solo aparece cuando queda poco para el límite */}
-      {cajaHabilitada && <TurnoCountdown />}
-
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Search trigger */}
-      <button
-        onClick={() => document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click()}
-        className="hidden sm:flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-      >
-        <Search className="h-4 w-4" />
-        <span className="hidden md:inline">Buscar</span>
-        <kbd className="hidden md:inline text-xs bg-gray-100 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
-      </button>
-
-      {/* Profile */}
-      <ProfileDropdown user={user} canSeeActivity={canSeeActivity} />
-    </header>
-  );
-}
-
-// ─── Sidebar (nav only) ───────────────────────────────────────────────────────
-
-function Sidebar({
+function SidebarContent({
   teams,
   activeTeamId,
   dgiiHabilitado,
+  variant,
   onClose,
 }: {
   teams: Team[];
   activeTeamId: number | null;
   dgiiHabilitado: boolean;
+  /** 'rail' = columna que se expande al pasar el mouse; 'drawer' = cajón móvil. */
+  variant?: 'rail' | 'drawer';
   onClose?: () => void;
 }) {
-  const pathname = usePathname();
-
-  const activeTeam = teams.find(t => t.id === activeTeamId) ?? teams[0];
-  const plan       = activeTeam?.planName;
-  // Nav siempre visible para todos los usuarios — sin gating por plan
-  const hasPlan    = true;
-
-  // Rol del usuario en el team activo — controla qué items se ven.
-  const role = activeTeam?.role;
+  const rutaNavegador = usePathname();
+  // En facturacion.zero.com.do el proxy sirve el panel por rewrite, así que la
+  // barra dice `/` aunque se esté viendo `/dashboard`. Sin normalizarlo, nada
+  // quedaba marcado en el menú justo al entrar.
+  const pathname    = rutaNavegador === '/' ? '/dashboard' : rutaNavegador;
+  const activeTeam  = teams.find(t => t.id === activeTeamId) ?? teams[0];
+  const role        = activeTeam?.role;
   const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
+  const hasPlan     = activeTeam ? teamHasPlan(activeTeam) : false;
 
   // Permisos efectivos (con overrides por empresa). null mientras carga →
   // canAccessHref usa el fallback estático del rol.
-  const { permissions, isLoading: permsLoading } = usePermissions();
+  const { permissions, modules, isLoading: permsLoading } = usePermissions();
   const permSet = useMemo(
     () => (permsLoading ? null : new Set<string>(permissions)),
     [permsLoading, permissions],
@@ -562,11 +275,6 @@ function Sidebar({
     (href: string) => canAccessHref(href, permSet, role),
     [permSet, role],
   );
-
-  // Todos los items siempre habilitados
-  function isEnabled(_href: string): boolean {
-    return true;
-  }
 
   // Grupo Caja — solo visible si cajaHabilitada y el rol tiene caja:ver
   const cajaCandidatos: NavGroup['children'] = [
@@ -579,34 +287,42 @@ function Sidebar({
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
     : null;
 
-  // Grupo Punto de venta — solo visible si posHabilitado y el rol tiene acceso.
-  const posHabilitado = activeTeam?.posHabilitado ?? false;
-  const posCandidatos: NavGroup['children'] = [
-    { href: '/pos',                      label: 'Abrir punto de venta' },
-    { href: '/dashboard/pos-terminales', label: 'Terminales' },
-  ].filter(c => can(c.href));
+  // Punto de Venta NO es un grupo dentro del nav de Facturación: es OTRO módulo.
+  // Como Alegra ("Ir a Alegra POS"), va como acceso separado al final del nav
+  // que cambia de producto (a /pos). Solo si el usuario tiene el módulo pos.
+  // Mismo trato para Administración Escolar. A diferencia del POS no tiene
+  // flag propio en teams: manda `modules` (empresa ∩ rol), así que mientras
+  // cargan los permisos NO se muestra — es opt-in y la mayoría no lo tiene.
 
-  const posGroup: NavGroup | null = posHabilitado && posCandidatos.length > 0
-    ? { id: 'pos', label: 'Punto de venta', icon: Store, children: posCandidatos }
-    : null;
-
-  // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
+  // Filtrar ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
-  //
+  // Grupos que pertenecen SOLO a Facturación: si el usuario no tiene ese módulo
+  // (p.ej. un cajero solo-POS) no deben aparecer aunque un href suelto no esté
+  // gateado por permiso. Inventario/Configuración quedan (traen entidades
+  // compartidas como Productos). null en modules = aún cargando → no ocultar.
+  const FACTURACION_ONLY_GROUPS = new Set(['ingresos', 'compras']);
+  const sinFacturacion = !permsLoading && !modules.includes('facturacion');
+
   // "Activar facturación electrónica" vive arriba (fuera de Configuración)
   // mientras el ambiente DGII del team no sea Producción; una vez ahí se
   // mueve a Configuración, su ubicación permanente. Nunca aparece en los dos
   // lugares a la vez. dgiiHabilitado viene de /api/habilitacion/ambiente-actual
   // (lectura en vivo del ambiente en ecf-api) — ver DashboardLayout.
-  const habilitacionTopItem: NavItem = { href: '/dashboard/habilitacion', icon: Zap, label: 'Activar facturación electrónica' };
+  // Se queda FUERA de la lista reordenable y clavado arriba: es un aviso con
+  // fecha de caducidad, no una sección. Si el orden por uso lo mandara al
+  // fondo, dejaría de cumplir su único trabajo.
+  const habilitacionCta: NavItem | null =
+    !dgiiHabilitado && can('/dashboard/habilitacion')
+      ? { id: 'habilitacion', href: '/dashboard/habilitacion', icon: Zap, label: 'Activar facturación electrónica' }
+      : null;
 
-  const topItemsVisibles  = [
-    ...TOP_ITEMS,
-    ...(!dgiiHabilitado ? [habilitacionTopItem] : []),
-  ].filter(item => can(item.href));
+  const itemsVisibles = new Map(
+    ITEMS.filter(i => can(i.href)).map(i => [i.id, { tipo: 'item' as const, ...i }]),
+  );
   const staticGroupsVis   = GROUPS
+    .filter(g => !(sinFacturacion && FACTURACION_ONLY_GROUPS.has(g.id)))
     .map(g => ({
       ...g,
       children: g.children
@@ -616,186 +332,193 @@ function Sidebar({
         .map(c => c.href === '/dashboard/habilitacion' ? { ...c, label: 'Habilitación e-CF' } : c),
     }))
     .filter(g => g.children.length > 0);
-  const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
+  // Caja va detrás de Inventario, no arriba del todo: se abre una vez al día,
+  // mientras que Ingresos e Inventario se tocan a cada rato. El POS no entra
+  // aquí: en v2 es un módulo del rail, no un grupo del nav de Facturación.
+  const iInventario = staticGroupsVis.findIndex(g => g.id === 'inventario');
+  const conCaja = iInventario === -1
+    ? [...staticGroupsVis, cajaGroup]
+    : [
+        ...staticGroupsVis.slice(0, iInventario + 1),
+        cajaGroup,
+        ...staticGroupsVis.slice(iInventario + 1),
+      ];
+  const groupsVisibles    = conCaja.filter((g): g is NavGroup => g !== null);
 
-  const defaultOpen = groupsVisibles.reduce((acc, g) => {
-    acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
-    return acc;
-  }, {} as Record<string, boolean>);
+  // ── La lista de secciones, en su orden POR DEFECTO ────────────────────────
+  // Este es el orden que ve quien entra por primera vez, y el que rompe los
+  // empates cuando dos secciones se usan lo mismo. El orden que se acaba
+  // pintando sale de useOrdenNav (abajo).
+  const seccionesBase: NavSeccion[] = [];
+  const empujarItem = (id: string) => {
+    const item = itemsVisibles.get(id);
+    if (item) seccionesBase.push(item);
+  };
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(defaultOpen);
-
-  function toggleGroup(id: string) {
-    setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
+  empujarItem('dashboard');
+  empujarItem('contactos');
+  for (const g of groupsVisibles) {
+    seccionesBase.push({ tipo: 'grupo', ...g });
+    if (g.id === 'contabilidad') empujarItem('reportes');
   }
+  // Sin permiso de contabilidad no hay de qué colgarlo; cierra la lista.
+  if (!seccionesBase.some(s => s.id === 'reportes')) empujarItem('reportes');
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
   return (
-    <div className="flex flex-col h-full bg-teal-700">
-      {/* Logo */}
-      <div className="px-4 py-4 border-b border-teal-600/50">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 bg-white rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-teal-700 font-black text-xs">z</span>
-          </div>
-          <span className="text-white font-bold text-sm tracking-wide">Zero</span>
-        </div>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-
+    <RailArmazon
+      modulo="facturacion"
+      variant={variant}
+      // La versión lleva a Novedades: ver el número y querer saber qué cambió es
+      // el mismo gesto. Evita un item más en el menú para algo que se mira de
+      // vez en cuando.
+      pie={
+        <Typography
+          component={Link}
+          href="/dashboard/novedades"
+          onClick={onClose}
+          title="Ver qué hay de nuevo"
+          className="nav-text"
+          sx={{
+            fontSize: '0.6875rem', fontWeight: 500, color: TINTA.tenue, whiteSpace: 'nowrap',
+            textDecoration: 'none', transition: 'color 0.15s',
+            '&:hover': { color: TINTA.hover },
+          }}
+        >
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
+        </Typography>
+      }
+    >
         {/* Sin plan — bloquear nav */}
         {!hasPlan && (
-          <div className="mx-1 mt-1 mb-3 rounded-xl bg-amber-500/20 border border-amber-400/30 px-4 py-4 flex flex-col gap-3">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-300 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-100 leading-snug">
+          <Box className="nav-children" sx={{ mx: 0.5, mt: 0.5, mb: 1.5, borderRadius: '12px', bgcolor: 'rgba(245,158,11,0.2)', border: '1px solid rgba(251,191,36,0.3)', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <AlertCircle style={{ width: 16, height: 16, color: '#fcd34d', marginTop: 2, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.75rem', color: '#fef3c7', lineHeight: 1.4 }}>
                 Esta empresa no tiene un plan activo. Activa un plan para acceder a todas las funciones.
-              </p>
-            </div>
-            <Link
-              href="/pricing?reason=no-plan"
+              </Typography>
+            </Box>
+            <Box
+              component={Link}
+              href="/dashboard/suscripcion"
               onClick={onClose}
-              className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-amber-900 text-xs font-semibold transition-colors"
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, width: '100%', py: 1, borderRadius: '8px', bgcolor: '#fbbf24', color: '#78350f', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none', transition: 'background-color 0.15s', '&:hover': { bgcolor: '#fcd34d' } }}
             >
-              <CreditCard className="h-3.5 w-3.5" />
+              <CreditCard style={{ width: 14, height: 14 }} />
               Activar plan
-            </Link>
-            {/* "Cambiar empresa" oculto — gestión solo desde admin */}
-          </div>
+            </Box>
+          </Box>
         )}
 
         {/* Nueva Factura — solo roles con facturas:crear */}
         {can('/dashboard/facturas/nueva') && (
-          <Link
+          <Box
+            component={Link}
             href="/dashboard/facturas/nueva"
-            onClick={hasPlan ? onClose : e => e.preventDefault()}
-            className={`flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-white/15 text-white text-sm font-medium transition-colors ${
-              hasPlan ? 'hover:bg-white/25' : 'opacity-40 cursor-not-allowed'
-            }`}
+            onClick={hasPlan ? onClose : (e: React.MouseEvent) => e.preventDefault()}
+            sx={{
+              display:     'flex',
+              alignItems:  'center',
+              gap:         1,
+              px:          1.5,
+              py:          1,
+              mb:          0.5,
+              borderRadius: '10px',
+              bgcolor:     'rgba(255,255,255,0.16)',
+              color:       '#ffffff',
+              ...FUENTE_SECCION,
+              fontWeight:  700,
+              textDecoration: 'none',
+              transition:  'background-color 0.15s',
+              ...(hasPlan
+                ? { '&:hover': { bgcolor: 'rgba(255,255,255,0.26)' } }
+                : { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' }),
+            }}
           >
-            <Plus className="h-4 w-4 shrink-0" />
-            Nueva Factura
-          </Link>
+            <Plus style={{ width: 17, height: 17, flexShrink: 0 }} />
+            <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>Nueva Factura</Box>
+          </Box>
         )}
 
-        {/* Search trigger */}
-        <button
+        {/* Search */}
+        <Box
+          component="button"
           onClick={() => { onClose?.(); document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click(); }}
-          className="flex items-center gap-2.5 w-full px-3 py-2 mb-1 rounded-lg text-teal-200 hover:bg-white/10 hover:text-white text-sm transition-colors"
+          sx={{
+            display:     'flex',
+            alignItems:  'center',
+            gap:         1,
+            width:       '100%',
+            px:          1.5,
+            py:          1,
+            mb:          0.5,
+            borderRadius: '10px',
+            color:       TINTA.reposo,
+            ...FUENTE_SECCION,
+            fontWeight:  600,
+            cursor:      'pointer',
+            bgcolor:     'transparent',
+            border:      'none',
+            transition:  'all 0.15s',
+            '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: TINTA.hover },
+          }}
         >
-          <Search className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">Buscar...</span>
-          <kbd className="text-xs bg-white/10 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
-        </button>
+          <Search style={{ width: 17, height: 17, flexShrink: 0 }} />
+          <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>Buscar...</Box>
+          <Box
+            component="kbd"
+            className="nav-text"
+            sx={{
+              fontSize:    '0.6875rem',
+              bgcolor:     'rgba(255,255,255,0.1)',
+              color:       TINTA.tenue,
+              borderRadius: '4px',
+              px:          0.75,
+              py:          0.25,
+              fontFamily:  'monospace',
+            }}
+          >
+            ⌘K
+          </Box>
+        </Box>
 
-        {/* Activación e-CF oculta — flujo manejado desde panel admin */}
+        {/* Activar facturación electrónica — clavado arriba mientras haga falta.
+            Fuera de la lista reordenable, pero con la MISMA pieza que sus
+            secciones: si diverge, se nota que es un pegote. */}
+        {habilitacionCta && (
+          <EnlaceSeccion
+            item={habilitacionCta}
+            activo={isActive(habilitacionCta.href)}
+            onNavegar={onClose}
+            tamanoIcono={17}
+            sx={{
+              gap: 1.25,
+              px:  1.5,
+              py:  1,
+              mb:  0.5,
+              // Un punto menos que el resto: es la única etiqueta larga del
+              // menú y a 14px se corta incluso con la barra ya ensanchada.
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              bgcolor: isActive(habilitacionCta.href) ? 'rgba(255,255,255,0.18)' : 'transparent',
+              boxShadow: 'none',
+            }}
+          />
+        )}
 
-        {/* Top items — filtrados por rol */}
-        {topItemsVisibles.map(item => {
-          const enabled = isEnabled(item.href);
-          const active  = enabled && isActive(item.href, item.exact);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={enabled ? onClose : e => e.preventDefault()}
-              className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors ${
-                !enabled
-                  ? 'text-teal-100/40 cursor-not-allowed'
-                  : active
-                    ? 'bg-white/20 text-white font-medium'
-                    : 'text-teal-100 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
-            </Link>
-          );
-        })}
+        <Divider sx={{ my: 0.75, borderColor: 'rgba(255,255,255,0.14)' }} />
 
-        <div className="my-1 border-t border-teal-600/40" />
-
-        {/* Grupos — filtrados por rol (grupos sin hijos accesibles se omiten) */}
-        {groupsVisibles.map(group => {
-          const groupActive = group.children.some(c => pathname.startsWith(c.href));
-          const isOpen      = openGroups[group.id] ?? false;
-          return (
-            <div key={group.id}>
-              <button
-                onClick={() => toggleGroup(group.id)}
-                className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors ${
-                  groupActive ? 'text-white font-medium' : 'text-teal-100 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <group.icon className="h-4 w-4 shrink-0" />
-                <span className="flex-1 text-left">{group.label}</span>
-                {isOpen
-                  ? <ChevronUp className="h-3.5 w-3.5 opacity-70" />
-                  : <ChevronRight className="h-3.5 w-3.5 opacity-70" />
-                }
-              </button>
-
-              {isOpen && (
-                <div className="ml-6 pl-2 border-l border-teal-500/40 mt-0.5 mb-1 space-y-0.5">
-                  {group.children.map(child => {
-                    const enabled = isEnabled(child.href);
-                    const active  = enabled && pathname.startsWith(child.href);
-                    return (
-                      <div key={child.href} className="flex items-center group/sub">
-                        <Link
-                          href={child.href}
-                          onClick={enabled ? onClose : e => e.preventDefault()}
-                          className={`flex-1 py-1.5 px-2.5 text-sm rounded-lg truncate transition-colors ${
-                            !enabled
-                              ? 'text-teal-200/40 cursor-not-allowed'
-                              : active
-                                ? 'text-white font-medium bg-white/15'
-                                : 'text-teal-200 hover:text-white hover:bg-white/10'
-                          }`}
-                        >
-                          {child.label}
-                        </Link>
-                        {child.plusHref && enabled && can(child.plusHref) && (
-                          <Link
-                            href={child.plusHref}
-                            onClick={onClose}
-                            title="Nuevo"
-                            className="opacity-0 group-hover/sub:opacity-100 p-1 rounded hover:bg-white/20 text-teal-300 hover:text-white transition-all ml-1"
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Link>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </nav>
-
-      {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
-          el mismo gesto. Evita un item más en el menú para algo que se mira de
-          vez en cuando. */}
-      <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
-        <Link
-          href="/dashboard/novedades"
-          className="text-[11px] text-gray-400 hover:text-teal-700 transition-colors"
-          title="Ver qué hay de nuevo"
-        >
-          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
-        </Link>
-      </div>
-    </div>
+        {/* Secciones — misma pieza que en POS, Escolar y Administración
+            (components/rail). El orden lo pone useOrdenNav: el uso de los
+            últimos días, no el orden en que están escritas arriba. */}
+        <RailSecciones secciones={seccionesBase} modulo="facturacion" onNavegar={onClose} puedeVer={can} />
+    </RailArmazon>
   );
 }
 
-// ─── Root layout ──────────────────────────────────────────────────────────────
+// ─── Root Layout ──────────────────────────────────────────────────────────────
 
 const layoutFetcher = (url: string) => fetch(url).then(r => r.json()).catch(() => null);
 
@@ -805,42 +528,31 @@ type EmpresaListResponse = {
 } | null;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen]           = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeTeamOverride, setActiveTeamOverride] = useState<number | null>(null);
-
-  // Hidratar collapsed desde localStorage (después de mount para evitar hydration mismatch)
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('emitedo:sidebarCollapsed');
-      if (stored === '1') setSidebarCollapsed(true);
-    } catch {}
-  }, []);
-
-  function toggleSidebar() {
-    setSidebarCollapsed(prev => {
-      const next = !prev;
-      try { localStorage.setItem('emitedo:sidebarCollapsed', next ? '1' : '0'); } catch {}
-      return next;
-    });
-  }
-
-  // SWR for user + empresa list — no auto refetch on focus/reconnect.
-  // We revalidate explicitly via mutate() on switch.
-  const { data: user } = useSWR<UserInfo | null>('/api/user', layoutFetcher, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-  });
-  const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>(
-    '/api/empresa/list',
-    layoutFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
+  // El provider envuelve todo: el rail y el header deben leer el MISMO estado
+  // de "menú fijo", y el provider tiene que estar por encima de los dos.
+  return (
+    <NavFijoProvider>
+      <DashboardLayoutInterno>{children}</DashboardLayoutInterno>
+    </NavFijoProvider>
   );
+}
+
+function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
+  const [mobileOpen, setMobileOpen]         = useState(false);
+  const [activeTeamOverride, setActiveTeamOverride] = useState<number | null>(null);
+  // Preferencia compartida con POS, Escolar y Administración: quien fija el
+  // menú acá lo encuentra fijo allá. Antes esto era un localStorage propio de
+  // Facturación ('emitedo:sidebarCollapsed') que ningún otro módulo leía.
+  const { fijo: navFijo, alternar: alternarNavFijo } = useNavFijo();
+
+  const { data: user }          = useSWR<UserInfo | null>('/api/user', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
+  const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>('/api/empresa/list', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
+
   const teams: Team[] = empresaData?.teams ?? [];
-  const activeTeamId = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
+  const activeTeamId  = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
+  // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
+  const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
+
   const activeTeamNav = teams.find(t => t.id === activeTeamId) ?? teams[0];
 
   // Dónde vive el link de habilitación en el nav: el flag local
@@ -860,56 +572,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (ambienteActual?.ambiente === 'Produccion' && !dgiiHabilitado) mutateEmpresa();
   }, [ambienteActual, dgiiHabilitado, mutateEmpresa]);
 
-  // Cuando el usuario cambia de empresa: actualizar activeTeamId optimistamente
-  // y revalidar la lista de empresas (trae plan/logo nuevos).
   function handleSwitch(teamId: number) {
     setActiveTeamOverride(teamId);
     mutateEmpresa();
   }
 
-  const plan = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.planName ?? null;
-  // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
-  const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
-
   return (
-    <div className="flex h-[100dvh] bg-gray-50 overflow-hidden">
-      <GlobalSearch />
+    <Box sx={{ display: 'flex', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
+      {/* El buscador ya NO se monta aquí: vive dentro de ModuleHeader, en el
+          centro de la barra superior. Montarlo también aquí dejaba dos botones
+          con el mismo `id="global-search-trigger"` y el del menú lateral abría
+          el modal del componente equivocado. */}
 
-      {/* Sidebar — desktop (oculto cuando collapsed) */}
-      {!sidebarCollapsed && (
-        <aside className="hidden lg:flex w-56 flex-col shrink-0">
-          <Sidebar teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} />
-        </aside>
-      )}
+      {/* Arquitectura idéntica al Punto de Venta: rail full-height a la izquierda
+          (mismo menú que se abre/cierra al pasar el mouse) + columna de contenido
+          (header + página) a la derecha. El armazón —ancho, plegado y hover— lo
+          pone RailArmazon, el mismo de los otros tres módulos. */}
+      <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} />
 
-      {/* Sidebar — mobile overlay */}
-      {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div className="w-56 flex flex-col">
-            <Sidebar teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} onClose={() => setSidebarOpen(false)} />
-          </div>
-          <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)} />
-        </div>
-      )}
+      {/* Mobile Drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', lg: 'none' },
+          '& .MuiDrawer-paper': { width: ANCHO_ABIERTO, boxSizing: 'border-box', border: 'none' },
+        }}
+      >
+        <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} variant="drawer" onClose={() => setMobileOpen(false)} />
+      </Drawer>
 
-      {/* Main column */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <DashboardTopBar
-          teams={teams}
-          activeTeamId={activeTeamId}
+      {/* Columna de contenido: header (barra) + página */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Header único del sistema — el mismo que montan POS, Escolar y
+            Administración. Ver components/module-header.tsx. */}
+        <ModuleHeader
+          current="facturacion"
           user={user ?? null}
-          plan={plan}
-          cajaHabilitada={cajaHabilitada}
-          onMenuClick={() => setSidebarOpen(true)}
-          onToggleSidebar={toggleSidebar}
-          sidebarCollapsed={sidebarCollapsed}
-          onSwitch={handleSwitch}
+          onAbrirMenu={() => setMobileOpen(true)}
+          onFijarMenu={alternarNavFijo}
+          menuFijo={navFijo}
+          onSwitchEmpresa={handleSwitch}
+          breakpointMenu="lg"
         />
 
-        <main className="flex-1 overflow-y-auto">
+        {/* Fuera del área que hace scroll: un aviso de cobro que se pierde al
+            bajar la página no sirve de nada. */}
+        <BannerSuscripcion />
+
+        {/* Page content */}
+        <Box
+          component="main"
+          sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
+        >
           {children}
-        </main>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }

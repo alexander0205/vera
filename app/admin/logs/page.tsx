@@ -1,66 +1,63 @@
 import { db } from '@/lib/db/drizzle';
 import { systemLogs, teams } from '@/lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { AlertTriangle, Info, XCircle } from 'lucide-react';
 
 export default async function AdminLogsPage() {
   const logs = await db
     .select({
-      id: systemLogs.id,
-      level: systemLogs.level,
-      source: systemLogs.source,
-      message: systemLogs.message,
-      details: systemLogs.details,
-      createdAt: systemLogs.createdAt,
-      teamName: teams.name,
+      id: systemLogs.id, level: systemLogs.level, source: systemLogs.source,
+      message: systemLogs.message, details: systemLogs.details,
+      createdAt: systemLogs.createdAt, teamName: teams.name,
     })
     .from(systemLogs)
     .leftJoin(teams, eq(systemLogs.teamId, teams.id))
     .orderBy(desc(systemLogs.createdAt))
     .limit(500);
 
-  const LEVEL_ICON = {
-    error: XCircle,
-    warn: AlertTriangle,
-    info: Info,
-  };
-  const LEVEL_COLOR = {
-    error: 'text-red-500',
-    warn: 'text-amber-500',
-    info: 'text-blue-500',
-  };
+  const LEVEL_ICON = { error: XCircle, warn: AlertTriangle, info: Info };
+  const LEVEL_COLOR = { error: '#ef4444', warn: '#f59e0b', info: '#3b82f6' };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">System Logs</h1>
-      <div className="space-y-2">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827' }}>System Logs</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {logs.map(log => {
           const level = log.level as 'error' | 'warn' | 'info';
-          const Icon = LEVEL_ICON[level] ?? Info;
+          const Icon  = LEVEL_ICON[level] ?? Info;
+          const color = LEVEL_COLOR[level] ?? '#9ca3af';
           return (
-            <div key={log.id} className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-start gap-3">
-                <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${LEVEL_COLOR[level] ?? 'text-gray-400'}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-gray-900 truncate">{log.message}</span>
-                    {log.source && <code className="text-xs text-gray-400 bg-gray-100 rounded px-1.5">{log.source}</code>}
-                  </div>
+            <Box key={log.id} sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <Icon size={16} color={color} style={{ marginTop: 2, flexShrink: 0 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {log.message}
+                    </Typography>
+                    {log.source && (
+                      <Box component="code" sx={{ fontSize: '0.6875rem', color: '#9ca3af', bgcolor: '#f3f4f6', borderRadius: '4px', px: 1, flexShrink: 0 }}>
+                        {log.source}
+                      </Box>
+                    )}
+                  </Box>
                   {log.details && (
-                    <pre className="text-xs text-gray-500 bg-gray-50 rounded p-2 overflow-auto max-h-32 mt-1">
+                    <Box component="pre" sx={{ fontSize: '0.6875rem', color: '#6b7280', bgcolor: '#f9fafb', borderRadius: '6px', p: 1, overflowX: 'auto', maxHeight: 128, mt: 0.5, m: 0 }}>
                       {log.details}
-                    </pre>
+                    </Box>
                   )}
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    {log.teamName && <span>Empresa: {log.teamName}</span>}
-                    <span>{new Date(log.createdAt).toLocaleString('es-DO')}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+                    {log.teamName && <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>Empresa: {log.teamName}</Typography>}
+                    <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>{new Date(log.createdAt).toLocaleString('es-DO')}</Typography>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

@@ -2,28 +2,35 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
+  Box,
+  Typography,
+  Button,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Alert,
+  CircularProgress,
+  Chip,
+  IconButton,
+} from '@mui/material';
 import {
   ArrowLeft, X, User, Package, Calendar, ScrollText, StickyNote, FileText,
-  CreditCard, ChevronRight, Info, Receipt, RefreshCw, AlertTriangle,
+  CreditCard, ChevronRight, Info, Receipt, RefreshCw,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { describirMora } from '@/lib/cobranza/mora-calculo';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
+import { useVolver } from '@/lib/hooks/useVolver';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
 import { AccordionSection } from '../../facturas/nueva/sections/AccordionSection';
 import { ClienteSection } from '../../facturas/nueva/sections/ClienteSection';
+import { ModalNuevoCliente } from '../../facturas/nueva/modals/ModalNuevoCliente';
 import { ItemsTable } from '../../facturas/nueva/sections/ItemsTable';
 import { ColumnasToggle } from '../../facturas/nueva/sections/ColumnasToggle';
 import { Terminos, Notas } from '../../facturas/nueva/sections/TerminosNotas';
@@ -34,7 +41,6 @@ import { calcularTotales } from '../../facturas/nueva/utils/calculos';
 import { BottomActionBar } from '../../facturas/nueva/sections/BottomActionBar';
 import { EmpresaBlock } from '../../facturas/nueva/sections/EmpresaBlock';
 import type { Cliente, ItemLinea, Producto, EmpresaPerfil } from '../../facturas/nueva/utils/types';
-import { describirMora } from '@/lib/cobranza/mora-calculo';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -156,14 +162,40 @@ export interface InitialPlan {
   notas:        string | null;
 }
 
+export interface ContextoEscolar {
+  matriculaId: number;
+  conceptoId: number;
+  conceptoNombre: string;
+  estudianteNombre: string;
+  tutorNombre: string;
+  clientId: number;
+  clienteRazonSocial: string;
+  periodo: string;
+  fechaInicio: string;
+  fechaFin: string;
+  beneficiario: { id: number; nombre: string } | null;
+  producto: {
+    id: number;
+    nombre: string;
+    descripcion: string | null;
+    referencia: string | null;
+    precioDOP: number;
+    tasaItbis: ItemLinea['tasaItbis'];
+    tipo: 'bien' | 'servicio';
+    unidadMedida: string | null;
+  } | null;
+}
+
 interface Props {
   initialPerfil: EmpresaPerfil | null;
   /** Si se pasa, el form opera en modo edición (PUT en lugar de POST). */
   initialPlan?: InitialPlan;
+  contextoEscolar?: ContextoEscolar;
 }
 
-export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan }: Props) {
+export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan, contextoEscolar }: Props) {
   const router = useRouter();
+  const volver = useVolver('/dashboard/facturas-recurrentes');
   const empresa = initialPerfil;
   const isEdit = Boolean(initialPlan);
   const { tipoVisible, enProduccion } = useTiposDisponibles();
@@ -189,11 +221,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       ? String(initialPlan.diasParaPago)
       : (defaultDias != null && defaultDias > 0 ? String(defaultDias) : '5'),
   ); // solo aplica si tipoPago=2 (crédito)
-  const [frecuencia, setFrecuencia]     = useState(initialPlan?.frecuencia ?? 'mensual');
-  const [nombre, setNombre]             = useState(initialPlan?.nombre ?? '');
+  const [frecuencia, setFrecuencia]     = useState(initialPlan?.frecuencia ?? (contextoEscolar ? 'mensual' : 'mensual'));
+  const [nombre, setNombre]             = useState(initialPlan?.nombre ?? (contextoEscolar ? `${contextoEscolar.conceptoNombre} — ${contextoEscolar.estudianteNombre}` : ''));
   const [descripcion, setDescripcion]   = useState(initialPlan?.descripcion ?? '');
-  const [fechaInicio, setFechaInicio]   = useState(initialPlan?.fechaInicio ?? '');
-  const [fechaFin, setFechaFin]         = useState(initialPlan?.fechaFin ?? '');
+  const [fechaInicio, setFechaInicio]   = useState(initialPlan?.fechaInicio ?? contextoEscolar?.fechaInicio ?? '');
+  const [fechaFin, setFechaFin]         = useState(initialPlan?.fechaFin ?? contextoEscolar?.fechaFin ?? '');
 
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
@@ -202,8 +234,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   // Esto garantiza que un Guardar antes de que termine la hidratación no borre el
   // clientId del plan (la hidratación luego enriquece con razonSocial/email/etc.).
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(
-    initialPlan?.clientId
-      ? { id: initialPlan.clientId, razonSocial: 'Cargando…', rnc: null, email: null, telefono: null }
+    initialPlan?.clientId || contextoEscolar?.clientId
+      ? {
+        id: initialPlan?.clientId ?? contextoEscolar!.clientId,
+        razonSocial: contextoEscolar?.clienteRazonSocial ?? 'Cargando…', rnc: null, email: null, telefono: null,
+      }
       : null
   );
   const [rncManual, setRncManual]             = useState('');
@@ -213,7 +248,25 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
 
   // ── Items (useReducer compartido) ──────────────────────────────────────────
   const initialItems = useMemo<ItemLinea[] | undefined>(() => {
-    if (!initialPlan?.items) return undefined;
+    if (!initialPlan?.items) {
+      if (!contextoEscolar?.producto) return undefined;
+      const producto = contextoEscolar.producto;
+      return [{
+        id: 1,
+        productoId: producto.id,
+        nombreItem: producto.nombre,
+        referencia: producto.referencia ?? '',
+        descripcionItem: producto.descripcion ?? '',
+        cantidadItem: 1,
+        precioUnitarioItem: producto.precioDOP,
+        descuentoPct: 0,
+        tasaItbis: producto.tasaItbis,
+        indicadorBienoServicio: producto.tipo === 'bien' ? '1' : '2',
+        unidadMedida: producto.unidadMedida ?? '',
+        dependienteId: contextoEscolar.beneficiario?.id ?? null,
+        dependienteNombre: contextoEscolar.beneficiario?.nombre ?? '',
+      }];
+    }
     try {
       const parsed = JSON.parse(initialPlan.items) as Array<Partial<ItemLinea>>;
       if (!Array.isArray(parsed) || !parsed.length) return undefined;
@@ -236,9 +289,13 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
     } catch {
       return undefined;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [contextoEscolar, initialPlan?.items]);
   const [items, dispatchItems] = useItemsState(initialItems);
+
+  // Crear cliente sin salir de aquí. Antes esto navegaba a /clientes/nuevo, y
+  // volver dejaba el formulario de la suscripción en blanco: había que teclearlo
+  // todo otra vez.
+  const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
   // ── Beneficiarios (dependientes del cliente) — igual que en factura ──────────
   const [dependientesCliente, setDependientesCliente] = useState<
@@ -271,7 +328,6 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       const cols = prefs.itemsCols ?? {};
       setShowItemRef(Boolean(cols.referencia));
       setShowItemDesc(Boolean(cols.descripcion));
-      if (prefs.ocultarAvisoContado) setOcultarAvisoContado(true);
     } catch {}
   }, []);
   // Hydrate cliente cuando estamos en modo edición. Hace fetch una vez al montar.
@@ -329,8 +385,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const [notas, setNotas]                  = useState(initialPlan?.notas ?? '');
   const [pieFactura, setPieFactura]        = useState('');
 
-  // Config de mora que aplicará a este plan: viene SOLO de la configuración
-  // central de la empresa. Ya no hay personalización por plan.
+  // La mora de este plan sale SOLO de la configuración central de la empresa;
+  // ya no se personaliza por plan. Aquí solo se describe para avisar.
   const configMoraEmpresa = useMemo(() => ({
     modo: (empresa?.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje') as 'porcentaje' | 'fijo',
     porcentajeBps:    empresa?.recargoMoraPorcentaje ?? 0,
@@ -345,20 +401,6 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
-  // Aviso al guardar un plan "de contado" con mora configurada.
-  const [confirmContado, setConfirmContado] = useState(false);
-  // "No volver a mostrar" — persistido en localStorage (compartido con la factura).
-  const [ocultarAvisoContado, setOcultarAvisoContado] = useState(false);
-  const [noMostrarContado, setNoMostrarContado] = useState(false);
-
-  function persistOcultarAvisoContado() {
-    try {
-      const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
-      prefs.ocultarAvisoContado = true;
-      localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
-    } catch {}
-    setOcultarAvisoContado(true);
-  }
 
   // ── Cobro automático (feature no implementada — dialog Próximamente) ────────
   const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
@@ -395,7 +437,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
 
   // ─── Búsqueda productos ─────────────────────────────────────────────────────
   async function buscarProductos(q: string): Promise<Producto[]> {
-    const res  = await fetch(`/api/productos?q=${encodeURIComponent(q)}`);
+    // contexto=facturacion: excluye lo que es solo del POS (cafetería).
+    const res  = await fetch(`/api/productos?contexto=facturacion&q=${encodeURIComponent(q)}`);
     const data = await res.json();
     return data.productos ?? [];
   }
@@ -492,18 +535,6 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       setError('Cada ítem requiere un beneficiario'); return;
     }
 
-    // Aviso: plan "de contado" con mora configurada. Las facturas generadas
-    // quedarán por cobrar sin vencimiento ni mora automática.
-    if (tipoPago === '1' && empresa?.recargoMoraActivo && !ocultarAvisoContado) {
-      setNoMostrarContado(false);
-      setConfirmContado(true);
-      return;
-    }
-
-    await doSubmit();
-  }
-
-  async function doSubmit() {
     const proximaEmision = fechaInicio; // Primera emisión = fecha de inicio
     const notasFinal = [terminosCondiciones, notas, pieFactura]
       .filter(s => s.trim()).join('\n\n') || null;
@@ -541,6 +572,12 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
             dependienteId:      item.dependienteId ?? null,
             dependienteNombre:  item.dependienteNombre || undefined,
           })),
+          ...(contextoEscolar && {
+            contextoEscolar: {
+              matriculaId: contextoEscolar.matriculaId,
+              conceptoId: contextoEscolar.conceptoId,
+            },
+          }),
         }),
       });
       const data = await res.json();
@@ -555,30 +592,41 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="bg-[#eef0f7] min-h-full flex flex-col">
-      <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: { xs: 1.5, sm: 2, md: 2.5 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
 
-        {/* Back nav */}
-        <div className="flex items-center gap-3 mb-4">
-          <Button variant="ghost" size="sm" asChild className="text-gray-600 hover:text-gray-900">
-            <Link href="/dashboard/facturas-recurrentes">
-              <ArrowLeft className="h-4 w-4 mr-1" />Volver
-            </Link>
-          </Button>
-          <h1 className="text-lg font-semibold text-gray-700">
-            {isEdit ? 'Editar factura recurrente' : 'Nueva factura recurrente'}
-          </h1>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-            <span className="text-red-500 mt-0.5 shrink-0 text-lg leading-none">!</span>
-            <p className="text-sm text-red-700">{error}</p>
+        {contextoEscolar && !isEdit && (
+          <div className="mb-4 rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-sm text-zero-900">
+            Mensualidad de <b>{contextoEscolar.estudianteNombre}</b> · {contextoEscolar.periodo}. Tutor responsable: <b>{contextoEscolar.tutorNombre}</b>.
+            Al guardar, plan queda ligado a esta matrícula; cron creará factura y cargo del mismo mes.
           </div>
         )}
 
-        <form
+        {/* Back nav */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+          <Button
+            onClick={volver}
+            variant="text"
+            size="small"
+            startIcon={<ArrowLeft size={16} />}
+            sx={{ textTransform: 'none', color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+          >
+            Volver
+          </Button>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+            {isEdit ? 'Editar factura recurrente' : 'Nueva factura recurrente'}
+          </Typography>
+        </Box>
+
+        {/* Error */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>
+            {error}
+          </Alert>
+        )}
+
+        <Box
+          component="form"
           onSubmit={handleSubmit}
           onKeyDown={(e) => {
             const t = e.target as HTMLElement;
@@ -586,506 +634,710 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
             const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
             if (e.key === 'Enter' && isInput && !isSubmitBtn) e.preventDefault();
           }}
-          className="flex-1 flex flex-col space-y-4"
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}
         >
-          <div className="space-y-4">
-          {/* ── SPLIT LAYOUT: form left, sticky resumen right (solo xl+) ──── */}
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 xl:gap-5">
-            {/* LEFT column */}
-            <div className="space-y-4 min-w-0">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* ── SPLIT LAYOUT: form left, sticky resumen right (solo xl+) ──── */}
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', xl: 'minmax(0,1fr) 320px' },
+              gap: { xs: 2, xl: 2.5 },
+            }}>
+              {/* LEFT column */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
 
-              {/* Empresa card — logo + nombre + RNC + Estado + Moneda */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <EmpresaBlock empresa={empresa} showCambiarEmpresa logoSize="md" />
+                {/* Empresa card — logo + nombre + RNC + Estado + Moneda */}
+                <Box sx={{
+                  bgcolor: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  px: { xs: 2, md: 2.5 },
+                  py: 2,
+                }}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+                    <EmpresaBlock empresa={empresa} showCambiarEmpresa logoSize="md" />
 
-                  <div className="flex items-start gap-8">
-                    <div className="text-right">
-                      <p className="text-[11px] text-gray-500 uppercase tracking-wide">Estado</p>
-                      <div className="flex items-center gap-1.5 mt-1 justify-end">
-                        <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
-                        <span className="text-sm font-medium text-gray-700">Sin emitir</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] text-gray-500 uppercase tracking-wide">Moneda</p>
-                      <p className="text-sm font-medium text-gray-700 mt-1">DOP</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Estado
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5, justifyContent: 'flex-end' }}>
+                          <Box
+                            component="span"
+                            aria-hidden="true"
+                            sx={{ height: 8, width: 8, borderRadius: '50%', bgcolor: '#fbbf24', display: 'inline-block' }}
+                          />
+                          <Typography sx={{ fontSize: '14px', fontWeight: 500, color: 'text.primary' }}>
+                            Sin emitir
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Moneda
+                        </Typography>
+                        <Typography sx={{ fontSize: '14px', fontWeight: 500, color: 'text.primary', mt: 0.5 }}>
+                          DOP
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Box>
 
-              {/* ── SECCIÓN 1: Tipo de comprobante fiscal ──────────────────────── */}
-          <SectionCard number={1} title="Tipo de comprobante fiscal" icon={Receipt}>
-            <p className="text-xs text-gray-500 mb-4">
-              Este tipo de comprobante se usará para todas las facturas generadas por esta suscripción.
-            </p>
-            <div>
-              <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                Tipo de factura <span className="text-red-500">*</span>
-              </Label>
-              <Select value={tipoEcf} onValueChange={handleChangeTipo}>
-                <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIPOS_ECF.filter(t => tipoVisible(t.value)).map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="mt-4 bg-teal-50 border border-teal-100 rounded-lg p-3 flex items-start gap-2.5">
-              <Info className="h-4 w-4 text-teal-700 mt-0.5 shrink-0" />
-              <p className="text-xs text-teal-900 leading-relaxed">
-                <span className="font-semibold">Importante:</span> Cambiar el tipo de comprobante afectará las próximas facturas de esta suscripción. Las facturas ya emitidas no se modificarán.
-              </p>
-            </div>
-          </SectionCard>
-
-              {/* ── SECCIÓN 2: Cliente ──────────────────────────────────────────── */}
-          <SectionCard number={2} title="Cliente" icon={User}>
-            <ClienteSection
-              clienteSeleccionado={clienteSeleccionado}
-              buscarClientes={buscarClientes}
-              onSelectCliente={seleccionarCliente}
-              onClearCliente={limpiarCliente}
-              onOpenNuevoCliente={() => router.push('/dashboard/clientes/nuevo')}
-              regla={regla}
-              rncManual={rncManual} rncManualNombre={rncManualNombre}
-              setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
-              emailManual={emailManual} setEmailManual={setEmailManual}
-              telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
-              tipoEcf={tipoEcf} totalDocumento={totales.total}
-            />
-          </SectionCard>
-
-          {/* ── SECCIÓN 3: Configuración de la suscripción ──────────────────── */}
-          <SectionCard number={3} title="Configuración de la suscripción" icon={Calendar}>
-            <div className="space-y-5">
-
-              {/* Row 1: Nombre del plan + Descripción */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Nombre del plan <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    placeholder="Ej: Mensualidad colegio - Juan Pérez"
-                    value={nombre}
-                    onChange={e => setNombre(e.target.value)}
-                    className="mt-1 h-10"
-                    required
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1">Nombre interno para identificar este plan</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Descripción <span className="text-gray-400 text-[11px] font-normal normal-case">(opcional)</span>
-                  </Label>
-                  <Input
-                    placeholder="Ej: Mensualidad por servicios educativos"
-                    value={descripcion}
-                    onChange={e => setDescripcion(e.target.value.slice(0, 200))}
-                    maxLength={200}
-                    className="mt-1 h-10"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1 text-right">{descripcion.length}/200</p>
-                </div>
-              </div>
-
-              {/* ── Subheader RECURRENCIA ── */}
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Recurrencia
-                </span>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Frecuencia <span className="text-red-500">*</span>
-                  </Label>
-                  <Select value={frecuencia} onValueChange={setFrecuencia}>
-                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FRECUENCIAS.map(f => (
-                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                {/* ── SECCIÓN 1: Tipo de comprobante fiscal ──────────────────────── */}
+                <SectionCard number={1} title="Tipo de comprobante fiscal" icon={Receipt}>
+                  <Typography sx={{ fontSize: '12px', color: 'text.secondary', mb: 2 }}>
+                    Este tipo de comprobante se usará para todas las facturas generadas por esta suscripción.
+                  </Typography>
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>Tipo de factura *</InputLabel>
+                    <Select
+                      value={tipoEcf}
+                      label="Tipo de factura *"
+                      onChange={(e) => handleChangeTipo(e.target.value)}
+                      sx={{ borderRadius: '8px' }}
+                    >
+                      {TIPOS_ECF.filter(t => tipoVisible(t.value)).map(t => (
+                        <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Fecha de inicio <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="date"
-                    value={fechaInicio}
-                    onChange={e => setFechaInicio(e.target.value)}
-                    /* En edición, permitimos fechas pasadas (el plan ya existe). */
-                    min={isEdit ? undefined : today}
-                    className="mt-1 h-10"
-                    required
+                    </Select>
+                  </FormControl>
+                  <Box sx={{
+                    mt: 2,
+                    bgcolor: '#eef2fe',
+                    border: '1px solid #e0e7fd',
+                    borderRadius: '8px',
+                    p: 1.5,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 1.25,
+                  }}>
+                    <Info size={16} style={{ color: '#2a45c4', marginTop: 2, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: '12px', color: '#24377d', lineHeight: 1.6 }}>
+                      <Box component="span" sx={{ fontWeight: 600 }}>Importante:</Box>{' '}
+                      Cambiar el tipo de comprobante afectará las próximas facturas de esta suscripción. Las facturas ya emitidas no se modificarán.
+                    </Typography>
+                  </Box>
+                </SectionCard>
+
+                {/* ── SECCIÓN 2: Cliente ──────────────────────────────────────────── */}
+                <SectionCard number={2} title="Cliente" icon={User}>
+                  <ClienteSection
+                    clienteSeleccionado={clienteSeleccionado}
+                    buscarClientes={buscarClientes}
+                    onSelectCliente={seleccionarCliente}
+                    onClearCliente={limpiarCliente}
+                    onOpenNuevoCliente={() => setShowNuevoCliente(true)}
+                    regla={regla}
+                    rncManual={rncManual} rncManualNombre={rncManualNombre}
+                    setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
+                    emailManual={emailManual} setEmailManual={setEmailManual}
+                    telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
+                    tipoEcf={tipoEcf} totalDocumento={totales.total}
                   />
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Fecha de fin <span className="text-gray-400 text-[11px] font-normal normal-case">(opcional)</span>
-                  </Label>
-                  <div className="relative mt-1">
-                    <Input
-                      type="date"
-                      value={fechaFin}
-                      onChange={e => setFechaFin(e.target.value)}
-                      min={fechaInicio || today}
-                      className="h-10 pr-8"
+                </SectionCard>
+
+                {/* ── SECCIÓN 3: Configuración de la suscripción ──────────────────── */}
+                <SectionCard number={3} title="Configuración de la suscripción" icon={Calendar}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+
+                    {/* Row 1: Nombre del plan + Descripción */}
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Nombre del plan <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+                        </Typography>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          placeholder="Ej: Mensualidad colegio - Juan Pérez"
+                          value={nombre}
+                          onChange={e => setNombre(e.target.value)}
+                          required
+                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                        />
+                        <Typography sx={{ fontSize: '10px', color: 'text.disabled', mt: 0.5 }}>
+                          Nombre interno para identificar este plan
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Descripción{' '}
+                          <Box component="span" sx={{ color: 'text.disabled', fontSize: '11px', fontWeight: 400, textTransform: 'none' }}>(opcional)</Box>
+                        </Typography>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          placeholder="Ej: Mensualidad por servicios educativos"
+                          value={descripcion}
+                          onChange={e => setDescripcion(e.target.value.slice(0, 200))}
+                          slotProps={{ htmlInput: { maxLength: 200 } }}
+                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                        />
+                        <Typography sx={{ fontSize: '10px', color: 'text.disabled', mt: 0.5, textAlign: 'right' }}>
+                          {descripcion.length}/200
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    {/* ── Subheader RECURRENCIA ── */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Box sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        bgcolor: '#eef2fe',
+                        color: '#2a45c4',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        px: 1.25,
+                        py: 0.5,
+                        borderRadius: '6px',
+                      }}>
+                        <RefreshCw size={14} />
+                        Recurrencia
+                      </Box>
+                      <Box sx={{ flex: 1, height: '1px', bgcolor: '#e5e7eb' }} />
+                    </Box>
+
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4,1fr)' }, gap: 1.5 }}>
+                      {/* Frecuencia */}
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Frecuencia <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+                        </Typography>
+                        <FormControl size="small" fullWidth>
+                          <Select
+                            value={frecuencia}
+                            onChange={(e) => setFrecuencia(e.target.value)}
+                            sx={{ borderRadius: '8px' }}
+                            displayEmpty
+                          >
+                            {FRECUENCIAS.map(f => (
+                              <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+
+                      {/* Fecha de inicio */}
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Fecha de inicio <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+                        </Typography>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          type="date"
+                          value={fechaInicio}
+                          onChange={e => setFechaInicio(e.target.value)}
+                          slotProps={{ htmlInput: { min: isEdit ? undefined : today } }}
+                          required
+                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                        />
+                      </Box>
+
+                      {/* Fecha de fin */}
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Fecha de fin{' '}
+                          <Box component="span" sx={{ color: 'text.disabled', fontSize: '11px', fontWeight: 400, textTransform: 'none' }}>(opcional)</Box>
+                        </Typography>
+                        <Box sx={{ position: 'relative' }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            type="date"
+                            value={fechaFin}
+                            onChange={e => setFechaFin(e.target.value)}
+                            slotProps={{ htmlInput: { min: fechaInicio || today } }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                              '& input': { pr: fechaFin ? 4.5 : undefined },
+                            }}
+                          />
+                          {fechaFin && (
+                            <IconButton
+                              size="small"
+                              onClick={() => setFechaFin('')}
+                              title="Quitar fecha de fin"
+                              sx={{
+                                position: 'absolute',
+                                right: 6,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                p: 0.25,
+                                color: 'text.disabled',
+                                '&:hover': { color: 'text.secondary' },
+                              }}
+                            >
+                              <X size={14} />
+                            </IconButton>
+                          )}
+                        </Box>
+                      </Box>
+
+                      {/* Día de cobro */}
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Día de cobro <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+                        </Typography>
+                        <FormControl size="small" fullWidth disabled={!fechaInicio}>
+                          <Select
+                            value={diaCobro ? String(diaCobro) : ''}
+                            displayEmpty
+                            renderValue={(v) => v || '—'}
+                            onChange={(e) => {
+                              if (!fechaInicio) return;
+                              const [y, m] = fechaInicio.split('-');
+                              const nuevoDia = String(e.target.value).padStart(2, '0');
+                              setFechaInicio(`${y}-${m}-${nuevoDia}`);
+                            }}
+                            sx={{ borderRadius: '8px' }}
+                          >
+                            {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
+                              <MenuItem key={n} value={String(n)}>{n}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+                    </Box>
+
+                    {/* Info pill: día de cobro */}
+                    {diaCobro && (
+                      <Box sx={{
+                        bgcolor: '#eef2fe',
+                        border: '1px solid #e0e7fd',
+                        borderRadius: '8px',
+                        px: 1.5,
+                        py: 1.25,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 1.25,
+                      }}>
+                        <Info size={16} style={{ color: '#2a45c4', flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
+                          {frecuencia === 'semanal'    && <>Se cobrará cada <Box component="span" sx={{ fontWeight: 600 }}>{new Date(fechaInicio + 'T00:00').toLocaleDateString('es-DO', { weekday: 'long' })}</Box>.</>}
+                          {frecuencia === 'quincenal'  && <>Se cobrará cada <Box component="span" sx={{ fontWeight: 600 }}>15 días</Box> desde {formatFechaCorta(fechaInicio)}.</>}
+                          {frecuencia === 'mensual'    && <>Se cobrará el día <Box component="span" sx={{ fontWeight: 600 }}>{diaCobro}</Box> de cada mes.</>}
+                          {frecuencia === 'trimestral' && <>Se cobrará cada <Box component="span" sx={{ fontWeight: 600 }}>3 meses</Box> el día {diaCobro}.</>}
+                          {frecuencia === 'anual'      && <>Se cobrará cada <Box component="span" sx={{ fontWeight: 600 }}>año</Box> el día {diaCobro}.</>}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* ── Subheader PAGO ── */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pt: 1 }}>
+                      <Box sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        bgcolor: '#eef2fe',
+                        color: '#2a45c4',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        px: 1.25,
+                        py: 0.5,
+                        borderRadius: '6px',
+                      }}>
+                        <CreditCard size={14} />
+                        Pago
+                      </Box>
+                      <Box sx={{ flex: 1, height: '1px', bgcolor: '#e5e7eb' }} />
+                    </Box>
+
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                      {/* Condición de pago */}
+                      <Box>
+                        <Typography sx={{ fontSize: '11px', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                          Condición de pago <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+                        </Typography>
+                        <FormControl size="small" fullWidth>
+                          <Select
+                            value={tipoPago}
+                            onChange={(e) => setTipoPago(e.target.value)}
+                            sx={{ borderRadius: '8px' }}
+                          >
+                            {TIPOS_PAGO.map(t => (
+                              <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+
+                      {/* Plazo de vencimiento */}
+                      <Box>
+                        <Typography sx={{
+                          fontSize: '11px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          mb: 0.5,
+                          color: tipoPago === '2' ? 'text.secondary' : 'text.disabled',
+                        }}>
+                          Plazo de vencimiento{' '}
+                          {tipoPago === '2' && <Box component="span" sx={{ color: 'error.main' }}>*</Box>}
+                        </Typography>
+                        <Box sx={{ position: 'relative', width: 112 }}>
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={diasParaPago}
+                            onChange={(e) => setDiasParaPago(e.target.value)}
+                            disabled={tipoPago !== '2'}
+                            slotProps={{ htmlInput: { min: 1 } }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                              '& input': { pr: 5 },
+                            }}
+                          />
+                          <Typography sx={{
+                            position: 'absolute',
+                            right: 10,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            fontSize: '12px',
+                            color: 'text.disabled',
+                            pointerEvents: 'none',
+                          }}>
+                            días
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+
+                    {/* Info pill: vencimiento */}
+                    {tipoPago === '2' && diasParaPago && (
+                      <Box sx={{
+                        bgcolor: '#eef2fe',
+                        border: '1px solid #e0e7fd',
+                        borderRadius: '8px',
+                        px: 1.5,
+                        py: 1.25,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.25,
+                      }}>
+                        <Info size={16} style={{ color: '#2a45c4', flexShrink: 0, marginTop: 2 }} />
+                        <Box>
+                          <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
+                            Vence <Box component="span" sx={{ fontWeight: 600 }}>{diasParaPago} días</Box> después de cada emisión.
+                          </Typography>
+                          {empresa?.recargoMoraActivo && (
+                            <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
+                              <Box component="span" sx={{ fontWeight: 600 }}>Mora:</Box>{' '}
+                              {describirMora(
+                                configMoraEmpresa,
+                                (cents: number) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                              )}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    )}
+
+                  </Box>
+                </SectionCard>
+
+                {/* ── SECCIÓN 4: Productos o servicios ────────────────────────────── */}
+                <SectionCard
+                  number={4}
+                  title="Productos o servicios"
+                  icon={Package}
+                  actions={
+                    <ColumnasToggle
+                      showReferencia={showItemRef}
+                      showDescripcion={showItemDesc}
+                      onToggleReferencia={handleToggleRef}
+                      onToggleDescripcion={handleToggleDesc}
                     />
-                    {fechaFin && (
-                      <button
-                        type="button"
-                        onClick={() => setFechaFin('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        title="Quitar fecha de fin"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Día de cobro <span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    value={diaCobro ? String(diaCobro) : ''}
-                    onValueChange={(v) => {
-                      if (!fechaInicio) return;
-                      const [y, m] = fechaInicio.split('-');
-                      const nuevoDia = String(v).padStart(2, '0');
-                      setFechaInicio(`${y}-${m}-${nuevoDia}`);
-                    }}
-                    disabled={!fechaInicio}
-                  >
-                    <SelectTrigger className="mt-1 h-10"><SelectValue placeholder="—" /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
-                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                  }
+                >
+                  <ItemsTable
+                    items={items}
+                    regla={regla}
+                    buscarProductos={buscarProductos}
+                    onSelectProducto={seleccionarProducto}
+                    onCrearProductoLibre={crearProductoLibre}
+                    onAddItem={addItem}
+                    onRemoveItem={removeItem}
+                    onUpdateItem={updateItem}
+                    onSelectBeneficiario={handleSelectBeneficiario}
+                    onOpenNuevoProducto={() => router.push('/dashboard/productos/nuevo')}
+                    showReferencia={showItemRef}
+                    showDescripcion={showItemDesc}
+                    dependientes={dependientesCliente}
+                  />
 
-              {/* Info pill: día de cobro */}
-              {diaCobro && (
-                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-                  <Info className="h-4 w-4 text-teal-700 shrink-0" />
-                  <p className="text-sm text-teal-900">
-                    {frecuencia === 'semanal'    && <>Se cobrará cada <span className="font-semibold">{new Date(fechaInicio + 'T00:00').toLocaleDateString('es-DO', { weekday: 'long' })}</span>.</>}
-                    {frecuencia === 'quincenal'  && <>Se cobrará cada <span className="font-semibold">15 días</span> desde {formatFechaCorta(fechaInicio)}.</>}
-                    {frecuencia === 'mensual'    && <>Se cobrará el día <span className="font-semibold">{diaCobro}</span> de cada mes.</>}
-                    {frecuencia === 'trimestral' && <>Se cobrará cada <span className="font-semibold">3 meses</span> el día {diaCobro}.</>}
-                    {frecuencia === 'anual'      && <>Se cobrará cada <span className="font-semibold">año</span> el día {diaCobro}.</>}
-                  </p>
-                </div>
-              )}
+                  {/* Totales */}
+                  <Box sx={{ pt: 2, mt: 1.5, borderTop: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
+                    <Box sx={{ width: 288, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Subtotal</Typography>
+                        <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>{formatDOP(totales.subtotal)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>ITBIS</Typography>
+                        <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>{formatDOP(totales.itbis)}</Typography>
+                      </Box>
+                      <Box sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        borderTop: '1px solid #e5e7eb',
+                        pt: 1,
+                        mt: 0.5,
+                      }}>
+                        <Typography sx={{ fontSize: '16px', fontWeight: 700, color: 'text.primary' }}>Total estimado</Typography>
+                        <Typography sx={{ fontSize: '16px', fontWeight: 700, color: 'text.primary' }}>{formatDOP(totales.total)}</Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                </SectionCard>
 
-              {/* ── Subheader PAGO ── */}
-              <div className="flex items-center gap-3 pt-2">
-                <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">
-                  <CreditCard className="h-3.5 w-3.5" />
-                  Pago
-                </span>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
+                {/* ── SECCIÓN 5: Términos y condiciones ───────────────────────────── */}
+                <AccordionSection
+                  number={5} title="Términos y condiciones" icon={ScrollText}
+                  defaultOpen={terminosCondiciones.trim().length > 0}
+                >
+                  <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
+                </AccordionSection>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Condición de pago <span className="text-red-500">*</span>
-                  </Label>
-                  <Select value={tipoPago} onValueChange={setTipoPago}>
-                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_PAGO.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                {/* ── SECCIÓN 6: Notas ────────────────────────────────────────────── */}
+                <AccordionSection
+                  number={6} title="Notas" icon={StickyNote}
+                  defaultOpen={notas.trim().length > 0}
+                >
+                  <Notas notas={notas} setNotas={setNotas} />
+                </AccordionSection>
 
-              {/* Info pill: vencimiento (según config central) + mora */}
-              {tipoPago === '2' && diasParaPago && (
-                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
-                  <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
-                  <div className="text-sm text-teal-900 space-y-0.5">
-                    <p>
-                      Vence <span className="font-semibold">{diasParaPago} días</span> después de cada emisión.
-                    </p>
-                    {empresa?.recargoMoraActivo && (
-                      <p>
-                        <span className="font-semibold">Mora:</span>{' '}
-                        {describirMora(
-                          configMoraEmpresa,
-                          (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                        )}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+                {/* ── SECCIÓN 7: Pie de factura ───────────────────────────────────── */}
+                <AccordionSection
+                  number={7} title="Pie de factura" icon={FileText}
+                  defaultOpen={pieFactura.trim().length > 0}
+                >
+                  <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
+                </AccordionSection>
 
-            </div>
-          </SectionCard>
+                {/* Cobro automático con tarjeta — feature no implementada */}
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => openProximamente('Cobro automático con tarjeta')}
+                  sx={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    bgcolor: '#fff',
+                    border: '1px dashed #d1d5db',
+                    borderRadius: '12px',
+                    p: 1.5,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'border-color 0.15s, background-color 0.15s',
+                    '&:hover': {
+                      borderColor: '#8193f5',
+                      bgcolor: 'rgba(240,253,250,0.4)',
+                      '& .chevron-icon': { color: '#3658e1' },
+                    },
+                  }}
+                >
+                  <Box sx={{
+                    height: 36,
+                    width: 36,
+                    borderRadius: '8px',
+                    bgcolor: '#e0e7fd',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <CreditCard size={18} style={{ color: '#2a45c4' }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '14px', fontWeight: 500, color: 'text.primary' }}>
+                      Cobro automático con tarjeta
+                    </Typography>
+                    <Typography sx={{ fontSize: '12px', color: 'text.secondary' }}>
+                      Descuenta el monto de una tarjeta cada período. Sin registrar pagos a mano.{' '}
+                      <Box component="span" sx={{ color: '#92400e' }}>(próximamente)</Box>
+                    </Typography>
+                  </Box>
+                  <Box sx={{ color: '#d1d5db', flexShrink: 0, transition: 'color 0.15s' }}>
+                    <ChevronRight size={16} />
+                  </Box>
+                </Box>
+              </Box>
 
-          {/* ── SECCIÓN 4: Productos o servicios ────────────────────────────── */}
-          <SectionCard
-            number={4}
-            title="Productos o servicios"
-            icon={Package}
-            actions={
-              <ColumnasToggle
-                showReferencia={showItemRef}
-                showDescripcion={showItemDesc}
-                onToggleReferencia={handleToggleRef}
-                onToggleDescripcion={handleToggleDesc}
-              />
-            }
-          >
-            <ItemsTable
-              items={items}
-              regla={regla}
-              buscarProductos={buscarProductos}
-              onSelectProducto={seleccionarProducto}
-              onCrearProductoLibre={crearProductoLibre}
-              onAddItem={addItem}
-              onRemoveItem={removeItem}
-              onUpdateItem={updateItem}
-              onSelectBeneficiario={handleSelectBeneficiario}
-              onOpenNuevoProducto={() => router.push('/dashboard/productos/nuevo')}
-              showReferencia={showItemRef}
-              showDescripcion={showItemDesc}
-              dependientes={dependientesCliente}
-            />
-
-            {/* Totales */}
-            <div className="pt-4 mt-3 border-t border-gray-100 flex justify-end">
-              <div className="w-72 space-y-2">
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>Subtotal</span>
-                  <span>{formatDOP(totales.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>ITBIS</span>
-                  <span>{formatDOP(totales.itbis)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-base text-gray-900 border-t border-gray-200 pt-2 mt-2">
-                  <span>Total estimado</span>
-                  <span>{formatDOP(totales.total)}</span>
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* ── SECCIÓN 5: Términos y condiciones ───────────────────────────── */}
-          <AccordionSection
-            number={5} title="Términos y condiciones" icon={ScrollText}
-            defaultOpen={terminosCondiciones.trim().length > 0}
-          >
-            <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
-          </AccordionSection>
-
-          {/* ── SECCIÓN 6: Notas ────────────────────────────────────────────── */}
-          <AccordionSection
-            number={6} title="Notas" icon={StickyNote}
-            defaultOpen={notas.trim().length > 0}
-          >
-            <Notas notas={notas} setNotas={setNotas} />
-          </AccordionSection>
-
-          {/* ── SECCIÓN 7: Pie de factura ───────────────────────────────────── */}
-          <AccordionSection
-            number={7} title="Pie de factura" icon={FileText}
-            defaultOpen={pieFactura.trim().length > 0}
-          >
-            <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
-          </AccordionSection>
-
-              {/* Cobro automático con tarjeta — feature no implementada, va al final del flow */}
-              <button
-                type="button"
-                onClick={() => openProximamente('Cobro automático con tarjeta')}
-                className="w-full flex items-center gap-3 bg-white border border-dashed border-gray-300 hover:border-teal-400 hover:bg-teal-50/40 rounded-xl p-3 text-left transition-colors group"
+              {/* RIGHT column — sticky sidebar */}
+              <Box
+                component="aside"
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  xl: { position: 'sticky', top: 16, alignSelf: 'flex-start' },
+                  position: { xl: 'sticky' },
+                  top: { xl: 16 },
+                  alignSelf: { xl: 'flex-start' },
+                }}
               >
-                <div className="h-9 w-9 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
-                  <CreditCard className="h-[18px] w-[18px] text-teal-700" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Cobro automático con tarjeta</p>
-                  <p className="text-xs text-gray-500">
-                    Descuenta el monto de una tarjeta cada período. Sin registrar pagos a mano. <span className="text-amber-700">(próximamente)</span>
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500 shrink-0" />
-              </button>
-            </div>
+                {/* Resumen del plan */}
+                <Box component="section" sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+                  <Box
+                    component="header"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      px: 2,
+                      py: 1.5,
+                      borderBottom: '1px solid #f3f4f6',
+                    }}
+                  >
+                    <FileText size={16} style={{ color: '#4b5563' }} />
+                    <Typography sx={{ fontSize: '14px', fontWeight: 600, color: 'text.primary' }}>
+                      Resumen del plan
+                    </Typography>
+                  </Box>
+                  <Box sx={{ px: 2, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Tipo de comprobante</Typography>
+                      <Chip
+                        label={
+                          tipoEcf === '31' ? `Crédito fiscal (${tipoEcf})` :
+                          tipoEcf === '32' ? `Consumo (${tipoEcf})` :
+                          `e-CF (${tipoEcf})`
+                        }
+                        size="small"
+                        sx={{ bgcolor: '#eef2fe', color: '#2a45c4', fontWeight: 500, height: 22, fontSize: '12px' }}
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Frecuencia</Typography>
+                      <Typography sx={{ fontSize: '14px', color: 'text.primary' }}>{FRECUENCIA_LABEL[frecuencia] ?? frecuencia}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Día de cobro</Typography>
+                      <Typography sx={{ fontSize: '14px', color: 'text.primary' }}>{diaCobro ?? '—'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Fecha de inicio</Typography>
+                      <Typography sx={{ fontSize: '14px', color: 'text.primary' }}>{fechaInicio ? formatFechaCorta(fechaInicio) : '—'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Próxima factura</Typography>
+                      <Typography sx={{ fontSize: '14px', color: '#2a45c4', fontWeight: 500 }}>
+                        {proximaEmisionPreview ? formatFechaCorta(proximaEmisionPreview) : '—'}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Clientes</Typography>
+                      <Typography sx={{ fontSize: '14px', color: 'text.primary' }}>{clienteSeleccionado ? 1 : 0}</Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{ borderTop: '1px solid #f3f4f6', px: 2, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Subtotal</Typography>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>{formatDOP(totales.subtotal)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Impuestos</Typography>
+                      <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>{formatDOP(totales.itbis)}</Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{ borderTop: '1px solid #f3f4f6', px: 2, py: 1.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <Typography sx={{ fontSize: '14px', fontWeight: 600, color: 'text.primary' }}>Total estimado</Typography>
+                      <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#2a45c4' }}>{formatDOP(totales.total)}</Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: '10px', color: 'text.disabled', mt: 0.5 }}>
+                      Este es un cálculo estimado por emisión.
+                    </Typography>
+                  </Box>
+                </Box>
 
-            {/* RIGHT column — sticky sidebar */}
-            <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-              {/* Resumen del plan */}
-              <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-                <header className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-                  <FileText className="h-4 w-4 text-gray-600" />
-                  <h3 className="text-sm font-semibold text-gray-900">Resumen del plan</h3>
-                </header>
-                <div className="px-4 py-3 space-y-2.5 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Tipo de comprobante</span>
-                    <span className="bg-teal-50 text-teal-700 text-xs font-medium px-2 py-0.5 rounded">
-                      {tipoEcf === '31' ? `Crédito fiscal (${tipoEcf})` :
-                       tipoEcf === '32' ? `Consumo (${tipoEcf})` :
-                       `e-CF (${tipoEcf})`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Frecuencia</span>
-                    <span className="text-gray-900">{FRECUENCIA_LABEL[frecuencia] ?? frecuencia}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Día de cobro</span>
-                    <span className="text-gray-900">{diaCobro ?? '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Fecha de inicio</span>
-                    <span className="text-gray-900">{fechaInicio ? formatFechaCorta(fechaInicio) : '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Próxima factura</span>
-                    <span className="text-teal-700 font-medium">{proximaEmisionPreview ? formatFechaCorta(proximaEmisionPreview) : '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Clientes</span>
-                    <span className="text-gray-900">{clienteSeleccionado ? 1 : 0}</span>
-                  </div>
-                </div>
-                <div className="border-t border-gray-100 px-4 py-3 space-y-2 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span>
-                    <span>{formatDOP(totales.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Impuestos</span>
-                    <span>{formatDOP(totales.itbis)}</span>
-                  </div>
-                </div>
-                <div className="border-t border-gray-100 px-4 py-3">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-sm font-semibold text-gray-900">Total estimado</span>
-                    <span className="text-lg font-bold text-teal-700">{formatDOP(totales.total)}</span>
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1">Este es un cálculo estimado por emisión.</p>
-                </div>
-              </section>
+                {/* Próximas facturas (3) */}
+                {proximas3Emisiones.length > 0 && (
+                  <Box component="section" sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+                    <Box
+                      component="header"
+                      sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f3f4f6' }}
+                    >
+                      <Typography sx={{ fontSize: '14px', fontWeight: 600, color: 'text.primary' }}>
+                        Próximas facturas ({proximas3Emisiones.length})
+                      </Typography>
+                    </Box>
+                    <Box component="ul" sx={{ px: 2, py: 1, m: 0, listStyle: 'none', p: 0 }}>
+                      {proximas3Emisiones.map((fecha, i) => (
+                        <Box
+                          key={i}
+                          component="li"
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 1,
+                            py: 1,
+                            borderBottom: i < proximas3Emisiones.length - 1 ? '1px solid #f3f4f6' : 'none',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                            <Calendar size={14} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                            <Typography sx={{ fontSize: '14px', color: 'text.primary' }}>{formatFechaCorta(fecha)}</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                            <Chip
+                              label={FRECUENCIA_LABEL[frecuencia] ?? frecuencia}
+                              size="small"
+                              sx={{ bgcolor: '#eef2fe', color: '#2a45c4', fontWeight: 500, height: 18, fontSize: '10px' }}
+                            />
+                            <Typography sx={{ fontSize: '12px', fontWeight: 500, color: 'text.primary' }}>
+                              {formatDOP(totales.total)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
 
-              {/* Próximas facturas (3) */}
-              {proximas3Emisiones.length > 0 && (
-                <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-                  <header className="px-4 py-3 border-b border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900">Próximas facturas ({proximas3Emisiones.length})</h3>
-                  </header>
-                  <ul className="px-4 py-2 divide-y divide-gray-100">
-                    {proximas3Emisiones.map((fecha, i) => (
-                      <li key={i} className="flex items-center justify-between gap-2 py-2 text-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Calendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span className="text-gray-700">{formatFechaCorta(fecha)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="bg-teal-50 text-teal-700 text-[10px] font-medium px-1.5 py-0.5 rounded">
-                            {FRECUENCIA_LABEL[frecuencia] ?? frecuencia}
-                          </span>
-                          <span className="text-gray-900 text-xs font-medium">{formatDOP(totales.total)}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+                {/* Notas info */}
+                <Box component="section" sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', px: 2, py: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <StickyNote size={16} style={{ color: '#4b5563' }} />
+                    <Typography sx={{ fontSize: '14px', fontWeight: 600, color: 'text.primary' }}>Notas</Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: '12px', color: 'text.secondary', lineHeight: 1.6 }}>
+                    Las facturas se generarán automáticamente según la frecuencia y configuración definidas.
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
 
-              {/* Notas info */}
-              <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <StickyNote className="h-4 w-4 text-gray-600" />
-                  <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
-                </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Las facturas se generarán automáticamente según la frecuencia y configuración definidas.
-                </p>
-              </section>
-            </aside>
-          </div>
-
-          </div>
           <BottomActionBar
             items={items}
             loading={loading}
             primaryLabel={isEdit ? 'Guardar cambios' : 'Guardar y activar suscripción'}
             loadingPrimaryLabel="Guardando…"
-            onCancelar={() => router.push('/dashboard/facturas-recurrentes')}
+            onCancelar={volver}
           />
-        </form>
-      </div>
+        </Box>
+      </Box>
+
+      <ModalNuevoCliente
+        open={showNuevoCliente}
+        onClose={() => setShowNuevoCliente(false)}
+        onCreated={(c) => { seleccionarCliente(c); setShowNuevoCliente(false); }}
+      />
 
       {proximamenteDialog}
-
-      {/* Aviso al guardar un plan de contado con mora configurada */}
-      <Dialog open={confirmContado} onOpenChange={(o) => { if (!o && !loading) setConfirmContado(false); }}>
-        <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
-              Plan de contado
-            </DialogTitle>
-            <DialogDescription className="pt-1 text-sm text-gray-600">
-              Este plan está marcado <span className="font-semibold">de contado</span>. Las facturas
-              que genere quedarán por cobrar sin fecha de vencimiento y sin generar la mora
-              automática que tienes configurada. Puedes cambiarlo a crédito para que aplique el
-              vencimiento y la mora, o continuar de contado.
-            </DialogDescription>
-          </DialogHeader>
-          <label className="flex items-center gap-2 mt-1 text-sm text-gray-600 select-none cursor-pointer">
-            <input
-              type="checkbox"
-              checked={noMostrarContado}
-              onChange={(e) => setNoMostrarContado(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-            />
-            No volver a mostrar este mensaje
-          </label>
-          <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
-            <Button variant="outline" onClick={() => setConfirmContado(false)} disabled={loading}>
-              Cancelar
-            </Button>
-            <Button
-              variant="outline"
-              className="border-teal-600 text-teal-700 hover:bg-teal-50"
-              onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setTipoPago('2'); setConfirmContado(false); }}
-              disabled={loading}
-            >
-              Cambiar a crédito
-            </Button>
-            <Button
-              className="bg-amber-500 hover:bg-amber-600 text-white"
-              onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setConfirmContado(false); void doSubmit(); }}
-              disabled={loading}
-            >
-              Continuar de contado
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </Box>
   );
 }

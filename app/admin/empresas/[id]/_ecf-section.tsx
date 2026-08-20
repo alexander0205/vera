@@ -9,6 +9,8 @@ import {
 import { ensureContribuyenteLink } from '@/lib/ecf-api/sync';
 import { EcfApiTabs, EcfApiNoLink } from './_ecf-tabs';
 import { AlertTriangle } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 interface Props {
   teamId: number;
@@ -18,17 +20,23 @@ interface Props {
 export default async function EcfApiSection({ teamId, rnc }: Props) {
   if (!rnc) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-amber-900">Empresa sin RNC</p>
-          <p className="text-xs text-amber-700 mt-1">Edita la empresa y agrega un RNC válido para vincular con ecf-api.</p>
-        </div>
-      </div>
+      <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', p: 2.5, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <AlertTriangle style={{ width: 20, height: 20, color: '#d97706', marginTop: 2, flexShrink: 0 }} />
+        <Box>
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#78350f' }}>Empresa sin RNC</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#92400e', mt: 0.5 }}>Edita la empresa y agrega un RNC válido para vincular con ecf-api.</Typography>
+        </Box>
+      </Box>
     );
   }
 
-  const link = await ensureContribuyenteLink(teamId);
+  let link: Awaited<ReturnType<typeof ensureContribuyenteLink>>;
+  try {
+    link = await ensureContribuyenteLink(teamId);
+  } catch (e) {
+    console.error('[EcfApiSection] ensureContribuyenteLink error:', e);
+    link = { linked: false, codigoPublico: null, contribuyente: null, autoLinked: false };
+  }
 
   if (!link.linked) {
     return <EcfApiNoLink teamId={teamId} rnc={rnc} />;
@@ -37,7 +45,6 @@ export default async function EcfApiSection({ teamId, rnc }: Props) {
   const cp = link.codigoPublico!;
   const contrib = link.contribuyente!;
 
-  // Cargar data en paralelo, tolerando errores parciales
   const [certs, rangos, status, emisiones, meData] = await Promise.all([
     safeCall(() => certificados.list(cp)),
     safeCall(() => ncfRangos.list(cp)),

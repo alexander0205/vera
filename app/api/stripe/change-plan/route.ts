@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getPlanByPriceId } from '@/lib/config/plans';
+import { validarCambioDePlan } from '@/lib/suscripcion/cambio-plan';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,12 +34,54 @@ export async function POST(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'No hay empresa activa' }, { status: 400 });
 
-  const { newPriceId } = await req.json() as { newPriceId?: string };
+  const { newPriceId, confirmado } = await req.json() as {
+    newPriceId?: string;
+    /** El usuario ya vio la lista de consecuencias y aun así quiere seguir. */
+    confirmado?: boolean;
+  };
   if (!newPriceId) return NextResponse.json({ error: 'newPriceId requerido' }, { status: 400 });
 
   const team = await getTeam(teamId);
   if (!team?.stripeSubscriptionId || !team.stripeCustomerId) {
     return NextResponse.json({ error: 'No tienes una suscripción activa' }, { status: 400 });
+  }
+
+  // ── Qué se rompe con este cambio ──────────────────────────────────────────
+  // Antes de tocar Stripe. Para él un cambio de plan son dos números; que el
+  // colegio tenga 442 estudiantes contra un tope de 300 solo lo sabemos aquí.
+  const planDestino = getPlanByPriceId(newPriceId);
+  const adicionales = Array.isArray(team.adicionales)
+    ? team.adicionales.filter((a): a is string => typeof a === 'string')
+    : [];
+  const veredicto = await validarCambioDePlan(
+    teamId, team.planName, planDestino.key, adicionales,
+  );
+
+  if (!veredicto.permitido) {
+    return NextResponse.json(
+      {
+        error: 'Este cambio de plan no se puede aplicar todavía.',
+        code: 'CAMBIO_BLOQUEADO',
+        bloqueos: veredicto.bloqueos,
+        avisos: veredicto.avisos,
+      },
+      { status: 409 },
+    );
+  }
+
+  // Hay consecuencias pero ninguna bloquea: se devuelven para que las vea y
+  // vuelva a llamar con `confirmado: true`. Un 200 con la lista sería un
+  // cambio aplicado que el cliente no leyó.
+  if (veredicto.requiereConfirmacion && !confirmado) {
+    return NextResponse.json(
+      {
+        code: 'REQUIERE_CONFIRMACION',
+        plan: planDestino.name,
+        avisos: veredicto.avisos,
+        modulosQueSePierden: veredicto.modulosQueSePierden,
+      },
+      { status: 409 },
+    );
   }
 
   // Recuperar suscripción actual
@@ -74,7 +117,7 @@ export async function POST(req: NextRequest) {
     });
 
     const newPlan = getPlanByPriceId(newPriceId);
-    await db.update(teams).set({ planName: newPlan.name, updatedAt: new Date() })
+    await db.update(teams).set({ planName: newPlan.key, updatedAt: new Date() })
       .where(eq(teams.id, teamId));
 
     return NextResponse.json({

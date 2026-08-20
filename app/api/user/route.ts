@@ -1,9 +1,10 @@
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
-import { users, teamMembers } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
+import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
 
 export async function GET() {
   const user = await getUser();
@@ -14,15 +15,7 @@ export async function GET() {
   // Rol en el team activo + catálogo de permisos efectivos.
   // El cliente (usePermissions) usa esto para gating de la UI.
   const teamId = await getTeamIdForUser();
-  let teamRole: string | null = null;
-  if (teamId) {
-    const [m] = await db
-      .select({ role: teamMembers.role })
-      .from(teamMembers)
-      .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-      .limit(1);
-    teamRole = m?.role ?? null;
-  }
+  const teamRole = teamId ? await getTeamRoleForUser() : null;
 
   // platformRole='admin' → acceso total (espejo de userCanForTeam). Para el
   // resto, permisos efectivos del rol en el team (con overrides por empresa).
@@ -31,7 +24,13 @@ export async function GET() {
       ? [...ALL_PERMISSIONS]
       : (teamId ? await getEffectivePermissions(teamId, teamRole) : []);
 
-  return Response.json({ ...safe, teamRole, permissions });
+  // Módulos accesibles para este usuario en el team activo (módulos de la
+  // empresa ∩ permisos modulo:* del rol). El module-switcher usa esto.
+  const modules: ModuleKey[] = teamId
+    ? await getUserModules(teamId, user.platformRole, teamRole)
+    : [];
+
+  return Response.json({ ...safe, teamRole, permissions, modules });
 }
 
 export async function PATCH(req: Request) {
@@ -48,7 +47,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE() {
-  const { cookies } = await import('next/headers');
-  (await cookies()).delete('session');
+  const { clearSession } = await import('@/lib/auth/session');
+  await clearSession();
   return Response.json({ success: true });
 }

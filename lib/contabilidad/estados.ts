@@ -23,11 +23,19 @@ export type EstadoNcf =
 /** Qué debe hacer el contador con este comprobante. Es la decisión que importa. */
 export type Veredicto = 'declarar' | 'no-declarar' | 'esperar' | 'revisar';
 
-export const VEREDICTO_META: Record<Veredicto, { label: string; cls: string }> = {
-  'declarar':    { label: 'Sí se declara',   cls: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-  'no-declarar': { label: 'No se declara',   cls: 'bg-gray-100 text-gray-700 border-gray-300' },
-  'esperar':     { label: 'Aún no',          cls: 'bg-amber-100 text-amber-800 border-amber-300' },
-  'revisar':     { label: 'Revisar',         cls: 'bg-red-100 text-red-800 border-red-300' },
+/** Colores del chip de veredicto (hex directo — la UI es MUI, no utilidades CSS). */
+export interface VeredictoMeta {
+  label:  string;
+  bg:     string;
+  fg:     string;
+  border: string;
+}
+
+export const VEREDICTO_META: Record<Veredicto, VeredictoMeta> = {
+  'declarar':    { label: 'Sí se declara', bg: '#d1fae5', fg: '#065f46', border: '#6ee7b7' },
+  'no-declarar': { label: 'No se declara', bg: '#f3f4f6', fg: '#374151', border: '#d1d5db' },
+  'esperar':     { label: 'Aún no',        bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },
+  'revisar':     { label: 'Revisar',       bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' },
 };
 
 export interface EstadoMeta {

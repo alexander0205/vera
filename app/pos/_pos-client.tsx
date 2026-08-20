@@ -2,14 +2,28 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useDgiiReadiness } from '@/lib/hooks/useDgiiReadiness';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
-import { toast } from 'sonner';
-import { RncSearch } from '@/components/RncSearch';
-import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
-import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
+import { labelMetodo } from '@/lib/pagos/metodos';
+import { ProductoDialog } from '@/components/shared/producto-dialog';
+import { ClienteDialog } from '@/components/shared/cliente-dialog';
+import { montosRapidos } from '@/lib/pos/montos';
+import Link from 'next/link';
+import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap, Banknote, CreditCard, ArrowLeftRight, type LucideIcon } from 'lucide-react';
+import { toast } from 'sonner';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import ButtonBase from '@mui/material/ButtonBase';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import InputAdornment from '@mui/material/InputAdornment';
+import Checkbox from '@mui/material/Checkbox';
+import Dialog from '@mui/material/Dialog';
+import Chip from '@mui/material/Chip';
+import { RncSearch } from '@/components/RncSearch';
 import { ModalSeleccionarVariante } from '@/app/(dashboard)/dashboard/facturas/nueva/modals/ModalSeleccionarVariante';
 import type { VariantePick } from '@/app/(dashboard)/dashboard/facturas/nueva/utils/types';
 
@@ -79,7 +93,29 @@ interface ClienteView { id: number; razonSocial: string; rnc: string | null; ema
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
-type MetodoCobro = Metodo | 'cuenta-estudiante';
+// Iconos grandes para los botones de método de cobro (táctil).
+const METODO_ICONO: Record<Metodo, LucideIcon> = {
+  efectivo: Banknote, tarjeta: CreditCard, transferencia: ArrowLeftRight,
+};
+// 'credito' = fiado: la venta se registra SIN pago y queda con saldo
+// pendiente, así aparece sola en cuentas por cobrar (facturación y POS
+// leen la misma cartera). No confundir con 'cuenta-estudiante', que es el
+// monedero prepago y sí descuenta saldo en el momento.
+type MetodoCobro = Metodo | 'cuenta-estudiante' | 'credito';
+
+// Tipo de orden POS (dato operativo, no fiscal — no entra al XML DGII). Sirve
+// para clasificar/filtrar el historial de recibos. 'comer-aqui' solo aplica a
+// órdenes con mesa (comanda); las ventas rápidas sin mesa usan 'mostrador'.
+type TipoOrden = 'comer-aqui' | 'para-llevar' | 'delivery' | 'mostrador';
+const TIPO_ORDEN_LABEL: Record<TipoOrden, string> = {
+  'comer-aqui':  'Comer aquí',
+  'para-llevar': 'Para llevar',
+  'delivery':    'Delivery',
+  'mostrador':   'Mostrador',
+};
+/** Opciones ofrecidas según el contexto: con mesa se puede comer aquí; sin mesa no. */
+const tiposOrdenPara = (enMesa: boolean): TipoOrden[] =>
+  enMesa ? ['comer-aqui', 'para-llevar', 'delivery'] : ['mostrador', 'para-llevar', 'delivery'];
 
 /** Venta aparcada (hold) — se persiste en localStorage por turno para no perder
  *  el carrito al atender otra venta o si se recarga la página. */
@@ -166,7 +202,52 @@ function totalesCarrito(items: LineaCarrito[], descuento: DescuentoAplicado | nu
   return { subtotal, itbis, total: subtotal + itbis, descuentoTotal };
 }
 
+// ─── Estilos compartidos (presentación) ──────────────────────────────────────
+
+const MONEY = { fontVariantNumeric: 'tabular-nums' } as const;
+
+/** Botón de acción del header/nav: ícono solo en móvil, ícono + texto en ≥sm.
+ *  Dimensionado touch/tablet: altura mínima 48px para dedo. */
+const iconActionSx = {
+  flexShrink: 0,
+  minWidth: 0,
+  color: '#4b5563',
+  borderColor: '#e5e7eb',
+  bgcolor: '#fff',
+  fontWeight: 600,
+  fontSize: 15,
+  borderRadius: '10px',
+  width: { xs: 48, sm: 'auto' },
+  height: { xs: 48, sm: 48 },
+  px: { xs: 0, sm: 2 },
+  py: { xs: 0, sm: 1 },
+  gap: 0.75,
+  '&:hover': { bgcolor: '#f9fafb', borderColor: '#e5e7eb' },
+} as const;
+
 // ─── Componente principal ────────────────────────────────────────────────────
+
+/**
+ * `fetch` + JSON que no revienta cuando no hay JSON.
+ *
+ * `r.json()` sobre un cuerpo vacío tira «Unexpected end of JSON input», y eso
+ * pasa de verdad: al navegar —cambiar de módulo o de empresa— el navegador
+ * aborta las peticiones en vuelo, la promesa resuelve igual y el cuerpo llega
+ * vacío. El POS carga varias cosas al montar, así que es fácil pillarlo a
+ * medias. También cubre el 401/403 con cuerpo vacío.
+ *
+ * Devuelve `null` en vez de lanzar: quien llama decide con qué se queda.
+ */
+async function traerJson<T>(url: string): Promise<T | null> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const texto = await r.text();
+    return texto ? (JSON.parse(texto) as T) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function PosClient({
   terminales, turnoInicial, terminalInicial, escolarHabilitado, alertaMetodoPago,
@@ -175,7 +256,7 @@ export default function PosClient({
   turnoInicial:      TurnoProp | null;
   terminalInicial:   TerminalProp | null;
   escolarHabilitado: boolean;
-  /** Alerta double-check del método de pago activa (config de empresa). */
+  /** Doble confirmación del método de pago antes de cobrar (ajuste de empresa). */
   alertaMetodoPago:  boolean;
 }) {
   if (!turnoInicial) {
@@ -216,66 +297,82 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
     router.refresh();
   }
 
+  // Con ensurePosDefaults (server) siempre hay al menos una terminal; este
+  // fallback solo cubre el caso extremo de todas desactivadas manualmente.
   if (terminales.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="max-w-md text-center">
-          <h1 className="text-xl font-medium">No hay terminales configuradas</h1>
-          <p className="mt-2 text-sm text-gray-500">
-            Pide a un administrador que cree una terminal de punto de venta antes de vender.
-          </p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+        <Box sx={{ maxWidth: 448, textAlign: 'center' }}>
+          <Typography component="h1" sx={{ fontSize: 20, fontWeight: 500 }}>Todas las terminales están inactivas</Typography>
+          <Typography sx={{ mt: 1, fontSize: 14, color: '#6b7280' }}>
+            Activa una terminal en Configuración → Terminales POS para vender.
+          </Typography>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center p-6">
-      <Link
+    <Box sx={{ position: 'relative', display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+      <Button
+        component={Link}
         href="/dashboard"
-        className="absolute left-4 top-4 flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+        nativeButton={false}
+        variant="outlined"
+        sx={{
+          position: 'absolute', left: 16, top: 16, gap: 0.75,
+          color: '#4b5563', borderColor: '#e5e7eb', bgcolor: '#fff', fontWeight: 400,
+          '&:hover': { bgcolor: '#f9fafb', borderColor: '#e5e7eb' },
+        }}
       >
-        <ArrowLeft className="h-4 w-4" /> Volver al panel
-      </Link>
-      <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6">
-        <h1 className="text-lg font-medium">Abrir turno de caja</h1>
-        <p className="mt-1 text-sm text-gray-500">Elige la terminal y el fondo inicial.</p>
+        <ArrowLeft style={{ width: 16, height: 16 }} /> Volver al panel
+      </Button>
+      <Box sx={{ width: '100%', maxWidth: 448, borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 3 }}>
+        <Typography component="h1" sx={{ fontSize: 18, fontWeight: 500 }}>Abrir turno de caja</Typography>
+        <Typography sx={{ mt: 0.5, fontSize: 14, color: '#6b7280' }}>Elige la terminal y el fondo inicial.</Typography>
 
-        <label className="mt-5 block text-sm text-gray-600">Terminal</label>
-        <div className="mt-2 space-y-2">
+        <Typography component="label" sx={{ display: 'block', mt: 2.5, fontSize: 14, color: '#4b5563' }}>Terminal</Typography>
+        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {terminales.map((t) => (
-            <button
+            <ButtonBase
               key={t.id}
               onClick={() => setTerminalId(t.id)}
-              className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm ${
-                terminalId === t.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
-              }`}
+              sx={{
+                display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+                borderRadius: '8px', border: '1px solid', px: 1.5, py: 1.25, textAlign: 'left', fontSize: 14,
+                borderColor: terminalId === t.id ? '#3658e1' : '#e5e7eb',
+                bgcolor: terminalId === t.id ? '#eef2fe' : '#fff',
+              }}
             >
-              <span className="font-medium">{t.nombre}</span>
-              <span className="text-xs text-gray-500">{t.almacenNombre ?? 'Sin almacén'}</span>
-            </button>
+              <Box component="span" sx={{ fontWeight: 500 }}>{t.nombre}</Box>
+              <Box component="span" sx={{ fontSize: 12, color: '#6b7280' }}>{t.almacenNombre ?? 'Sin almacén'}</Box>
+            </ButtonBase>
           ))}
-        </div>
+        </Box>
 
-        <label className="mt-5 block text-sm text-gray-600">Fondo inicial (efectivo para cambio)</label>
-        <div className="mt-2 flex items-center rounded-lg border border-gray-300 px-3">
-          <span className="text-gray-400">RD$</span>
-          <input
-            type="number" min="0" step="0.01" value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-            placeholder="0.00"
-            className="w-full bg-transparent px-2 py-2.5 text-lg outline-none"
-          />
-        </div>
+        <Typography component="label" sx={{ display: 'block', mt: 2.5, fontSize: 14, color: '#4b5563' }}>Fondo inicial (efectivo para cambio)</Typography>
+        <TextField
+          type="number"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          placeholder="0.00"
+          fullWidth
+          slotProps={{
+            input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+            htmlInput: { min: 0, step: 0.01 },
+          }}
+          sx={{ mt: 1, '& input': { fontSize: 18, py: 1.25 } }}
+        />
 
-        <button
+        <Button
           onClick={abrir} disabled={loading}
-          className="mt-6 w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-60"
+          variant="contained" color="primary" fullWidth
+          sx={{ mt: 3, py: 1.5, fontWeight: 500 }}
         >
           {loading ? 'Abriendo…' : 'Abrir turno y empezar a vender'}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Box>
+    </Box>
   );
 }
 
@@ -290,9 +387,9 @@ function Venta({
   alertaMetodoPago: boolean;
 }) {
   const router = useRouter();
-  // Sin `facturas:precio-editar` el cajero vende al precio del catálogo: el
+  // Sin `facturas:precio-editar` el cajero vende al precio del catálogo. El
   // servidor rechaza la venta con precio manual, así que el atajo se apaga aquí
-  // en vez de dejar que el cobro falle al final.
+  // en vez de dejar que el cobro reviente al final.
   const { can, isLoading: permLoading } = usePermissions();
   const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   const [productos, setProductos] = useState<ProductoPos[]>([]);
@@ -314,15 +411,22 @@ function Venta({
   const [listas, setListas] = useState<ListaPrecio[]>([]);
   const [listaPreciosId, setListaPreciosId] = useState<number | 'general'>('general');
   const [tipoEcf, setTipoEcf] = useState<string>(terminal?.tipoEcf ?? 'sin-ncf');
-  const { enProduccion } = useTiposDisponibles();
-
-  // Un terminal configurado con e31/e32 antes de este gate arrastraría ese tipo
-  // a cada venta. Si la empresa no está en Producción, se cae a ticket.
-  useEffect(() => {
-    if (!enProduccion && esTipoVentaFiscal(tipoEcf)) setTipoEcf('sin-ncf');
-  }, [enProduccion, tipoEcf]);
   const [cliente, setCliente] = useState<ClienteView | null>(null);
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
+  const [ventaSimpleAbierta, setVentaSimpleAbierta] = useState(false);
+
+  /** Venta simple: línea de monto libre sin producto de catálogo (id negativo). */
+  function agregarVentaSimple(concepto: string, precioCentavos: number, tasaItbis: string) {
+    const id = -Date.now();  // sintético — nunca colisiona con ids de catálogo
+    setCarrito((prev) => [...prev, {
+      id, nombre: concepto || 'Venta simple', referencia: null, codigoBarras: null,
+      precio: precioCentavos, tasaItbis, tipo: 'servicio',
+      controlaInventario: false, permiteVentaSinStock: true, favorito: false,
+      stockAlmacen: null, categoriaId: null, categoriaNombre: null, imagen: null,
+      qty: 1,
+    }]);
+    setVentaSimpleAbierta(false);
+  }
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [aparcadas, setAparcadas] = useState<VentaAparcada[]>([]);
@@ -343,7 +447,8 @@ function Venta({
   const [dispNuevo, setDispNuevo] = useState<'pill' | 'compacto' | 'abajo'>('pill');
 
   useEffect(() => {
-    fetch('/api/listas-precios').then((r) => r.json()).then((d) => setListas(d.listasPrecios ?? []));
+    void traerJson<{ listasPrecios?: ListaPrecio[] }>('/api/listas-precios')
+      .then((d) => setListas(d?.listasPrecios ?? []));
   }, []);
 
   const refrescarEstudiante = useCallback(async (dependienteId: number) => {
@@ -637,9 +742,19 @@ function Venta({
     pagos: { metodo: MetodoCobro; valorCentavos: number }[],
     recibidoCentavos: number,
     propinaCentavos = 0,
+    tipoOrden: TipoOrden = comandaId != null ? 'comer-aqui' : 'mostrador',
   ) {
     const esMonedero = pagos.length === 1 && pagos[0].metodo === 'cuenta-estudiante';
+    // Fiado: sin pagos. El motor calcula estado_pago = PENDIENTE y el documento
+    // entra a cuentas por cobrar, la misma cartera que lee Facturación.
+    const esCredito = pagos.length === 0;
     const totalConPropina = totales.total + propinaCentavos;
+
+    // Sin alguien a quien cobrarle, la deuda queda huérfana en la cartera.
+    if (esCredito && !cliente && !estudiante) {
+      toast.error('Para fiar hay que elegir el cliente o el estudiante');
+      return;
+    }
 
     // Crédito fiscal (e31) exige RNC del comprador (DGII #38). El servidor lo
     // revalida, pero se corta aquí para no perder la venta con un error tardío.
@@ -668,7 +783,9 @@ function Venta({
         descuentoMonto:         descCentavos > 0 ? descCentavos / 100 : undefined,
         tasaItbis:              tasaFloat(c.tasaItbis) as 0 | 0.16 | 0.18,
         indicadorBienoServicio: (c.tipo === 'bien' ? 1 : 2) as 1 | 2,
-        productoId:             c.id,
+        // Venta simple usa ids sintéticos negativos — sin producto de catálogo
+        // ni descuento de inventario.
+        productoId:             c.id > 0 ? c.id : (undefined as unknown as number),
         // Variante vendida → el descuento de stock pega a la variante.
         variantId:              c.variantId ?? undefined,
       };
@@ -691,7 +808,8 @@ function Venta({
 
     // Persistir las líneas (detalle de venta + ticket). Forma compatible con ItemLinea[].
     const lineasBase = carrito.map((c, i) => ({
-      id: i + 1, productoId: c.id, variantId: c.variantId ?? null, variantNombre: c.variantNombre ?? null,
+      id: i + 1, productoId: c.id > 0 ? c.id : 0,
+      variantId: c.variantId ?? null, variantNombre: c.variantNombre ?? null,
       nombreItem: c.nombre, referencia: c.referencia ?? '',
       descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: precioLinea(c) / 100,
       descuentoPct: (descuentoAplicado?.ids.has(lineKey(c)) ? descuentoAplicado.pct : 0),
@@ -710,17 +828,29 @@ function Venta({
     const payload = {
       modo:                 'borrador',
       tipoEcf,
-      razonSocialComprador: esMonedero ? estudiante!.nombre : (cliente?.razonSocial ?? 'Consumidor Final'),
+      razonSocialComprador: esMonedero || (esCredito && !cliente)
+                              ? estudiante!.nombre
+                              : (cliente?.razonSocial ?? 'Consumidor Final'),
+      clientId:             !esMonedero && cliente ? cliente.id : undefined,
       rncComprador:         esMonedero ? undefined : (cliente?.rnc ?? undefined),
       emailComprador:       esMonedero ? undefined : (cliente?.email ?? undefined),
-      dependienteId:        esMonedero ? estudiante!.dependienteId : undefined,
-      dependienteNombre:    esMonedero ? estudiante!.nombre : undefined,
-      tipoPago:             1,
+      // Fiar a un estudiante ata la deuda a él, igual que el monedero: si no,
+      // la cartera muestra el nombre pero no a quién corresponde.
+      dependienteId:        esMonedero || (esCredito && !cliente && estudiante)
+                              ? estudiante!.dependienteId : undefined,
+      dependienteNombre:    esMonedero || (esCredito && !cliente && estudiante)
+                              ? estudiante!.nombre : undefined,
+      // 2 = crédito (DGII). El motor exige fechaLimitePago solo al emitir a la
+      // DGII, no en borrador; el POS guarda en borrador.
+      tipoPago:             esCredito ? 2 : 1,
       items,
       lineasJson,
-      pagoRecibido:         true,
+      pagoRecibido:         !esCredito,
       pagos:                pagos.map((p) => ({ metodo: p.metodo, valor: p.valorCentavos / 100 })),
       almacenId:            terminal?.almacenId ?? null,
+      // Clasificación operativa del POS (no fiscal). El motor la estampa en
+      // ecf_documents.tipo_orden para el historial de recibos.
+      tipoOrden,
     };
 
     // Cobro con monedero: saga atómica server-side (descuenta → emite → revierte
@@ -818,83 +948,108 @@ function Venta({
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column', overflow: 'hidden' }}>
       {mesaActiva && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-sm sm:px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <button onClick={guardarYVolver} className="flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100">
-              <ArrowLeft className="h-3.5 w-3.5" /> Mesas
-            </button>
-            <span className="truncate font-semibold text-amber-900">{mesaActiva.nombre}</span>
-            {mesero && <span className="truncate text-xs text-amber-700">· {mesero.nombre}</span>}
-          </div>
-          <button onClick={() => guardarComanda(false)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700">
+        <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #fde68a', bgcolor: '#fffbeb', px: { xs: 1.5, sm: 2 }, py: 0.75, fontSize: 14 }}>
+          <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1 }}>
+            <ButtonBase onClick={guardarYVolver} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '8px', border: '1px solid #fcd34d', bgcolor: '#fff', px: 1.25, py: 0.75, fontSize: 12, fontWeight: 500, color: '#92400e', '&:hover': { bgcolor: '#fef3c7' } }}>
+              <ArrowLeft style={{ width: 14, height: 14 }} /> Mesas
+            </ButtonBase>
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: '#78350f' }}>{mesaActiva.nombre}</Box>
+            {mesero && <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#b45309' }}>· {mesero.nombre}</Box>}
+          </Box>
+          <Button onClick={() => guardarComanda(false)} variant="contained" disableElevation sx={{ borderRadius: '8px', bgcolor: '#d97706', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500, color: '#fff', '&:hover': { bgcolor: '#b45309' } }}>
             Guardar comanda
-          </button>
-        </div>
+          </Button>
+        </Box>
       )}
-      <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <Link href="/dashboard" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Volver al panel">
-            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Panel</span>
-          </Link>
-          <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
-            <span className="truncate">{terminal?.nombre ?? 'Punto de venta'}</span>
-            <span className="hidden text-gray-400 sm:inline">·</span>
-            <span className="hidden truncate text-gray-500 sm:inline">{terminal?.almacenNombre ?? ''}</span>
-          </div>
-        </div>
-        <input
+      <Box component="header" sx={{ zIndex: 20, display: 'flex', flexShrink: 0, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #e5e7eb', bgcolor: '#fff', px: { xs: 1.5, sm: 2 }, py: 1 }}>
+        <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: { xs: 1, sm: 1.5 } }}>
+          <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={iconActionSx}>
+            <ArrowLeft style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, fontSize: 14 }}>Panel</Box>
+          </Button>
+          <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1, fontSize: 14, fontWeight: 500 }}>
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{terminal?.nombre ?? 'Punto de venta'}</Box>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, color: '#9ca3af' }}>·</Box>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6b7280' }}>{terminal?.almacenNombre ?? ''}</Box>
+          </Box>
+        </Box>
+        <TextField
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); escanear(); } }}
+          /**
+           * `id` a mano, no el que inventa MUI.
+           *
+           * Sin él, MUI lo genera con `useId`, que depende de la posición en el
+           * árbol ENTERO: cualquier cambio por encima del POS —una capa del
+           * layout, el loader de cambio de módulo— le daba al servidor un id
+           * distinto del que calculaba el cliente, y React avisaba de un
+           * desajuste de hidratación nada más cargar la pantalla. Escrito a
+           * mano, el campo deja de depender de lo que pase más arriba.
+           */
+          id="pos-buscar-producto"
           placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
           autoFocus
-          className="order-last h-11 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 sm:order-none sm:mx-3 sm:h-10 sm:max-w-xs md:max-w-sm"
+          sx={{
+            order: { xs: 3, sm: 0 },
+            width: { xs: '100%', sm: 'auto' },
+            flex: { sm: 1 },
+            // minWidth evita que los botones del header lo aplasten a nada en
+            // tablet; con flexWrap del header baja a su propia fila si no cabe.
+            minWidth: { sm: 260 },
+            maxWidth: { sm: 380, md: 460 },
+            mx: { sm: 1.5 },
+            '& .MuiInputBase-root': { height: { xs: 52, sm: 52 }, fontSize: 16, borderRadius: '10px' },
+          }}
         />
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <span className="hidden rounded-full bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 lg:inline">Turno abierto</span>
-          <button
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1 } }}>
+          <Chip label="Turno abierto" sx={{ display: { xs: 'none', lg: 'inline-flex' }, bgcolor: '#f0fdf4', color: '#15803d', borderRadius: '9999px', px: 0.5, py: 1.5, fontSize: 12, fontWeight: 500 }} />
+          <Button
             onClick={aparcar}
             disabled={carrito.length === 0}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            variant="outlined"
             title="Aparcar venta (F3)"
+            sx={{ ...iconActionSx, '&.Mui-disabled': { opacity: 0.4 } }}
           >
-            <PauseCircle className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Aparcar</span>
-          </button>
-          <button
+            <PauseCircle style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcar</Box>
+          </Button>
+          <Button
             onClick={() => setAparcadasAbierto(true)}
-            className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            variant="outlined"
             title="Ventas aparcadas (F4)"
+            sx={{ ...iconActionSx, position: 'relative' }}
           >
-            <ListChecks className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Aparcadas</span>
+            <ListChecks style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcadas</Box>
             {aparcadas.length > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">{aparcadas.length}</span>
+              <Box component="span" sx={{ position: 'absolute', right: -4, top: -4, display: 'flex', height: 20, minWidth: 20, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 0.5, fontSize: 11, fontWeight: 600, color: '#fff' }}>{aparcadas.length}</Box>
             )}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680')}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            variant="outlined"
             title="Corte X del turno"
+            sx={iconActionSx}
           >
-            <FileText className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Reporte X</span>
-          </button>
-          <button
+            <FileText style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Reporte X</Box>
+          </Button>
+          <Button
             onClick={() => setCierreAbierto(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            variant="outlined"
             title="Cerrar turno (corte Z)"
+            sx={iconActionSx}
           >
-            <LogOut className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Cerrar turno</span>
-          </button>
-        </div>
-      </header>
+            <LogOut style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Cerrar turno</Box>
+          </Button>
+        </Box>
+      </Box>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 md:grid-cols-[1.55fr_1fr]">
+      <Box sx={{ display: 'grid', minHeight: 0, flex: 1, gridTemplateColumns: { xs: '1fr', md: '1.55fr 1fr' }, gap: 1.5, p: 1.5 }}>
         {/* Grilla */}
-        <div className="flex min-h-0 flex-col">
-          <div
+        <Box sx={{ display: 'flex', minHeight: 0, flexDirection: 'column' }}>
+          <Box
             ref={filaCategoriasRef}
-            className={`mb-3 flex shrink-0 ${dispNuevo === 'abajo' ? 'flex-col gap-3' : 'items-center gap-2'}`}
+            sx={{ mb: 1.5, display: 'flex', flexShrink: 0, ...(dispNuevo === 'abajo' ? { flexDirection: 'column', gap: 1.5 } : { alignItems: 'center', gap: 1 }) }}
           >
             {/* Chips scrolleables + botón "Nuevo producto". El wrapper interno
                 (chipsRef) mide el ancho natural de los chips para decidir la
@@ -902,111 +1057,147 @@ function Venta({
                 ícono "+" en línea, o 'abajo' en su propia fila cuando ni el "+"
                 cabría sin recortar los chips (móviles angostos). En 'abajo' hay
                 gap-3 vertical para que no se confunda al tocar una categoría. */}
-            <div className={`flex min-w-0 overflow-x-auto pb-1 ${dispNuevo === 'abajo' ? 'w-full' : 'flex-1'}`}>
-              <div ref={chipsRef} className="flex gap-2">
+            <Box sx={{ display: 'flex', minWidth: 0, overflowX: 'auto', pb: 0.5, ...(dispNuevo === 'abajo' ? { width: '100%' } : { flex: 1 }) }}>
+              <Box ref={chipsRef} sx={{ display: 'flex', gap: 1 }}>
                 {categorias.length > 0 && (
                   <>
-                    <button
+                    <ButtonBase
                       onClick={() => setCategoriaActiva('todas')}
-                      className={`shrink-0 rounded-full border px-5 py-2.5 text-base font-medium ${
-                        categoriaActiva === 'todas' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                      }`}
+                      sx={{
+                        flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, py: 1.25, fontSize: 16, fontWeight: 500,
+                        borderColor: categoriaActiva === 'todas' ? '#3658e1' : '#e5e7eb',
+                        bgcolor: categoriaActiva === 'todas' ? '#eef2fe' : 'transparent',
+                        color: categoriaActiva === 'todas' ? '#2a45c4' : '#4b5563',
+                      }}
                     >
                       Todas
-                    </button>
+                    </ButtonBase>
                     {categorias.map((c) => (
-                      <button
+                      <ButtonBase
                         key={c.id}
                         onClick={() => setCategoriaActiva(c.id)}
-                        className={`shrink-0 rounded-full border px-5 py-2.5 text-base font-medium ${
-                          categoriaActiva === c.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                        }`}
+                        sx={{
+                          flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, py: 1.25, fontSize: 16, fontWeight: 500,
+                          borderColor: categoriaActiva === c.id ? '#3658e1' : '#e5e7eb',
+                          bgcolor: categoriaActiva === c.id ? '#eef2fe' : 'transparent',
+                          color: categoriaActiva === c.id ? '#2a45c4' : '#4b5563',
+                        }}
                       >
                         {c.nombre}
-                      </button>
+                      </ButtonBase>
                     ))}
                   </>
                 )}
-              </div>
-            </div>
-            <button
+              </Box>
+            </Box>
+            <Button
               onClick={() => setNuevoProductoAbierto(true)}
               title="Nuevo producto"
-              className={`flex shrink-0 items-center justify-center gap-1.5 bg-blue-600 text-white hover:bg-blue-700 ${
-                dispNuevo === 'pill' ? 'rounded-lg px-4 py-2' : 'h-10 w-10 rounded-full'
-              } ${dispNuevo === 'abajo' ? 'self-end' : ''}`}
+              variant="contained"
+              color="primary"
+              disableElevation
+              sx={{
+                flexShrink: 0, minWidth: 0, gap: 0.75,
+                alignSelf: dispNuevo === 'abajo' ? 'flex-end' : 'auto',
+                ...(dispNuevo === 'pill'
+                  ? { borderRadius: '10px', px: 2.5, py: 1.5 }
+                  : { width: 48, height: 48, p: 0, borderRadius: '9999px' }),
+              }}
             >
-              <Plus className={dispNuevo === 'pill' ? 'h-4 w-4' : 'h-5 w-5'} />
-              {dispNuevo === 'pill' && <span className="text-sm font-medium">Nuevo producto</span>}
-            </button>
-          </div>
+              <Plus style={{ width: dispNuevo === 'pill' ? 18 : 22, height: dispNuevo === 'pill' ? 18 : 22 }} />
+              {dispNuevo === 'pill' && <Box component="span" sx={{ fontSize: 15, fontWeight: 600 }}>Nuevo producto</Box>}
+            </Button>
+          </Box>
           {cargando ? (
-            <p className="text-sm text-gray-500">Cargando catálogo…</p>
-          ) : filtrados.length === 0 ? (
-            <p className="text-sm text-gray-500">Sin productos para esta terminal.</p>
+            <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Cargando catálogo…</Typography>
           ) : (
-            <div className="grid flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-auto pb-24 sm:grid-cols-3 md:pb-3 lg:grid-cols-4 xl:grid-cols-5">
+            <Box sx={{ display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', xl: 'repeat(4, 1fr)' }, alignContent: 'start', gap: 2, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}>
+              {/* Venta simple: monto libre sin producto (patrón Alegra) */}
+              <ButtonBase
+                onClick={() => setVentaSimpleAbierta(true)}
+                sx={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
+                  borderRadius: '16px', border: '2px dashed #d1d5db', bgcolor: '#fff', minHeight: 180,
+                  '&:hover': { borderColor: '#8193f5', bgcolor: '#eef2fe' },
+                  '&:active': { transform: 'scale(0.97)' },
+                }}
+              >
+                <Box sx={{ display: 'flex', height: 60, width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6' }}>
+                  <Zap style={{ width: 28, height: 28, color: '#3658e1' }} />
+                </Box>
+                <Box component="span" sx={{ fontSize: 17, fontWeight: 700, color: '#374151' }}>Venta simple</Box>
+              </ButtonBase>
+              {filtrados.length === 0 && (
+                <Box sx={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Sin productos para esta terminal — crea el primero o usa Venta simple.</Typography>
+                </Box>
+              )}
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
                 // Suma de todas las líneas de este producto (incluye sus variantes).
                 const qty = carrito.filter((c) => c.id === p.id).reduce((s, c) => s + c.qty, 0);
                 return (
-                  <button
+                  <ButtonBase
                     key={p.id}
                     disabled={agotado}
                     onClick={() => agregar(p)}
-                    className={`relative flex flex-col overflow-hidden rounded-xl border bg-white text-left active:scale-[0.97] ${
-                      qty > 0 ? 'border-blue-400 ring-1 ring-blue-400' : 'border-gray-200'
-                    } ${agotado ? 'opacity-50' : 'hover:border-blue-400'}`}
+                    sx={{
+                      position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', overflow: 'hidden', borderRadius: '12px', border: '1px solid', bgcolor: '#fff', textAlign: 'left',
+                      '&:active': { transform: 'scale(0.97)' },
+                      borderColor: qty > 0 ? '#8193f5' : '#e5e7eb',
+                      boxShadow: qty > 0 ? '0 0 0 1px #8193f5' : 'none',
+                      opacity: agotado ? 0.5 : 1,
+                      '&:hover': { borderColor: agotado ? '#e5e7eb' : '#8193f5' },
+                    }}
                   >
-                    <div className="relative aspect-square w-full bg-gray-50">
+                    <Box sx={{ position: 'relative', aspectRatio: '1 / 1', width: '100%', bgcolor: '#f9fafb' }}>
                       {p.imagen ? (
-                        <img src={p.imagen} alt={p.nombre} className="h-full w-full object-cover" />
+                        <Box component="img" src={p.imagen} alt={p.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
                       ) : (
                         (() => {
                           const c = tileColor(p.nombre);
                           return (
-                            <div className="flex h-full w-full items-center justify-center" style={{ backgroundColor: c.bg }}>
-                              <span className="text-4xl font-bold sm:text-5xl" style={{ color: c.fg }}>{iniciales(p.nombre)}</span>
-                            </div>
+                            <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg }}>
+                              <Box component="span" sx={{ fontSize: { xs: 36, sm: 48 }, fontWeight: 700, color: c.fg }}>{iniciales(p.nombre)}</Box>
+                            </Box>
                           );
                         })()
                       )}
                       {qty > 0 && (
-                        <span className="absolute left-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full bg-blue-600 px-2 text-sm font-bold text-white shadow">
+                        <Box component="span" sx={{ position: 'absolute', left: 8, top: 8, display: 'flex', height: 32, minWidth: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 1, fontSize: 14, fontWeight: 700, color: '#fff', boxShadow: 1, ...MONEY }}>
                           {qty}
-                        </span>
+                        </Box>
                       )}
-                      <span
+                      <Box
+                        component="span"
                         role="button"
                         title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
                         onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
-                        className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-white/85"
+                        sx={{ position: 'absolute', right: 4, top: 4, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
                       >
-                        <Star className={`h-6 w-6 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
-                      </span>
-                    </div>
-                    <div className="flex flex-1 flex-col justify-between p-3.5">
-                      <div>
-                        <div className="text-base font-semibold leading-tight sm:text-lg">{p.nombre}</div>
-                        <div className="mt-1 text-sm text-gray-400">
+                        <Star style={{ width: 24, height: 24, color: p.favorito ? '#fbbf24' : '#9ca3af', fill: p.favorito ? '#fbbf24' : 'none' }} />
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', flex: 1, flexDirection: 'column', justifyContent: 'space-between', p: 2 }}>
+                      <Box>
+                        <Box sx={{ fontSize: { xs: 17, sm: 19 }, fontWeight: 700, lineHeight: 1.25 }}>{p.nombre}</Box>
+                        <Box sx={{ mt: 0.5, fontSize: 14, color: '#9ca3af' }}>
                           {p.referencia ? p.referencia + ' · ' : ''}
                           {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
-                        </div>
-                      </div>
-                      <div className="mt-1.5 text-xl font-bold text-gray-900">{fmt(p.precio)}</div>
-                    </div>
-                  </button>
+                        </Box>
+                      </Box>
+                      <Box sx={{ mt: 1, fontSize: 24, fontWeight: 800, color: '#111827', ...MONEY }}>{fmt(p.precio)}</Box>
+                    </Box>
+                  </ButtonBase>
                 );
               })}
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
 
         {/* Carrito — panel fijo en escritorio, hoja deslizable en móvil */}
-        <div className="hidden md:flex md:w-full">
+        <Box sx={{ display: { xs: 'none', md: 'flex' }, minHeight: 0, width: { md: '100%' } }}>
           <CarritoPanel
-            bloquearPrecios={bloquearPrecios}
             carrito={carrito}
             totales={totales}
             cambiarQty={cambiarQty}
@@ -1015,6 +1206,7 @@ function Venta({
             onCobrar={cobrar}
             escolar={escolarHabilitado}
             alertaMetodoPago={alertaMetodoPago}
+            bloquearPrecios={bloquearPrecios}
             estudiante={estudiante}
             onSelectEstudiante={setEstudiante}
             listas={listas}
@@ -1022,36 +1214,38 @@ function Venta({
             onSelectLista={setListaPreciosId}
             tipoEcf={tipoEcf}
             onSelectTipoEcf={setTipoEcf}
-              enProduccion={enProduccion}
             cliente={cliente}
             onSelectCliente={setCliente}
             descuentoAplicado={descuentoAplicado}
             onAplicarDescuento={setDescuentoAplicado}
             cobroDirecto={cobroDirecto}
             onCobroConsumido={() => setCobroDirecto(false)}
+            enMesa={comandaId != null}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* Barra flotante móvil: total + abrir carrito */}
-      <button
+      <ButtonBase
         onClick={() => setCarritoMovilAbierto(true)}
         disabled={carrito.length === 0}
-        className="fixed inset-x-3 bottom-3 z-30 flex items-center justify-between rounded-xl bg-blue-600 px-4 py-3.5 text-white shadow-lg disabled:opacity-50 md:hidden"
+        sx={{ position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 30, display: { xs: 'flex', md: 'none' }, alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px', bgcolor: '#3658e1', px: 2, py: 1.75, color: '#fff', boxShadow: 4, '&.Mui-disabled': { opacity: 0.5 } }}
       >
-        <span className="text-sm font-medium">{carrito.length} {carrito.length === 1 ? 'artículo' : 'artículos'}</span>
-        <span className="font-medium">Ver carrito · {fmt(totales.total)}</span>
-      </button>
+        <Box component="span" sx={{ fontSize: 14, fontWeight: 500 }}>{carrito.length} {carrito.length === 1 ? 'artículo' : 'artículos'}</Box>
+        <Box component="span" sx={{ fontWeight: 500, ...MONEY }}>Ver carrito · {fmt(totales.total)}</Box>
+      </ButtonBase>
 
       {carritoMovilAbierto && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-black/45 md:hidden" onClick={() => setCarritoMovilAbierto(false)}>
-          <div className="mt-auto max-h-[85vh] rounded-t-2xl bg-white p-3" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-500">Tu carrito</span>
-              <button onClick={() => setCarritoMovilAbierto(false)} className="p-2 text-gray-400">✕</button>
-            </div>
+        <Box sx={{ position: 'fixed', inset: 0, zIndex: 40, display: { xs: 'flex', md: 'none' }, flexDirection: 'column', bgcolor: 'rgba(0,0,0,0.45)' }} onClick={() => setCarritoMovilAbierto(false)}>
+          {/* La hoja se queda en 85vh y REPARTE esa altura: cabecera fija y el
+              panel ocupando el resto. Antes el panel crecía dentro de la hoja
+              y el botón de cobrar quedaba por debajo del borde del teléfono. */}
+          <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', maxHeight: '85vh', minHeight: 0, borderRadius: '16px 16px 0 0', bgcolor: '#fff', p: 1.5 }} onClick={(e) => e.stopPropagation()}>
+            <Box sx={{ mb: 0.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>Tu carrito</Box>
+              <IconButton onClick={() => setCarritoMovilAbierto(false)} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+            </Box>
             <CarritoPanel
-              bloquearPrecios={bloquearPrecios}
               carrito={carrito}
               totales={totales}
               cambiarQty={cambiarQty}
@@ -1060,6 +1254,7 @@ function Venta({
               onCobrar={cobrar}
               escolar={escolarHabilitado}
               alertaMetodoPago={alertaMetodoPago}
+              bloquearPrecios={bloquearPrecios}
               estudiante={estudiante}
               onSelectEstudiante={setEstudiante}
               listas={listas}
@@ -1067,20 +1262,28 @@ function Venta({
               onSelectLista={setListaPreciosId}
               tipoEcf={tipoEcf}
               onSelectTipoEcf={setTipoEcf}
-              enProduccion={enProduccion}
               cliente={cliente}
               onSelectCliente={setCliente}
               descuentoAplicado={descuentoAplicado}
               onAplicarDescuento={setDescuentoAplicado}
+              enMesa={comandaId != null}
             />
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {nuevoProductoAbierto && (
-        <NuevoProductoModal
+        <ProductoDialog
+          open
           onClose={() => setNuevoProductoAbierto(false)}
           onCreated={() => { setNuevoProductoAbierto(false); cargarCatalogo(); }}
+        />
+      )}
+
+      {ventaSimpleAbierta && (
+        <VentaSimpleModal
+          onClose={() => setVentaSimpleAbierta(false)}
+          onAgregar={agregarVentaSimple}
         />
       )}
 
@@ -1114,26 +1317,28 @@ function Venta({
           }}
         />
       )}
-    </div>
+    </Box>
   );
 }
 
 // ─── Panel de carrito + cobro ────────────────────────────────────────────────
 
 function CarritoPanel({
-  carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, estudiante, onSelectEstudiante,
-  listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, enProduccion, cliente, onSelectCliente,
-  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
-  bloquearPrecios = false,
+  carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, bloquearPrecios, estudiante, onSelectEstudiante,
+  listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
+  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido, enMesa = false,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
   cambiarQty: (key: string, delta: number) => void;
   editarPrecio: (key: string, centavos: number | null) => void;
   cobrando: boolean;
-  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
-  escolar: boolean;
+  /** Doble confirmación del método antes de cerrar el cobro. */
   alertaMetodoPago: boolean;
+  /** Sin `facturas:precio-editar`: precio de catálogo, sin retoques. */
+  bloquearPrecios: boolean;
+  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
+  escolar: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
   listas: ListaPrecio[];
@@ -1141,19 +1346,25 @@ function CarritoPanel({
   onSelectLista: (id: number | 'general') => void;
   tipoEcf: string;
   onSelectTipoEcf: (t: string) => void;
-  /** false ⇒ la empresa no está habilitada en DGII: solo ticket sin NCF. */
-  enProduccion: boolean;
   cliente: ClienteView | null;
   onSelectCliente: (c: ClienteView | null) => void;
   descuentoAplicado: DescuentoAplicado | null;
   onAplicarDescuento: (d: DescuentoAplicado | null) => void;
-  /** Sin `facturas:precio-editar`: precio de catálogo, sin retoques. */
-  bloquearPrecios?: boolean;
   cobroDirecto?: boolean;
   onCobroConsumido?: () => void;
+  /** true si la venta se cobra desde una mesa (comanda) → habilita "Comer aquí". */
+  enMesa?: boolean;
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
   const [panelDescuento, setPanelDescuento] = useState(false);
+
+  // Gate DGII: sin conexión DGII lista, el POS solo emite tickets sin NCF.
+  // Oculta e31/e32 del selector y fuerza sin-ncf si la terminal traía otro
+  // default (defensa adicional en /api/ecf/emitir).
+  const { ready: dgiiReady, motivo: motivoDgii } = useDgiiReadiness();
+  useEffect(() => {
+    if (!dgiiReady && tipoEcf !== 'sin-ncf') onSelectTipoEcf('sin-ncf');
+  }, [dgiiReady, tipoEcf, onSelectTipoEcf]);
 
   // F2: abre el cobro desde el panel si hay ítems en el carrito.
   useEffect(() => {
@@ -1175,48 +1386,64 @@ function CarritoPanel({
   }
 
   return (
-    <div className="flex w-full flex-col rounded-xl border border-gray-200 bg-white p-3">
-      <div className="mb-3 space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Lista de precio</label>
-            <select
+    // `height: 100%` + `minHeight: 0` es lo que hace que el panel se ajuste a
+    // la pantalla en vez de crecer con el carrito. Sin ellos, con ocho líneas
+    // el total y el botón de cobrar se iban por debajo del borde y no había
+    // scroll que los alcanzara: el cajero veía la lista y ningún sitio donde
+    // cobrar. Lo que se desplaza es la LISTA; la cabecera y el pie se quedan.
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0, width: '100%', flexDirection: 'column', overflow: 'hidden', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 1.5 }}>
+      <Box sx={{ mb: 1.5, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+          <Box>
+            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Lista de precio</Typography>
+            <TextField
+              select
+              id="pos-lista-precio"
               value={listaPreciosId}
               onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
-              className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
+              fullWidth
+              sx={{ '& .MuiInputBase-root': { height: 52, fontSize: 16 } }}
             >
-              <option value="general">General (precio base)</option>
-              {listas.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Numeración</label>
-            <select
+              <MenuItem value="general">General (precio base)</MenuItem>
+              {listas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
+            </TextField>
+          </Box>
+          <Box>
+            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Numeración</Typography>
+            <TextField
+              select
+              id="pos-numeracion"
               value={tipoEcf}
               onChange={(e) => onSelectTipoEcf(e.target.value)}
-              className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
+              fullWidth
+              sx={{ '& .MuiInputBase-root': { height: 52, fontSize: 16 } }}
             >
-              <option value="sin-ncf">Ticket (sin NCF)</option>
-              {/* Fuera de Producción no existen comprobantes fiscales para esta
-                  empresa: solo queda el ticket. */}
-              {enProduccion && <option value="32">Consumo (e32)</option>}
-              {enProduccion && <option value="31">Crédito fiscal (e31)</option>}
-            </select>
-          </div>
-        </div>
+              <MenuItem value="sin-ncf">Ticket (sin NCF)</MenuItem>
+              {dgiiReady && <MenuItem value="32">Consumo (e32)</MenuItem>}
+              {dgiiReady && <MenuItem value="31">Crédito fiscal (e31)</MenuItem>}
+            </TextField>
+            {/* Sin tipos fiscales, decir POR QUÉ: si no, el cajero ve el
+                selector con una sola opción y no sabe si es un error. */}
+            {!dgiiReady && motivoDgii && (
+              <Typography sx={{ mt: 0.75, fontSize: 12, color: '#92400e', lineHeight: 1.35 }}>
+                {motivoDgii}
+              </Typography>
+            )}
+          </Box>
+        </Box>
         <ClientePicker cliente={cliente} onSelect={onSelectCliente} />
         {tipoEcf === '31' && (
-          <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
-            <label className="mb-1 block text-xs font-medium text-amber-800">
+          <Box sx={{ mt: 1, borderRadius: '8px', border: '1px solid #fde68a', bgcolor: '#fffbeb', p: 1.25 }}>
+            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#92400e' }}>
               RNC del comprador · obligatorio para crédito fiscal
-            </label>
+            </Typography>
             {cliente?.rnc ? (
-              <div className="flex items-center justify-between text-sm">
-                <span className="truncate font-medium text-amber-900">
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14 }}>
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, color: '#78350f' }}>
                   {cliente.rnc} · {cliente.razonSocial}
-                </span>
-                <button onClick={() => onSelectCliente(null)} className="shrink-0 text-xs text-amber-700 underline">cambiar</button>
-              </div>
+                </Box>
+                <Box component="button" onClick={() => onSelectCliente(null)} sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#b45309', textDecoration: 'underline' }}>cambiar</Box>
+              </Box>
             ) : (
               <RncSearch
                 placeholder="Buscar RNC / cédula o razón social…"
@@ -1224,83 +1451,93 @@ function CarritoPanel({
                 onSelect={(r) => onSelectCliente({ id: 0, razonSocial: r.nombre || 'Sin nombre', rnc: r.rnc, email: null })}
               />
             )}
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
       {escolar && <EstudiantePicker estudiante={estudiante} onSelect={onSelectEstudiante} />}
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500">Carrito ({carrito.length})</span>
-        <button
+      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box component="span" sx={{ fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Carrito ({carrito.length})</Box>
+        <ButtonBase
           onClick={() => setPanelDescuento(true)}
           disabled={carrito.length === 0 || bloquearPrecios}
           title={bloquearPrecios ? 'Tu rol no puede aplicar descuentos' : 'Descuentos globales'}
-          className="flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '9999px', border: '1px solid #e5e7eb', px: 1.25, py: 0.75, fontSize: 12, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' }, '&.Mui-disabled': { opacity: 0.4 } }}
         >
-          <Percent className="h-3.5 w-3.5" /> Descuento
-        </button>
-      </div>
-      <div className="flex-1 overflow-auto">
+          <Percent style={{ width: 14, height: 14 }} /> Descuento
+        </ButtonBase>
+      </Box>
+      {/* `minHeight: 0` no es cosmético: sin él un hijo flex se niega a
+          encoger por debajo de su contenido, así que la lista empujaba al pie
+          fuera de la pantalla en vez de llevarse el scroll. */}
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {carrito.length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-400">Toca productos para agregarlos</p>
+          <Typography sx={{ py: 4, textAlign: 'center', fontSize: 14, color: '#9ca3af' }}>Toca productos para agregarlos</Typography>
         ) : (
           carrito.map((c) => {
             const desc = descuentoLinea(c, descuentoAplicado);
             return (
-              <div key={lineKey(c)} className="flex items-center justify-between gap-2 border-b border-gray-100 py-3">
-                <div className="min-w-0 leading-tight">
-                  <div className="truncate text-base font-medium">{c.nombre}</div>
-                  <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-400">
+              <Box key={lineKey(c)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #f3f4f6', py: 1.75 }}>
+                <Box sx={{ minWidth: 0, lineHeight: 1.25 }}>
+                  <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 600 }}>{c.nombre}</Box>
+                  <Box sx={{ mt: 0.25, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 15, color: '#9ca3af' }}>
                     <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(lineKey(c), cents)} bloqueado={bloquearPrecios} />
-                    {desc > 0 && <span className="text-emerald-600">−{descuentoAplicado!.pct}%</span>}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button onClick={() => cambiarQty(lineKey(c), -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">−</button>
-                  <span className="w-7 text-center text-lg font-semibold">{c.qty}</span>
-                  <button onClick={() => cambiarQty(lineKey(c), 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">+</button>
-                </div>
-              </div>
+                    {desc > 0 && <Box component="span" sx={{ color: '#059669' }}>−{descuentoAplicado!.pct}%</Box>}
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.25 }}>
+                  <ButtonBase onClick={() => cambiarQty(lineKey(c), -1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
+                  <Box component="span" sx={{ width: 34, textAlign: 'center', fontSize: 20, fontWeight: 700, ...MONEY }}>{c.qty}</Box>
+                  <ButtonBase onClick={() => cambiarQty(lineKey(c), 1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
+                </Box>
+              </Box>
             );
           })
         )}
-      </div>
+      </Box>
 
-      <div className="mt-3 border-t border-gray-100 pt-3">
+      {/* El pie —totales y Cobrar— nunca se desplaza ni se encoge: es lo que
+          el cajero necesita tener siempre a mano, con dos ítems o con veinte. */}
+      <Box sx={{ mt: 1.5, flexShrink: 0, borderTop: '1px solid #f3f4f6', pt: 1.5 }}>
         {descuentoAplicado && (
-          <div className="mb-2 flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
-            <span>Descuento {descuentoAplicado.pct}% ({descuentoAplicado.ids.size} {descuentoAplicado.ids.size === 1 ? 'ítem' : 'ítems'})</span>
-            <button onClick={() => onAplicarDescuento(null)} className="font-medium underline">quitar</button>
-          </div>
+          <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '8px', bgcolor: '#ecfdf5', px: 1.25, py: 0.75, fontSize: 12, color: '#047857' }}>
+            <Box component="span">Descuento {descuentoAplicado.pct}% ({descuentoAplicado.ids.size} {descuentoAplicado.ids.size === 1 ? 'ítem' : 'ítems'})</Box>
+            <Box component="button" onClick={() => onAplicarDescuento(null)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: 'inherit', fontWeight: 500, textDecoration: 'underline' }}>quitar</Box>
+          </Box>
         )}
-        <div className="mb-1 flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>{fmt(totales.subtotal + totales.descuentoTotal)}</span></div>
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}><Box component="span">Subtotal</Box><Box component="span" sx={MONEY}>{fmt(totales.subtotal + totales.descuentoTotal)}</Box></Box>
         {totales.descuentoTotal > 0 && (
-          <div className="mb-1 flex justify-between text-sm text-emerald-600"><span>Descuento</span><span>−{fmt(totales.descuentoTotal)}</span></div>
+          <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#059669' }}><Box component="span">Descuento</Box><Box component="span" sx={MONEY}>−{fmt(totales.descuentoTotal)}</Box></Box>
         )}
-        <div className="mb-2 flex justify-between text-sm text-gray-500"><span>ITBIS</span><span>{fmt(totales.itbis)}</span></div>
-        <div className="mb-3 flex items-baseline justify-between"><span className="text-lg font-semibold">Total</span><span className="text-2xl font-bold">{fmt(totales.total)}</span></div>
+        <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}><Box component="span">ITBIS</Box><Box component="span" sx={MONEY}>{fmt(totales.itbis)}</Box></Box>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}><Box component="span" sx={{ fontSize: 20, fontWeight: 700 }}>Total</Box><Box component="span" sx={{ fontSize: 30, fontWeight: 800, ...MONEY }}>{fmt(totales.total)}</Box></Box>
         {tipoEcf === '31' && !cliente?.rnc && carrito.length > 0 && (
-          <p className="mb-2 text-center text-sm font-medium text-amber-600">Carga el RNC del comprador para el crédito fiscal</p>
+          <Typography sx={{ mb: 1, textAlign: 'center', fontSize: 14, fontWeight: 500, color: '#d97706' }}>Carga el RNC del comprador para el crédito fiscal</Typography>
         )}
-        <button
+        <Button
           disabled={carrito.length === 0 || (tipoEcf === '31' && !cliente?.rnc)}
           onClick={() => setAbrirCobro(true)}
-          className="w-full rounded-xl bg-green-600 py-4 text-lg font-semibold text-white disabled:opacity-50"
+          variant="contained"
+          fullWidth
+          disableElevation
+          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2.5, fontSize: 22, fontWeight: 700, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' }, ...MONEY }}
         >
           Cobrar {fmt(totales.total)}
-        </button>
-      </div>
+        </Button>
+      </Box>
 
       {abrirCobro && (
         <CobroModal
+          alertaMetodoPago={alertaMetodoPago}
           total={totales.total}
           cobrando={cobrando}
           estudiante={estudiante}
-          alertaMetodoPago={alertaMetodoPago}
+          cliente={cliente}
+          enMesa={enMesa}
           onClose={() => setAbrirCobro(false)}
-          onConfirm={(pagos, recibido, propina) => { onCobrar(pagos, recibido, propina); setAbrirCobro(false); }}
+          onConfirm={(pagos, recibido, propina, tipoOrden) => { onCobrar(pagos, recibido, propina, tipoOrden); setAbrirCobro(false); }}
         />
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -1331,57 +1568,61 @@ function DescuentosPanel({ carrito, aplicado, onAplicar, onClose }: {
   const puedeAplicar = pctNum > 0 && pctNum <= 100 && seleccion.size > 0;
 
   return (
-    <div className="flex w-full flex-col rounded-xl border border-gray-200 bg-white p-3">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-base font-medium">Descuentos globales</span>
-        <button onClick={onClose} className="text-gray-400">✕</button>
-      </div>
-      <p className="mb-3 text-xs text-gray-500">Añade descuentos a los ítems de esta venta de forma rápida.</p>
+    <Box sx={{ display: 'flex', width: '100%', flexDirection: 'column', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 1.5 }}>
+      <Box sx={{ mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Descuentos globales</Box>
+        <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+      </Box>
+      <Typography sx={{ mb: 1.5, fontSize: 12, color: '#6b7280' }}>Añade descuentos a los ítems de esta venta de forma rápida.</Typography>
 
-      <label className="mb-1 block text-xs text-gray-500">Porcentaje</label>
-      <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
-        <input
-          type="number" min="0" max="100" step="1" value={pct}
-          onChange={(e) => setPct(e.target.value)}
-          placeholder="0"
-          className="w-full bg-transparent py-2 text-sm outline-none"
-        />
-        <span className="text-gray-400">%</span>
-      </div>
+      <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Porcentaje</Typography>
+      <TextField
+        type="number"
+        value={pct}
+        onChange={(e) => setPct(e.target.value)}
+        placeholder="0"
+        fullWidth
+        slotProps={{
+          input: { endAdornment: <InputAdornment position="end" sx={{ color: '#9ca3af' }}>%</InputAdornment> },
+          htmlInput: { min: 0, max: 100, step: 1 },
+        }}
+        sx={{ mb: 1.5 }}
+      />
 
-      <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-2 text-xs text-gray-500">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={seleccion.size === carrito.length && carrito.length > 0} onChange={toggleTodos} />
+      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', pb: 1, fontSize: 12, color: '#6b7280' }}>
+        <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
+          <Checkbox checked={seleccion.size === carrito.length && carrito.length > 0} onChange={toggleTodos} size="small" sx={{ p: 0 }} />
           Seleccionar todo
-        </label>
-        <span>{carrito.length} productos</span>
-      </div>
+        </Box>
+        <Box component="span">{carrito.length} productos</Box>
+      </Box>
 
-      <div className="flex-1 overflow-auto">
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
         {carrito.map((c) => (
-          <label key={lineKey(c)} className="flex cursor-pointer items-center justify-between border-b border-gray-50 py-2">
-            <span className="flex items-center gap-2">
-              <input type="checkbox" checked={seleccion.has(lineKey(c))} onChange={() => toggle(lineKey(c))} />
-              <span className="text-sm">{c.nombre}</span>
-            </span>
-            <span className="text-right text-xs text-gray-500">
-              <div>{fmt(c.precio * c.qty)}</div>
-              <div className="text-emerald-600">
+          <Box component="label" key={lineKey(c)} sx={{ display: 'flex', cursor: 'pointer', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f9fafb', py: 1 }}>
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Checkbox checked={seleccion.has(lineKey(c))} onChange={() => toggle(lineKey(c))} size="small" sx={{ p: 0 }} />
+              <Box component="span" sx={{ fontSize: 14 }}>{c.nombre}</Box>
+            </Box>
+            <Box component="span" sx={{ textAlign: 'right', fontSize: 12, color: '#6b7280' }}>
+              <Box sx={MONEY}>{fmt(c.precio * c.qty)}</Box>
+              <Box sx={{ color: '#059669', ...MONEY }}>
                 {seleccion.has(lineKey(c)) && pctNum > 0 ? `−${fmt(Math.round(c.precio * c.qty * pctNum / 100))}` : '--'}
-              </div>
-            </span>
-          </label>
+              </Box>
+            </Box>
+          </Box>
         ))}
-      </div>
+      </Box>
 
-      <button
+      <Button
         disabled={!puedeAplicar}
         onClick={() => onAplicar({ pct: pctNum, ids: seleccion })}
-        className="mt-3 w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-40"
+        variant="contained" color="primary" fullWidth
+        sx={{ mt: 1.5, py: 1.5, fontWeight: 500, '&.Mui-disabled': { opacity: 0.4 } }}
       >
         Aplicar descuento
-      </button>
-    </div>
+      </Button>
+    </Box>
   );
 }
 
@@ -1401,7 +1642,8 @@ function ClientePicker({ cliente, onSelect }: {
   // Carga inicial acotada (primeros 100) para poder abrir el dropdown y ojear
   // sin escribir. Antes traía la tabla COMPLETA de clientes en cada apertura.
   const cargarIniciales = useCallback(() => {
-    fetch('/api/clientes?limit=100').then((r) => r.json()).then((d) => setIniciales(d.clientes ?? []));
+    void traerJson<{ clientes?: ClienteView[] }>('/api/clientes?limit=100')
+      .then((d) => setIniciales(d?.clientes ?? []));
   }, []);
 
   useEffect(() => { cargarIniciales(); }, [cargarIniciales]);
@@ -1412,10 +1654,8 @@ function ClientePicker({ cliente, onSelect }: {
     const qq = q.trim();
     if (qq.length < 2) { setResultados([]); return; }
     const t = setTimeout(() => {
-      fetch(`/api/clientes?q=${encodeURIComponent(qq)}&limit=50`)
-        .then((r) => r.json())
-        .then((d) => setResultados(d.clientes ?? []))
-        .catch(() => setResultados([]));
+      void traerJson<{ clientes?: ClienteView[] }>(`/api/clientes?q=${encodeURIComponent(qq)}&limit=50`)
+        .then((d) => setResultados(d?.clientes ?? []));
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
@@ -1433,137 +1673,71 @@ function ClientePicker({ cliente, onSelect }: {
 
   if (cliente) {
     return (
-      <div className="mb-2 rounded-lg bg-gray-50 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <span className="truncate text-sm font-medium text-gray-800">{cliente.razonSocial}</span>
-          <button onClick={() => onSelect(null)} className="shrink-0 text-xs text-blue-700">quitar</button>
-        </div>
-        {cliente.rnc && <div className="text-[11px] text-gray-400">RNC: {cliente.rnc}</div>}
-      </div>
+      <Box sx={{ mb: 1, borderRadius: '8px', bgcolor: '#f9fafb', px: 1.5, py: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 500, color: '#1f2937' }}>{cliente.razonSocial}</Box>
+          <Box component="button" onClick={() => onSelect(null)} sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4' }}>quitar</Box>
+        </Box>
+        {cliente.rnc && <Box sx={{ fontSize: 11, color: '#9ca3af' }}>RNC: {cliente.rnc}</Box>}
+      </Box>
     );
   }
 
   return (
-    <div className="relative mb-2" ref={wrapperRef}>
-      <label className="mb-1 block text-xs font-medium text-gray-500">Cliente</label>
-      <input
+    <Box sx={{ position: 'relative', mb: 1 }} ref={wrapperRef}>
+      <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Cliente</Typography>
+      <TextField
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => setAbierto(true)}
         onClick={() => setAbierto(true)}
         placeholder="Consumidor Final (elige o busca)…"
-        className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+        fullWidth
+        sx={{ '& .MuiInputBase-root': { height: 44 } }}
       />
       {abierto && (
-        <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow">
-          <button onClick={() => { onSelect(null); setQ(''); setAbierto(false); }}
-            className="flex w-full items-center px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50">
+        <Box sx={{ position: 'absolute', zIndex: 10, mt: 0.5, maxHeight: 224, width: '100%', overflow: 'auto', borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#fff', boxShadow: 3 }}>
+          <Box component="button" onClick={() => { onSelect(null); setQ(''); setAbierto(false); }}
+            sx={{ display: 'flex', width: '100%', alignItems: 'center', border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' } }}>
             Consumidor Final
-          </button>
+          </Box>
           {filtrados.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-400">Sin clientes registrados</p>
+            <Typography sx={{ px: 1.5, py: 1, fontSize: 12, color: '#9ca3af' }}>Sin clientes registrados</Typography>
           ) : (
             filtrados.map((r) => (
-              <button key={r.id} onClick={() => { onSelect(r); setQ(''); setAbierto(false); }}
-                className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50">
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate" title={r.razonSocial}>{r.razonSocial}</span>
-                  <span className="shrink-0 font-mono text-xs text-gray-400">{r.rnc ?? '—'}</span>
-                </span>
+              <Box component="button" key={r.id} onClick={() => { onSelect(r); setQ(''); setAbierto(false); }}
+                sx={{ display: 'block', width: '100%', border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, '&:hover': { bgcolor: '#f9fafb' } }}>
+                <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+                  <Box component="span" title={r.razonSocial} sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.razonSocial}</Box>
+                  <Box component="span" sx={{ flexShrink: 0, fontFamily: 'monospace', fontSize: 12, color: '#9ca3af' }}>{r.rnc ?? '—'}</Box>
+                </Box>
                 {!!r.dependientes?.length && (
-                  <span className="mt-1 block border-t border-gray-200 pt-1">
+                  <Box component="span" sx={{ display: 'block', mt: 0.5, pt: 0.5, borderTop: '1px solid #e5e7eb' }}>
                     {r.dependientes.map((d) => (
-                      <span key={d} className="block truncate text-xs text-blue-600" title={d}>{d}</span>
+                      <Box component="span" key={d} title={d} sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#2563eb' }}>{d}</Box>
                     ))}
-                  </span>
+                  </Box>
                 )}
-              </button>
+              </Box>
             ))
           )}
-          <button
+          <Box component="button"
             onClick={() => { setAbierto(false); setNuevoAbierto(true); }}
-            className="flex w-full items-center gap-1.5 border-t border-gray-100 px-3 py-2 text-left text-sm font-medium text-blue-600 hover:bg-blue-50"
+            sx={{ display: 'flex', width: '100%', alignItems: 'center', gap: 0.75, borderTop: '1px solid #f3f4f6', border: 'none', borderTopColor: '#f3f4f6', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, fontWeight: 500, color: '#3658e1', '&:hover': { bgcolor: '#eef2fe' } }}
           >
-            <Plus className="h-3.5 w-3.5" /> Nuevo cliente
-          </button>
-        </div>
+            <Plus style={{ width: 14, height: 14 }} /> Nuevo cliente
+          </Box>
+        </Box>
       )}
       {nuevoAbierto && (
-        <NuevoClienteModal
+        <ClienteDialog
+          open
           nombreInicial={q}
           onClose={() => setNuevoAbierto(false)}
           onCreated={(c) => { setNuevoAbierto(false); setQ(''); cargarIniciales(); onSelect(c); }}
         />
       )}
-    </div>
-  );
-}
-
-function NuevoClienteModal({ nombreInicial, onClose, onCreated }: {
-  nombreInicial: string;
-  onClose: () => void;
-  onCreated: (c: ClienteView) => void;
-}) {
-  const [razonSocial, setRazonSocial] = useState(nombreInicial);
-  const [rnc, setRnc] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [email, setEmail] = useState('');
-  const [guardando, setGuardando] = useState(false);
-
-  async function guardar() {
-    if (!razonSocial.trim()) { toast.error('El nombre es obligatorio'); return; }
-    setGuardando(true);
-    const res = await fetch('/api/clientes', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ razonSocial, rnc: rnc || null, telefono: telefono || null, email: email || null }),
-    });
-    setGuardando(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { toast.error(data.error ?? 'No se pudo crear el cliente'); return; }
-    toast.success('Cliente creado');
-    onCreated(data.cliente);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Nuevo cliente</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
-
-        <label className="mb-1 block text-xs text-gray-500">Nombre / Razón social</label>
-        <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} autoFocus
-          placeholder="Nombre del cliente"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-
-        <label className="mb-1 block text-xs text-gray-500">RNC / Cédula (opcional)</label>
-        <input value={rnc} onChange={(e) => setRnc(e.target.value)}
-          placeholder="000-0000000-0"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-
-        <div className="mb-3 grid grid-cols-2 gap-2">
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">Teléfono (opcional)</label>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">Email (opcional)</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-          </div>
-        </div>
-
-        <button
-          disabled={guardando}
-          onClick={guardar}
-          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-50"
-        >
-          {guardando ? 'Creando…' : 'Crear y seleccionar'}
-        </button>
-      </div>
-    </div>
+    </Box>
   );
 }
 
@@ -1600,19 +1774,19 @@ function EstudiantePicker({ estudiante, onSelect }: {
       : `${fmt(estudiante.gastadoHoyCentavos)} / ${fmt(estudiante.limiteDiarioCentavos)} hoy`;
     return (
       <>
-        <div className="mb-2 rounded-lg bg-blue-50 px-3 py-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-blue-800">{estudiante.nombre}</span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setGestion(true)} className="text-xs text-blue-700 underline">saldo</button>
-              <button onClick={() => onSelect(null)} className="text-xs text-blue-700">quitar</button>
-            </div>
-          </div>
-          <div className="mt-0.5 flex justify-between text-[11px] text-blue-700">
-            <span>Saldo: {fmt(estudiante.saldoCentavos)}</span>
-            <span>{limiteTxt}</span>
-          </div>
-        </div>
+        <Box sx={{ mb: 1, borderRadius: '8px', bgcolor: '#eef2fe', px: 1.5, py: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#253a9e' }}>{estudiante.nombre}</Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box component="button" onClick={() => setGestion(true)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4', textDecoration: 'underline' }}>saldo</Box>
+              <Box component="button" onClick={() => onSelect(null)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4' }}>quitar</Box>
+            </Box>
+          </Box>
+          <Box sx={{ mt: 0.25, display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#2a45c4' }}>
+            <Box component="span" sx={MONEY}>Saldo: {fmt(estudiante.saldoCentavos)}</Box>
+            <Box component="span" sx={MONEY}>{limiteTxt}</Box>
+          </Box>
+        </Box>
         {gestion && (
           <MonederoModal estudiante={estudiante} onClose={() => setGestion(false)} onUpdated={onSelect} />
         )}
@@ -1621,42 +1795,59 @@ function EstudiantePicker({ estudiante, onSelect }: {
   }
 
   return (
-    <div className="relative mb-2">
-      <input
+    <Box sx={{ position: 'relative', mb: 1 }}>
+      <TextField
         value={q} onChange={(e) => setQ(e.target.value)}
         placeholder="Estudiante (opcional)…"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+        fullWidth
       />
       {resultados.length > 0 && (
-        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow">
+        <Box sx={{ position: 'absolute', zIndex: 10, mt: 0.5, maxHeight: 192, width: '100%', overflow: 'auto', borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#fff', boxShadow: 3 }}>
           {resultados.map((r) => (
-            <button key={r.dependienteId} onClick={() => elegir(r.dependienteId)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
-              <span>{r.nombre}</span>
-              <span className="text-xs text-gray-400">{fmt(r.saldoCentavos)}</span>
-            </button>
+            <Box component="button" key={r.dependienteId} onClick={() => elegir(r.dependienteId)}
+              sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, '&:hover': { bgcolor: '#f9fafb' } }}>
+              <Box component="span">{r.nombre}</Box>
+              <Box component="span" sx={{ fontSize: 12, color: '#9ca3af', ...MONEY }}>{fmt(r.saldoCentavos)}</Box>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
 function CobroModal({
-  total, cobrando, estudiante, alertaMetodoPago, onClose, onConfirm,
+  total, cobrando, estudiante, cliente, alertaMetodoPago, enMesa = false, onClose, onConfirm,
 }: {
   total: number;
   cobrando: boolean;
-  estudiante: MonederoView | null;
-  /** Si true, pide reconfirmar el método antes de finalizar (config de empresa). */
+  /** Si está activa, pide reconfirmar el método antes de finalizar. */
   alertaMetodoPago: boolean;
+  estudiante: MonederoView | null;
+  /** Necesario para el fiado: sin alguien a quien cobrarle no hay crédito. */
+  cliente: ClienteView | null;
+  /** true si se cobra desde una mesa (comanda) → ofrece "Comer aquí". */
+  enMesa?: boolean;
   onClose: () => void;
-  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
+  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
 }) {
   const [propina, setPropina] = useState('');
   const [split, setSplit] = useState(false);
+  /**
+   * Cobro a la espera de que se reconfirme el método.
+   *
+   * Cobrar efectivo apuntándolo como tarjeta descuadra el cierre de caja y no
+   * se nota hasta el arqueo, cuando ya nadie recuerda cuál venta fue.
+   */
+  const [pendienteConfirm, setPendienteConfirm] = useState<
+    null | { pagos: { metodo: MetodoCobro; valorCentavos: number }[]; recibidoCentavos: number }
+  >(null);
+
+  // Tipo de orden: por defecto "Comer aquí" en mesa, "Mostrador" en venta rápida.
+  const opcionesTipoOrden = tiposOrdenPara(enMesa);
+  const [tipoOrden, setTipoOrden] = useState<TipoOrden>(opcionesTipoOrden[0]);
 
   // Modo simple (un método) — o cuenta-estudiante.
   const [metodo, setMetodo] = useState<MetodoCobro>('efectivo');
@@ -1668,16 +1859,11 @@ function CobroModal({
     { metodo: 'tarjeta', valor: '' },
   ]);
 
-  // Double-check del método: al confirmar, guardamos el cobro pendiente y pedimos
-  // reconfirmar el método antes de finalizar (evita cobrar efectivo por tarjeta).
-  const [pendienteConfirm, setPendienteConfirm] = useState<
-    null | { pagos: { metodo: MetodoCobro; valorCentavos: number }[]; recibidoCentavos: number }
-  >(null);
-
   const propinaCentavos = Math.max(0, Math.round((Number(propina) || 0) * 100));
   const totalCobrar = total + propinaCentavos;
 
   const esMonedero = metodo === 'cuenta-estudiante' && !split;
+  const esCredito  = metodo === 'credito' && !split;
   const recibidoCentavos = Math.round((Number(recibido) || 0) * 100);
   const cambio = metodo === 'efectivo' && !split ? recibidoCentavos - totalCobrar : 0;
   const faltaEfectivo = metodo === 'efectivo' && !split && recibidoCentavos < totalCobrar;
@@ -1705,16 +1891,23 @@ function CobroModal({
     setFilaValor(i, (resto / 100).toFixed(2));
   }
 
-  // Con la alerta activa, abre el double-check; si está apagada, finaliza directo.
-  function pedirOFinalizar(pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number) {
-    if (alertaMetodoPago) {
-      setPendienteConfirm({ pagos, recibidoCentavos });
-    } else {
-      onConfirm(pagos, recibidoCentavos, propinaCentavos);
-    }
+  /**
+   * Con la alerta encendida abre el doble-check; apagada, cobra directo.
+   *
+   * El crédito y el monedero no pasan por aquí: no hay método que confundir.
+   */
+  function pedirOFinalizar(
+    pagos: { metodo: MetodoCobro; valorCentavos: number }[],
+    recibidoCentavos: number,
+  ) {
+    // El tipo de orden viaja hasta el final por los dos caminos. Si se quedara
+    // fuera del que pasa por el doble-check, reconfirmar el método convertiría
+    // un "para llevar" en lo que diga el valor por defecto — y eso cambia el
+    // recibo que se imprime.
+    if (alertaMetodoPago) setPendienteConfirm({ pagos, recibidoCentavos });
+    else onConfirm(pagos, recibidoCentavos, propinaCentavos, tipoOrden);
   }
 
-  // Arma el cobro y (según config) abre el double-check o finaliza.
   function confirmar() {
     if (split) {
       if (!splitCuadra) return;
@@ -1725,195 +1918,277 @@ function CobroModal({
       return;
     }
     if (esMonedero) {
-      pedirOFinalizar([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar);
+      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos, tipoOrden);
+      return;
+    }
+    // Crédito: se confirma SIN pagos. El motor calcula estado_pago = PENDIENTE
+    // y el documento entra a la cartera.
+    if (esCredito) {
+      onConfirm([], 0, propinaCentavos, tipoOrden);
       return;
     }
     const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
     pedirOFinalizar([{ metodo, valorCentavos: totalCobrar }], recibidoOut);
   }
 
-  // El cajero reconfirmó el método → finalizar la venta.
-  function finalizarConfirmado() {
-    if (!pendienteConfirm) return;
-    onConfirm(pendienteConfirm.pagos, pendienteConfirm.recibidoCentavos, propinaCentavos);
-  }
-
-  // Etiqueta legible del método para el resumen del double-check.
-  function labelMetodoCobro(m: MetodoCobro): string {
-    if (m === 'cuenta-estudiante') return estudiante ? `Cuenta de ${estudiante.nombre}` : 'Monedero';
-    return m.charAt(0).toUpperCase() + m.slice(1);
-  }
-  const resumenPago: ResumenMetodo[] = (pendienteConfirm?.pagos ?? []).map((p) => ({
-    label: labelMetodoCobro(p.metodo),
-    montoFmt: fmt(p.valorCentavos),
-  }));
-
   const puedeConfirmar = !cobrando && (split ? splitCuadra : (!faltaEfectivo && !monederoBloqueado));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="max-h-[92vh] w-full max-w-sm overflow-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Cobrar venta</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 560, maxHeight: '94vh', m: 2, borderRadius: '16px' } } }}>
+      <Box sx={{ p: { xs: 2.5, sm: 3.5 } }}>
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 20, fontWeight: 700 }}>Cobrar venta</Box>
+          <IconButton onClick={onClose} sx={{ color: '#9ca3af' }}><X style={{ width: 22, height: 22 }} /></IconButton>
+        </Box>
 
-        <div className="mb-3 rounded-lg bg-gray-50 p-3 text-center">
-          <div className="text-xs text-gray-500">Total a cobrar</div>
-          <div className="text-2xl font-medium">{fmt(totalCobrar)}</div>
+        <Box sx={{ mb: 2, borderRadius: '12px', bgcolor: '#f9fafb', p: 2, textAlign: 'center' }}>
+          <Box sx={{ fontSize: 13, color: '#6b7280' }}>Total a cobrar</Box>
+          <Box sx={{ fontSize: 34, fontWeight: 700, ...MONEY }}>{fmt(totalCobrar)}</Box>
           {propinaCentavos > 0 && (
-            <div className="mt-0.5 text-[11px] text-gray-400">Incluye propina {fmt(propinaCentavos)}</div>
+            <Box sx={{ mt: 0.25, fontSize: 12, color: '#9ca3af', ...MONEY }}>Incluye propina {fmt(propinaCentavos)}</Box>
           )}
-        </div>
+        </Box>
+
+        {/* Tipo de orden (operativo, no fiscal) — clasifica el recibo en el historial. */}
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Tipo de orden</Typography>
+        <Box sx={{ mb: 1.5, display: 'flex', gap: 0.75 }}>
+          {opcionesTipoOrden.map((t) => (
+            <Button
+              key={t}
+              onClick={() => setTipoOrden(t)}
+              disableElevation
+              variant={tipoOrden === t ? 'contained' : 'outlined'}
+              sx={{
+                flex: 1, textTransform: 'none', borderRadius: '10px', fontSize: 15, fontWeight: 600, py: 1.25, minWidth: 0,
+                ...(tipoOrden === t
+                  ? { bgcolor: '#10b981', color: '#fff', '&:hover': { bgcolor: '#059669' } }
+                  : { color: '#374151', borderColor: '#d1d5db' }),
+              }}
+            >
+              {TIPO_ORDEN_LABEL[t]}
+            </Button>
+          ))}
+        </Box>
 
         {/* Propina */}
-        <label className="mb-1 block text-xs text-gray-500">Propina (opcional)</label>
-        <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
-          <span className="text-gray-400">RD$</span>
-          <input
-            type="number" min="0" step="0.01" value={propina}
-            onChange={(e) => setPropina(e.target.value)}
-            placeholder="0.00"
-            className="w-full bg-transparent px-2 py-2 text-sm outline-none"
-          />
-        </div>
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Propina (opcional)</Typography>
+        <TextField
+          type="number"
+          value={propina}
+          onChange={(e) => setPropina(e.target.value)}
+          placeholder="0.00"
+          fullWidth
+          slotProps={{
+            input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+            htmlInput: { min: 0, step: 0.01 },
+          }}
+          sx={{ mb: 1.5 }}
+        />
 
         {/* Toggle pago dividido */}
-        <label className="mb-3 flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
-          <span className="text-gray-700">Pago dividido</span>
-          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} />
-        </label>
+        <Box component="label" sx={{ mb: 2, display: 'flex', cursor: 'pointer', alignItems: 'center', justifyContent: 'space-between', borderRadius: '10px', border: '1px solid #e5e7eb', px: 2, py: 1.5, fontSize: 15, fontWeight: 500 }}>
+          <Box component="span" sx={{ color: '#374151' }}>Pago dividido</Box>
+          <Checkbox checked={split} onChange={(e) => setSplit(e.target.checked)} sx={{ p: 0 }} />
+        </Box>
 
         {!split ? (
           <>
-            <div className="mb-3 grid grid-cols-3 gap-2">
-              {METODOS.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMetodo(m)}
-                  className={`rounded-lg border py-2 text-xs capitalize ${
-                    metodo === m ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+            <Box sx={{ mb: 2, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5 }}>
+              {METODOS.map((m) => {
+                const Ico = METODO_ICONO[m];
+                return (
+                  <ButtonBase
+                    key={m}
+                    onClick={() => setMetodo(m)}
+                    sx={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75,
+                      borderRadius: '14px', border: '1px solid', minHeight: 90, py: 1.5, fontSize: 15, fontWeight: 600, textTransform: 'capitalize',
+                      borderColor: metodo === m ? '#3658e1' : '#e5e7eb',
+                      bgcolor: metodo === m ? '#eef2fe' : 'transparent',
+                      color: metodo === m ? '#2a45c4' : '#4b5563',
+                      '&:active': { transform: 'scale(0.97)' },
+                    }}
+                  >
+                    <Ico style={{ width: 32, height: 32 }} />
+                    {m}
+                  </ButtonBase>
+                );
+              })}
+            </Box>
 
             {estudiante && (
-              <button
+              <ButtonBase
                 onClick={() => setMetodo('cuenta-estudiante')}
-                className={`mb-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-                  metodo === 'cuenta-estudiante' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                }`}
+                sx={{
+                  mb: 1.5, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+                  borderRadius: '8px', border: '1px solid', px: 1.5, py: 1, fontSize: 14,
+                  borderColor: metodo === 'cuenta-estudiante' ? '#3658e1' : '#e5e7eb',
+                  bgcolor: metodo === 'cuenta-estudiante' ? '#eef2fe' : 'transparent',
+                  color: metodo === 'cuenta-estudiante' ? '#2a45c4' : '#4b5563',
+                }}
               >
-                <span>Cuenta de {estudiante.nombre}</span>
-                <span className="text-xs">saldo {fmt(estudiante.saldoCentavos)}</span>
-              </button>
+                <Box component="span">Cuenta de {estudiante.nombre}</Box>
+                <Box component="span" sx={{ fontSize: 12, ...MONEY }}>saldo {fmt(estudiante.saldoCentavos)}</Box>
+              </ButtonBase>
+            )}
+
+            {(cliente || estudiante) && (
+              <ButtonBase
+                onClick={() => setMetodo('credito')}
+                sx={{
+                  mb: 1.5, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+                  borderRadius: '8px', border: '1px solid', px: 1.5, py: 1, fontSize: 14,
+                  borderColor: metodo === 'credito' ? '#3658e1' : '#e5e7eb',
+                  bgcolor: metodo === 'credito' ? '#eef2fe' : 'transparent',
+                  color: metodo === 'credito' ? '#2a45c4' : '#4b5563',
+                }}
+              >
+                <Box component="span">A crédito (fiado)</Box>
+                <Box component="span" sx={{ fontSize: 12 }}>queda en cuentas por cobrar</Box>
+              </ButtonBase>
+            )}
+
+            {esCredito && (
+              <Box sx={{ mb: 1.5, borderRadius: '8px', bgcolor: '#fffbeb', px: 1.5, py: 1, fontSize: 12, color: '#92400e' }}>
+                Se registra la venta sin cobrar. Queda como deuda de{' '}
+                {estudiante?.nombre ?? cliente?.razonSocial} en cuentas por cobrar.
+              </Box>
             )}
 
             {monederoBloqueado && (
-              <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+              <Box sx={{ mb: 1.5, borderRadius: '8px', bgcolor: '#fef2f2', px: 1.5, py: 1, fontSize: 12, color: '#b91c1c' }}>
                 {saldoCorto ? 'Saldo insuficiente en el monedero.' : 'Excede el límite diario del estudiante.'}
-              </div>
+              </Box>
             )}
 
             {metodo === 'efectivo' && (
               <>
-                <label className="mb-1 block text-xs text-gray-500">Efectivo recibido</label>
-                <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
-                  <span className="text-gray-400">RD$</span>
-                  <input
-                    type="number" min="0" step="0.01" value={recibido} autoFocus
-                    onChange={(e) => setRecibido(e.target.value)}
-                    className="w-full bg-transparent px-2 py-2.5 text-lg outline-none"
-                  />
-                </div>
+                <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Efectivo recibido</Typography>
+                <TextField
+                  type="number"
+                  value={recibido}
+                  autoFocus
+                  onChange={(e) => setRecibido(e.target.value)}
+                  fullWidth
+                  slotProps={{
+                    input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+                    htmlInput: { min: 0, step: 0.01 },
+                  }}
+                  sx={{ mb: 1, '& input': { fontSize: 18, py: 1.25 } }}
+                />
+                {/* Montos rápidos: exacto + redondeos comunes de billetes */}
+                <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                  {montosRapidos(totalCobrar).map((mc) => (
+                    <ButtonBase
+                      key={mc}
+                      onClick={() => setRecibido((mc / 100).toFixed(2))}
+                      sx={{
+                        borderRadius: '10px', border: '1px solid', py: 1.5, fontSize: 15, fontWeight: 600, ...MONEY,
+                        borderColor: recibidoCentavos === mc ? '#3658e1' : '#e5e7eb',
+                        bgcolor: recibidoCentavos === mc ? '#eef2fe' : 'transparent',
+                        color: recibidoCentavos === mc ? '#2a45c4' : '#4b5563',
+                      }}
+                    >
+                      {fmt(mc)}
+                    </ButtonBase>
+                  ))}
+                </Box>
                 {recibidoCentavos > 0 && !faltaEfectivo && (
-                  <div className="mb-3 flex justify-between rounded-lg bg-green-50 p-3 text-green-700">
-                    <span className="text-sm">Cambio</span>
-                    <span className="font-medium">{fmt(cambio)}</span>
-                  </div>
+                  <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'space-between', borderRadius: '8px', bgcolor: '#f0fdf4', p: 1.5, color: '#15803d' }}>
+                    <Box component="span" sx={{ fontSize: 14 }}>Cambio</Box>
+                    <Box component="span" sx={{ fontWeight: 500, ...MONEY }}>{fmt(cambio)}</Box>
+                  </Box>
                 )}
               </>
             )}
           </>
         ) : (
           <>
-            <div className="mb-2 space-y-2">
+            <Box sx={{ mb: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {filas.map((f, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
+                <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TextField
+                    select
                     value={f.metodo}
                     onChange={(e) => setFilaMetodo(i, e.target.value as Metodo)}
-                    className="h-10 rounded-lg border border-gray-300 px-2 text-sm capitalize outline-none focus:border-blue-500"
+                    sx={{ minWidth: 132, '& .MuiInputBase-root': { height: 52, fontSize: 15 }, '& .MuiSelect-select': { textTransform: 'capitalize' } }}
                   >
-                    {METODOS.map((m) => <option key={m} value={m} className="capitalize">{m}</option>)}
-                  </select>
-                  <div className="flex flex-1 items-center rounded-lg border border-gray-300 px-2">
-                    <span className="text-xs text-gray-400">RD$</span>
-                    <input
-                      type="number" min="0" step="0.01" value={f.valor}
-                      onChange={(e) => setFilaValor(i, e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-transparent px-1.5 py-2 text-sm outline-none"
-                    />
-                  </div>
-                  <button onClick={() => autollenarResto(i)} title="Completar el resto"
-                    className="rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-500 hover:bg-gray-50">resto</button>
+                    {METODOS.map((m) => <MenuItem key={m} value={m} sx={{ textTransform: 'capitalize', fontSize: 15, py: 1.25 }}>{m}</MenuItem>)}
+                  </TextField>
+                  <TextField
+                    type="number"
+                    value={f.valor}
+                    onChange={(e) => setFilaValor(i, e.target.value)}
+                    placeholder="0.00"
+                    sx={{ flex: 1, '& .MuiInputBase-root': { height: 52 }, '& input': { fontSize: 16 } }}
+                    slotProps={{
+                      input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+                      htmlInput: { min: 0, step: 0.01 },
+                    }}
+                  />
+                  <ButtonBase onClick={() => autollenarResto(i)} title="Completar el resto"
+                    sx={{ flexShrink: 0, borderRadius: '10px', border: '1px solid #e5e7eb', minWidth: 56, height: 52, fontSize: 14, fontWeight: 600, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' } }}>resto</ButtonBase>
                   {filas.length > 2 && (
-                    <button onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="text-gray-300 hover:text-red-500"><X className="h-4 w-4" /></button>
+                    <Box component="button" onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))}
+                      sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 52, color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 20, height: 20 }} /></Box>
                   )}
-                </div>
+                </Box>
               ))}
-            </div>
-            <button
+            </Box>
+            <ButtonBase
               onClick={() => setFilas((prev) => [...prev, { metodo: 'transferencia', valor: '' }])}
-              className="mb-2 flex items-center gap-1 text-xs font-medium text-blue-600"
+              sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, width: '100%', minHeight: 48, borderRadius: '10px', border: '1px dashed #c7d2fe', fontSize: 15, fontWeight: 600, color: '#3658e1', '&:hover': { bgcolor: '#eef2fe' } }}
             >
-              <Plus className="h-3.5 w-3.5" /> Agregar método
-            </button>
-            <div className={`mb-3 flex justify-between rounded-lg px-3 py-2 text-sm ${
-              splitCuadra ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-            }`}>
-              <span>{splitCuadra ? 'Cuadra' : (restanteSplit > 0 ? 'Falta' : 'Sobra')}</span>
-              <span className="font-medium">{fmt(Math.abs(restanteSplit))}</span>
-            </div>
+              <Plus style={{ width: 18, height: 18 }} /> Agregar método
+            </ButtonBase>
+            <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '10px', px: 1.75, py: 1.5, fontSize: 15, fontWeight: 600, bgcolor: splitCuadra ? '#f0fdf4' : '#fffbeb', color: splitCuadra ? '#15803d' : '#b45309' }}>
+              <Box component="span">{splitCuadra ? 'Cuadra' : (restanteSplit > 0 ? 'Falta' : 'Sobra')}</Box>
+              <Box component="span" sx={{ fontWeight: 700, fontSize: 17, ...MONEY }}>{fmt(Math.abs(restanteSplit))}</Box>
+            </Box>
           </>
         )}
 
-        <button
+        <Button
           disabled={!puedeConfirmar}
           onClick={confirmar}
-          className="w-full rounded-lg bg-green-600 py-3 font-medium text-white disabled:opacity-50"
+          variant="contained"
+          fullWidth
+          disableElevation
+          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2, fontSize: 18, fontWeight: 700, textTransform: 'none', color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' } }}
         >
           {cobrando ? 'Procesando…'
             : split ? (splitCuadra ? 'Confirmar venta' : 'El pago no cuadra')
             : faltaEfectivo ? 'Efectivo insuficiente'
             : monederoBloqueado ? (saldoCorto ? 'Saldo insuficiente' : 'Excede límite diario')
             : 'Confirmar venta'}
-        </button>
-      </div>
+        </Button>
+      </Box>
 
       {pendienteConfirm && (
         <ConfirmarMetodoPagoDialog
-          lineas={resumenPago}
+          lineas={pendienteConfirm.pagos.map<ResumenMetodo>((pg) => ({
+            label: labelMetodo(pg.metodo),
+            montoFmt: fmt(pg.valorCentavos),
+          }))}
           procesando={cobrando}
           onCancel={() => setPendienteConfirm(null)}
-          onConfirm={finalizarConfirmado}
+          onConfirm={() => {
+            const pend = pendienteConfirm;
+            setPendienteConfirm(null);
+            onConfirm(pend.pagos, pend.recibidoCentavos, propinaCentavos, tipoOrden);
+          }}
         />
       )}
-    </div>
+    </Dialog>
   );
 }
 
 // ─── Precio editable en línea del carrito ────────────────────────────────────
 
-function PrecioEditable({ linea, onEditar, bloqueado }: {
+function PrecioEditable({ linea, onEditar, bloqueado = false }: {
   linea: LineaCarrito;
   onEditar: (centavos: number | null) => void;
-  /** Sin `facturas:precio-editar` el precio se muestra pero no se toca. */
+  /** Sin permiso el precio se ve pero no se toca. */
   bloqueado?: boolean;
 }) {
   const [editando, setEditando] = useState(false);
@@ -1921,6 +2196,7 @@ function PrecioEditable({ linea, onEditar, bloqueado }: {
   const editado = linea.precioOverride != null;
 
   function abrir() {
+    if (bloqueado) return;
     setValor((precioLinea(linea) / 100).toFixed(2));
     setEditando(true);
   }
@@ -1932,31 +2208,26 @@ function PrecioEditable({ linea, onEditar, bloqueado }: {
 
   if (editando) {
     return (
-      <span className="inline-flex items-center gap-1">
-        <span className="text-gray-400">RD$</span>
-        <input
-          type="number" min="0" step="0.01" value={valor} autoFocus
-          onChange={(e) => setValor(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        <Box component="span" sx={{ color: '#9ca3af' }}>RD$</Box>
+        <Box
+          component="input"
+          type="number"
+          value={valor}
+          autoFocus
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValor(e.target.value)}
+          onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
           onBlur={guardar}
-          className="w-16 rounded border border-blue-300 px-1 py-0.5 text-xs outline-none"
+          sx={{ width: 64, borderRadius: '4px', border: '1px solid #a5b4f9', px: 0.5, py: 0.25, fontSize: 12, outline: 'none', ...MONEY }}
         />
-      </span>
-    );
-  }
-
-  if (bloqueado) {
-    return (
-      <span className="text-gray-400" title="Tu rol no puede cambiar el precio">
-        {fmt(precioLinea(linea))} c/u
-      </span>
+      </Box>
     );
   }
 
   return (
-    <button onClick={abrir} title="Editar precio" className={`underline decoration-dotted underline-offset-2 ${editado ? 'text-blue-600' : 'text-gray-400'}`}>
+    <Box component="button" onClick={abrir} title="Editar precio" sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2, color: editado ? '#3658e1' : '#9ca3af', ...MONEY }}>
       {fmt(precioLinea(linea))} c/u{editado ? '*' : ''}
-    </button>
+    </Box>
   );
 }
 
@@ -1969,37 +2240,37 @@ function AparcadasModal({ aparcadas, onRetomar, onDescartar, onClose }: {
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="max-h-[85vh] w-full max-w-md overflow-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Ventas aparcadas ({aparcadas.length})</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 448, maxHeight: '85vh', m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Ventas aparcadas ({aparcadas.length})</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
         {aparcadas.length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-400">No hay ventas aparcadas.</p>
+          <Typography sx={{ py: 4, textAlign: 'center', fontSize: 14, color: '#9ca3af' }}>No hay ventas aparcadas.</Typography>
         ) : (
-          <div className="space-y-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {aparcadas.map((a) => {
               const t = totalesCarrito(a.carrito);
               return (
-                <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{a.etiqueta}</div>
-                    <div className="text-xs text-gray-400">
+                <Box key={a.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderRadius: '8px', border: '1px solid #e5e7eb', px: 1.5, py: 1.25 }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 500 }}>{a.etiqueta}</Box>
+                    <Box sx={{ fontSize: 12, color: '#9ca3af', ...MONEY }}>
                       {a.carrito.length} {a.carrito.length === 1 ? 'ítem' : 'ítems'} · {fmt(t.total)}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button onClick={() => onRetomar(a)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white">Retomar</button>
-                    <button onClick={() => onDescartar(a.id)} className="text-gray-300 hover:text-red-500"><X className="h-4 w-4" /></button>
-                  </div>
-                </div>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1 }}>
+                    <Button onClick={() => onRetomar(a)} variant="contained" color="primary" disableElevation sx={{ borderRadius: '8px', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500 }}>Retomar</Button>
+                    <Box component="button" onClick={() => onDescartar(a.id)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 16, height: 16 }} /></Box>
+                  </Box>
+                </Box>
               );
             })}
-          </div>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -2017,10 +2288,10 @@ function CierreModal({ turnoId, onClose, onCerrado }: {
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    fetch('/api/caja/turnos').then((r) => r.json()).then((d) => {
-      setEstado((s) => ({ ...s, esperado: d.desglose?.esperado ?? 0 }));
+    void traerJson<{ desglose?: { esperado?: number } }>('/api/caja/turnos').then((d) => {
+      setEstado((s) => ({ ...s, esperado: d?.desglose?.esperado ?? 0 }));
       setCargando(false);
-    }).catch(() => setCargando(false));
+    });
   }, []);
 
   const contadoCentavos = Math.round((Number(estado.contado) || 0) * 100);
@@ -2042,60 +2313,68 @@ function CierreModal({ turnoId, onClose, onCerrado }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Cerrar turno (corte Z)</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Cerrar turno (corte Z)</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
 
         {cargando ? (
-          <p className="py-6 text-center text-sm text-gray-400">Calculando esperado…</p>
+          <Typography sx={{ py: 3, textAlign: 'center', fontSize: 14, color: '#9ca3af' }}>Calculando esperado…</Typography>
         ) : (
           <>
-            <div className="mb-3 rounded-lg bg-gray-50 p-3 text-center">
-              <div className="text-xs text-gray-500">Efectivo esperado en caja</div>
-              <div className="text-2xl font-medium">{fmt(estado.esperado)}</div>
-            </div>
+            <Box sx={{ mb: 1.5, borderRadius: '8px', bgcolor: '#f9fafb', p: 1.5, textAlign: 'center' }}>
+              <Box sx={{ fontSize: 12, color: '#6b7280' }}>Efectivo esperado en caja</Box>
+              <Box sx={{ fontSize: 24, fontWeight: 500, ...MONEY }}>{fmt(estado.esperado)}</Box>
+            </Box>
 
-            <label className="mb-1 block text-xs text-gray-500">Efectivo contado (RD$)</label>
-            <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
-              <span className="text-gray-400">RD$</span>
-              <input
-                type="number" min="0" step="0.01" value={estado.contado} autoFocus
-                onChange={(e) => setEstado((s) => ({ ...s, contado: e.target.value }))}
-                className="w-full bg-transparent px-2 py-2.5 text-lg outline-none"
-              />
-            </div>
-
-            {estado.contado !== '' && (
-              <div className={`mb-3 flex justify-between rounded-lg px-3 py-2 text-sm ${
-                hayDiff ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
-              }`}>
-                <span>{hayDiff ? `Diferencia ${diferencia > 0 ? '+' : ''}${fmt(diferencia)}` : 'Cuadrada'}</span>
-              </div>
-            )}
-
-            <label className="mb-1 block text-xs text-gray-500">Observaciones {hayDiff && <span className="text-red-500">*</span>}</label>
-            <textarea
-              value={estado.obs}
-              onChange={(e) => setEstado((s) => ({ ...s, obs: e.target.value }))}
-              rows={2} maxLength={500}
-              placeholder={hayDiff ? 'Explica el descuadre…' : 'Opcional'}
-              className="mb-3 w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Efectivo contado (RD$)</Typography>
+            <TextField
+              type="number"
+              value={estado.contado}
+              autoFocus
+              onChange={(e) => setEstado((s) => ({ ...s, contado: e.target.value }))}
+              fullWidth
+              slotProps={{
+                input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+                htmlInput: { min: 0, step: 0.01 },
+              }}
+              sx={{ mb: 1.5, '& input': { fontSize: 18, py: 1.25 } }}
             />
 
-            <button
+            {estado.contado !== '' && (
+              <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'space-between', borderRadius: '8px', px: 1.5, py: 1, fontSize: 14, bgcolor: hayDiff ? '#fef2f2' : '#f0fdf4', color: hayDiff ? '#b91c1c' : '#15803d' }}>
+                <Box component="span" sx={MONEY}>{hayDiff ? `Diferencia ${diferencia > 0 ? '+' : ''}${fmt(diferencia)}` : 'Cuadrada'}</Box>
+              </Box>
+            )}
+
+            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Observaciones {hayDiff && <Box component="span" sx={{ color: '#ef4444' }}>*</Box>}</Typography>
+            <TextField
+              value={estado.obs}
+              onChange={(e) => setEstado((s) => ({ ...s, obs: e.target.value }))}
+              multiline
+              rows={2}
+              placeholder={hayDiff ? 'Explica el descuadre…' : 'Opcional'}
+              fullWidth
+              slotProps={{ htmlInput: { maxLength: 500 } }}
+              sx={{ mb: 1.5 }}
+            />
+
+            <Button
               disabled={enviando || estado.contado === ''}
               onClick={enviar}
-              className="w-full rounded-lg bg-green-600 py-3 font-medium text-white disabled:opacity-50"
+              variant="contained"
+              fullWidth
+              disableElevation
+              sx={{ bgcolor: '#10b981', py: 1.5, fontWeight: 500, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' } }}
             >
               {enviando ? 'Enviando…' : 'Firmar y enviar cierre'}
-            </button>
+            </Button>
           </>
         )}
-      </div>
-    </div>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -2139,33 +2418,33 @@ function MonederoModal({ estudiante, onClose, onUpdated }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Saldo de {estudiante.nombre}</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Saldo de {estudiante.nombre}</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
 
-        <div className="mb-4 rounded-lg bg-gray-50 p-3 text-center">
-          <div className="text-xs text-gray-500">Saldo actual</div>
-          <div className="text-2xl font-medium">{fmt(estudiante.saldoCentavos)}</div>
-        </div>
+        <Box sx={{ mb: 2, borderRadius: '8px', bgcolor: '#f9fafb', p: 1.5, textAlign: 'center' }}>
+          <Box sx={{ fontSize: 12, color: '#6b7280' }}>Saldo actual</Box>
+          <Box sx={{ fontSize: 24, fontWeight: 500, ...MONEY }}>{fmt(estudiante.saldoCentavos)}</Box>
+        </Box>
 
-        <label className="mb-1 block text-xs text-gray-500">Recargar (RD$)</label>
-        <div className="mb-2 flex gap-2">
-          <input type="number" min="0" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="0.00" />
-          <button onClick={recargar} disabled={busy} className="rounded-lg bg-green-600 px-4 text-sm font-medium text-white disabled:opacity-60">Recargar</button>
-        </div>
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Recargar (RD$)</Typography>
+        <Box sx={{ mb: 1, display: 'flex', gap: 1 }}>
+          <TextField type="number" value={monto} onChange={(e) => setMonto(e.target.value)}
+            placeholder="0.00" sx={{ flex: 1 }} slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
+          <Button onClick={recargar} disabled={busy} variant="contained" disableElevation sx={{ bgcolor: '#10b981', px: 2, fontWeight: 500, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.6, color: '#fff' } }}>Recargar</Button>
+        </Box>
 
-        <label className="mb-1 mt-4 block text-xs text-gray-500">Límite diario (RD$, vacío = sin límite)</label>
-        <div className="flex gap-2">
-          <input type="number" min="0" step="0.01" value={limite} onChange={(e) => setLimite(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="sin límite" />
-          <button onClick={guardarLimite} disabled={busy} className="rounded-lg border border-gray-300 px-4 text-sm">Guardar</button>
-        </div>
-      </div>
-    </div>
+        <Typography component="label" sx={{ mb: 0.5, mt: 2, display: 'block', fontSize: 12, color: '#6b7280' }}>Límite diario (RD$, vacío = sin límite)</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <TextField type="number" value={limite} onChange={(e) => setLimite(e.target.value)}
+            placeholder="sin límite" sx={{ flex: 1 }} slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
+          <Button onClick={guardarLimite} disabled={busy} variant="outlined" sx={{ px: 2, color: '#374151', borderColor: '#d1d5db', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}>Guardar</Button>
+        </Box>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -2192,71 +2471,74 @@ function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, 
   useEffect(() => { cargar(); }, [cargar, refresco]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <header className="z-20 flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link href="/dashboard" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Volver al panel">
-            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Panel</span>
-          </Link>
-          <span className="truncate text-sm font-medium">{terminalNombre}</span>
-          <span className="hidden text-gray-400 sm:inline">· Salón</span>
-        </div>
-        <div className="flex items-center gap-2">
+    <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box component="header" sx={{ zIndex: 20, display: 'flex', flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #e5e7eb', bgcolor: '#fff', px: { xs: 1.5, sm: 2 }, py: 1 }}>
+        <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1 }}>
+          <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={iconActionSx}>
+            <ArrowLeft style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, fontSize: 14 }}>Panel</Box>
+          </Button>
+          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 500 }}>{terminalNombre}</Box>
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, color: '#9ca3af' }}>· Salón</Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {mesero ? (
-            <button onClick={onCambiarMesero} className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700">
-              <UserRound className="h-3.5 w-3.5" /> {mesero.nombre} · cambiar
-            </button>
+            <ButtonBase onClick={onCambiarMesero} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, borderRadius: '8px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500, color: '#2a45c4' }}>
+              <UserRound style={{ width: 14, height: 14 }} /> {mesero.nombre} · cambiar
+            </ButtonBase>
           ) : (
-            <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-500">Elige mesa → PIN</span>
+            <Chip label="Elige mesa → PIN" sx={{ bgcolor: '#f3f4f6', color: '#6b7280', borderRadius: '9999px', px: 0.5, py: 0.75, fontSize: 12, fontWeight: 400 }} />
           )}
-          <button onClick={() => setNuevaAbierto(true)} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
-            <Plus className="h-4 w-4" /> Mesa
-          </button>
-        </div>
-      </header>
+          <Button onClick={() => setNuevaAbierto(true)} variant="contained" color="primary" disableElevation sx={{ display: 'flex', alignItems: 'center', gap: 0.75, borderRadius: '8px', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500 }}>
+            <Plus style={{ width: 16, height: 16 }} /> Mesa
+          </Button>
+        </Box>
+      </Box>
 
-      <div className="flex-1 overflow-auto p-4">
+      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
         {cargando ? (
-          <p className="text-sm text-gray-500">Cargando salón…</p>
+          <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Cargando salón…</Typography>
         ) : mesas.length === 0 ? (
-          <div className="mx-auto mt-16 max-w-sm text-center">
-            <p className="text-sm text-gray-500">No hay mesas configuradas en esta terminal.</p>
-            <button onClick={() => setNuevaAbierto(true)} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Crear primera mesa</button>
-          </div>
+          <Box sx={{ mx: 'auto', mt: 8, maxWidth: 384, textAlign: 'center' }}>
+            <Typography sx={{ fontSize: 14, color: '#6b7280' }}>No hay mesas configuradas en esta terminal.</Typography>
+            <Button onClick={() => setNuevaAbierto(true)} variant="contained" color="primary" disableElevation sx={{ mt: 1.5, borderRadius: '8px', px: 2, py: 1, fontSize: 14, fontWeight: 500 }}>Crear primera mesa</Button>
+          </Box>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 1.5 }}>
             {mesas.map((m) => (
-              <button
+              <ButtonBase
                 key={m.id}
                 onClick={() => onAbrirMesa(m)}
-                className={`flex aspect-[4/3] flex-col justify-between rounded-xl border p-3 text-left ${
-                  m.ocupada ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white hover:border-blue-400'
-                }`}
+                sx={{
+                  display: 'flex', aspectRatio: '4 / 3', flexDirection: 'column', justifyContent: 'space-between', borderRadius: '12px', border: '1px solid', p: 1.5, textAlign: 'left',
+                  borderColor: m.ocupada ? '#fcd34d' : '#e5e7eb',
+                  bgcolor: m.ocupada ? '#fffbeb' : '#fff',
+                  '&:hover': { borderColor: m.ocupada ? '#fcd34d' : '#8193f5' },
+                }}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-base font-semibold text-gray-900">{m.nombre}</span>
-                  <span className={`h-2.5 w-2.5 rounded-full ${m.ocupada ? 'bg-amber-500' : 'bg-emerald-400'}`} />
-                </div>
+                <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box component="span" sx={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>{m.nombre}</Box>
+                  <Box component="span" sx={{ height: 10, width: 10, borderRadius: '9999px', bgcolor: m.ocupada ? '#f59e0b' : '#34d399' }} />
+                </Box>
                 {m.ocupada ? (
-                  <div className="leading-tight">
-                    <div className="text-sm font-semibold text-amber-800">{fmt(m.totalCentavos)}</div>
-                    <div className="truncate text-[11px] text-amber-600">
+                  <Box sx={{ width: '100%', lineHeight: 1.2 }}>
+                    <Box sx={{ fontSize: 14, fontWeight: 600, color: '#92400e', ...MONEY }}>{fmt(m.totalCentavos)}</Box>
+                    <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#d97706' }}>
                       {m.items} {m.items === 1 ? 'ítem' : 'ítems'}{m.meseroNombre ? ` · ${m.meseroNombre}` : ''}
-                    </div>
-                  </div>
+                    </Box>
+                  </Box>
                 ) : (
-                  <span className="text-xs text-gray-400">{m.zona ?? 'Libre'}</span>
+                  <Box component="span" sx={{ fontSize: 12, color: '#9ca3af' }}>{m.zona ?? 'Libre'}</Box>
                 )}
-              </button>
+              </ButtonBase>
             ))}
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
 
       {nuevaAbierto && (
         <NuevaMesaModal terminalId={terminalId} onClose={() => setNuevaAbierto(false)} onCreated={() => { setNuevaAbierto(false); cargar(); }} />
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -2279,33 +2561,38 @@ function PinMeseroModal({ onClose, onOk }: { onClose: () => void; onOk: (m: Mese
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-xs rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Identifícate</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
-        <p className="mb-3 text-xs text-gray-500">Ingresa tu PIN de mesero.</p>
-        <input
-          type="password" inputMode="numeric" autoFocus value={pin}
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 320, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Identifícate</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
+        <Typography sx={{ mb: 1.5, fontSize: 12, color: '#6b7280' }}>Ingresa tu PIN de mesero.</Typography>
+        <TextField
+          type="password"
+          autoFocus
+          value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
           onKeyDown={(e) => { if (e.key === 'Enter') verificar(pin); }}
           placeholder="••••"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-3 text-center text-2xl tracking-[0.5em] outline-none focus:border-blue-500"
+          fullWidth
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          sx={{ mb: 1.5, '& input': { textAlign: 'center', fontSize: 24, letterSpacing: '0.5em', py: 1.5 } }}
         />
-        <button
+        <Button
           disabled={verificando || pin.length < 4}
           onClick={() => verificar(pin)}
-          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-50"
+          variant="contained" color="primary" fullWidth
+          sx={{ py: 1.5, fontWeight: 500 }}
         >
           {verificando ? 'Verificando…' : 'Entrar'}
-        </button>
-        <button onClick={() => setGestion(true)} className="mt-3 w-full text-center text-xs text-blue-600">
+        </Button>
+        <Box component="button" onClick={() => setGestion(true)} sx={{ mt: 1.5, width: '100%', border: 'none', bgcolor: 'transparent', cursor: 'pointer', textAlign: 'center', fontSize: 12, color: '#3658e1' }}>
           Registrar nuevo mesero
-        </button>
+        </Box>
         {gestion && <NuevoMeseroModal onClose={() => setGestion(false)} onCreated={() => setGestion(false)} />}
-      </div>
-    </div>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -2330,23 +2617,21 @@ function NuevoMeseroModal({ onClose, onCreated }: { onClose: () => void; onCreat
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-xs rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Nuevo mesero</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
-        <label className="mb-1 block text-xs text-gray-500">Nombre</label>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-        <label className="mb-1 block text-xs text-gray-500">PIN (4–6 dígitos)</label>
-        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-        <button disabled={busy} onClick={guardar} className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} sx={{ zIndex: 1400 }} slotProps={{ paper: { sx: { maxWidth: 320, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Nuevo mesero</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Nombre</Typography>
+        <TextField value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus fullWidth sx={{ mb: 1.5 }} />
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>PIN (4–6 dígitos)</Typography>
+        <TextField value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} fullWidth slotProps={{ htmlInput: { inputMode: 'numeric' } }} sx={{ mb: 1.5 }} />
+        <Button disabled={busy} onClick={guardar} variant="contained" color="primary" fullWidth sx={{ py: 1.25, fontSize: 14, fontWeight: 500 }}>
           {busy ? 'Creando…' : 'Registrar'}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -2370,117 +2655,81 @@ function NuevaMesaModal({ terminalId, onClose, onCreated }: { terminalId: number
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-xs rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Nueva mesa</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
-        <label className="mb-1 block text-xs text-gray-500">Nombre / número</label>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Mesa 1"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-        <label className="mb-1 block text-xs text-gray-500">Zona (opcional)</label>
-        <input value={zona} onChange={(e) => setZona(e.target.value)} placeholder="Terraza"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-        <button disabled={busy} onClick={guardar} className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 320, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Nueva mesa</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Nombre / número</Typography>
+        <TextField value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Mesa 1" fullWidth sx={{ mb: 1.5 }} />
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Zona (opcional)</Typography>
+        <TextField value={zona} onChange={(e) => setZona(e.target.value)} placeholder="Terraza" fullWidth sx={{ mb: 1.5 }} />
+        <Button disabled={busy} onClick={guardar} variant="contained" color="primary" fullWidth sx={{ py: 1.25, fontSize: 14, fontWeight: 500 }}>
           {busy ? 'Creando…' : 'Crear mesa'}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Box>
+    </Dialog>
   );
 }
 
-// ─── Crear producto rápido desde el POS ──────────────────────────────────────
+// Crear producto/cliente rápido: modales compartidos en components/shared/
+// (producto-dialog.tsx y cliente-dialog.tsx) — mismos que usa Facturación.
 
-const IMG_MAX_BYTES = 800_000;
+// ─── Venta simple (monto libre, sin producto de catálogo) ────────────────────
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function NuevoProductoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [nombre, setNombre] = useState('');
-  const [precio, setPrecio] = useState('');
+function VentaSimpleModal({ onClose, onAgregar }: {
+  onClose: () => void;
+  onAgregar: (concepto: string, precioCentavos: number, tasaItbis: string) => void;
+}) {
+  const [concepto, setConcepto] = useState('');
+  const [monto, setMonto] = useState('');
   const [tasaItbis, setTasaItbis] = useState('0.18');
-  const [imagen, setImagen] = useState('');
-  const [guardando, setGuardando] = useState(false);
 
-  async function handleImagen(file: File) {
-    if (!file.type.startsWith('image/')) { toast.error('Solo se aceptan imágenes'); return; }
-    if (file.size > IMG_MAX_BYTES) { toast.error('Imagen demasiado grande (máx 800 KB)'); return; }
-    setImagen(await fileToBase64(file));
-  }
-
-  async function guardar() {
-    const p = Number(precio);
-    if (!nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
-    if (!precio || isNaN(p) || p < 0) { toast.error('Precio inválido'); return; }
-    setGuardando(true);
-    const res = await fetch('/api/productos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, precio: p, tasaItbis, tipo: 'bien', imagen: imagen || null }),
-    });
-    setGuardando(false);
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      toast.error(e.error ?? 'No se pudo crear el producto');
-      return;
-    }
-    toast.success('Producto creado');
-    onCreated();
+  function agregar() {
+    const p = Number(monto);
+    if (!monto || isNaN(p) || p <= 0) { toast.error('Monto inválido'); return; }
+    onAgregar(concepto.trim(), Math.round(p * 100), tasaItbis);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-medium">Nuevo producto</span>
-          <button onClick={onClose} className="text-gray-400">✕</button>
-        </div>
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Venta simple</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
 
-        <label className="relative mx-auto mb-3 flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400">
-          <input type="file" accept="image/*" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagen(f); }} />
-          {imagen ? <img src={imagen} alt="" className="h-full w-full object-cover" /> : <Camera className="h-6 w-6" />}
-        </label>
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Monto (DOP)</Typography>
+        <TextField
+          type="number" value={monto} autoFocus
+          onChange={(e) => setMonto(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
+          placeholder="0.00" fullWidth
+          slotProps={{
+            input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+            htmlInput: { min: 0, step: 0.01 },
+          }}
+          sx={{ mb: 1.5, '& input': { fontSize: 18, py: 1.25 } }}
+        />
 
-        <label className="mb-1 block text-xs text-gray-500">Nombre</label>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus
-          placeholder="Ej. Café con leche"
-          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Concepto (opcional)</Typography>
+        <TextField value={concepto} onChange={(e) => setConcepto(e.target.value)}
+          placeholder="Venta simple" fullWidth sx={{ mb: 1.5 }} />
 
-        <div className="mb-3 grid grid-cols-2 gap-2">
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">Precio (DOP)</label>
-            <input type="number" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)}
-              placeholder="0.00"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">ITBIS</label>
-            <select value={tasaItbis} onChange={(e) => setTasaItbis(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500">
-              <option value="0.18">18%</option>
-              <option value="0.16">16%</option>
-              <option value="0">0%</option>
-              <option value="exento">Exento</option>
-            </select>
-          </div>
-        </div>
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>ITBIS</Typography>
+        <TextField select value={tasaItbis} onChange={(e) => setTasaItbis(e.target.value)} fullWidth sx={{ mb: 2 }}>
+          <MenuItem value="0.18">18%</MenuItem>
+          <MenuItem value="0.16">16%</MenuItem>
+          <MenuItem value="0">0%</MenuItem>
+          <MenuItem value="exento">Exento</MenuItem>
+        </TextField>
 
-        <button
-          disabled={guardando}
-          onClick={guardar}
-          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-50"
-        >
-          {guardando ? 'Creando…' : 'Crear y agregar al catálogo'}
-        </button>
-      </div>
-    </div>
+        <Button onClick={agregar} variant="contained" color="primary" fullWidth sx={{ py: 1.5, fontWeight: 500 }}>
+          Agregar al carrito
+        </Button>
+      </Box>
+    </Dialog>
   );
 }
+

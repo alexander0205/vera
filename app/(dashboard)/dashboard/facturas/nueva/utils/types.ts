@@ -69,6 +69,9 @@ export interface BorradorInicial {
   pagoRecibido?:        boolean;
   pagoFecha?:           string | null;
   pagoLineas?:          { metodo: string; valor: string; cuenta?: string; referencia?: string }[];
+  categoriaGasto?:      string | null;
+  ncfProveedor?:        string | null;
+  fechaGasto?:          string | null;
 }
 
 export interface ItemLinea {

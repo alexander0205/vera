@@ -3,11 +3,13 @@
  * ║  FUENTE DE VERDAD — Roles y permisos de EmiteDO                 ║
  * ║                                                                  ║
  * ║  Para agregar un rol nuevo:                                      ║
- * ║  1. Agregar entrada en ROLES array                               ║
- * ║  2. Agregar al enum roleEnum en lib/db/schema.ts                 ║
- * ║  3. El resto del sistema lo lee de aquí                          ║
+ * ║  1. Agregar entrada en ROLES array y a RoleKey                   ║
+ * ║  2. El resto del sistema lo lee de aquí — listTeamRoles siembra  ║
+ * ║     los roles de sistema que falten en cada empresa              ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
+
+import { BILLING_ENABLED } from '@/lib/config/billing';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,10 +71,29 @@ export type Permission =
   // Punto de venta (POS)
   | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
   | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
+  | 'pos:anular'     // editar/eliminar/anular/unsettle recibos ya cobrados (admin/owner)
+  | 'pos:quitar-item-pin' // cajero: quitar un ítem de un recibo cobrado autorizando con el PIN de un supervisor
+  // Acceso por módulo del producto (facturación / POS). El acceso efectivo de
+  // un usuario a un módulo = módulo activo en la empresa (teams.modulosHabilitados)
+  // ∩ este permiso en su rol. Ver lib/auth/modules.ts.
+  | 'modulo:facturacion'
+  | 'modulo:administracion'
+  | 'modulo:pos'
+  | 'modulo:escolar'
   // Suscripción / billing
-  | 'suscripcion:gestionar';
+  | 'suscripcion:gestionar'
+  // Administración escolar
+  | 'administracion-escolar:ver'
+  | 'administracion-escolar:gestionar'
+  | 'administracion-escolar:configurar'
+  | 'administracion-escolar:pagos'
+  // Contabilidad — agrupa lo fiscal (secuencias, consulta de e-NCF) y el motor
+  // contable (catálogo de cuentas, asientos, libro diario, reportes).
+  | 'contabilidad:ver'        // consultar secuencias, e-NCF, asientos y reportes
+  | 'contabilidad:gestionar'  // crear/editar/anular asientos manuales
+  | 'contabilidad:configurar';// catálogo de cuentas y cuentas automáticas
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'lector';
+export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
@@ -129,8 +150,11 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
-      'pos:vender', 'pos:configurar',
+      'pos:vender', 'pos:configurar', 'pos:anular', 'pos:quitar-item-pin',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
       'suscripcion:gestionar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
+      'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
   },
@@ -151,7 +175,10 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
-      'pos:vender', 'pos:configurar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
+      'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
+      'pos:vender', 'pos:configurar', 'pos:anular', 'pos:quitar-item-pin',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -170,9 +197,14 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'equipo:ver',
       'caja:ver', 'caja:operar',
-      'pos:vender',
+      // Sin permisos de Administración Escolar: un vendedor no matricula
+      // estudiantes. El colegio se atiende con 'personal-escolar'.
+      // Solo lectura contable: el vendedor consulta secuencias y e-NCF, no toca asientos.
+      'contabilidad:ver',
+      'pos:vender', 'pos:quitar-item-pin',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos',
     ],
-    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
+    ui: { color: 'text-zero-600 bg-zero-50 border-zero-200',       icon: 'User'       },
   },
   {
     key:         'lector',
@@ -189,8 +221,42 @@ export const ROLES: RoleDef[] = [
       'configuracion:ver',
       'compras:ver',
       'caja:ver',
+      'modulo:facturacion', 'modulo:administracion',
+      // Sin 'modulo:escolar': ver el colegio en solo lectura solo aplica si el
+      // dueño le abre el módulo a este rol.
+      'administracion-escolar:ver',
+      'contabilidad:ver',
     ],
     ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
+  },
+  {
+    key:         'cajero',
+    label:       'Cajero (solo POS)',
+    description: 'Solo Punto de Venta: vende, cobra, opera caja y usa productos/contactos. No entra a Facturación.',
+    invitable:   true,
+    permissions: [
+      'clientes:ver', 'clientes:gestionar',
+      'productos:ver',
+      'caja:ver', 'caja:operar',
+      'pos:vender', 'pos:quitar-item-pin',
+      'modulo:pos', 'modulo:administracion',
+    ],
+    ui: { color: 'text-zero-600 bg-zero-50 border-zero-200', icon: 'Store' },
+  },
+  {
+    key:         'personal-escolar',
+    label:       'Personal del colegio',
+    description: 'Solo Administración Escolar: estudiantes, tutores, matrículas y cobros del colegio. No entra a Facturación ni al POS.',
+    invitable:   true,
+    permissions: [
+      // Los cargos escolares se cobran con facturas y los tutores son
+      // contactos: necesita verlos, aunque no entre al módulo de Facturación.
+      'clientes:ver', 'clientes:gestionar',
+      'facturas:ver',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
+      'modulo:escolar', 'modulo:administracion',
+    ],
+    ui: { color: 'text-indigo-600 bg-indigo-50 border-indigo-200', icon: 'GraduationCap' },
   },
 ];
 
@@ -249,8 +315,16 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'caja:aprobar', label: 'Aprobar cierres y descuadres' },
   ]},
   { module: 'Punto de venta', icon: 'Store', permissions: [
-    { key: 'pos:vender',     label: 'Vender y cobrar (cajero)' },
-    { key: 'pos:configurar', label: 'Configurar terminales del POS' },
+    { key: 'pos:vender',          label: 'Vender y cobrar (cajero)' },
+    { key: 'pos:configurar',      label: 'Configurar terminales del POS' },
+    { key: 'pos:anular',          label: 'Editar / eliminar / anular recibos cobrados (admin)' },
+    { key: 'pos:quitar-item-pin', label: 'Quitar ítem de un recibo con PIN de supervisor' },
+  ]},
+  { module: 'Acceso a módulos', icon: 'LayoutGrid', permissions: [
+    { key: 'modulo:facturacion',    label: 'Acceso al módulo Facturación' },
+    { key: 'modulo:administracion', label: 'Acceso al módulo Administración' },
+    { key: 'modulo:pos',            label: 'Acceso al módulo Punto de Venta' },
+    { key: 'modulo:escolar',        label: 'Acceso al módulo Administración Escolar' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },
@@ -260,8 +334,21 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'configuracion:ver',       label: 'Ver configuración' },
     { key: 'configuracion:gestionar', label: 'Editar configuración' },
   ]},
-  { module: 'Suscripción', icon: 'CreditCard', permissions: [
-    { key: 'suscripcion:gestionar', label: 'Gestionar plan y pagos' },
+  // Suscripción solo se le ofrece al usuario con el billing activo; mientras
+  // tanto no hay plan que gestionar. Ver lib/config/billing.
+  ...(BILLING_ENABLED ? [{ module: 'Suscripción', icon: 'CreditCard', permissions: [
+    { key: 'suscripcion:gestionar' as Permission, label: 'Gestionar plan y pagos' },
+  ]}] : []),
+  { module: 'Administración escolar', icon: 'GraduationCap', permissions: [
+    { key: 'administracion-escolar:ver',         label: 'Ver estudiantes, matrículas, cargos y pagos' },
+    { key: 'administracion-escolar:gestionar',    label: 'Crear / editar estudiantes, tutores, cursos y matrículas' },
+    { key: 'administracion-escolar:configurar',   label: 'Configurar períodos, cursos, materias y conceptos' },
+    { key: 'administracion-escolar:pagos',        label: 'Registrar pagos escolares' },
+  ]},
+  { module: 'Contabilidad', icon: 'BookOpen', permissions: [
+    { key: 'contabilidad:ver',        label: 'Ver secuencias, e-NCF, asientos y reportes contables' },
+    { key: 'contabilidad:gestionar',  label: 'Crear / editar / anular asientos manuales' },
+    { key: 'contabilidad:configurar', label: 'Configurar catálogo de cuentas y cuentas automáticas' },
   ]},
 ];
 

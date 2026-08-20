@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Search } from 'lucide-react';
+import Box from '@mui/material/Box';
+import InputBase from '@mui/material/InputBase';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
@@ -154,64 +156,144 @@ export function Autocomplete<T extends { id: number }>({
   const dropLeft = dropRect ? Math.max(8, Math.min(dropRect.left, vw - dropW - 8)) : 0;
 
   const dropdown = open && dropRect ? (
-    <div
+    <Box
       ref={dropRef}
       id={listboxId}
       role="listbox"
-      style={{
+      sx={{
         position: 'fixed',
         top:   dropRect.bottom + 4,
         left:  dropLeft,
         width: dropW,
         zIndex: 9999,
         pointerEvents: 'auto',
+        bgcolor: 'white',
+        border: '1px solid',
+        borderColor: 'grey.200',
+        borderRadius: '12px',
+        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+        maxHeight: 224,
+        overflow: 'auto',
       }}
-      className="bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-auto"
     >
       {/* "+ Nuevo producto" siempre al inicio */}
       {onCreate && (
-        <button type="button"
-          onMouseDown={(e) => e.preventDefault()}
+        <Box
+          component="button"
+          type="button"
+          onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
           onClick={() => { setOpen(false); onCreate(); }}
-          className="w-full text-left px-4 py-2.5 text-sm text-teal-700 font-medium hover:bg-teal-50 flex items-center gap-2 border-b border-gray-200">
-          <Plus className="h-4 w-4" />{createLabel ?? 'Crear nuevo'}
-        </button>
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            width: '100%',
+            textAlign: 'left',
+            px: 2,
+            py: 1.25,
+            fontSize: '0.875rem',
+            color: '#2a45c4',
+            fontWeight: 500,
+            bgcolor: 'transparent',
+            border: 'none',
+            borderBottom: '1px solid',
+            borderColor: 'grey.200',
+            cursor: 'pointer',
+            '&:hover': { bgcolor: 'rgba(13,148,136,0.06)' },
+          }}
+        >
+          <Plus size={16} />{createLabel ?? 'Crear nuevo'}
+        </Box>
       )}
       {results.length === 0 ? (
         <>
-          <div className="px-4 py-3 text-sm text-gray-500">No se han encontrado resultados</div>
+          <Box sx={{ px: 2, py: 1.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+            No se han encontrado resultados
+          </Box>
           {onFreeText && query.trim() && (
-            <button type="button"
-              onMouseDown={(e) => e.preventDefault()}
+            <Box
+              component="button"
+              type="button"
+              onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
               onClick={commitFreeText}
-              className="w-full text-left px-4 py-2.5 text-sm text-teal-700 font-medium hover:bg-teal-50 flex items-center gap-2 border-t border-gray-200">
-              <Plus className="h-4 w-4" />
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                width: '100%',
+                textAlign: 'left',
+                px: 2,
+                py: 1.25,
+                fontSize: '0.875rem',
+                color: '#2a45c4',
+                fontWeight: 500,
+                bgcolor: 'transparent',
+                border: 'none',
+                borderTop: '1px solid',
+                borderColor: 'grey.200',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'rgba(13,148,136,0.06)' },
+              }}
+            >
+              <Plus size={16} />
               {freeTextLabel ?? `Usar "${query.trim()}" como descripción`}
-            </button>
+            </Box>
           )}
         </>
       ) : (
         results.map((item, idx) => (
-          <button key={item.id} type="button"
+          <Box
+            key={item.id}
+            component="button"
+            type="button"
             role="option"
             aria-selected={idx === highlight}
-            className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 last:border-0 ${idx === highlight ? 'bg-teal-50' : 'hover:bg-gray-50'}`}
-            onMouseDown={(e) => e.preventDefault()}
+            sx={{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              px: 2,
+              py: 1.25,
+              fontSize: '0.875rem',
+              borderBottom: idx < results.length - 1 ? '1px solid' : 'none',
+              borderColor: 'grey.100',
+              bgcolor: idx === highlight ? 'rgba(13,148,136,0.06)' : 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              '&:hover': { bgcolor: idx === highlight ? 'rgba(13,148,136,0.06)' : 'grey.50' },
+            }}
+            onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
             onMouseEnter={() => setHighlight(idx)}
-            onClick={() => select(item)}>
+            onClick={() => select(item)}
+          >
             {renderOption(item)}
-          </button>
+          </Box>
         ))
       )}
-    </div>
+    </Box>
   ) : null;
 
   return (
-    <div ref={wrapperRef} className="relative">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600" />
-        <Input
-          className="pl-8 h-9 text-sm"
+    <Box ref={wrapperRef} sx={{ position: 'relative' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          border: '1px solid',
+          borderColor: 'grey.300',
+          borderRadius: '8px',
+          bgcolor: 'white',
+          height: 36,
+          '&:hover': { borderColor: 'grey.400' },
+          '&:focus-within': { borderColor: '#3658e1', boxShadow: '0 0 0 2px rgba(13,148,136,0.2)' },
+        }}
+      >
+        <Box sx={{ position: 'absolute', left: 12, display: 'flex', alignItems: 'center', color: 'grey.500', pointerEvents: 'none' }}>
+          <Search size={14} />
+        </Box>
+        <InputBase
+          sx={{ pl: '32px', pr: '32px', fontSize: '0.875rem', width: '100%', height: '100%' }}
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleInput(e.target.value)}
@@ -224,15 +306,21 @@ export function Autocomplete<T extends { id: number }>({
             }, 200);
           }}
           onKeyDown={handleKeyDown}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={open}
-          aria-controls={listboxId}
-          aria-activedescendant={open && results[highlight] ? `${listboxId}-${results[highlight].id}` : undefined}
+          inputProps={{
+            role: 'combobox',
+            'aria-autocomplete': 'list',
+            'aria-expanded': open,
+            'aria-controls': listboxId,
+            'aria-activedescendant': open && results[highlight] ? `${listboxId}-${results[highlight].id}` : undefined,
+          }}
         />
-        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-600" />}
-      </div>
+        {loading && (
+          <Box sx={{ position: 'absolute', right: 10, display: 'flex', alignItems: 'center' }}>
+            <CircularProgress size={14} sx={{ color: 'grey.500' }} />
+          </Box>
+        )}
+      </Box>
       {typeof document !== 'undefined' && dropdown && createPortal(dropdown, document.body)}
-    </div>
+    </Box>
   );
 }

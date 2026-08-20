@@ -16,6 +16,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams, ecfDocuments } from '@/lib/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import { generarNotaDebitoMora } from '@/lib/cobranza/nota-debito-mora';
+import { hoyRD } from '@/lib/utils/format';
 
 export interface AplicarRecargoOpts {
   /** Si se especifica, solo aplica para ese team. Si no, aplica a TODOS los teams con recargoMoraActivo=true. */
@@ -50,7 +51,7 @@ export interface AplicarRecargoResult {
 export async function aplicarRecargosMoraVencidos(
   opts: AplicarRecargoOpts = {},
 ): Promise<AplicarRecargoResult> {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   // Obtener teams candidatos (solo activos — el cron no debe procesar inactivos)
   const teamsQuery = db

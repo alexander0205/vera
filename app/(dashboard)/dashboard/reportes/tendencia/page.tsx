@@ -2,6 +2,13 @@ import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { parseRango, type Granularidad } from '@/lib/reportes/shared';
 import { getTendencia } from '@/lib/reportes/queries';
@@ -9,6 +16,15 @@ import { ReportShell, Panel } from '@/components/reportes/report-shell';
 import { TrendChart } from '@/components/reportes/charts';
 
 const GRANS: [Granularidad, string][] = [['dia', 'Diario'], ['semana', 'Semanal'], ['mes', 'Mensual']];
+
+const headCellSx = {
+  px: 2, py: 1.5, fontSize: '0.6875rem', fontWeight: 600, color: '#6b7280',
+  textTransform: 'uppercase', letterSpacing: '0.05em', bgcolor: '#f9fafb',
+  borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap',
+} as const;
+const bodyCellSx = {
+  px: 2, py: 1.5, fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6',
+} as const;
 
 export default async function TendenciaPage({
   searchParams,
@@ -41,51 +57,67 @@ export default async function TendenciaPage({
       <Panel
         titulo={`Ingresos — ${fmtDOP(totalIngresos)} · ${totalFacturas} facturas`}
         right={
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
+          <Box sx={{ display: 'flex', bgcolor: '#f3f4f6', borderRadius: '8px', p: 0.5 }}>
             {GRANS.map(([v, label]) => (
               <Link
                 key={v}
                 href={`?desde=${d0}&hasta=${d1}&g=${v}`}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${g === v ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  borderRadius: '6px',
+                  textDecoration: 'none',
+                  transition: 'color 0.15s',
+                  ...(g === v
+                    ? { backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.08)', color: '#111827' }
+                    : { color: '#6b7280' }),
+                }}
               >
                 {label}
               </Link>
             ))}
-          </div>
+          </Box>
         }
       >
         <TrendChart data={serie} />
       </Panel>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-900">Detalle por período ({serie.length})</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-2.5 text-left">Período</th>
-                <th className="px-4 py-2.5 text-right">Facturas</th>
-                <th className="px-4 py-2.5 text-right">ITBIS</th>
-                <th className="px-4 py-2.5 text-right">Ingresos</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb' }}>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Detalle por período ({serie.length})
+          </Typography>
+        </Box>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell align="left" sx={headCellSx}>Período</TableCell>
+                <TableCell align="right" sx={headCellSx}>Facturas</TableCell>
+                <TableCell align="right" sx={headCellSx}>ITBIS</TableCell>
+                <TableCell align="right" sx={headCellSx}>Ingresos</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {serie.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Sin datos en este rango.</td></tr>
+                <TableRow>
+                  <TableCell colSpan={4} align="center" sx={{ ...bodyCellSx, py: 4, color: '#9ca3af', borderBottom: 0 }}>
+                    Sin datos en este rango.
+                  </TableCell>
+                </TableRow>
               ) : serie.map(p => (
-                <tr key={p.periodo} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-700">{fmtFechaCorta(p.periodo)}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{p.numFacturas}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{fmtDOP(p.itbisCents)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtDOP(p.ingresosCents)}</td>
-                </tr>
+                <TableRow key={p.periodo} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                  <TableCell sx={{ ...bodyCellSx, color: '#374151' }}>{fmtFechaCorta(p.periodo)}</TableCell>
+                  <TableCell align="right" sx={{ ...bodyCellSx, color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{p.numFacturas}</TableCell>
+                  <TableCell align="right" sx={{ ...bodyCellSx, color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(p.itbisCents)}</TableCell>
+                  <TableCell align="right" sx={{ ...bodyCellSx, fontWeight: 500, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(p.ingresosCents)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </Box>
+      </Box>
     </ReportShell>
   );
 }

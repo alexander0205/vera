@@ -1,11 +1,13 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
 import { AlertTriangle, Info, Plus, X } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
-import { Tooltip } from '@/components/ui/tooltip';
+import Tooltip from '@mui/material/Tooltip';
 import { getCampoHint } from '@/lib/factura/validator/ui-helpers';
 import { Autocomplete } from '../components/Autocomplete';
 import type { Cliente } from '../utils/types';
@@ -22,23 +24,35 @@ const CLIENTE_DROPDOWN_W = 520;
 function renderClienteOption(c: Cliente) {
   const deps = c.dependientes ?? [];
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="min-w-0 truncate font-medium" title={c.razonSocial}>
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
+        <Typography
+          variant="body2"
+          title={c.razonSocial}
+          sx={{ minWidth: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
           {c.razonSocial}
-        </p>
-        <span className="shrink-0 font-mono text-xs text-gray-500">{c.rnc || '—'}</span>
-      </div>
+        </Typography>
+        <Typography variant="caption" sx={{ flexShrink: 0, fontFamily: 'monospace', color: 'text.secondary' }}>
+          {c.rnc || '—'}
+        </Typography>
+      </Box>
       {deps.length > 0 && (
-        <ul className="mt-1 border-t border-gray-200 pt-1">
+        <Box component="ul" sx={{ mt: 0.5, pt: 0.5, m: 0, pl: 0, listStyle: 'none', borderTop: '1px solid #e5e7eb' }}>
           {deps.map((d) => (
-            <li key={d} className="truncate text-xs text-blue-600" title={d}>
+            <Typography
+              key={d}
+              component="li"
+              variant="caption"
+              title={d}
+              sx={{ display: 'block', color: '#2563eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
               {d}
-            </li>
+            </Typography>
           ))}
-        </ul>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -72,9 +86,10 @@ export function ClienteSection({
   tipoEcf, totalDocumento,
 }: Props) {
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex-1 min-w-[200px] relative">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {/* Row: autocomplete + "Nuevo contacto" button */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 200, position: 'relative' }}>
           <Autocomplete<Cliente>
             placeholder="Buscar cliente por nombre, RNC o beneficiario…"
             value={clienteSeleccionado?.razonSocial ?? ''}
@@ -86,38 +101,84 @@ export function ClienteSection({
             dropdownMinWidth={CLIENTE_DROPDOWN_W}
             renderOption={renderClienteOption}
           />
-          {/* Botón limpiar — visible cuando hay cliente seleccionado */}
+          {/* Clear button — visible when a client is selected */}
           {clienteSeleccionado && (
-            <button
+            <IconButton
               type="button"
               onClick={onClearCliente}
               aria-label="Quitar cliente seleccionado"
               title="Quitar cliente"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-1 transition-colors z-10"
+              size="small"
+              sx={{
+                position: 'absolute',
+                right: 6,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 10,
+                color: 'grey.400',
+                '&:hover': { color: 'error.main' },
+              }}
             >
-              <X className="h-4 w-4" />
-            </button>
+              <X size={16} />
+            </IconButton>
           )}
-        </div>
-        <button
+        </Box>
+
+        <Box
+          component="button"
           type="button"
           onClick={onOpenNuevoCliente}
-          className="text-teal-600 hover:text-teal-800 text-sm font-medium whitespace-nowrap flex items-center gap-1 transition-colors py-2 -my-1">
-          <Plus className="h-3.5 w-3.5" />Nuevo contacto
-        </button>
-      </div>
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: '#3658e1',
+            bgcolor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            py: 1,
+            my: -0.5,
+            '&:hover': { color: '#2a45c4' },
+          }}
+        >
+          <Plus size={14} />Nuevo contacto
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
-        <div className="min-w-0">
-          <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
-            {regla?.rncLabel ?? 'RNC o Cédula'}
-            {regla?.requiereRncComprador && <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>}
-            <Tooltip text={getCampoHint(tipoEcf, 'rncComprador') || 'DGII #38 · RNC, cédula o pasaporte'}>
-              <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+      {/* RNC / Teléfono / Email grid */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' },
+          gap: 1.5,
+          alignItems: 'start',
+        }}
+      >
+        {/* RNC o Cédula */}
+        <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}
+            >
+              {regla?.rncLabel ?? 'RNC o Cédula'}
+            </Typography>
+            {regla?.requiereRncComprador && (
+              <Typography component="span" sx={{ color: 'error.main', fontSize: '0.875rem', lineHeight: 1 }} aria-label="campo obligatorio">
+                *
+              </Typography>
+            )}
+            <Tooltip title={getCampoHint(tipoEcf, 'rncComprador') || 'DGII #38 · 9 u 11 dígitos'} arrow placement="top">
+              <Box component="span" sx={{ display: 'inline-flex', cursor: 'help' }}>
+                <Info size={12} color="var(--mui-palette-text-secondary, #6b7280)" aria-hidden="true" />
+              </Box>
             </Tooltip>
-          </Label>
+          </Box>
+          <Box sx={{ mt: 1 }}>
           <RncSearch
-            className="mt-1"
             placeholder="Buscar RNC, Cédula o razón social…"
             value={
               clienteSeleccionado?.rnc
@@ -133,35 +194,75 @@ export function ClienteSection({
             }}
             showSyncHint={!clienteSeleccionado}
           />
-        </div>
-        <div>
-          <Label className="text-xs text-gray-600 uppercase tracking-wide">Teléfono</Label>
-          <Input
-            className="mt-1 h-10"
+          </Box>
+        </Box>
+
+        {/* Teléfono */}
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500, display: 'block', mb: 0.5 }}
+          >
+            Teléfono
+          </Typography>
+          <TextField
+            size="small"
+            fullWidth
             placeholder="___-___-____"
             value={telefonoManual}
             onChange={(e) => setTelefonoManual(e.target.value)}
+            slotProps={{
+              htmlInput: { style: { fontSize: '0.875rem', height: '22px' } },
+            }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-        {/* Email siempre visible — si cliente seleccionado sin email, queda editable */}
-        <div>
-          <Label className="text-xs text-gray-600 uppercase tracking-wide">Email (para envío)</Label>
-          <Input
-            className="mt-1 h-10"
+        </Box>
+
+        {/* Email — siempre visible; si cliente sin email, queda editable */}
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500, display: 'block', mb: 0.5 }}
+          >
+            Email (para envío)
+          </Typography>
+          <TextField
             type="email"
+            size="small"
+            fullWidth
             placeholder="facturacion@empresa.com"
             value={emailManual}
             onChange={(e) => setEmailManual(e.target.value)}
+            slotProps={{
+              htmlInput: { style: { fontSize: '0.875rem', height: '22px' } },
+            }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
+      {/* DOP 200k+ warning banner */}
       {tipoEcf === '32' && totalDocumento >= 200000 && (
-        <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>{totalDocumento >= 250000 ? 'DOP 250,000+: datos del comprador OBLIGATORIOS.' : 'Al superar DOP 250,000 los datos del comprador serán obligatorios.'}</span>
-        </div>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1,
+            bgcolor: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: '8px',
+            p: 1.5,
+          }}
+        >
+          <Box sx={{ flexShrink: 0, mt: 0.25, color: '#92400e' }}>
+            <AlertTriangle size={16} />
+          </Box>
+          <Typography variant="caption" sx={{ color: '#92400e', lineHeight: 1.5 }}>
+            {totalDocumento >= 250000
+              ? 'DOP 250,000+: datos del comprador OBLIGATORIOS.'
+              : 'Al superar DOP 250,000 los datos del comprador serán obligatorios.'}
+          </Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

@@ -21,6 +21,8 @@ interface Cotizacion {
   estado: string;
   razonSocialComprador: string | null;
   emailComprador: string | null;
+  /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+  emailCliente?: string | null;
   montoTotal: number;
   fechaEmision: string;
   fechaVencimiento: string | null;
@@ -131,7 +133,7 @@ export default function CotizacionesPage() {
       render: c => (
         <Link
           href={`/dashboard/cotizaciones/${c.id}`}
-          className="font-mono font-medium text-sm text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+          className="font-mono font-medium text-sm text-zero-700 underline decoration-zero-200 underline-offset-2 hover:decoration-zero-600"
         >
           {c.numero}
         </Link>
@@ -172,7 +174,7 @@ export default function CotizacionesPage() {
     // El detalle es donde vive "Convertir a factura"; sin esta puerta había que
     // adivinar que el número era un enlace.
     { icon: Eye,    title: 'Ver detalle', href: `/dashboard/cotizaciones/${c.id}`, primary: true },
-    { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador ?? '' }) },
+    { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador || c.emailCliente || '' }) },
     { icon: Pencil, title: 'Editar',   href: `/dashboard/cotizaciones/${c.id}/editar` },
     { icon: Trash2, title: 'Eliminar', variant: 'danger', onClick: () => { setDeleteTarget(c); setOpError(null); } },
   ];
@@ -198,7 +200,7 @@ export default function CotizacionesPage() {
           hint: search ? undefined : 'Crea tu primera cotización para enviarla a un cliente',
           cta: search ? undefined : (
             <Link href="/dashboard/cotizaciones/nueva">
-              <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
+              <Button className="bg-zero-600 hover:bg-zero-700" size="sm">
                 <Plus className="h-4 w-4 mr-1" /> Nueva cotización
               </Button>
             </Link>
@@ -206,7 +208,7 @@ export default function CotizacionesPage() {
         }}
         headerActions={
           <Link href="/dashboard/cotizaciones/nueva">
-            <Button className="bg-teal-600 hover:bg-teal-700">
+            <Button className="bg-zero-600 hover:bg-zero-700">
               <Plus className="h-4 w-4 mr-2" />
               Nueva cotización
             </Button>
@@ -237,7 +239,7 @@ export default function CotizacionesPage() {
               Cancelar
             </Button>
             <Button
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-zero-600 hover:bg-zero-700"
               onClick={handleEnviarEmail}
               disabled={sendingEmail || !emailTarget?.email}
             >

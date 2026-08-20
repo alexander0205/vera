@@ -12,6 +12,14 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Printer, ArrowLeft, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableFooter from '@mui/material/TableFooter';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -107,8 +115,8 @@ const TIPO_LABEL: Record<string, string> = {
 
 export default function ImprimirCajaPage() {
   const { id } = useParams<{ id: string }>();
-  const [data, setData]     = useState<Detalle | null>(null);
-  const [error, setError]   = useState<string | null>(null);
+  const [data, setData]       = useState<Detalle | null>(null);
+  const [error, setError]     = useState<string | null>(null);
   const [printed, setPrinted] = useState(false);
 
   useEffect(() => {
@@ -131,22 +139,49 @@ export default function ImprimirCajaPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center space-y-3 p-8">
-          <AlertTriangle className="h-10 w-10 text-red-500 mx-auto" />
-          <p className="text-lg font-semibold text-gray-800">{error}</p>
-          <button onClick={() => window.close()}
-            className="text-sm text-teal-600 hover:underline">Cerrar ventana</button>
-        </div>
-      </div>
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        bgcolor: '#f9fafb',
+      }}>
+        <Box sx={{ textAlign: 'center', p: 4, '& > * + *': { mt: 1.5 } }}>
+          <AlertTriangle style={{ width: 40, height: 40, color: '#ef4444', display: 'block', margin: '0 auto' }} />
+          <Typography sx={{ fontSize: '1.125rem', fontWeight: 600, color: '#1f2937' }}>
+            {error}
+          </Typography>
+          <Box
+            component="button"
+            onClick={() => window.close()}
+            sx={{
+              fontSize: '0.875rem',
+              color: '#3658e1',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              '&:hover': { textDecoration: 'underline' },
+            }}
+          >
+            Cerrar ventana
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </div>
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        bgcolor: '#f9fafb',
+      }}>
+        <Loader2 style={{ width: 32, height: 32, color: '#3658e1', animation: 'spin 1s linear infinite' }} />
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </Box>
     );
   }
 
@@ -172,6 +207,10 @@ export default function ImprimirCajaPage() {
   const entradas = movimientos.filter(m => SUMAN.has(m.tipo)).reduce((s, m) => s + m.montoCentavos, 0);
   const salidas  = movimientos.filter(m => RESTAN.has(m.tipo)).reduce((s, m) => s + m.montoCentavos, 0);
 
+  // Diferencia row colors
+  const diffBgColor   = cuadra ? '#ecfdf5' : diff > 0 ? '#f0f9ff' : '#fef2f2';
+  const diffTextColor = cuadra ? '#047857' : diff > 0 ? '#075985' : '#b91c1c';
+
   return (
     <>
       {/* ── Estilos de impresión ── */}
@@ -184,359 +223,748 @@ export default function ImprimirCajaPage() {
       `}</style>
 
       {/* ── Barra de acciones (solo pantalla) ── */}
-      <div className="no-print fixed top-0 inset-x-0 z-50 bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between shadow-sm">
-        <button
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          bgcolor: '#ffffff',
+          borderBottom: '1px solid #e5e7eb',
+          px: 2,
+          py: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+          '@media print': { display: 'none' },
+        }}
+      >
+        <Box
+          component="button"
           onClick={() => window.history.back()}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            fontSize: '0.875rem',
+            color: '#4b5563',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            '&:hover': { color: '#111827' },
+          }}
         >
-          <ArrowLeft className="h-4 w-4" /> Volver
-        </button>
-        <button
+          <ArrowLeft style={{ width: 16, height: 16 }} /> Volver
+        </Box>
+        <Box
+          component="button"
           onClick={() => window.print()}
-          className="flex items-center gap-2 text-sm bg-teal-600 text-white px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            fontSize: '0.875rem',
+            bgcolor: '#3658e1',
+            color: '#ffffff',
+            px: 2,
+            py: '6px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 500,
+            '&:hover': { bgcolor: '#2a45c4' },
+          }}
         >
-          <Printer className="h-4 w-4" /> Imprimir
-        </button>
-      </div>
+          <Printer style={{ width: 16, height: 16 }} /> Imprimir
+        </Box>
+      </Box>
 
       {/* ── Contenido imprimible ── */}
-      <div className="min-h-screen bg-white pt-14 print:pt-0 print-area">
-        <div className="max-w-2xl mx-auto p-6 print:p-0 space-y-5">
+      <Box
+        sx={{
+          minHeight: '100vh',
+          bgcolor: '#ffffff',
+          pt: '56px',
+          '@media print': { pt: 0 },
+        }}
+      >
+        <Box sx={{ maxWidth: '672px', mx: 'auto', p: 3, '& > * + *': { mt: 2.5 }, '@media print': { p: 0 } }}>
 
           {/* ENCABEZADO */}
-          <div className="flex items-start justify-between border-b-2 border-gray-800 pb-4">
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Zero</p>
-              <h1 className="text-2xl font-bold text-gray-900 mt-0.5">{teamName}</h1>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Cuadre de Caja</p>
-              <p className="text-lg font-mono font-bold text-gray-900 mt-0.5">
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            borderBottom: '2px solid #1f2937',
+            pb: 2,
+          }}>
+            <Box>
+              <Typography sx={{
+                fontSize: '0.75rem',
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}>
+                Zero
+              </Typography>
+              <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', mt: 0.25 }}>
+                {teamName}
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'right' }}>
+              <Typography sx={{
+                fontSize: '0.75rem',
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}>
+                Cuadre de Caja
+              </Typography>
+              <Typography sx={{
+                fontSize: '1.125rem',
+                fontFamily: 'monospace',
+                fontWeight: 700,
+                color: '#111827',
+                mt: 0.25,
+              }}>
                 {turno.numeroCierre ?? `Turno #${turno.id}`}
-              </p>
-              <span className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 px-2 py-0.5 rounded-full ${
-                turno.estado === 'CERRADO'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-amber-100 text-amber-700'
-              }`}>
+              </Typography>
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  mt: 0.5,
+                  px: 1,
+                  py: '2px',
+                  borderRadius: '9999px',
+                  bgcolor: turno.estado === 'CERRADO' ? '#d1fae5' : '#fffbeb',
+                  color: turno.estado === 'CERRADO' ? '#047857' : '#d97706',
+                }}
+              >
                 {turno.estado === 'CERRADO'
-                  ? <><CheckCircle className="h-3 w-3" /> Aprobado</>
+                  ? <><CheckCircle style={{ width: 12, height: 12 }} /> Aprobado</>
                   : 'Pendiente'}
-              </span>
-            </div>
-          </div>
+              </Box>
+            </Box>
+          </Box>
 
           {/* DATOS DEL TURNO */}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-sm">
-            <div>
-              <span className="text-gray-500">Cajero:</span>{' '}
-              <span className="font-medium">{cajero?.name ?? cajero?.email ?? '—'}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Apertura:</span>{' '}
-              <span className="font-medium">{fmtDatetime(turno.aperturaAt)}</span>
-            </div>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            columnGap: 4,
+            rowGap: 0.75,
+            fontSize: '0.875rem',
+          }}>
+            <Box>
+              <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Cajero:</Typography>{' '}
+              <Typography component="span" sx={{ fontWeight: 500, fontSize: 'inherit' }}>
+                {cajero?.name ?? cajero?.email ?? '—'}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Apertura:</Typography>{' '}
+              <Typography component="span" sx={{ fontWeight: 500, fontSize: 'inherit' }}>
+                {fmtDatetime(turno.aperturaAt)}
+              </Typography>
+            </Box>
             {cajero?.email && (
-              <div>
-                <span className="text-gray-500">Email:</span>{' '}
-                <span className="text-gray-700">{cajero.email}</span>
-              </div>
+              <Box>
+                <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Email:</Typography>{' '}
+                <Typography component="span" sx={{ color: '#374151', fontSize: 'inherit' }}>
+                  {cajero.email}
+                </Typography>
+              </Box>
             )}
             {turno.cierreSolicitadoAt && (
-              <div>
-                <span className="text-gray-500">Cierre enviado:</span>{' '}
-                <span className="font-medium">{fmtDatetime(turno.cierreSolicitadoAt)}</span>
-              </div>
+              <Box>
+                <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Cierre enviado:</Typography>{' '}
+                <Typography component="span" sx={{ fontWeight: 500, fontSize: 'inherit' }}>
+                  {fmtDatetime(turno.cierreSolicitadoAt)}
+                </Typography>
+              </Box>
             )}
             {turno.aprobadoAt && (
               <>
-                <div>
-                  <span className="text-gray-500">Aprobado por:</span>{' '}
-                  <span className="font-medium">{aprobador?.name ?? aprobador?.email ?? '—'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Aprobado el:</span>{' '}
-                  <span className="font-medium">{fmtDatetime(turno.aprobadoAt)}</span>
-                </div>
+                <Box>
+                  <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Aprobado por:</Typography>{' '}
+                  <Typography component="span" sx={{ fontWeight: 500, fontSize: 'inherit' }}>
+                    {aprobador?.name ?? aprobador?.email ?? '—'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Aprobado el:</Typography>{' '}
+                  <Typography component="span" sx={{ fontWeight: 500, fontSize: 'inherit' }}>
+                    {fmtDatetime(turno.aprobadoAt)}
+                  </Typography>
+                </Box>
               </>
             )}
-            <div>
-              <span className="text-gray-500">Duración:</span>{' '}
-              <span className="font-medium">{duracion(turno.aperturaAt, turno.aprobadoAt ?? turno.cierreSolicitadoAt)}</span>
-            </div>
-          </div>
+            <Box>
+              <Typography component="span" sx={{ color: '#6b7280', fontSize: 'inherit' }}>Duración:</Typography>{' '}
+              <Typography component="span" sx={{ fontWeight: 500, fontSize: 'inherit' }}>
+                {duracion(turno.aperturaAt, turno.aprobadoAt ?? turno.cierreSolicitadoAt)}
+              </Typography>
+            </Box>
+          </Box>
 
           {/* COBROS POR MÉTODO */}
-          <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+          <Box>
+            <Typography sx={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              mb: 1,
+            }}>
               Cobros del turno por método
-            </h2>
+            </Typography>
             {pagos.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">Sin cobros registrados en este turno.</p>
+              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                Sin cobros registrados en este turno.
+              </Typography>
             ) : (
-              <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Método</th>
-                    <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {pagos.map(p => (
-                    <tr key={p.metodo}>
-                      <td className="px-4 py-2 text-gray-700">
-                        {p.metodo}
-                        {/* Sólo el efectivo llega a la gaveta: marcarlo evita
-                            cuadrar contra un total que incluye tarjeta. */}
-                        {p.esEfectivo && (
-                          <span className="ml-1.5 text-xs text-gray-400">· entra al cuadre</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right font-semibold tabular-nums text-gray-900">
-                        DOP {fmt(p.totalCentavos)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-50 border-t-2 border-gray-300">
-                    <td className="px-4 py-2.5 font-bold text-gray-900 text-sm">Total cobros</td>
-                    <td className="px-4 py-2.5 text-right font-bold tabular-nums text-gray-900 text-sm">
-                      DOP {fmt(totalCobrosCentavos)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+              <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <Table size="small" sx={{ fontSize: '0.875rem' }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      <TableCell sx={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        py: 1,
+                        px: 2,
+                      }}>
+                        Método
+                      </TableCell>
+                      <TableCell align="right" sx={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        py: 1,
+                        px: 2,
+                      }}>
+                        Total
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pagos.map(p => (
+                      <TableRow key={p.metodo} sx={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <TableCell sx={{ color: '#374151', py: 1, px: 2, border: 'none' }}>
+                          {p.metodo}
+                          {/* Sólo el efectivo llega a la gaveta: marcarlo evita
+                              cuadrar contra un total que incluye tarjeta. */}
+                          {p.esEfectivo && (
+                            <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', color: '#9ca3af' }}>
+                              · entra al cuadre
+                            </Box>
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{
+                          fontWeight: 600,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: '#111827',
+                          py: 1,
+                          px: 2,
+                          border: 'none',
+                        }}>
+                          DOP {fmt(p.totalCentavos)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow sx={{ bgcolor: '#f9fafb', borderTop: '2px solid #d1d5db' }}>
+                      <TableCell sx={{
+                        fontWeight: 700,
+                        color: '#111827',
+                        fontSize: '0.875rem',
+                        py: 1.25,
+                        px: 2,
+                        border: 'none',
+                      }}>
+                        Total cobros
+                      </TableCell>
+                      <TableCell align="right" sx={{
+                        fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: '#111827',
+                        fontSize: '0.875rem',
+                        py: 1.25,
+                        px: 2,
+                        border: 'none',
+                      }}>
+                        DOP {fmt(totalCobrosCentavos)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* COMPROBANTES — en números. Un turno puede tener cientos; volcarlos
               haría una hoja de decenas de páginas que nadie revisa. */}
-          <div className="break-inside-avoid">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+          <Box sx={{ breakInside: 'avoid' }}>
+            <Typography sx={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              mb: 1,
+            }}>
               Comprobantes del turno ({resumen.cantidadComprobantes})
-            </h2>
-            <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-              <tbody className="divide-y divide-gray-100">
-                <tr>
-                  <td className="px-4 py-2 text-gray-700">Facturado</td>
-                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-gray-900">
-                    DOP {fmt(totalFacturadoCentavos)}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 text-gray-700">Anulados</td>
-                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-gray-900">
-                    {resumen.cantidadAnulados}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 text-gray-700">
-                    Facturado sin cobrar ({resumen.cantidadConPendiente})
-                  </td>
-                  <td className={`px-4 py-2 text-right font-semibold tabular-nums ${
-                    totalPendienteCentavos > 0 ? 'text-amber-700' : 'text-gray-900'
-                  }`}>
-                    DOP {fmt(totalPendienteCentavos)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            </Typography>
+            <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+              <Table size="small" sx={{ fontSize: '0.875rem' }}>
+                <TableBody>
+                  {[
+                    { label: 'Facturado', value: `DOP ${fmt(totalFacturadoCentavos)}`, alerta: false },
+                    { label: 'Anulados', value: String(resumen.cantidadAnulados), alerta: false },
+                    {
+                      label: `Facturado sin cobrar (${resumen.cantidadConPendiente})`,
+                      value: `DOP ${fmt(totalPendienteCentavos)}`,
+                      alerta: totalPendienteCentavos > 0,
+                    },
+                  ].map(row => (
+                    <TableRow key={row.label} sx={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <TableCell sx={{ color: '#374151', py: 1, px: 2, border: 'none' }}>
+                        {row.label}
+                      </TableCell>
+                      <TableCell align="right" sx={{
+                        fontWeight: 600,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: row.alerta ? '#b45309' : '#111827',
+                        py: 1,
+                        px: 2,
+                        border: 'none',
+                      }}>
+                        {row.value}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
             {totalPendienteCentavos > 0 && (
-              <p className="mt-1.5 text-xs text-gray-500">
+              <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: '#6b7280' }}>
                 DOP {fmt(totalPendienteCentavos)} se facturaron y no se cobraron. No afectan el
                 cuadre de efectivo de abajo — ahí solo entra el dinero que se recibió.
-              </p>
+              </Typography>
             )}
-          </div>
+          </Box>
 
           {/* REQUIEREN REVISIÓN — sólo anulados y saldos sin cobrar. El resto
               son ventas cobradas completas: ya están sumadas arriba. */}
           {excepciones.length > 0 && (
-            <div className="break-inside-avoid">
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+            <Box sx={{ breakInside: 'avoid' }}>
+              <Typography sx={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                mb: 1,
+              }}>
                 Requieren revisión ({resumen.cantidadAnulados + resumen.cantidadConPendiente})
-              </h2>
-              <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Comprobante</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Cliente</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Total</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Cobrado</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Sin cobrar</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {excepciones.map(d => {
-                    const anulado = d.estado === 'ANULADO';
-                    return (
-                      <tr key={d.id} className={anulado ? 'text-gray-400' : ''}>
-                        <td className="px-3 py-1.5 font-mono text-xs">
-                          <span className={anulado ? 'line-through' : 'text-gray-700'}>
-                            {d.encf || d.codigo || '—'}
-                          </span>
-                          {anulado && (
-                            <span className="ml-1 rounded bg-red-50 px-1 py-0.5 text-[10px] font-sans text-red-700">
-                              anulado
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-1.5">{d.cliente || '—'}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmt(d.totalCentavos)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmt(d.pagadoCentavos)}</td>
-                        <td className={`px-3 py-1.5 text-right tabular-nums ${
-                          !anulado && d.pendienteCentavos > 0 ? 'font-semibold text-amber-700' : ''
-                        }`}>
-                          {d.pendienteCentavos > 0 ? fmt(d.pendienteCentavos) : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              </Typography>
+              <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <Table size="small" sx={{ fontSize: '0.875rem' }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      {[
+                        { label: 'Comprobante', align: 'left' as const },
+                        { label: 'Cliente', align: 'left' as const },
+                        { label: 'Total', align: 'right' as const },
+                        { label: 'Cobrado', align: 'right' as const },
+                        { label: 'Sin cobrar', align: 'right' as const },
+                      ].map(h => (
+                        <TableCell key={h.label} align={h.align} sx={{
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: '#6b7280',
+                          textTransform: 'uppercase',
+                          py: 1,
+                          px: 1.5,
+                        }}>
+                          {h.label}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {excepciones.map(d => {
+                      const anulado = d.estado === 'ANULADO';
+                      const cellSx = {
+                        py: 0.75, px: 1.5, border: 'none',
+                        color: anulado ? '#9ca3af' : 'inherit',
+                        borderBottom: '1px solid #f3f4f6',
+                      };
+                      return (
+                        <TableRow key={d.id}>
+                          <TableCell sx={{ ...cellSx, fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            <Box component="span" sx={{
+                              textDecoration: anulado ? 'line-through' : 'none',
+                              color: anulado ? 'inherit' : '#374151',
+                            }}>
+                              {d.encf || d.codigo || '—'}
+                            </Box>
+                            {anulado && (
+                              <Box component="span" sx={{
+                                ml: 0.5, borderRadius: '4px', bgcolor: '#fef2f2',
+                                px: 0.5, py: '2px', fontSize: '10px',
+                                fontFamily: 'inherit', color: '#b91c1c',
+                              }}>
+                                anulado
+                              </Box>
+                            )}
+                          </TableCell>
+                          <TableCell sx={cellSx}>{d.cliente || '—'}</TableCell>
+                          <TableCell align="right" sx={{ ...cellSx, fontVariantNumeric: 'tabular-nums' }}>
+                            {fmt(d.totalCentavos)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...cellSx, fontVariantNumeric: 'tabular-nums' }}>
+                            {fmt(d.pagadoCentavos)}
+                          </TableCell>
+                          <TableCell align="right" sx={{
+                            ...cellSx,
+                            fontVariantNumeric: 'tabular-nums',
+                            ...(!anulado && d.pendienteCentavos > 0
+                              ? { fontWeight: 600, color: '#b45309' }
+                              : {}),
+                          }}>
+                            {d.pendienteCentavos > 0 ? fmt(d.pendienteCentavos) : '—'}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Box>
               {hayMasExcepciones && (
-                <p className="mt-1.5 text-xs text-gray-500">
+                <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: '#6b7280' }}>
                   Se muestran las {excepciones.length} de mayor monto. Hay más — revísalas en Facturas.
-                </p>
+                </Typography>
               )}
-            </div>
+            </Box>
           )}
 
           {/* CUADRE DE EFECTIVO */}
-          <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+          <Box>
+            <Typography sx={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              mb: 1,
+            }}>
               Cuadre de efectivo
-            </h2>
-            <div className="border border-gray-200 rounded-lg overflow-hidden text-sm">
-              <div className="divide-y divide-gray-100">
-                <div className="flex justify-between px-4 py-2 bg-gray-50">
-                  <span className="text-gray-600">Monto de apertura</span>
-                  <span className="tabular-nums font-medium">DOP {fmt(turno.montoAperturaCentavos)}</span>
-                </div>
-                <div className="flex justify-between px-4 py-2">
-                  <span className="text-gray-600">+ Ventas en efectivo</span>
-                  <span className="tabular-nums font-medium text-emerald-700">DOP {fmt(ventasEfectivoTotal)}</span>
-                </div>
-                {entradas > 0 && (
-                  <div className="flex justify-between px-4 py-2">
-                    <span className="text-gray-600">+ Entradas / ajustes</span>
-                    <span className="tabular-nums font-medium text-emerald-700">DOP {fmt(entradas)}</span>
-                  </div>
-                )}
-                {salidas > 0 && (
-                  <div className="flex justify-between px-4 py-2">
-                    <span className="text-gray-600">− Salidas / gastos</span>
-                    <span className="tabular-nums font-medium text-red-700">DOP {fmt(salidas)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between px-4 py-2.5 bg-gray-50 font-bold border-t-2 border-gray-300">
-                  <span>Efectivo esperado</span>
-                  <span className="tabular-nums">DOP {fmt(turno.montoEsperadoCentavos ?? 0)}</span>
-                </div>
-                <div className="flex justify-between px-4 py-2">
-                  <span className="text-gray-600">Efectivo contado</span>
-                  <span className="tabular-nums font-semibold">DOP {fmt(turno.efectivoContadoCentavos ?? 0)}</span>
-                </div>
-                <div className={`flex justify-between px-4 py-2.5 font-bold ${
-                  cuadra ? 'bg-emerald-50' : diff > 0 ? 'bg-sky-50' : 'bg-red-50'
-                }`}>
-                  <span className={cuadra ? 'text-emerald-800' : diff > 0 ? 'text-sky-800' : 'text-red-800'}>
-                    {cuadra ? '✓ Diferencia (cuadra)' : diff > 0 ? 'Sobrante' : 'Faltante'}
-                  </span>
-                  <span className={`tabular-nums ${cuadra ? 'text-emerald-800' : diff > 0 ? 'text-sky-800' : 'text-red-800'}`}>
-                    {diff > 0 ? '+' : ''} DOP {fmt(diff)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            </Typography>
+            <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', fontSize: '0.875rem' }}>
+
+              {/* Apertura */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1,
+                bgcolor: '#f9fafb',
+                borderBottom: '1px solid #f3f4f6',
+              }}>
+                <Typography component="span" sx={{ color: '#4b5563', fontSize: 'inherit' }}>
+                  Monto de apertura
+                </Typography>
+                <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500, fontSize: 'inherit' }}>
+                  DOP {fmt(turno.montoAperturaCentavos)}
+                </Typography>
+              </Box>
+
+              {/* Ventas efectivo */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1,
+                borderBottom: '1px solid #f3f4f6',
+              }}>
+                <Typography component="span" sx={{ color: '#4b5563', fontSize: 'inherit' }}>
+                  + Ventas en efectivo
+                </Typography>
+                <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: '#047857', fontSize: 'inherit' }}>
+                  DOP {fmt(ventasEfectivoTotal)}
+                </Typography>
+              </Box>
+
+              {/* Entradas */}
+              {entradas > 0 && (
+                <Box sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  px: 2,
+                  py: 1,
+                  borderBottom: '1px solid #f3f4f6',
+                }}>
+                  <Typography component="span" sx={{ color: '#4b5563', fontSize: 'inherit' }}>
+                    + Entradas / ajustes
+                  </Typography>
+                  <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: '#047857', fontSize: 'inherit' }}>
+                    DOP {fmt(entradas)}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Salidas */}
+              {salidas > 0 && (
+                <Box sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  px: 2,
+                  py: 1,
+                  borderBottom: '1px solid #f3f4f6',
+                }}>
+                  <Typography component="span" sx={{ color: '#4b5563', fontSize: 'inherit' }}>
+                    − Salidas / gastos
+                  </Typography>
+                  <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: '#b91c1c', fontSize: 'inherit' }}>
+                    DOP {fmt(salidas)}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Efectivo esperado */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1.25,
+                bgcolor: '#f9fafb',
+                fontWeight: 700,
+                borderTop: '2px solid #d1d5db',
+                borderBottom: '1px solid #f3f4f6',
+              }}>
+                <Typography component="span" sx={{ fontWeight: 700, fontSize: 'inherit' }}>
+                  Efectivo esperado
+                </Typography>
+                <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 'inherit' }}>
+                  DOP {fmt(turno.montoEsperadoCentavos ?? 0)}
+                </Typography>
+              </Box>
+
+              {/* Efectivo contado */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1,
+                borderBottom: '1px solid #f3f4f6',
+              }}>
+                <Typography component="span" sx={{ color: '#4b5563', fontSize: 'inherit' }}>
+                  Efectivo contado
+                </Typography>
+                <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, fontSize: 'inherit' }}>
+                  DOP {fmt(turno.efectivoContadoCentavos ?? 0)}
+                </Typography>
+              </Box>
+
+              {/* Diferencia */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                px: 2,
+                py: 1.25,
+                fontWeight: 700,
+                bgcolor: diffBgColor,
+              }}>
+                <Typography component="span" sx={{ fontWeight: 700, color: diffTextColor, fontSize: 'inherit' }}>
+                  {cuadra ? '✓ Diferencia (cuadra)' : diff > 0 ? 'Sobrante' : 'Faltante'}
+                </Typography>
+                <Typography component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: diffTextColor, fontSize: 'inherit' }}>
+                  {diff > 0 ? '+' : ''} DOP {fmt(diff)}
+                </Typography>
+              </Box>
+            </Box>
 
             {/* Justificación del cajero */}
             {turno.cierreObs && (
-              <div className="mt-2 border border-amber-200 bg-amber-50 rounded-lg px-4 py-2.5 text-sm">
-                <p className="text-xs text-amber-600 font-medium mb-0.5">Justificación del cajero</p>
-                <p className="text-gray-800 italic">"{turno.cierreObs}"</p>
-              </div>
+              <Box sx={{
+                mt: 1,
+                border: '1px solid #fde68a',
+                bgcolor: '#fffbeb',
+                borderRadius: '8px',
+                px: 2,
+                py: 1.25,
+                fontSize: '0.875rem',
+              }}>
+                <Typography sx={{ fontSize: '0.75rem', color: '#d97706', fontWeight: 500, mb: 0.25 }}>
+                  Justificación del cajero
+                </Typography>
+                <Typography sx={{ color: '#1f2937', fontStyle: 'italic', fontSize: 'inherit' }}>
+                  &ldquo;{turno.cierreObs}&rdquo;
+                </Typography>
+              </Box>
             )}
+
+            {/* Nota del aprobador */}
             {turno.aprobacionObs && (
-              <div className="mt-2 border border-gray-200 bg-gray-50 rounded-lg px-4 py-2.5 text-sm">
-                <p className="text-xs text-gray-500 font-medium mb-0.5">Nota del aprobador</p>
-                <p className="text-gray-800 italic">"{turno.aprobacionObs}"</p>
-              </div>
+              <Box sx={{
+                mt: 1,
+                border: '1px solid #e5e7eb',
+                bgcolor: '#f9fafb',
+                borderRadius: '8px',
+                px: 2,
+                py: 1.25,
+                fontSize: '0.875rem',
+              }}>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500, mb: 0.25 }}>
+                  Nota del aprobador
+                </Typography>
+                <Typography sx={{ color: '#1f2937', fontStyle: 'italic', fontSize: 'inherit' }}>
+                  &ldquo;{turno.aprobacionObs}&rdquo;
+                </Typography>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* MOVIMIENTOS */}
           {movimientos.length > 0 && (
-            <div>
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+            <Box>
+              <Typography sx={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                mb: 1,
+              }}>
                 Movimientos del turno ({movimientos.length})
-              </h2>
-              <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Hora</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Tipo</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Método</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Descripción</th>
-                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Monto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {movimientos.map(m => {
-                    const suma = SUMAN.has(m.tipo);
-                    return (
-                      <tr key={m.id}>
-                        <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">
-                          {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="px-3 py-2 text-gray-700">{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
-                        <td className="px-3 py-2 text-gray-600 text-xs whitespace-nowrap">
-                          {labelMetodo(m.metodo)}
-                          {!esEfectivo(m.metodo) && <span className="text-gray-400"> (no afecta caja)</span>}
-                        </td>
-                        <td className="px-3 py-2 text-gray-600 text-xs">{m.descripcion ?? m.motivo ?? '—'}</td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-medium ${suma ? 'text-emerald-700' : 'text-red-700'}`}>
-                          {suma ? '+' : '−'} DOP {fmt(m.montoCentavos)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              </Typography>
+              <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <Table size="small" sx={{ fontSize: '0.875rem' }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
+                        Hora
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
+                        Tipo
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
+                        Método
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
+                        Descripción
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
+                        Monto
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {movimientos.map(m => {
+                      const suma = SUMAN.has(m.tipo);
+                      return (
+                        <TableRow key={m.id} sx={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <TableCell sx={{
+                            color: '#6b7280',
+                            fontSize: '0.75rem',
+                            whiteSpace: 'nowrap',
+                            py: 1,
+                            px: 1.5,
+                            border: 'none',
+                          }}>
+                            {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
+                          </TableCell>
+                          <TableCell sx={{ color: '#374151', py: 1, px: 1.5, border: 'none' }}>
+                            {TIPO_LABEL[m.tipo] ?? m.tipo}
+                          </TableCell>
+                          <TableCell sx={{ color: '#4b5563', fontSize: '0.75rem', whiteSpace: 'nowrap', py: 1, px: 1.5, border: 'none' }}>
+                            {labelMetodo(m.metodo)}
+                            {!esEfectivo(m.metodo) && <Box component="span" sx={{ color: '#9ca3af' }}> (no afecta caja)</Box>}
+                          </TableCell>
+                          <TableCell sx={{ color: '#4b5563', fontSize: '0.75rem', py: 1, px: 1.5, border: 'none' }}>
+                            {m.descripcion ?? m.motivo ?? '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{
+                            fontVariantNumeric: 'tabular-nums',
+                            fontWeight: 500,
+                            color: suma ? '#047857' : '#b91c1c',
+                            py: 1,
+                            px: 1.5,
+                            border: 'none',
+                          }}>
+                            {suma ? '+' : '−'} DOP {fmt(m.montoCentavos)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Box>
+            </Box>
           )}
 
           {/* FIRMAS */}
-          <div className="border-t-2 border-gray-800 pt-5 mt-4">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-5">
+          <Box sx={{ borderTop: '2px solid #1f2937', pt: 2.5, mt: 2 }}>
+            <Typography sx={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              mb: 2.5,
+            }}>
               Firmas y conformidad
-            </h2>
-            <div className="grid grid-cols-2 gap-10">
-              <div className="space-y-6">
-                <div className="border-b border-gray-400 pb-1">
-                  <p className="text-sm font-semibold text-gray-800">{cajero?.name ?? '___________________________'}</p>
-                </div>
-                <p className="text-xs text-gray-500">Cajero — firma y fecha</p>
-              </div>
-              <div className="space-y-6">
-                <div className="border-b border-gray-400 pb-1">
-                  <p className="text-sm font-semibold text-gray-800">
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              <Box sx={{ '& > * + *': { mt: 1.5 } }}>
+                <Box sx={{ borderBottom: '1px solid #9ca3af', pb: 0.5 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>
+                    {cajero?.name ?? '___________________________'}
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  Cajero — firma y fecha
+                </Typography>
+              </Box>
+              <Box sx={{ '& > * + *': { mt: 1.5 } }}>
+                <Box sx={{ borderBottom: '1px solid #9ca3af', pb: 0.5 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>
                     {aprobador?.name ?? '___________________________'}
-                  </p>
-                </div>
-                <p className="text-xs text-gray-500">Administrador — firma y fecha</p>
-              </div>
-            </div>
-          </div>
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  Administrador — firma y fecha
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
 
           {/* Pie de página */}
-          <p className="text-center text-xs text-gray-400 border-t border-gray-100 pt-3 mt-4">
+          <Typography sx={{
+            textAlign: 'center',
+            fontSize: '0.75rem',
+            color: '#9ca3af',
+            borderTop: '1px solid #f3f4f6',
+            pt: 1.5,
+            mt: 2,
+          }}>
             Zero · Cuadre generado el {fmtDatetime(new Date().toISOString())}
-          </p>
+          </Typography>
 
-        </div>
-      </div>
+        </Box>
+      </Box>
     </>
   );
 }

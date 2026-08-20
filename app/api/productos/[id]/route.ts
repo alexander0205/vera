@@ -47,6 +47,8 @@ const updateSchema = z.object({
   stockMinimo:          z.number().int().min(0).optional(),
   controlaInventario:   z.boolean().optional(),
   permiteVentaSinStock: z.boolean().optional(),
+  visiblePos:           z.boolean().optional(),
+  visibleFacturacion:   z.boolean().optional(),
   categoriaId:          z.number().int().positive().optional().nullable(),
   imagen:               z.string().max(1_500_000).optional().nullable(),
   // Variantes (Opción B). Si `variants` viene, se reconcilian con las existentes.
@@ -70,7 +72,29 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!prod) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
 
-  return NextResponse.json({ producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100 } });
+  // Las variantes van con el producto: quien pregunta por un producto con ejes
+  // casi siempre necesita saber CUÁLES son (para elegir talla al ajustar el
+  // inventario, por ejemplo). Traerlas aparte obligaba a una segunda ruta y a
+  // que cada pantalla se acordara de llamarla.
+  const variantes = await db.select({
+    id: productVariants.id,
+    nombre: productVariants.nombre,
+    atributos: productVariants.atributos,
+    precio: productVariants.precio,
+    stockActual: productVariants.stockActual,
+    activo: productVariants.activo,
+  })
+    .from(productVariants)
+    .where(and(
+      eq(productVariants.productId, prodId),
+      eq(productVariants.teamId, teamId),
+      eq(productVariants.activo, true),
+    ))
+    .orderBy(productVariants.id);
+
+  return NextResponse.json({
+    producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100, variantes },
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
@@ -89,6 +113,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo, activo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
+    visiblePos, visibleFacturacion,
     categoriaId, imagen, variantAtributos, variants,
   } = parsed.data;
 
@@ -123,6 +148,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(stockMinimo          !== undefined && { stockMinimo }),
       ...(controlaInventario   !== undefined && { controlaInventario }),
       ...(permiteVentaSinStock !== undefined && { permiteVentaSinStock }),
+      // Estas dos estaban en el esquema de validación y NO en el update: el
+      // formulario mandaba «¿dónde se vende?», la API la daba por buena y la
+      // tiraba. Editar un producto para sacarlo de la caja no hacía nada, y por
+      // eso 334 de 335 productos de producción seguían con visible_pos = true
+      // pese a que el desplegable lleva meses en pantalla.
+      ...(visiblePos           !== undefined && { visiblePos }),
+      ...(visibleFacturacion   !== undefined && { visibleFacturacion }),
       ...(categoriaId          !== undefined && { categoriaId }),
       ...(imagen               !== undefined && { imagen }),
       updatedAt: new Date(),

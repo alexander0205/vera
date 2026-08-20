@@ -1,4 +1,5 @@
 import { Resend, type Attachment } from 'resend';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -28,7 +29,7 @@ function escapeHtml(s: string | null | undefined): string {
 }
 
 export async function sendPasswordResetEmail(email: string, token: string, name: string | null) {
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
+  const resetUrl = `${baseDeEnlaces()}/reset-password?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
@@ -36,11 +37,11 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
     subject: 'Restablecer contraseña — Zero',
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Restablecer contraseña</h2>
+        <h2 style="color: #2a45c4;">Restablecer contraseña</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
         <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Zero.</p>
         <p>
-          <a href="${escapeHtml(resetUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+          <a href="${escapeHtml(resetUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Restablecer contraseña
           </a>
         </p>
@@ -82,7 +83,7 @@ export async function enviarAlertaEmail(asunto: string, mensaje: string): Promis
 }
 
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
-  const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${encodeURIComponent(token)}`;
+  const verifyUrl = `${baseDeEnlaces()}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
@@ -90,11 +91,11 @@ export async function sendEmailVerificationEmail(email: string, token: string, n
     subject: 'Verificar tu email — Zero',
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Verifica tu email</h2>
+        <h2 style="color: #2a45c4;">Verifica tu email</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
         <p>Gracias por registrarte en Zero. Confirma tu dirección de email para comenzar.</p>
         <p>
-          <a href="${escapeHtml(verifyUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+          <a href="${escapeHtml(verifyUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Verificar email
           </a>
         </p>
@@ -111,7 +112,7 @@ export async function sendInvitationEmail(
   teamName: string,
   token: string,
 ) {
-  const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${encodeURIComponent(token)}`;
+  const acceptUrl = `${baseDeEnlaces()}/invitations/accept?token=${encodeURIComponent(token)}`;
   const safeInvitedBy = escapeHtml(invitedByName) || 'Alguien';
   const safeTeam = escapeHtml(teamName);
   const res = await resend.emails.send({
@@ -120,10 +121,10 @@ export async function sendInvitationEmail(
     subject: `Invitación a ${teamName} en Zero`,
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Te invitaron a ${safeTeam}</h2>
+        <h2 style="color: #2a45c4;">Te invitaron a ${safeTeam}</h2>
         <p>${safeInvitedBy} te ha invitado a colaborar en <strong>${safeTeam}</strong> en Zero.</p>
         <p>
-          <a href="${escapeHtml(acceptUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+          <a href="${escapeHtml(acceptUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Aceptar invitación
           </a>
         </p>
@@ -171,7 +172,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
   const html = `
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
       <!-- Header -->
-      <div style="background:#0f766e;padding:24px 28px;">
+      <div style="background:#2a45c4;padding:24px 28px;">
         <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
         <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">Aprobación pendiente</h1>
       </div>
@@ -210,7 +211,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
         <!-- CTA -->
         <div style="text-align:center;margin-bottom:8px;">
           <a href="${safeUrl}"
-             style="display:inline-block;background:#0f766e;color:#fff;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
+             style="display:inline-block;background:#2a45c4;color:#fff;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
             Revisar y aprobar
           </a>
         </div>
@@ -284,7 +285,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
     subject: `✓ Cuadre aprobado — ${numeroCierre} · ${teamName}`,
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
-        <div style="background:#0f766e;padding:24px 28px;">
+        <div style="background:#2a45c4;padding:24px 28px;">
           <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
           <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">✓ Cuadre aprobado</h1>
         </div>
@@ -311,7 +312,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
           </div>` : ''}
           <div style="text-align:center;">
             <a href="${safeUrl}/dashboard/caja/historial"
-               style="display:inline-block;background:#0f766e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+               style="display:inline-block;background:#2a45c4;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
               Ver historial de caja
             </a>
           </div>
@@ -487,6 +488,56 @@ function fila(etiqueta: string, valor: string, destacada = false): string {
       <td style="padding:9px 14px;color:#6b7280;font-size:13px;border-bottom:1px solid #f3f4f6;">${etiqueta}</td>
       <td style="padding:9px 14px;text-align:right;font-size:13px;font-weight:${peso};color:#111827;border-bottom:1px solid #f3f4f6;">${valor}</td>
     </tr>`;
+}
+
+/**
+ * Recordatorio de pago de una cuenta por cobrar.
+ *
+ * Tono neutro a propósito: es un aviso de saldo, no una gestión de cobro
+ * agresiva. Quien decide el tono real es la empresa en el comentario interno,
+ * no este correo.
+ */
+export async function sendRecordatorioCobroEmail(opts: {
+  email:        string;
+  cliente:      string;
+  emisor:       string;
+  documento:    string;
+  saldoCents:   number;
+  fechaLimite:  string | null;
+  diasVencido:  number;
+}) {
+  const safeCliente = escapeHtml(opts.cliente);
+  const safeEmisor  = escapeHtml(opts.emisor);
+  const safeDoc     = escapeHtml(opts.documento);
+  const safeSaldo   = escapeHtml(
+    (opts.saldoCents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }),
+  );
+  const vencida = opts.diasVencido > 0;
+  const linea = vencida
+    ? `Este documento venció hace ${opts.diasVencido} día${opts.diasVencido !== 1 ? 's' : ''}.`
+    : opts.fechaLimite
+      ? `Su fecha de vencimiento es el ${escapeHtml(opts.fechaLimite)}.`
+      : '';
+
+  await resend.emails.send({
+    from: 'Zero <noreply@zero.com.do>',
+    to: opts.email,
+    subject: `Recordatorio de pago · ${opts.documento}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto;">
+        <h2 style="color:#2a45c4;">Recordatorio de pago</h2>
+        <p>Estimado/a ${safeCliente},</p>
+        <p>
+          Le recordamos que el documento <strong>${safeDoc}</strong> tiene un
+          saldo pendiente de <strong>DOP ${safeSaldo}</strong>. ${linea}
+        </p>
+        <p style="color:#6b7280;font-size:14px;">
+          Si ya realizó el pago, por favor ignore este mensaje.
+        </p>
+        <p style="color:#6b7280;font-size:14px;">${safeEmisor}</p>
+      </div>
+    `,
+  });
 }
 
 /** Envía la factura como PDF adjunto, con la marca de quien la emite. */

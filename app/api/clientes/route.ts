@@ -11,6 +11,11 @@ import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, ilike, or, and, inArray, sql } from 'drizzle-orm';
 import { clienteSchema } from '@/lib/clientes/schema';
 
+/** Los dígitos de un documento, para comparar cédulas escritas de mil formas. */
+function soloDigitos(v: string): string {
+  return v.replace(/\D/g, '');
+}
+
 /**
  * Condición ILIKE sobre un dependiente: nombre, apellido o el nombre completo.
  * El nombre completo permite buscar "Juan Pérez" aunque esté partido en dos columnas.
@@ -47,6 +52,10 @@ export async function GET(req: NextRequest) {
               ilike(clients.razonSocial, `%${q}%`),
               ilike(clients.rnc, `%${q}%`),
               ilike(clients.email, `%${q}%`),
+              // Por documento comparando SOLO los dígitos: la misma cédula está
+              // escrita «001-0351455-0» en un sitio y «00103514550» en otro, y
+              // sin esto se crea el mismo padre dos veces por un guion.
+              ...(soloDigitos(q).length >= 7 ? [sql`regexp_replace(COALESCE(${clients.rnc}, ''), '\D', '', 'g') = ${soloDigitos(q)}`] : []),
               sql`EXISTS (
                 SELECT 1 FROM ${dependientes}
                 WHERE ${dependientes.clientId} = ${clients.id}
@@ -97,7 +106,7 @@ export async function POST(req: NextRequest) {
   const parsed = clienteSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
-  const { razonSocial, rnc, email, telefono, direccion, descripcion } = parsed.data;
+  const { razonSocial, rnc, email, telefono, celular, whatsapp, direccion, descripcion } = parsed.data;
 
   // CLI-12: avisar al cliente si ya existe un cliente con el mismo RNC en el team.
   // Si el caller envía `?force=1` (o `force:true` en body) se permite duplicado.
@@ -126,6 +135,8 @@ export async function POST(req: NextRequest) {
     rnc:         rnc         || null,
     email:       email       || null,
     telefono:    telefono    || null,
+    celular:     celular     || null,
+    whatsapp:    whatsapp    || null,
     direccion:   direccion   || null,
     descripcion: descripcion || null,
     createdBy:   user.id,

@@ -5,6 +5,13 @@
  * aparece donde tiene stock asignado (fila en product_almacen_stock del almacén
  * de la terminal). Los productos sin control de inventario aparecen siempre.
  * Excluye lo no vendible en mostrador vía products.visible_pos.
+ *
+ * Y excluye SIEMPRE el servicio de mora, mire lo que mire `visible_pos`. No es
+ * una preferencia del comerciante: su precio de catálogo es 0 porque el monto
+ * lo calcula `lib/cobranza/nota-debito-mora.ts` por factura vencida, así que
+ * tocarlo en la caja no cobra la mora — emite un comprobante fiscal de cero
+ * pesos. Lo que no se puede hacer bien no se ofrece; dejarlo como interruptor
+ * apagable solo garantiza que algún día alguien lo encienda «para probar».
  */
 
 import { and, eq, asc, desc, sql } from 'drizzle-orm';
@@ -87,6 +94,7 @@ export async function getCatalogoPos(
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
       eq(products.visiblePos, true),
+      eq(products.esMora, false),
       // Aparece si: no controla inventario, tiene stock de producto en este
       // almacén, o tiene alguna variante con stock asignado en este almacén.
       sql`(${products.controlaInventario} = false

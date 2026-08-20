@@ -1,6 +1,7 @@
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
+import Box from '@mui/material/Box';
 import { fmtDOP } from '@/lib/utils/format';
 import { parseRango, METODO_LABEL } from '@/lib/reportes/shared';
 import { getKpis, getTendencia, getIngresosPorMetodo } from '@/lib/reportes/queries';
@@ -38,8 +39,8 @@ export default async function PanelPage({
       hasta={d1}
     >
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <KpiCard label="Ingresos netos" value={fmtDOP(kpis.ingresosCents)} sub={`${kpis.numFacturas} facturas`} tone="teal" />
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
+        <KpiCard label="Ingresos netos" value={fmtDOP(kpis.ingresosCents)} sub={`${kpis.numFacturas} facturas`} tone="marca" />
         <KpiCard label="Base imponible" value={fmtDOP(kpis.baseCents)} sub="sin ITBIS" />
         <KpiCard label="ITBIS del período" value={fmtDOP(kpis.itbisCents)} sub="débito fiscal" tone="amber" />
         <KpiCard label="Ticket promedio" value={fmtDOP(kpis.ticketPromedioCents)} />
@@ -47,34 +48,43 @@ export default async function PanelPage({
         <KpiCard label="Vencido" value={fmtDOP(kpis.vencidoCents)} sub="cartera en mora" tone={kpis.vencidoCents > 0 ? 'red' : 'default'} />
         <KpiCard label="Aceptación DGII" value={`${Math.round(kpis.tasaAceptacion * 100)}%`} sub="e-CF aceptados" tone="emerald" />
         <KpiCard label="ITBIS a pagar" value={fmtDOP(kpis.itbisCents)} sub="estimado" tone="amber" />
-      </div>
+      </Box>
 
       <Panel titulo="Tendencia de ingresos">
         <TrendChart data={tendencia} />
       </Panel>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, 1fr)' }, gap: 3 }}>
         <Panel titulo="Ingresos por método de pago">
           <DonutChart data={donut} />
         </Panel>
         <Panel titulo="Accesos rápidos">
-          <div className="grid gap-2 text-sm">
+          <Box sx={{ display: 'grid', gap: 1, fontSize: '0.875rem' }}>
             <QuickLink href="/dashboard/reportes/tendencia">Tendencia detallada de ingresos</QuickLink>
             <QuickLink href="/dashboard/reportes/por-producto">Ingresos por producto / servicio</QuickLink>
             <QuickLink href="/dashboard/reportes/cuentas-por-cobrar">Cuentas por cobrar (antigüedad)</QuickLink>
             <QuickLink href="/dashboard/reportes/ventas-generales">Ventas generales</QuickLink>
-          </div>
+          </Box>
         </Panel>
-      </div>
+      </Box>
     </ReportShell>
   );
 }
 
 function QuickLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a href={href} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-200 hover:border-teal-300 hover:bg-teal-50/40 transition-colors text-gray-700">
-      <span>{children}</span>
-      <span className="text-teal-600">→</span>
-    </a>
+    <Box
+      component="a"
+      href={href}
+      sx={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        px: 1.5, py: 1.25, borderRadius: '8px', border: '1px solid #e5e7eb',
+        color: '#374151', textDecoration: 'none', transition: 'all 0.15s',
+        '&:hover': { borderColor: '#a5b4f9', bgcolor: 'rgba(240,253,250,0.4)' },
+      }}
+    >
+      <Box component="span">{children}</Box>
+      <Box component="span" sx={{ color: '#3658e1' }}>→</Box>
+    </Box>
   );
 }

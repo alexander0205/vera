@@ -6,6 +6,17 @@ import {
   DollarSign, Wallet, TrendingUp, Calculator, X, Loader2,
   AlertTriangle, Trash2, FileText, Download, Banknote, Send, Paperclip,
 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import LinearProgress from '@mui/material/LinearProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, fmtFechaHora } from '@/lib/utils/format';
 import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
@@ -21,6 +32,10 @@ interface Pago {
   notas:         string | null;
   createdAt:     string;
   turnoCajaId:   number | null;
+  /** Cuadre al que pertenece. null cuando se cobró fuera de la caja. */
+  turnoNumeroCierre?: string | null;
+  turnoAperturaAt?:   string | null;
+  turnoEstado?:       string | null;
   notaCreditoId: number | null;
   docId:         number | null;
   docCodigo:     string | null;
@@ -211,27 +226,31 @@ export default function PagosPage() {
       sortable: true,
       sortAccessor: p => p.fechaPago,
       render: p => (
-        <div>
-          <p className="text-xs text-gray-700">{fmtFechaCorta(p.fechaPago)}</p>
-          <p className="text-[10px] text-gray-400">{fmtFechaHora(p.createdAt)}</p>
-        </div>
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', color: '#374151' }}>{fmtFechaCorta(p.fechaPago)}</Typography>
+          <Typography sx={{ fontSize: '10px', color: '#9ca3af' }}>{fmtFechaHora(p.createdAt)}</Typography>
+        </Box>
       ),
     },
     {
       id: 'documento',
       header: 'Documento',
       render: p => p.docId ? (
-        <div className="min-w-0">
-          <Link href={`/dashboard/facturas/${p.docId}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
+        <Box sx={{ minWidth: 0 }}>
+          <Box
+            component={Link}
+            href={`/dashboard/facturas/${p.docId}`}
+            sx={{ color: '#3658e1', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+          >
             {p.docCodigo ?? p.docEncf ?? `#${p.docId}`}
-          </Link>
+          </Box>
           {p.pagosDelDoc > 1 && (
-            <p className="text-[10px] text-gray-400 mt-0.5">
+            <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.25 }}>
               {p.pagosDelDoc} pagos en esta factura
-            </p>
+            </Typography>
           )}
-        </div>
-      ) : <span className="text-gray-400 text-xs">—</span>,
+        </Box>
+      ) : <Box component="span" sx={{ color: '#9ca3af', fontSize: '0.75rem' }}>—</Box>,
     },
     {
       id: 'dgii',
@@ -240,13 +259,20 @@ export default function PagosPage() {
       sortable: true,
       sortAccessor: p => (p.enviadoDgii ? 1 : 0),
       render: p => p.enviadoDgii ? (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-200" title={p.docTrackId ? `TrackID: ${p.docTrackId}` : p.docEstado ?? ''}>
-          <Send className="h-3 w-3" /> Enviado
-        </span>
+        <Chip
+          icon={<Send style={{ width: 12, height: 12 }} />}
+          label="Enviado"
+          size="small"
+          title={p.docTrackId ? `TrackID: ${p.docTrackId}` : p.docEstado ?? ''}
+          sx={{ height: 22, fontSize: '11px', fontWeight: 500, bgcolor: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', '& .MuiChip-label': { px: 0.75 }, '& .MuiChip-icon': { color: '#0369a1', ml: 0.5 } }}
+        />
       ) : (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200" title={p.docEstado ?? 'Sin enviar'}>
-          No enviado
-        </span>
+        <Chip
+          label="No enviado"
+          size="small"
+          title={p.docEstado ?? 'Sin enviar'}
+          sx={{ height: 22, fontSize: '11px', fontWeight: 500, bgcolor: '#f9fafb', color: '#6b7280', border: '1px solid #e5e7eb', '& .MuiChip-label': { px: 0.75 } }}
+        />
       ),
     },
     {
@@ -254,23 +280,26 @@ export default function PagosPage() {
       header: 'Cliente',
       visibleAt: 'md',
       render: p => (
-        <div className="max-w-[200px]">
-          <p className="text-sm text-gray-900 truncate">{p.cliente ?? 'Consumidor Final'}</p>
-          {p.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{p.rncComprador}</p>}
-        </div>
+        <Box sx={{ maxWidth: 200 }}>
+          <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.cliente ?? 'Consumidor Final'}</Typography>
+          {p.rncComprador && <Typography sx={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{p.rncComprador}</Typography>}
+        </Box>
       ),
     },
     {
       id: 'metodo',
       header: 'Método',
       render: p => (
-        <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-          esEfectivo(p.metodo)
-            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-            : 'bg-gray-50 text-gray-600 border-gray-200'
-        }`}>
-          {labelMetodo(p.metodo)}
-        </span>
+        <Chip
+          label={labelMetodo(p.metodo)}
+          size="small"
+          sx={{
+            height: 22, fontSize: '11px', fontWeight: 500, '& .MuiChip-label': { px: 0.75 },
+            ...(esEfectivo(p.metodo)
+              ? { bgcolor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }
+              : { bgcolor: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb' }),
+          }}
+        />
       ),
     },
     {
@@ -278,14 +307,44 @@ export default function PagosPage() {
       header: 'Referencia',
       visibleAt: 'lg',
       render: p => p.referencia
-        ? <span className="text-xs text-gray-600 font-mono">{p.referencia}</span>
-        : <span className="text-gray-300 text-xs">—</span>,
+        ? <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', fontFamily: 'monospace' }}>{p.referencia}</Box>
+        : <Box component="span" sx={{ color: '#d1d5db', fontSize: '0.75rem' }}>—</Box>,
     },
     {
       id: 'registradoPor',
       header: 'Registrado por',
       visibleAt: 'xl',
-      render: p => <span className="text-xs text-gray-500">{p.registradoPor ?? p.registradoPorEmail ?? '—'}</span>,
+      render: p => <Box component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.registradoPor ?? p.registradoPorEmail ?? '—'}</Box>,
+    },
+    {
+      // En qué cuadre de caja cayó el cobro.
+      //
+      // Es la pregunta que aparece cada vez que una caja no cuadra, y hasta
+      // ahora solo se podía responder consultando la base de datos. «Fuera de
+      // caja» no es un hueco: significa que se cobró desde Facturación, sin
+      // turno abierto, y por eso ese dinero no aparece en ningún arqueo.
+      id: 'cuadre',
+      header: 'Cuadre',
+      visibleAt: 'xl',
+      render: p => {
+        if (!p.turnoCajaId) {
+          return (
+            <Box component="span" sx={{ fontSize: '0.72rem', color: '#9ca3af' }} title="Cobrado desde Facturación, sin turno de caja abierto">
+              Fuera de caja
+            </Box>
+          );
+        }
+        const abierto = p.turnoEstado === 'ABIERTO';
+        return (
+          <Box
+            component="span"
+            title={p.turnoAperturaAt ? `Turno abierto el ${fmtFechaCorta(p.turnoAperturaAt)}` : undefined}
+            sx={{ fontSize: '0.72rem', fontFamily: 'monospace', color: abierto ? '#047857' : '#4b5563' }}
+          >
+            {p.turnoNumeroCierre ?? (abierto ? 'Turno abierto' : `#${p.turnoCajaId}`)}
+          </Box>
+        );
+      },
     },
     {
       id: 'comprobante',
@@ -297,7 +356,7 @@ export default function PagosPage() {
             <Link
               href={`/dashboard/facturas/${p.docId}`}
               title={`${p.comprobantes} comprobante${p.comprobantes > 1 ? 's' : ''}`}
-              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[11px] font-medium hover:bg-teal-100"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-zero-50 text-zero-700 text-[11px] font-medium hover:bg-zero-100"
             >
               <Paperclip className="h-3 w-3" />
               {p.comprobantes}
@@ -326,7 +385,7 @@ export default function PagosPage() {
       align: 'right',
       sortable: true,
       sortAccessor: p => p.monto,
-      render: p => <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(p.monto)}</span>,
+      render: p => <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(p.monto)}</Box>,
     },
   ], [metodosExige]);
 
@@ -342,79 +401,90 @@ export default function PagosPage() {
   };
 
   return (
-    <section className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pagos recibidos</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: { sm: 'space-between' }, gap: 1.5 }}>
+        <Box>
+          <Typography variant="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>Pagos recibidos</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
             Todos los cobros registrados con su detalle: documento, método, referencia y quién lo registró.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+          <Button
             onClick={exportarCSV}
             disabled={pagosFiltrados.length === 0}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            startIcon={<Download style={{ width: 16, height: 16 }} />}
+            sx={{
+              textTransform: 'none', px: 1.5, py: 1, fontSize: '0.875rem', fontWeight: 500, borderRadius: '8px',
+              bgcolor: '#ffffff', color: '#374151', border: '1px solid #d1d5db',
+              '&:hover': { borderColor: '#a5b4f9', color: '#2a45c4', bgcolor: '#ffffff' },
+              '&.Mui-disabled': { opacity: 0.5 },
+            }}
           >
-            <Download className="h-4 w-4" />
             Exportar CSV
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Box>
+      </Box>
 
       {/* Selector de rango (server-side) */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75 }}>
         {RANGOS.map(r => (
-          <button
+          <Button
             key={r.key}
             onClick={() => setRango(r.key)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-              rango === r.key
-                ? 'bg-teal-600 text-white border-teal-600'
-                : 'bg-white text-gray-600 border-gray-300 hover:border-teal-300'
-            }`}
+            sx={{
+              textTransform: 'none', px: 1.5, py: 0.75, minWidth: 0, fontSize: '0.75rem', fontWeight: 500, borderRadius: '8px', border: '1px solid',
+              ...(rango === r.key
+                ? { bgcolor: '#3658e1', color: '#ffffff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4', borderColor: '#2a45c4' } }
+                : { bgcolor: '#ffffff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#ffffff' } }),
+            }}
           >
             {r.label}
-          </button>
+          </Button>
         ))}
-      </div>
+      </Box>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={<DollarSign className="h-5 w-5" />} label="Total cobrado" value={fmtDOP(totales.monto)} color="text-gray-900" />
-        <StatCard icon={<Wallet className="h-5 w-5" />} label="Pagos" value={totales.count.toString()} color="text-gray-900" />
-        <StatCard icon={<Banknote className="h-5 w-5" />} label="En efectivo" value={fmtDOP(efectivoTotal)} color="text-emerald-700" />
-        <StatCard icon={<Calculator className="h-5 w-5" />} label="Promedio" value={fmtDOP(promedio)} color="text-gray-900" />
-      </div>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+        <StatCard icon={<DollarSign style={{ width: 20, height: 20 }} />} label="Total cobrado" value={fmtDOP(totales.monto)} color="#111827" />
+        <StatCard icon={<Wallet style={{ width: 20, height: 20 }} />} label="Pagos" value={totales.count.toString()} color="#111827" />
+        <StatCard icon={<Banknote style={{ width: 20, height: 20 }} />} label="En efectivo" value={fmtDOP(efectivoTotal)} color="#047857" />
+        <StatCard icon={<Calculator style={{ width: 20, height: 20 }} />} label="Promedio" value={fmtDOP(promedio)} color="#111827" />
+      </Box>
 
       {/* Desglose por método */}
       {desglose.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 text-gray-400 mb-3">
-            <TrendingUp className="h-4 w-4" />
-            <p className="text-xs font-medium">Desglose por método</p>
-          </div>
-          <div className="space-y-2">
+        <Box sx={{ bgcolor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9ca3af', mb: 1.5 }}>
+            <TrendingUp style={{ width: 16, height: 16 }} />
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 500 }}>Desglose por método</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {desglose.map(([metodo, info]) => {
               const pct = totales.monto > 0 ? (info.monto / totales.monto) * 100 : 0;
               return (
-                <div key={metodo}>
-                  <div className="flex items-center justify-between text-xs mb-0.5">
-                    <span className="text-gray-700 font-medium">
+                <Box key={metodo}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', mb: 0.25 }}>
+                    <Box component="span" sx={{ color: '#374151', fontWeight: 500 }}>
                       {labelMetodo(metodo)}
-                      <span className="text-gray-400 font-normal"> · {info.count} pago{info.count !== 1 ? 's' : ''}</span>
-                    </span>
-                    <span className="text-gray-900 font-semibold">{fmtDOP(info.monto)} <span className="text-gray-400 font-normal">({pct.toFixed(0)}%)</span></span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${esEfectivo(metodo) ? 'bg-emerald-500' : 'bg-teal-500'}`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
+                      <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}> · {info.count} pago{info.count !== 1 ? 's' : ''}</Box>
+                    </Box>
+                    <Box component="span" sx={{ color: '#111827', fontWeight: 600 }}>{fmtDOP(info.monto)} <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>({pct.toFixed(0)}%)</Box></Box>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={pct}
+                    sx={{
+                      height: 6, borderRadius: '9999px', bgcolor: '#f3f4f6',
+                      '& .MuiLinearProgress-bar': { borderRadius: '9999px', bgcolor: esEfectivo(metodo) ? '#10b981' : '#5b73ec' },
+                    }}
+                  />
+                </Box>
               );
             })}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {/* Tabla */}
@@ -468,13 +538,13 @@ export default function PagosPage() {
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot = rows.reduce((s, p) => s + p.monto, 0);
           return (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-gray-800">
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>
                 {key}
-                <span className="text-gray-400 font-normal"> · {rows.length} pago{rows.length !== 1 ? 's' : ''}</span>
-              </span>
-              <span className="text-xs font-bold text-gray-900 whitespace-nowrap">{fmtDOP(tot)}</span>
-            </div>
+                <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}> · {rows.length} pago{rows.length !== 1 ? 's' : ''}</Box>
+              </Box>
+              <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{fmtDOP(tot)}</Box>
+            </Box>
           );
         }) : undefined}
         emptyState={{
@@ -494,7 +564,7 @@ export default function PagosPage() {
           onSuccess={() => { setPagoEliminar(null); cargar(); }}
         />
       )}
-    </section>
+    </Box>
   );
 }
 
@@ -504,13 +574,13 @@ function StatCard({ icon, label, value, color }: {
   icon: React.ReactNode; label: string; value: string; color: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex items-center gap-2 text-gray-400 mb-2">
+    <Box sx={{ bgcolor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9ca3af', mb: 1 }}>
         {icon}
-        <p className="text-xs font-medium">{label}</p>
-      </div>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-    </div>
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500 }}>{label}</Typography>
+      </Box>
+      <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color }}>{value}</Typography>
+    </Box>
   );
 }
 
@@ -536,46 +606,52 @@ function EliminarPagoModal({ pago, onClose, onSuccess }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Eliminar pago</h2>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">
-              Esto revierte el cobro y recalcula el saldo del documento. La acción no se puede deshacer.
-            </p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-            <div className="flex justify-between"><span className="text-gray-500">Documento</span><span className="text-gray-800 font-mono">{pago.docCodigo ?? pago.docEncf ?? (pago.docId ? `#${pago.docId}` : '—')}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Método</span><span className="text-gray-800">{labelMetodo(pago.metodo)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Fecha</span><span className="text-gray-800">{fmtFechaCorta(pago.fechaPago)}</span></div>
-            <div className="flex justify-between border-t border-gray-200 pt-1 mt-1 font-medium"><span className="text-gray-700">Monto</span><span className="text-gray-900">{fmtDOP(pago.monto)}</span></div>
-          </div>
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-700">{error}</p>
-            </div>
-          )}
-          <div className="flex gap-2 justify-end pt-1">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800">Cancelar</button>
-            <button
-              onClick={handleDelete}
-              disabled={guardando}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
-            >
-              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
-              Eliminar pago
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <Dialog
+      open
+      onClose={onClose}
+      slotProps={{ paper: { sx: { borderRadius: '12px', width: '100%', maxWidth: 448 } } as object }}
+    >
+      <DialogTitle sx={{ px: 2.5, py: 2, borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+        Eliminar pago
+        <IconButton onClick={onClose} sx={{ p: 0.75, borderRadius: '6px', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6' } }}>
+          <X style={{ width: 16, height: 16 }} />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 1.5, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', mt: 1 }}>
+          <AlertTriangle style={{ width: 20, height: 20, color: '#ef4444', marginTop: 2, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: '0.875rem', color: '#b91c1c' }}>
+            Esto revierte el cobro y recalcula el saldo del documento. La acción no se puede deshacer.
+          </Typography>
+        </Box>
+        <Box sx={{ bgcolor: '#f9fafb', borderRadius: '8px', p: 1.5, fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Box component="span" sx={{ color: '#6b7280' }}>Documento</Box><Box component="span" sx={{ color: '#1f2937', fontFamily: 'monospace' }}>{pago.docCodigo ?? pago.docEncf ?? (pago.docId ? `#${pago.docId}` : '—')}</Box></Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Box component="span" sx={{ color: '#6b7280' }}>Método</Box><Box component="span" sx={{ color: '#1f2937' }}>{labelMetodo(pago.metodo)}</Box></Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Box component="span" sx={{ color: '#6b7280' }}>Fecha</Box><Box component="span" sx={{ color: '#1f2937' }}>{fmtFechaCorta(pago.fechaPago)}</Box></Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', pt: 0.5, mt: 0.5, fontWeight: 500 }}><Box component="span" sx={{ color: '#374151' }}>Monto</Box><Box component="span" sx={{ color: '#111827' }}>{fmtDOP(pago.monto)}</Box></Box>
+        </Box>
+        {error && (
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.5, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px' }}>
+            <AlertTriangle style={{ width: 16, height: 16, color: '#ef4444', marginTop: 2, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.75rem', color: '#b91c1c' }}>{error}</Typography>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 2.5, pb: 2.5, pt: 0, gap: 1, justifyContent: 'flex-end' }}>
+        <Button onClick={onClose} sx={{ textTransform: 'none', px: 2, py: 1, fontSize: '0.875rem', fontWeight: 500, color: '#4b5563', '&:hover': { color: '#1f2937', bgcolor: 'transparent' } }}>Cancelar</Button>
+        <Button
+          onClick={handleDelete}
+          disabled={guardando}
+          startIcon={guardando ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
+          sx={{
+            textTransform: 'none', px: 2, py: 1, fontSize: '0.875rem', fontWeight: 500, borderRadius: '8px',
+            bgcolor: '#dc2626', color: '#ffffff', '&:hover': { bgcolor: '#b91c1c' },
+            '&.Mui-disabled': { bgcolor: '#dc2626', opacity: 0.5, color: '#ffffff' },
+          }}
+        >
+          Eliminar pago
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

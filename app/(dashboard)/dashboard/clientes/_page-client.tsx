@@ -2,15 +2,18 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Users, Plus, Pencil, Trash2, Loader2, AlertTriangle, Upload,
-} from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { ImportModal } from '@/components/import-modal';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import MuiButton from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface Cliente {
   id: number;
@@ -37,7 +40,7 @@ export default function ClientesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null);
   const [showImport, setShowImport]     = useState(false);
   const [deleting, setDeleting]         = useState(false);
-  const [delError, setDelError]         = useState<string | null>(null);
+  const [opError, setOpError]           = useState<string | null>(null);
 
   const search = filterValues.q ?? '';
 
@@ -52,16 +55,33 @@ export default function ClientesPage() {
     }
   }, []);
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => cargar(search), 300);
     return () => clearTimeout(t);
   }, [search, cargar]);
 
+  /**
+   * Crear y editar son pantalla propia, no modal.
+   *
+   * Desde aquí el usuario no está a mitad de nada —está en el listado—, así que
+   * el modal no ganaba nada y sí perdía: la ficha es larga y un clic fuera o un
+   * Escape la cerraba con todo dentro. Una página no se cierra sola, aguanta
+   * una recarga y su enlace se puede pasar a otro. El modal se queda donde de
+   * verdad hace falta (POS y factura nueva), donde salir de la pantalla costaría
+   * la venta a medias.
+   */
+  function abrirNuevo() {
+    router.push('/dashboard/clientes/nuevo');
+  }
+
+  function abrirEdicion(c: Cliente) {
+    router.push(`/dashboard/clientes/${c.id}/editar`);
+  }
+
   async function handleEliminar() {
     if (!deleteTarget) return;
     setDeleting(true);
-    setDelError(null);
+    setOpError(null);
     try {
       const res  = await fetch(`/api/clientes/${deleteTarget.id}`, { method: 'DELETE' });
       const data = await res.json();
@@ -69,7 +89,7 @@ export default function ClientesPage() {
       setDeleteTarget(null);
       cargar(search);
     } catch (e: unknown) {
-      setDelError(e instanceof Error ? e.message : 'Error eliminando');
+      setOpError(e instanceof Error ? e.message : 'Error eliminando');
     } finally {
       setDeleting(false);
     }
@@ -81,50 +101,48 @@ export default function ClientesPage() {
       header: 'Nombre / Razón Social',
       sortable: true,
       render: c => (
-        <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold uppercase">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#eef2fe', color: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>
             {initials(c.razonSocial)}
-          </span>
-          <span className="font-medium text-gray-900">{c.razonSocial}</span>
-        </div>
+          </Box>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>{c.razonSocial}</Typography>
+        </Box>
       ),
     },
     {
       id: 'rnc',
       header: 'RNC / Cédula',
       visibleAt: 'md',
-      render: c => <span className="font-mono text-sm text-gray-600">{c.rnc ?? '—'}</span>,
+      render: c => <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>{c.rnc ?? '—'}</Typography>,
     },
     {
       id: 'email',
       header: 'Email',
       visibleAt: 'lg',
-      render: c => <span className="text-sm text-gray-600">{c.email ?? '—'}</span>,
+      render: c => <Typography variant="body2" sx={{ color: 'text.secondary' }}>{c.email ?? '—'}</Typography>,
     },
     {
       id: 'telefono',
       header: 'Teléfono',
       visibleAt: 'lg',
-      render: c => <span className="text-sm text-gray-600">{c.telefono ?? '—'}</span>,
+      render: c => <Typography variant="body2" sx={{ color: 'text.secondary' }}>{c.telefono ?? '—'}</Typography>,
     },
   ], []);
 
   const rowActions = (c: Cliente): RowAction[] => [
-    { icon: Pencil, title: 'Editar',   onClick: () => router.push(`/dashboard/clientes/${c.id}/editar`) },
-    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(c); setDelError(null); }, variant: 'danger' },
+    { icon: Pencil, title: 'Editar',   onClick: () => abrirEdicion(c) },
+    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(c); setOpError(null); }, variant: 'danger' },
   ];
 
   return (
-    <section className="p-6 space-y-6">
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <DataTable<Cliente>
         data={clientes}
         loading={loading}
         columns={columns}
         title="Clientes"
         description="Directorio de compradores y contactos"
-        filters={[
-          { type: 'search', id: 'q', placeholder: 'Buscar por nombre, RNC o email…' },
-        ]}
+        filters={[{ type: 'search', id: 'q', placeholder: 'Buscar por nombre, RNC o email…' }]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
         rowActions={rowActions}
@@ -133,22 +151,26 @@ export default function ClientesPage() {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin clientes registrados',
           hint: search ? undefined : 'Crea tu primer cliente o aparecerán automáticamente al emitir facturas',
           cta: search ? undefined : (
-            <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={() => router.push('/dashboard/clientes/nuevo')}>
-              <Plus className="h-4 w-4 mr-1" />Nuevo cliente
-            </Button>
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+              startIcon={<Plus style={{ width: 14, height: 14 }} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+              Nuevo cliente
+            </MuiButton>
           ),
         }}
         headerActions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Importar de Alegra
-            </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => router.push('/dashboard/clientes/nuevo')}>
-              <Plus className="h-4 w-4 mr-2" />
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <MuiButton variant="outlined" size="small" onClick={() => setShowImport(true)}
+              startIcon={<Upload style={{ width: 14, height: 14 }} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
+              Importar CSV
+            </MuiButton>
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+              startIcon={<Plus style={{ width: 14, height: 14 }} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
               Nuevo cliente
-            </Button>
-          </div>
+            </MuiButton>
+          </Box>
         }
       />
 
@@ -156,8 +178,8 @@ export default function ClientesPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         endpoint="/api/import/clientes"
-        title="Importar clientes de Alegra"
-        helpText="Archivo CSV exportado de Alegra (Contactos). Se omiten duplicados por RNC o nombre."
+        title="Importar clientes desde CSV"
+        helpText="Archivo CSV de contactos. Se omiten duplicados por RNC o nombre."
         columns={[
           { key: 'razonSocial', label: 'Nombre / Razón Social' },
           { key: 'rnc',         label: 'RNC / Cédula' },
@@ -167,30 +189,31 @@ export default function ClientesPage() {
         onDone={() => cargar(search)}
       />
 
-      {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar cliente?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {delError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{delError}</div>
-            )}
-            <p className="text-sm text-gray-700">
+      {/* Modal: Confirmar eliminación */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>¿Eliminar cliente?</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Vas a eliminar a <strong>{deleteTarget?.razonSocial}</strong>. Esta acción no se puede deshacer.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Las facturas emitidas a este cliente no se verán afectadas.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+            </Typography>
+            <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+              <Typography variant="caption">Las facturas emitidas a este cliente no se verán afectadas.</Typography>
+            </Alert>
+          </Box>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={() => setDeleteTarget(null)} disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton variant="contained" color="error" disableElevation onClick={handleEliminar} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </MuiButton>
+        </DialogActions>
       </Dialog>
-    </section>
+    </Box>
   );
 }

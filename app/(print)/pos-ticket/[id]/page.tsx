@@ -7,6 +7,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 
 interface Linea { nombreItem: string; cantidadItem: number; precioUnitarioItem: number; tasaItbis?: string }
 interface Ticket {
@@ -34,63 +36,68 @@ export default function PosTicketPage() {
       .catch((e) => setError(typeof e === 'string' ? e : 'No se pudo cargar el ticket'));
   }, [id]);
 
-  if (error) return <div style={{ padding: 16, fontFamily: 'monospace' }}>{error}</div>;
-  if (!t) return <div style={{ padding: 16, fontFamily: 'monospace' }}>Cargando…</div>;
+  if (error) return <Box sx={{ padding: '16px', fontFamily: 'monospace' }}>{error}</Box>;
+  if (!t) return <Box sx={{ padding: '16px', fontFamily: 'monospace' }}>Cargando…</Box>;
 
   const fecha = new Date(t.doc.fechaEmision).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' });
 
   return (
-    <div style={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: 12, color: '#000', lineHeight: 1.35 }}>
-      <div style={{ textAlign: 'center', marginBottom: 6 }}>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>{t.empresa.nombre}</div>
-        {t.empresa.rnc && <div>RNC: {t.empresa.rnc}</div>}
-        <div style={{ marginTop: 4 }}>{t.doc.tipoEcf === 'sin-ncf' ? 'TICKET DE VENTA' : `NCF ${t.doc.encf}`}</div>
-      </div>
+    <Box sx={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: '12px', color: '#000', lineHeight: 1.35 }}>
+      <Box sx={{ textAlign: 'center', marginBottom: '6px' }}>
+        <Box sx={{ fontWeight: 700, fontSize: '14px' }}>{t.empresa.nombre}</Box>
+        {t.empresa.rnc && <Box>RNC: {t.empresa.rnc}</Box>}
+        <Box sx={{ marginTop: '4px' }}>{t.doc.tipoEcf === 'sin-ncf' ? 'TICKET DE VENTA' : `NCF ${t.doc.encf}`}</Box>
+      </Box>
 
-      <div style={{ borderTop: '1px dashed #000', paddingTop: 4 }}>
-        <div>Fecha: {fecha}</div>
-        {t.doc.codigo && <div>Código: {t.doc.codigo}</div>}
-        {t.cajero && <div>Cajero: {t.cajero}</div>}
+      <Box sx={{ borderTop: '1px dashed #000', paddingTop: '4px' }}>
+        <Box>Fecha: {fecha}</Box>
+        {t.doc.codigo && <Box>Código: {t.doc.codigo}</Box>}
+        {t.cajero && <Box>Cajero: {t.cajero}</Box>}
         {t.doc.dependiente
-          ? <div>Estudiante: {t.doc.dependiente}</div>
-          : t.doc.cliente && <div>Cliente: {t.doc.cliente}</div>}
-      </div>
+          ? <Box>Estudiante: {t.doc.dependiente}</Box>
+          : t.doc.cliente && <Box>Cliente: {t.doc.cliente}</Box>}
+      </Box>
 
-      <table style={{ width: '100%', borderTop: '1px dashed #000', borderBottom: '1px dashed #000', margin: '4px 0', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ textAlign: 'left' }}>
-            <th style={{ width: '12%' }}>Cant</th><th>Producto</th><th style={{ textAlign: 'right' }}>Importe</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Box component="table" sx={{ width: '100%', borderTop: '1px dashed #000', borderBottom: '1px dashed #000', margin: '4px 0', borderCollapse: 'collapse' }}>
+        <Box component="thead">
+          <Box component="tr" sx={{ textAlign: 'left' }}>
+            <Box component="th" sx={{ width: '12%' }}>Cant</Box><Box component="th">Producto</Box><Box component="th" sx={{ textAlign: 'right' }}>Importe</Box>
+          </Box>
+        </Box>
+        <Box component="tbody">
           {t.lineas.map((l, i) => (
-            <tr key={i}>
-              <td style={{ verticalAlign: 'top' }}>{l.cantidadItem}</td>
-              <td>{l.nombreItem}<div style={{ color: '#444' }}>@ {fmt(Math.round(l.precioUnitarioItem * 100))}</div></td>
-              <td style={{ textAlign: 'right', verticalAlign: 'top' }}>{fmt(Math.round(l.precioUnitarioItem * l.cantidadItem * 100))}</td>
-            </tr>
+            <Box component="tr" key={i}>
+              <Box component="td" sx={{ verticalAlign: 'top' }}>{l.cantidadItem}</Box>
+              <Box component="td">{l.nombreItem}<Box sx={{ color: '#444' }}>@ {fmt(Math.round(l.precioUnitarioItem * 100))}</Box></Box>
+              <Box component="td" sx={{ textAlign: 'right', verticalAlign: 'top' }}>{fmt(Math.round(l.precioUnitarioItem * l.cantidadItem * 100))}</Box>
+            </Box>
           ))}
-          {t.lineas.length === 0 && <tr><td colSpan={3} style={{ textAlign: 'center', color: '#444' }}>(sin detalle de líneas)</td></tr>}
-        </tbody>
-      </table>
+          {t.lineas.length === 0 && <Box component="tr"><Box component="td" colSpan={3} sx={{ textAlign: 'center', color: '#444' }}>(sin detalle de líneas)</Box></Box>}
+        </Box>
+      </Box>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>ITBIS</span><span>{fmt(t.doc.totalItbis)}</span></div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14 }}><span>TOTAL</span><span>RD$ {fmt(t.doc.montoTotal)}</span></div>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Box component="span">ITBIS</Box><Box component="span">{fmt(t.doc.totalItbis)}</Box></Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '14px' }}><Box component="span">TOTAL</Box><Box component="span">RD$ {fmt(t.doc.montoTotal)}</Box></Box>
 
-      <div style={{ borderTop: '1px dashed #000', marginTop: 4, paddingTop: 4 }}>
+      <Box sx={{ borderTop: '1px dashed #000', marginTop: '4px', paddingTop: '4px' }}>
         {t.pagos.map((p, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>{METODO_LABEL[p.metodo] ?? p.metodo}</span><span>{fmt(p.montoCentavos)}</span>
-          </div>
+          <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box component="span">{METODO_LABEL[p.metodo] ?? p.metodo}</Box><Box component="span">{fmt(p.montoCentavos)}</Box>
+          </Box>
         ))}
-      </div>
+      </Box>
 
-      <div style={{ textAlign: 'center', marginTop: 8 }}>¡Gracias por su compra!</div>
+      <Box sx={{ textAlign: 'center', marginTop: '8px' }}>¡Gracias por su compra!</Box>
 
-      <button onClick={() => window.print()} className="no-print" style={{ display: 'block', margin: '12px auto', padding: '6px 14px' }}>
+      <Button
+        onClick={() => window.print()}
+        variant="outlined"
+        size="small"
+        sx={{ display: 'block', margin: '12px auto', padding: '6px 14px', textTransform: 'none', color: '#374151', borderColor: '#d1d5db', '@media print': { display: 'none' } }}
+      >
         Imprimir
-      </button>
-      <style>{`@media print { .no-print { display: none } @page { margin: 0 } }`}</style>
-    </div>
+      </Button>
+      <style>{`@media print { @page { margin: 0 } }`}</style>
+    </Box>
   );
 }

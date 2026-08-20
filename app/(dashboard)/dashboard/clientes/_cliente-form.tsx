@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Users, Plus, Loader2, X, ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
+import { Users, Plus, X, ArrowLeft } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import { formatTelefonoDO } from '@/lib/utils/format';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 interface Dependiente {
   id: number;   // > 0 persistido en DB; < 0 temporal (en memoria, modo crear)
@@ -15,12 +21,29 @@ interface Dependiente {
   apellido: string;
 }
 
-const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', direccion: '', descripcion: '' };
+/**
+ * Lo mínimo que necesita quien crea un cliente desde otra pantalla (factura,
+ * cotización, POS) para pintarlo en el selector sin volver a pedirlo.
+ *
+ * Vive aquí y no en el diálogo porque el diálogo importa este formulario: al
+ * revés sería un ciclo.
+ */
+export interface ClienteCreado {
+  id:          number;
+  razonSocial: string;
+  rnc:         string | null;
+  email:       string | null;
+  telefono:    string | null;
+}
+
+const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', celular: '', whatsapp: '', direccion: '', descripcion: '' };
 type ClienteForm = typeof EMPTY_FORM;
+
+const inputSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
 
 /**
  * Campo de texto. Definido FUERA del componente página: si se define adentro,
- * cada render crea una función nueva y React remonta el <Input>, tumbando el foco.
+ * cada render crea una función nueva y React remonta el <TextField>, tumbando el foco.
  */
 function Field({ label, field, type = 'text', placeholder, form, setForm }: {
   label: string;
@@ -30,22 +53,27 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
   form: ClienteForm;
   setForm: React.Dispatch<React.SetStateAction<ClienteForm>>;
 }) {
-  const isTelefono = field === 'telefono';
+  const isTelefono = field === 'telefono' || field === 'celular' || field === 'whatsapp';
   return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      <Input
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+        {label}
+      </Typography>
+      <TextField
         type={type}
         placeholder={placeholder}
-        inputMode={isTelefono ? 'tel' : undefined}
+        size="small"
+        fullWidth
         value={form[field]}
         onChange={(e) => {
           const raw = e.target.value;
           const next = isTelefono ? formatTelefonoDO(raw) : raw;
           setForm((f) => ({ ...f, [field]: next }));
         }}
+        slotProps={{ htmlInput: { inputMode: isTelefono ? 'tel' : undefined } }}
+        sx={inputSx}
       />
-    </div>
+    </Box>
   );
 }
 
@@ -55,11 +83,58 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
  *   - Editar: dependientes se persisten en vivo (ya hay clientId).
  *   - Crear:  se acumulan en memoria y se guardan tras crear el cliente.
  */
-export default function ClienteForm({ clienteId }: { clienteId?: number }) {
+export default function ClienteForm({
+  clienteId, embebido = false, dependientesEditables = true,
+  valoresIniciales, onGuardado, onCancelar, onSucioChange,
+}: {
+  clienteId?: number;
+  /**
+   * Dentro de un diálogo: sin cabecera de página ni botón de volver, y al
+   * guardar avisa en vez de navegar. Existe para que la ficha del alumno pueda
+   * crear el responsable de pago con ESTE formulario y no con una copia que se
+   * separaría del original al primer campo nuevo.
+   */
+  embebido?: boolean;
+  /**
+   * Si se pueden agregar dependientes desde aquí.
+   *
+   * Apagado solo en la ficha del alumno: ahí el dependiente es el alumno que
+   * se está vinculando y lo agrega la propia ficha al guardar, así que la caja
+   * de «Nombre / Apellido / Agregar» crearía un segundo hijo por error. En
+   * todos los demás sitios va encendida — es lo que evita el crear-y-editar.
+   */
+  dependientesEditables?: boolean;
+  /**
+   * Datos con los que arrancar el formulario al CREAR.
+   *
+   * Lo usa «Hacer responsable de pago»: el tutor ya tiene cédula, nombre y
+   * teléfonos, y volver a teclearlos es la vía rápida a escribirlos distinto y
+   * acabar con dos fichas de la misma persona.
+   */
+  valoresIniciales?: Partial<typeof EMPTY_FORM>;
+  /**
+   * Devuelve también el nombre: quien lo embebe lo necesita para pintarlo, y
+   * pedirlo otra vez al servidor era un viaje para leer lo que se acaba de
+   * escribir aquí mismo. El tercer argumento trae además RNC, email y teléfono,
+   * que es lo que el selector de la factura pinta bajo el nombre.
+   */
+  onGuardado?: (clienteId: number, razonSocial: string, cliente: ClienteCreado) => void;
+  onCancelar?: () => void;
+  /**
+   * Avisa si hay algo escrito que se perdería al cerrar.
+   *
+   * Lo escucha el diálogo para preguntar antes de descartar. Quien monta este
+   * formulario no puede saberlo por su cuenta —los campos viven aquí dentro—, y
+   * sin el aviso el botón Cancelar se llevaba diez campos sin abrir la boca.
+   */
+  onSucioChange?: (sucio: boolean) => void;
+}) {
   const router = useRouter();
+  const volverPagina = useVolver('/dashboard/clientes');
+  const volver = onCancelar ?? volverPagina;
   const isEdit = clienteId != null;
 
-  const [form, setForm]       = useState<ClienteForm>(EMPTY_FORM);
+  const [form, setForm]       = useState<ClienteForm>({ ...EMPTY_FORM, ...valoresIniciales });
   const [loading, setLoading] = useState(isEdit);   // edición: carga datos primero
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -74,6 +149,16 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
   // Si el cliente ya fue creado (modo crear), evita duplicarlo al reintentar guardar.
   const createdIdRef = useRef<number | null>(null);
   const tempIdRef    = useRef(-1);
+
+  /**
+   * Lo que había en pantalla al abrir, para saber si el usuario escribió algo.
+   *
+   * Se compara contra esto y no contra el formulario vacío porque en edición
+   * todos los campos llegan llenos: con el vacío como referencia, abrir la
+   * ficha de un cliente y cerrarla sin tocar nada ya contaba como «cambios sin
+   * guardar» y preguntaba en balde.
+   */
+  const inicialRef = useRef<ClienteForm>({ ...EMPTY_FORM, ...valoresIniciales });
 
   // ID efectivo del cliente para operaciones de dependientes en vivo.
   const persistedId = clienteId ?? createdIdRef.current;
@@ -94,14 +179,20 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
         if (cancel) return;
         if (!cRes.ok) { setError(cData.error ?? 'Error cargando el cliente'); return; }
         const c = cData.cliente;
-        setForm({
+        const cargado: ClienteForm = {
           razonSocial: c.razonSocial ?? '',
           rnc:         c.rnc         ?? '',
           email:       c.email       ?? '',
           telefono:    formatTelefonoDO(c.telefono ?? ''),
+          celular:     formatTelefonoDO(c.celular ?? ''),
+          whatsapp:    formatTelefonoDO(c.whatsapp ?? ''),
           direccion:   c.direccion   ?? '',
           descripcion: c.descripcion ?? '',
-        });
+        };
+        // La referencia se mueve a lo recién cargado: a partir de aquí «cambió»
+        // significa distinto de lo que tiene el cliente en la base, no distinto de vacío.
+        inicialRef.current = cargado;
+        setForm(cargado);
         setDependientes(dData.dependientes ?? []);
       } finally {
         if (!cancel) setLoading(false);
@@ -109,6 +200,20 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
     })();
     return () => { cancel = true; };
   }, [isEdit, clienteId]);
+
+  /**
+   * Cuenta el dependiente a medio teclear y los que aún no se han guardado
+   * (id < 0): son datos escritos, y al cerrar se van igual que los campos.
+   */
+  const sucio = useMemo(() => {
+    const inicial = inicialRef.current;
+    return (Object.keys(EMPTY_FORM) as (keyof ClienteForm)[]).some((k) => form[k] !== inicial[k])
+      || dependientes.some((d) => d.id < 0)
+      || depForm.nombre.trim()   !== ''
+      || depForm.apellido.trim() !== '';
+  }, [form, dependientes, depForm]);
+
+  useEffect(() => { onSucioChange?.(sucio); }, [sucio, onSucioChange]);
 
   async function recargarDependientes(id: number) {
     try {
@@ -216,6 +321,20 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
         }
       }
 
+      if (onGuardado) {
+        onGuardado(id, form.razonSocial.trim(), {
+          id,
+          razonSocial: form.razonSocial.trim(),
+          rnc:      form.rnc.trim()      || null,
+          email:    form.email.trim()    || null,
+          telefono: form.telefono.trim() || null,
+        });
+        return;
+      }
+      // En página propia, guardar saca al usuario de la pantalla: sin este aviso
+      // el listado aparece igual que antes y no queda señal de que el guardado
+      // llegó a ocurrir. Quien nos embebe (`onGuardado`) ya avisa a su manera.
+      toast.success(isEdit ? 'Cliente actualizado' : `Cliente «${form.razonSocial.trim()}» creado`);
       router.push('/dashboard/clientes');
       router.refresh();
     } catch (e: unknown) {
@@ -226,39 +345,53 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
+      </Box>
     );
   }
 
   return (
-    <section className="mx-auto max-w-3xl p-6 space-y-6">
-      {/* Encabezado */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push('/dashboard/clientes')}
-          className="p-2 -ml-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-          title="Volver a clientes"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">{isEdit ? 'Editar cliente' : 'Nuevo cliente'}</h1>
-          <p className="text-sm text-gray-500">Datos del cliente y sus dependientes</p>
-        </div>
-      </div>
+    <Box component="section" sx={embebido
+      ? { display: 'flex', flexDirection: 'column', gap: 2 }
+      : { mx: 'auto', maxWidth: 768, p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {/* Encabezado — dentro de un diálogo lo pone el propio diálogo. */}
+      {!embebido && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <IconButton
+            onClick={volver}
+            title="Volver a clientes"
+            sx={{ ml: -1, borderRadius: '8px', color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
+          >
+            <ArrowLeft size={20} />
+          </IconButton>
+          <Box>
+            <Typography variant="h5" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>
+              {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
+            </Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              Datos del cliente y sus dependientes
+            </Typography>
+          </Box>
+        </Box>
+      )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>
+        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
+          {error}
+        </Box>
       )}
 
       {/* ── Datos del cliente ─────────────────────────────────────────────── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-700">Datos</h2>
+      <Paper elevation={0} sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>
+          Datos
+        </Typography>
 
-        <div className="space-y-1.5">
-          <Label>RNC / Cédula</Label>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+            RNC / Cédula
+          </Typography>
           <RncSearch
             placeholder="Buscar RNC, Cédula o razón social…"
             value={form.rnc || undefined}
@@ -270,101 +403,162 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
             onClear={() => setForm((f) => ({ ...f, rnc: '' }))}
             showSyncHint={false}
           />
-        </div>
+        </Box>
 
         <Field label="Nombre / Razón Social *" field="razonSocial" placeholder="Empresa XYZ SRL" form={form} setForm={setForm} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
           <Field label="Teléfono" field="telefono" placeholder="(809) 000-0000" form={form} setForm={setForm} />
+          {/* Aparte del teléfono: por aquí salen los avisos, y en muchas casas
+              el fijo y el número que contesta no son el mismo. */}
+          <Field label="Celular" field="celular" placeholder="(809) 000-0000" form={form} setForm={setForm} />
+          <Field label="WhatsApp" field="whatsapp" placeholder="(809) 000-0000" form={form} setForm={setForm} />
           <Field label="Email" field="email" type="email" placeholder="facturacion@empresa.com" form={form} setForm={setForm} />
-        </div>
+        </Box>
         <Field label="Dirección" field="direccion" placeholder="Calle, No., Ciudad" form={form} setForm={setForm} />
 
-        <div className="space-y-1.5">
-          <Label>Descripción</Label>
-          <textarea
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none min-h-[80px]"
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+            Descripción
+          </Typography>
+          <TextField
+            multiline
+            minRows={3}
+            size="small"
+            fullWidth
             placeholder="Notas internas, sector, condiciones especiales…"
             value={form.descripcion}
             onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+            sx={{ ...inputSx, '& .MuiOutlinedInput-input': { resize: 'none' } }}
           />
-        </div>
-      </div>
+        </Box>
+      </Paper>
 
       {/* ── Dependientes ──────────────────────────────────────────────────── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-700">Dependientes</h2>
-          <p className="text-xs text-gray-500">Personas asociadas al cliente. Puedes agregarlas desde ya.</p>
-        </div>
+      <Paper elevation={0} sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>
+            Dependientes
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            {dependientesEditables
+              ? 'Personas asociadas al cliente. Puedes agregarlas desde ya.'
+              : 'El alumno se agrega solo al guardar. Aquí se ven los que ya tiene este contacto.'}
+          </Typography>
+        </Box>
 
         {depError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{depError}</div>
+          <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
+            {depError}
+          </Box>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-          <div className="flex-1 space-y-1.5">
-            <Label className="text-xs">Nombre</Label>
-            <Input
+        {dependientesEditables && (
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'flex-end' } }}>
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151' }}>
+              Nombre
+            </Typography>
+            <TextField
               placeholder="Nombre"
+              size="small"
+              fullWidth
               value={depForm.nombre}
               onChange={(e) => setDepForm((f) => ({ ...f, nombre: e.target.value }))}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAgregarDependiente(); }}
+              sx={inputSx}
             />
-          </div>
-          <div className="flex-1 space-y-1.5">
-            <Label className="text-xs">Apellido</Label>
-            <Input
+          </Box>
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151' }}>
+              Apellido
+            </Typography>
+            <TextField
               placeholder="Apellido"
+              size="small"
+              fullWidth
               value={depForm.apellido}
               onChange={(e) => setDepForm((f) => ({ ...f, apellido: e.target.value }))}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAgregarDependiente(); }}
+              sx={inputSx}
             />
-          </div>
+          </Box>
           <Button
-            size="sm"
-            className="bg-teal-600 hover:bg-teal-700 shrink-0"
+            size="small"
+            variant="contained"
+            disableElevation
             onClick={handleAgregarDependiente}
             disabled={savingDep}
+            sx={{ flexShrink: 0, bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, textTransform: 'none', borderRadius: '8px' }}
           >
-            {savingDep ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 mr-1" />Agregar</>}
+            {savingDep
+              ? <CircularProgress size={16} sx={{ color: '#fff' }} />
+              : <><Plus size={16} style={{ marginRight: 4 }} />Agregar</>}
           </Button>
-        </div>
+        </Box>
+        )}
 
         {dependientes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-8 text-center text-sm text-gray-400">
-            <Users className="h-8 w-8 text-gray-300" />
-            <p>Sin dependientes. Agrega el primero arriba.</p>
-          </div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, py: 4, textAlign: 'center', fontSize: '0.875rem', color: '#9ca3af' }}>
+            <Users size={32} style={{ color: '#d1d5db' }} />
+            <Typography sx={{ fontSize: '0.875rem', color: 'inherit' }}>
+              {dependientesEditables ? 'Sin dependientes. Agrega el primero arriba.' : 'Sin dependientes.'}
+            </Typography>
+          </Box>
         ) : (
-          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 overflow-hidden">
+          <Box
+            component="ul"
+            sx={{
+              listStyle: 'none', m: 0, p: 0,
+              borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden',
+              '& > li + li': { borderTop: '1px solid #f3f4f6' },
+            }}
+          >
             {dependientes.map((dep) => (
-              <li key={dep.id} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50 text-sm">
-                <span className="font-medium text-gray-800">{dep.nombre} {dep.apellido}</span>
-                <button
+              <Box
+                component="li"
+                key={dep.id}
+                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, bgcolor: '#fff', fontSize: '0.875rem', '&:hover': { bgcolor: '#f9fafb' } }}
+              >
+                <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937' }}>
+                  {dep.nombre} {dep.apellido}
+                </Typography>
+                <IconButton
                   onClick={() => handleEliminarDependiente(dep)}
                   disabled={deletingDepId === dep.id}
-                  className="ml-2 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
                   title="Eliminar dependiente"
+                  sx={{ ml: 1, p: 0.5, borderRadius: '6px', color: '#9ca3af', '&:hover': { color: '#ef4444', bgcolor: '#fef2f2' }, '&.Mui-disabled': { opacity: 0.5 } }}
                 >
                   {deletingDepId === dep.id
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <X className="h-4 w-4" />}
-                </button>
-              </li>
+                    ? <CircularProgress size={16} sx={{ color: 'inherit' }} />
+                    : <X size={16} />}
+                </IconButton>
+              </Box>
             ))}
-          </ul>
+          </Box>
         )}
-      </div>
+      </Paper>
 
       {/* ── Acciones ──────────────────────────────────────────────────────── */}
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => router.push('/dashboard/clientes')} disabled={saving}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={volver}
+          disabled={saving}
+          sx={{ textTransform: 'none', borderRadius: '8px' }}
+        >
           Cancelar
         </Button>
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving}>
-          {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : (isEdit ? 'Guardar cambios' : 'Crear cliente')}
+        <Button
+          variant="contained"
+          disableElevation
+          onClick={handleGuardar}
+          disabled={saving}
+          startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
+          sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, textTransform: 'none', borderRadius: '8px' }}
+        >
+          {saving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Crear cliente')}
         </Button>
-      </div>
-    </section>
+      </Box>
+    </Box>
   );
 }

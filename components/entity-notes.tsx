@@ -1,9 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Loader2, Trash2, MessageSquare } from 'lucide-react';
+import { Trash2, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface Note {
   id:        number;
@@ -25,7 +30,7 @@ interface Props {
  * Notas genéricas reutilizables. Lista + agregar + eliminar (soft delete).
  * Se monta en cualquier entidad pasando entityType + entityId.
  */
-export function EntityNotes({ entityType, entityId, className = '' }: Props) {
+export function EntityNotes({ entityType, entityId }: Props) {
   const [notes, setNotes]     = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText]       = useState('');
@@ -86,63 +91,72 @@ export function EntityNotes({ entityType, entityId, className = '' }: Props) {
   }
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Agregar */}
-      <div className="space-y-2">
-        <textarea
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <TextField
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder="Escribe una nota..."
+          multiline
           rows={3}
-          maxLength={5000}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          fullWidth
+          size="small"
           disabled={saving}
+          slotProps={{ htmlInput: { maxLength: 5000 } }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
         />
-        <div className="flex justify-end">
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button
             type="button"
-            size="sm"
-            className="bg-teal-600 hover:bg-teal-700 text-white"
+            variant="contained"
+            size="small"
             onClick={handleAdd}
             disabled={saving || !text.trim()}
+            startIcon={saving ? <CircularProgress size={12} color="inherit" /> : undefined}
           >
-            {saving ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Guardando…</> : 'Agregar nota'}
+            {saving ? 'Guardando…' : 'Agregar nota'}
           </Button>
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* Lista */}
       {loading ? (
-        <div className="flex justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
-        </div>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={20} sx={{ color: '#5b73ec' }} />
+        </Box>
       ) : notes.length === 0 ? (
-        <div className="text-center py-8 text-gray-400 text-sm">
-          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
+        <Box sx={{ textAlign: 'center', py: 4, color: '#9ca3af', fontSize: '0.875rem' }}>
+          <MessageSquare style={{ width: 32, height: 32, display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
           Sin notas aún.
-        </div>
+        </Box>
       ) : (
-        <ul className="space-y-2">
+        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {notes.map(n => (
-            <li key={n.id} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm text-gray-800 whitespace-pre-wrap flex-1">{n.text}</p>
-                <button
+            <Box
+              component="li"
+              key={n.id}
+              sx={{ bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', px: 1.5, py: 1 }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                <Typography sx={{ fontSize: '0.875rem', color: '#1f2937', whiteSpace: 'pre-wrap', flex: 1 }}>{n.text}</Typography>
+                <IconButton
                   type="button"
                   onClick={() => handleDelete(n.id)}
-                  className="p-1 text-gray-400 hover:text-red-600 shrink-0"
                   title="Eliminar"
+                  size="small"
+                  sx={{ p: 0.5, color: '#9ca3af', flexShrink: 0, '&:hover': { color: '#dc2626' } }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <p className="text-[10px] text-gray-400 mt-1">
+                  <Trash2 style={{ width: 14, height: 14 }} />
+                </IconButton>
+              </Box>
+              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
                 {n.userName || n.userEmail || 'Sistema'} · {fmtDate(n.createdAt)}
-              </p>
-            </li>
+              </Typography>
+            </Box>
           ))}
-        </ul>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

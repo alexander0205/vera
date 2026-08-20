@@ -2,19 +2,22 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  RefreshCw, Plus, Trash2, Loader2, AlertTriangle, Pencil, PauseCircle, PlayCircle, Zap, Eye,
+  RefreshCw, Plus, Trash2, AlertTriangle, Pencil, PauseCircle, PlayCircle, Zap, Eye, Loader2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { toast } from 'sonner';
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface FacturaRecurrente {
   id: number;
@@ -30,29 +33,27 @@ interface FacturaRecurrente {
   clientId: number | null;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const FRECUENCIA_LABEL: Record<string, string> = {
-  diario:      'Diario',
-  semanal:     'Semanal',
-  quincenal:   'Quincenal',
-  mensual:     'Mensual',
-  bimestral:   'Bimestral',
-  trimestral:  'Trimestral',
-  semestral:   'Semestral',
-  anual:       'Anual',
+  diario:     'Diario',
+  semanal:    'Semanal',
+  quincenal:  'Quincenal',
+  mensual:    'Mensual',
+  bimestral:  'Bimestral',
+  trimestral: 'Trimestral',
+  semestral:  'Semestral',
+  anual:      'Anual',
 };
 
-function estadoBadge(estado: string) {
+function EstadoChip({ estado }: { estado: string }) {
   switch (estado) {
     case 'activa':
-      return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200 border">Activa</Badge>;
+      return <Chip label="Activa" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', fontSize: '0.6875rem' }} />;
     case 'pausada':
-      return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200 border">Pausada</Badge>;
+      return <Chip label="Pausada" size="small" sx={{ bgcolor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontSize: '0.6875rem' }} />;
     case 'finalizada':
-      return <Badge variant="outline" className="text-gray-500 border-gray-300">Finalizada</Badge>;
+      return <Chip label="Finalizada" size="small" variant="outlined" sx={{ fontSize: '0.6875rem', borderColor: '#d1d5db', color: '#6b7280' }} />;
     default:
-      return <Badge variant="outline">{estado}</Badge>;
+      return <Chip label={estado} size="small" variant="outlined" sx={{ fontSize: '0.6875rem' }} />;
   }
 }
 
@@ -112,10 +113,10 @@ function RecurrenteHijos({ recurrenteId }: { recurrenteId: number }) {
           <Link
             key={g.id}
             href={`/dashboard/facturas/${g.id}`}
-            className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 hover:border-teal-300 hover:bg-white transition-colors"
+            className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 hover:border-zero-300 hover:bg-white transition-colors"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono text-xs font-semibold text-teal-700 truncate">
+              <span className="font-mono text-xs font-semibold text-zero-700 truncate">
                 {g.codigo ?? (g.encf && !g.encf.startsWith('BOR-') ? g.encf : `#${g.id}`)}
               </span>
               <span className="text-[11px] text-gray-400 whitespace-nowrap hidden sm:inline">{fmtFechaCorta(g.fechaEmision)}</span>
@@ -149,7 +150,7 @@ function RecurrenteHijos({ recurrenteId }: { recurrenteId: number }) {
     <div className="py-1">
       <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-          <RefreshCw className="h-4 w-4 text-teal-600 shrink-0" />
+          <RefreshCw className="h-4 w-4 text-zero-600 shrink-0" />
           <span className="text-sm font-semibold text-gray-900">Facturas generadas</span>
         </div>
         <div className="p-4">{contenido}</div>
@@ -176,9 +177,7 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
       const res  = await fetch('/api/facturas-recurrentes');
       const data = await res.json();
       setFacturas(data.facturasRecurrentes ?? []);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -187,19 +186,15 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
 
   async function handleEliminar() {
     if (!deleteTarget) return;
-    setDeleting(true);
-    setOpError(null);
+    setDeleting(true); setOpError(null);
     try {
       const res  = await fetch(`/api/facturas-recurrentes/${deleteTarget.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error eliminando');
-      setDeleteTarget(null);
-      cargar();
+      setDeleteTarget(null); cargar();
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error eliminando');
-    } finally {
-      setDeleting(false);
-    }
+    } finally { setDeleting(false); }
   }
 
   async function handleToggleEstado(f: FacturaRecurrente) {
@@ -212,9 +207,7 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
         body: JSON.stringify({ estado: nuevoEstado }),
       });
       setFacturas(prev => prev.map(fr => fr.id === f.id ? { ...fr, estado: nuevoEstado } : fr));
-    } finally {
-      setToggling(null);
-    }
+    } finally { setToggling(null); }
   }
 
   async function handleGenerarAhora(f: FacturaRecurrente) {
@@ -222,26 +215,14 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
     try {
       const res  = await fetch(`/api/facturas-recurrentes/${f.id}/generar`, { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? 'Error generando factura');
-        return;
-      }
-      toast.success(
-        `Factura generada: ${data.encf}`,
-        {
-          action: {
-            label: 'Ver factura',
-            onClick: () => { window.location.href = `/dashboard/facturas/${data.documentoId}`; },
-          },
-        },
-      );
-      // Refrescar lista para actualizar "Próxima emisión" y "Emitidas"
+      if (!res.ok) { toast.error(data.error ?? 'Error generando factura'); return; }
+      toast.success(`Factura generada: ${data.encf}`, {
+        action: { label: 'Ver factura', onClick: () => { window.location.href = `/dashboard/facturas/${data.documentoId}`; } },
+      });
       cargar();
     } catch {
       toast.error('Error de conexión al generar la factura');
-    } finally {
-      setGenerando(null);
-    }
+    } finally { setGenerando(null); }
   }
 
   const columns: DataTableColumn<FacturaRecurrente>[] = useMemo(() => [
@@ -250,12 +231,16 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
       header: 'Nombre',
       sortable: true,
       render: f => (
-        <div className="max-w-[280px]">
-          <p className="font-medium text-sm text-gray-900 truncate">{f.nombre}</p>
+        <Box sx={{ maxWidth: 280 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {f.nombre}
+          </Typography>
           {f.descripcion && (
-            <p className="text-xs text-gray-500 truncate">{f.descripcion}</p>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {f.descripcion}
+            </Typography>
           )}
-        </div>
+        </Box>
       ),
     },
     {
@@ -263,14 +248,14 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
       header: 'Contacto',
       visibleAt: 'md',
       render: f => f.clienteRazonSocial
-        ? <span className="text-sm text-gray-700">{f.clienteRazonSocial}</span>
-        : <span className="text-sm text-gray-400 italic">Sin contacto</span>,
+        ? <Typography variant="body2" sx={{ color: '#374151' }}>{f.clienteRazonSocial}</Typography>
+        : <Typography variant="body2" sx={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin contacto</Typography>,
     },
     {
       id: 'frecuencia',
       header: 'Frecuencia',
       visibleAt: 'lg',
-      render: f => <span className="text-sm">{FRECUENCIA_LABEL[f.frecuencia] ?? f.frecuencia}</span>,
+      render: f => <Typography variant="body2">{FRECUENCIA_LABEL[f.frecuencia] ?? f.frecuencia}</Typography>,
     },
     {
       id: 'proximaEmision',
@@ -278,19 +263,19 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
       visibleAt: 'lg',
       sortable: true,
       sortAccessor: f => f.proximaEmision,
-      render: f => <span className="text-sm text-gray-600">{fmtFechaCorta(f.proximaEmision)}</span>,
+      render: f => <Typography variant="body2" sx={{ color: '#6b7280' }}>{fmtFechaCorta(f.proximaEmision)}</Typography>,
     },
     {
       id: 'estado',
       header: 'Estado',
-      render: f => estadoBadge(f.estado),
+      render: f => <EstadoChip estado={f.estado} />,
     },
     {
       id: 'emitidas',
       header: 'Emitidas',
       align: 'center',
       visibleAt: 'md',
-      render: f => <span className="text-sm text-gray-600">{f.facturasEmitidas}</span>,
+      render: f => <Typography variant="body2" sx={{ color: '#6b7280' }}>{f.facturasEmitidas}</Typography>,
     },
     {
       id: 'total',
@@ -298,13 +283,13 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
       align: 'right',
       sortable: true,
       sortAccessor: f => f.totalEstimado,
-      render: f => <span className="font-medium text-sm whitespace-nowrap">{fmtDOP(f.totalEstimado)}</span>,
+      render: f => <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtDOP(f.totalEstimado)}</Typography>,
     },
   ], []);
 
   const rowActions = (f: FacturaRecurrente): RowAction[] => {
     const actions: RowAction[] = [
-      { icon: Eye, title: 'Ver', href: `/dashboard/facturas-recurrentes/${f.id}` },
+      { icon: Eye,    title: 'Ver',    href: `/dashboard/facturas-recurrentes/${f.id}` },
       { icon: Pencil, title: 'Editar', href: `/dashboard/facturas-recurrentes/${f.id}/editar` },
     ];
     if (canOperate && f.estado !== 'finalizada') {
@@ -331,7 +316,7 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
   };
 
   return (
-    <section className="bg-[#eef0f7] min-h-full p-6 space-y-6">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3 }}>
       <DataTable<FacturaRecurrente>
         data={facturas}
         loading={loading}
@@ -347,53 +332,47 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
           title: 'Sin facturas recurrentes',
           hint: 'Configura una factura recurrente para automatizar tu facturación',
           cta: canOperate ? (
-            <Link href="/dashboard/facturas-recurrentes/nueva">
-              <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
-                <Plus className="h-4 w-4 mr-1" /> Nueva factura recurrente
+            <Link href="/dashboard/facturas-recurrentes/nueva" style={{ textDecoration: 'none' }}>
+              <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+                Nueva factura recurrente
               </Button>
             </Link>
           ) : undefined,
         }}
         headerActions={canOperate ? (
-          <Link href="/dashboard/facturas-recurrentes/nueva">
-            <Button className="bg-teal-600 hover:bg-teal-700">
-              <Plus className="h-4 w-4 mr-2" />
+          <Link href="/dashboard/facturas-recurrentes/nueva" style={{ textDecoration: 'none' }}>
+            <Button variant="contained" disableElevation startIcon={<Plus size={18} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
               Nueva factura recurrente
             </Button>
           </Link>
         ) : undefined}
       />
 
-      {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar factura recurrente?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-                {opError}
-              </div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Las facturas ya emitidas no se verán afectadas.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</>
-                : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+      {/* Modal: Confirmar eliminación */}
+      <Dialog open={!!deleteTarget} onClose={() => { if (!deleting) setDeleteTarget(null); }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 360 } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>¿Eliminar factura recurrente?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          {opError && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>{opError}</Alert>}
+          <Typography variant="body2" sx={{ color: '#374151', mb: 2 }}>
+            Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
+          </Typography>
+          <Alert severity="warning" icon={<AlertTriangle size={16} />} sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+            Las facturas ya emitidas no se verán afectadas.
+          </Alert>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setDeleteTarget(null)} disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
+          <Button variant="contained" disableElevation color="error" onClick={handleEliminar} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </section>
+    </Box>
   );
 }

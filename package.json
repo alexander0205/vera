@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "1.20.1",
+  "version": "1.21.2",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
@@ -34,6 +34,9 @@
     "corre:prod": "bash scripts/run-prod.sh start",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "db:setup": "npx tsx lib/db/setup.ts",
     "db:seed": "npx tsx lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",
@@ -42,12 +45,22 @@
     "db:reset": "npx tsx lib/db/reset.ts",
     "db:local:setup": "bash scripts/setup-local-db.sh",
     "branch:setup": "bash scripts/branch-setup.sh",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
     "comprobantes:reconciliar": "npx tsx scripts/reconciliar-comprobantes-s3.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1105.0",
+    "@aws-sdk/client-sns": "^3.1105.0",
+    "@aws-sdk/s3-request-presigner": "^3.1105.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.1.1",
+    "@mui/material": "^9.1.1",
+    "@mui/material-nextjs": "^9.1.1",
     "@react-pdf/renderer": "^4.4.0",
     "@tailwindcss/postcss": "4.1.7",
     "@types/adm-zip": "^0.5.8",

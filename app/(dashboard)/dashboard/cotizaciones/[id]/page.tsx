@@ -17,6 +17,7 @@ import {
   ArrowLeft, Download, FileText, Loader2, XCircle, CheckCircle,
   Clock, ChevronDown, Mail, Pencil, FileCheck, MoreVertical,
 } from 'lucide-react';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ interface Cotizacion {
   razonSocialComprador: string | null;
   rncComprador:         string | null;
   emailComprador:       string | null;
+  /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+  emailCliente?:        string | null;
   fechaEmision:         string;
   fechaVencimiento:     string | null;
   montoSubtotal:        number;
@@ -91,6 +94,7 @@ export default function CotizacionDetallePage() {
   const params = useParams();
   const router = useRouter();
   const cotId  = params.id as string;
+  const volver = useVolver('/dashboard/cotizaciones');
 
   const [cot, setCot]         = useState<Cotizacion | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +119,9 @@ export default function CotizacionDetallePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando cotización');
       setCot(data.cotizacion);
-      setEmailTo(data.cotizacion?.emailComprador ?? '');
+      // Igual que en facturas: el correo grabado en la cotización y, si no hay,
+      // el de la ficha del cliente.
+      setEmailTo(data.cotizacion?.emailComprador || data.cotizacion?.emailCliente || '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -193,7 +199,7 @@ export default function CotizacionDetallePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     );
   }
@@ -204,7 +210,7 @@ export default function CotizacionDetallePage() {
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
           <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
           <p className="font-medium">{error ?? 'Cotización no encontrada'}</p>
-          <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard/cotizaciones')}>
+          <Button variant="outline" className="mt-4" onClick={volver}>
             Volver a cotizaciones
           </Button>
         </div>
@@ -239,11 +245,9 @@ export default function CotizacionDetallePage() {
       {/* ── Header ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/dashboard/cotizaciones">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Cotizaciones</span>
-            </Link>
+          <Button variant="ghost" size="sm" onClick={volver}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">Cotizaciones</span>
           </Button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -258,7 +262,7 @@ export default function CotizacionDetallePage() {
             <p className="text-xs text-gray-500 mt-0.5">
               Emitida: {fmtDate(cot.fechaEmision)}
               {cot.fechaVencimiento && (
-                <> · Válida hasta: <span className="text-teal-700 font-medium">{fmtDate(cot.fechaVencimiento)}</span></>
+                <> · Válida hasta: <span className="text-zero-700 font-medium">{fmtDate(cot.fechaVencimiento)}</span></>
               )}
             </p>
           </div>
@@ -331,7 +335,7 @@ export default function CotizacionDetallePage() {
                   className="flex items-center gap-2 cursor-pointer"
                   disabled={converting}
                 >
-                  <FileCheck className="h-4 w-4 text-teal-600" />
+                  <FileCheck className="h-4 w-4 text-zero-600" />
                   {converting ? 'Convirtiendo…' : 'Convertir a factura'}
                 </DropdownMenuItem>
               )}
@@ -433,7 +437,7 @@ export default function CotizacionDetallePage() {
           {/* Resumen */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-teal-600" />
+              <FileText className="h-4 w-4 text-zero-600" />
               Resumen
             </h2>
             <div className="space-y-2 text-sm">
@@ -467,7 +471,7 @@ export default function CotizacionDetallePage() {
               {cot.fechaVencimiento && (
                 <div className="flex justify-between gap-3">
                   <dt className="text-gray-500">Vencimiento</dt>
-                  <dd className="text-teal-700 font-medium">{fmtDate(cot.fechaVencimiento)}</dd>
+                  <dd className="text-zero-700 font-medium">{fmtDate(cot.fechaVencimiento)}</dd>
                 </div>
               )}
             </dl>
@@ -479,7 +483,7 @@ export default function CotizacionDetallePage() {
               href={`/api/pdf/cotizacion/${cot.id}`}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
+              className="flex items-center justify-center gap-2 text-sm font-medium text-zero-700 hover:text-zero-800 border border-zero-200 hover:bg-zero-50 rounded-lg py-2 transition-colors"
             >
               <FileText className="h-4 w-4" />
               Ver PDF
@@ -494,7 +498,7 @@ export default function CotizacionDetallePage() {
             </Button>
             {puedeConvertir && (
               <Button
-                className="w-full bg-teal-600 hover:bg-teal-700 text-sm"
+                className="w-full bg-zero-600 hover:bg-zero-700 text-sm"
                 onClick={() => setShowConfirmConvert(true)}
                 disabled={converting}
               >
@@ -508,11 +512,11 @@ export default function CotizacionDetallePage() {
       </div>
 
       {/* ── Bottom bar ───────────────────────────────────────────────────────── */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           variant="outline"
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-          onClick={() => router.push('/dashboard/cotizaciones')}
+          onClick={volver}
         >
           Volver
         </Button>
@@ -535,7 +539,7 @@ export default function CotizacionDetallePage() {
               pantallas chicas la columna cae al final y el botón no se veía. */}
           {puedeConvertir && (
             <Button
-              className="bg-teal-600 hover:bg-teal-700 h-11 sm:h-9 flex-1 sm:flex-none"
+              className="bg-zero-600 hover:bg-zero-700 h-11 sm:h-9 flex-1 sm:flex-none"
               onClick={() => setShowConfirmConvert(true)}
               disabled={converting}
             >
@@ -554,7 +558,7 @@ export default function CotizacionDetallePage() {
         title="Convertir a factura"
         description={<>Se creará un <strong>borrador de factura</strong> a partir de esta cotización ({cot.numero}) y se abrirá para completarla. La cotización se conserva.</>}
         confirmLabel="Convertir"
-        icon={<FileCheck className="h-5 w-5 text-teal-600" />}
+        icon={<FileCheck className="h-5 w-5 text-zero-600" />}
         loading={converting}
         onConfirm={handleConvertir}
       />
@@ -572,7 +576,7 @@ export default function CotizacionDetallePage() {
                 value={emailTo}
                 onChange={(e) => setEmailTo(e.target.value)}
                 placeholder="cliente@dominio.com"
-                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
               />
             </label>
             <p className="text-xs text-gray-500">
@@ -586,7 +590,7 @@ export default function CotizacionDetallePage() {
             <Button
               onClick={handleSendEmail}
               disabled={sendingEmail || !emailTo}
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-zero-600 hover:bg-zero-700"
             >
               {sendingEmail
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>

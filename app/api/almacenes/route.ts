@@ -11,6 +11,9 @@ const schema = z.object({
   direccion:   z.string().max(500).optional().nullable(),
   observacion: z.string().optional().nullable(),
   esDefault:   z.boolean().optional(),
+  // Almacén de uso exclusivo del POS: lo que solo vive acá no aparece en el
+  // catálogo de Facturación (ver lib/productos/visibilidad.ts).
+  soloPos:     z.boolean().optional(),
 });
 
 export async function GET() {
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
     const parsed = schema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
-    const { nombre, direccion, observacion, esDefault } = parsed.data;
+    const { nombre, direccion, observacion, esDefault, soloPos } = parsed.data;
 
     // Si es default, quitar default de los demás
     if (esDefault) {
@@ -46,6 +49,7 @@ export async function POST(req: NextRequest) {
     const [row] = await db.insert(almacenes).values({
       teamId,
       nombre:      nombre.trim(),
+      soloPos:     soloPos ?? false,
       direccion:   direccion?.trim() || null,
       observacion: observacion?.trim() || null,
       esDefault:   esDefault ? 'true' : 'false',

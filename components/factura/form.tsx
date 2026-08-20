@@ -10,7 +10,27 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Loader2, AlertCircle, CheckCircle2, Search, X } from 'lucide-react';
+import { Plus, Trash2, AlertCircle, CheckCircle2, Search, X } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
+import CircularProgress from '@mui/material/CircularProgress';
+import Paper from '@mui/material/Paper';
+import Alert from '@mui/material/Alert';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 import { useFactura } from '@/lib/factura/form';
 import { fmtMoneda, type TasaItbis, type TipoPago } from '@/lib/factura/core';
 
@@ -77,65 +97,117 @@ export function ClienteSearch() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative">
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Buscar cliente <span className="text-gray-400 font-normal">(opcional)</span>
-      </label>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          value={query}
-          onChange={e => handleInput(e.target.value)}
-          onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="Nombre, RNC o beneficiario del cliente..."
-          className="w-full pl-10 pr-10 py-2.5 text-base md:text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-        />
-        {loading ? (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
-        ) : query ? (
-          <button
-            type="button"
-            onClick={() => { setQuery(''); setResults([]); setOpen(false); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-            aria-label="Limpiar búsqueda"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        ) : null}
-      </div>
+    <Box ref={wrapperRef} sx={{ position: 'relative' }}>
+      <Typography
+        component="label"
+        sx={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.5 }}
+      >
+        Buscar cliente <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>(opcional)</Box>
+      </Typography>
+      <TextField
+        fullWidth
+        size="small"
+        value={query}
+        onChange={e => handleInput(e.target.value)}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        placeholder="Nombre, RNC o beneficiario del cliente..."
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search style={{ width: 16, height: 16, color: '#9ca3af' }} />
+              </InputAdornment>
+            ),
+            endAdornment: loading ? (
+              <InputAdornment position="end">
+                <CircularProgress size={16} sx={{ color: '#9ca3af' }} />
+              </InputAdornment>
+            ) : query ? (
+              <InputAdornment position="end">
+                <IconButton
+                  type="button"
+                  size="small"
+                  onClick={() => { setQuery(''); setResults([]); setOpen(false); }}
+                  aria-label="Limpiar búsqueda"
+                  sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          },
+        }}
+      />
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+        <Paper
+          elevation={3}
+          sx={{
+            position: 'absolute',
+            zIndex: 20,
+            mt: 0.5,
+            width: '100%',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            maxHeight: 240,
+            overflow: 'auto',
+          }}
+        >
           {results.length === 0 ? (
-            <div className="px-3 py-3 text-sm text-gray-500">Sin resultados</div>
+            <Box sx={{ px: 1.5, py: 1.5, fontSize: '0.875rem', color: '#6b7280' }}>Sin resultados</Box>
           ) : (
             results.map(c => (
-              <button
+              <Box
                 key={c.id}
+                component="button"
                 type="button"
                 onClick={() => select(c)}
-                className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                sx={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  px: 1.5,
+                  py: 1.25,
+                  font: 'inherit',
+                  bgcolor: 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid #f3f4f6',
+                  cursor: 'pointer',
+                  '&:last-of-type': { borderBottom: 'none' },
+                  '&:hover': { bgcolor: '#f9fafb' },
+                }}
               >
-                <div className="flex items-baseline justify-between gap-3">
-                  <div className="min-w-0 truncate font-medium text-gray-900" title={c.razonSocial}>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
+                  <Typography
+                    title={c.razonSocial}
+                    sx={{ minWidth: 0, fontSize: '0.875rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
                     {c.razonSocial}
-                  </div>
-                  <div className="shrink-0 font-mono text-xs text-gray-500">{c.rnc || '—'}</div>
-                </div>
+                  </Typography>
+                  <Typography sx={{ flexShrink: 0, fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280' }}>
+                    {c.rnc || '—'}
+                  </Typography>
+                </Box>
                 {!!c.dependientes?.length && (
-                  <div className="mt-1 border-t border-gray-200 pt-1">
+                  <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid #e5e7eb' }}>
                     {c.dependientes.map((d) => (
-                      <div key={d} className="truncate text-xs text-blue-600" title={d}>{d}</div>
+                      <Typography
+                        key={d}
+                        title={d}
+                        sx={{ fontSize: '0.75rem', color: '#2563eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {d}
+                      </Typography>
                     ))}
-                  </div>
+                  </Box>
                 )}
-              </button>
+              </Box>
             ))
           )}
-        </div>
+        </Paper>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -150,36 +222,44 @@ export function ClienteSearch() {
 export function FacturaHeader() {
   const { rncComprador, setRncComprador, razonSocial, setRazonSocial } = useFactura();
   return (
-    <div className="space-y-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <ClienteSearch />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            RNC / Cédula / Pasaporte <span className="text-gray-400 font-normal">(opcional)</span>
-          </label>
-          <input
-            type="text"
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+        <Box>
+          <Typography
+            component="label"
+            sx={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.5 }}
+          >
+            RNC / Cédula / Pasaporte <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>(opcional)</Box>
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
             value={rncComprador}
             onChange={e => setRncComprador(e.target.value)}
-            className="w-full px-3 py-2.5 text-base md:text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             placeholder="131988032 o PA123456"
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Razón social <span className="text-gray-400 font-normal">(opcional)</span>
-          </label>
-          <input
-            type="text"
+        </Box>
+        <Box>
+          <Typography
+            component="label"
+            sx={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.5 }}
+          >
+            Razón social <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>(opcional)</Box>
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
             value={razonSocial}
             onChange={e => setRazonSocial(e.target.value)}
-            className="w-full px-3 py-2.5 text-base md:text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             placeholder="Empresa SRL"
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -189,159 +269,197 @@ export function FacturaItems() {
   const { items, addItem, removeItem, updateItem } = useFactura();
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="block text-sm font-medium text-gray-700">Items</label>
-        <button
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Items</Typography>
+        <Button
           type="button"
+          variant="text"
           onClick={addItem}
-          className="text-sm text-orange-600 hover:text-orange-700 flex items-center gap-1 px-2 py-1"
+          startIcon={<Plus style={{ width: 16, height: 16 }} />}
+          sx={{
+            textTransform: 'none',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: '#3658e1',
+            px: 1,
+            py: 0.5,
+            minWidth: 0,
+            '&:hover': { color: '#2a45c4', bgcolor: 'transparent' },
+          }}
         >
-          <Plus className="w-4 h-4" /> Agregar
-        </button>
-      </div>
+          Agregar
+        </Button>
+      </Box>
 
       {/* ─── Móvil: cards ─────────────────────────────────────────────────── */}
-      <div className="md:hidden space-y-3">
+      <Box sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1.5 }}>
         {items.map((it, idx) => (
-          <div key={it.id} className="border border-gray-200 rounded-md p-3 space-y-3 bg-white">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-gray-500">Item #{idx + 1}</span>
+          <Box
+            key={it.id}
+            sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', p: 1.5, bgcolor: '#fff', display: 'flex', flexDirection: 'column', gap: 1.5 }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>Item #{idx + 1}</Typography>
               {items.length > 1 && (
-                <button
+                <IconButton
                   type="button"
+                  size="small"
                   onClick={() => removeItem(it.id)}
-                  className="text-gray-400 hover:text-red-600 p-1"
                   aria-label="Eliminar item"
+                  sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626' } }}
                 >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  <Trash2 style={{ width: 16, height: 16 }} />
+                </IconButton>
               )}
-            </div>
+            </Box>
 
-            <input
-              type="text"
+            <TextField
+              fullWidth
+              size="small"
               value={it.nombre}
               onChange={e => updateItem(it.id, { nombre: e.target.value })}
-              className="w-full px-3 py-2.5 text-base border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               placeholder="Nombre del producto o servicio"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
 
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Cant.</label>
-                <input
-                  type="number" inputMode="numeric" min="1" step="1"
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+              <Box>
+                <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', color: '#4b5563', mb: 0.5 }}>Cant.</Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
                   value={it.cantidad}
                   onChange={e => updateItem(it.id, { cantidad: Number(e.target.value) || 1 })}
-                  className="w-full px-2 py-2 text-base text-right border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  slotProps={{ htmlInput: { min: 1, step: 1, inputMode: 'numeric', style: { textAlign: 'right' } } }}
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Precio</label>
-                <input
-                  type="number" inputMode="decimal" min="0" step="0.01"
+              </Box>
+              <Box>
+                <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', color: '#4b5563', mb: 0.5 }}>Precio</Typography>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
                   value={it.precio || ''}
                   onChange={e => updateItem(it.id, { precio: Number(e.target.value) || 0 })}
-                  className="w-full px-2 py-2 text-base text-right border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   placeholder="0.00"
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal', style: { textAlign: 'right' } } }}
                 />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">ITBIS</label>
-                <select
+              </Box>
+              <Box>
+                <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', color: '#4b5563', mb: 0.5 }}>ITBIS</Typography>
+                <Select
+                  fullWidth
+                  size="small"
                   value={it.tasaItbis}
                   onChange={e => updateItem(it.id, { tasaItbis: Number(e.target.value) as TasaItbis })}
-                  className="w-full px-2 py-2 text-base border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
                 >
-                  <option value={0.18}>18%</option>
-                  <option value={0}>0%</option>
-                </select>
-              </div>
-            </div>
+                  <MenuItem value={0.18}>18%</MenuItem>
+                  <MenuItem value={0}>0%</MenuItem>
+                </Select>
+              </Box>
+            </Box>
 
-            <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-100">
-              <span className="text-gray-500">Total línea</span>
-              <span className="font-medium text-gray-900">
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 1, borderTop: '1px solid #f3f4f6' }}>
+              <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Total línea</Typography>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>
                 {fmtMoneda(it.cantidad * it.precio * (1 + it.tasaItbis))}
-              </span>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ─── Desktop: tabla ───────────────────────────────────────────────── */}
-      <div className="hidden md:block border border-gray-200 rounded-md overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Descripción</th>
-              <th className="px-3 py-2 text-right font-medium w-20">Cant.</th>
-              <th className="px-3 py-2 text-right font-medium w-32">Precio</th>
-              <th className="px-3 py-2 text-right font-medium w-24">ITBIS</th>
-              <th className="px-3 py-2 text-right font-medium w-32">Total</th>
-              <th className="w-10"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
+      <Box sx={{ display: { xs: 'none', md: 'block' }, border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Table
+          size="small"
+          sx={{ '& th': { fontWeight: 500, color: '#6b7280', bgcolor: '#f9fafb', fontSize: '0.875rem' } }}
+        >
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ textAlign: 'left' }}>Descripción</TableCell>
+              <TableCell align="right" sx={{ width: 80 }}>Cant.</TableCell>
+              <TableCell align="right" sx={{ width: 128 }}>Precio</TableCell>
+              <TableCell align="right" sx={{ width: 96 }}>ITBIS</TableCell>
+              <TableCell align="right" sx={{ width: 128 }}>Total</TableCell>
+              <TableCell sx={{ width: 40 }} />
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {items.map(it => (
-              <tr key={it.id}>
-                <td className="px-2 py-1">
-                  <input
-                    type="text"
+              <TableRow key={it.id}>
+                <TableCell sx={{ px: 1, py: 0.5 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
                     value={it.nombre}
                     onChange={e => updateItem(it.id, { nombre: e.target.value })}
-                    className="w-full px-2 py-1 border border-transparent hover:border-gray-300 focus:border-orange-500 rounded outline-none"
                     placeholder="Nombre del producto o servicio"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
                   />
-                </td>
-                <td className="px-2 py-1">
-                  <input
-                    type="number" min="1" step="1"
+                </TableCell>
+                <TableCell sx={{ px: 1, py: 0.5 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
                     value={it.cantidad}
                     onChange={e => updateItem(it.id, { cantidad: Number(e.target.value) || 1 })}
-                    className="w-full px-2 py-1 text-right border border-transparent hover:border-gray-300 focus:border-orange-500 rounded outline-none"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    slotProps={{ htmlInput: { min: 1, step: 1, style: { textAlign: 'right' } } }}
                   />
-                </td>
-                <td className="px-2 py-1">
-                  <input
-                    type="number" min="0" step="0.01"
+                </TableCell>
+                <TableCell sx={{ px: 1, py: 0.5 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
                     value={it.precio || ''}
                     onChange={e => updateItem(it.id, { precio: Number(e.target.value) || 0 })}
-                    className="w-full px-2 py-1 text-right border border-transparent hover:border-gray-300 focus:border-orange-500 rounded outline-none"
                     placeholder="0.00"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    slotProps={{ htmlInput: { min: 0, step: 0.01, style: { textAlign: 'right' } } }}
                   />
-                </td>
-                <td className="px-2 py-1">
-                  <select
+                </TableCell>
+                <TableCell sx={{ px: 1, py: 0.5 }}>
+                  <Select
+                    fullWidth
+                    size="small"
                     value={it.tasaItbis}
                     onChange={e => updateItem(it.id, { tasaItbis: Number(e.target.value) as TasaItbis })}
-                    className="w-full px-2 py-1 text-right border border-transparent hover:border-gray-300 focus:border-orange-500 rounded outline-none bg-white"
+                    sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
                   >
-                    <option value={0.18}>18%</option>
-                    <option value={0}>0%</option>
-                  </select>
-                </td>
-                <td className="px-3 py-2 text-right text-gray-700">
+                    <MenuItem value={0.18}>18%</MenuItem>
+                    <MenuItem value={0}>0%</MenuItem>
+                  </Select>
+                </TableCell>
+                <TableCell align="right" sx={{ fontSize: '0.875rem', color: '#374151', fontVariantNumeric: 'tabular-nums' }}>
                   {fmtMoneda(it.cantidad * it.precio * (1 + it.tasaItbis))}
-                </td>
-                <td className="px-2 py-1 text-center">
+                </TableCell>
+                <TableCell align="center" sx={{ px: 0.5 }}>
                   {items.length > 1 && (
-                    <button
+                    <IconButton
                       type="button"
+                      size="small"
                       onClick={() => removeItem(it.id)}
-                      className="text-gray-400 hover:text-red-600"
+                      aria-label="Eliminar item"
+                      sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626' } }}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <Trash2 style={{ width: 16, height: 16 }} />
+                    </IconButton>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </Box>
+    </Box>
   );
 }
 
@@ -350,42 +468,68 @@ export function FacturaItems() {
 export function FacturaFooter() {
   const { tipoPago, setTipoPago, totales, enviando, emitir, previewAbierto } = useFactura();
   return (
-    <div className="space-y-4 pt-4 border-t border-gray-200">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="w-full sm:w-auto">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de pago</label>
-          <select
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2, borderTop: '1px solid #e5e7eb' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { sm: 'flex-end' },
+          justifyContent: { sm: 'space-between' },
+          gap: 2,
+        }}
+      >
+        <Box sx={{ width: { xs: '100%', sm: 'auto' } }}>
+          <Typography component="label" sx={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.5 }}>
+            Tipo de pago
+          </Typography>
+          <Select
             value={tipoPago}
             onChange={e => setTipoPago(Number(e.target.value) as TipoPago)}
-            className="w-full sm:w-auto px-3 py-2.5 text-base md:text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            size="small"
+            sx={{ width: { xs: '100%', sm: 'auto' }, minWidth: 160, borderRadius: '8px', fontSize: '0.875rem' }}
           >
-            <option value={1}>Contado</option>
-            <option value={2}>Crédito</option>
-          </select>
-        </div>
+            <MenuItem value={1}>Contado</MenuItem>
+            <MenuItem value={2}>Crédito</MenuItem>
+          </Select>
+        </Box>
 
-        <div className="text-right space-y-1 text-sm w-full sm:w-auto">
-          <div className="flex justify-between sm:gap-8 text-gray-600">
-            <span>Subtotal:</span><span>{fmtMoneda(totales.subtotal)}</span>
-          </div>
-          <div className="flex justify-between sm:gap-8 text-gray-600">
-            <span>ITBIS:</span><span>{fmtMoneda(totales.totalItbis)}</span>
-          </div>
-          <div className="flex justify-between sm:gap-8 text-base font-semibold text-gray-900 pt-1 border-t border-gray-200">
-            <span>Total:</span><span>{fmtMoneda(totales.montoTotal)}</span>
-          </div>
-        </div>
-      </div>
+        <Box sx={{ width: { xs: '100%', sm: 'auto' }, display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.875rem' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: { sm: 4 }, color: '#4b5563' }}>
+            <Box component="span">Subtotal:</Box>
+            <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoneda(totales.subtotal)}</Box>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: { sm: 4 }, color: '#4b5563' }}>
+            <Box component="span">ITBIS:</Box>
+            <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoneda(totales.totalItbis)}</Box>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: { sm: 4 }, fontSize: '1rem', fontWeight: 600, color: '#111827', pt: 0.5, borderTop: '1px solid #e5e7eb' }}>
+            <Box component="span">Total:</Box>
+            <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoneda(totales.montoTotal)}</Box>
+          </Box>
+        </Box>
+      </Box>
 
-      <button
+      <Button
         type="button"
+        variant="contained"
+        disableElevation
         onClick={emitir}
         disabled={enviando || previewAbierto}
-        className="w-full sm:w-auto sm:ml-auto sm:flex px-6 py-3 sm:py-2.5 bg-orange-600 text-white font-medium rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        sx={{
+          width: { xs: '100%', sm: 'auto' },
+          alignSelf: { sm: 'flex-end' },
+          px: 3,
+          py: { xs: 1.5, sm: 1.25 },
+          textTransform: 'none',
+          fontWeight: 500,
+          bgcolor: '#3658e1',
+          '&:hover': { bgcolor: '#2a45c4' },
+          '&.Mui-disabled': { bgcolor: '#3658e180', color: '#fff' },
+        }}
       >
         Revisar y emitir
-      </button>
-    </div>
+      </Button>
+    </Box>
   );
 }
 
@@ -397,22 +541,26 @@ export function FacturaMessages() {
   const visibleError = previewAbierto ? null : error;
   if (!visibleError && !exito) return null;
   return (
-    <div className="space-y-2">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {visibleError && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
-          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>{visibleError}</span>
-        </div>
+        <Alert
+          severity="error"
+          icon={<AlertCircle style={{ width: 16, height: 16 }} />}
+          sx={{ borderRadius: '8px', alignItems: 'flex-start', '& .MuiAlert-message': { fontSize: '0.875rem' } }}
+        >
+          {visibleError}
+        </Alert>
       )}
       {exito && (
-        <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-800">
-          <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span className="break-all">
-            Factura emitida: <strong>{exito.encf}</strong> — Estado: {exito.estado}
-          </span>
-        </div>
+        <Alert
+          severity="success"
+          icon={<CheckCircle2 style={{ width: 16, height: 16 }} />}
+          sx={{ borderRadius: '8px', alignItems: 'flex-start', '& .MuiAlert-message': { fontSize: '0.875rem', wordBreak: 'break-all' } }}
+        >
+          Factura emitida: <Box component="strong" sx={{ fontWeight: 700 }}>{exito.encf}</Box> — Estado: {exito.estado}
+        </Alert>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -429,142 +577,183 @@ export function FacturaPreview() {
     enviando, error, previewAbierto, confirmar, cancelarPreview,
   } = useFactura();
 
-  if (!previewAbierto) return null;
-
   const itemsValidos = items.filter(it => it.nombre.trim() && it.precio > 0);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      onClick={cancelarPreview}
+    <Dialog
+      open={previewAbierto}
+      onClose={cancelarPreview}
+      fullWidth
+      scroll="paper"
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 672, width: '100%', maxHeight: { xs: '95vh', sm: '90vh' } } } as object }}
     >
-      <div
-        className="bg-white w-full sm:max-w-2xl sm:rounded-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-t-lg overflow-hidden"
-        onClick={e => e.stopPropagation()}
+      {/* Header del modal */}
+      <DialogTitle
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          px: { xs: 2, sm: 3 },
+          py: 1.5,
+          borderBottom: '1px solid #e5e7eb',
+          fontSize: { xs: '1rem', sm: '1.125rem' },
+          fontWeight: 600,
+          color: '#111827',
+        }}
       >
-        {/* Header del modal */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-900">
-            Pre-factura — Revisar antes de emitir
-          </h2>
-          <button
-            type="button"
-            onClick={cancelarPreview}
-            className="p-1 text-gray-400 hover:text-gray-600"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        Pre-factura — Revisar antes de emitir
+        <IconButton
+          type="button"
+          size="small"
+          onClick={cancelarPreview}
+          aria-label="Cerrar"
+          sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+        >
+          <X style={{ width: 20, height: 20 }} />
+        </IconButton>
+      </DialogTitle>
 
-        {/* Contenido scrollable */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-5">
-          {/* Cliente */}
-          <section>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-              Cliente
-            </h3>
-            {razonSocial.trim() ? (
-              <div className="space-y-0.5">
-                <p className="font-medium text-gray-900">{razonSocial}</p>
-                {rncComprador.trim() && (
-                  <p className="text-sm text-gray-600">RNC: {rncComprador}</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500 italic">Consumidor final</p>
-            )}
-          </section>
-
-          {/* Items */}
-          <section>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-              Items ({itemsValidos.length})
-            </h3>
-            <div className="border border-gray-200 rounded-md overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs text-gray-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Descripción</th>
-                    <th className="px-2 py-2 text-right font-medium">Cant.</th>
-                    <th className="px-2 py-2 text-right font-medium hidden sm:table-cell">Precio</th>
-                    <th className="px-3 py-2 text-right font-medium">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {itemsValidos.map(it => (
-                    <tr key={it.id}>
-                      <td className="px-3 py-2 text-gray-900">{it.nombre}</td>
-                      <td className="px-2 py-2 text-right text-gray-600">{it.cantidad}</td>
-                      <td className="px-2 py-2 text-right text-gray-600 hidden sm:table-cell">
-                        {fmtMoneda(it.precio)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-900 font-medium">
-                        {fmtMoneda(it.cantidad * it.precio * (1 + it.tasaItbis))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Totales */}
-          <section className="border-t border-gray-200 pt-4 space-y-1.5 text-sm">
-            <div className="flex justify-between text-gray-600">
-              <span>Subtotal:</span>
-              <span>{fmtMoneda(totales.subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-gray-600">
-              <span>ITBIS:</span>
-              <span>{fmtMoneda(totales.totalItbis)}</span>
-            </div>
-            <div className="flex justify-between text-base font-bold text-gray-900 pt-1.5 border-t border-gray-100">
-              <span>Total:</span>
-              <span>{fmtMoneda(totales.montoTotal)}</span>
-            </div>
-          </section>
-
-          {/* Tipo de pago */}
-          <section className="text-sm">
-            <span className="text-gray-500">Tipo de pago: </span>
-            <span className="font-medium text-gray-900">
-              {tipoPago === 1 ? 'Contado' : tipoPago === 2 ? 'Crédito' : 'Gratuito'}
-            </span>
-          </section>
-
-          {/* Error de la API (si falla el envío) */}
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
+      {/* Contenido scrollable */}
+      <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: 2, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        {/* Cliente */}
+        <Box component="section">
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+            Cliente
+          </Typography>
+          {razonSocial.trim() ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+              <Typography sx={{ fontWeight: 500, color: '#111827' }}>{razonSocial}</Typography>
+              {rncComprador.trim() && (
+                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>RNC: {rncComprador}</Typography>
+              )}
+            </Box>
+          ) : (
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', fontStyle: 'italic' }}>Consumidor final</Typography>
           )}
-        </div>
+        </Box>
 
-        {/* Footer del modal */}
-        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 px-4 sm:px-6 py-3 border-t border-gray-200 bg-gray-50">
-          <button
-            type="button"
-            onClick={cancelarPreview}
-            disabled={enviando}
-            className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+        {/* Items */}
+        <Box component="section">
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1 }}>
+            Items ({itemsValidos.length})
+          </Typography>
+          <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+            <Table size="small" sx={{ '& th': { fontWeight: 500, color: '#6b7280', bgcolor: '#f9fafb', fontSize: '0.75rem' } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ textAlign: 'left' }}>Descripción</TableCell>
+                  <TableCell align="right">Cant.</TableCell>
+                  <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Precio</TableCell>
+                  <TableCell align="right">Total</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {itemsValidos.map(it => (
+                  <TableRow key={it.id}>
+                    <TableCell sx={{ color: '#111827' }}>{it.nombre}</TableCell>
+                    <TableCell align="right" sx={{ color: '#4b5563', fontVariantNumeric: 'tabular-nums' }}>{it.cantidad}</TableCell>
+                    <TableCell align="right" sx={{ color: '#4b5563', fontVariantNumeric: 'tabular-nums', display: { xs: 'none', sm: 'table-cell' } }}>
+                      {fmtMoneda(it.precio)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: '#111827', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtMoneda(it.cantidad * it.precio * (1 + it.tasaItbis))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        </Box>
+
+        {/* Totales */}
+        <Box component="section" sx={{ borderTop: '1px solid #e5e7eb', pt: 2, display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.875rem' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#4b5563' }}>
+            <Box component="span">Subtotal:</Box>
+            <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoneda(totales.subtotal)}</Box>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#4b5563' }}>
+            <Box component="span">ITBIS:</Box>
+            <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoneda(totales.totalItbis)}</Box>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 700, color: '#111827', pt: 0.75, borderTop: '1px solid #f3f4f6' }}>
+            <Box component="span">Total:</Box>
+            <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoneda(totales.montoTotal)}</Box>
+          </Box>
+        </Box>
+
+        {/* Tipo de pago */}
+        <Box component="section" sx={{ fontSize: '0.875rem' }}>
+          <Box component="span" sx={{ color: '#6b7280' }}>Tipo de pago: </Box>
+          <Box component="span" sx={{ fontWeight: 500, color: '#111827' }}>
+            {tipoPago === 1 ? 'Contado' : tipoPago === 2 ? 'Crédito' : 'Gratuito'}
+          </Box>
+        </Box>
+
+        {/* Error de la API (si falla el envío) */}
+        {error && (
+          <Alert
+            severity="error"
+            icon={<AlertCircle style={{ width: 16, height: 16 }} />}
+            sx={{ borderRadius: '8px', alignItems: 'flex-start', '& .MuiAlert-message': { fontSize: '0.875rem' } }}
           >
-            Editar
-          </button>
-          <button
-            type="button"
-            onClick={confirmar}
-            disabled={enviando}
-            className="w-full sm:flex-1 px-4 py-2.5 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {enviando ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Emitiendo...</>
-            ) : 'Confirmar y emitir'}
-          </button>
-        </div>
-      </div>
-    </div>
+            {error}
+          </Alert>
+        )}
+      </DialogContent>
+
+      {/* Footer del modal */}
+      <DialogActions
+        sx={{
+          flexDirection: { xs: 'column-reverse', sm: 'row' },
+          gap: 1,
+          px: { xs: 2, sm: 3 },
+          py: 1.5,
+          borderTop: '1px solid #e5e7eb',
+          bgcolor: '#f9fafb',
+        }}
+      >
+        <Button
+          type="button"
+          variant="outlined"
+          onClick={cancelarPreview}
+          disabled={enviando}
+          sx={{
+            width: { xs: '100%', sm: 'auto' },
+            textTransform: 'none',
+            fontWeight: 500,
+            color: '#374151',
+            borderColor: '#d1d5db',
+            bgcolor: '#fff',
+            '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+          }}
+        >
+          Editar
+        </Button>
+        <Button
+          type="button"
+          variant="contained"
+          disableElevation
+          onClick={confirmar}
+          disabled={enviando}
+          sx={{
+            width: { xs: '100%', sm: 'auto' },
+            flex: { sm: 1 },
+            textTransform: 'none',
+            fontWeight: 500,
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { bgcolor: '#3658e180', color: '#fff' },
+          }}
+        >
+          {enviando ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CircularProgress size={16} sx={{ color: 'inherit' }} /> Emitiendo...
+            </Box>
+          ) : 'Confirmar y emitir'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -573,12 +762,23 @@ export function FacturaPreview() {
 export function FacturaForm() {
   return (
     <>
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sm:p-6 space-y-6">
+      <Box
+        sx={{
+          bgcolor: '#fff',
+          borderRadius: '12px',
+          border: '1px solid #e5e7eb',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          p: { xs: 2, sm: 3 },
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3,
+        }}
+      >
         <FacturaHeader />
         <FacturaItems />
         <FacturaFooter />
         <FacturaMessages />
-      </div>
+      </Box>
       <FacturaPreview />
     </>
   );

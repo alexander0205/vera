@@ -69,6 +69,7 @@ export async function GET(
     cobrosCountRows,
     resumenRows,
     excepcionesRows,
+    cobrosDetalleRows,
   ] = await Promise.all([
     // Cajero
     db.select({ name: users.name, email: users.email })
@@ -168,6 +169,30 @@ export async function GET(
       ORDER BY (monto_total - pagado) DESC
       LIMIT ${EXCEPCIONES_MAX + 1}
     `),
+
+    // Cobro por cobro, con su factura y su cliente.
+    //
+    // Es lo que hay que poder mirar cuando el conteo no cuadra: los agregados
+    // dicen CUÁNTO se esperaba, y esto dice DE DÓNDE salió cada peso. Sin esta
+    // lista, entender un descuadre obligaba a consultar la base de datos —fue
+    // exactamente lo que hubo que hacer para explicarle a un cliente por qué su
+    // caja decía 21 mil y él tenía otra cifra en la cabeza.
+    //
+    // Acotado por turno, así que son decenas de filas, no miles. Se ordena por
+    // hora: el cajero reconstruye su día leyendo de arriba abajo.
+    db.execute<{
+      id: number; metodo: string | null; monto_centavos: number; created_at: string;
+      referencia: string | null; codigo: string | null; encf: string | null;
+      cliente: string | null; estado: string;
+    }>(sql`
+      SELECT p.id, p.metodo, p.monto_centavos, p.created_at, p.referencia,
+             d.codigo, d.encf, d.razon_social_comprador AS cliente, d.estado
+        FROM pagos_recibidos p
+        JOIN ecf_documents d ON d.id = p.ecf_document_id
+       WHERE p.team_id = ${teamId} AND p.turno_caja_id = ${turnoId}
+         AND d.estado <> 'ANULADO'
+       ORDER BY p.created_at
+    `),
   ]);
 
   const cajero   = cajeroRows[0]   ?? null;
@@ -237,12 +262,31 @@ export async function GET(
     };
   });
 
+  // Cobro por cobro, ya traducido a lo que la tabla pinta.
+  const cobros = (cobrosDetalleRows as unknown as Array<{
+    id: number; metodo: string | null; monto_centavos: string | number; created_at: string;
+    referencia: string | null; codigo: string | null; encf: string | null;
+    cliente: string | null; estado: string;
+  }>).map(c => ({
+    id: c.id,
+    metodo: labelMetodo(c.metodo),
+    esEfectivo: esEfectivo(c.metodo),
+    montoCentavos: Number(c.monto_centavos ?? 0),
+    fecha: c.created_at,
+    referencia: c.referencia,
+    codigo: c.codigo,
+    encf: c.encf,
+    cliente: c.cliente,
+    estado: c.estado,
+  }));
+
   return NextResponse.json({
     turno,
     cajero,
     aprobador,
     teamName,
     pagos,
+    cobros,
     totalCobrosCentavos,
     // El efectivo es lo único que el conteo físico puede desmentir; el resto se
     // cobró pero nunca pasó por la gaveta. Separarlos evita que el owner busque

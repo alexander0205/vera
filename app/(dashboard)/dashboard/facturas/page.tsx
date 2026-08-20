@@ -2,14 +2,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Ban, FileText, Upload, Eye,
+  Plus, Download, Ban, FileText, Upload, Eye, Store,
 } from 'lucide-react';
+import Chip from '@mui/material/Chip';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { guardarListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -21,7 +23,7 @@ const ESTADOS = [
   { value: 'ACEPTADO_CONDICIONAL', label: 'Aceptado condicional' },
   { value: 'RECHAZADO',            label: 'Rechazado' },
   { value: 'ANULADO',              label: 'Anulado' },
-  { value: 'HISTORICA',            label: 'Histórica (Alegra)' },
+  { value: 'HISTORICA',            label: 'Histórica (importada)' },
 ];
 
 // Etiqueta legible para el badge de estado DGII
@@ -96,6 +98,8 @@ interface Doc {
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
+  turnoCajaId?: number | null;
+  tipoOrden?: string | null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -187,10 +191,30 @@ export default function FacturasPage() {
         // todas las filas y se comía media columna. El completo, en el tooltip.
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-zero-700 underline decoration-zero-200 underline-offset-2 hover:decoration-zero-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
+          {/* El código corto es de esta rama; el sello POS viene de la del
+              punto de venta. Se quedan los dos: uno dice CUÁL factura es y el
+              otro DE DÓNDE salió, y en una lista mezclada las dos preguntas se
+              hacen a la vez. El <Typography> de allá se cayó porque repetía
+              punto por punto los estilos que ya trae el <Link>. */}
           {doc.codigo ? fmtCodigoCorto(doc.codigo) : `#${doc.id}`}
+          {doc.tipoOrden != null && (
+            <Chip
+              icon={<Store style={{ width: 11, height: 11 }} />}
+              label="POS"
+              size="small"
+              title="Venta hecha en el Punto de Venta"
+              sx={{
+                mt: '3px', height: 18, borderRadius: '6px',
+                bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fe',
+                fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.03em',
+                '& .MuiChip-label': { px: '5px' },
+                '& .MuiChip-icon': { ml: '4px', mr: '-2px', color: '#2a45c4' },
+              }}
+            />
+          )}
         </Link>
       ),
     },
@@ -417,6 +441,9 @@ export default function FacturasPage() {
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
+        // El detalle usa este orden para las flechas «‹ 2 de 548 ›»: recorre
+        // lo que el usuario tiene filtrado delante, no todo el histórico.
+        onVisibleRowsChange={ids => guardarListaNavegacion('/dashboard/facturas', ids as number[])}
         rowActions={rowActions}
         pagination={{
           page,
@@ -428,7 +455,7 @@ export default function FacturasPage() {
           icon: FileText,
           title: 'No se encontraron comprobantes',
           cta: canCrear ? (
-            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:underline">
+            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-zero-600 hover:underline">
               <Plus className="h-4 w-4" /> Emitir primer comprobante
             </Link>
           ) : undefined,
@@ -438,7 +465,7 @@ export default function FacturasPage() {
             {canCrear && (
               <button onClick={() => setShowImport(true)}
                 className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
-                <Upload className="h-4 w-4" /> Importar de Alegra
+                <Upload className="h-4 w-4" /> Importar CSV
               </button>
             )}
             {canExportar && (
@@ -449,7 +476,7 @@ export default function FacturasPage() {
             )}
             {canCrear && (
               <Link href="/dashboard/facturas/nueva"
-                className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium transition-colors">
+                className="flex items-center gap-1.5 bg-zero-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-zero-700 font-medium transition-colors">
                 <Plus className="h-4 w-4" /> Nueva Factura
               </Link>
             )}
@@ -461,8 +488,8 @@ export default function FacturasPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         endpoint="/api/import/facturas"
-        title="Importar facturas de Alegra"
-        helpText="CSV de Alegra (Facturas). Se agrupan por código, no van a DGII (estado Histórica). Crea clientes y productos faltantes. Dedup por código."
+        title="Importar facturas desde CSV"
+        helpText="CSV de facturas. Se agrupan por código, no van a DGII (estado Histórica). Crea clientes y productos faltantes. Dedup por código."
         columns={[
           { key: 'codigo',        label: 'Código' },
           { key: 'fecha',         label: 'Fecha' },

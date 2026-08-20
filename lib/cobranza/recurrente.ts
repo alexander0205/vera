@@ -12,6 +12,9 @@ import { and, eq, ne } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import {
+  reflejarFacturaRecurrenteEnCargo, mesYaFacturadoAMano,
+} from '@/lib/administracion-escolar/facturacion-recurrente';
 
 export interface GenerarFacturaResult {
   ok: true;
@@ -23,6 +26,8 @@ export type GenerarFacturaError =
   | { ok: false; reason: 'no_sequence' }
   | { ok: false; reason: 'not_found' }
   | { ok: false; reason: 'already_generated' }
+  /** El mes ya se facturó a mano desde la ficha del estudiante. */
+  | { ok: false; reason: 'ya_facturado_a_mano' }
   | { ok: false; reason: string };
 
 /**
@@ -117,6 +122,14 @@ export async function generarFacturaDeRecurrente(
     return { ok: false, reason: 'already_generated' };
   }
 
+  // Candado contra la doble factura del mismo mes. El chequeo de arriba solo ve
+  // las facturas que nacieron de ESTA recurrente; la que hizo la secretaria a
+  // mano desde la ficha del estudiante no lleva `origenRecurrenteId` y por ahí
+  // es invisible. Se mira el cargo del mes, que es lo único que tocan las dos.
+  if (await mesYaFacturadoAMano(fr.id, periodo)) {
+    return { ok: false, reason: 'ya_facturado_a_mano' };
+  }
+
   // Parsear ítems y calcular totales
   let montoTotal = fr.totalEstimado;
   let totalItbis = 0;
@@ -127,8 +140,14 @@ export async function generarFacturaDeRecurrente(
     if (Array.isArray(items) && items.length > 0) {
       const totales = calcularTotales(items);
       // calcularTotales devuelve DOP; la columna montoTotal/totalItbis es en centavos.
-      montoTotal = Math.round(totales.montoTotal * 100);
-      totalItbis = Math.round(totales.totalItbis * 100);
+      const mt = Math.round(totales.montoTotal * 100);
+      const ti = Math.round(totales.totalItbis * 100);
+      // Guard: items con shape legacy/incompleto (p.ej. `precioUnitario` en vez
+      // de `precioUnitarioItem`) hacen que calcularTotales devuelva NaN. En ese
+      // caso caemos a `totalEstimado` (ya en centavos) en vez de insertar NaN y
+      // romper con "invalid input syntax for type integer: NaN".
+      if (Number.isFinite(mt)) montoTotal = mt;
+      if (Number.isFinite(ti)) totalItbis = ti;
     }
   } catch {
     // fallback a totalEstimado si el JSON es inválido
@@ -144,12 +163,14 @@ export async function generarFacturaDeRecurrente(
     ? ''
     : `BOR-${fr.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
-  // Fecha límite de pago para crédito
+  // Fecha límite de pago para crédito. Parte del período generado, no del día
+  // en que corra el cron (un catch-up no debe mover el vencimiento escolar).
   let fechaLimitePago: string | null = null;
   if (fr.tipoPago === 2 && fr.diasParaPago && fr.diasParaPago > 0) {
-    const limite = new Date();
+    const [py, pm, pd] = periodo.split('-').map(Number);
+    const limite = new Date(py, pm - 1, pd, 12, 0, 0);
     limite.setDate(limite.getDate() + fr.diasParaPago);
-    fechaLimitePago = limite.toISOString().slice(0, 10);
+    fechaLimitePago = `${limite.getFullYear()}-${String(limite.getMonth() + 1).padStart(2, '0')}-${String(limite.getDate()).padStart(2, '0')}`;
   }
 
   const codigo     = await generarCodigoFactura(db, { teamId: fr.teamId, userId: null, tipoEcf: fr.tipoEcf });
@@ -183,6 +204,16 @@ export async function generarFacturaDeRecurrente(
       fechaEmision,
     })
     .returning({ id: ecfDocuments.id });
+
+  // Si plan pertenece a una matrícula, reflejar esta factura en el cargo exacto
+  // de su mes. Recurrentes no escolares salen inmediatamente sin efecto.
+  await reflejarFacturaRecurrenteEnCargo({
+    facturaRecurrenteId: fr.id,
+    documentoId: inserted.id,
+    periodo,
+    montoCentavos: montoTotal,
+    fechaVencimiento: fechaLimitePago,
+  });
 
   // NB: NO se avanza la secuencia — esto es un borrador. La secuencia se consume
   // al emitir a DGII (emitir-ecf), que asigna el e-NCF fiscal real.

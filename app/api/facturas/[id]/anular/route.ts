@@ -180,6 +180,9 @@ export async function POST(
       const lineas = JSON.parse(doc.lineasJson) as Array<Record<string, unknown>>;
       const items = lineas.map(i => ({
         productoId:             i.productoId             ? Number(i.productoId)   : null,
+        // A qué talla vuelve cada unidad. Sin esto la devolución entraba al
+        // total del producto sin tocar ninguna variante.
+        variantId:              i.variantId              ? Number(i.variantId)    : null,
         cantidadItem:           i.cantidadItem           ? Number(i.cantidadItem) : 1,
         indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 : 2 as 1 | 2,
       }));

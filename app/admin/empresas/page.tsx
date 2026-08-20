@@ -1,113 +1,102 @@
 import { db } from '@/lib/db/drizzle';
-import { teams, teamMembers, users, ecfDocuments } from '@/lib/db/schema';
-import { desc, count, eq } from 'drizzle-orm';
-import { Building2, Plus, Users } from 'lucide-react';
+import { teams, teamMembers, ecfDocuments } from '@/lib/db/schema';
+import { desc, count } from 'drizzle-orm';
 import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import { Building2, Plus, Users } from 'lucide-react';
 
 export default async function AdminEmpresasPage() {
   const allTeams = await db
     .select({
-      id:                 teams.id,
-      name:               teams.name,
-      rnc:                teams.rnc,
-      razonSocial:        teams.razonSocial,
-      planName:           teams.planName,
-      subscriptionStatus: teams.subscriptionStatus,
-      createdAt:          teams.createdAt,
+      id: teams.id, name: teams.name, rnc: teams.rnc,
+      razonSocial: teams.razonSocial, planName: teams.planName,
+      subscriptionStatus: teams.subscriptionStatus, createdAt: teams.createdAt,
     })
     .from(teams)
     .orderBy(desc(teams.createdAt))
     .limit(500);
 
-  // Contar miembros y facturas por team
-  const memberCounts = await db
-    .select({ teamId: teamMembers.teamId, c: count() })
-    .from(teamMembers)
-    .groupBy(teamMembers.teamId);
-
-  const docCounts = await db
-    .select({ teamId: ecfDocuments.teamId, c: count() })
-    .from(ecfDocuments)
-    .groupBy(ecfDocuments.teamId);
-
-  const memberMap = Object.fromEntries(memberCounts.map(r => [r.teamId, r.c]));
-  const docMap    = Object.fromEntries(docCounts.map(r => [r.teamId, r.c]));
+  const memberCounts = await db.select({ teamId: teamMembers.teamId, c: count() }).from(teamMembers).groupBy(teamMembers.teamId);
+  const docCounts    = await db.select({ teamId: ecfDocuments.teamId, c: count() }).from(ecfDocuments).groupBy(ecfDocuments.teamId);
+  const memberMap    = Object.fromEntries(memberCounts.map(r => [r.teamId, r.c]));
+  const docMap       = Object.fromEntries(docCounts.map(r => [r.teamId, r.c]));
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">
-          Empresas ({allTeams.length})
-        </h1>
-        <Link
-          href="/admin/empresas/nueva"
-          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva empresa
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827' }}>Empresas ({allTeams.length})</Typography>
+        <Link href="/admin/empresas/nueva" style={{ textDecoration: 'none' }}>
+          <Button variant="contained" disableElevation startIcon={<Plus size={16} />}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+            Nueva empresa
+          </Button>
         </Link>
-      </div>
+      </Box>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
         {allTeams.length === 0 ? (
-          <div className="py-16 text-center">
-            <Building2 className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-500 mb-4">No hay empresas registradas</p>
-            <Link
-              href="/admin/empresas/nueva"
-              className="inline-flex items-center gap-2 bg-teal-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-teal-700"
-            >
-              <Plus className="w-4 h-4" /> Crear primera empresa
+          <Box sx={{ py: 8, textAlign: 'center' }}>
+            <Building2 size={40} color="#e5e7eb" style={{ margin: '0 auto 12px' }} />
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 2 }}>No hay empresas registradas</Typography>
+            <Link href="/admin/empresas/nueva" style={{ textDecoration: 'none' }}>
+              <Button variant="contained" disableElevation startIcon={<Plus size={16} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+                Crear primera empresa
+              </Button>
             </Link>
-          </div>
+          </Box>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Empresa</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">RNC</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Usuarios</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Facturas</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Creada</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {allTeams.map(t => (
-                <tr key={t.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{t.razonSocial ?? t.name}</p>
-                    {t.razonSocial && t.razonSocial !== t.name && (
-                      <p className="text-xs text-gray-400">{t.name}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs font-mono text-gray-600">{t.rnc ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className="flex items-center gap-1 text-gray-600">
-                      <Users className="w-3 h-3" />
-                      {memberMap[t.id] ?? 0}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{(docMap[t.id] ?? 0).toLocaleString('es-DO')}</td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
-                    {new Date(t.createdAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/empresas/${t.id}`}
-                      className="text-xs text-teal-600 hover:text-teal-800 font-medium"
-                    >
-                      Ver →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 640 }}>
+              <TableHead>
+                <TableRow sx={{ '& th': { fontWeight: 600, color: '#6b7280', fontSize: '0.75rem', bgcolor: '#f9fafb', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid #f3f4f6' } }}>
+                  <TableCell>Empresa</TableCell>
+                  <TableCell>RNC</TableCell>
+                  <TableCell>Usuarios</TableCell>
+                  <TableCell>Facturas</TableCell>
+                  <TableCell>Creada</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {allTeams.map(t => (
+                  <TableRow key={t.id} sx={{ '&:hover': { bgcolor: '#f9fafb' }, '& td': { borderBottom: '1px solid #f3f4f6' } }}>
+                    <TableCell>
+                      <Typography sx={{ fontWeight: 500, color: '#111827', fontSize: '0.875rem' }}>{t.razonSocial ?? t.name}</Typography>
+                      {t.razonSocial && t.razonSocial !== t.name && (
+                        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{t.name}</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Typography sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#4b5563' }}>{t.rnc ?? '—'}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#4b5563' }}>
+                        <Users size={12} />
+                        <Typography sx={{ fontSize: '0.875rem' }}>{memberMap[t.id] ?? 0}</Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell><Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>{(docMap[t.id] ?? 0).toLocaleString('es-DO')}</Typography></TableCell>
+                    <TableCell><Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{new Date(t.createdAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}</Typography></TableCell>
+                    <TableCell>
+                      <Link href={`/admin/empresas/${t.id}`} style={{ textDecoration: 'none', color: '#3658e1', fontSize: '0.75rem', fontWeight: 500 }}>
+                        Ver →
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

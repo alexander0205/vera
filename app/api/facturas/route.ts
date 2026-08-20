@@ -18,16 +18,31 @@ export async function GET(req: NextRequest) {
   const hasta = sp.get('hasta') ?? '';
   // NCA-22: filtro "conNcs" — facturas con NCs/débitos asociados
   const conNcs = sp.get('conNcs') === '1' || sp.get('conNcs') === 'true';
+  // Filtro por cliente — usado por módulos que necesitan las facturas de UN
+  // cliente puntual (ej. administración escolar: facturas del tutor).
+  const clientId = sp.get('clientId') ? parseInt(sp.get('clientId')!, 10) : null;
+  // Filtro por dependiente — afina clientId a las facturas de UN hijo puntual
+  // (ej. administración escolar: perfil de un estudiante específico, no todos
+  // los hijos del mismo tutor). Aditivo: solo aplica si se manda.
+  const dependienteId = sp.get('dependienteId') ? parseInt(sp.get('dependienteId')!, 10) : null;
   const limit = Math.min(parseInt(sp.get('limit') ?? '50', 10), 200);
   const offset = parseInt(sp.get('offset') ?? '0', 10);
 
-  // Facturas históricas (estado=HISTORICA, tipoEcf='00') importadas de Alegra
+  // Facturas históricas (estado=HISTORICA, tipoEcf='00') importadas por CSV
   // SÍ se listan aquí como ventas — además de en /dashboard/cuentas-por-cobrar.
   const conditions = [
     eq(ecfDocuments.teamId, teamId),
     // Las Notas de Crédito (34) y Débito (33) tienen su propia pantalla — no se listan aquí.
     sql`${ecfDocuments.tipoEcf} NOT IN ('33', '34')`,
   ];
+
+  if (clientId) {
+    conditions.push(eq(ecfDocuments.clientId, clientId));
+  }
+
+  if (dependienteId) {
+    conditions.push(eq(ecfDocuments.dependienteId, dependienteId));
+  }
 
   if (search) {
     conditions.push(
@@ -122,6 +137,10 @@ export async function GET(req: NextRequest) {
         ), 0)`,
         createdByName:     users.name,
         dependienteNombre: ecfDocuments.dependienteNombre,
+        // Un turno concilia el cobro, pero no identifica el origen: Facturación
+        // también puede cobrar mientras hay turno abierto. `tipoOrden` es POS.
+        turnoCajaId:       ecfDocuments.turnoCajaId,
+        tipoOrden:         ecfDocuments.tipoOrden,
       })
       .from(ecfDocuments)
       .leftJoin(users, eq(users.id, ecfDocuments.createdBy))

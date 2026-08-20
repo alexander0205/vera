@@ -4,29 +4,29 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 dotenv.config({ path: '.env.local' }); dotenv.config();
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require', max: 1 });
+
+/**
+ * Aplica LAS DOS migraciones que llevan el número 0078.
+ *
+ * El número está duplicado: la rama de facturación y la de gobernanza escolar
+ * avanzaron en paralelo y ambas llegaron a 0078 con cambios distintos. Al
+ * juntarlas no se renumeró ninguna porque las escolares se apoyan unas en
+ * otras —0075 crea las tablas que 0109 modifica— y moverlas de sitio las
+ * dejaría corriendo después de quien las necesita.
+ *
+ * Las dos son idempotentes, así que correr esto sobre una base que ya tenga
+ * una de las dos no rompe nada.
+ */
+const MIGRACIONES = [
+  '0078_administracion_escolar_estudiante_sexo.sql',
+  '0078_cotizaciones_retenciones_comentario_pie.sql',
+];
+
 (async () => {
-  const host = new URL(process.env.POSTGRES_URL!).host;
-  console.log(`→ Base: ${host}`);
-
-  const t = readFileSync(join(process.cwd(), 'lib/db/migrations/0078_mora_monto_y_periodica.sql'), 'utf-8');
-  await sql.unsafe(t);
-  console.log('✓ Migración 0078 ejecutada.');
-
-  // Verificación real contra information_schema (el workflow Neon miente).
-  const cols = await sql`
-    SELECT table_name, column_name, data_type
-      FROM information_schema.columns
-     WHERE (table_name = 'teams' AND column_name LIKE 'recargo_mora_%')
-        OR (table_name = 'ecf_documents' AND column_name IN ('mora_modo','mora_monto_cents','mora_periodo'))
-        OR (table_name = 'facturas_recurrentes' AND column_name IN ('mora_modo','mora_monto_cents'))
-     ORDER BY table_name, column_name`;
-  console.table(cols);
-
-  const idx = await sql`
-    SELECT indexname FROM pg_indexes
-     WHERE tablename = 'ecf_documents'
-       AND indexname IN ('ecf_documents_mora_periodo_unico_idx','ecf_documents_mora_activa_unica_idx')`;
-  console.log('Índices de mora:', idx.map((r: any) => r.indexname));
-
+  for (const archivo of MIGRACIONES) {
+    const t = readFileSync(join(process.cwd(), 'lib/db/migrations', archivo), 'utf-8');
+    await sql.unsafe(t);
+    console.log(`✓ ${archivo}`);
+  }
   await sql.end();
 })();

@@ -7,6 +7,7 @@ import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Loader2, AlertTriangle, ShieldX } from 'lucide-react';
 import Link from 'next/link';
+import { Box, Typography, Button } from '@mui/material';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
@@ -26,23 +27,58 @@ export default async function EditarBorradorPage({
   const canEdit = await hasPermission('facturas:editar');
   if (!canEdit) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-5 p-6 text-center">
-        <div className="h-14 w-14 rounded-full bg-red-50 flex items-center justify-center">
-          <ShieldX className="h-7 w-7 text-red-500" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Sin permisos para editar</h2>
-          <p className="text-sm text-gray-500 mt-1 max-w-sm">
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 400,
+          gap: 2.5,
+          p: 3,
+          textAlign: 'center',
+        }}
+      >
+        <Box
+          sx={{
+            height: 56,
+            width: 56,
+            borderRadius: '50%',
+            bgcolor: '#fef2f2',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ShieldX style={{ width: 28, height: 28, color: '#ef4444' }} />
+        </Box>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: '#111827' }}>
+            Sin permisos para editar
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5, maxWidth: 384 }}>
             Tu rol no tiene acceso para editar facturas. Contacta al administrador si necesitas realizar cambios.
-          </p>
-        </div>
-        <Link
+          </Typography>
+        </Box>
+        <Button
+          component="a"
           href="/dashboard/facturas"
-          className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          nativeButton={false}
+          variant="contained"
+          disableElevation
+          sx={{
+            textTransform: 'none',
+            fontSize: '0.875rem',
+            px: 2,
+            py: 1,
+            borderRadius: '8px',
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+          }}
         >
           Volver a facturas
-        </Link>
-      </div>
+        </Button>
+      </Box>
     );
   }
 
@@ -78,7 +114,7 @@ export default async function EditarBorradorPage({
   ]);
 
   if (!row) notFound();
-  // Editables: documentos sin e-CF real (borrador, histórica de Alegra).
+  // Editables: documentos sin e-CF real (borrador, histórica importada).
   // Los ya emitidos a DGII / anulados no se editan.
   if (!['BORRADOR', 'HISTORICA'].includes(row.doc.estado)) {
     redirect(`/dashboard/facturas`);
@@ -142,6 +178,9 @@ export default async function EditarBorradorPage({
     // re-guardado la pise con la fecha de hoy). Custom se guarda a las 12:00,
     // así que toISOString().slice(0,10) es estable.
     fechaEmision:         doc.fechaEmision ? doc.fechaEmision.toISOString().slice(0, 10) : null,
+    categoriaGasto:       doc.categoriaGasto ?? null,
+    ncfProveedor:         doc.ncfProveedor ?? null,
+    fechaGasto:           doc.fechaGasto ?? null,
     ncfModificado:        doc.ncfModificado,
     notas:                doc.notas,
     terminosCondiciones:  doc.terminosCondiciones,
@@ -164,21 +203,20 @@ export default async function EditarBorradorPage({
 
   return (
     <div>
-      {/* Aviso cuando el borrador fue guardado sin ítems (formato anterior) */}
       {sinItems && (
-        <div className="mx-auto max-w-5xl px-4 pt-4">
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
-            <p>
+        <div style={{ maxWidth: '80rem', margin: '0 auto', padding: '16px 16px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', fontSize: '0.875rem', color: '#92400e' }}>
+            <AlertTriangle style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0, color: '#f59e0b' }} />
+            <p style={{ margin: 0 }}>
               Esta factura fue guardada antes de que el sistema almacenara los ítems.
-              <strong className="ml-1">Agrega los productos/servicios nuevamente</strong> y haz Vista previa para continuar.
+              <strong style={{ marginLeft: 4 }}>Agrega los productos/servicios nuevamente</strong> y haz Vista previa para continuar.
             </p>
           </div>
         </div>
       )}
       <Suspense fallback={
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+          <Loader2 style={{ width: 32, height: 32, color: '#3658e1', animation: 'spin 1s linear infinite' }} />
         </div>
       }>
         <EditarBorradorClient initialPerfil={perfil} initialData={initialData} />

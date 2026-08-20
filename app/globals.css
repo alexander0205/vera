@@ -9,6 +9,29 @@
 @variant dark (&:is(.dark *));
 
 @theme {
+  /*
+    Marca Zero. El azul corporativo es el 600; el resto de la escala se deriva
+    de él para tener los tonos que pide una interfaz (fondos suaves, bordes,
+    estados hover) sin salirse de la identidad.
+
+    Se llama `zero` y no `primary` a propósito: `primary` ya existe arriba
+    atado a los tokens de shadcn, y mezclarlos haría imposible saber cuál manda.
+  */
+  --color-zero-50:  #eef2fe;
+  --color-zero-100: #e0e7fd;
+  --color-zero-200: #c7d2fc;
+  --color-zero-300: #a5b4f9;
+  --color-zero-400: #8193f5;
+  --color-zero-500: #5b73ec;
+  --color-zero-600: #3658e1;
+  --color-zero-700: #2a45c4;
+  --color-zero-800: #253a9e;
+  --color-zero-900: #24377d;
+  --color-zero-950: #1a2450;
+
+  /* Sora es la tipografía de marca; se pide con `font-display`. */
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
 
@@ -77,7 +100,27 @@
 
 @layer utilities {
   body {
-    font-family: "Manrope", Arial, Helvetica, sans-serif;
+    /* Inter, la del cuerpo. Antes decía "Manrope", que no se carga en ninguna
+       parte: hoy no se nota porque el tema de MUI gana por especificidad, pero
+       el día que dejara de ganar toda la aplicación caería a Arial. */
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer base {
+  /* Sora en los títulos de pantalla.
+     La intención estaba escrita desde el principio —«Inter para el cuerpo,
+     Sora para títulos y marca»— pero solo se había aplicado a la marca: el
+     login, el rail y el cargador. El resto del sistema titulaba en Inter, así
+     que la tipografía de marca no existía dentro de la aplicación.
+     Solo el título de la pantalla (h1 y los h4/h5 de MUI, que es como se
+     titulan las páginas aquí). Los subtítulos de tarjeta siguen en Inter: en
+     bloques pequeños y repetidos, Sora cansa. */
+  h1,
+  .MuiTypography-h4,
+  .MuiTypography-h5 {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -89,8 +132,10 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Azul Zero (#3658e1). Antes era casi negro, el gris que trae shadcn de
+       fábrica, y por eso los botones primarios no se veían de la marca. */
+    --primary: 228 74% 55%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
@@ -101,9 +146,9 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 228 74% 55%;
     --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
+    --chart-2: 228 74% 55%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
@@ -174,8 +219,10 @@
   --card-foreground: hsl(240 10% 3.9%);
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(240 10% 3.9%);
-  --primary: hsl(240 5.9% 10%);
-  --primary-foreground: hsl(0 0% 98%);
+  /* Azul Zero. Este bloque va fuera de @layer, así que es el que manda sobre
+     el de arriba; cambiar solo aquel dejaba los botones primarios en gris. */
+  --primary: hsl(228 74% 55%);
+  --primary-foreground: hsl(0 0% 100%);
   --secondary: hsl(240 4.8% 95.9%);
   --secondary-foreground: hsl(240 5.9% 10%);
   --muted: hsl(240 4.8% 95.9%);
@@ -186,9 +233,9 @@
   --destructive-foreground: hsl(0 0% 98%);
   --border: hsl(240 5.9% 90%);
   --input: hsl(240 5.9% 90%);
-  --ring: hsl(240 10% 3.9%);
+  --ring: hsl(228 74% 55%);
   --chart-1: hsl(12 76% 61%);
-  --chart-2: hsl(173 58% 39%);
+  --chart-2: hsl(228 74% 55%);
   --chart-3: hsl(197 37% 24%);
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(27 87% 67%);
@@ -206,8 +253,8 @@
   --card-foreground: hsl(0 0% 98%);
   --popover: hsl(240 10% 3.9%);
   --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
+  --primary: hsl(228 85% 66%);
+  --primary-foreground: hsl(0 0% 100%);
   --secondary: hsl(240 3.7% 15.9%);
   --secondary-foreground: hsl(0 0% 98%);
   --muted: hsl(240 3.7% 15.9%);
@@ -325,7 +372,7 @@
   top: -40px;
   left: 0;
   padding: 8px 16px;
-  background: #0f766e;
+  background: #2a45c4;
   color: white;
   z-index: 100;
   border-radius: 0 0 8px 0;
@@ -336,4 +383,25 @@
   top: 0;
   outline: 2px solid #fff;
   outline-offset: 2px;
+}
+
+/*
+ * Tapado entre módulos.
+ *
+ * Lo pone un script que corre antes del primer pintado y lo quita React
+ * cuando su propia pantalla de carga termina. Cubre el hueco en el que el
+ * documento nuevo ya pintó pero React todavía no hidrató: sin esto se veía
+ * la pantalla pelada un instante y el loader parecía irse y volver.
+ *
+ * Solo un fondo del color de la app; el logo y la frase los pone el loader de
+ * React encima. Por eso 1400: por encima del armazón (AppBar 1100, Drawer
+ * 1200, Modal 1300) y por debajo del loader, que va en 1510.
+ */
+html[data-abriendo-modulo] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: #f9fafb;
+  z-index: 1400;
+  pointer-events: none;
 }

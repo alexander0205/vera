@@ -474,7 +474,7 @@ export default function NuevaCotizacionForm({
                       value={fechaVencimiento}
                       min={today}
                       onChange={(e) => setFechaVencimiento(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
                     />
                   </div>
                 </div>
@@ -558,7 +558,7 @@ export default function NuevaCotizacionForm({
 
           {/* Barra de acciones — sticky abajo. mt-auto empuja la barra al fondo
               cuando el contenido es corto (evita el hueco antes de Guardar). */}
-          <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 mt-auto flex justify-end gap-3 border-t border-gray-200 bg-white/95 px-3 sm:px-4 md:px-5 py-3 backdrop-blur">
+          <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 -mb-3 sm:-mb-4 md:-mb-5 mt-auto flex justify-end gap-3 border-t border-gray-200 bg-white/95 px-3 sm:px-4 md:px-5 py-3 backdrop-blur">
             <Button
               type="button"
               variant="outline"
@@ -570,7 +570,7 @@ export default function NuevaCotizacionForm({
             <Button
               type="submit"
               disabled={saving}
-              className="bg-teal-600 hover:bg-teal-700 text-white"
+              className="bg-zero-600 hover:bg-zero-700 text-white"
             >
               {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
               {saving ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar cotización'}
