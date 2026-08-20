@@ -174,5 +174,19 @@ export function validarBasesDeEnlaces(): void {
 
   const mensaje = `\n⛔ Bases de enlaces mal configuradas:\n${problemas.map(p => `  - ${p}`).join('\n')}\n`;
   console.error(mensaje);
-  if (process.env.NODE_ENV === 'production') throw new Error(mensaje);
+
+  /**
+   * Solo revienta en un despliegue de verdad.
+   *
+   * `NODE_ENV` no sirve para decidirlo: `next build` lo pone en 'production'
+   * siempre, también cuando alguien compila en su portátil con el `.env` de
+   * desarrollo — y ahí las bases apuntan a localhost y a la IP de la Mac, que
+   * es lo correcto en esa máquina. Con la primera versión de esta comprobación,
+   * `next build` dejó de funcionar en local.
+   *
+   * `VERCEL_ENV` sí distingue: solo vale 'production' en el despliegue de
+   * producción. Fuera de ahí queda el aviso por consola, que es lo que hace
+   * falta mientras se trabaja.
+   */
+  if (process.env.VERCEL_ENV === 'production') throw new Error(mensaje);
 }

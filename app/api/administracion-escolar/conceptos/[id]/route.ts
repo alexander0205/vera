@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { teamId } = auth;
   const { id } = await params;
   const body = await req.json();
-  const { nombre, tipo, activo, productId } = body;
+  const { nombre, tipo, activo, productId, admiteBeca } = body;
 
   if (productId !== undefined && productId !== null) {
     const [p] = await db.select({ id: products.id }).from(products)
@@ -32,6 +32,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(tipo !== undefined ? { tipo: TIPOS.includes(tipo) ? tipo : 'otro' } : {}),
       ...(activo !== undefined ? { activo } : {}),
       ...(productId !== undefined ? { productId } : {}),
+      /**
+       * Si la beca del alumno descuenta en este concepto.
+       *
+       * Se leía en el listado pero no se podía escribir por ninguna parte, así
+       * que todos los conceptos nacían con `false` y ahí se quedaban: aprobar
+       * una beca no rebajaba un peso. La cadena entera estaba puesta —el motor
+       * de tarifas la aplica, la matrícula la guarda— y se cortaba en el único
+       * campo que nadie podía tocar.
+       *
+       * Casi siempre va en la colegiatura y no en inscripción, materiales ni
+       * uniformes: una beca cubre la mensualidad, no la ropa.
+       */
+      ...(admiteBeca !== undefined ? { admiteBeca: admiteBeca === true } : {}),
       ...camposCiclo(body),
       updatedAt: new Date(),
     })
