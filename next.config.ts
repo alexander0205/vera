@@ -30,12 +30,22 @@ const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ??
  * que no admite `blob:`. `modern-screenshot` (captura de pantalla del chat de
  * soporte) crea su worker desde una blob: URL; sin esto el navegador lo
  * bloquea y la librería cae a un fallback que exporta el canvas en negro.
+ *
+ * `microphone=(self), display-capture=(self)` — la videollamada de soporte
+ * (docs/superpowers/specs/2026-08-20-videollamada-soporte-design.md) pide
+ * getUserMedia (audio) y getDisplayMedia (pantalla). Sin esto el navegador
+ * bloquea ambos de raíz, antes de que el código llegue a pedir permiso. La
+ * cámara se queda cerrada — no la usa nada de este feature.
+ *
+ * `stun: turn: turns:` en connect-src — los navegadores tratan las
+ * conexiones ICE de WebRTC como sujetas a connect-src; sin estos esquemas
+ * ahí, la conexión a los servidores STUN/TURN se bloquea.
  */
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',
@@ -46,7 +56,7 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=()',
+    value: 'camera=(), microphone=(self), display-capture=(self), geolocation=()',
   },
 ];
 
