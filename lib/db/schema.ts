@@ -1078,6 +1078,30 @@ export const ticketAttachments = pgTable('ticket_attachments', {
   createdAt:     timestamp('created_at').notNull().defaultNow(),
 });
 
+export const ticketCalls = pgTable('ticket_calls', {
+  id:           serial('id').primaryKey(),
+  ticketId:     integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  requestedBy:  integer('requested_by').notNull().references(() => users.id),
+  status:       varchar('status', { length: 20 }).notNull().default('pendiente'), // pendiente | activa | terminada | rechazada
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  answeredAt:   timestamp('answered_at'),
+  endedAt:      timestamp('ended_at'),
+  endedReason:  varchar('ended_reason', { length: 20 }), // colgada | rechazada | timeout | error | desconexion
+}, (t) => [
+  // Una sola llamada viva (pendiente o activa) por ticket — el segundo
+  // agente que intente llamar al mismo ticket choca acá, no en el código.
+  uniqueIndex('ticket_calls_activa_uniq').on(t.ticketId).where(sql`status IN ('pendiente', 'activa')`),
+]);
+
+export const ticketCallSignals = pgTable('ticket_call_signals', {
+  id:         serial('id').primaryKey(),
+  callId:     integer('call_id').notNull().references(() => ticketCalls.id, { onDelete: 'cascade' }),
+  fromRole:   varchar('from_role', { length: 10 }).notNull(), // user | agent
+  kind:       varchar('kind', { length: 10 }).notNull(),      // offer | answer
+  payload:    jsonb('payload').notNull(),                     // RTCSessionDescriptionInit completo
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
 export const agentPresence = pgTable('agent_presence', {
   userId:      integer('user_id').primaryKey().references(() => users.id),
   isAvailable: boolean('is_available').notNull().default(false),
