@@ -118,8 +118,27 @@ export async function POST(req: NextRequest) {
     }
     montoFinal = tarifa.montoCentavos;
   }
-  if (!Number.isInteger(montoFinal) || montoFinal <= 0) {
-    return NextResponse.json({ error: 'El monto resuelto no es válido' }, { status: 400 });
+  /**
+   * Cero es un monto válido cuando lo produce una beca.
+   *
+   * La regla era `<= 0` y eso dejaba fuera justo al becado del 100%: la tarifa
+   * resuelve su colegiatura en cero y el alta se caía con «El monto resuelto no
+   * es válido». Un hijo de empleado exonerado no podía tener cargo, así que no
+   * aparecía en el estado de cuenta, ni en la matrícula, ni en los avisos —
+   * como si no estuviera matriculado.
+   *
+   * Lo que sigue prohibido es lo que de verdad no tiene sentido: un monto
+   * negativo, o un cero que venga escrito a mano sin beca detrás. Un cargo de
+   * cero es la forma de decir «esto se cobra, y cuesta nada», que es
+   * exactamente lo que es una exoneración: queda el registro, y el día que se
+   * le quite la beca hay dónde ponerle el precio.
+   */
+  const exonerado = montoCentavos == null && montoFinal === 0;
+  if (!Number.isInteger(montoFinal) || montoFinal < 0 || (montoFinal === 0 && !exonerado)) {
+    return NextResponse.json(
+      { error: 'El monto resuelto no es válido. Solo una beca puede dejarlo en cero.' },
+      { status: 400 },
+    );
   }
 
   const [periodo] = await db
