@@ -10,6 +10,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { tickets, ticketMessages, ticketAttachments, agentPresence, teams } from '@/lib/db/schema';
 import { enviarAlertaSlackBlocks } from '@/lib/slack';
+import { obtenerLlamadaVigente } from '@/lib/webrtc/llamada-db';
 
 const AGENTE_STALE_MIN = 2;
 const MIN_POR_TICKET = 5;
@@ -151,15 +152,18 @@ export async function GET() {
     return NextResponse.json({ ticket: null, messages: [], espera });
   }
 
-  const messages = await db
-    .select({
-      message: ticketMessages,
-      attachment: ticketAttachments,
-    })
-    .from(ticketMessages)
-    .leftJoin(ticketAttachments, eq(ticketAttachments.messageId, ticketMessages.id))
-    .where(eq(ticketMessages.ticketId, ticket.id))
-    .orderBy(asc(ticketMessages.createdAt));
+  const [messages, call] = await Promise.all([
+    db
+      .select({
+        message: ticketMessages,
+        attachment: ticketAttachments,
+      })
+      .from(ticketMessages)
+      .leftJoin(ticketAttachments, eq(ticketAttachments.messageId, ticketMessages.id))
+      .where(eq(ticketMessages.ticketId, ticket.id))
+      .orderBy(asc(ticketMessages.createdAt)),
+    obtenerLlamadaVigente(ticket.id),
+  ]);
 
   // El poll pega cada 1.5s mientras el chat está abierto — escribir acá en
   // cada tick, aunque no haya nada nuevo que marcar como leído, multiplica
@@ -175,5 +179,6 @@ export async function GET() {
     ticket: { ...ticket, agentTyping: ticket.agentTypingUntil ? ticket.agentTypingUntil > new Date() : false },
     messages: messages.map((r) => ({ ...r.message, attachment: r.attachment })),
     espera,
+    call,
   });
 }
