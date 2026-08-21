@@ -1012,9 +1012,12 @@ export class ConexionLlamada {
 
   async compartirPantalla(onCortadoPorNavegador: () => void): Promise<void> {
     // Si ya había un share en curso (re-share sin cortar antes), hay que
-    // soltarlo primero — si no, su captura sigue corriendo invisible y su
-    // `onended` queda huérfano.
-    this.dejarDeCompartirPantalla();
+    // soltar sus tracks primero — si no, la captura sigue corriendo
+    // invisible y su `onended` queda huérfano. Nota: NO se llama
+    // `dejarDeCompartirPantalla()` acá — eso también haría
+    // `replaceTrack(null)`, un round-trip desperdiciado justo antes de
+    // reemplazarlo por el track nuevo dos líneas abajo.
+    this.screenStream?.getTracks().forEach((t) => t.stop());
     this.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const track = this.screenStream.getVideoTracks()[0];
     await this.videoSender.replaceTrack(track);
