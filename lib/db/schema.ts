@@ -1102,6 +1102,15 @@ export const ticketCallSignals = pgTable('ticket_call_signals', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 });
 
+export const ticketCallRecordings = pgTable('ticket_call_recordings', {
+  id:                serial('id').primaryKey(),
+  callId:            integer('call_id').notNull().references(() => ticketCalls.id, { onDelete: 'cascade' }),
+  role:              varchar('role', { length: 10 }).notNull(), // user | agent
+  s3Key:             varchar('s3_key', { length: 500 }).notNull(),
+  duracionSegundos:  integer('duracion_segundos').notNull(),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
 export const agentPresence = pgTable('agent_presence', {
   userId:      integer('user_id').primaryKey().references(() => users.id),
   isAvailable: boolean('is_available').notNull().default(false),
