@@ -7,6 +7,8 @@ export interface LlamadaDTO {
   ticketId: number;
   status: 'pendiente' | 'activa' | 'terminada' | 'rechazada';
   requestedBy: number;
+  // Solo viene poblado desde el poll (obtenerLlamadaVigente); iniciarLlamada/responderLlamada devuelven la fila cruda sin join, así que acá llega undefined.
+  requestedByName: string | null;
   createdAt: string;
   answeredAt: string | null;
 }
