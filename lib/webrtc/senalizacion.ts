@@ -8,7 +8,7 @@ export interface LlamadaDTO {
   status: 'pendiente' | 'activa' | 'terminada' | 'rechazada';
   requestedBy: number;
   // Solo viene poblado desde el poll (obtenerLlamadaVigente); iniciarLlamada/responderLlamada devuelven la fila cruda sin join, así que acá llega undefined.
-  requestedByName: string | null;
+  requestedByName?: string | null;
   createdAt: string;
   answeredAt: string | null;
 }
@@ -40,7 +40,10 @@ export async function responderLlamada(callId: number, accept: boolean): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ accept }),
   });
-  if (!res.ok) throw new Error('No se pudo responder la llamada');
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? 'No se pudo responder la llamada');
+  }
   return (await res.json()).call;
 }
 
@@ -50,7 +53,10 @@ export async function mandarSenal(callId: number, kind: 'offer' | 'answer', sdp:
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind, sdp }),
   });
-  if (!res.ok) throw new Error('No se pudo mandar la señal');
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? 'No se pudo mandar la señal');
+  }
 }
 
 export async function leerSenales(callId: number, desde: number): Promise<SignalDTO[]> {
