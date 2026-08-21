@@ -8,14 +8,18 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { MessageCircle, Maximize2, X, Paperclip, Camera, Send } from 'lucide-react';
+import { MessageCircle, Maximize2, X, Paperclip, Camera, Send, Phone } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
 import { InvitacionLlamada } from '@/components/support/invitacion-llamada';
+import { PanelLlamada } from '@/components/support/panel-llamada';
+import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
+import { useLlamadaGlobal } from '@/lib/webrtc/LlamadaGlobalProvider';
+import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
 import { responderLlamada } from '@/lib/webrtc/senalizacion';
+import { reproducirTonoLlamada } from '@/lib/webrtc/tonoLlamada';
 
 const COLOR_MIO = '#3658e1';
 const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
@@ -24,22 +28,72 @@ const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 export function TicketWidget() {
   const [open, setOpen] = useState(false);
   const chat = useTicketChat(open);
-  const router = useRouter();
+  // La conexión WebRTC vive en un provider único montado en el layout raíz
+  // (LlamadaGlobalProvider) — nunca este componente. Si este widget se
+  // desmonta (p.ej. al navegar a una ruta excluida, ver TicketWidgetGate),
+  // la llamada sigue viva ahí arriba; acá solo se LEE su estado.
+  const { call, ...llamada } = useLlamadaGlobal();
+  const finalizadaReciente = useLlamadaFinalizadaReciente(call);
+  // Vista dentro del widget abierto: 'chat' o 'llamada'. Al aceptar/recibir
+  // una llamada activa se cambia sola a 'llamada'; el usuario puede volver a
+  // 'chat' con la llamada igual conectada de fondo (el hook no depende de
+  // qué vista esté mostrando).
+  const [vista, setVista] = useState<'chat' | 'llamada'>('chat');
 
-  async function responderInvitacion(accept: boolean) {
-    if (!chat.call) return;
-    try {
-      await responderLlamada(chat.call.id, accept);
-      if (accept) router.push('/dashboard/soporte');
-    } catch {
-      window.alert('No se pudo responder la llamada.');
+  useEffect(() => {
+    if (call?.status === 'activa') setVista('llamada');
+  }, [call?.status]);
+
+  // Al colgar, `call` pasa a null (el poll solo trae pendiente/activa) y
+  // `finalizadaReciente` se prende 2.5s para mostrar el aviso de "Llamada
+  // finalizada" — pero pasado ESE plazo, sin este efecto, la vista se quedaba
+  // clavada en 'llamada' con nada que mostrar (ni el aviso, que ya expiró, ni
+  // el chat, tapado por `vista === 'llamada'') — el widget quedaba vacío
+  // hasta recargar la página. Apenas no hay ni llamada activa ni aviso
+  // reciente que mostrar, vuelve solo al chat.
+  useEffect(() => {
+    if (call?.status !== 'activa' && !finalizadaReciente) setVista('chat');
+  }, [call?.status, finalizadaReciente]);
+
+  // Chime suave apenas entra una invitación — edge-triggered contra el ref,
+  // no contra el poll: sin esto sonaría de nuevo en cada tick mientras siga
+  // 'pendiente'.
+  const pendienteAvisadoRef = useRef(false);
+  useEffect(() => {
+    const pendiente = call?.status === 'pendiente';
+    if (pendiente && !pendienteAvisadoRef.current) {
+      pendienteAvisadoRef.current = true;
+      reproducirTonoLlamada();
     }
+    if (!pendiente) pendienteAvisadoRef.current = false;
+  }, [call?.status]);
+
+  // Sin try/catch acá — InvitacionLlamada maneja el estado optimista y
+  // muestra el error inline si el POST falla, en vez de un window.alert. Ya
+  // no redirige a /dashboard/soporte: la llamada queda en segundo plano en
+  // este mismo widget, el usuario sigue donde estaba.
+  async function responderInvitacion(accept: boolean) {
+    if (!call) return;
+    await responderLlamada(call.id, accept);
+    if (accept) setOpen(true);
   }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+
+  // Widget minimizado con llamada activa: el audio tiene que seguir sonando
+  // igual — este <audio> vive fuera de PanelLlamada (que ahí no está
+  // montado) y se activa solo mientras `!open`, para no duplicar el audio
+  // cuando el panel completo ya se encarga de reproducirlo.
+  const audioMinimizadoRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (open || !llamada.remoteStream || !audioMinimizadoRef.current) return;
+    audioMinimizadoRef.current.srcObject = llamada.remoteStream;
+    audioMinimizadoRef.current.volume = 1;
+    audioMinimizadoRef.current.play().catch(() => {});
+  }, [open, llamada.remoteStream]);
 
   function scrollToBottom() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -55,20 +109,47 @@ export function TicketWidget() {
   }, [open, chat.messages, chat.pending]);
 
   if (!open) {
+    const llamadaEntrante = call?.status === 'pendiente';
+    const llamadaEnCurso = llamada.estado === 'activa';
     return (
-      <button
-        onClick={() => setOpen(true)}
-        title="Chatear con soporte"
-        style={{
-          position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
-          width: 56, height: 56, borderRadius: '50%', background: '#3658e1',
-          color: 'white', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-        }}
-      >
-        <MessageCircle size={26} />
-      </button>
+      <>
+        {/* Fuera de PanelLlamada a propósito — el panel no está montado
+            mientras el widget está minimizado, así que el audio de la
+            llamada en curso necesita su propio elemento acá para no
+            cortarse al cerrar el widget. */}
+        {llamadaEnCurso && <audio ref={audioMinimizadoRef} />}
+        <button
+          onClick={() => setOpen(true)}
+          title={llamadaEntrante ? 'Llamada entrante — abrir soporte' : llamadaEnCurso ? 'Llamada en curso — abrir' : 'Chatear con soporte'}
+          style={{
+            position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
+            width: 56, height: 56, borderRadius: '50%', background: llamadaEnCurso ? '#16a34a' : '#3658e1',
+            color: 'white', border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}
+        >
+          {llamadaEnCurso ? <Phone size={24} /> : <MessageCircle size={26} />}
+          {(llamadaEntrante || llamadaEnCurso) && (
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: '50%',
+                background: llamadaEntrante ? '#ef4444' : '#22c55e', border: '2px solid white',
+                animation: 'zt-badge-llamada 1.4s ease-out infinite',
+              }}
+            />
+          )}
+          {(llamadaEntrante || llamadaEnCurso) && (
+            <style>{`
+              @keyframes zt-badge-llamada {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(${llamadaEntrante ? '239, 68, 68' : '34, 197, 94'}, 0.6); }
+                50% { box-shadow: 0 0 0 6px rgba(${llamadaEntrante ? '239, 68, 68' : '34, 197, 94'}, 0); }
+              }
+            `}</style>
+          )}
+        </button>
+      </>
     );
   }
 
@@ -107,7 +188,54 @@ export function TicketWidget() {
         </div>
       </div>
 
-      {chat.status === 'esperando' && chat.espera && (
+      {(call?.status === 'activa' || finalizadaReciente) && (
+        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+          <button
+            onClick={() => setVista('chat')}
+            style={{
+              flex: 1, border: 'none', background: 'none', padding: '8px 0', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              color: vista === 'chat' ? COLOR_MIO : '#64748b',
+              borderBottom: vista === 'chat' ? `2px solid ${COLOR_MIO}` : '2px solid transparent',
+            }}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => setVista('llamada')}
+            style={{
+              flex: 1, border: 'none', background: 'none', padding: '8px 0', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              color: vista === 'llamada' ? COLOR_MIO : '#64748b',
+              borderBottom: vista === 'llamada' ? `2px solid ${COLOR_MIO}` : '2px solid transparent',
+            }}
+          >
+            Llamada
+          </button>
+        </div>
+      )}
+
+      {vista === 'llamada' && (finalizadaReciente || call?.status === 'activa') && (
+        <div style={{ flex: 1, minHeight: 0 }}>
+          {finalizadaReciente && call?.status !== 'activa' ? (
+            <div style={{ padding: 16, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+              <LlamadaFinalizada />
+            </div>
+          ) : (
+            <PanelLlamada
+              estado={llamada.estado}
+              error={llamada.error}
+              micActivo={llamada.micActivo}
+              compartiendoPantalla={llamada.compartiendoPantalla}
+              videoRemotoActivo={llamada.videoRemotoActivo}
+              remoteStream={llamada.remoteStream}
+              onAlternarMicrofono={llamada.alternarMicrofono}
+              onAlternarPantalla={llamada.alternarPantalla}
+              onColgar={() => llamada.colgar('colgada')}
+            />
+          )}
+        </div>
+      )}
+
+      {vista === 'chat' && chat.status === 'esperando' && chat.espera && (
         <div style={{ padding: '8px 12px', fontSize: 12, background: '#fffbeb', color: '#92400e', textAlign: 'center', borderBottom: '1px solid #fde68a' }}>
           {chat.espera.agentesDisponibles === 0
             ? 'Todos nuestros agentes están ocupados. Te vamos a responder pronto.'
@@ -115,14 +243,15 @@ export function TicketWidget() {
         </div>
       )}
 
-      {chat.call?.status === 'pendiente' && (
+      {vista === 'chat' && call?.status === 'pendiente' && (
         <InvitacionLlamada
-          nombreAgente={chat.call.requestedByName ?? null}
+          nombreAgente={call.requestedByName ?? null}
           onAceptar={() => responderInvitacion(true)}
           onRechazar={() => responderInvitacion(false)}
         />
       )}
 
+      {vista === 'chat' && (
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 10, background: '#f8fafc' }}>
         {[...chat.messages, ...chat.pending].map((m, i) => {
           const key = m.id != null ? `msg-${m.id}` : `tmp-${i}`;
@@ -152,14 +281,15 @@ export function TicketWidget() {
           <div style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'flex-end', marginRight: 2 }}>enviando...</div>
         )}
       </div>
+      )}
 
-      {chat.status === 'cerrado' && (
+      {vista === 'chat' && chat.status === 'cerrado' && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#92400e', background: '#fef3c7', textAlign: 'center' }}>
           Este ticket fue cerrado. Escribe para reabrirlo.
         </div>
       )}
 
-      {chat.showRating && (
+      {vista === 'chat' && chat.showRating && (
         <div style={{ padding: 10, background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 12, color: '#334155', fontWeight: 600 }}>¿Cómo calificás la atención recibida?</div>
           <div style={{ display: 'flex', gap: 4 }}>
@@ -194,18 +324,19 @@ export function TicketWidget() {
         </div>
       )}
 
-      {chat.ratingSubmitted && (
+      {vista === 'chat' && chat.ratingSubmitted && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#166534', background: '#dcfce7', textAlign: 'center' }}>
           ¡Gracias por tu calificación!
         </div>
       )}
 
-      {chat.status === 'abierto' && chat.onHold && (
+      {vista === 'chat' && chat.status === 'abierto' && chat.onHold && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#334155', background: '#f1f5f9', textAlign: 'center' }}>
           Tu ticket está en espera mientras el agente investiga.
         </div>
       )}
 
+      {vista === 'chat' && (
       <div style={{ display: 'flex', borderTop: '1px solid #eee', alignItems: 'center' }}>
         <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={chat.onFileSelected} style={{ display: 'none' }} />
         <button
@@ -238,6 +369,7 @@ export function TicketWidget() {
           <Send size={17} />
         </button>
       </div>
+      )}
     </div>
     </>
   );

@@ -10,6 +10,7 @@ import { MuiProviders } from '@/components/mui-providers';
 import { ScriptTapaLlegada } from '@/components/loader-llegada';
 import { RastreadorDeNavegacion } from '@/lib/hooks/useVolver';
 import { TicketWidgetGate } from '@/components/support/ticket-widget-gate';
+import { LlamadaGlobalProvider } from '@/lib/webrtc/LlamadaGlobalProvider';
 
 export const metadata: Metadata = {
   title: 'Zero — Facturación Electrónica República Dominicana',
@@ -88,8 +89,10 @@ export default function RootLayout({
                 }
               }}
             >
-              {children}
-              <TicketWidgetGate />
+              <LlamadaGlobalProvider>
+                {children}
+                <TicketWidgetGate />
+              </LlamadaGlobalProvider>
             </SWRConfig>
           </MuiProviders>
         </AppRouterCacheProvider>

@@ -20,8 +20,11 @@ import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
 import { InvitacionLlamada } from '@/components/support/invitacion-llamada';
 import { PanelLlamada } from '@/components/support/panel-llamada';
-import { useLlamada } from '@/lib/webrtc/useLlamada';
+import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
+import { useLlamadaGlobal } from '@/lib/webrtc/LlamadaGlobalProvider';
+import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
 import { responderLlamada } from '@/lib/webrtc/senalizacion';
+import { reproducirTonoLlamada } from '@/lib/webrtc/tonoLlamada';
 
 const COLOR_MIO = '#3658e1';
 const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
@@ -29,18 +32,33 @@ const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 
 export function SoportePaginaCompleta() {
   const chat = useTicketChat(true);
-  const llamada = useLlamada('user', chat.call);
+  // La conexión WebRTC vive en LlamadaGlobalProvider (layout raíz) — nunca
+  // acá. Si esta página se desmonta (navegar afuera de /dashboard/soporte),
+  // la llamada sigue viva; acá solo se LEE su estado.
+  const { call, ...llamada } = useLlamadaGlobal();
+  const finalizadaReciente = useLlamadaFinalizadaReciente(call);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
 
-  async function responderInvitacion(accept: boolean) {
-    if (!chat.call) return;
-    try {
-      await responderLlamada(chat.call.id, accept);
-    } catch {
-      window.alert('No se pudo responder la llamada.');
+  // Chime suave apenas entra una invitación — edge-triggered contra el ref,
+  // no contra el poll: sin esto sonaría de nuevo en cada tick mientras siga
+  // 'pendiente'.
+  const pendienteAvisadoRef = useRef(false);
+  useEffect(() => {
+    const pendiente = call?.status === 'pendiente';
+    if (pendiente && !pendienteAvisadoRef.current) {
+      pendienteAvisadoRef.current = true;
+      reproducirTonoLlamada();
     }
+    if (!pendiente) pendienteAvisadoRef.current = false;
+  }, [call?.status]);
+
+  // Sin try/catch acá — InvitacionLlamada maneja el estado optimista y
+  // muestra el error inline si el POST falla, en vez de un window.alert.
+  async function responderInvitacion(accept: boolean) {
+    if (!call) return;
+    await responderLlamada(call.id, accept);
   }
 
   function scrollToBottom() {
@@ -66,9 +84,9 @@ export function SoportePaginaCompleta() {
         <span style={{ fontWeight: 700, fontSize: 19, color: '#0f172a' }}>Soporte</span>
       </div>
 
-      {chat.call?.status === 'pendiente' && (
+      {call?.status === 'pendiente' && (
         <InvitacionLlamada
-          nombreAgente={chat.call.requestedByName ?? null}
+          nombreAgente={call.requestedByName ?? null}
           onAceptar={() => responderInvitacion(true)}
           onRechazar={() => responderInvitacion(false)}
         />
@@ -199,13 +217,19 @@ export function SoportePaginaCompleta() {
       </div>
     </div>
 
-    {chat.call?.status === 'activa' && (
+    {finalizadaReciente && (
+      <div style={{ width: 420, flexShrink: 0, padding: 16, background: '#f8fafc' }}>
+        <LlamadaFinalizada />
+      </div>
+    )}
+    {call?.status === 'activa' && (
       <div style={{ width: 420, flexShrink: 0, padding: 16, background: '#f8fafc' }}>
         <PanelLlamada
           estado={llamada.estado}
           error={llamada.error}
           micActivo={llamada.micActivo}
           compartiendoPantalla={llamada.compartiendoPantalla}
+          videoRemotoActivo={llamada.videoRemotoActivo}
           remoteStream={llamada.remoteStream}
           onAlternarMicrofono={llamada.alternarMicrofono}
           onAlternarPantalla={llamada.alternarPantalla}
