@@ -87,6 +87,13 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
     // momento conexionRef.current ya apunte a otra cosa (la de una
     // invocación posterior) o a null (la limpió un unmount).
     let conexionLocal: ConexionLlamada | null = null;
+    // Guard simétrico para todo punto de salida por staleness que ocurra
+    // DESPUÉS de tener conexionLocal asignada — cada uno se hace cargo de
+    // cerrar su propia conexión en vez de confiar en que quien invalidó la
+    // generación (hoy siempre limpiar()) ya la cerró por su cuenta.
+    const cerrarSiHuerfana = () => {
+      if (conexionLocal && conexionRef.current !== conexionLocal) conexionLocal.cerrar();
+    };
     fijarEstado('conectando');
     setError(null);
     try {
@@ -126,7 +133,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       } catch {
         setError('No se pudo activar el micrófono. La llamada sigue sin tu audio.');
       }
-      if (negociarGenRef.current !== miGen) return; // cancelada durante activarMicrofono
+      if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada durante activarMicrofono
 
       timeoutConexionRef.current = setTimeout(() => {
         if (estadoRef.current !== 'activa') colgar('error');
@@ -134,9 +141,9 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
       if (soyOfertante) {
         const oferta = await conexion.crearOferta();
-        if (negociarGenRef.current !== miGen) return; // cancelada mientras armaba la oferta
+        if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras armaba la oferta
         await mandarSenal(llamada.id, 'offer', oferta);
-        if (negociarGenRef.current !== miGen) return; // cancelada mientras mandaba la oferta
+        if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras mandaba la oferta
       }
 
       // Poll de señales — solo mientras dura el handshake (oferta+respuesta
@@ -147,22 +154,23 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
             clearInterval(signalPollRef.current);
             signalPollRef.current = null;
           }
+          cerrarSiHuerfana();
           return;
         }
         const senales = await leerSenales(llamada.id, ultimaSenalRef.current);
-        if (negociarGenRef.current !== miGen) return; // cancelada mientras leía señales
+        if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras leía señales
         let negociada = false;
         for (const s of senales) {
           ultimaSenalRef.current = Math.max(ultimaSenalRef.current, s.id);
           if (!soyOfertante && s.kind === 'offer') {
             const respuesta = await conexion.crearRespuesta(s.payload);
-            if (negociarGenRef.current !== miGen) return; // cancelada mientras armaba la respuesta
+            if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras armaba la respuesta
             await mandarSenal(llamada.id, 'answer', respuesta);
-            if (negociarGenRef.current !== miGen) return; // cancelada mientras mandaba la respuesta
+            if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras mandaba la respuesta
             negociada = true;
           } else if (soyOfertante && s.kind === 'answer') {
             await conexion.aplicarRespuesta(s.payload);
-            if (negociarGenRef.current !== miGen) return; // cancelada mientras aplicaba la respuesta
+            if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras aplicaba la respuesta
             negociada = true;
           }
         }
@@ -178,7 +186,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       // posterior) — solo cerrá la conexión propia de esta instancia, si
       // llegó a crear una.
       if (negociarGenRef.current !== miGen) {
-        if (conexionLocal && conexionRef.current !== conexionLocal) conexionLocal.cerrar();
+        cerrarSiHuerfana();
         return;
       }
       colgar('error');
