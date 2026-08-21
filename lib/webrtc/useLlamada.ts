@@ -31,6 +31,14 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
   // plazo sí hay que cerrarla (tabla de errores del spec de diseño).
   const desconexionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ultimaSenalRef = useRef(0);
+  // Contador de generación: identifica la INVOCACIÓN de negociar(), no la
+  // llamada (`call.id`) que negocia — dos invocaciones distintas (p.ej. una
+  // previa a un remount de Strict Mode y la que arranca después) negocian
+  // el mismo call.id, así que comparar contra call.id no alcanza para
+  // distinguir "sigo siendo la vigente" de "negocio la misma llamada que
+  // otra invocación". Solo la invocación cuyo miGen matchea el contador
+  // vigente tiene permiso de tocar conexionRef/timeoutConexionRef/signalPollRef.
+  const negociarGenRef = useRef(0);
 
   function fijarEstado(nuevo: EstadoLlamada) {
     estadoRef.current = nuevo;
@@ -38,6 +46,11 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
   }
 
   const limpiar = useCallback((mensajeError?: string) => {
+    // Invalida cualquier negociar() en vuelo (p.ej. suspendido en un await)
+    // aunque no haya una invocación nueva reemplazándola todavía — si no,
+    // un unmount sin remount posterior nunca haría que esa invocación se
+    // detecte a sí misma como obsoleta.
+    negociarGenRef.current += 1;
     if (signalPollRef.current) clearInterval(signalPollRef.current);
     if (timeoutConexionRef.current) clearTimeout(timeoutConexionRef.current);
     if (desconexionRef.current) clearTimeout(desconexionRef.current);
@@ -62,25 +75,27 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
   const negociar = useCallback(async (llamada: LlamadaDTO, soyOfertante: boolean) => {
     callIdEnCursoRef.current = llamada.id;
-    // Snapshot para comparar después de cada `await` — si en el ínterin
-    // hubo un unmount (limpiar() puso callIdEnCursoRef.current en null) o
-    // un remount de Strict Mode (arrancó otra negociación con otro id),
-    // esta instancia quedó obsoleta y no debe seguir tocando refs/estado/red.
-    const miId = llamada.id;
+    // Generación de ESTA invocación de negociar() — no del call.id (dos
+    // invocaciones distintas pueden negociar el mismo call.id, p.ej. una
+    // antes de un remount de Strict Mode y la que arranca después de él).
+    // Comparar contra el contador global después de cada `await` es lo que
+    // distingue "sigo siendo la invocación vigente" de "estoy negociando la
+    // misma llamada que otra invocación también está negociando".
+    const miGen = ++negociarGenRef.current;
     // Referencia local a la conexión que ESTA instancia de negociar crea —
     // si queda obsoleta, hay que cerrarla explícitamente aunque para ese
-    // momento conexionRef.current ya apunte a otra cosa (la de un remount
-    // posterior) o a null (la limpió un unmount).
+    // momento conexionRef.current ya apunte a otra cosa (la de una
+    // invocación posterior) o a null (la limpió un unmount).
     let conexionLocal: ConexionLlamada | null = null;
     fijarEstado('conectando');
     setError(null);
     try {
       const iceServers = await obtenerIceServers();
-      if (callIdEnCursoRef.current !== miId) return; // cancelada mientras esperábamos ICE servers
+      if (negociarGenRef.current !== miGen) return; // cancelada mientras esperábamos ICE servers
 
       const conexion = new ConexionLlamada(iceServers);
       conexionLocal = conexion;
-      if (callIdEnCursoRef.current !== miId) {
+      if (negociarGenRef.current !== miGen) {
         conexion.cerrar();
         return;
       }
@@ -111,7 +126,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       } catch {
         setError('No se pudo activar el micrófono. La llamada sigue sin tu audio.');
       }
-      if (callIdEnCursoRef.current !== miId) return; // cancelada durante activarMicrofono
+      if (negociarGenRef.current !== miGen) return; // cancelada durante activarMicrofono
 
       timeoutConexionRef.current = setTimeout(() => {
         if (estadoRef.current !== 'activa') colgar('error');
@@ -119,15 +134,15 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
       if (soyOfertante) {
         const oferta = await conexion.crearOferta();
-        if (callIdEnCursoRef.current !== miId) return; // cancelada mientras armaba la oferta
+        if (negociarGenRef.current !== miGen) return; // cancelada mientras armaba la oferta
         await mandarSenal(llamada.id, 'offer', oferta);
-        if (callIdEnCursoRef.current !== miId) return; // cancelada mientras mandaba la oferta
+        if (negociarGenRef.current !== miGen) return; // cancelada mientras mandaba la oferta
       }
 
       // Poll de señales — solo mientras dura el handshake (oferta+respuesta
       // es todo el intercambio; se apaga solo apenas llega la que faltaba).
       signalPollRef.current = setInterval(async () => {
-        if (callIdEnCursoRef.current !== miId) {
+        if (negociarGenRef.current !== miGen) {
           if (signalPollRef.current) {
             clearInterval(signalPollRef.current);
             signalPollRef.current = null;
@@ -135,19 +150,19 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
           return;
         }
         const senales = await leerSenales(llamada.id, ultimaSenalRef.current);
-        if (callIdEnCursoRef.current !== miId) return; // cancelada mientras leía señales
+        if (negociarGenRef.current !== miGen) return; // cancelada mientras leía señales
         let negociada = false;
         for (const s of senales) {
           ultimaSenalRef.current = Math.max(ultimaSenalRef.current, s.id);
           if (!soyOfertante && s.kind === 'offer') {
             const respuesta = await conexion.crearRespuesta(s.payload);
-            if (callIdEnCursoRef.current !== miId) return; // cancelada mientras armaba la respuesta
+            if (negociarGenRef.current !== miGen) return; // cancelada mientras armaba la respuesta
             await mandarSenal(llamada.id, 'answer', respuesta);
-            if (callIdEnCursoRef.current !== miId) return; // cancelada mientras mandaba la respuesta
+            if (negociarGenRef.current !== miGen) return; // cancelada mientras mandaba la respuesta
             negociada = true;
           } else if (soyOfertante && s.kind === 'answer') {
             await conexion.aplicarRespuesta(s.payload);
-            if (callIdEnCursoRef.current !== miId) return; // cancelada mientras aplicaba la respuesta
+            if (negociarGenRef.current !== miGen) return; // cancelada mientras aplicaba la respuesta
             negociada = true;
           }
         }
@@ -159,10 +174,10 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
     } catch {
       // Si esta negociación ya no es la vigente (se canceló mientras el
       // await que reventó estaba en vuelo), no toques el estado de la
-      // llamada actual ni conexionRef (puede ser de un remount posterior)
-      // — solo cerrá la conexión propia de esta instancia, si llegó a crear
-      // una.
-      if (callIdEnCursoRef.current !== miId) {
+      // llamada actual ni conexionRef (puede ser de una invocación
+      // posterior) — solo cerrá la conexión propia de esta instancia, si
+      // llegó a crear una.
+      if (negociarGenRef.current !== miGen) {
         if (conexionLocal && conexionRef.current !== conexionLocal) conexionLocal.cerrar();
         return;
       }
