@@ -16,7 +16,7 @@ const TIMEOUT_ICE_GATHERING_MS = 8000;
 export const TIMEOUT_CONEXION_MS = 20000;
 
 export class ConexionLlamada {
-  readonly pc: RTCPeerConnection;
+  private readonly pc: RTCPeerConnection;
   private readonly audioSender: RTCRtpSender;
   private readonly videoSender: RTCRtpSender;
   private micStream: MediaStream | null = null;
@@ -48,6 +48,7 @@ export class ConexionLlamada {
   }
 
   async compartirPantalla(onCortadoPorNavegador: () => void): Promise<void> {
+    this.screenStream?.getTracks().forEach((t) => t.stop());
     this.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const track = this.screenStream.getVideoTracks()[0];
     await this.videoSender.replaceTrack(track);
