@@ -979,7 +979,7 @@ const TIMEOUT_ICE_GATHERING_MS = 8000;
 export const TIMEOUT_CONEXION_MS = 20000;
 
 export class ConexionLlamada {
-  readonly pc: RTCPeerConnection;
+  private readonly pc: RTCPeerConnection;
   private readonly audioSender: RTCRtpSender;
   private readonly videoSender: RTCRtpSender;
   private micStream: MediaStream | null = null;
@@ -1011,6 +1011,10 @@ export class ConexionLlamada {
   }
 
   async compartirPantalla(onCortadoPorNavegador: () => void): Promise<void> {
+    // Si ya había un share en curso (re-share sin cortar antes), hay que
+    // soltarlo primero — si no, su captura sigue corriendo invisible y su
+    // `onended` queda huérfano.
+    this.dejarDeCompartirPantalla();
     this.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const track = this.screenStream.getVideoTracks()[0];
     await this.videoSender.replaceTrack(track);
