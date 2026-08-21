@@ -56,7 +56,13 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(self), display-capture=(self), geolocation=()',
+    // `camera=()` (deshabilitada del todo) tira "Permissions policy
+    // violation: camera is not allowed in this document" al llamar
+    // getDisplayMedia — este Chromium liga compartir pantalla a la misma
+    // política de cámara, aunque no se pida video de cámara en ningún
+    // momento. `camera=(self)` no prende la cámara sola ni evita el
+    // permiso del navegador; solo deja que ESTE origen pueda pedirlo.
+    value: 'camera=(self), microphone=(self), display-capture=(self), geolocation=()',
   },
 ];
 

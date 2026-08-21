@@ -5,11 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { eq, and, asc, desc, sql, gte } from 'drizzle-orm';
+import { eq, and, desc, sql, gte } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
-import { tickets, ticketMessages, ticketAttachments, agentPresence, teams } from '@/lib/db/schema';
+import { tickets, ticketMessages, agentPresence, teams } from '@/lib/db/schema';
 import { enviarAlertaSlackBlocks } from '@/lib/slack';
+import { obtenerMensajesDeTicket } from '@/lib/db/ticket-mensajes';
 import { obtenerLlamadaVigente } from '@/lib/webrtc/llamada-db';
 
 const AGENTE_STALE_MIN = 2;
@@ -153,15 +154,7 @@ export async function GET() {
   }
 
   const [messages, call] = await Promise.all([
-    db
-      .select({
-        message: ticketMessages,
-        attachment: ticketAttachments,
-      })
-      .from(ticketMessages)
-      .leftJoin(ticketAttachments, eq(ticketAttachments.messageId, ticketMessages.id))
-      .where(eq(ticketMessages.ticketId, ticket.id))
-      .orderBy(asc(ticketMessages.createdAt)),
+    obtenerMensajesDeTicket(ticket.id),
     obtenerLlamadaVigente(ticket.id),
   ]);
 
@@ -177,7 +170,7 @@ export async function GET() {
 
   return NextResponse.json({
     ticket: { ...ticket, agentTyping: ticket.agentTypingUntil ? ticket.agentTypingUntil > new Date() : false },
-    messages: messages.map((r) => ({ ...r.message, attachment: r.attachment })),
+    messages,
     espera,
     call,
   });

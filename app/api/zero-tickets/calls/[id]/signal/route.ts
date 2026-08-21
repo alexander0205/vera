@@ -9,7 +9,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const callId = parseInt(id, 10);
   if (Number.isNaN(callId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
-  const auth = await requireCallParticipant(callId);
+  let body: { kind: 'offer' | 'answer'; sdp: unknown; role?: 'user' | 'agent' };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
+  }
+
+  const { kind, sdp, role } = body;
+  if (role !== undefined && role !== 'user' && role !== 'agent') {
+    return NextResponse.json({ error: 'role inválido' }, { status: 400 });
+  }
+
+  const auth = await requireCallParticipant(callId, role);
   if (!auth.ok) return auth.response;
 
   if (auth.call.status !== 'pendiente' && auth.call.status !== 'activa') {
@@ -17,7 +29,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const { kind, sdp } = (await req.json()) as { kind: 'offer' | 'answer'; sdp: unknown };
     if (kind !== 'offer' && kind !== 'answer') {
       return NextResponse.json({ error: 'kind inválido' }, { status: 400 });
     }
@@ -39,7 +50,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const callId = parseInt(id, 10);
   if (Number.isNaN(callId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
-  const auth = await requireCallParticipant(callId);
+  const rolParam = req.nextUrl.searchParams.get('role');
+  if (rolParam !== null && rolParam !== 'user' && rolParam !== 'agent') {
+    return NextResponse.json({ error: 'role inválido' }, { status: 400 });
+  }
+
+  const auth = await requireCallParticipant(callId, rolParam ?? undefined);
   if (!auth.ok) return auth.response;
 
   const desdeParam = req.nextUrl.searchParams.get('desde');
