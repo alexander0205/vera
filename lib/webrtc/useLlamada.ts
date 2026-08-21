@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConexionLlamada, TIMEOUT_CONEXION_MS } from './conexion';
 import { mandarSenal, leerSenales, terminarLlamada, obtenerIceServers, type LlamadaDTO } from './senalizacion';
+import { GrabacionLlamada } from './grabacionLlamada';
 
 export type EstadoLlamada = 'inactiva' | 'conectando' | 'activa' | 'error';
 
@@ -20,9 +21,17 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
   const [micActivo, setMicActivo] = useState(true);
   const [compartiendoPantalla, setCompartiendoPantalla] = useState(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  // Si de verdad están llegando frames de video NUEVOS ahora mismo — no si
+  // el track "existe" ni si el browser lo marca `muted` (esa señal resultó
+  // no ser confiable: ver el comentario largo en ConexionLlamada). Esto
+  // viene de medir `framesDecoded` real vía getStats(), así que refleja
+  // tanto cuando alguien empieza a compartir como cuando corta, sin
+  // depender de ningún evento del navegador.
+  const [videoRemotoActivo, setVideoRemotoActivo] = useState(false);
 
   const estadoRef = useRef<EstadoLlamada>('inactiva');
   const conexionRef = useRef<ConexionLlamada | null>(null);
+  const grabacionRef = useRef<GrabacionLlamada | null>(null);
   const callIdEnCursoRef = useRef<number | null>(null);
   const signalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutConexionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,17 +68,30 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
     desconexionRef.current = null;
     conexionRef.current?.cerrar();
     conexionRef.current = null;
+    grabacionRef.current?.detener();
+    grabacionRef.current = null;
     callIdEnCursoRef.current = null;
     ultimaSenalRef.current = 0;
     setRemoteStream(null);
+    setVideoRemotoActivo(false);
     setCompartiendoPantalla(false);
     fijarEstado(mensajeError ? 'error' : 'inactiva');
     setError(mensajeError ?? null);
   }, []);
 
-  const colgar = useCallback((reason: string = 'colgada') => {
+  const colgar = useCallback(async (reason: string = 'colgada') => {
     const id = callIdEnCursoRef.current;
-    if (id) terminarLlamada(id, reason);
+    // Esperar la confirmación del server ANTES de limpiar el estado local —
+    // si no, hay una ventana donde ya limpiamos `callIdEnCursoRef` (queda en
+    // null) pero el PATCH que marca la llamada como terminada todavía no
+    // llegó a la DB. Un poll que caiga justo ahí sigue viendo `status:
+    // 'activa'` del lado del server y, como el ref ya está en null, el
+    // efecto de abajo lo lee como "llamada activa nueva, todavía no
+    // negociada" y arranca `negociar()` de nuevo — de ahí el parpadeo de
+    // "Conectando…" justo después de colgar. Esperando acá, para cuando el
+    // ref se limpia el server YA confirma terminada, así que ningún poll
+    // puede leerla como activa.
+    if (id) await terminarLlamada(id, reason).catch(() => {});
     limpiar();
   }, [limpiar]);
 
@@ -105,6 +127,41 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; }
       conexionRef.current = conexion;
       conexion.onRemoteStream = (stream) => setRemoteStream(stream);
+      conexion.onVideoActivoCambiado = (activo) => setVideoRemotoActivo(activo);
+      let micActivadoOEnCurso = false;
+      const activarMicrofonoAlConectar = async () => {
+        // El mic se activa acá —cuando la conexión YA está en 'connected'—
+        // y no antes de negociar como se hacía originalmente. Confirmado con
+        // logs reales: `replaceTrack()` llamado ANTES de que el transporte
+        // DTLS/SRTP esté armado deja el track adjuntado del lado del sender,
+        // pero el otro lado nunca lo ve salir de `muted` — la señalización
+        // negocia bien (llega el ontrack, hay receiver) pero jamás fluye
+        // audio real. Screen-share ya se activa post-conexión (por acción
+        // del usuario) y ahí sí funciona siempre — este es el mismo momento.
+        if (micActivadoOEnCurso) return;
+        micActivadoOEnCurso = true;
+        // getUserMedia/getDisplayMedia no existen fuera de un contexto seguro
+        // (https://, o localhost). Entrar por la IP de red del server en
+        // http:// —como http://10.x.x.x:3000— es exactamente ese caso: la
+        // llamada negocia bien (la señalización es texto plano por HTTP, no
+        // necesita nada especial) pero nunca hay media de ningún lado, sin
+        // ningún error visible salvo que se chequee esto explícitamente.
+        if (!navigator.mediaDevices) {
+          setError('Este navegador no permite usar micrófono/cámara en esta dirección. Si entraste por una IP de red (http://10.x.x.x) en vez de localhost o un dominio con HTTPS, hace falta un túnel o desplegar con SSL.');
+          return;
+        }
+        // Negar el micrófono no debe tirar abajo la llamada entera — sigue
+        // sin audio propio, recibiendo el del otro lado igual (tabla de
+        // errores del spec de diseño).
+        try {
+          await conexion.activarMicrofono();
+        } catch (e) {
+          const detalle = e instanceof Error ? e.message : 'motivo desconocido';
+          setError(`No se pudo activar el micrófono (${detalle}). La llamada sigue sin tu audio.`);
+        }
+        grabacionRef.current = new GrabacionLlamada(llamada.id, role);
+        grabacionRef.current.actualizarStream(conexion.obtenerStreamLocal());
+      };
       conexion.onEstadoCambiado = (pcEstado) => {
         // Este callback vive en el closure de `conexion` y puede disparar en
         // cualquier momento futuro, mucho después de que esta invocación
@@ -119,6 +176,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
             desconexionRef.current = null;
           }
           fijarEstado('activa');
+          activarMicrofonoAlConectar();
         }
         if (pcEstado === 'failed') colgar('error');
         // 'disconnected' es transitorio (un lag de red breve pasa por acá
@@ -129,16 +187,6 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
         }
       };
 
-      // Negar el micrófono no debe tirar abajo la llamada entera — sigue
-      // sin audio propio, recibiendo el del otro lado igual (tabla de
-      // errores del spec de diseño).
-      try {
-        await conexion.activarMicrofono();
-      } catch {
-        setError('No se pudo activar el micrófono. La llamada sigue sin tu audio.');
-      }
-      if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada durante activarMicrofono
-
       timeoutConexionRef.current = setTimeout(() => {
         if (estadoRef.current !== 'activa') colgar('error');
       }, TIMEOUT_CONEXION_MS);
@@ -146,7 +194,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       if (soyOfertante) {
         const oferta = await conexion.crearOferta();
         if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras armaba la oferta
-        await mandarSenal(llamada.id, 'offer', oferta);
+        await mandarSenal(llamada.id, 'offer', oferta, role);
         if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras mandaba la oferta
       }
 
@@ -156,7 +204,34 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       // limpiar signalPollRef.current hay que confirmar que sigue apuntando
       // a este mismo handle, porque una invocación más nueva puede haberlo
       // reemplazado por el suyo propio.
+      // Sin esto, si leerSenales/crearRespuesta/mandarSenal tardan más que
+      // 1.5s (DB lenta) el próximo tick del interval dispara una lectura
+      // nueva encima de la que sigue en vuelo — mismo bug que
+      // messagesInFlightRef en app/zero-tickets/page.tsx, acá aplicado al
+      // poll de señales.
+      let tickEnCurso = false;
       const intervalLocal: ReturnType<typeof setInterval> = setInterval(async () => {
+        if (tickEnCurso) return;
+        tickEnCurso = true;
+        try {
+          await tickSenal();
+        } catch {
+          // Sin este catch, una señal que falla se volvía unhandled rejection
+          // y Next la mostraba como Runtime Error en pantalla. El caso normal
+          // es un 409 "La llamada ya terminó": el otro lado colgó mientras
+          // este tick estaba en vuelo. No hay nada que reintentar — se corta
+          // el poll y el poll de estado de la llamada se encarga del resto.
+          clearInterval(intervalLocal);
+          if (signalPollRef.current === intervalLocal) signalPollRef.current = null;
+        } finally {
+          tickEnCurso = false;
+        }
+        // 800ms y no 1500: este poll solo vive durante el handshake (se apaga
+        // solo apenas llega la señal que faltaba), y cada tick de más se suma
+        // directo al tiempo que tarda la llamada en conectar. El guard de
+        // arriba evita que acortarlo amontone requests.
+      }, 800);
+      async function tickSenal() {
         if (negociarGenRef.current !== miGen) {
           // clearInterval sobre el handle LOCAL siempre corre — parar el
           // propio timer de esta invocación no depende de si el ref
@@ -168,7 +243,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
           cerrarSiHuerfana();
           return;
         }
-        const senales = await leerSenales(llamada.id, ultimaSenalRef.current);
+        const senales = await leerSenales(llamada.id, ultimaSenalRef.current, role);
         if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras leía señales
         let negociada = false;
         for (const s of senales) {
@@ -176,7 +251,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
           if (!soyOfertante && s.kind === 'offer') {
             const respuesta = await conexion.crearRespuesta(s.payload);
             if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras armaba la respuesta
-            await mandarSenal(llamada.id, 'answer', respuesta);
+            await mandarSenal(llamada.id, 'answer', respuesta, role);
             if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras mandaba la respuesta
             negociada = true;
           } else if (soyOfertante && s.kind === 'answer') {
@@ -189,7 +264,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
           clearInterval(intervalLocal);
           if (signalPollRef.current === intervalLocal) signalPollRef.current = null;
         }
-      }, 1500);
+      }
       signalPollRef.current = intervalLocal;
     } catch {
       // Si esta negociación ya no es la vigente (se canceló mientras el
@@ -203,7 +278,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       }
       colgar('error');
     }
-  }, [colgar]);
+  }, [colgar, role]);
 
   useEffect(() => {
     if (!call) return;
@@ -231,15 +306,29 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
     if (conexion.compartiendoPantalla()) {
       conexion.dejarDeCompartirPantalla();
       setCompartiendoPantalla(false);
+      grabacionRef.current?.actualizarStream(conexion.obtenerStreamLocal());
     } else {
       try {
-        await conexion.compartirPantalla(() => setCompartiendoPantalla(false));
+        await conexion.compartirPantalla(() => {
+          setCompartiendoPantalla(false);
+          grabacionRef.current?.actualizarStream(conexion.obtenerStreamLocal());
+        });
         setCompartiendoPantalla(true);
-      } catch {
-        // Picker nativo cancelado — no es un error a mostrar.
+        grabacionRef.current?.actualizarStream(conexion.obtenerStreamLocal());
+      } catch (e) {
+        // getDisplayMedia tira NotAllowedError tanto si el usuario cierra el
+        // picker nativo como si el navegador lo bloquea de raíz (contexto
+        // inseguro, política del navegador) — pero Chrome SÍ distingue los
+        // dos casos en el texto del mensaje: "denied by user" es cancelación
+        // normal (cerró el picker, no pasa nada raro), "denied by system" es
+        // un bloqueo real. Mostrar el mismo error de SSL/túnel para un click
+        // en "Cancelar" era el bug — asustaba con un mensaje que no aplicaba.
+        const mensaje = e instanceof Error ? e.message : '';
+        if (/denied by user/i.test(mensaje)) return;
+        setError(`No se pudo compartir pantalla (${mensaje || 'motivo desconocido'}). Si entraste por una IP de red (http://10.x.x.x) en vez de localhost o un dominio con HTTPS, el navegador bloquea compartir pantalla directamente — hace falta un túnel o desplegar con SSL.`);
       }
     }
   }, []);
 
-  return { estado, error, micActivo, compartiendoPantalla, remoteStream, alternarMicrofono, alternarPantalla, colgar };
+  return { estado, error, micActivo, compartiendoPantalla, remoteStream, videoRemotoActivo, alternarMicrofono, alternarPantalla, colgar };
 }
