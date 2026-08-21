@@ -8,11 +8,14 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { MessageCircle, Maximize2, X, Paperclip, Camera, Send } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
+import { InvitacionLlamada } from '@/components/support/invitacion-llamada';
+import { responderLlamada } from '@/lib/webrtc/senalizacion';
 
 const COLOR_MIO = '#3658e1';
 const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
@@ -21,6 +24,14 @@ const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 export function TicketWidget() {
   const [open, setOpen] = useState(false);
   const chat = useTicketChat(open);
+  const router = useRouter();
+
+  async function responderInvitacion(accept: boolean) {
+    if (!chat.call) return;
+    await responderLlamada(chat.call.id, accept);
+    if (accept) router.push('/dashboard/soporte');
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -98,6 +109,14 @@ export function TicketWidget() {
             ? 'Todos nuestros agentes están ocupados. Te vamos a responder pronto.'
             : `Tiempo de espera estimado: ${chat.espera.esperaMinutos} min (posición en cola: ${chat.espera.enCola})`}
         </div>
+      )}
+
+      {chat.call?.status === 'pendiente' && (
+        <InvitacionLlamada
+          nombreAgente={chat.call.requestedByName ?? null}
+          onAceptar={() => responderInvitacion(true)}
+          onRechazar={() => responderInvitacion(false)}
+        />
       )}
 
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 10, background: '#f8fafc' }}>
