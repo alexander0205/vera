@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { requireCallParticipant } from '@/lib/auth/zero-tickets-call-guard';
 import { db } from '@/lib/db/drizzle';
-import { ticketCalls, ticketMessages } from '@/lib/db/schema';
+import { ticketCalls, ticketMessages, tickets } from '@/lib/db/schema';
 
 const RAZONES_VALIDAS = new Set(['colgada', 'error', 'desconexion']);
 
 function formatearDuracion(ms: number): string {
-  const totalSeg = Math.round(ms / 1000);
+  const totalSeg = Math.round(Math.max(0, ms) / 1000);
   const min = Math.floor(totalSeg / 60);
   const seg = totalSeg % 60;
   return min > 0 ? `${min}m ${seg}s` : `${seg}s`;
@@ -21,6 +21,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const auth = await requireCallParticipant(callId);
   if (!auth.ok) return auth.response;
 
+  // Colgar es idempotente (a diferencia de signal/route.ts, que devuelve 409
+  // ante una llamada ya no vigente): pedir que termine una llamada que ya
+  // terminó no es un error, es el resultado que el cliente quería.
   if (auth.call.status !== 'pendiente' && auth.call.status !== 'activa') {
     return NextResponse.json({ call: auth.call });
   }
@@ -53,11 +56,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ? ` · ${formatearDuracion(ahora.getTime() - auth.call.answeredAt.getTime())}`
       : '';
 
-    await db.insert(ticketMessages).values({
-      ticketId: auth.call.ticketId,
-      senderType: 'system',
-      content: `Llamada terminada${duracionTexto}.`,
-    });
+    await Promise.all([
+      db.insert(ticketMessages).values({
+        ticketId: auth.call.ticketId,
+        senderType: 'system',
+        content: `Llamada terminada${duracionTexto}.`,
+      }),
+      db
+        .update(tickets)
+        .set({ lastMessageAt: ahora, updatedAt: ahora })
+        .where(eq(tickets.id, auth.call.ticketId)),
+    ]);
 
     return NextResponse.json({ call: updated });
   } catch (err) {
