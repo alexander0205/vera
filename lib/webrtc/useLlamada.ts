@@ -102,10 +102,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
       const conexion = new ConexionLlamada(iceServers);
       conexionLocal = conexion;
-      if (negociarGenRef.current !== miGen) {
-        conexion.cerrar();
-        return;
-      }
+      if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; }
       conexionRef.current = conexion;
       conexion.onRemoteStream = (stream) => setRemoteStream(stream);
       conexion.onEstadoCambiado = (pcEstado) => {
@@ -148,10 +145,14 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
       // Poll de señales — solo mientras dura el handshake (oferta+respuesta
       // es todo el intercambio; se apaga solo apenas llega la que faltaba).
-      signalPollRef.current = setInterval(async () => {
+      // intervalLocal identifica el intervalo de ESTA invocación — antes de
+      // limpiar signalPollRef.current hay que confirmar que sigue apuntando
+      // a este mismo handle, porque una invocación más nueva puede haberlo
+      // reemplazado por el suyo propio.
+      const intervalLocal: ReturnType<typeof setInterval> = setInterval(async () => {
         if (negociarGenRef.current !== miGen) {
-          if (signalPollRef.current) {
-            clearInterval(signalPollRef.current);
+          if (signalPollRef.current === intervalLocal) {
+            clearInterval(intervalLocal);
             signalPollRef.current = null;
           }
           cerrarSiHuerfana();
@@ -174,11 +175,12 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
             negociada = true;
           }
         }
-        if (negociada && signalPollRef.current) {
-          clearInterval(signalPollRef.current);
+        if (negociada && signalPollRef.current === intervalLocal) {
+          clearInterval(intervalLocal);
           signalPollRef.current = null;
         }
       }, 1500);
+      signalPollRef.current = intervalLocal;
     } catch {
       // Si esta negociación ya no es la vigente (se canceló mientras el
       // await que reventó estaba en vuelo), no toques el estado de la
