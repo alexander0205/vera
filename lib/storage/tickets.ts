@@ -56,3 +56,9 @@ export async function leerAdjuntoTicket(key: string): Promise<Buffer> {
 export async function borrarAdjuntoTicket(key: string): Promise<void> {
   await getCliente().send(new DeleteObjectCommand({ Bucket: BUCKET!, Key: key }));
 }
+
+const PREFIX_GRABACIONES = process.env.S3_GRABACIONES_PREFIX ?? 'grabaciones';
+
+export function construirKeyGrabacion(callId: number, role: 'user' | 'agent'): string {
+  return `${PREFIX_GRABACIONES}/call_${callId}/${role}_${randomUUID()}.webm`;
+}
