@@ -1249,6 +1249,14 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
   // plazo sí hay que cerrarla (tabla de errores del spec de diseño).
   const desconexionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ultimaSenalRef = useRef(0);
+  // Contador de generación: identifica la INVOCACIÓN de negociar(), no la
+  // llamada (`call.id`) que negocia — dos invocaciones distintas (p.ej. una
+  // previa a un remount de Strict Mode y la que arranca después) negocian
+  // el mismo call.id, así que comparar contra call.id no alcanza para
+  // distinguir "sigo siendo la vigente" de "negocio la misma llamada que
+  // otra invocación". Solo la invocación cuyo miGen matchea el contador
+  // vigente tiene permiso de tocar conexionRef/timeoutConexionRef/signalPollRef.
+  const negociarGenRef = useRef(0);
 
   function fijarEstado(nuevo: EstadoLlamada) {
     estadoRef.current = nuevo;
@@ -1256,6 +1264,11 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
   }
 
   const limpiar = useCallback((mensajeError?: string) => {
+    // Invalida cualquier negociar() en vuelo (p.ej. suspendido en un await)
+    // aunque no haya una invocación nueva reemplazándola todavía — si no,
+    // un unmount sin remount posterior nunca haría que esa invocación se
+    // detecte a sí misma como obsoleta.
+    negociarGenRef.current += 1;
     if (signalPollRef.current) clearInterval(signalPollRef.current);
     if (timeoutConexionRef.current) clearTimeout(timeoutConexionRef.current);
     if (desconexionRef.current) clearTimeout(desconexionRef.current);
@@ -1280,14 +1293,44 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
   const negociar = useCallback(async (llamada: LlamadaDTO, soyOfertante: boolean) => {
     callIdEnCursoRef.current = llamada.id;
+    // Generación de ESTA invocación de negociar() — no del call.id (dos
+    // invocaciones distintas pueden negociar el mismo call.id, p.ej. una
+    // antes de un remount de Strict Mode y la que arranca después de él).
+    // Comparar contra el contador global después de cada `await` es lo que
+    // distingue "sigo siendo la invocación vigente" de "estoy negociando la
+    // misma llamada que otra invocación también está negociando".
+    const miGen = ++negociarGenRef.current;
+    // Referencia local a la conexión que ESTA instancia de negociar crea —
+    // si queda obsoleta, hay que cerrarla explícitamente aunque para ese
+    // momento conexionRef.current ya apunte a otra cosa (la de una
+    // invocación posterior) o a null (la limpió un unmount).
+    let conexionLocal: ConexionLlamada | null = null;
+    // Guard simétrico para todo punto de salida por staleness que ocurra
+    // DESPUÉS de tener conexionLocal asignada — cada uno se hace cargo de
+    // cerrar su propia conexión en vez de confiar en que quien invalidó la
+    // generación (hoy siempre limpiar()) ya la cerró por su cuenta.
+    const cerrarSiHuerfana = () => {
+      if (conexionLocal && conexionRef.current !== conexionLocal) conexionLocal.cerrar();
+    };
     fijarEstado('conectando');
     setError(null);
     try {
       const iceServers = await obtenerIceServers();
+      if (negociarGenRef.current !== miGen) return; // cancelada mientras esperábamos ICE servers
+
       const conexion = new ConexionLlamada(iceServers);
+      conexionLocal = conexion;
+      if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; }
       conexionRef.current = conexion;
       conexion.onRemoteStream = (stream) => setRemoteStream(stream);
       conexion.onEstadoCambiado = (pcEstado) => {
+        // Este callback vive en el closure de `conexion` y puede disparar en
+        // cualquier momento futuro, mucho después de que esta invocación
+        // haya quedado obsoleta (p.ej. su RTCPeerConnection huérfana pasa a
+        // 'failed' bastante después de que otra invocación ya la reemplazó).
+        // Sin este chequeo, una conexión huérfana podría llamar colgar() y
+        // destruir el estado de la invocación realmente vigente.
+        if (negociarGenRef.current !== miGen) return;
         if (pcEstado === 'connected') {
           if (desconexionRef.current) {
             clearTimeout(desconexionRef.current);
@@ -1312,6 +1355,7 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       } catch {
         setError('No se pudo activar el micrófono. La llamada sigue sin tu audio.');
       }
+      if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada durante activarMicrofono
 
       timeoutConexionRef.current = setTimeout(() => {
         if (estadoRef.current !== 'activa') colgar('error');
@@ -1319,31 +1363,62 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
 
       if (soyOfertante) {
         const oferta = await conexion.crearOferta();
+        if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras armaba la oferta
         await mandarSenal(llamada.id, 'offer', oferta);
+        if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras mandaba la oferta
       }
 
       // Poll de señales — solo mientras dura el handshake (oferta+respuesta
       // es todo el intercambio; se apaga solo apenas llega la que faltaba).
-      signalPollRef.current = setInterval(async () => {
+      // intervalLocal identifica el intervalo de ESTA invocación — antes de
+      // limpiar signalPollRef.current hay que confirmar que sigue apuntando
+      // a este mismo handle, porque una invocación más nueva puede haberlo
+      // reemplazado por el suyo propio.
+      const intervalLocal: ReturnType<typeof setInterval> = setInterval(async () => {
+        if (negociarGenRef.current !== miGen) {
+          // clearInterval sobre el handle LOCAL siempre corre — parar el
+          // propio timer de esta invocación no depende de si el ref
+          // compartido todavía lo referencia. Solo el nulleo del ref va
+          // gateado por identidad, para no pisar el de una invocación más
+          // nueva que ya lo reemplazó.
+          clearInterval(intervalLocal);
+          if (signalPollRef.current === intervalLocal) signalPollRef.current = null;
+          cerrarSiHuerfana();
+          return;
+        }
         const senales = await leerSenales(llamada.id, ultimaSenalRef.current);
+        if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras leía señales
         let negociada = false;
         for (const s of senales) {
           ultimaSenalRef.current = Math.max(ultimaSenalRef.current, s.id);
           if (!soyOfertante && s.kind === 'offer') {
             const respuesta = await conexion.crearRespuesta(s.payload);
+            if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras armaba la respuesta
             await mandarSenal(llamada.id, 'answer', respuesta);
+            if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras mandaba la respuesta
             negociada = true;
           } else if (soyOfertante && s.kind === 'answer') {
             await conexion.aplicarRespuesta(s.payload);
+            if (negociarGenRef.current !== miGen) { cerrarSiHuerfana(); return; } // cancelada mientras aplicaba la respuesta
             negociada = true;
           }
         }
-        if (negociada && signalPollRef.current) {
-          clearInterval(signalPollRef.current);
-          signalPollRef.current = null;
+        if (negociada) {
+          clearInterval(intervalLocal);
+          if (signalPollRef.current === intervalLocal) signalPollRef.current = null;
         }
       }, 1500);
+      signalPollRef.current = intervalLocal;
     } catch {
+      // Si esta negociación ya no es la vigente (se canceló mientras el
+      // await que reventó estaba en vuelo), no toques el estado de la
+      // llamada actual ni conexionRef (puede ser de una invocación
+      // posterior) — solo cerrá la conexión propia de esta instancia, si
+      // llegó a crear una.
+      if (negociarGenRef.current !== miGen) {
+        cerrarSiHuerfana();
+        return;
+      }
       colgar('error');
     }
   }, [colgar]);
