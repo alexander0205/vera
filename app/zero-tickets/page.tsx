@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Phone, PhoneOff, PhoneCall } from 'lucide-react';
+import { ImageLightbox } from '@/components/support/image-lightbox';
 import { PanelLlamada } from '@/components/support/panel-llamada';
 import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
 import { PulsoLlamada } from '@/components/support/pulso-llamada';
@@ -60,6 +61,32 @@ const CATEGORY_LABELS: Record<string, string> = {
   general: 'General',
 };
 
+/**
+ * Imagen de un mensaje: mientras carga muestra un placeholder animado en vez
+ * de un hueco en blanco — la carga es lenta acá (sin S3 configurado en este
+ * entorno, los adjuntos vienen de Postgres en base64), así que sin esto la
+ * lista de mensajes se veía "rota" varios segundos antes de que la imagen
+ * apareciera. Un click abre el lightbox a pantalla completa.
+ */
+function AdjuntoImagen({ src, alt, onClick }: { src: string; alt: string; onClick: () => void }) {
+  const [cargada, setCargada] = useState(false);
+  return (
+    <div className="relative max-w-full rounded overflow-hidden" style={{ minHeight: cargada ? undefined : 80, minWidth: cargada ? undefined : 120 }}>
+      {!cargada && (
+        <div className="absolute inset-0 bg-gray-200 animate-pulse rounded" />
+      )}
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => setCargada(true)}
+        onClick={onClick}
+        className="max-w-full rounded cursor-zoom-in transition-opacity"
+        style={{ opacity: cargada ? 1 : 0 }}
+      />
+    </div>
+  );
+}
+
 export default function ZeroTicketsPage() {
   const [ticketList, setTicketList] = useState<TicketRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -75,19 +102,7 @@ export default function ZeroTicketsPage() {
   // confirma el nuevo estado.
   const [llamando, setLlamando] = useState(false);
   const [errorLlamada, setErrorLlamada] = useState<string | null>(null);
-  const [mostrarGrabaciones, setMostrarGrabaciones] = useState(false);
-  const [grabaciones, setGrabaciones] = useState<{ id: number; role: string; duracionSegundos: number; createdAt: string }[]>([]);
-
-  async function toggleGrabaciones() {
-    if (!selectedId) return;
-    if (mostrarGrabaciones) {
-      setMostrarGrabaciones(false);
-      return;
-    }
-    const res = await fetch(`/api/zero-tickets/agent/tickets/${selectedId}/recordings`);
-    setGrabaciones(res.ok ? (await res.json()).recordings : []);
-    setMostrarGrabaciones(true);
-  }
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const llamada = useLlamada('agent', call);
   const finalizadaReciente = useLlamadaFinalizadaReciente(call);
   const [reply, setReply] = useState('');
@@ -194,7 +209,6 @@ export default function ZeroTicketsPage() {
   }, [available]);
 
   useEffect(() => {
-    setMostrarGrabaciones(false);
     if (pollRef.current) clearInterval(pollRef.current);
     if (selectedId == null) return;
     loadMessages(selectedId);
@@ -385,6 +399,7 @@ export default function ZeroTicketsPage() {
 
   return (
     <div className="flex h-[calc(100vh-120px)] gap-4">
+      {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       <div className="w-80 shrink-0 flex flex-col gap-3">
         <div className="border rounded-lg bg-white p-3 flex items-center justify-between">
           <div>
@@ -483,9 +498,6 @@ export default function ZeroTicketsPage() {
                 <button onClick={() => requestScreenshot(selected.id)} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                   Pedir captura
                 </button>
-                <button onClick={toggleGrabaciones} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
-                  {mostrarGrabaciones ? 'Ocultar grabaciones' : 'Grabaciones'}
-                </button>
                 <button
                   onClick={() => startCall(selected.id)}
                   disabled={llamando || call?.status === 'pendiente' || call?.status === 'activa'}
@@ -522,24 +534,6 @@ export default function ZeroTicketsPage() {
               </div>
             </div>
 
-            {mostrarGrabaciones && (
-              <div className="border-b bg-gray-50 px-4 py-2 space-y-1">
-                {grabaciones.length === 0 && <div className="text-xs text-gray-400">Sin grabaciones para este ticket.</div>}
-                {grabaciones.map((g) => (
-                  <a
-                    key={g.id}
-                    href={`/api/zero-tickets/agent/recordings/${g.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex justify-between text-xs text-[#3658e1] hover:underline"
-                  >
-                    <span>{g.role === 'agent' ? 'Agente' : 'Cliente'} — {new Date(g.createdAt).toLocaleString()}</span>
-                    <span>{g.duracionSegundos}s</span>
-                  </a>
-                ))}
-              </div>
-            )}
-
             <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-2">
               {messages.map((m) => {
                 if (m.senderType === 'system') {
@@ -558,7 +552,11 @@ export default function ZeroTicketsPage() {
                       {m.attachment && (
                         <div className="mt-1.5">
                           {m.attachment.kind === 'image' && (
-                            <img src={`/api/zero-tickets/attachments/${m.attachment.id}`} alt={m.attachment.fileName} className="max-w-full rounded" />
+                            <AdjuntoImagen
+                              src={`/api/zero-tickets/attachments/${m.attachment.id}`}
+                              alt={m.attachment.fileName}
+                              onClick={() => setLightbox(`/api/zero-tickets/attachments/${m.attachment!.id}`)}
+                            />
                           )}
                           {m.attachment.kind === 'video' && (
                             <video src={`/api/zero-tickets/attachments/${m.attachment.id}`} controls className="max-w-full rounded" />
