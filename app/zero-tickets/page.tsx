@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PanelLlamada } from '@/components/support/panel-llamada';
+import { useLlamada } from '@/lib/webrtc/useLlamada';
+import { iniciarLlamada, type LlamadaDTO } from '@/lib/webrtc/senalizacion';
 
 interface TicketRow {
   id: number;
@@ -57,6 +60,8 @@ export default function ZeroTicketsPage() {
   const [ticketList, setTicketList] = useState<TicketRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [call, setCall] = useState<LlamadaDTO | null>(null);
+  const llamada = useLlamada('agent', call);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [available, setAvailable] = useState(false);
@@ -82,7 +87,11 @@ export default function ZeroTicketsPage() {
 
   async function loadMessages(id: number) {
     const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/messages`);
-    if (res.ok) setMessages((await res.json()).messages);
+    if (res.ok) {
+      const data = await res.json();
+      setMessages(data.messages);
+      setCall(data.call ?? null);
+    }
   }
 
   async function loadPresence() {
@@ -189,6 +198,15 @@ export default function ZeroTicketsPage() {
     const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/request-screenshot`, { method: 'POST' });
     if (!res.ok) window.alert('No se pudo pedir la captura.');
     await loadMessages(id);
+  }
+
+  async function startCall(id: number) {
+    try {
+      await iniciarLlamada(id);
+      await loadMessages(id);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'No se pudo iniciar la llamada.');
+    }
   }
 
   function onReplyChange(value: string) {
@@ -365,7 +383,8 @@ export default function ZeroTicketsPage() {
         </div>
       </div>
 
-      <div className="flex-1 border rounded-lg bg-white flex flex-col">
+      <div className="flex-1 flex gap-4">
+      <div className="flex-1 border rounded-lg bg-white flex flex-col min-w-0">
         {selectedId == null || !selected ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Selecciona un ticket</div>
         ) : (
@@ -383,6 +402,13 @@ export default function ZeroTicketsPage() {
                 )}
                 <button onClick={() => requestScreenshot(selected.id)} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                   Pedir captura
+                </button>
+                <button
+                  onClick={() => startCall(selected.id)}
+                  disabled={call?.status === 'pendiente' || call?.status === 'activa'}
+                  className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {call?.status === 'pendiente' ? 'Esperando respuesta…' : call?.status === 'activa' ? 'En llamada' : 'Iniciar llamada'}
                 </button>
                 <button
                   onClick={() => toggleHold(selected.id, selected.onHold)}
@@ -495,6 +521,22 @@ export default function ZeroTicketsPage() {
             </div>
           </>
         )}
+      </div>
+
+      {call?.status === 'activa' && (
+        <div style={{ width: 420 }} className="shrink-0">
+          <PanelLlamada
+            estado={llamada.estado}
+            error={llamada.error}
+            micActivo={llamada.micActivo}
+            compartiendoPantalla={llamada.compartiendoPantalla}
+            remoteStream={llamada.remoteStream}
+            onAlternarMicrofono={llamada.alternarMicrofono}
+            onAlternarPantalla={llamada.alternarPantalla}
+            onColgar={() => llamada.colgar('colgada')}
+          />
+        </div>
+      )}
       </div>
 
       {showManageModal && (
