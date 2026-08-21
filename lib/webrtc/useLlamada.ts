@@ -106,6 +106,13 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       conexionRef.current = conexion;
       conexion.onRemoteStream = (stream) => setRemoteStream(stream);
       conexion.onEstadoCambiado = (pcEstado) => {
+        // Este callback vive en el closure de `conexion` y puede disparar en
+        // cualquier momento futuro, mucho después de que esta invocación
+        // haya quedado obsoleta (p.ej. su RTCPeerConnection huérfana pasa a
+        // 'failed' bastante después de que otra invocación ya la reemplazó).
+        // Sin este chequeo, una conexión huérfana podría llamar colgar() y
+        // destruir el estado de la invocación realmente vigente.
+        if (negociarGenRef.current !== miGen) return;
         if (pcEstado === 'connected') {
           if (desconexionRef.current) {
             clearTimeout(desconexionRef.current);
@@ -151,10 +158,13 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
       // reemplazado por el suyo propio.
       const intervalLocal: ReturnType<typeof setInterval> = setInterval(async () => {
         if (negociarGenRef.current !== miGen) {
-          if (signalPollRef.current === intervalLocal) {
-            clearInterval(intervalLocal);
-            signalPollRef.current = null;
-          }
+          // clearInterval sobre el handle LOCAL siempre corre — parar el
+          // propio timer de esta invocación no depende de si el ref
+          // compartido todavía lo referencia. Solo el nulleo del ref va
+          // gateado por identidad, para no pisar el de una invocación más
+          // nueva que ya lo reemplazó.
+          clearInterval(intervalLocal);
+          if (signalPollRef.current === intervalLocal) signalPollRef.current = null;
           cerrarSiHuerfana();
           return;
         }
@@ -175,9 +185,9 @@ export function useLlamada(role: 'user' | 'agent', call: LlamadaDTO | null) {
             negociada = true;
           }
         }
-        if (negociada && signalPollRef.current === intervalLocal) {
+        if (negociada) {
           clearInterval(intervalLocal);
-          signalPollRef.current = null;
+          if (signalPollRef.current === intervalLocal) signalPollRef.current = null;
         }
       }, 1500);
       signalPollRef.current = intervalLocal;
