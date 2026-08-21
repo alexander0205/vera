@@ -10,6 +10,7 @@ import {
   TrendingDown, BarChart3, CreditCard,
   Search, AlertCircle, Zap,
   ShoppingCart, Wallet, BookOpen,
+  LifeBuoy,
   } from 'lucide-react';
 import { ModuleHeader } from '@/components/module-header';
 import { BannerSuscripcion } from '@/components/banner-suscripcion';
@@ -132,6 +133,7 @@ const ITEMS: NavItem[] = [
   { id: 'dashboard', href: '/dashboard',          icon: LayoutDashboard, label: 'Dashboard', exact: true },
   { id: 'contactos', href: '/dashboard/clientes', icon: Users,           label: 'Contactos' },
   { id: 'reportes',  href: '/dashboard/reportes', icon: BarChart3,       label: 'Reportes'  },
+  { id: 'ayuda',     href: '/dashboard/soporte',  icon: LifeBuoy,        label: 'Ayuda'     },
 ];
 
 // ─── Permission gating ──────────────────────────────────────────────────────
@@ -363,6 +365,7 @@ function SidebarContent({
   }
   // Sin permiso de contabilidad no hay de qué colgarlo; cierra la lista.
   if (!seccionesBase.some(s => s.id === 'reportes')) empujarItem('reportes');
+  empujarItem('ayuda'); // siempre al final, debajo de Reportes
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);

@@ -127,14 +127,15 @@ export function useTicketChat(active: boolean) {
     }
   }
 
+  // Antes esto se apagaba del todo con `!active` (widget minimizado) —
+  // pero entonces nunca se enteraba de una llamada entrante mientras estaba
+  // cerrado, sin forma de mostrar el badge del ícono flotante. Ahora sigue
+  // polleando siempre, solo que mucho más lento cuando no está activo
+  // (10s en vez de 1.5s) — alcanza para el badge sin pagar el costo de un
+  // poll de chat completo cada 1.5s con la ventana cerrada.
   useEffect(() => {
     poll();
-  }, []);
-
-  useEffect(() => {
-    if (!active) return;
-    poll();
-    pollRef.current = setInterval(poll, 1500);
+    pollRef.current = setInterval(poll, active ? 1500 : 10000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -261,7 +262,13 @@ export function useTicketChat(active: boolean) {
             features: { restoreScrollPosition: true },
           }),
         ),
-        8000,
+        // 8000 se quedaba corto en la práctica: domToBlob serializa TODO
+        // `document.body` (el dashboard entero, no solo lo visible), y en una
+        // página con tablas largas eso solo puede tardar más de 8s en una
+        // máquina normal — no es un cuelgue, es trabajo real. El síntoma era
+        // "no se puede tomar captura" en capturas que sí iban a terminar,
+        // solo que un poco después.
+        20000,
       );
 
       const file = new File([blob], 'captura.png', { type: 'image/png' });

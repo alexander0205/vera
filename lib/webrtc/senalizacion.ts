@@ -47,11 +47,23 @@ export async function responderLlamada(callId: number, accept: boolean): Promise
   return (await res.json()).call;
 }
 
-export async function mandarSenal(callId: number, kind: 'offer' | 'answer', sdp: RTCSessionDescriptionInit): Promise<void> {
+/**
+ * `role` es de qué lado de la llamada está quien manda/lee, y NO es opcional:
+ * el servidor no puede deducirlo solo de la identidad porque una misma
+ * persona puede ser dueña del ticket y agente a la vez (ver
+ * requireCallParticipant). Si las dos puntas terminan con el mismo rol,
+ * cada una descarta las señales de la otra y el handshake nunca cierra.
+ */
+export async function mandarSenal(
+  callId: number,
+  kind: 'offer' | 'answer',
+  sdp: RTCSessionDescriptionInit,
+  role: 'user' | 'agent',
+): Promise<void> {
   const res = await fetch(`/api/zero-tickets/calls/${callId}/signal`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, sdp }),
+    body: JSON.stringify({ kind, sdp, role }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
@@ -59,8 +71,8 @@ export async function mandarSenal(callId: number, kind: 'offer' | 'answer', sdp:
   }
 }
 
-export async function leerSenales(callId: number, desde: number): Promise<SignalDTO[]> {
-  const res = await fetch(`/api/zero-tickets/calls/${callId}/signal?desde=${desde}`);
+export async function leerSenales(callId: number, desde: number, role: 'user' | 'agent'): Promise<SignalDTO[]> {
+  const res = await fetch(`/api/zero-tickets/calls/${callId}/signal?desde=${desde}&role=${role}`);
   if (!res.ok) return [];
   return (await res.json()).signals;
 }
