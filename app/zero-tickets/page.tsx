@@ -1,8 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Phone, PhoneOff, PhoneCall } from 'lucide-react';
 import { PanelLlamada } from '@/components/support/panel-llamada';
+import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
+import { PulsoLlamada } from '@/components/support/pulso-llamada';
 import { useLlamada } from '@/lib/webrtc/useLlamada';
+import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
 import { iniciarLlamada, type LlamadaDTO } from '@/lib/webrtc/senalizacion';
 
 interface TicketRow {
@@ -61,13 +65,45 @@ export default function ZeroTicketsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [call, setCall] = useState<LlamadaDTO | null>(null);
+  // Optimista: se pone en `true` en el mismo click, ANTES de esperar la
+  // respuesta del POST — sin esto, entre el click y que el poll trae
+  // `call.status === 'pendiente'` (red + hasta 1.5s de poll) el botón
+  // seguía diciendo "Llamar" sin ningún cambio visible, así que el agente
+  // dudaba si el click pegó y clickeaba de nuevo — el segundo POST chocaba
+  // contra la llamada que ya se estaba creando (409) y salía un
+  // `window.alert`. Se descarta apenas `call` (la fuente de verdad real)
+  // confirma el nuevo estado.
+  const [llamando, setLlamando] = useState(false);
+  const [errorLlamada, setErrorLlamada] = useState<string | null>(null);
+  const [mostrarGrabaciones, setMostrarGrabaciones] = useState(false);
+  const [grabaciones, setGrabaciones] = useState<{ id: number; role: string; duracionSegundos: number; createdAt: string }[]>([]);
+
+  async function toggleGrabaciones() {
+    if (!selectedId) return;
+    if (mostrarGrabaciones) {
+      setMostrarGrabaciones(false);
+      return;
+    }
+    const res = await fetch(`/api/zero-tickets/agent/tickets/${selectedId}/recordings`);
+    setGrabaciones(res.ok ? (await res.json()).recordings : []);
+    setMostrarGrabaciones(true);
+  }
   const llamada = useLlamada('agent', call);
+  const finalizadaReciente = useLlamadaFinalizadaReciente(call);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [available, setAvailable] = useState(false);
   const [onlineAgents, setOnlineAgents] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTypingSentRef = useRef(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Sin esto, si un tick tarda más que el intervalo (DB lenta) el siguiente
+  // dispara igual — los requests se amontonan sin límite (uno nuevo cada
+  // 1.5s aunque ninguno haya vuelto todavía) y la cola crece para siempre en
+  // vez de estabilizarse. Mismo patrón que pollInFlightRef en useTicketChat.
+  const messagesInFlightRef = useRef(false);
+  const ticketsInFlightRef = useRef(false);
+  const presenceInFlightRef = useRef(false);
 
   const [me, setMe] = useState<{ name: string | null; email: string } | null>(null);
 
@@ -81,25 +117,43 @@ export default function ZeroTicketsPage() {
   const [savingCanned, setSavingCanned] = useState(false);
 
   async function loadTickets() {
-    const res = await fetch('/api/zero-tickets/agent/tickets');
-    if (res.ok) setTicketList((await res.json()).tickets);
+    if (ticketsInFlightRef.current) return;
+    ticketsInFlightRef.current = true;
+    try {
+      const res = await fetch('/api/zero-tickets/agent/tickets');
+      if (res.ok) setTicketList((await res.json()).tickets);
+    } finally {
+      ticketsInFlightRef.current = false;
+    }
   }
 
   async function loadMessages(id: number) {
-    const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/messages`);
-    if (res.ok) {
-      const data = await res.json();
-      setMessages(data.messages);
-      setCall(data.call ?? null);
+    if (messagesInFlightRef.current) return;
+    messagesInFlightRef.current = true;
+    try {
+      const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages);
+        setCall(data.call ?? null);
+      }
+    } finally {
+      messagesInFlightRef.current = false;
     }
   }
 
   async function loadPresence() {
-    const res = await fetch('/api/zero-tickets/agent/presence');
-    if (res.ok) {
-      const data = await res.json();
-      setAvailable(data.available);
-      setOnlineAgents(data.onlineAgents);
+    if (presenceInFlightRef.current) return;
+    presenceInFlightRef.current = true;
+    try {
+      const res = await fetch('/api/zero-tickets/agent/presence');
+      if (res.ok) {
+        const data = await res.json();
+        setAvailable(data.available);
+        setOnlineAgents(data.onlineAgents);
+      }
+    } finally {
+      presenceInFlightRef.current = false;
     }
   }
 
@@ -140,6 +194,7 @@ export default function ZeroTicketsPage() {
   }, [available]);
 
   useEffect(() => {
+    setMostrarGrabaciones(false);
     if (pollRef.current) clearInterval(pollRef.current);
     if (selectedId == null) return;
     loadMessages(selectedId);
@@ -148,6 +203,25 @@ export default function ZeroTicketsPage() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [selectedId]);
+
+  // Entrar a un ticket, o que le lleguen mensajes nuevos, tiene que dejar al
+  // agente viendo lo último — no el arranque de la conversación. Sin esto se
+  // quedaba con el scroll donde React lo montó (arriba del todo).
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [selectedId, messages]);
+
+  // `call` es la fuente de verdad real (viene del poll) — apenas confirma
+  // cualquier estado de la llamada, el optimista ya cumplió su función.
+  useEffect(() => {
+    if (call) setLlamando(false);
+  }, [call]);
+
+  useEffect(() => {
+    if (!errorLlamada) return;
+    const t = setTimeout(() => setErrorLlamada(null), 4000);
+    return () => clearTimeout(t);
+  }, [errorLlamada]);
 
   async function toggleAvailable() {
     const next = !available;
@@ -201,11 +275,17 @@ export default function ZeroTicketsPage() {
   }
 
   async function startCall(id: number) {
+    if (llamando || call?.status === 'pendiente' || call?.status === 'activa') return;
+    setLlamando(true);
+    setErrorLlamada(null);
     try {
       await iniciarLlamada(id);
       await loadMessages(id);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'No se pudo iniciar la llamada.');
+      // Sin window.alert — se corta el estado optimista y el motivo real
+      // queda inline, chico, junto al botón (se desvanece solo).
+      setLlamando(false);
+      setErrorLlamada(e instanceof Error ? e.message : 'No se pudo iniciar la llamada.');
     }
   }
 
@@ -403,13 +483,26 @@ export default function ZeroTicketsPage() {
                 <button onClick={() => requestScreenshot(selected.id)} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                   Pedir captura
                 </button>
+                <button onClick={toggleGrabaciones} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                  {mostrarGrabaciones ? 'Ocultar grabaciones' : 'Grabaciones'}
+                </button>
                 <button
                   onClick={() => startCall(selected.id)}
-                  disabled={call?.status === 'pendiente' || call?.status === 'activa'}
-                  className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  disabled={llamando || call?.status === 'pendiente' || call?.status === 'activa'}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  {call?.status === 'pendiente' ? 'Esperando respuesta…' : call?.status === 'activa' ? 'En llamada' : 'Iniciar llamada'}
+                  {llamando || call?.status === 'pendiente' ? (
+                    <PulsoLlamada icono={PhoneCall} diametro={16} iconoTamano={10} />
+                  ) : call?.status === 'activa' ? (
+                    <PhoneOff size={14} />
+                  ) : (
+                    <Phone size={14} />
+                  )}
+                  {llamando || call?.status === 'pendiente' ? 'Llamando…' : call?.status === 'activa' ? 'En llamada' : 'Llamar'}
                 </button>
+                {errorLlamada && (
+                  <span className="text-xs text-red-600 self-center">{errorLlamada}</span>
+                )}
                 <button
                   onClick={() => toggleHold(selected.id, selected.onHold)}
                   className={`text-xs px-3 py-1.5 rounded border ${
@@ -429,7 +522,25 @@ export default function ZeroTicketsPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {mostrarGrabaciones && (
+              <div className="border-b bg-gray-50 px-4 py-2 space-y-1">
+                {grabaciones.length === 0 && <div className="text-xs text-gray-400">Sin grabaciones para este ticket.</div>}
+                {grabaciones.map((g) => (
+                  <a
+                    key={g.id}
+                    href={`/api/zero-tickets/agent/recordings/${g.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex justify-between text-xs text-[#3658e1] hover:underline"
+                  >
+                    <span>{g.role === 'agent' ? 'Agente' : 'Cliente'} — {new Date(g.createdAt).toLocaleString()}</span>
+                    <span>{g.duracionSegundos}s</span>
+                  </a>
+                ))}
+              </div>
+            )}
+
+            <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-2">
               {messages.map((m) => {
                 if (m.senderType === 'system') {
                   return (
@@ -523,6 +634,11 @@ export default function ZeroTicketsPage() {
         )}
       </div>
 
+      {finalizadaReciente && (
+        <div style={{ width: 420 }} className="shrink-0">
+          <LlamadaFinalizada />
+        </div>
+      )}
       {call?.status === 'activa' && (
         <div style={{ width: 420 }} className="shrink-0">
           <PanelLlamada
@@ -530,6 +646,7 @@ export default function ZeroTicketsPage() {
             error={llamada.error}
             micActivo={llamada.micActivo}
             compartiendoPantalla={llamada.compartiendoPantalla}
+            videoRemotoActivo={llamada.videoRemotoActivo}
             remoteStream={llamada.remoteStream}
             onAlternarMicrofono={llamada.alternarMicrofono}
             onAlternarPantalla={llamada.alternarPantalla}
