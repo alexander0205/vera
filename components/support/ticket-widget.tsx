@@ -28,8 +28,12 @@ export function TicketWidget() {
 
   async function responderInvitacion(accept: boolean) {
     if (!chat.call) return;
-    await responderLlamada(chat.call.id, accept);
-    if (accept) router.push('/dashboard/soporte');
+    try {
+      await responderLlamada(chat.call.id, accept);
+      if (accept) router.push('/dashboard/soporte');
+    } catch {
+      window.alert('No se pudo responder la llamada.');
+    }
   }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
