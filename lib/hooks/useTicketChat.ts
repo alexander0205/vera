@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { domToBlob } from 'modern-screenshot';
+import type { LlamadaDTO } from '@/lib/webrtc/senalizacion';
 
 export interface Attachment {
   id: number;
@@ -64,6 +65,7 @@ export function useTicketChat(active: boolean) {
   const [onHold, setOnHold] = useState(false);
   const [agentTyping, setAgentTyping] = useState(false);
   const [espera, setEspera] = useState<Espera | null>(null);
+  const [call, setCall] = useState<LlamadaDTO | null>(null);
   const [readByAgentAt, setReadByAgentAt] = useState<string | null>(null);
   const [showRating, setShowRating] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
@@ -115,6 +117,7 @@ export function useTicketChat(active: boolean) {
         setReadByAgentAt(data.ticket.lastReadByAgentAt);
       }
       setEspera(data.espera);
+      setCall(data.call ?? null);
     } catch {
       // Fetch de red caído o timeout — el próximo tick reintenta solo, no
       // hace falta propagar el error.
@@ -283,6 +286,7 @@ export function useTicketChat(active: boolean) {
     onHold,
     agentTyping,
     espera,
+    call,
     readByAgentAt,
     showRating,
     ratingSubmitted,
