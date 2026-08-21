@@ -3,10 +3,9 @@
 /**
  * Versión de pantalla completa del chat de soporte.
  *
- * La videollamada con pantalla compartida va a vivir acá más adelante, pero
- * la va a PEDIR el agente por un mensaje del chat (como ya pasa con
- * "screenshot_request") — no hace falta reservarle columna propia de
- * antemano, así que el chat usa todo el ancho disponible.
+ * Cuando la llamada está pendiente se muestra la invitación como banner
+ * arriba del chat; cuando está activa se abre el panel de video/pantalla
+ * compartida al lado, sin perder el chat.
  *
  * Vive en app/(dashboard)/dashboard/soporte — adentro del layout de
  * Facturación a propósito: es el MISMO rail y header que el resto de la app
@@ -19,6 +18,10 @@ import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
+import { InvitacionLlamada } from '@/components/support/invitacion-llamada';
+import { PanelLlamada } from '@/components/support/panel-llamada';
+import { useLlamada } from '@/lib/webrtc/useLlamada';
+import { responderLlamada } from '@/lib/webrtc/senalizacion';
 
 const COLOR_MIO = '#3658e1';
 const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
@@ -26,9 +29,19 @@ const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 
 export function SoportePaginaCompleta() {
   const chat = useTicketChat(true);
+  const llamada = useLlamada('user', chat.call);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+
+  async function responderInvitacion(accept: boolean) {
+    if (!chat.call) return;
+    try {
+      await responderLlamada(chat.call.id, accept);
+    } catch {
+      window.alert('No se pudo responder la llamada.');
+    }
+  }
 
   function scrollToBottom() {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -42,7 +55,8 @@ export function SoportePaginaCompleta() {
   }, [chat.messages, chat.pending]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'white' }}>
+    <div style={{ display: 'flex', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, background: 'white' }}>
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
       {(chat.busyStage === 'capturando' || chat.busyStage === 'subiendo') && (
         <CapturaOverlay stage={chat.busyStage} />
@@ -51,6 +65,14 @@ export function SoportePaginaCompleta() {
       <div style={{ padding: '18px 28px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
         <span style={{ fontWeight: 700, fontSize: 19, color: '#0f172a' }}>Soporte</span>
       </div>
+
+      {chat.call?.status === 'pendiente' && (
+        <InvitacionLlamada
+          nombreAgente={chat.call.requestedByName ?? null}
+          onAceptar={() => responderInvitacion(true)}
+          onRechazar={() => responderInvitacion(false)}
+        />
+      )}
 
       {chat.status === 'esperando' && chat.espera && (
         <div style={{ padding: '10px 28px', fontSize: 12.5, background: '#fffbeb', color: '#92400e', textAlign: 'center', borderBottom: '1px solid #fde68a', flexShrink: 0 }}>
@@ -175,6 +197,22 @@ export function SoportePaginaCompleta() {
           <Send size={16} /> Enviar
         </button>
       </div>
+    </div>
+
+    {chat.call?.status === 'activa' && (
+      <div style={{ width: 420, flexShrink: 0, padding: 16, background: '#f8fafc' }}>
+        <PanelLlamada
+          estado={llamada.estado}
+          error={llamada.error}
+          micActivo={llamada.micActivo}
+          compartiendoPantalla={llamada.compartiendoPantalla}
+          remoteStream={llamada.remoteStream}
+          onAlternarMicrofono={llamada.alternarMicrofono}
+          onAlternarPantalla={llamada.alternarPantalla}
+          onColgar={() => llamada.colgar('colgada')}
+        />
+      </div>
+    )}
     </div>
   );
 }
