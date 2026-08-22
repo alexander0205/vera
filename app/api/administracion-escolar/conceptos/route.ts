@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const body = await req.json();
-  const { nombre, tipo, activo, productId } = body;
+  const { nombre, tipo, activo, productId, admiteBeca } = body;
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
   if (productId !== undefined && productId !== null) {
@@ -89,6 +89,9 @@ export async function POST(req: NextRequest) {
     frecuencia: tipoNorm === 'mensualidad' ? 'mensual' : 'unico',
     productId: productId ?? null,
     activo: activo ?? true,
+    // Si la beca del alumno descuenta aquí. Por defecto no: una beca cubre la
+    // mensualidad, no la inscripción ni el uniforme.
+    admiteBeca: admiteBeca === true,
     ...camposCiclo(body),
   }).returning();
   invalidarEstructura(teamId);

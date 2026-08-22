@@ -24,7 +24,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { periodoId, cursoId, documentoListaId, fechaInscripcion, estado, codigoMatricula, notas } = await req.json();
+  const {
+    periodoId, cursoId, documentoListaId, fechaInscripcion, estado, codigoMatricula, notas,
+    becaTipo, becaValor, becaMotivo,
+  } = await req.json();
   const matriculaId = parseInt(id, 10);
   const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado })
     .from(adminEscolarMatriculas)
@@ -52,6 +55,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (conflicto) return NextResponse.json({ error: conflicto }, { status: 409 });
   }
 
+  /**
+   * La beca, editable después de matricular.
+   *
+   * Antes solo se admitía al crear la matrícula, y no había forma de ponerla
+   * luego: el PATCH la ignoraba y borrar la matrícula para rehacerla devuelve
+   * 409 en cuanto tiene un cargo. O sea que un colegio que aprueba una beca en
+   * octubre —que es cuando se aprueban, no en agosto— se quedaba sin dónde
+   * anotarla.
+   *
+   * Mismas reglas que el alta, para que no haya dos verdades: solo
+   * 'porcentaje' o 'monto', y el valor solo cuenta si hay tipo. Mandar
+   * `becaTipo: null` la quita, y con ella el valor y el motivo — una beca sin
+   * tipo no es media beca, es ninguna.
+   */
+  const tocaBeca = becaTipo !== undefined || becaValor !== undefined || becaMotivo !== undefined;
+  const becaTipoOk = becaTipo === 'porcentaje' || becaTipo === 'monto' ? becaTipo : null;
+  const becaValorOk = becaTipoOk && Number.isFinite(Number(becaValor)) ? Number(becaValor) : null;
+
+  if (tocaBeca && becaTipo != null && !becaTipoOk) {
+    return NextResponse.json(
+      { error: 'La beca solo puede ser «porcentaje» o «monto».' },
+      { status: 400 },
+    );
+  }
+  if (becaTipoOk && becaValorOk == null) {
+    return NextResponse.json(
+      { error: 'Una beca necesita su valor: el porcentaje, o el monto en centavos.' },
+      { status: 400 },
+    );
+  }
+  if (becaTipoOk === 'porcentaje' && (becaValorOk! <= 0 || becaValorOk! > 100)) {
+    return NextResponse.json(
+      { error: 'El porcentaje de beca tiene que estar entre 1 y 100.' },
+      { status: 400 },
+    );
+  }
+  if (becaTipoOk === 'monto' && becaValorOk! <= 0) {
+    return NextResponse.json(
+      { error: 'El monto de la beca tiene que ser mayor que cero.' },
+      { status: 400 },
+    );
+  }
+
   try {
     const [row] = await db.update(adminEscolarMatriculas)
       .set({
@@ -63,6 +109,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(estado !== undefined && ESTADOS.includes(estado) ? { estado } : {}),
         ...(codigoMatricula !== undefined ? { codigoMatricula: codigoMatricula?.trim() || null } : {}),
         ...(notas !== undefined ? { notas: notas?.trim() || null } : {}),
+        ...(tocaBeca ? {
+          becaTipo:   becaTipoOk,
+          becaValor:  becaValorOk,
+          // El motivo se guarda solo si la beca existe: dejarlo suelto tras
+          // quitarla deja en la ficha el porqué de algo que ya no está.
+          becaMotivo: becaTipoOk ? (String(becaMotivo ?? '').trim() || null) : null,
+        } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))

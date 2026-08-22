@@ -85,6 +85,13 @@ export async function devengarPeriodo(
   teamId: number,
   periodoId: number,
   hasta: string,
+  /**
+   * Incluir también las matrículas ya finalizadas.
+   *
+   * Apagado por defecto: el cron mensual no debe seguir generando deuda a quien
+   * ya terminó. Se enciende para cerrar un año escolar o subir el histórico.
+   */
+  incluirFinalizadas = false,
 ): Promise<ResultadoDevengo> {
   const matriculas = await db
     .select({
@@ -100,7 +107,16 @@ export async function devengarPeriodo(
     .where(and(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.periodoId, periodoId),
-      eq(adminEscolarMatriculas.estado, 'activa'),
+      // 'activa' siempre; 'finalizada' solo si se pide.
+      //
+      // El cron mensual corre sin la bandera, así que una matrícula terminada
+      // no sigue generando deuda sola. Pero un colegio que CIERRA el año —o que
+      // sube su historia— necesita generar los cargos de un período que ya
+      // acabó, y con el filtro fijo no había forma: había que reabrir las
+      // matrículas una por una, devengar, y volver a cerrarlas.
+      incluirFinalizadas
+        ? inArray(adminEscolarMatriculas.estado, ['activa', 'finalizada'])
+        : eq(adminEscolarMatriculas.estado, 'activa'),
     ));
 
   if (matriculas.length === 0) return { matriculas: 0, cargosCreados: 0 };

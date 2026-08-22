@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
   // Hasta fin de mes y no hasta hoy: la mensualidad de septiembre tiene que
   // existir durante todo septiembre, no solo desde el día 5 que vence.
   const hasta = finDeMes(cuerpo?.hasta || new Date().toISOString().slice(0, 10));
-  const resultado = await devengarPeriodo(teamId, periodo.id, hasta);
+  // El cron no manda la bandera; la pantalla de cierre de año sí.
+  const incluirFinalizadas = cuerpo?.incluirFinalizadas === true;
+  const resultado = await devengarPeriodo(teamId, periodo.id, hasta, incluirFinalizadas);
 
-  return NextResponse.json({ periodo: periodo.nombre, hasta, ...resultado });
+  return NextResponse.json({ periodo: periodo.nombre, hasta, incluirFinalizadas, ...resultado });
 }
