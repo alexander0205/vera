@@ -1,6 +1,10 @@
 'use client';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 /**
  * Paginador de listados.
@@ -8,6 +12,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
  * Enseña siempre el total y el tramo que se está viendo. Eso importa más que
  * los botones: sin el total, una lista cortada en la fila cincuenta parece la
  * lista completa, y quien la mira no tiene forma de saber que falta algo.
+ *
+ * No usa el `Pagination` de MUI a propósito. Ese pinta la rueda de números
+ * (1 2 3 … 47), que aquí sobra: los listados se recorren de corrido y el dato
+ * que hace falta es cuántos faltan, no saltar a la página 31.
  */
 export function Paginador({
   pagina,
@@ -30,33 +38,67 @@ export function Paginador({
   const hasta = Math.min(pagina * porPagina, total);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-3">
-      <p className="text-sm text-gray-500">
-        {total === 1
-          ? '1 registro'
-          : <>Mostrando <span className="font-medium text-gray-700">{desde}–{hasta}</span> de{' '}
-             <span className="font-medium text-gray-700">{total.toLocaleString('es-DO')}</span></>}
-      </p>
+    <Box
+      sx={{
+        display:        'flex',
+        flexWrap:       'wrap',
+        alignItems:     'center',
+        justifyContent: 'space-between',
+        gap:            1.5,
+        borderTop:      1,
+        borderColor:    'divider',
+        px:             2,
+        py:             1.5,
+      }}
+    >
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        {total === 1 ? (
+          '1 registro'
+        ) : (
+          <>
+            Mostrando{' '}
+            <Box component="span" sx={{ fontWeight: 500, color: 'text.primary' }}>
+              {desde}–{hasta}
+            </Box>{' '}
+            de{' '}
+            <Box component="span" sx={{ fontWeight: 500, color: 'text.primary' }}>
+              {total.toLocaleString('es-DO')}
+            </Box>
+          </>
+        )}
+      </Typography>
 
       {paginas > 1 && (
-        <div className="flex items-center gap-1">
-          <button
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
             onClick={() => onCambiar(pagina - 1)}
             disabled={pagina <= 1 || cargando}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm text-gray-600 hover:border-gray-300 disabled:opacity-40"
+            startIcon={<ChevronLeftIcon fontSize="small" />}
+            sx={{ color: 'text.secondary' }}
           >
-            <ChevronLeft className="h-4 w-4" /> Anterior
-          </button>
-          <span className="px-2 text-sm text-gray-500">{pagina} de {paginas}</span>
-          <button
+            Anterior
+          </Button>
+
+          <Typography variant="body2" sx={{ px: 1, color: 'text.secondary' }}>
+            {pagina} de {paginas}
+          </Typography>
+
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
             onClick={() => onCambiar(pagina + 1)}
             disabled={pagina >= paginas || cargando}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm text-gray-600 hover:border-gray-300 disabled:opacity-40"
+            endIcon={<ChevronRightIcon fontSize="small" />}
+            sx={{ color: 'text.secondary' }}
           >
-            Siguiente <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+            Siguiente
+          </Button>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
