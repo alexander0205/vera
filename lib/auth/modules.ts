@@ -38,6 +38,7 @@ const MODULE_PERMISSION: Record<ModuleKey, Permission> = {
   administracion: 'modulo:administracion',
   pos: 'modulo:pos',
   escolar: 'modulo:escolar',
+  nomina: 'modulo:nomina',
 };
 
 /**

@@ -3506,3 +3506,58 @@ export const fotosSesiones = pgTable('fotos_sesiones', {
 export type Foto        = typeof fotos.$inferSelect;
 export type NewFoto     = typeof fotos.$inferInsert;
 export type FotoSesion  = typeof fotosSesiones.$inferSelect;
+
+// ─── Nómina — Maestro de empleados (T1) ──────────────────────────────────────
+// Directorio de empleados del negocio. Es la base del módulo de nómina: sobre
+// estas filas corren las corridas (nomina_corridas/nomina_lineas) en fases
+// siguientes. No se contamina con vocabulario de otros verticales — es del
+// dominio laboral, tabla propia (misma regla que activos fijos vs inventario).
+//
+// La cédula se guarda pelada (solo dígitos). Cuando el selector de tipo de
+// documento compartido (PR #63, lib/documento/identidad.ts) llegue a v2, este
+// form lo adopta como los demás; hasta entonces es un input plano. Los campos
+// de banco existen desde ya porque la Fase 4 ("reciben pago") genera el archivo
+// de dispersión bancaria a partir de ellos.
+export const empleados = pgTable('empleados', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  cedula:          varchar('cedula', { length: 20 }),
+  nombres:         varchar('nombres', { length: 160 }).notNull(),
+  apellidos:       varchar('apellidos', { length: 160 }).notNull(),
+  cargo:           varchar('cargo', { length: 120 }),
+  /** 'indefinido' | 'temporal' | 'por_obra' | 'pasantia'. Libre por ahora. */
+  tipoContrato:    varchar('tipo_contrato', { length: 30 }).notNull().default('indefinido'),
+  /** Salario base del período de pago, en centavos (RD$). */
+  salarioBaseCents: bigint('salario_base_cents', { mode: 'number' }).notNull().default(0),
+  /** 'mensual' | 'quincenal' | 'semanal'. Cómo se paga y sobre qué se prorratea. */
+  frecuenciaPago:  varchar('frecuencia_pago', { length: 20 }).notNull().default('mensual'),
+  fechaIngreso:    date('fecha_ingreso'),
+  /** Baja: deja de entrar en corridas nuevas, conserva su historia. */
+  fechaSalida:     date('fecha_salida'),
+  estado:          varchar('estado', { length: 20 }).notNull().default('activo'),
+  // ── Afiliación a la Seguridad Social (TSS) — hoy texto libre; se normaliza
+  //    a catálogo cuando el motor de cálculo lo necesite (Fase 2). ──
+  afp:             varchar('afp', { length: 80 }),
+  ars:             varchar('ars', { length: 80 }),
+  // ── Datos para el archivo de dispersión bancaria (Fase 4) ──
+  bancoNombre:     varchar('banco_nombre', { length: 80 }),
+  bancoCuenta:     varchar('banco_cuenta', { length: 40 }),
+  /** 'ahorros' | 'corriente'. */
+  bancoTipoCuenta: varchar('banco_tipo_cuenta', { length: 20 }),
+  // ── Datos personales ──
+  sexo:            varchar('sexo', { length: 20 }),
+  fechaNacimiento: date('fecha_nacimiento'),
+  nacionalidad:    varchar('nacionalidad', { length: 60 }),
+  telefono:        varchar('telefono', { length: 30 }),
+  email:           varchar('email', { length: 160 }),
+  notas:           text('notas'),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleados_team_idx').on(t.teamId),
+  index('empleados_team_estado_idx').on(t.teamId, t.estado),
+]);
+
+export type Empleado    = typeof empleados.$inferSelect;
+export type NewEmpleado = typeof empleados.$inferInsert;
