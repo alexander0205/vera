@@ -19,8 +19,7 @@ type SeccionNomina = RailSeccion & { oculto?: boolean };
 const SECCIONES: SeccionNomina[] = [
   { tipo: 'item', id: 'nomina-panorama',   href: '/nomina',            label: 'Panorama',   icon: LayoutDashboard, oculto: true },
   { tipo: 'item', id: 'nomina-empleados',  href: '/nomina/empleados',  label: 'Empleados',  icon: Users },
-  // Fase 2-3: corrida de nómina (cálculo AFP/SFS/ISR + volante + asiento).
-  { tipo: 'item', id: 'nomina-corridas',   href: '/nomina/corridas',   label: 'Corridas',   icon: CalendarClock, oculto: true },
+  { tipo: 'item', id: 'nomina-corridas',   href: '/nomina/corridas',   label: 'Corridas',   icon: CalendarClock },
   // Fase 4: archivo de dispersión bancaria y registro del pago.
   { tipo: 'item', id: 'nomina-pagos',      href: '/nomina/pagos',      label: 'Pagos',      icon: Wallet, oculto: true },
   { tipo: 'item', id: 'nomina-config',     href: '/nomina/configuracion', label: 'Configuración', icon: Settings, oculto: true },

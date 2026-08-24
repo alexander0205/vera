@@ -908,6 +908,83 @@ export async function generarAsientoGastoDoc(
     : { creado: true, asientoId };
 }
 
+// ─── Asiento de nómina ───────────────────────────────────────────────────────
+
+/**
+ * Asiento de una corrida de nómina al aprobarla. Partida doble del devengo:
+ *
+ *   DEBE  Gasto de sueldos            (bruto)
+ *   DEBE  Gasto aportes patronales    (patronal)
+ *   HABER Retenciones por pagar       (AFP+SFS+ISR del empleado)
+ *   HABER Aportes patronales por pagar(patronal)
+ *   HABER Sueldos por pagar           (neto)
+ *
+ * Cuadra: bruto + patronal (debe) = deducciones + patronal + neto (haber),
+ * porque bruto = neto + deducciones. Mientras no exista una cuenta de nómina
+ * dedicada en la config, usa la de gastos y la de por-pagar genéricas: es
+ * correcto y balanceado; separar en cuentas propias es refinamiento posterior.
+ */
+export async function generarAsientoNomina(
+  teamId: number,
+  corridaId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT descripcion,
+           total_bruto_cents       AS "bruto",
+           total_deducciones_cents AS "deducciones",
+           total_neto_cents        AS "neto",
+           total_patronal_cents    AS "patronal",
+           to_char(coalesce(fecha_pago, (periodo || '-28')::date), 'YYYY-MM-DD') AS fecha
+    FROM nomina_corridas
+    WHERE team_id = ${teamId} AND id = ${corridaId}
+  `);
+  const fila = (filas as unknown as {
+    descripcion: string; bruto: string | number; deducciones: string | number;
+    neto: string | number; patronal: string | number; fecha: string;
+  }[])[0];
+
+  if (!fila) return { creado: false, motivo: 'no-es-gasto' };
+  // Los BIGINT llegan como string desde el SQL crudo: coercionar a número o el
+  // reduce de insertarAsiento concatenaría en vez de sumar y descuadraría.
+  const c = {
+    descripcion: fila.descripcion,
+    fecha: fila.fecha,
+    bruto:       Number(fila.bruto),
+    deducciones: Number(fila.deducciones),
+    neto:        Number(fila.neto),
+    patronal:    Number(fila.patronal),
+  };
+  if (c.bruto <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
+  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+
+  const lineas = [
+    { cuentaId: cuentaGasto,     debeCents: c.bruto,       haberCents: 0, descripcion: 'Sueldos del período' },
+    { cuentaId: cuentaGasto,     debeCents: c.patronal,    haberCents: 0, descripcion: 'Aportes patronales TSS' },
+    { cuentaId: cuentaPorPagar,  debeCents: 0, haberCents: c.deducciones, descripcion: 'Retenciones por pagar (AFP/SFS/ISR)' },
+    { cuentaId: cuentaPorPagar,  debeCents: 0, haberCents: c.patronal,    descripcion: 'Aportes patronales por pagar' },
+    { cuentaId: cuentaPorPagar,  debeCents: 0, haberCents: c.neto,        descripcion: 'Sueldos por pagar' },
+  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: c.fecha, concepto: `Nómina · ${c.descripcion}`, origenTipo: 'nomina', origenId: corridaId },
+    lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
 // ─── Asiento manual ──────────────────────────────────────────────────────────
 
 /** Error de validación de un asiento manual. La API lo traduce a 400. */

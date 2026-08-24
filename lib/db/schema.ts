@@ -3561,3 +3561,73 @@ export const empleados = pgTable('empleados', {
 
 export type Empleado    = typeof empleados.$inferSelect;
 export type NewEmpleado = typeof empleados.$inferInsert;
+
+// ─── Nómina — Corridas (Fase 3) ──────────────────────────────────────────────
+// Una corrida es una nómina de un período: toma los empleados activos, corre el
+// motor (lib/nomina/calculo.ts) sobre cada uno y guarda el desglose. Los
+// totales se guardan denormalizados para no recalcular al listar. El asiento
+// contable se ata al aprobar (origenTipo='nomina', el motor contable ya existe).
+export const nominaCorridas = pgTable('nomina_corridas', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  /** Período contable de la nómina, formato 'YYYY-MM'. */
+  periodo:     varchar('periodo', { length: 7 }).notNull(),
+  descripcion: varchar('descripcion', { length: 160 }).notNull(),
+  /** 'mensual' | 'quincenal' | 'semanal' — la frecuencia de esta corrida. */
+  tipo:        varchar('tipo', { length: 20 }).notNull().default('mensual'),
+  fechaPago:   date('fecha_pago'),
+  /** 'borrador' | 'aprobada' | 'pagada'. */
+  estado:      varchar('estado', { length: 20 }).notNull().default('borrador'),
+  /** Año de las tasas TSS/ISR con que se calculó (snapshot de la ley usada). */
+  anioTasas:   integer('anio_tasas').notNull(),
+  totalBrutoCents:       bigint('total_bruto_cents', { mode: 'number' }).notNull().default(0),
+  totalDeduccionesCents: bigint('total_deducciones_cents', { mode: 'number' }).notNull().default(0),
+  totalNetoCents:        bigint('total_neto_cents', { mode: 'number' }).notNull().default(0),
+  totalPatronalCents:    bigint('total_patronal_cents', { mode: 'number' }).notNull().default(0),
+  /** Asiento contable generado al aprobar. Null mientras es borrador. */
+  asientoId:   integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdBy:   integer('created_by').references(() => users.id),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  aprobadaEn:  timestamp('aprobada_en'),
+  pagadaEn:    timestamp('pagada_en'),
+}, (t) => [
+  index('nomina_corridas_team_idx').on(t.teamId),
+  uniqueIndex('nomina_corridas_periodo_uniq').on(t.teamId, t.periodo, t.tipo),
+]);
+
+/**
+ * Línea de una corrida = un empleado calculado. Guarda el desglose completo y
+ * un snapshot del nombre/cédula/cargo: si el empleado se edita o se da de baja
+ * después, la nómina histórica no cambia.
+ */
+export const nominaLineas = pgTable('nomina_lineas', {
+  id:          serial('id').primaryKey(),
+  corridaId:   integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  empleadoId:  integer('empleado_id').notNull().references(() => empleados.id),
+  // Snapshot al momento de la corrida
+  nombre:      varchar('nombre', { length: 320 }).notNull(),
+  cedula:      varchar('cedula', { length: 20 }),
+  cargo:       varchar('cargo', { length: 120 }),
+  // Desglose (centavos), espejo de DesgloseNomina
+  brutoCents:            bigint('bruto_cents', { mode: 'number' }).notNull(),
+  afpEmpleadoCents:      bigint('afp_empleado_cents', { mode: 'number' }).notNull(),
+  sfsEmpleadoCents:      bigint('sfs_empleado_cents', { mode: 'number' }).notNull(),
+  isrCents:              bigint('isr_cents', { mode: 'number' }).notNull(),
+  otrasDeduccionesCents: bigint('otras_deducciones_cents', { mode: 'number' }).notNull().default(0),
+  totalDeduccionesCents: bigint('total_deducciones_cents', { mode: 'number' }).notNull(),
+  afpPatronalCents:      bigint('afp_patronal_cents', { mode: 'number' }).notNull(),
+  sfsPatronalCents:      bigint('sfs_patronal_cents', { mode: 'number' }).notNull(),
+  srlPatronalCents:      bigint('srl_patronal_cents', { mode: 'number' }).notNull(),
+  infotepPatronalCents:  bigint('infotep_patronal_cents', { mode: 'number' }).notNull(),
+  totalPatronalCents:    bigint('total_patronal_cents', { mode: 'number' }).notNull(),
+  netoCents:             bigint('neto_cents', { mode: 'number' }).notNull(),
+}, (t) => [
+  index('nomina_lineas_corrida_idx').on(t.corridaId),
+  index('nomina_lineas_team_idx').on(t.teamId),
+]);
+
+export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
+export type NewNominaCorrida = typeof nominaCorridas.$inferInsert;
+export type NominaLinea      = typeof nominaLineas.$inferSelect;
+export type NewNominaLinea   = typeof nominaLineas.$inferInsert;
