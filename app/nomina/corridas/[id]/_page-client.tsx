@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
-import { ArrowLeft, Loader2, CheckCircle2, BookOpen } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle } from 'lucide-react';
 
 interface Corrida {
   id: number;
@@ -49,12 +49,28 @@ const BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 
   pagada:   { label: 'Pagada',   variant: 'secondary' },
 };
 
+interface PreviewDispersion {
+  totalBeneficiarios: number;
+  totalCents: number;
+  incompletos: { empleadoId: number; nombre: string; motivo: string }[];
+}
+
 export default function CorridaDetalleClient({ id }: { id: string }) {
   const { can } = usePermissions();
   const puedeCorrer = can('nomina:correr');
+  const puedePagar = can('nomina:pagar');
   const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[] }>(`/api/nomina/corridas/${id}`, fetcher);
   const [confirmar, setConfirmar] = useState(false);
   const [aprobando, setAprobando] = useState(false);
+  const [confirmarPago, setConfirmarPago] = useState(false);
+  const [pagando, setPagando] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+
+  const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
+  const { data: preview } = useSWR<PreviewDispersion>(
+    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1` : null,
+    fetcher,
+  );
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>;
@@ -82,6 +98,46 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     }
   }
 
+  async function descargarDispersion() {
+    setDescargando(true);
+    try {
+      const res = await fetch(`/api/nomina/corridas/${id}/dispersion`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? 'No se pudo generar el archivo');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dispersion-nomina-${corrida.periodo}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setDescargando(false);
+    }
+  }
+
+  async function pagar() {
+    setPagando(true);
+    try {
+      const res = await fetch(`/api/nomina/corridas/${id}/pagar`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo marcar como pagada');
+      toast.success('Corrida marcada como pagada');
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setPagando(false);
+      setConfirmarPago(false);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
       <Link href="/nomina/corridas" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -99,17 +155,42 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
             {corrida.fechaPago ? ` · pago ${corrida.fechaPago}` : ''}
           </p>
         </div>
-        {corrida.estado === 'borrador' && puedeCorrer && (
-          <Button onClick={() => setConfirmar(true)} className="gap-1.5">
-            <CheckCircle2 className="h-4 w-4" /> Aprobar corrida
-          </Button>
-        )}
-        {corrida.asientoId && (
-          <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-            <BookOpen className="h-4 w-4" /> Asiento #{corrida.asientoId}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {corrida.asientoId && (
+            <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+              <BookOpen className="h-4 w-4" /> Asiento #{corrida.asientoId}
+            </span>
+          )}
+          {corrida.estado === 'borrador' && puedeCorrer && (
+            <Button onClick={() => setConfirmar(true)} className="gap-1.5">
+              <CheckCircle2 className="h-4 w-4" /> Aprobar corrida
+            </Button>
+          )}
+          {corrida.estado !== 'borrador' && puedePagar && (
+            <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="gap-1.5">
+              {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Descargar dispersión
+            </Button>
+          )}
+          {corrida.estado === 'aprobada' && puedePagar && (
+            <Button onClick={() => setConfirmarPago(true)} className="gap-1.5">
+              <Banknote className="h-4 w-4" /> Marcar como pagada
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Aviso: empleados sin cuenta de banco que quedan fuera de la dispersión */}
+      {corrida.estado === 'aprobada' && preview && preview.incompletos.length > 0 && (
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <div>
+            <span className="font-medium">{preview.incompletos.length} empleado(s) sin cuenta de banco</span> quedan
+            fuera del archivo: {preview.incompletos.map((i) => i.nombre).join(', ')}. Complétales la cuenta en su ficha
+            para incluirlos.
+          </div>
+        </div>
+      )}
 
       {/* Totales */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -161,6 +242,15 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         description="Se genera el asiento contable del devengo y la corrida queda lista para pagar. No podrás editarla después."
         confirmLabel={aprobando ? 'Aprobando…' : 'Aprobar'}
         onConfirm={aprobar}
+      />
+
+      <ConfirmDialog
+        open={confirmarPago}
+        onOpenChange={setConfirmarPago}
+        title="Marcar la corrida como pagada"
+        description="Confírmalo una vez que hayas subido el archivo de dispersión a tu banca en línea. Queda registrada la fecha de pago; la app no mueve el dinero."
+        confirmLabel={pagando ? 'Guardando…' : 'Sí, ya la pagué'}
+        onConfirm={pagar}
       />
     </div>
   );
