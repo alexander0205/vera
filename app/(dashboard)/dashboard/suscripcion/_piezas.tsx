@@ -280,8 +280,12 @@ export function Comparativa({
 }: {
   planes: PlanDef[];
   actual: PlanDef;
-  /** El precio real de cada plan, adicionales de la línea incluidos. */
-  precios: Record<string, number>;
+  /**
+   * El precio real de cada plan, adicionales de la línea incluidos, o `null`
+   * cuando su familia se cotiza. Sin respaldo a `p.price`: ese respaldo es
+   * justo el que devolvería la cifra que se acaba de retirar.
+   */
+  precios: Record<string, number | null>;
 }) {
   type Celda = { texto: string } | { sinTope: true };
   const filas: { etiqueta: string; valor: (p: PlanDef) => Celda }[] = [
@@ -299,7 +303,19 @@ export function Comparativa({
     ...(planes.some(p => p.limits.smsMensajes >= 0)
       ? [{ etiqueta: 'Avisos SMS/mes', valor: (p: PlanDef): Celda => ({ texto: limiteTexto(p.limits.smsMensajes) }) }]
       : []),
-    { etiqueta: 'Precio/mes', valor: (p): Celda => ({ texto: usd(precios[p.key] ?? p.price) }) },
+    // La fila del precio desaparece entera cuando ninguno de los planes que se
+    // comparan publica cifra: una columna de «Bajo cotización» repetida cuatro
+    // veces no compara nada y ocupa el sitio de lo que sí distingue un plan de
+    // otro. El aviso de que el precio se cotiza ya está arriba, en la rejilla.
+    ...(planes.some(p => precios[p.key] !== null)
+      ? [{
+        etiqueta: 'Precio/mes',
+        valor: (p: PlanDef): Celda => {
+          const v = precios[p.key];
+          return { texto: v === null || v === undefined ? 'Bajo cotización' : usd(v) };
+        },
+      }]
+      : []),
   ];
 
   return (
@@ -316,7 +332,11 @@ export function Comparativa({
         <Box>
           <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: TINTA }}>Comparar los planes</Typography>
           <Typography sx={{ fontSize: '0.78rem', color: GRIS, mt: 0.375 }}>
-            Topes, usuarios y precio de cada plan, uno al lado del otro.
+            {/* No se anuncia una fila de precios que puede no existir: la
+                tabla de una familia que se cotiza no la lleva. */}
+            {planes.some(p => precios[p.key] !== null)
+              ? 'Topes, usuarios y precio de cada plan, uno al lado del otro.'
+              : 'Topes y usuarios de cada plan, uno al lado del otro.'}
           </Typography>
         </Box>
         <Box className="chevron" sx={{ display: 'grid', placeItems: 'center', transition: 'transform .22s', flexShrink: 0 }}>

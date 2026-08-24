@@ -374,10 +374,16 @@ export function limiteTexto(n: number): string {
   return n < 0 ? 'ilimitados' : n.toLocaleString('es-DO');
 }
 
-/** Precio formateado para mostrar en UI (ej: "$15 USD/mes") */
+/**
+ * Precio formateado para mostrar en UI (ej: "$15 USD/mes").
+ *
+ * Respeta `precioBajoCotizacion`: es una función de PINTAR, y si alguien la
+ * usa para una línea que no publica cifra, la cifra saldría por aquí.
+ */
 export function getPlanPriceLabel(planKey: string): string {
   const plan = getPlan(planKey);
   if (plan.price === 0) return 'Gratis';
+  if (planBajoCotizacion(plan.key)) return TEXTO_BAJO_COTIZACION;
   return `$${plan.price} USD/mes`;
 }
 
@@ -552,6 +558,24 @@ export interface LineaProducto {
   /** Adicionales que la línea trae de fábrica (se suman al precio). */
   addons: string[];
   /**
+   * La línea NO publica precio: donde iría la cifra va la invitación a
+   * cotizar, y el plan no se puede auto-contratar.
+   *
+   * Las dos mitades son la misma decisión y por eso viven en el mismo campo.
+   * Esconder el precio y dejar al lado un botón que cobra US$35 en Stripe es
+   * prometer una conversación y cobrar sin tenerla; y bloquear la compra sin
+   * decir por qué es un callejón sin salida que acaba en soporte. Quien lea
+   * este flag tiene que hacer las dos cosas: `lineaBajoCotizacion` para el
+   * precio y el veto del autoservicio en `lib/payments/actions.ts` y en
+   * /api/stripe/change-plan.
+   *
+   * Vive AQUÍ y no en cada pantalla porque son siete las que pintan un precio
+   * —portada, /precios, su tabla comparativa, el recomendador, el onboarding,
+   * la rejilla de suscripción y su comparativa— y la que se quede sin
+   * enterarse es justamente la que sigue publicando la cifra que se retiró.
+   */
+  precioBajoCotizacion: boolean;
+  /**
    * La frase que va primero, en grande: el problema que se le quita de encima.
    *
    * Deliberadamente SIN porcentajes ni cifras. «Los colegios pierden un 30%»
@@ -581,6 +605,9 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Facturación electrónica, contabilidad completa, inventario y compras.',
     familia: 'ecf',
     addons: [],
+    // Sin cifra publicada: lo que paga un negocio se arma con su volumen, sus
+    // usuarios y lo que haya que migrarle. Decisión del dueño.
+    precioBajoCotizacion: true,
     gancho: 'Deja de perseguir lo que te deben y de armar los 606 a mano.',
     vende: [
       'Emites e-CF ante la DGII sin salir del sistema ni pagar un tercero',
@@ -595,6 +622,10 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP más el punto de venta: caja, turnos y stock por almacén.',
     familia: 'ecf',
     addons: ['pos'],
+    // Es la misma familia `ecf` con el POS sumado, así que arrastra su misma
+    // regla: si el plan de debajo se cotiza, el combinado también. Tenerlas
+    // distintas dejaría el precio del adicional a la vista por resta.
+    precioBajoCotizacion: true,
     gancho: 'Lo que se vende, se descuenta del inventario y se factura en el mismo acto.',
     vende: [
       'Cobras en mostrador con caja, turnos y cuadre al cerrar',
@@ -609,6 +640,12 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP, el punto de venta de la cafetería y la gobernanza del colegio.',
     familia: 'colegio',
     addons: [],
+    // Los cuatro tramos SÍ llevan cifra —135/237/350/500— y es a propósito: el
+    // tramo se elige por estudiantes, que es un número que el colegio ya sabe,
+    // así que publicarlo deja que se ubique solo. (Lo que la portada pública
+    // decidió aparte, por mercadeo, es no enseñar el total en /precios; eso es
+    // suyo y no lo decide este flag.)
+    precioBajoCotizacion: false,
     // Un colegio no pierde plata de golpe: la pierde en goteo, y las tres vías
     // por las que se va son exactamente las tres que el sistema cierra. Por eso
     // el texto empieza por el dinero y no por las funciones — el director no
@@ -667,4 +704,82 @@ export function planesDeLinea(lineaKey: string): { plan: PlanDef; precio: number
     plan,
     precio: precioTotal(plan.key, linea.addons),
   }));
+}
+
+// ─── Precio bajo cotización ───────────────────────────────────────────────────
+//
+// Todo lo que decide si una cifra se publica sale de `precioBajoCotizacion` y
+// pasa por aquí. La regla anterior —«el precio se esconde si la línea es de
+// colegio»— estaba escrita a mano en cinco componentes, y esa es exactamente la
+// forma de que el día que cambie quede una pantalla publicando lo que las otras
+// cuatro ya retiraron.
+
+/** Lo que se lee donde iría la cifra. Uno solo para todas las pantallas. */
+export const TEXTO_BAJO_COTIZACION = 'Precio bajo cotización';
+
+/** Una línea comercial por su clave. null si no existe. */
+export function getLinea(lineaKey: string | null | undefined): LineaProducto | null {
+  return LINEAS_PRODUCTO.find(l => l.key === lineaKey) ?? null;
+}
+
+/** ¿Esta línea se cotiza en vez de publicar su precio? */
+export function lineaBajoCotizacion(lineaKey: string | null | undefined): boolean {
+  return getLinea(lineaKey)?.precioBajoCotizacion ?? false;
+}
+
+/**
+ * ¿A esta familia hay que cotizarle el precio?
+ *
+ * Solo si TODAS sus líneas se cotizan. La familia `ecf` se vende por dos —Zero
+ * ERP y Zero POS + ERP— sobre los mismos cuatro planes: mientras una de las dos
+ * publique cifra, el precio del plan está publicado y esconderlo en la otra no
+ * lo retira de ningún sitio, solo descuadra las dos pantallas.
+ *
+ * Existe porque hay sitios que no saben desde qué línea se está mirando —la
+ * comparativa de la pantalla de suscripción trabaja con `planesDeFamilia`— y
+ * ahí la pregunta correcta es esta, no la de la línea.
+ */
+export function familiaBajoCotizacion(familia: FamiliaPlan): boolean {
+  const lineas = LINEAS_PRODUCTO.filter(l => l.familia === familia);
+  return lineas.length > 0 && lineas.every(l => l.precioBajoCotizacion);
+}
+
+/** Lo mismo, cuando lo único que se tiene a mano es la clave del plan. */
+export function planBajoCotizacion(planKey: string | null | undefined): boolean {
+  return familiaBajoCotizacion(getPlan(planKey).familia);
+}
+
+/**
+ * El precio de un plan DENTRO de una línea tal como se le puede enseñar al
+ * cliente: la cifra con los adicionales de la línea ya sumados, o `null`
+ * cuando toca cotizar.
+ *
+ * Devolver `null` y no una cadena vacía ni un cero es lo que permite que el
+ * servidor no le mande la cifra al navegador: en una página pública, un precio
+ * «escondido» con CSS sigue estando en el fuente para quien mire.
+ */
+export function precioPublicable(
+  lineaKey: string | null | undefined,
+  planKey: string | null | undefined,
+): number | null {
+  const linea = getLinea(lineaKey);
+  if (!linea || linea.precioBajoCotizacion) return null;
+  return precioTotal(planKey, linea.addons);
+}
+
+/**
+ * ¿Hay que cotizar el adicional al ofrecerlo sobre esta familia?
+ *
+ * El Punto de Venta solo se vende suelto sobre la familia e-CF —en los tramos
+ * de colegio viene dentro—, y esa familia va entera bajo cotización, así que
+ * sus US$9 corren la misma suerte. Publicarlos sería, además, dar el precio del
+ * combinado por resta el día que alguno de los dos se publique.
+ */
+export function addonBajoCotizacion(addonKey: string, familia: FamiliaPlan): boolean {
+  const addon = ADDONS.find(a => a.key === addonKey);
+  if (!addon) return false;
+  // Donde ya viene incluido no se ofrece ni se cobra aparte: no hay cifra que
+  // publicar ni que esconder.
+  if (addon.incluidoEn.includes(familia)) return false;
+  return familiaBajoCotizacion(familia);
 }

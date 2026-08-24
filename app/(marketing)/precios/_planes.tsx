@@ -39,9 +39,10 @@ export type PlanVista = {
   descripcion: string;
   /**
    * `null` = este plan no publica precio, y en su lugar va la invitación a
-   * hablar con un representante. Hoy son los tramos de colegio: el servidor
-   * ni siquiera manda la cifra (ver `page.tsx`), así que aquí no hay nada que
-   * esconder — si no vino, no existe.
+   * hablar con nosotros. El servidor ni siquiera manda la cifra (ver
+   * `page.tsx`), así que aquí no hay nada que esconder — si no vino, no
+   * existe. El POR QUÉ no vino lo dice `LineaVista.bajoCotizacion`, y no es
+   * el mismo en las tres líneas.
    */
   precio: number | null;
   /**
@@ -73,6 +74,16 @@ export type LineaVista = {
   descripcion: string;
   gancho: string;
   esColegio: boolean;
+  /**
+   * La línea no tiene precio de catálogo: se cotiza con el cliente.
+   *
+   * Distinto de que la cifra falte por la decisión de mercadeo de esta página
+   * —que es lo que pasa con los tramos de colegio, que SÍ tienen precio y se
+   * enseña dentro del sistema—. Lo que cambia es qué se escribe en el hueco:
+   * al colegio se le dice de qué depende su tramo, y aquí que el precio se
+   * arma con su operación.
+   */
+  bajoCotizacion: boolean;
   conPos: boolean;
   /**
    * Días de prueba de ESTA línea, no del producto.
@@ -87,6 +98,31 @@ export type LineaVista = {
 };
 
 const usd = (n: number) => `US$${n.toLocaleString('es-DO')}`;
+
+/**
+ * Qué se escribe donde iba la cifra, y por qué falta.
+ *
+ * Una tarjeta con el hueco en blanco parece un olvido y el visitante se va a
+ * buscar el precio a otro lado; decir de qué depende convierte la ausencia en
+ * una razón. Son dos razones distintas y por eso son dos textos: el colegio
+ * tiene tramo y lo que no se publica es su total, mientras que en las líneas
+ * de facturación no hay cifra de catálogo que publicar.
+ */
+function huecoDePrecio(linea: LineaVista): { titulo: string; detalle: string } {
+  return linea.bajoCotizacion
+    ? {
+      titulo: 'Precio bajo cotización',
+      detalle: 'Lo armamos con tu volumen, tus usuarios y lo que haya que migrar.',
+    }
+    : {
+      titulo: 'Precio a la medida',
+      detalle: 'Depende de cuántos estudiantes tienes y de la implementación que necesites.',
+    };
+}
+
+/** A dónde se va a pedir el precio. El perfil viaja puesto: ya lo dijo. */
+const hrefCotizar = (linea: LineaVista) =>
+  linea.esColegio ? '/contacto?perfil=colegio' : '/contacto?perfil=pyme';
 
 // ─── Celdas de la tabla ──────────────────────────────────────────────────────
 
@@ -228,6 +264,7 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
           {linea.planes.map(p => {
             const oscuro = !p.destacado && p === linea.planes[linea.planes.length - 1];
             const esColegio = linea.key === 'erp-colegio';
+            const hueco = huecoDePrecio(linea);
             return (
               <div
                 key={p.key}
@@ -251,18 +288,29 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   {p.descripcion}
                 </div>
 
-                {/* Sin cifra, pero con motivo: una tarjeta que enseña el
-                    tramo entero y deja el precio en blanco parece un olvido, y
-                    el visitante se va a buscarlo a otro lado. Decir de qué
-                    depende convierte la ausencia en una razón. */}
+                {/* Sin cifra, pero con motivo y con salida: el texto dice de
+                    qué depende (ver `huecoDePrecio`) y el enlace lleva a
+                    pedirlo. Un hueco sin ninguna de las dos cosas parece un
+                    olvido y el visitante se va a buscar el precio a otro
+                    lado. */}
                 {p.precio === null ? (
                   <div className="mt-4">
                     <div className={`font-[family-name:var(--font-display)] text-[19px] font-semibold leading-tight tracking-[-.6px] ${oscuro ? 'text-white' : 'text-[#0f1118]'}`}>
-                      Precio a la medida
+                      {hueco.titulo}
                     </div>
                     <p className={`mt-1.5 text-pretty text-[11.5px] leading-snug ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
-                      Depende de cuántos estudiantes tienes y de la implementación que necesites.
+                      {hueco.detalle}
                     </p>
+                    {/* Solo donde el botón de abajo NO lleva ya a contacto: en
+                        colegio sería el mismo destino dos veces seguidas. */}
+                    {!esColegio && (
+                      <Link
+                        href={hrefCotizar(linea)}
+                        className={`mt-1.5 inline-flex items-center text-[11.5px] font-semibold underline underline-offset-2 ${oscuro ? 'text-white' : 'text-zero-600'}`}
+                      >
+                        Pedir cotización
+                      </Link>
+                    )}
                   </div>
                 ) : (
                   <div className="mt-4 flex items-baseline gap-1">
@@ -306,16 +354,20 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                     alguien tiene que enseñárselo a la secretaria y el precio
                     se arma con sus números. Ahí la conversación es el camino
                     honesto, y por eso el botón la ofrece en vez de mandar a un
-                    registro que no va a poder completar. Los planes de
-                    facturación sí se compran solos —hay prueba de verdad, con
-                    su tarjeta y su reloj en Stripe—, y mandarlos a un
-                    formulario sería ponerle una cita a algo que ya funciona
-                    sin nosotros.
+                    registro que no va a poder completar.
 
-                    El `?perfil=colegio` llega al formulario de contacto: quien
-                    viene de esta tarjeta ya dijo que es un colegio, y volver a
-                    preguntárselo le enseña de entrada las preguntas de una
-                    pyme. */}
+                    En las líneas de facturación el botón SIGUE siendo la
+                    prueba aunque ya no se publique el precio, y no es un
+                    descuido: la prueba no cobra nada ni pide tarjeta —Stripe
+                    la deja en pausa si al terminar no hay método de pago—, así
+                    que nadie acaba pagando una cifra que no vio. Lo que sí se
+                    cerró es el botón que COBRA (ver `lib/payments/actions.ts`).
+                    Quien quiera el número antes de probar lo pide por el
+                    enlace de arriba.
+
+                    El `?perfil=` llega al formulario de contacto: quien viene
+                    de esta tarjeta ya dijo quién es, y volver a preguntárselo
+                    le enseña de entrada las preguntas del otro perfil. */}
                 <Link
                   href={esColegio ? '/contacto?perfil=colegio' : '/sign-up'}
                   className={`mt-4 flex h-11 items-center justify-center rounded-xl px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight transition ${
@@ -412,7 +464,7 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   </div>
                   {p.precio === null ? (
                     <div className={`mt-1 text-pretty text-[10.5px] font-semibold leading-tight ${p.destacado ? 'text-zero-600' : 'text-[#4a5164]'}`}>
-                      Precio a la medida
+                      {huecoDePrecio(tabla).titulo}
                     </div>
                   ) : (
                     <div className={`mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold ${p.destacado ? 'text-zero-600' : 'text-[#0f1118]'}`}>
@@ -497,7 +549,9 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
         <p className="mt-3 text-[11.5px] text-gray-500">
           {tabla.esColegio
             ? 'El precio de cada tramo se arma con los números de tu colegio. El lazo de Zero indica sin tope.'
-            : 'Precios mensuales en dólares estadounidenses, sin ITBIS. El lazo de Zero indica sin tope.'}
+            : tabla.bajoCotizacion
+              ? 'El precio se arma con tu operación y se cotiza en dólares, sin ITBIS. El lazo de Zero indica sin tope.'
+              : 'Precios mensuales en dólares estadounidenses, sin ITBIS. El lazo de Zero indica sin tope.'}
         </p>
       </Contenedor>
     </>
@@ -536,6 +590,10 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
 
   const esColegio = perfil === 'colegio';
   const planes = linea.planes;
+  const hueco = huecoDePrecio(linea);
+  // Que la línea no enseñe cifra, venga de donde venga el motivo: es lo que
+  // decide si el bloque azul promete un precio o una conversación.
+  const sinCifra = planes.every(p => p.precio === null);
 
   const indicePorVolumen = esColegio
     ? planes.findIndex(p => p.estudiantes < 0 || estudiantes <= p.estudiantes)
@@ -554,12 +612,12 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
         <h2 className="mt-3.5 font-[family-name:var(--font-display)] text-[clamp(1.4rem,4vw,1.7rem)] font-semibold leading-tight tracking-[-1px]">
           ¿Cuál plan me toca?
         </h2>
-        {/* En colegio la promesa es el TRAMO, no la cifra: prometer «con su
-            precio» y luego enseñar una invitación a hablar sería quedarle mal
-            al visitante en la misma pantalla. */}
+        {/* La promesa es el PLAN, no la cifra, en cuanto la línea no publique
+            precio: prometer «con su precio» y luego enseñar una invitación a
+            hablar sería quedarle mal al visitante en la misma pantalla. */}
         <p className="mt-3 text-pretty text-[13.5px] leading-relaxed text-[#5c6373]">
           Mueve dos barras y te decimos el plan exacto de <strong className="font-semibold">{linea.nombre}</strong>
-          {linea.esColegio ? ' que te toca.' : ' con su precio.'}
+          {sinCifra ? ' que te toca.' : ' con su precio.'}
         </p>
 
         {esColegio ? (
@@ -603,12 +661,12 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
               {sugerido.precio === null ? (
                 <>
                   <div className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-semibold leading-tight tracking-[-.8px]">
-                    Precio a la medida
+                    {hueco.titulo}
                   </div>
                   <p className="mt-2 text-pretty text-[12.5px] leading-relaxed text-white/70">
-                    El de un colegio no sale de una lista: depende de cuántos estudiantes tiene, de
-                    cuánto hay que migrar y de lo que ya tenga puesto. Escríbenos y lo armamos con
-                    tus números.
+                    {linea.bajoCotizacion
+                      ? 'No sale de una lista: depende de cuánto facturas, de cuántos entran al sistema y de lo que haya que migrar. Escríbenos y lo armamos con tus números.'
+                      : 'El de un colegio no sale de una lista: depende de cuántos estudiantes tiene, de cuánto hay que migrar y de lo que ya tenga puesto. Escríbenos y lo armamos con tus números.'}
                   </p>
                   {/* La referencia por estudiante. Es la cifra con la que un
                       director de verdad decide —la compara con lo que cobra de
@@ -664,17 +722,19 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
           )}
 
           <Link
-            href={linea.esColegio ? '/contacto?perfil=colegio' : '/contacto'}
+            href={hrefCotizar(linea)}
             className="mt-6 flex h-11 items-center justify-center rounded-xl bg-white px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight text-[#102a72] transition hover:-translate-y-0.5"
           >
             {!sugerido
               ? 'Hablar con ventas'
               : sugerido.precio === null
-                ? 'Hablar con un representante'
+                ? linea.bajoCotizacion ? 'Pedir cotización' : 'Hablar con un representante'
                 : 'Solicitar este plan'}
           </Link>
+          {/* El pie no puede hablar de «precios» sobre un bloque sin ninguno:
+              es contradecirse en tres centímetros. */}
           <div className="mt-3 text-center text-[11px] text-white/55">
-            {linea.esColegio
+            {sinCifra
               ? 'Sin costo de instalación. Facturación mensual.'
               : 'Precios en dólares, sin ITBIS. Facturación mensual.'}
           </div>
