@@ -42,7 +42,9 @@ export default function PosReportePage() {
   );
 
   return (
-    <Box sx={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: '12px', color: '#000', lineHeight: 1.35 }}>
+    // `print-area`: el CSS global apaga `body *` al imprimir y solo deja ver lo
+    // que cuelga de esta clase. Sin ella el corte sale en blanco.
+    <Box className="print-area" sx={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: '12px', color: '#000', lineHeight: 1.35 }}>
       <Box sx={{ textAlign: 'center', marginBottom: '6px' }}>
         <Box sx={{ fontWeight: 700, fontSize: '14px' }}>CORTE {r.tipo}</Box>
         <Box>{r.tipo === 'Z' ? 'Cierre de turno' : 'Lectura en curso'}</Box>

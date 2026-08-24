@@ -6,10 +6,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, desc, sql } from 'drizzle-orm';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { conErrorJson } from '@/lib/api/error-json';
 import { db } from '@/lib/db/drizzle';
 import { cajaTurnos, users } from '@/lib/db/schema';
 
 export async function GET(req: NextRequest) {
+  return conErrorJson(
+    'api/caja/historial',
+    'No se pudo cargar el historial de turnos.',
+    () => historialDeTurnos(req),
+  );
+}
+
+async function historialDeTurnos(req: NextRequest): Promise<Response> {
   const auth = await requirePermission('caja:ver');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
