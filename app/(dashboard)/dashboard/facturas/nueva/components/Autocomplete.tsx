@@ -9,7 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
-  onFreeText, freeTextLabel, dropdownMinWidth,
+  onFreeText, freeTextLabel, dropdownMinWidth, multilinea = false,
 }: {
   placeholder: string;
   onSearch: (q: string) => Promise<T[]>;
@@ -26,6 +26,19 @@ export function Autocomplete<T extends { id: number }>({
   /** Ancho mínimo (px) del dropdown. Si supera el ancho del input, el panel se
    *  ensancha más allá de la celda (útil para opciones tipo tabla). */
   dropdownMinWidth?: number;
+  /**
+   * Deja que el texto seleccionado baje a una segunda línea en vez de cortarse.
+   *
+   * En una tabla de factura el nombre del producto es el dato que identifica la
+   * línea, y «Manuales Caligrafias 3ro…» cortado no dice cuál manual es. Un
+   * `input` normal no puede envolver texto —es una sola línea por definición—,
+   * así que por dentro pasa a ser un `textarea`.
+   *
+   * De ahí que Enter quede bloqueado más abajo: en un textarea insertaría un
+   * salto de línea, y ese salto viajaría dentro de `nombreItem` hasta el XML de
+   * la DGII.
+   */
+  multilinea?: boolean;
 }) {
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState<T[]>([]);
@@ -71,7 +84,9 @@ export function Autocomplete<T extends { id: number }>({
     setQuery(value ?? '');
   }, [value]);
 
-  async function handleInput(v: string) {
+  async function handleInput(entrada: string) {
+    // Un textarea acepta saltos de línea al pegar texto; aquí no valen nunca.
+    const v = multilinea ? entrada.replace(/[\r\n]+/g, ' ') : entrada;
     setQuery(v);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
@@ -121,6 +136,8 @@ export function Autocomplete<T extends { id: number }>({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Siendo textarea, Enter metería un salto de línea en el nombre del ítem.
+    if (multilinea && e.key === 'Enter') e.preventDefault();
     if (!open || results.length === 0) {
       if (e.key === 'Escape') setOpen(false);
       // Enter con texto libre → promover query a nombreItem
@@ -279,21 +296,46 @@ export function Autocomplete<T extends { id: number }>({
         sx={{
           position: 'relative',
           display: 'flex',
-          alignItems: 'center',
+          // Multilínea: el texto se ancla arriba y el marco crece hacia abajo.
+          alignItems: multilinea ? 'flex-start' : 'center',
           border: '1px solid',
           borderColor: 'grey.300',
           borderRadius: '8px',
           bgcolor: 'white',
-          height: 36,
+          ...(multilinea ? { minHeight: 36, py: 0.5 } : { height: 36 }),
           '&:hover': { borderColor: 'grey.400' },
           '&:focus-within': { borderColor: '#3658e1', boxShadow: '0 0 0 2px rgba(13,148,136,0.2)' },
         }}
       >
-        <Box sx={{ position: 'absolute', left: 12, display: 'flex', alignItems: 'center', color: 'grey.500', pointerEvents: 'none' }}>
+        <Box
+          sx={{
+            position: 'absolute',
+            left: 12,
+            display: 'flex',
+            alignItems: 'center',
+            color: 'grey.500',
+            pointerEvents: 'none',
+            // Con dos líneas de texto la lupa centrada queda flotando en el
+            // medio; se ancla al primer renglón.
+            ...(multilinea ? { top: 10 } : {}),
+          }}
+        >
           <Search size={14} />
         </Box>
         <InputBase
-          sx={{ pl: '32px', pr: '32px', fontSize: '0.875rem', width: '100%', height: '100%' }}
+          multiline={multilinea}
+          maxRows={multilinea ? 3 : undefined}
+          sx={{
+            pl: '32px',
+            // Los 32px de la derecha reservaban sitio para el spinner de carga.
+            // En una celda de tabla ese hueco permanente le quita al nombre del
+            // producto un ancho que sí usa siempre; el spinner solo aparece
+            // mientras se teclea la búsqueda, y ahí el texto es corto.
+            pr: multilinea ? '10px' : '32px',
+            fontSize: '0.875rem',
+            width: '100%',
+            ...(multilinea ? { lineHeight: 1.35 } : { height: '100%' }),
+          }}
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleInput(e.target.value)}

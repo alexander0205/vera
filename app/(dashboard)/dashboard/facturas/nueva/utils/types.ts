@@ -98,6 +98,8 @@ export interface ResultadoEmision {
   ok:              boolean;
   modo:            'emitir' | 'borrador';
   encf?:           string;
+  /** El código interno (FA-2026-…). En un «sin NCF» es el único que hay. */
+  codigo?:         string | null;
   trackId?:        string;
   estado:          string;
   codigoSeguridad?: string;

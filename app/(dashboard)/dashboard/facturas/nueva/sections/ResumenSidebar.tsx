@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FileText, CreditCard, ChevronDown } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -33,6 +33,15 @@ interface Props {
   /** Líneas de pago (1 línea = pago normal). Controladas por el padre. */
   pagoLineas?: PagoLinea[];
   setPagoLineas?: (v: PagoLinea[]) => void;
+  /**
+   * Deja de ser barra lateral y pasa a ser un paso del formulario.
+   *
+   * En el cajón del colegio esto es el paso 2 «Pago y envío»: ocupa el ancho
+   * de la columna en vez de una franja de 360px a la derecha, así que el
+   * resumen y el pago van uno al lado del otro en vez de apilados. Y deja de
+   * ser pegajoso — no hay nada al lado que siga desplazándose.
+   */
+  enPaso?: boolean;
 }
 
 const fmt = (n: number) =>
@@ -51,7 +60,7 @@ const sectionHeaderSx = {
   display: 'flex',
   alignItems: 'center',
   gap: 1,
-  px: 2,
+  px: 1.75,
   pt: 2,
   pb: 1.5,
   cursor: 'pointer',
@@ -74,6 +83,7 @@ export function ResumenSidebar({
   pagoRecibido = false, setPagoRecibido,
   pagoFecha = '', setPagoFecha,
   pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
+  enPaso = false,
 }: Props) {
   const [resumenOpen, setResumenOpen] = useState(true);
   const [pagoOpen, setPagoOpen]       = useState(true);
@@ -85,17 +95,65 @@ export function ResumenSidebar({
   // Items con nombre (filtra líneas vacías)
   const itemsConNombre = items.filter(i => i.nombreItem.trim());
 
+  /**
+   * Las líneas agrupadas por beneficiario, en el orden en que se escribieron.
+   *
+   * Si ninguna lleva beneficiario sale un solo grupo sin título, y el resumen
+   * se ve exactamente como antes — que es lo que debe pasar en una factura
+   * corriente. Se agrupa por NOMBRE y no por id porque el id puede venir vacío
+   * en una línea escrita a mano y aun así traer el nombre puesto.
+   */
+  const grupos = (() => {
+    const mapa = new Map<string, { clave: string; nombre: string; items: typeof itemsConNombre }>();
+    for (const item of itemsConNombre) {
+      const nombre = (item.dependienteNombre ?? '').trim();
+      const clave = nombre || '__sin__';
+      const g = mapa.get(clave) ?? { clave, nombre, items: [] };
+      g.items.push(item);
+      mapa.set(clave, g);
+    }
+    return [...mapa.values()];
+  })();
+
+  /**
+   * Marcar «Registrar pago recibido» cierra el acordeón del Resumen.
+   *
+   * Con una lista larga —una familia de tres hijos y cinco cargos cada uno— el
+   * resumen empuja el card de Pago fuera de la pantalla, y es justo entonces
+   * cuando hace falta: hay que escribir el monto sin verlo. Cerrando el
+   * resumen, Pago sube.
+   *
+   * Solo en el paso de desmarcado a marcado. Si después se vuelve a abrir el
+   * resumen a mano, se queda abierto: la intención del usuario manda por
+   * encima de la nuestra.
+   */
+  const pagoAnterior = useRef(pagoRecibido);
+  useEffect(() => {
+    if (enPaso) return;
+    if (pagoRecibido && !pagoAnterior.current) setResumenOpen(false);
+    pagoAnterior.current = pagoRecibido;
+  }, [pagoRecibido, enPaso]);
+
   return (
     <Box
-      component="aside"
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-        position: { lg: 'sticky' },
-        top: { lg: 16 },
-        alignSelf: { lg: 'flex-start' },
-      }}
+      component={enPaso ? 'div' : 'aside'}
+      sx={enPaso
+        ? {
+            // Como paso: las dos tarjetas en paralelo, y arriba del todo —el
+            // pago es lo que se está haciendo, no un apunte al margen.
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(300px, 1fr))' },
+            alignItems: 'start',
+            gap: 2,
+          }
+        : {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            position: { lg: 'sticky' },
+            top: { lg: 16 },
+            alignSelf: { lg: 'flex-start' },
+          }}
     >
       {/* ─── Resumen card ─── */}
       <Box component="section" sx={cardSx}>
@@ -108,7 +166,7 @@ export function ResumenSidebar({
         >
           <FileText size={16} color="#3658e1" aria-hidden="true" style={{ flexShrink: 0 }} />
           <Typography
-            sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}
+            sx={{ fontSize: '0.8125rem', fontWeight: 600, color: '#111827', flex: 1 }}
           >
             Resumen
           </Typography>
@@ -125,7 +183,7 @@ export function ResumenSidebar({
         </Box>
 
         {resumenOpen && (
-          <Box sx={{ px: 2, pb: 2 }}>
+          <Box sx={{ px: 1.75, pb: 1.5 }}>
             {/* Tabla items */}
             {itemsConNombre.length > 0 && (
               <>
@@ -147,35 +205,64 @@ export function ResumenSidebar({
                   <span style={{ textAlign: 'right' }}>Total</span>
                 </Box>
                 <Box sx={{ '& > *:not(:last-child)': { borderBottom: '1px solid #f9fafb' } }}>
-                  {itemsConNombre.map(item => (
-                    <Box
-                      key={item.id}
-                      sx={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto auto',
-                        gap: 1.5,
-                        py: 1,
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      <Typography
-                        sx={{
-                          color: '#374151',
-                          fontSize: '0.875rem',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title={item.nombreItem}
-                      >
-                        {item.nombreItem}
-                      </Typography>
-                      <Typography sx={{ color: '#4b5563', fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {item.cantidadItem}
-                      </Typography>
-                      <Typography sx={{ color: '#111827', fontWeight: 500, fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                        {fmt(calcularMontoItem(item))}
-                      </Typography>
+                  {grupos.map((g) => (
+                    <Box key={g.clave}>
+                      {/* El nombre del beneficiario, una vez, encabezando lo
+                          suyo. Sin esto, una familia con tres hijos ve los
+                          mismos cinco conceptos repetidos tres veces y no hay
+                          forma de saber cuál renglón es de cuál niño. Solo
+                          aparece si de verdad hay beneficiarios: en una factura
+                          corriente el resumen se queda como estaba. */}
+                      {g.nombre && (
+                        <Typography
+                          sx={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: '#1f2937',
+                            letterSpacing: '0.01em',
+                            pt: 1,
+                            pb: 0.25,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={g.nombre}
+                        >
+                          {g.nombre}
+                        </Typography>
+                      )}
+                      {g.items.map(item => (
+                        <Box
+                          key={item.id}
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto auto',
+                            gap: 1,
+                            py: 0.5,
+                            fontSize: '0.8125rem',
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              color: '#374151',
+                              fontSize: '0.8125rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              pl: g.nombre ? 1 : 0,
+                            }}
+                            title={item.nombreItem}
+                          >
+                            {item.nombreItem}
+                          </Typography>
+                          <Typography sx={{ color: '#4b5563', fontSize: '0.8125rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {item.cantidadItem}
+                          </Typography>
+                          <Typography sx={{ color: '#111827', fontWeight: 500, fontSize: '0.8125rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                            {fmt(calcularMontoItem(item))}
+                          </Typography>
+                        </Box>
+                      ))}
                     </Box>
                   ))}
                 </Box>
@@ -185,8 +272,8 @@ export function ResumenSidebar({
             {/* Totales */}
             <Box sx={{ pt: 1.5, mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.75, borderTop: '1px solid #f3f4f6' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>Subtotal</Typography>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#4b5563' }}>Subtotal</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
                   {fmt(totales.bruto - totales.descuento)}
                 </Typography>
               </Box>
@@ -200,8 +287,8 @@ export function ResumenSidebar({
               )}
               {totales.itbis > 0 && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>ITBIS (18%)</Typography>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
+                  <Typography sx={{ fontSize: '0.8125rem', color: '#4b5563' }}>ITBIS (18%)</Typography>
+                  <Typography sx={{ fontSize: '0.8125rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
                     {fmt(totales.itbis)}
                   </Typography>
                 </Box>
@@ -228,8 +315,8 @@ export function ResumenSidebar({
                 mt: 1.5,
               }}
             >
-              <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>{totalLabel}</Typography>
-              <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>
+              <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: '#111827' }}>{totalLabel}</Typography>
+              <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>
                 {fmt(totalNeto)}
               </Typography>
             </Box>
@@ -239,7 +326,7 @@ export function ResumenSidebar({
               <>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5 }}>
                   <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>Pagado</Typography>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
+                  <Typography sx={{ fontSize: '0.8125rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
                     {fmt(pagoNum)}
                   </Typography>
                 </Box>
@@ -280,7 +367,7 @@ export function ResumenSidebar({
           >
             <CreditCard size={16} color="#3658e1" aria-hidden="true" style={{ flexShrink: 0 }} />
             <Typography
-              sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}
+              sx={{ fontSize: '0.8125rem', fontWeight: 600, color: '#111827', flex: 1 }}
             >
               Pago
             </Typography>

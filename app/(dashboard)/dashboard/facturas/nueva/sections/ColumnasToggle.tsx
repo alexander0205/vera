@@ -10,12 +10,15 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 interface Props {
   showReferencia: boolean;
   showDescripcion: boolean;
+  showDescuento: boolean;
   onToggleReferencia: (v: boolean) => void;
   onToggleDescripcion: (v: boolean) => void;
+  onToggleDescuento: (v: boolean) => void;
 }
 
 export function ColumnasToggle({
-  showReferencia, showDescripcion, onToggleReferencia, onToggleDescripcion,
+  showReferencia, showDescripcion, showDescuento,
+  onToggleReferencia, onToggleDescripcion, onToggleDescuento,
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -60,6 +63,12 @@ export function ColumnasToggle({
           <FormControlLabel
             control={<Checkbox size="small" checked={showDescripcion} onChange={(e) => onToggleDescripcion(e.target.checked)} sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' }, p: 0.5 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Descripción</Typography>}
+            sx={{ display: 'flex', justifyContent: 'space-between', mx: 0, px: 0.75, py: 0.75, borderRadius: '6px', '&:hover': { bgcolor: '#f9fafb' } }}
+            labelPlacement="start"
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={showDescuento} onChange={(e) => onToggleDescuento(e.target.checked)} sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' }, p: 0.5 }} />}
+            label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Descuento</Typography>}
             sx={{ display: 'flex', justifyContent: 'space-between', mx: 0, px: 0.75, py: 0.75, borderRadius: '6px', '&:hover': { bgcolor: '#f9fafb' } }}
             labelPlacement="start"
           />

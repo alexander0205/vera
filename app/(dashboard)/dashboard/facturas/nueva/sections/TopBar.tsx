@@ -16,6 +16,9 @@ import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
 interface Props {
+  /** Esconde «Personalizar opciones»: almacén, lista de precios y vendedor no
+   *  aplican a un colegio, y el menú solo ofrece cosas que no va a usar. */
+  ocultarPersonalizar?: boolean;
   showAlmacen: boolean;
   setShowAlmacen: (v: boolean) => void;
   showListaPrecios: boolean;
@@ -41,18 +44,25 @@ interface Props {
 }
 
 export function NavBar({
+  ocultarPersonalizar = false,
   showAlmacen, setShowAlmacen,
   showListaPrecios, setShowListaPrecios,
   showVendedor, setShowVendedor,
   toggleOpcion,
   title = 'Nueva factura',
-}: Pick<Props, 'showAlmacen' | 'setShowAlmacen' | 'showListaPrecios' | 'setShowListaPrecios' | 'showVendedor' | 'setShowVendedor' | 'toggleOpcion'> & { title?: string }) {
+  onVolver,
+}: Pick<Props, 'showAlmacen' | 'setShowAlmacen' | 'showListaPrecios' | 'setShowListaPrecios' | 'showVendedor' | 'setShowVendedor' | 'toggleOpcion'>
+  & { title?: string; ocultarPersonalizar?: boolean; onVolver?: () => void }) {
   const personalizarRef = useRef<HTMLDivElement>(null);
   const [showPersonalizar, setShowPersonalizar] = useState(false);
   // Esta barra la comparten factura y cotización, y el respaldo siempre fue el
   // listado de facturas. Con el historial delante, el que entró a cotizar
   // vuelve a cotizaciones sin tener que parametrizar nada.
-  const volver = useVolver('/dashboard/facturas');
+  const historial = useVolver('/dashboard/facturas');
+  // Dentro de un cajón no hay a dónde volver: navegar cambiaría la página que
+  // está DEBAJO —la ficha desde la que se está facturando— y al cerrar el
+  // cajón uno aparecería en el listado de facturas sin haberlo pedido.
+  const volver = onVolver ?? historial;
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -79,6 +89,7 @@ export function NavBar({
         {title}
       </Typography>
 
+      {!ocultarPersonalizar && (
       <Box ref={personalizarRef} sx={{ position: 'relative', ml: 'auto' }}>
         <Button
           type="button"
@@ -120,6 +131,7 @@ export function NavBar({
           </Box>
         )}
       </Box>
+      )}
     </Box>
   );
 }

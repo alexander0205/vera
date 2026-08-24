@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, CreditCard, FileText, Loader2, Mail, Printer } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, CreditCard, FileText, Loader2, Mail, Printer } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ItemLinea } from '../utils/types';
 import Box from '@mui/material/Box';
@@ -19,6 +19,17 @@ interface Props {
   loadingPreview?: boolean;
   onVistaPrevia?: () => void;
   onEmitir?: (modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) => void;
+  /**
+   * En qué paso va la factura del cajón. `undefined` = un solo paso, que es
+   * como sigue funcionando la pantalla de siempre.
+   *
+   * Con pasos, el botón que emite SOLO sale en el último. En el primero
+   * emitir estaría antes de decidir si se cobra en el acto, y eso cambia si
+   * la factura sale pagada o entra en la cartera por cobrar.
+   */
+  paso?: 1 | 2;
+  onSiguiente?: () => void;
+  onAtras?: () => void;
 }
 
 export function BottomActionBar({
@@ -27,6 +38,7 @@ export function BottomActionBar({
   loadingPrimaryLabel = 'Emitiendo…',
   primaryBtnClass = 'bg-zero-600 hover:bg-zero-700 border-zero-700',
   loadingPreview, onVistaPrevia, onEmitir,
+  paso, onSiguiente, onAtras,
 }: Props) {
   const [showGuardarMenu, setShowGuardarMenu] = useState(false);
   const guardarMenuRef = useRef<HTMLDivElement>(null);
@@ -50,18 +62,54 @@ export function BottomActionBar({
 
   return (
     <Box sx={{ position: 'sticky', bottom: 0, zIndex: 30, mx: { xs: -1.5, sm: -2, md: -2.5 }, mb: { xs: -1.5, sm: -2, md: -2.5 }, px: { xs: 1.5, sm: 2, md: 2.5 }, mt: 'auto', bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e5e7eb', boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, py: 1.5 }}>
-      <Button
-        type="button"
-        variant="outlined"
-        disableElevation
-        onClick={onCancelar}
-        sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
-      >
-        Cancelar
-      </Button>
+      {paso === 2 ? (
+        <Button
+          type="button"
+          variant="outlined"
+          disableElevation
+          onClick={onAtras}
+          startIcon={<ArrowLeft size={15} />}
+          sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
+        >
+          Atrás
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outlined"
+          disableElevation
+          onClick={onCancelar}
+          sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
+        >
+          Cancelar
+        </Button>
+      )}
 
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, gap: 1.5, width: { xs: '100%', sm: 'auto' } }}>
-        {onEmitir ? (
+        {paso === 1 ? (
+          <>
+            <Button
+              type="button"
+              variant="outlined"
+              disableElevation
+              disabled={loading || loadingPreview}
+              onClick={onVistaPrevia}
+              startIcon={loadingPreview ? <CircularProgress size={14} /> : undefined}
+              sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
+            >
+              {loadingPreview ? 'Guardando…' : 'Vista previa'}
+            </Button>
+            <Button
+              type="button"
+              disableElevation
+              onClick={onSiguiente}
+              endIcon={<ArrowRight size={15} />}
+              sx={{ textTransform: 'none', bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' }, borderRadius: '8px', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, px: 2.5, fontWeight: 500 }}
+            >
+              Siguiente: pago y envío
+            </Button>
+          </>
+        ) : onEmitir ? (
           <>
             <Button
               type="button"
