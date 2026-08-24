@@ -18,9 +18,9 @@ describe('calcularNominaEmpleado — tasas 2026, sin tope', () => {
     // Patronal
     expect(r.afpPatronalCents).toBe(213_000);
     expect(r.sfsPatronalCents).toBe(212_700);
-    expect(r.srlPatronalCents).toBe(34_500);
+    expect(r.srlPatronalCents).toBe(33_000);   // 3,000,000 × 1.10%
     expect(r.infotepPatronalCents).toBe(30_000);
-    expect(r.totalPatronalCents).toBe(490_200);
+    expect(r.totalPatronalCents).toBe(488_700);
   });
 
   it('tramo medio del ISR 15% (RD$50,000)', () => {
@@ -46,6 +46,15 @@ describe('calcularNominaEmpleado — tasas 2026, sin tope', () => {
     const con = calcularNominaEmpleado({ salarioMensualCents: 3_000_000, tasas: TASAS_NOMINA_2026, otrasDeduccionesCents: 50_000 });
     expect(con.isrCents).toBe(base.isrCents);
     expect(con.netoCents).toBe(base.netoCents - 50_000);
+  });
+
+  it('sueldo alto: aplica los topes reales de la TSS (RD$300,000)', () => {
+    // SMC 2026 ya definido en las tasas: tope SFS RD$232,230, SRL RD$92,892,
+    // AFP RD$464,460. Este sueldo pasa los dos primeros pero no el de AFP.
+    const r = calcularNominaEmpleado({ salarioMensualCents: 30_000_000, tasas: TASAS_NOMINA_2026 });
+    expect(r.afpEmpleadoCents).toBe(861_000);  // 30M × 2.87% (bajo el tope AFP)
+    expect(r.sfsEmpleadoCents).toBe(705_979);  // tope SFS 23,223,000 × 3.04%
+    expect(r.srlPatronalCents).toBe(102_181);  // tope SRL  9,289,200 × 1.10%
   });
 
   it('salario cero → todo en cero, sin negativos', () => {

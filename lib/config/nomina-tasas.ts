@@ -9,14 +9,16 @@
  * ║  entero la respeta.                                              ║
  * ╚══════════════════════════════════════════════════════════════════╝
  *
- * ⚠️ PENDIENTE DE CONFIRMAR contra TSS y DGII vigentes (2026):
- *   · Los porcentajes de AFP/SFS/INFOTEP son estables desde hace años, pero
- *     el SRL (riesgo laboral) varía por empresa y el Salario Mínimo Cotizable
- *     (SMC) lo actualiza la TSS.
- *   · La escala del ISR está congelada desde 2017 (no indexada), pero hay que
- *     verificar que no la hayan ajustado antes de usarla en producción.
- *   Ninguno de estos números debe darse por bueno sin cotejarlo: calcula el
- *   sueldo real de una persona.
+ * CONFIRMADO 2026-08-24 contra fuentes oficiales:
+ *   · AFP/SFS (empleado y patronal) e INFOTEP — cotejados con la TSS.
+ *   · SMC = RD$23,223/mes y topes AFP/SFS/SRL (20/10/4 SMC) — Resolución
+ *     01-2025 de la TSS, vigente desde febrero 2026.
+ *   · Escala ISR — Resolución DDG-AR1-2026-00001 de la DGII; exento hasta
+ *     RD$416,220/año, sin cambios desde 2018.
+ *
+ * ⚠️ Lo único que sigue dependiendo de la empresa: el SRL (riesgo laboral) va
+ *    de 1.10% a 1.30% según el nivel de riesgo. Aquí queda el piso (1.10%); si
+ *    la empresa tiene un nivel mayor, se ajusta esta tasa.
  */
 
 /** Un tramo de la escala anual del ISR. */
@@ -53,6 +55,8 @@ export interface TasasNomina {
   topeAfpEnSalarios: number;
   /** Tope del salario cotizable para SFS, en cantidad de SMC. */
   topeSfsEnSalarios: number;
+  /** Tope del salario cotizable para SRL (riesgo laboral), en cantidad de SMC. */
+  topeSrlEnSalarios: number;
 
   /** Escala anual del ISR, ordenada de menor a mayor por `desdeCents`. */
   isrEscala: TramoISR[];
@@ -77,13 +81,14 @@ export const TASAS_NOMINA_2026: TasasNomina = {
 
   afpPatronal: 0.0710,
   sfsPatronal: 0.0709,
-  srlPatronal: 0.0115,
+  srlPatronal: 0.0110, // piso del rango 1.10–1.30% (por nivel de riesgo)
   infotepPatronal: 0.0100,
 
-  // SMC pendiente de confirmar con la TSS; placeholder para no bloquear el motor.
-  salarioMinimoCotizableCents: 0,
-  topeAfpEnSalarios: 20,
-  topeSfsEnSalarios: 10,
+  // SMC RD$23,223.00/mes (Resolución 01-2025 TSS, vigente desde feb 2026).
+  salarioMinimoCotizableCents: 2_322_300,
+  topeAfpEnSalarios: 20, // tope AFP = RD$464,460
+  topeSfsEnSalarios: 10, // tope SFS = RD$232,230
+  topeSrlEnSalarios: 4,  // tope SRL = RD$92,892
 
   isrEscala: [
     { desdeCents:        0,      fijoCents:       0,      tasa: 0    },

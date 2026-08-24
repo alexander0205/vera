@@ -90,6 +90,7 @@ export function calcularNominaEmpleado(p: ParametrosNomina): DesgloseNomina {
 
   const cotizableAfp = salarioCotizable(bruto, t.salarioMinimoCotizableCents, t.topeAfpEnSalarios);
   const cotizableSfs = salarioCotizable(bruto, t.salarioMinimoCotizableCents, t.topeSfsEnSalarios);
+  const cotizableSrl = salarioCotizable(bruto, t.salarioMinimoCotizableCents, t.topeSrlEnSalarios);
 
   // Deducciones del empleado
   const afpEmpleado = redondear(cotizableAfp * t.afpEmpleado);
@@ -101,7 +102,7 @@ export function calcularNominaEmpleado(p: ParametrosNomina): DesgloseNomina {
   // Aportes patronales (INFOTEP va sobre el salario íntegro, sin tope)
   const afpPatronal = redondear(cotizableAfp * t.afpPatronal);
   const sfsPatronal = redondear(cotizableSfs * t.sfsPatronal);
-  const srlPatronal = redondear(cotizableSfs * t.srlPatronal);
+  const srlPatronal = redondear(cotizableSrl * t.srlPatronal);
   const infotepPatronal = redondear(bruto * t.infotepPatronal);
   const totalPatronal = afpPatronal + sfsPatronal + srlPatronal + infotepPatronal;
 
