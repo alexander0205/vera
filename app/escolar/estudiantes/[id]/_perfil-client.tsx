@@ -31,6 +31,7 @@ import { ReenviarAvisoDialog } from '@/components/administracion-escolar/Reenvia
 import { PeriodoDetalle, FacturasSueltas, CanalChip, MESES, AVISO_TEXTO, construirGruposPeriodo, EmptyBox, SimpleTable, type Matricula, type Cargo, type Pago, type PagoSuelto, type FacturaSuelta, type AvisoEnviado, type AvisoProgramado, type PlanesPorMatricula } from '@/components/administracion-escolar/PeriodoDetalle';
 import dynamic from 'next/dynamic';
 import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 /**
  * El modal de cobro arrastra diecisiete componentes de MUI entre él y su
@@ -117,7 +118,11 @@ const fetcher = async (url: string) => {
 };
 
 const TABS = ['periodo', 'tutores', 'documentos', 'avisos', 'historial'] as const;
-export default function PerfilEstudianteClient({ id }: { id: number }) {
+export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
+  id: number;
+  /** Datos del emisor, resueltos en el servidor. Los usa el cajón de facturar. */
+  perfilEmpresa: EmpresaPerfil | null;
+}) {
   const router = useRouter();
   const { permissions } = usePermissions();
   const puedePagos = permissions.includes('administracion-escolar:pagos');
@@ -634,6 +639,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 puedeGestionar={puedeGestionar}
                 estudianteId={estudiante.id}
                 tutorClientId={responsable?.clientId ?? null}
+                perfilEmpresa={perfilEmpresa}
                 onRegistrarPago={abrirPago}
                 onAplicarMora={(ecfId) => setMoraFacturaId(ecfId)}
                 onAnularFactura={setFacturaAnular}
