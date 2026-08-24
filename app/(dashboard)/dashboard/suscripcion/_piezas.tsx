@@ -17,7 +17,7 @@ import Button from '@mui/material/Button';
 import { ChevronDown, CreditCard, TriangleAlert } from 'lucide-react';
 
 import { LazoZero } from '@/lib/marca/isotipo';
-import { limiteTexto, type PlanDef } from '@/lib/config/plans';
+import { limiteTexto, planBajoCotizacion, TEXTO_BAJO_COTIZACION, type PlanDef } from '@/lib/config/plans';
 import type { Suscripcion } from '@/lib/suscripcion/estado';
 import { customerPortalAction } from '@/lib/payments/actions';
 import {
@@ -212,17 +212,34 @@ export function TarjetaPlan({
 
         {!sinPlan && (
           <Box sx={{ textAlign: { sm: 'right' } }}>
-            <Typography sx={{ fontSize: '1.625rem', fontWeight: 700, letterSpacing: '-.6px', color: TINTA }}>
-              {usd(total)}
-              <Box component="span" sx={{ fontSize: '0.875rem', color: GRIS, fontWeight: 500 }}>/mes</Box>
-            </Typography>
+            {/*
+              Esta cifra es el precio de CATÁLOGO del plan, no lo que Stripe va
+              a cobrar, así que sigue la misma regla que la rejilla de abajo:
+              si la línea no publica precio, aquí tampoco.
+
+              Se escapaba. Con los tramos de colegio retirados de /precios, esta
+              tarjeta seguía anunciando «US$350/mes» encima de una cuenta que ni
+              siquiera se cobra — el único sitio de la pantalla donde la cifra
+              sobrevivía, porque no pasa por `precioPublicable` como todo lo
+              demás.
+            */}
+            {planBajoCotizacion(plan.key) ? (
+              <Typography sx={{ fontSize: '1.0625rem', fontWeight: 700, letterSpacing: '-.3px', color: TINTA }}>
+                {TEXTO_BAJO_COTIZACION}
+              </Typography>
+            ) : (
+              <Typography sx={{ fontSize: '1.625rem', fontWeight: 700, letterSpacing: '-.6px', color: TINTA }}>
+                {usd(total)}
+                <Box component="span" sx={{ fontSize: '0.875rem', color: GRIS, fontWeight: 500 }}>/mes</Box>
+              </Typography>
+            )}
 
             {/* De qué está hecho el total.
                 Sin esto la pantalla se contradice a nueve dólares de distancia:
                 arriba «US$74/mes» y abajo un plan que la rejilla marca a US$65.
                 La diferencia son los adicionales, y callarla es justo el tipo
                 de duda que acaba en soporte. */}
-            {desglose.length > 1 && (
+            {!planBajoCotizacion(plan.key) && desglose.length > 1 && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.375, mt: 1, alignItems: { sm: 'flex-end' } }}>
                 {desglose.map(d => (
                   <Typography key={d.concepto} sx={{ fontSize: '0.78rem', color: TEXTO_SUAVE, fontVariantNumeric: 'tabular-nums' }}>

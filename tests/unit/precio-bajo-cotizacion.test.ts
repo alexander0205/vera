@@ -15,13 +15,15 @@ import {
  * helpers que lo leen; lo que no pueden fijar es que una pantalla nueva se
  * salte los helpers y escriba `plan.price` a mano.
  *
- * Lo que sí protegen de verdad es la asimetría: las dos líneas de facturación
- * NO llevan cifra y la de colegio SÍ. Igualarlas por descuido —en cualquiera de
- * los dos sentidos— es el fallo que esto caza.
+ * Lo que fijan hoy es que NINGUNA línea publica cifra. Antes la de colegio era
+ * la excepción, y la excepción se le escapó a media aplicación: /precios la
+ * tapaba a mano con un `if (esColegio)` y por eso la web pública salía limpia,
+ * mientras /dashboard/suscripcion y /bienvenida enseñaban los 135/237/350/500
+ * tan tranquilos. El fallo que esto caza es que a una línea se le devuelva la
+ * cifra sin querer.
  */
 
-const LINEAS_SIN_PRECIO = ['erp', 'pos-erp'] as const;
-const LINEA_CON_PRECIO = 'erp-colegio';
+const LINEAS_SIN_PRECIO = ['erp', 'pos-erp', 'erp-colegio'] as const;
 
 describe('las líneas de facturación no exponen precio', () => {
   it('«Zero ERP» y «Zero POS + ERP» están marcadas bajo cotización', () => {
@@ -61,32 +63,37 @@ describe('las líneas de facturación no exponen precio', () => {
   });
 });
 
-describe('los tramos de colegio conservan su precio', () => {
-  it('la línea de colegio NO está bajo cotización', () => {
-    expect(getLinea(LINEA_CON_PRECIO)!.precioBajoCotizacion).toBe(false);
-    expect(lineaBajoCotizacion(LINEA_CON_PRECIO)).toBe(false);
-    expect(familiaBajoCotizacion('colegio')).toBe(false);
+describe('los tramos de colegio tampoco publican su precio', () => {
+  it('la línea de colegio está bajo cotización, como las otras dos', () => {
+    expect(getLinea('erp-colegio')!.precioBajoCotizacion).toBe(true);
+    expect(lineaBajoCotizacion('erp-colegio')).toBe(true);
+    expect(familiaBajoCotizacion('colegio')).toBe(true);
   });
 
-  it('sus cuatro tramos devuelven la cifra del catálogo', () => {
+  it('sus cuatro tramos siguen VALIENDO lo mismo en el catálogo', () => {
+    // Esconder no es rebajar: Stripe cobra por el catálogo, y si al ocultar la
+    // cifra alguien la pusiera a 0 «para que no se vea», los cuatro tramos
+    // pasarían a ser gratis sin que nadie lo decidiera.
     const tramos = planesDeFamilia('colegio');
     expect(tramos.length).toBeGreaterThan(0);
-
     for (const plan of tramos) {
-      const publicable = precioPublicable(LINEA_CON_PRECIO, plan.key);
-      expect(publicable).not.toBeNull();
-      // Es el MISMO número del catálogo, no uno redondeado ni recalculado: la
-      // línea de colegio no lleva adicionales sueltos (el POS le viene dentro),
-      // así que el precio publicable es el del plan tal cual.
-      expect(publicable).toBe(plan.price);
-      expect(publicable).toBeGreaterThan(0);
-      expect(planBajoCotizacion(plan.key)).toBe(false);
+      expect(plan.price, `el tramo ${plan.key}`).toBeGreaterThan(0);
     }
   });
 
-  it('la etiqueta de precio sigue diciendo la cifra, no «bajo cotización»', () => {
+  it('pero ninguno devuelve una cifra publicable', () => {
     for (const plan of planesDeFamilia('colegio')) {
-      expect(getPlanPriceLabel(plan.key)).toContain(String(plan.price));
+      // `null`, no 0 ni cadena vacía: es lo que hace que el servidor no le
+      // mande el número al navegador. Escondido con CSS seguiría en el fuente.
+      expect(precioPublicable('erp-colegio', plan.key)).toBeNull();
+      expect(planBajoCotizacion(plan.key)).toBe(true);
+      expect(getPlanPriceLabel(plan.key)).toBe(TEXTO_BAJO_COTIZACION);
+    }
+  });
+
+  it('la etiqueta no deja escapar la cifra por ningún tramo', () => {
+    for (const plan of planesDeFamilia('colegio')) {
+      expect(getPlanPriceLabel(plan.key)).not.toContain(String(plan.price));
     }
   });
 });

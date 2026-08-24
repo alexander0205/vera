@@ -640,12 +640,15 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP, el punto de venta de la cafetería y la gobernanza del colegio.',
     familia: 'colegio',
     addons: [],
-    // Los cuatro tramos SÍ llevan cifra —135/237/350/500— y es a propósito: el
-    // tramo se elige por estudiantes, que es un número que el colegio ya sabe,
-    // así que publicarlo deja que se ubique solo. (Lo que la portada pública
-    // decidió aparte, por mercadeo, es no enseñar el total en /precios; eso es
-    // suyo y no lo decide este flag.)
-    precioBajoCotizacion: false,
+    // Tampoco publica cifra. Los cuatro tramos siguen valiendo 135/237/350/500
+    // en el catálogo y Stripe los cobra igual: lo único que cambia es que el
+    // número no se le enseña a nadie. El tramo se acuerda hablando.
+    //
+    // Era la única línea que publicaba, y por eso la web pública no enseñaba
+    // los 135/237/350/500 —/precios los tapaba aparte, a mano— pero
+    // /dashboard/suscripcion y /bienvenida sí los enseñaban. Con esto se
+    // callan las tres.
+    precioBajoCotizacion: true,
     // Un colegio no pierde plata de golpe: la pierde en goteo, y las tres vías
     // por las que se va son exactamente las tres que el sistema cierra. Por eso
     // el texto empieza por el dinero y no por las funciones — el director no
