@@ -48,18 +48,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     .where(eq(nominaLineas.corridaId, id))
     .orderBy(asc(nominaLineas.nombre));
 
+  const url = new URL(req.url);
   const archivo = generarArchivoDispersion(filas, {
     periodo: corrida.periodo,
     referencia: `Nomina ${corrida.periodo}`,
+    formatoKey: url.searchParams.get('formato') ?? undefined,
   });
 
-  const url = new URL(req.url);
   if (url.searchParams.get('preview') === '1') {
     return NextResponse.json({
       totalBeneficiarios: archivo.totalBeneficiarios,
       totalCents: archivo.totalCents,
       incompletos: archivo.incompletos,
       nombreArchivo: archivo.nombreArchivo,
+      formato: archivo.formato,
+      formatoNombre: archivo.formatoNombre,
+      nota: archivo.nota,
     });
   }
 

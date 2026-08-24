@@ -7,7 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { NativeSelect } from '@/components/ui/native-select';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { FORMATOS_BANCO, FORMATO_POR_DEFECTO } from '@/lib/nomina/formatos-banco';
 import { toast } from '@/lib/toast';
 import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText } from 'lucide-react';
 
@@ -53,6 +55,7 @@ interface PreviewDispersion {
   totalBeneficiarios: number;
   totalCents: number;
   incompletos: { empleadoId: number; nombre: string; motivo: string }[];
+  nota?: string;
 }
 
 export default function CorridaDetalleClient({ id }: { id: string }) {
@@ -65,10 +68,11 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const [confirmarPago, setConfirmarPago] = useState(false);
   const [pagando, setPagando] = useState(false);
   const [descargando, setDescargando] = useState(false);
+  const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
 
   const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
   const { data: preview } = useSWR<PreviewDispersion>(
-    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1` : null,
+    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}` : null,
     fetcher,
   );
 
@@ -101,7 +105,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   async function descargarDispersion() {
     setDescargando(true);
     try {
-      const res = await fetch(`/api/nomina/corridas/${id}/dispersion`);
+      const res = await fetch(`/api/nomina/corridas/${id}/dispersion?formato=${formato}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? 'No se pudo generar el archivo');
@@ -110,7 +114,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dispersion-nomina-${corrida.periodo}.csv`;
+      a.download = `dispersion-nomina-${corrida.periodo}-${formato}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -167,10 +171,22 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
             </Button>
           )}
           {corrida.estado !== 'borrador' && puedePagar && (
-            <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="gap-1.5">
-              {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              Descargar dispersión
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <NativeSelect
+                value={formato}
+                onChange={(e) => setFormato(e.target.value)}
+                className="h-9 w-auto"
+                title="Formato del archivo según tu banco"
+              >
+                {FORMATOS_BANCO.map((f) => (
+                  <option key={f.key} value={f.key}>{f.nombre}</option>
+                ))}
+              </NativeSelect>
+              <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="gap-1.5">
+                {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Descargar dispersión
+              </Button>
+            </div>
           )}
           {corrida.estado === 'aprobada' && puedePagar && (
             <Button onClick={() => setConfirmarPago(true)} className="gap-1.5">
@@ -189,6 +205,14 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
             fuera del archivo: {preview.incompletos.map((i) => i.nombre).join(', ')}. Complétales la cuenta en su ficha
             para incluirlos.
           </div>
+        </div>
+      )}
+
+      {/* Aviso de verificación cuando se elige un preset de banco */}
+      {corrida.estado !== 'borrador' && preview?.nota && (
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <div>{preview.nota}</div>
         </div>
       )}
 
