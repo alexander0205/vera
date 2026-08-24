@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { consumir, reversar, actualizarReferenciaConsumo, escolarHabilitado } from '@/lib/pos/monedero';
 
@@ -26,7 +26,7 @@ interface Body {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
 

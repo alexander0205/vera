@@ -86,7 +86,45 @@ export type LineaVista = {
   grupos: Grupo[];
 };
 
+/**
+ * Qué hace el botón de un plan de facturación según quién mira. `null`/ausente
+ * = anónimo → default de marketing (`/sign-up` + «Empieza gratis N días»). Lo
+ * decide el servidor (`page.tsx`) por la sesión. Los planes de colegio no lo
+ * usan: siempre van a contacto, con o sin sesión.
+ *
+ *  - `onboarding` → el que está a medio registrarse. El botón lleva su elección
+ *    de vuelta al onboarding vía /bienvenida/elegir, mapeando el tier a su tramo
+ *    de tamaño (así la deducción del paso-plan reproduce ESTE plan).
+ *  - `cliente`    → el que ya terminó. Href fijo a su pantalla de suscripción.
+ */
+export type CtaPlan =
+  | { modo: 'onboarding' }
+  | { modo: 'cliente'; href: string; label: string };
+
 const usd = (n: number) => `US$${n.toLocaleString('es-DO')}`;
+
+/**
+ * El botón (href + texto) de un plan de FACTURACIÓN. El colegio no pasa por aquí.
+ *
+ * En `onboarding` el destino es por-tarjeta: cada tier corresponde a un tramo de
+ * tamaño —el MISMO que ofrece el paso-tamaño (50/200/500/5000 facturas)— así que
+ * mandar ese `tamano` hace que la deducción del onboarding vuelva a dar este
+ * plan, sin inventar estado nuevo. `docs < 0` (Ilimitado) → el bracket «más de
+ * 500».
+ */
+function ctaFacturacion(
+  ctaPlan: CtaPlan | null | undefined,
+  lineaKey: string,
+  diasPrueba: number,
+  docs: number,
+): { href: string; label: string } {
+  if (ctaPlan?.modo === 'cliente') return { href: ctaPlan.href, label: ctaPlan.label };
+  if (ctaPlan?.modo === 'onboarding') {
+    const tamano = docs > 0 ? docs : 5000;
+    return { href: `/bienvenida/elegir?linea=${lineaKey}&tamano=${tamano}`, label: 'Elegir este plan' };
+  }
+  return { href: '/sign-up', label: `Empieza gratis ${diasPrueba} días` };
+}
 
 // ─── Celdas de la tabla ──────────────────────────────────────────────────────
 
@@ -116,7 +154,7 @@ function PintaCelda({ celda, destacada }: { celda: Celda; destacada: boolean }) 
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export function Planes({ lineas }: { lineas: LineaVista[] }) {
+export function Planes({ lineas, ctaPlan }: { lineas: LineaVista[]; ctaPlan?: CtaPlan | null }) {
   const negocio = lineas.filter(l => !l.esColegio);
   const colegio = lineas.filter(l => l.esColegio);
 
@@ -316,18 +354,29 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                     viene de esta tarjeta ya dijo que es un colegio, y volver a
                     preguntárselo le enseña de entrada las preguntas de una
                     pyme. */}
-                <Link
-                  href={esColegio ? '/contacto?perfil=colegio' : '/sign-up'}
-                  className={`mt-4 flex h-11 items-center justify-center rounded-xl px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight transition ${
-                    p.destacado
-                      ? 'border-[1.5px] border-zero-600 bg-zero-600 text-white hover:border-zero-700 hover:bg-zero-700'
-                      : oscuro
-                        ? 'border-[1.5px] border-white bg-white text-[#102a72] hover:-translate-y-0.5'
-                        : 'border-[1.5px] border-[#dce1f0] bg-white text-[#102a72] hover:border-zero-600 hover:text-zero-600'
-                  }`}
-                >
-                  {esColegio ? 'Hablar con un representante' : `Empieza gratis ${linea.diasPrueba} días`}
-                </Link>
+                {(() => {
+                  const cta = esColegio
+                    ? { href: '/contacto?perfil=colegio', label: 'Hablar con un representante' }
+                    : ctaFacturacion(ctaPlan, linea.key, linea.diasPrueba, p.docs);
+                  return (
+                    <Link
+                      href={cta.href}
+                      // Sin prefetch: en modo onboarding el href es /bienvenida/elegir,
+                      // que ESCRIBE la elección; un prefetch de Next la guardaría con
+                      // solo pasar el cursor por encima.
+                      prefetch={false}
+                      className={`mt-4 flex h-11 items-center justify-center rounded-xl px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight transition ${
+                        p.destacado
+                          ? 'border-[1.5px] border-zero-600 bg-zero-600 text-white hover:border-zero-700 hover:bg-zero-700'
+                          : oscuro
+                            ? 'border-[1.5px] border-white bg-white text-[#102a72] hover:-translate-y-0.5'
+                            : 'border-[1.5px] border-[#dce1f0] bg-white text-[#102a72] hover:border-zero-600 hover:text-zero-600'
+                      }`}
+                    >
+                      {cta.label}
+                    </Link>
+                  );
+                })()}
 
                 <div className={`mt-5 text-[11px] font-semibold uppercase tracking-[.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
                   {p.incluyeTitulo}

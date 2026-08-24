@@ -96,7 +96,16 @@ export async function requireTurnoAbierto(
     };
   }
 
-  if (!cfg.cajaHabilitada) return { ok: true, turno: null };
+  // Caja general apagada: no se BLOQUEA nada. Pero el POS abre su turno aunque
+  // este cuadre esté off (app/api/pos/turno) y su historial es por-turno: si la
+  // venta no se atribuye al turno abierto del cajero, el recibo nunca aparece
+  // ahí. Se adjunta el turno ABIERTO si lo hay —nunca uno en CIERRE_SOLICITADO,
+  // que ya tiene su esperado calculado y una venta más lo descuadraría—. Sin
+  // turno abierto se sigue igual que antes (null = facturación sin cuadre).
+  if (!cfg.cajaHabilitada) {
+    const abierto = await getTurnoAbierto(teamId, usuarioId);
+    return { ok: true, turno: abierto?.estado === 'ABIERTO' ? abierto : null };
+  }
 
   const turno = await getTurnoAbierto(teamId, usuarioId);
   if (!turno || turno.estado !== 'ABIERTO') {

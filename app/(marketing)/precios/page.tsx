@@ -21,8 +21,34 @@ import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, TarjetasContacto } from '../_piezas';
 import { Acordeon, type Pregunta } from '../_acordeon';
 import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
-import { Planes, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
+import { Planes, type Celda, type CtaPlan, type Grupo, type LineaVista, type PlanVista } from './_planes';
 import { CierreDePrecios, PerfilProvider } from './_perfil';
+import { getUser, getTeamForUser } from '@/lib/db/queries';
+
+/**
+ * A dónde manda el botón de un plan de facturación según quién mira la página.
+ *
+ * `/precios` es pública y sirve a TRES visitantes distintos; el botón «Empieza
+ * gratis» de cada plan tiene que llevar a cada uno a donde le toca:
+ *   - anónimo                        → registro (default de _planes: /sign-up).
+ *   - logueado, onboarding a medias  → de vuelta a su registro, NO a /sign-up
+ *     (mandarlo a /sign-up lo dejaba pidiéndole que entrara otra vez).
+ *   - logueado, ya cliente           → su pantalla de suscripción, donde se
+ *     elige y se abre la prueba de verdad.
+ *
+ * `null` = anónimo. Aislado a propósito: revertir el commit que añadió esto
+ * devuelve la página a servir /sign-up para todos, sin tocar nada más.
+ */
+async function ctaPlanPorSesion(): Promise<CtaPlan | null> {
+  const user = await getUser();
+  if (!user) return null;
+  const equipo = await getTeamForUser();
+  if (equipo && !equipo.onboardingCompletadoEn) {
+    // El botón de cada plan llevará su elección al onboarding (destino por-tarjeta).
+    return { modo: 'onboarding' };
+  }
+  return { modo: 'cliente', href: '/dashboard/suscripcion', label: 'Ir a mi suscripción' };
+}
 
 export const metadata: Metadata = {
   title: 'Planes y precios',
@@ -302,10 +328,11 @@ const MOMENTOS = [
 
 // ─── Página ──────────────────────────────────────────────────────────────────
 
-export default function PreciosPage() {
+export default async function PreciosPage() {
   const lineas = LINEAS_PRODUCTO.map(l => vistaDeLinea(l.key)).filter((l): l is LineaVista => l !== null);
   const addonPos = ADDONS.find(a => a.key === 'pos');
   const lineaColegio = lineas.find(l => l.esColegio);
+  const ctaPlan = await ctaPlanPorSesion();
 
   const canales = [
     { nombre: 'WhatsApp', tope: 'Con tope mensual por plan', icono: IconoWhatsApp, fondo: 'bg-[#e8f6ee]', color: 'text-[#25a366]' },
@@ -320,7 +347,7 @@ export default function PreciosPage() {
           layout. */}
       <section className="relative bg-gradient-to-b from-[#f5f7fe] to-white to-[58%] pt-14">
         <LazoDeFondo arriba={470} />
-        <Planes lineas={lineas} />
+        <Planes lineas={lineas} ctaPlan={ctaPlan} />
       </section>
 
       {/* ── Adicionales ───────────────────────────────────────────────────── */}

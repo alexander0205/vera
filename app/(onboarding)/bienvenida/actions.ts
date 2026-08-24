@@ -174,6 +174,12 @@ export const terminar = validatedAction(esquemaFinal, async (data) => {
     // guardar el nombre es lo que en su día dejó a cinco de ocho planes
     // cayendo a Gratis después de pagar.
     planName: plan.key,
+    // Los adicionales de la LÍNEA (POS en «Zero POS + ERP»). Sin esto se le
+    // mandaban a Stripe pero no se guardaban en el team, y `getTeamModules`
+    // —que lee `teams.adicionales`— dejaba al plan sin POS: quien elegía POS +
+    // ERP terminaba con un ERP pelado. Los tramos de colegio no dependían de
+    // esto porque su POS viene dentro de `modulos`, por eso solo fallaba aquí.
+    adicionales: linea?.addons ?? [],
     subscriptionStatus: 'trialing',
     trialEnd: finPrueba,
     periodoFin: finPrueba,

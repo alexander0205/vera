@@ -41,7 +41,7 @@ interface Role {
   permissions: string[];
   memberCount: number;
 }
-interface Data { roles: Role[]; catalog: PermGroup[] }
+interface Data { roles: Role[]; catalog: PermGroup[]; modulos: string[] }
 
 const ICONS: Record<string, React.ElementType> = {
   Crown, Shield, User, Eye, UserCog,
@@ -91,9 +91,13 @@ export default function PermisosClient() {
 
   return (
     <>
-      <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
-        <MiPinCard />
-      </Box>
+      {/* El PIN de autorización solo sirve para quitar ítems de un recibo del
+          POS: sin ese módulo no hay dónde usarlo, así que no se ofrece. */}
+      {data.modulos.includes('pos') && (
+        <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+          <MiPinCard />
+        </Box>
+      )}
       <RolesList
         roles={data.roles}
         onSelect={setSelectedId}

@@ -6,12 +6,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { getMonederoView, setLimiteDiario, escolarHabilitado } from '@/lib/pos/monedero';
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   if (!(await escolarHabilitado(teamId))) return NextResponse.json({ error: 'Capa escolar no habilitada' }, { status: 403 });
@@ -34,7 +34,7 @@ const limiteSchema = z.object({
 });
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requirePermission('pos:configurar');
+  const auth = await requireModuleAndPermission('pos', 'pos:configurar');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
   if (!(await escolarHabilitado(teamId))) return NextResponse.json({ error: 'Capa escolar no habilitada' }, { status: 403 });

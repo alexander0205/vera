@@ -14,13 +14,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, desc, inArray, isNotNull } from 'drizzle-orm';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos, users, comandas, mesas, cajaTurnos } from '@/lib/db/schema';
 import { getTurnoAbierto } from '@/lib/caja/core';
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { teamId, user } = auth;
 

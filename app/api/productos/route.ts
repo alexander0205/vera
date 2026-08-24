@@ -8,10 +8,11 @@ import { visibleEnFacturacion } from '@/lib/productos/visibilidad';
 import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { products, productVariants, productVariantAlmacenStock, almacenes } from '@/lib/db/schema';
+import { products, productVariants, productVariantAlmacenStock, productAlmacenStock } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, ilike, or, and, sql, getTableColumns, desc, asc } from 'drizzle-orm';
+import { ensureAlmacenDefaultId } from '@/lib/inventario/almacen-default';
+import { eq, ilike, or, and, sql, getTableColumns } from 'drizzle-orm';
 
 // Ejes de variante definidos por el usuario (MVP "por producto"):
 // [{ nombre: "Talla", valores: ["M","L","XL"] }]
@@ -207,25 +208,29 @@ export async function POST(req: NextRequest) {
       ).returning({ id: productVariants.id, stockActual: productVariants.stockActual });
 
       // Opción B: sembrar el stock inicial de cada variante en el almacén por
-      // defecto (o el primero si no hay uno marcado). Así el conteo fino vive por
-      // almacén desde el inicio y el producto aparece en el POS de ese almacén.
-      // La gestión por-almacén más fina (repartir entre almacenes) queda para
-      // la pantalla de detalle del producto.
-      const [almacenDefault] = await tx
-        .select({ id: almacenes.id })
-        .from(almacenes)
-        .where(eq(almacenes.teamId, teamId))
-        .orderBy(desc(almacenes.esDefault), asc(almacenes.id))
-        .limit(1);
-
-      if (almacenDefault) {
-        const filas = creadas
-          .filter((c) => (c.stockActual ?? 0) > 0)
-          .map((c) => ({ teamId, variantId: c.id, almacenId: almacenDefault.id, stockActual: c.stockActual }));
-        if (filas.length > 0) {
-          await tx.insert(productVariantAlmacenStock).values(filas);
-        }
+      // defecto. Así el conteo fino vive por almacén desde el inicio y el
+      // producto aparece en el POS de ese almacén. La gestión por-almacén más
+      // fina (repartir entre almacenes) queda para la pantalla de detalle.
+      const filas = creadas
+        .filter((c) => (c.stockActual ?? 0) > 0)
+        .map((c) => c);
+      if (filas.length > 0) {
+        // Solo se crea el almacén si de verdad hay stock que ubicar.
+        const almacenDefaultId = await ensureAlmacenDefaultId(tx, teamId);
+        await tx.insert(productVariantAlmacenStock).values(
+          filas.map((c) => ({ teamId, variantId: c.id, almacenId: almacenDefaultId, stockActual: c.stockActual })),
+        );
       }
+    } else if (tipo === 'bien' && (controlaInventario ?? false) && (stockActual ?? 0) > 0) {
+      // Bien simple con stock inicial: sembrar su fila en el almacén por defecto,
+      // igual que las variantes. product_almacen_stock es lo que mira el POS; sin
+      // esta fila el producto nace agotado en la caja pese a tener stock, y
+      // editarlo después tampoco lo arreglaba (ver PUT). Se crea el almacén si el
+      // team no tiene ninguno, para que el conteo por almacén exista desde el alta.
+      const almacenDefaultId = await ensureAlmacenDefaultId(tx, teamId);
+      await tx.insert(productAlmacenStock).values({
+        teamId, productId: prod.id, almacenId: almacenDefaultId, stockActual: stockActual ?? 0,
+      });
     }
     return prod;
   });

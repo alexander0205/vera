@@ -6,12 +6,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { listarMeseros, crearMesero, meseroPorPin } from '@/lib/pos/restaurante';
 
 export async function GET() {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const meseros = await listarMeseros(auth.teamId);
   // No exponer el PIN al listar.
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
 
   if (verificar) {
-    const auth = await requirePermission('pos:vender');
+    const auth = await requireModuleAndPermission('pos', 'pos:vender');
     if (!auth.ok) return auth.response;
     const parsed = pinSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: 'PIN inválido' }, { status: 400 });
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ mesero: { id: mesero.id, nombre: mesero.nombre } });
   }
 
-  const auth = await requirePermission('pos:configurar');
+  const auth = await requireModuleAndPermission('pos', 'pos:configurar');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
   const parsed = crearSchema.safeParse(body);

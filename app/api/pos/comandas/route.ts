@@ -8,11 +8,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { getComandaAbierta, abrirComanda } from '@/lib/pos/restaurante';
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const mesaId = Number(new URL(req.url).searchParams.get('mesaId'));
   if (!mesaId) return NextResponse.json({ error: 'mesaId requerido' }, { status: 400 });
@@ -28,7 +28,7 @@ const abrirSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const body = await req.json().catch(() => null);
   const parsed = abrirSchema.safeParse(body);

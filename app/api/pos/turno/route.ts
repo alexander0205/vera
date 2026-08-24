@@ -9,13 +9,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { getTurnoAbierto, abrirTurno } from '@/lib/caja/core';
 import { getTerminal } from '@/lib/pos/terminales';
 
 export async function GET() {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
 
@@ -33,7 +33,7 @@ const abrirSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('pos:vender');
+  const auth = await requireModuleAndPermission('pos', 'pos:vender');
   if (!auth.ok) return auth.response;
   const { user, teamId } = auth;
 

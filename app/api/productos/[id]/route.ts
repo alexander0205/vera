@@ -8,11 +8,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import {
-  products, inventoryMovements, productVariants, productVariantAlmacenStock, almacenes,
+  products, inventoryMovements, productVariants, productVariantAlmacenStock,
 } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, and, sql, desc, asc } from 'drizzle-orm';
+import { ensureAlmacenDefaultId } from '@/lib/inventario/almacen-default';
+import { eq, and, sql } from 'drizzle-orm';
 
 // Ejes de variante (igual que en POST /api/productos).
 const variantAtributoSchema = z.object({
@@ -167,9 +168,33 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     if (!reconciliaVariantes && stockActual !== undefined && existing.tipo === 'bien' && controla && stockActual !== existing.stock_actual) {
       const delta     = stockActual - existing.stock_actual;
       const esEntrada = delta > 0;
+
+      // El stock físico vive por almacén en product_almacen_stock, que es lo que
+      // miran el POS (lib/pos/catalogo) y el inventario. products.stock_actual es
+      // solo la cifra denormalizada de los listados. Sin este upsert, subir el
+      // stock aquí movía únicamente esa cifra y el producto seguía agotado en la
+      // caja —y ausente de su grilla si nunca tuvo fila de almacén, que es
+      // justo el caso del bien creado con stock 0. Se aplica el delta al almacén
+      // por defecto, espejo de /api/inventario/ajuste y del camino de variantes.
+      // Se crea el almacén si el team no tiene ninguno: sin él la cifra no tiene
+      // dónde vivir y el stock nunca sube en la caja.
+      const almacenDefaultId = await ensureAlmacenDefaultId(tx, teamId);
+
+      await tx.execute(sql`
+        INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+        VALUES (${teamId}, ${prodId}, ${almacenDefaultId},
+          GREATEST(0, COALESCE((
+            SELECT stock_actual FROM product_almacen_stock
+            WHERE product_id = ${prodId} AND almacen_id = ${almacenDefaultId}
+          ), 0) + ${delta}))
+        ON CONFLICT (product_id, almacen_id)
+        DO UPDATE SET stock_actual = GREATEST(0, product_almacen_stock.stock_actual + ${delta})
+      `);
+
       await tx.insert(inventoryMovements).values({
         teamId,
         productoId:   prodId,
+        almacenId:    almacenDefaultId,
         tipo:         esEntrada ? 'AJUSTE_ENTRADA' : 'AJUSTE_SALIDA',
         cantidad:     Math.abs(delta),
         esEntrada,
@@ -183,23 +208,19 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     // ── Reconciliación de variantes (Opción B) ────────────────────────────────
     if (reconciliaVariantes) {
       // Almacén por defecto: donde este form ajusta el stock de la variante
-      // (mismo criterio que la siembra al crear en POST /api/productos).
-      const [almacenDefault] = await tx
-        .select({ id: almacenes.id })
-        .from(almacenes)
-        .where(eq(almacenes.teamId, teamId))
-        .orderBy(desc(almacenes.esDefault), asc(almacenes.id))
-        .limit(1);
+      // (mismo criterio que la siembra al crear en POST /api/productos). Se crea
+      // si el team no tiene ninguno: sin él, `sumStock` daba 0 y editar una
+      // variante le borraba el stock en vez de subirlo.
+      const almacenDefaultId = await ensureAlmacenDefaultId(tx, teamId);
 
       // Stock de la variante en el almacén por defecto (0 si no hay fila).
       const stockDefault = async (variantId: number): Promise<number> => {
-        if (!almacenDefault) return 0;
         const [r] = await tx
           .select({ s: productVariantAlmacenStock.stockActual })
           .from(productVariantAlmacenStock)
           .where(and(
             eq(productVariantAlmacenStock.variantId, variantId),
-            eq(productVariantAlmacenStock.almacenId, almacenDefault.id),
+            eq(productVariantAlmacenStock.almacenId, almacenDefaultId),
           ))
           .limit(1);
         return r?.s ?? 0;
@@ -215,13 +236,12 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       // Fija el stock de la variante en el almacén por defecto a `target`,
       // dejando rastro en inventory_movements por el delta (con variant_id).
       const setStockDefault = async (variantId: number, target: number): Promise<void> => {
-        if (!almacenDefault) return;
         const antes = await stockDefault(variantId);
         const delta = target - antes;
         if (delta === 0) return;
         await tx
           .insert(productVariantAlmacenStock)
-          .values({ teamId, variantId, almacenId: almacenDefault.id, stockActual: target })
+          .values({ teamId, variantId, almacenId: almacenDefaultId, stockActual: target })
           .onConflictDoUpdate({
             target: [productVariantAlmacenStock.variantId, productVariantAlmacenStock.almacenId],
             set:    { stockActual: target },

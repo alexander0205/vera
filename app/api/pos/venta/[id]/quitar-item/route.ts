@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
 import { db } from '@/lib/db/drizzle';
@@ -44,7 +44,7 @@ function indBien(v: string | number): 1 | 2 {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('pos:quitar-item-pin');
+  const auth = await requireModuleAndPermission('pos', 'pos:quitar-item-pin');
   if (!auth.ok) return auth.response;
   const { teamId, user, teamRole } = auth;
 
