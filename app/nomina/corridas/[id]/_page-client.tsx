@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
-import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText } from 'lucide-react';
 
 interface Corrida {
   id: number;
@@ -213,6 +213,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                   <th className="px-4 py-2 text-right font-medium">SFS</th>
                   <th className="px-4 py-2 text-right font-medium">ISR</th>
                   <th className="px-4 py-2 text-right font-medium">Neto</th>
+                  <th className="px-4 py-2 text-right font-medium">Volante</th>
                 </tr>
               </thead>
               <tbody>
@@ -227,6 +228,17 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{pesos(l.sfsEmpleadoCents)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{pesos(l.isrCents)}</td>
                     <td className="px-4 py-2 text-right font-medium tabular-nums">{pesos(l.netoCents)}</td>
+                    <td className="px-4 py-2 text-right">
+                      <a
+                        href={`/api/nomina/corridas/${id}/volante/${l.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                        title="Abrir volante de pago (PDF)"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>

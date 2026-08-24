@@ -22,10 +22,13 @@ import {
   pagosRecibidos,
   users,
   cotizaciones,
+  nominaLineas,
+  nominaCorridas,
 } from '@/lib/db/schema';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { CotizacionPDF, type CotizacionPDFData } from '@/lib/pdf/CotizacionPDF';
+import { VolanteNominaPDF, type VolanteNominaData } from '@/lib/pdf/VolanteNominaPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import type { EmisorEmail } from '@/lib/email';
@@ -500,4 +503,74 @@ export async function generarCotizacionPdf(opts: {
       montoTotalCts:    cot.montoTotal,
     },
   };
+}
+
+// ─── Volante de pago de nómina ────────────────────────────────────────────────
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+/** "2026-07" → "Julio 2026". */
+function periodoLegible(periodo: string): string {
+  const [a, m] = periodo.split('-');
+  const idx = Number(m) - 1;
+  return idx >= 0 && idx < 12 ? `${MESES[idx]} ${a}` : periodo;
+}
+
+export type VolanteNominaResult = { buffer: Buffer; filename: string };
+
+/**
+ * Volante de pago de UN empleado en una corrida. El scoping por team es del
+ * llamador; aquí se valida que la línea pertenezca a la corrida y al team.
+ */
+export async function generarVolanteNominaPdf(opts: {
+  teamId: number;
+  corridaId: number;
+  lineaId: number;
+}): Promise<VolanteNominaResult | null> {
+  const { teamId, corridaId, lineaId } = opts;
+
+  const [row] = await db
+    .select({ linea: nominaLineas, corrida: nominaCorridas, team: teams })
+    .from(nominaLineas)
+    .innerJoin(nominaCorridas, eq(nominaCorridas.id, nominaLineas.corridaId))
+    .innerJoin(teams, eq(teams.id, nominaLineas.teamId))
+    .where(and(
+      eq(nominaLineas.id, lineaId),
+      eq(nominaLineas.corridaId, corridaId),
+      eq(nominaLineas.teamId, teamId),
+    ))
+    .limit(1);
+
+  if (!row) return null;
+  const { linea, corrida, team } = row;
+  const c = (n: number) => n / 100;
+
+  const data: VolanteNominaData = {
+    emisor: {
+      razonSocial:     team.razonSocial ?? team.name,
+      nombreComercial: team.nombreComercial ?? undefined,
+      rnc:             team.rnc ?? undefined,
+      direccion:       team.direccion ?? undefined,
+      telefono:        team.telefono ?? undefined,
+      logo:            team.logo ?? undefined,
+      colorPrimario:   team.colorPrimario ?? undefined,
+    },
+    empleado: { nombre: linea.nombre, cedula: linea.cedula, cargo: linea.cargo },
+    periodoTexto: periodoLegible(corrida.periodo),
+    descripcion:  corrida.descripcion,
+    fechaPago:    corrida.fechaPago ?? null,
+    bruto:            c(linea.brutoCents),
+    afpEmpleado:      c(linea.afpEmpleadoCents),
+    sfsEmpleado:      c(linea.sfsEmpleadoCents),
+    isr:              c(linea.isrCents),
+    otrasDeducciones: c(linea.otrasDeduccionesCents),
+    totalDeducciones: c(linea.totalDeduccionesCents),
+    neto:             c(linea.netoCents),
+    totalPatronal:    c(linea.totalPatronalCents),
+  };
+
+  const buffer = await renderToBuffer(createElement(VolanteNominaPDF, { data }) as any);
+  const slug = linea.nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return { buffer, filename: `volante-${slug || 'empleado'}-${corrida.periodo}.pdf` };
 }
