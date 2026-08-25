@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { CAMPOS_FACTURA } from '@/lib/mcp/campos-facturas';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -20,20 +21,11 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   if (isNaN(facturaId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [factura] = await db
-    .select()
+    .select(CAMPOS_FACTURA)
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, facturaId), eq(ecfDocuments.teamId, teamId)))
     .limit(1);
 
   if (!factura) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
-
-  // Mismo criterio de exclusión que la lista: sin XML/PDF/internos de DGII.
-  const {
-    xmlOriginal, xmlFirmado, xmlUrl, pdfUrl, mensajesDgii, trackId, codigoSeguridad,
-    lineasJson, ...resto
-  } = factura;
-  void xmlOriginal; void xmlFirmado; void xmlUrl; void pdfUrl;
-  void mensajesDgii; void trackId; void codigoSeguridad; void lineasJson;
-
-  return NextResponse.json({ factura: resto });
+  return NextResponse.json({ factura });
 }

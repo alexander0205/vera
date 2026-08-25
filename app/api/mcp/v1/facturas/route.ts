@@ -9,31 +9,7 @@ import { and, eq, gte, ilike, lte, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
-
-const CAMPOS = {
-  id: ecfDocuments.id,
-  encf: ecfDocuments.encf,
-  codigo: ecfDocuments.codigo,
-  tipoEcf: ecfDocuments.tipoEcf,
-  estado: ecfDocuments.estado,
-  estadoPago: ecfDocuments.estadoPago,
-  clientId: ecfDocuments.clientId,
-  rncComprador: ecfDocuments.rncComprador,
-  razonSocialComprador: ecfDocuments.razonSocialComprador,
-  emailComprador: ecfDocuments.emailComprador,
-  montoTotal: ecfDocuments.montoTotal,
-  totalItbis: ecfDocuments.totalItbis,
-  totalRetenciones: ecfDocuments.totalRetenciones,
-  tipoPago: ecfDocuments.tipoPago,
-  fechaEmision: ecfDocuments.fechaEmision,
-  fechaLimitePago: ecfDocuments.fechaLimitePago,
-  dependienteId: ecfDocuments.dependienteId,
-  dependienteNombre: ecfDocuments.dependienteNombre,
-  origenRecurrenteId: ecfDocuments.origenRecurrenteId,
-  periodoRecurrente: ecfDocuments.periodoRecurrente,
-  createdAt: ecfDocuments.createdAt,
-  updatedAt: ecfDocuments.updatedAt,
-};
+import { CAMPOS_FACTURA } from '@/lib/mcp/campos-facturas';
 
 export async function GET(req: NextRequest) {
   const auth = await requireApiKey(req);
@@ -68,7 +44,7 @@ export async function GET(req: NextRequest) {
   }
 
   const facturas = await db
-    .select(CAMPOS)
+    .select(CAMPOS_FACTURA)
     .from(ecfDocuments)
     .where(and(...condiciones))
     .orderBy(ecfDocuments.fechaEmision)
