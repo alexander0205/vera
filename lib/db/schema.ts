@@ -3675,3 +3675,48 @@ export const nominaProgramacion = pgTable('nomina_programacion', {
 
 export type NominaProgramacion    = typeof nominaProgramacion.$inferSelect;
 export type NewNominaProgramacion = typeof nominaProgramacion.$inferInsert;
+
+// ─── Nómina — Contratos (plantillas + emitidos) ──────────────────────────────
+// Estilo Deel: la empresa tiene plantillas de contrato PREGRABADAS con
+// marcadores `{{clave}}`; al dar de alta/gestionar un empleado se genera su
+// contrato autollenado con sus datos. La firma electrónica es fase 2 — por
+// ahora se llena y se produce el PDF.
+export const nominaContratoPlantillas = pgTable('nomina_contrato_plantillas', {
+  id:       serial('id').primaryKey(),
+  teamId:   integer('team_id').notNull().references(() => teams.id),
+  nombre:   varchar('nombre', { length: 160 }).notNull(),
+  /** Texto con marcadores `{{nombre}}`, `{{salario}}`… Ver lib/nomina/contratos.ts. */
+  cuerpo:   text('cuerpo').notNull(),
+  activa:   boolean('activa').notNull().default(true),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_contrato_plantillas_team_idx').on(t.teamId),
+]);
+
+// Un contrato EMITIDO = snapshot del cuerpo ya lleno para un empleado. Guarda el
+// texto resuelto (no una referencia viva) para que editar la plantilla después
+// no altere contratos ya generados. `estado` deja lugar a la firma (fase 2).
+export const nominaContratos = pgTable('nomina_contratos', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  empleadoId:  integer('empleado_id').notNull().references(() => empleados.id),
+  /** Plantilla de origen (traza). Null si se borró la plantilla. */
+  plantillaId: integer('plantilla_id').references(() => nominaContratoPlantillas.id, { onDelete: 'set null' }),
+  titulo:      varchar('titulo', { length: 200 }).notNull(),
+  /** Cuerpo YA LLENO (snapshot). */
+  cuerpo:      text('cuerpo').notNull(),
+  /** 'generado' (fase 2: 'enviado' | 'firmado'). */
+  estado:      varchar('estado', { length: 20 }).notNull().default('generado'),
+  createdBy:   integer('created_by').references(() => users.id),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_contratos_empleado_idx').on(t.empleadoId),
+  index('nomina_contratos_team_idx').on(t.teamId),
+]);
+
+export type NominaContratoPlantilla    = typeof nominaContratoPlantillas.$inferSelect;
+export type NewNominaContratoPlantilla = typeof nominaContratoPlantillas.$inferInsert;
+export type NominaContrato    = typeof nominaContratos.$inferSelect;
+export type NewNominaContrato = typeof nominaContratos.$inferInsert;

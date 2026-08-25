@@ -24,11 +24,13 @@ import {
   cotizaciones,
   nominaLineas,
   nominaCorridas,
+  nominaContratos,
 } from '@/lib/db/schema';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { CotizacionPDF, type CotizacionPDFData } from '@/lib/pdf/CotizacionPDF';
 import { VolanteNominaPDF, type VolanteNominaData } from '@/lib/pdf/VolanteNominaPDF';
+import { ContratoPDF } from '@/lib/pdf/ContratoPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import type { EmisorEmail } from '@/lib/email';
@@ -573,4 +575,49 @@ export async function generarVolanteNominaPdf(opts: {
   const buffer = await renderToBuffer(createElement(VolanteNominaPDF, { data }) as any);
   const slug = linea.nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return { buffer, filename: `volante-${slug || 'empleado'}-${corrida.periodo}.pdf` };
+}
+
+// ─── Contrato de empleado ─────────────────────────────────────────────────────
+
+export type ContratoPdfResult = { buffer: Buffer; filename: string };
+
+/**
+ * PDF de un contrato emitido. El cuerpo ya está lleno (snapshot en BD); aquí
+ * solo se maqueta. Scoping por team responsabilidad del llamador; se valida que
+ * el contrato pertenezca al team. `null` si no existe o no es del team.
+ */
+export async function generarContratoPdf(opts: {
+  teamId: number;
+  contratoId: number;
+}): Promise<ContratoPdfResult | null> {
+  const { teamId, contratoId } = opts;
+
+  const [row] = await db
+    .select({ contrato: nominaContratos, team: teams })
+    .from(nominaContratos)
+    .innerJoin(teams, eq(teams.id, nominaContratos.teamId))
+    .where(and(eq(nominaContratos.id, contratoId), eq(nominaContratos.teamId, teamId)))
+    .limit(1);
+
+  if (!row) return null;
+  const { contrato, team } = row;
+
+  const buffer = await renderToBuffer(createElement(ContratoPDF, {
+    data: {
+      emisor: {
+        razonSocial:     team.razonSocial ?? team.name,
+        nombreComercial: team.nombreComercial ?? undefined,
+        rnc:             team.rnc ?? undefined,
+        direccion:       team.direccion ?? undefined,
+        telefono:        team.telefono ?? undefined,
+        logo:            team.logo ?? undefined,
+        colorPrimario:   team.colorPrimario ?? undefined,
+      },
+      titulo:     contrato.titulo,
+      cuerpo:     contrato.cuerpo,
+      generadoEn: new Date(contrato.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+    },
+  }) as any);
+
+  return { buffer, filename: `contrato-${contratoId}.pdf` };
 }

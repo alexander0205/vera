@@ -16,7 +16,7 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
 import {
   Users, Search, Loader2, IdCard, Phone, Mail, Briefcase, Wallet, Landmark,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check,
+  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, Download,
 } from 'lucide-react';
 
 interface Empleado {
@@ -105,6 +105,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const [guardando, setGuardando] = useState(false);
   const [aEliminar, setAEliminar] = useState<Empleado | null>(null);
   const [importAbierto, setImportAbierto] = useState(false);
+  const [contratoDe, setContratoDe] = useState<Empleado | null>(null);
 
   const empleados = data?.empleados ?? [];
   const filtrados = useMemo(() => {
@@ -268,18 +269,23 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                   <div className="font-medium">{pesos(e.salarioBaseCents)}</div>
                   <div className="text-xs text-muted-foreground">{LABEL_FRECUENCIA[e.frecuenciaPago] ?? e.frecuenciaPago}</div>
                 </div>
-                {puedeGestionar && (
-                  <div className="flex flex-shrink-0 gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => abrirEditar(e)} aria-label="Editar">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    {esActivo(e.estado) && (
-                      <Button variant="ghost" size="icon" onClick={() => setAEliminar(e)} aria-label="Dar de baja">
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                <div className="flex flex-shrink-0 gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => setContratoDe(e)} aria-label="Contrato" title="Contrato">
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                  {puedeGestionar && (
+                    <>
+                      <Button variant="ghost" size="icon" onClick={() => abrirEditar(e)} aria-label="Editar">
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
-                )}
+                      {esActivo(e.estado) && (
+                        <Button variant="ghost" size="icon" onClick={() => setAEliminar(e)} aria-label="Dar de baja">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -367,6 +373,12 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
         />
       )}
 
+      <ContratosEmpleadoDialog
+        empleado={contratoDe}
+        puedeGestionar={puedeGestionar}
+        onOpenChange={(o) => { if (!o) setContratoDe(null); }}
+      />
+
       <ConfirmDialog
         open={!!aEliminar}
         onOpenChange={(o) => !o && setAEliminar(null)}
@@ -386,6 +398,124 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
     </div>
+  );
+}
+
+// ── Contratos del empleado ────────────────────────────────────────────────────
+// Lista los contratos ya generados (con descarga PDF) y permite generar uno
+// nuevo desde una plantilla: el servidor autollena los marcadores con los datos
+// del empleado y archiva el texto resuelto.
+
+interface PlantillaContrato { id: number; nombre: string; activa: boolean }
+interface ContratoEmitido { id: number; titulo: string; estado: string; createdAt: string }
+
+function ContratosEmpleadoDialog({
+  empleado, puedeGestionar, onOpenChange,
+}: {
+  empleado: Empleado | null;
+  puedeGestionar: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const abierto = !!empleado;
+  const { data: dContratos, mutate } = useSWR<{ contratos: ContratoEmitido[] }>(
+    abierto ? `/api/nomina/empleados/${empleado!.id}/contratos` : null, fetcher,
+  );
+  const { data: dPlantillas } = useSWR<{ plantillas: PlantillaContrato[] }>(
+    abierto ? '/api/nomina/contratos/plantillas' : null, fetcher,
+  );
+  const [plantillaId, setPlantillaId] = useState('');
+  const [generando, setGenerando] = useState(false);
+
+  const contratos = dContratos?.contratos ?? [];
+  const plantillas = (dPlantillas?.plantillas ?? []).filter((p) => p.activa);
+
+  async function generar() {
+    const pid = Number(plantillaId) || plantillas[0]?.id;
+    if (!pid || !empleado) { toast.error('Elige una plantilla'); return; }
+    setGenerando(true);
+    try {
+      const res = await fetch(`/api/nomina/empleados/${empleado.id}/contratos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plantillaId: pid }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo generar');
+      toast.success('Contrato generado');
+      mutate();
+      if (j.contrato?.id) window.open(`/api/nomina/contratos/${j.contrato.id}/pdf`, '_blank');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  return (
+    <Dialog open={abierto} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-zero-600" /> Contratos
+          </DialogTitle>
+          <DialogDescription>
+            {empleado ? nombreCompleto(empleado) : ''} — genera el contrato desde una plantilla; se llena solo con sus datos.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          {/* Generar nuevo */}
+          {puedeGestionar && (
+            plantillas.length === 0 ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                No hay plantillas activas. Crea una en <span className="font-medium">Nómina → Contratos</span>.
+              </div>
+            ) : (
+              <div className="flex items-end gap-2">
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Generar desde plantilla</Label>
+                  <NativeSelect value={plantillaId} onChange={(e) => setPlantillaId(e.target.value)}>
+                    {plantillas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </NativeSelect>
+                </div>
+                <Button onClick={generar} disabled={generando} className="gap-1.5">
+                  {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Generar
+                </Button>
+              </div>
+            )
+          )}
+
+          {/* Emitidos */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Contratos generados</Label>
+            {contratos.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Aún no hay contratos para este empleado.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {contratos.map((c) => (
+                  <div key={c.id} className="flex items-center gap-2 rounded-md border p-2.5">
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{c.titulo}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(c.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="gap-1.5"
+                      onClick={() => window.open(`/api/nomina/contratos/${c.id}/pdf`, '_blank')}>
+                      <Download className="h-3.5 w-3.5" /> PDF
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
