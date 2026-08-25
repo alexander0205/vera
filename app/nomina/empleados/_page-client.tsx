@@ -409,6 +409,12 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 interface PlantillaContrato { id: number; nombre: string; activa: boolean }
 interface ContratoEmitido { id: number; titulo: string; estado: string; createdAt: string }
 
+const ESTADO_CONTRATO: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
+  generado: { label: 'Generado', variant: 'outline' },
+  enviado:  { label: 'Enviado a firmar', variant: 'secondary' },
+  firmado:  { label: 'Firmado', variant: 'default' },
+};
+
 function ContratosEmpleadoDialog({
   empleado, puedeGestionar, onOpenChange,
 }: {
@@ -425,9 +431,31 @@ function ContratosEmpleadoDialog({
   );
   const [plantillaId, setPlantillaId] = useState('');
   const [generando, setGenerando] = useState(false);
+  const [enlaces, setEnlaces] = useState<Record<number, string>>({});
+  const [enviandoId, setEnviandoId] = useState<number | null>(null);
 
   const contratos = dContratos?.contratos ?? [];
   const plantillas = (dPlantillas?.plantillas ?? []).filter((p) => p.activa);
+
+  async function enviarAFirmar(contratoId: number) {
+    setEnviandoId(contratoId);
+    try {
+      const res = await fetch(`/api/nomina/contratos/${contratoId}/enviar`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo enviar');
+      setEnlaces((e) => ({ ...e, [contratoId]: j.url }));
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setEnviandoId(null);
+    }
+  }
+
+  async function copiar(url: string) {
+    try { await navigator.clipboard.writeText(url); toast.success('Enlace copiado'); }
+    catch { toast.error('No se pudo copiar'); }
+  }
 
   async function generar() {
     const pid = Number(plantillaId) || plantillas[0]?.id;
@@ -492,21 +520,47 @@ function ContratosEmpleadoDialog({
               <p className="py-6 text-center text-sm text-muted-foreground">Aún no hay contratos para este empleado.</p>
             ) : (
               <div className="space-y-1.5">
-                {contratos.map((c) => (
-                  <div key={c.id} className="flex items-center gap-2 rounded-md border p-2.5">
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{c.titulo}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(c.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}
+                {contratos.map((c) => {
+                  const est = ESTADO_CONTRATO[c.estado] ?? ESTADO_CONTRATO.generado;
+                  const enlace = enlaces[c.id];
+                  return (
+                    <div key={c.id} className="space-y-2 rounded-md border p-2.5">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-medium">{c.titulo}</span>
+                            <Badge variant={est.variant} className="shrink-0">{est.label}</Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(c.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" className="gap-1.5"
+                          onClick={() => window.open(`/api/nomina/contratos/${c.id}/pdf`, '_blank')}>
+                          <Download className="h-3.5 w-3.5" /> PDF
+                        </Button>
                       </div>
+
+                      {puedeGestionar && c.estado !== 'firmado' && (
+                        <div className="flex items-center gap-2 pl-6">
+                          <Button variant="secondary" size="sm" className="gap-1.5"
+                            onClick={() => enviarAFirmar(c.id)} disabled={enviandoId === c.id}>
+                            {enviandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            {c.estado === 'enviado' ? 'Regenerar enlace' : 'Enviar a firmar'}
+                          </Button>
+                        </div>
+                      )}
+
+                      {enlace && (
+                        <div className="ml-6 flex items-center gap-1.5 rounded-md border bg-muted/40 p-1.5">
+                          <input readOnly value={enlace} className="min-w-0 flex-1 bg-transparent px-1 text-xs text-muted-foreground outline-none" />
+                          <Button variant="ghost" size="sm" className="h-7 shrink-0 text-xs" onClick={() => copiar(enlace)}>Copiar</Button>
+                        </div>
+                      )}
                     </div>
-                    <Button variant="outline" size="sm" className="gap-1.5"
-                      onClick={() => window.open(`/api/nomina/contratos/${c.id}/pdf`, '_blank')}>
-                      <Download className="h-3.5 w-3.5" /> PDF
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -24,6 +24,15 @@ export interface ContratoPDFData {
   cuerpo: string;
   /** Pie: fecha de generación legible. */
   generadoEn: string;
+  /** Bloque de firma electrónica, si el contrato ya se firmó. */
+  firma?: {
+    firmanteNombre: string;
+    firmadoEn: string;
+    /** Imagen PNG de la firma (data URL). */
+    firmaImg: string;
+    /** Sello de integridad (sha256), para verificación. */
+    sello: string;
+  } | null;
 }
 
 const S = StyleSheet.create({
@@ -36,6 +45,12 @@ const S = StyleSheet.create({
   titulo: { fontFamily: 'Helvetica-Bold', fontSize: 13, textAlign: 'center', marginBottom: 16 },
   parrafo: { fontSize: 10.5, marginBottom: 10, textAlign: 'justify' },
   footer: { position: 'absolute', bottom: 30, left: 48, right: 48, textAlign: 'center', fontSize: 8, color: '#999' },
+  firmaCaja: { marginTop: 24, borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 14 },
+  firmaTitulo: { fontFamily: 'Helvetica-Bold', fontSize: 9, color: '#555', marginBottom: 6 },
+  firmaImg: { width: 180, height: 60, objectFit: 'contain' },
+  firmaNombre: { fontFamily: 'Helvetica-Bold', fontSize: 10, marginTop: 2 },
+  firmaMeta: { fontSize: 8, color: '#777', marginTop: 2 },
+  firmaSello: { fontSize: 7, color: '#aaa', marginTop: 4 },
 });
 
 /** Divide el cuerpo en bloques por línea en blanco; el primero es el título. */
@@ -73,8 +88,20 @@ export function ContratoPDF({ data }: { data: ContratoPDFData }) {
           <Text key={i} style={S.parrafo}>{p}</Text>
         ))}
 
+        {data.firma ? (
+          <View style={S.firmaCaja}>
+            <Text style={S.firmaTitulo}>FIRMA ELECTRÓNICA</Text>
+            <Image style={S.firmaImg} src={data.firma.firmaImg} />
+            <Text style={S.firmaNombre}>{data.firma.firmanteNombre}</Text>
+            <Text style={S.firmaMeta}>Firmado electrónicamente el {data.firma.firmadoEn}</Text>
+            <Text style={S.firmaSello}>Verificación de integridad: {data.firma.sello}</Text>
+          </View>
+        ) : null}
+
         <Text style={S.footer}>
-          Generado por Zero Nómina el {data.generadoEn}. Documento sin firma electrónica.
+          {data.firma
+            ? `Firmado electrónicamente el ${data.firma.firmadoEn}. Generado por Zero Nómina.`
+            : `Generado por Zero Nómina el ${data.generadoEn}. Documento sin firma electrónica.`}
         </Text>
       </Page>
     </Document>

@@ -3707,13 +3707,28 @@ export const nominaContratos = pgTable('nomina_contratos', {
   titulo:      varchar('titulo', { length: 200 }).notNull(),
   /** Cuerpo YA LLENO (snapshot). */
   cuerpo:      text('cuerpo').notNull(),
-  /** 'generado' (fase 2: 'enviado' | 'firmado'). */
+  /** 'generado' | 'enviado' | 'firmado'. */
   estado:      varchar('estado', { length: 20 }).notNull().default('generado'),
+  // ── Firma electrónica (fase 2) ──
+  // Se envía por un enlace público con token de 256 bits; en la base vive solo
+  // el SHA-256 (un volcado no deja firmar por nadie). El empleado firma en
+  // pantalla; se guarda la imagen de la firma + un sello de integridad
+  // (hash del cuerpo + firmante + fecha) + IP, como bitácora simple.
+  tokenHash:      char('token_hash', { length: 64 }),
+  enviadoEn:      timestamp('enviado_en'),
+  firmadoEn:      timestamp('firmado_en'),
+  firmanteNombre: varchar('firmante_nombre', { length: 200 }),
+  /** Imagen de la firma: 'data:image/png;base64,…'. */
+  firmaRef:       text('firma_ref'),
+  /** Sello de integridad: sha256(cuerpo | firmante | fecha). Tamper-evidence. */
+  firmaHash:      char('firma_hash', { length: 64 }),
+  firmaIp:        varchar('firma_ip', { length: 64 }),
   createdBy:   integer('created_by').references(() => users.id),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('nomina_contratos_empleado_idx').on(t.empleadoId),
   index('nomina_contratos_team_idx').on(t.teamId),
+  uniqueIndex('nomina_contratos_token_uniq').on(t.tokenHash),
 ]);
 
 export type NominaContratoPlantilla    = typeof nominaContratoPlantillas.$inferSelect;

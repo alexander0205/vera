@@ -616,6 +616,16 @@ export async function generarContratoPdf(opts: {
       titulo:     contrato.titulo,
       cuerpo:     contrato.cuerpo,
       generadoEn: new Date(contrato.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+      firma: contrato.estado === 'firmado' && contrato.firmaRef && contrato.firmanteNombre
+        ? {
+            firmanteNombre: contrato.firmanteNombre,
+            firmadoEn: contrato.firmadoEn
+              ? new Date(contrato.firmadoEn).toLocaleString('es-DO', { dateStyle: 'long', timeStyle: 'short' })
+              : '',
+            firmaImg: contrato.firmaRef,
+            sello: contrato.firmaHash ?? '',
+          }
+        : null,
     },
   }) as any);
 
