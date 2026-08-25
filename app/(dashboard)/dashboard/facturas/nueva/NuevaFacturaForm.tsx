@@ -1565,6 +1565,19 @@ export default function NuevaFacturaForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esCompraGasto, pagoRecibido, totalNeto]);
 
+  // Tipos que NO permiten ITBIS (e43 gastos menores, e47 pagos al exterior, y
+  // e44/e46): una línea de texto libre o recién agregada arrastra el 0.18 por
+  // defecto. Eso inflaba el total con un ITBIS que al emitir se fuerza a exento
+  // (y dejaba el selector en un valor fuera de rango → warning MUI). Se coacciona
+  // a 'exento' para que el total del formulario coincida con lo declarado.
+  useEffect(() => {
+    if (!regla || regla.permiteItbis) return;
+    items.forEach((it) => {
+      if (it.tasaItbis !== 'exento') updateItem(it.id, 'tasaItbis', 'exento');
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regla, items]);
+
   // Motivo (código de modificación) obligatorio para notas 33/34 — también al
   // guardar como borrador: la DGII lo exige y evita notas incompletas que luego
   // se traban al emitir.
