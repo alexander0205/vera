@@ -117,6 +117,7 @@ const GROUPS: NavGroup[] = [
       // Usuarios, roles y plan viven en el área de Administración (/cuenta):
       // son del negocio, no de Facturación. Se llega por el switcher de módulo.
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
+      { href: '/dashboard/api-keys',      label: 'API Keys' },
     ],
   },
 ];
@@ -199,6 +200,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/equipo':                'equipo:ver',
   '/dashboard/equipo/permisos':       'equipo:gestionar',
   '/dashboard/impresoras':            'configuracion:ver',
+  '/dashboard/api-keys':              'configuracion:gestionar',
 };
 
 // Gating del sidebar por PERMISOS EFECTIVOS (con overrides por empresa, vía
