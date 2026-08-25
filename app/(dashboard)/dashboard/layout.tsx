@@ -82,6 +82,7 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
       { href: '/dashboard/gastos',       label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
+      { href: '/dashboard/compras/catalogo', label: 'Artículos de compra' },
     ],
   },
   {
@@ -160,6 +161,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
+  '/dashboard/compras/catalogo':      'facturas:ver',
 
   // Administración Escolar no vive aquí: es otro módulo, con su propio nav en
   // /escolar. El salto entre módulos lo ofrece RailModulos, al pie del menú.

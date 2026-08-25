@@ -45,7 +45,11 @@ export async function GET(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const q = new URL(req.url).searchParams.get('q')?.trim();
+  const params = new URL(req.url).searchParams;
+  const q = params.get('q')?.trim();
+  // `?gestion=1` → página de gestión: devuelve las filas crudas del catálogo
+  // (campos completos, sin historial), para ver/editar/borrar artículos.
+  const gestion = params.get('gestion') === '1';
 
   let where = and(eq(catalogoCompras.teamId, teamId), eq(catalogoCompras.activo, true));
   if (q) {
@@ -63,7 +67,22 @@ export async function GET(req: NextRequest) {
     .from(catalogoCompras)
     .where(where)
     .orderBy(desc(catalogoCompras.updatedAt))
-    .limit(50);
+    .limit(gestion ? 500 : 50);
+
+  if (gestion) {
+    return NextResponse.json({
+      articulos: rows.map((r) => ({
+        id:              r.id,
+        nombre:          r.nombre,
+        descripcion:     r.descripcion,
+        referencia:      r.referencia,
+        costoDOP:        r.costoCents / 100,
+        tasaItbis:       r.tasaItbis,
+        proveedorNombre: r.proveedorNombre,
+        proveedorRnc:    r.proveedorRnc,
+      })),
+    });
+  }
 
   const curados = rows.map(aProducto);
 
