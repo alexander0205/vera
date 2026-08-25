@@ -184,6 +184,12 @@ interface Props {
    * producto de venta. (El catálogo de compras/proveedores es un paso aparte.)
    */
   sinBusquedaCatalogo?: boolean;
+  /**
+   * Buscador del catálogo de COMPRAS (lo que compras). Cuando se pasa junto con
+   * `sinBusquedaCatalogo`, el picker busca AQUÍ en vez del catálogo de venta.
+   * Si no se pasa, la línea queda como texto libre puro.
+   */
+  buscarCatalogoCompras?: (q: string) => Promise<Producto[]>;
 }
 
 
@@ -191,7 +197,7 @@ export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
   showReferencia, showDescripcion, dependientes, bloquearPrecios = false, modoGasto = false,
-  sinBusquedaCatalogo = false,
+  sinBusquedaCatalogo = false, buscarCatalogoCompras,
   ocultarItbis = false,
   showDescuento = false,
   ocultarConduce = false,
@@ -200,15 +206,17 @@ export function ItemsTable({
   const hasDeps = dependientes.length > 0;
   const etiquetaDetalle = sinBusquedaCatalogo ? 'Descripción' : modoGasto ? 'Descripción / producto' : 'Producto / servicio';
   const placeholderDetalle = sinBusquedaCatalogo
-    ? 'Describe lo que compraste…'
+    ? (buscarCatalogoCompras ? 'Busca o describe lo que compraste…' : 'Describe lo que compraste…')
     : modoGasto ? 'Describe gasto o busca producto de inventario...' : 'Buscar producto o servicio...';
   const crearLabel = modoGasto ? 'Crear producto para inventario' : 'Nuevo producto';
 
-  // Compra/gasto: sin catálogo de venta → el buscador devuelve vacío y la línea
-  // se completa con texto libre. Se conserva la firma (q, dependienteId).
-  const buscar = sinBusquedaCatalogo
-    ? (async () => []) as (q: string, dependienteId?: number | null) => Promise<Producto[]>
-    : buscarProductos;
+  // Compra/gasto (sinBusquedaCatalogo): NO se ofrece el catálogo de VENTA. Si hay
+  // un buscador del catálogo de COMPRAS, se usa ese; si no, la línea queda como
+  // texto libre puro (buscador vacío). Se conserva la firma (q, dependienteId).
+  const buscar: (q: string, dependienteId?: number | null) => Promise<Producto[]> =
+    sinBusquedaCatalogo
+      ? (buscarCatalogoCompras ? (q) => buscarCatalogoCompras(q) : async () => [])
+      : buscarProductos;
 
   /**
    * Ancho de cada columna en píxeles — salvo Producto, que no lleva ninguno.

@@ -1370,6 +1370,31 @@ export const comprasLocalesItems = pgTable('compras_locales_items', {
 export type CompraLocal     = typeof comprasLocales.$inferSelect;
 export type CompraLocalItem = typeof comprasLocalesItems.$inferSelect;
 
+/**
+ * Catálogo de COMPRAS: artículos/servicios que el negocio COMPRA a sus
+ * proveedores. Es el simétrico del catálogo de venta (`products`) pero
+ * separado a propósito: en una compra/gasto no quieres ver lo que vendes.
+ * Alimenta el buscador de líneas de gasto (e43/e47) y compra (e41).
+ * `costoCents` es solo una referencia editable; el costo real se fija en cada
+ * compra. No toca inventario/stock (eso vive en Compras registradas).
+ */
+export const catalogoCompras = pgTable('catalogo_compras', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  nombre:          varchar('nombre', { length: 255 }).notNull(),
+  descripcion:     text('descripcion'),
+  referencia:      varchar('referencia', { length: 100 }),
+  costoCents:      integer('costo_cents').notNull().default(0),
+  tasaItbis:       varchar('tasa_itbis', { length: 8 }).notNull().default('0.18'),
+  proveedorNombre: varchar('proveedor_nombre', { length: 255 }),
+  proveedorRnc:    varchar('proveedor_rnc',    { length: 20 }),
+  activo:          boolean('activo').notNull().default(true),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+export type CatalogoCompra = typeof catalogoCompras.$inferSelect;
+
 export const pagosProveedores = pgTable('pagos_proveedores', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id').notNull().references(() => teams.id),

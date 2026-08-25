@@ -1280,6 +1280,18 @@ export default function NuevaFacturaForm({
     return [...cuotasComoProductos(dependienteId, q), ...(data.productos ?? [])];
   }
 
+  /**
+   * Buscador del catálogo de COMPRAS (lo que compras), para las líneas de
+   * compra/gasto. Separado del catálogo de venta a propósito. Devuelve el
+   * mismo shape `Producto` para que el Autocomplete y `seleccionarProducto`
+   * funcionen igual. El historial de compras pasadas se sumará aquí después.
+   */
+  async function buscarCatalogoCompras(q: string): Promise<Producto[]> {
+    const res  = await fetch(`/api/compras/catalogo?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    return data.items ?? [];
+  }
+
   function seleccionarProducto(idx: number, p: Producto) {
     // Una cuota del plan no es un producto: trae su propio precio, su mes y el
     // cargo del que sale. Va por su camino antes de cualquier otra cosa —lo de
@@ -2521,6 +2533,7 @@ export default function NuevaFacturaForm({
                   bloquearPrecios={esCompraGasto ? false : bloquearPrecios}
                   modoGasto={esCompraGasto}
                   sinBusquedaCatalogo={esCompraGasto}
+                  buscarCatalogoCompras={esCompraGasto ? buscarCatalogoCompras : undefined}
                 />
                 {/* Las retenciones son de quien le compra al Estado o a un
                     gran contribuyente. Un colegio le cobra a familias: nunca
