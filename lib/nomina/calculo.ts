@@ -122,3 +122,65 @@ export function calcularNominaEmpleado(p: ParametrosNomina): DesgloseNomina {
     baseIsrMensualCents: baseIsr,
   };
 }
+
+/**
+ * Reparte un total MENSUAL entre `deTotal` períodos y devuelve el pedazo del
+ * período `indice` (1..deTotal), con redondeo ACUMULADO: la suma de los pedazos
+ * es exactamente el total, sin perder ni inventar un centavo.
+ *
+ *   pedazo(k) = round(total·k/N) − round(total·(k−1)/N)
+ *
+ * Telescopea: Σ pedazo(k) = round(total) − round(0) = total. Así dos quincenas
+ * suman el mes al centavo, y la declaración mensual de TSS/DGII cuadra.
+ */
+export function pedazoPeriodo(totalCents: number, indice: number, deTotal: number): number {
+  if (deTotal <= 1 || indice <= 0) return totalCents;
+  const hasta = Math.round((totalCents * indice) / deTotal);
+  const antes = Math.round((totalCents * (indice - 1)) / deTotal);
+  return hasta - antes;
+}
+
+/**
+ * Prorratea un desglose MENSUAL al período (indice de deTotal).
+ *
+ * Clave: los topes de TSS y la escala progresiva del ISR YA se aplicaron sobre
+ * el salario del mes en `calcularNominaEmpleado`; aquí solo se REPARTE el
+ * resultado. Prorratear la base antes de calcular distorsionaría el ISR (la
+ * escala es anual) y los topes — por eso se calcula mensual y luego se divide.
+ *
+ * Los totales se recomponen de las partes ya repartidas para que sigan cuadrando
+ * dentro del período (total = Σ partes; neto = bruto − deducciones).
+ */
+export function prorratearDesglose(d: DesgloseNomina, indice: number, deTotal: number): DesgloseNomina {
+  if (deTotal <= 1) return d;
+  const p = (n: number) => pedazoPeriodo(n, indice, deTotal);
+
+  const brutoCents = p(d.brutoCents);
+  const afpEmpleadoCents = p(d.afpEmpleadoCents);
+  const sfsEmpleadoCents = p(d.sfsEmpleadoCents);
+  const isrCents = p(d.isrCents);
+  const otrasDeduccionesCents = p(d.otrasDeduccionesCents);
+  const afpPatronalCents = p(d.afpPatronalCents);
+  const sfsPatronalCents = p(d.sfsPatronalCents);
+  const srlPatronalCents = p(d.srlPatronalCents);
+  const infotepPatronalCents = p(d.infotepPatronalCents);
+
+  const totalDeduccionesCents = afpEmpleadoCents + sfsEmpleadoCents + isrCents + otrasDeduccionesCents;
+  const totalPatronalCents = afpPatronalCents + sfsPatronalCents + srlPatronalCents + infotepPatronalCents;
+
+  return {
+    brutoCents,
+    afpEmpleadoCents,
+    sfsEmpleadoCents,
+    isrCents,
+    otrasDeduccionesCents,
+    totalDeduccionesCents,
+    afpPatronalCents,
+    sfsPatronalCents,
+    srlPatronalCents,
+    infotepPatronalCents,
+    totalPatronalCents,
+    netoCents: brutoCents - totalDeduccionesCents,
+    baseIsrMensualCents: p(d.baseIsrMensualCents),
+  };
+}

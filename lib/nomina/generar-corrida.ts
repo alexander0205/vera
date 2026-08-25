@@ -13,7 +13,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaCorridas, nominaLineas } from '@/lib/db/schema';
 import { tasasDelAnio } from '@/lib/config/nomina-tasas';
-import { construirCorrida } from '@/lib/nomina/corrida';
+import { construirCorrida, prorationDeTipo } from '@/lib/nomina/corrida';
 
 export interface GenerarCorridaInput {
   teamId: number;
@@ -46,12 +46,15 @@ export async function generarCorrida(input: GenerarCorridaInput): Promise<Genera
 
   const filas = await db.select().from(empleados).where(where);
 
+  // La proración sale del tipo: 'quincenal-1/2' cobran media mensualidad cada
+  // una; 'mensual' va completo. Aplica igual al cron y al botón manual.
   const { lineas, totales } = construirCorrida(
     filas.map((e) => ({
       id: e.id, nombres: e.nombres, apellidos: e.apellidos, cedula: e.cedula,
       cargo: e.cargo, salarioBaseCents: e.salarioBaseCents, estado: e.estado,
     })),
     tasasDelAnio(anioTasas),
+    prorationDeTipo(tipo),
   );
 
   if (lineas.length === 0) return { creada: false, motivo: 'sin-empleados' };

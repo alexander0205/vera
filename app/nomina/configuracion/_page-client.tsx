@@ -154,11 +154,11 @@ export default function ConfiguracionClient() {
                   <Label className="ml-3 text-xs text-muted-foreground">2do pago, día</Label>
                   <DiaInput value={cfg.quincenalDia2} onChange={(v) => set('quincenalDia2', v)} />
                 </div>
-                <div className="ml-7 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                <div className="ml-7 flex items-start gap-2 rounded-md border border-muted bg-muted/40 p-2.5 text-xs text-muted-foreground">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    Hoy el cálculo TSS/ISR se hace sobre el salario <strong>mensual</strong>; la proración quincenal aún no está.
-                    Cada quincena saldría a monto de mes completo. Úsalo para mensual hasta que llegue la proración.
+                    Cada quincena cobra <strong>la mitad</strong> del mes. El TSS/ISR se calcula sobre el salario mensual
+                    (topes y escala del año) y se reparte entre las dos quincenas, que suman el mes al centavo.
                   </span>
                 </div>
               </>
