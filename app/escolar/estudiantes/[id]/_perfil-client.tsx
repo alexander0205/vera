@@ -20,6 +20,7 @@ import { useTabUrl } from '@/lib/hooks/useUrlEstado';
 import { labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
 import { TutoresPanel, type TutorVinculo as TutorPanelVinculo } from '@/components/administracion-escolar/TutoresPanel';
+import { CopiarLinkPago } from '@/components/administracion-escolar/CopiarLinkPago';
 import { ResponsablePagoDialog, type Contacto } from '@/components/administracion-escolar/ResponsablePagoDialog';
 import { DocumentosEstudiante } from '@/components/administracion-escolar/DocumentosEstudiante';
 import { CapturaFoto } from '@/components/fotos/CapturaFoto';
@@ -552,11 +553,24 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                           abre todo lo que deben, también lo de los otros hijos.
                           Vive en la ficha del responsable, que es donde ese
                           alcance se ve, y desde aquí se llega en un clic. */}
-                      <Link href={`/escolar/responsables/${responsable.clientId}`}
-                        className="mt-1 inline-flex items-center gap-1 text-[11px] text-zero-600 hover:text-zero-800">
-                        <Users className="h-3 w-3" />
-                        Ver la familia y su enlace de pago
-                      </Link>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        {/* Copiarlo desde aquí, sin dar el rodeo por la ficha de
+                            la familia. El enlace SIGUE siendo de la familia —lo
+                            dice el título del botón— pero quien está mirando a
+                            un alumno y quiere mandárselo al padre no debería
+                            tener que cambiar de pantalla para eso. */}
+                        <CopiarLinkPago
+                          clientId={responsable.clientId}
+                          nombre={responsable.razonSocial}
+                          como="boton"
+                          className="text-[11px]"
+                        />
+                        <Link href={`/escolar/responsables/${responsable.clientId}`}
+                          className="inline-flex items-center gap-1 text-[11px] text-zero-600 hover:text-zero-800">
+                          <Users className="h-3 w-3" />
+                          Ver la familia
+                        </Link>
+                      </div>
                     </div>
                   ) : (
                     <p className="mt-0.5 text-sm text-red-600">Falta asignarlo</p>

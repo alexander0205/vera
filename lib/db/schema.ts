@@ -1194,6 +1194,30 @@ export const systemLogs = pgTable('system_logs', {
 
 export type SystemLog = typeof systemLogs.$inferSelect;
 
+/**
+ * Cuánto se tardó en hacer cada factura.
+ *
+ * Tiempo de PARED: del momento en que se abre el formulario al momento en que
+ * se guarda. Incluye que alguien se levante por un café. Por eso lo que se mira
+ * es la mediana y no el promedio — una factura que quedó abierta toda la tarde
+ * arrastra la media a un número que no describe a nadie.
+ */
+export const facturaTiempos = pgTable('factura_tiempos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  userId:        integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  ecfDocumentId: integer('ecf_document_id'),
+  /** 'escolar' | 'formulario' | 'pos' | 'recurrente' */
+  origen:        varchar('origen', { length: 24 }).notNull(),
+  ms:            integer('ms').notNull(),
+  lineas:        smallint('lineas').notNull().default(0),
+  montoCentavos: bigint('monto_centavos', { mode: 'number' }),
+  emitida:       boolean('emitida').notNull().default(false),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+export type FacturaTiempo = typeof facturaTiempos.$inferSelect;
+
 // ─── EmiteDO — Almacenes ──────────────────────────────────────────────────────
 
 export const almacenes = pgTable('almacenes', {

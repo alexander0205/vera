@@ -1233,6 +1233,33 @@ export default function NuevaFacturaForm({
       .filter((p) => !texto || p.nombre.toLowerCase().includes(texto) || (p.descripcion ?? '').toLowerCase().includes(texto));
   }
 
+  /**
+   * Reloj de la factura: arranca al montar el formulario.
+   *
+   * Es tiempo de PARED, no de trabajo — incluye que alguien se levante por un
+   * café a mitad de una factura. Se mide igual porque la alternativa es seguir
+   * discutiendo con minutos estimados; para leerlo se usa la mediana, que a
+   * una pestaña olvidada no la deja arrastrar el número.
+   */
+  const abiertoEn = useRef<number>(Date.now());
+
+  function apuntarTiempo(extra: { ecfDocumentId: number | null; emitida: boolean }) {
+    const cuerpo = {
+      ms: Date.now() - abiertoEn.current,
+      origen: modoColegio ? 'escolar' : 'formulario',
+      lineas: items.length,
+      montoCentavos: Math.round(totales.total * 100),
+      ...extra,
+    };
+    // `keepalive` para que sobreviva a la navegación que viene justo después.
+    void fetch('/api/metricas/factura-tiempo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   async function buscarProductos(q: string, dependienteId?: number | null): Promise<Producto[]> {
     // contexto=facturacion: excluye lo que es solo del POS (cafetería).
     const res  = await fetch(`/api/productos?contexto=facturacion&q=${encodeURIComponent(q)}`);
@@ -1758,6 +1785,13 @@ export default function NuevaFacturaForm({
       // Emitió bien: la reserva quedó consumida por este documento.
       setReservaDocId(null);
       try { localStorage.removeItem(draftKey); } catch {}
+
+      // Cuánto se tardó. Se manda y se olvida: si falla no se entera nadie, y
+      // sobre todo no toca el flujo de quien acaba de facturar.
+      apuntarTiempo({
+        ecfDocumentId: typeof data.id === 'number' ? data.id : null,
+        emitida: modoEfectivo === 'emitir',
+      });
       // Persistir clasificación por maestros (Plan A) — metadata no fiscal.
       if (data.documentoId) {
         try {
