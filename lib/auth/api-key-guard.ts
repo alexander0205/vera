@@ -2,7 +2,7 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { apiKeys } from '@/lib/db/schema';
 
@@ -51,7 +51,7 @@ export async function requireApiKey(req: NextRequest): Promise<ApiKeyAuthOk | Ap
 
   // Fire-and-forget: no bloquear la respuesta por esto.
   void db.update(apiKeys).set({ ultimoUsoAt: new Date() })
-    .where(and(eq(apiKeys.id, fila.id))).catch(() => {});
+    .where(eq(apiKeys.id, fila.id)).catch(() => {});
 
   return { ok: true, teamId: fila.teamId, apiKeyId: fila.id };
 }
