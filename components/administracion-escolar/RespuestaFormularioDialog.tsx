@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Check, Loader2, X } from 'lucide-react';
+import { Check, Loader2, X, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
@@ -171,8 +171,33 @@ function Valor({ tipo, valor }: { tipo: string; valor: unknown }) {
   }
 
   if (tipo === 'archivo' && valor && typeof valor === 'object') {
-    const v = valor as { nombre?: string; key?: string };
-    return <span>{v.nombre ?? 'Archivo adjunto'}</span>;
+    const v = valor as { nombre?: string; key?: string; tipo?: string };
+
+    // Sin llave no hay nada que abrir: pasó por vista previa, o es una respuesta
+    // vieja de cuando la subida ni existía. Se dice, en vez de dar un enlace roto.
+    if (!v.key || v.key === 'preview-local') {
+      return <span className="text-gray-500">{v.nombre ?? 'Archivo adjunto'} (no se guardó)</span>;
+    }
+
+    const url = `/api/administracion-escolar/formularios/archivo?key=${encodeURIComponent(v.key)}`;
+    const esImagen = (v.tipo ?? '').startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(v.nombre ?? '');
+
+    // La imagen se ve; el PDF se abre. Quien revisa una inscripción quiere
+    // mirar la foto 2×2 sin abrir cinco pestañas, pero un acta escaneada de
+    // varias páginas no se lee en una miniatura.
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 text-zero-600 hover:text-zero-800">
+        {esImagen ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt={v.nombre ?? 'Adjunto'}
+            className="h-16 w-16 rounded border border-gray-200 object-cover" />
+        ) : (
+          <FileText className="h-4 w-4" />
+        )}
+        <span className="underline">{v.nombre ?? 'Ver archivo'}</span>
+      </a>
+    );
   }
 
   if (Array.isArray(valor)) {
