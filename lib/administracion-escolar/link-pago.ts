@@ -62,6 +62,28 @@ export function generarToken(): string {
  * para el mismo padre —cosa que pasa, son cinco cargos en la misma tanda— no se
  * crean dos enlaces con dos referencias distintas.
  */
+/**
+ * ¿Ya tiene enlace este responsable? Sin crearlo.
+ *
+ * Existe para poder AVISAR antes de crear. `getOCrearLink` es cómodo pero
+ * siempre deja fila, y la pantalla necesita distinguir «te copio el que ya
+ * tienes» de «voy a crear uno nuevo» ANTES de hacerlo — si no, el colegio
+ * genera enlaces sin enterarse cada vez que hace clic por curiosidad.
+ */
+export async function buscarLink(teamId: number, clientId: number): Promise<{
+  token: string; referencia: string;
+} | null> {
+  const [ya] = await db
+    .select({ token: adminEscolarLinksPago.token, referencia: adminEscolarLinksPago.referencia })
+    .from(adminEscolarLinksPago)
+    .where(and(
+      eq(adminEscolarLinksPago.teamId, teamId),
+      eq(adminEscolarLinksPago.clientId, clientId),
+    ))
+    .limit(1);
+  return ya ?? null;
+}
+
 export async function getOCrearLink(teamId: number, clientId: number): Promise<{
   token: string; referencia: string;
 }> {

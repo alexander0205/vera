@@ -281,6 +281,18 @@ export default function NuevaFacturaForm({
   // ofrecer, en la pantalla de éxito, "volver al estudiante y vincular". Una
   // sola factura puede cubrir varios meses (N cargos → 1 factura).
   const [origenCargos, setOrigenCargos] = useState<{ id: number; saldoCentavos: number }[]>([]);
+
+  /**
+   * Todas las deudas cobrables del alumno —marcadas o no— tal como las devolvió
+   * el prefill. Alimentan el buscador de productos para poder añadir otro mes
+   * sin salir de la factura.
+   */
+  type OpcionEscolar = {
+    cargoId: number; estudianteId: number; seleccionado: boolean;
+    saldoCentavos: number; mes: number | null; anio: number;
+    linea?: PrefillCargo['linea']; contexto: string;
+  };
+  const [opcionesEscolares, setOpcionesEscolares] = useState<OpcionEscolar[]>([]);
   const [saldandoCargo, setSaldandoCargo] = useState(false);
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
@@ -632,6 +644,18 @@ export default function NuevaFacturaForm({
         // Solo lo que viene marcado: el resto son las otras deudas del alumno,
         // que aquí se ofrecían para añadir y en el formulario grande se añaden
         // buscando el producto.
+        // Las NO marcadas también se guardan: son las otras deudas del alumno,
+        // y hasta ahora se tiraban. Sin ellas, quien ya está dentro de la
+        // factura y quiere añadir otro mes tiene que salir y empezar de nuevo,
+        // porque el buscador solo mira el catálogo y una mensualidad no es un
+        // producto. Ahora alimentan el buscador (ver `buscarProductos`).
+        const ctxTodos = new Map((datos.estudiantes ?? []).map((e) => [e.id, e.contexto]));
+        setOpcionesEscolares(
+          (datos.opciones ?? [])
+            .filter((o) => o.linea && o.saldoCentavos > 0)
+            .map((o) => ({ ...o, contexto: contextoATexto(ctxTodos.get(o.estudianteId)) })),
+        );
+
         const elegidas = (datos.opciones ?? []).filter((o) => o.seleccionado);
         if (elegidas.length === 0) return;
 
@@ -1168,14 +1192,62 @@ export default function NuevaFacturaForm({
   }
 
   // ─── Búsqueda productos ───────────────────────────────────────────────────
-  async function buscarProductos(q: string): Promise<Producto[]> {
+  /**
+   * Cuotas del plan de un alumno, en forma de producto, para que el buscador
+   * las pueda ofrecer. Solo las de ESE beneficiario: con hermanos en la misma
+   * factura, mezclarlas haría cobrarle a uno la mensualidad del otro.
+   *
+   * El `id` va en negativo para no chocar nunca con un producto real.
+   */
+  function cuotasComoProductos(dependienteId: number | null | undefined, q: string): Producto[] {
+    if (!dependienteId || opcionesEscolares.length === 0) return [];
+    const texto = q.trim().toLowerCase();
+
+    return opcionesEscolares
+      .filter((o) => o.estudianteId === dependienteId)
+      // Lo que ya está en la factura no se vuelve a ofrecer: añadir dos veces
+      // el mismo mes es cobrarlo dos veces.
+      .filter((o) => !items.some((it) => it.cuotaClave === `${o.estudianteId}:${o.cargoId}:${o.mes ?? 0}:${o.anio}`))
+      .map((o) => {
+        const nombre = o.mes
+          ? `${o.linea!.nombreItem} — ${MESES_LINEA[o.mes]} ${o.anio}`
+          : String(o.linea!.nombreItem);
+        return {
+          id: -(o.cargoId || (o.estudianteId * 100 + (o.mes ?? 0))),
+          nombre,
+          descripcion: o.contexto || null,
+          precioDOP: Number(o.linea!.precioUnitarioItem) || 0,
+          tasaItbis: String(o.linea!.tasaItbis ?? 'exento'),
+          tipo: String(o.linea!.indicadorBienoServicio) === '1' ? 'bien' : 'servicio',
+          referencia: 'PLAN',
+          stockActual: 0, stockMinimo: 0,
+          controlaInventario: false, permiteVentaSinStock: true,
+          cuotaEscolar: {
+            cargoId: o.cargoId, estudianteId: o.estudianteId,
+            mes: o.mes, anio: o.anio, saldoCentavos: o.saldoCentavos,
+            productoId: typeof o.linea!.productoId === 'number' ? o.linea!.productoId : null,
+            contexto: o.contexto,
+          },
+        } satisfies Producto;
+      })
+      .filter((p) => !texto || p.nombre.toLowerCase().includes(texto) || (p.descripcion ?? '').toLowerCase().includes(texto));
+  }
+
+  async function buscarProductos(q: string, dependienteId?: number | null): Promise<Producto[]> {
     // contexto=facturacion: excluye lo que es solo del POS (cafetería).
     const res  = await fetch(`/api/productos?contexto=facturacion&q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    return data.productos ?? [];
+    // Las cuotas del alumno van PRIMERO: quien está facturando a una familia
+    // busca el mes, no el producto genérico del catálogo.
+    return [...cuotasComoProductos(dependienteId, q), ...(data.productos ?? [])];
   }
 
   function seleccionarProducto(idx: number, p: Producto) {
+    // Una cuota del plan no es un producto: trae su propio precio, su mes y el
+    // cargo del que sale. Va por su camino antes de cualquier otra cosa —lo de
+    // las variantes no le aplica y el id negativo no debe llegar a la línea.
+    if (p.cuotaEscolar) { aplicarCuotaEnLinea(idx, p); return; }
+
     // Producto con variantes (talla/color…): no se puede vender "el producto" a
     // secas — hay que elegir la variante para saber a qué stock pega el descuento.
     // Se abre el selector y la línea se completa al escoger (aplicarVarianteEnLinea).
@@ -1184,6 +1256,46 @@ export default function NuevaFacturaForm({
       return;
     }
     aplicarProductoEnLinea(idx, p);
+  }
+
+  /**
+   * Añade un mes del plan como línea.
+   *
+   * Tres cosas que no hace `aplicarProductoEnLinea` y aquí son obligatorias:
+   * el `productoId` es el del catálogo, no el id negativo del buscador; el
+   * cargo se registra en `origenCargos` para que al emitir se marque pagado; y
+   * queda la `cuotaClave` para no volver a ofrecer ese mismo mes.
+   */
+  function aplicarCuotaEnLinea(idx: number, p: Producto) {
+    const c = p.cuotaEscolar!;
+    const tasa = (p.tasaItbis as ItemLinea['tasaItbis']) ?? 'exento';
+    const tasaFinal: ItemLinea['tasaItbis'] =
+      regla === undefined ? tasa : regla.permiteItbis ? tasa : 'exento';
+
+    dispatchItems({
+      type: 'APPLY_PRODUCTO',
+      idx,
+      patch: {
+        productoId: c.productoId ?? undefined,
+        variantId: undefined,
+        variantNombre: undefined,
+        nombreItem: p.nombre,
+        referencia: '',
+        descripcionItem: c.contexto,
+        precioUnitarioItem: p.precioDOP,
+        tasaItbis: tasaFinal,
+        indicadorBienoServicio: p.tipo === 'bien' ? '1' : '2',
+        cuotaClave: `${c.estudianteId}:${c.cargoId}:${c.mes ?? 0}:${c.anio}`,
+      },
+    });
+
+    // Solo si la deuda ya existe. Una cuota prevista todavía no tiene cargo, y
+    // apuntar el 0 haría que al emitir se intentara saldar un cargo inexistente.
+    if (c.cargoId > 0) {
+      setOrigenCargos((prev) => prev.some((x) => x.id === c.cargoId)
+        ? prev
+        : [...prev, { id: c.cargoId, saldoCentavos: c.saldoCentavos }]);
+    }
   }
 
   /** Aplica un producto SIN variantes a la línea (comportamiento clásico). */

@@ -25,6 +25,24 @@ export interface Producto {
   permiteVentaSinStock: boolean;
   // Ejes de variante del producto. Vacío/undefined = producto sin variantes.
   variantAtributos?:    { nombre: string; valores: string[] }[];
+  /**
+   * Marca que esto NO es un producto del catálogo sino una cuota del plan de
+   * cobro de un alumno —«Colegiatura — Diciembre 2026»—, que el buscador ofrece
+   * cuando la línea ya tiene beneficiario.
+   *
+   * Existe porque las mensualidades no son productos: el catálogo tiene
+   * «Colegiatura — Primaria» y nada más. Sin esto, quien está dentro de una
+   * factura y quiere añadir otro mes tiene que salir y volver a empezar.
+   */
+  cuotaEscolar?: {
+    cargoId:        number;      // 0 = todavía no existe la deuda
+    estudianteId:   number;
+    mes:            number | null;
+    anio:           number;
+    saldoCentavos:  number;
+    productoId:     number | null;
+    contexto:       string;
+  };
 }
 
 /** Variante concreta de un producto (talla, color…), con su stock y precio. */
@@ -92,6 +110,14 @@ export interface ItemLinea {
   /** Beneficiario por línea (dependiente del cliente). */
   dependienteId?: number | null;
   dependienteNombre?: string;
+  /**
+   * `estudiante:cargo:mes:año` cuando la línea salió de una cuota del plan.
+   *
+   * Sirve para no ofrecer dos veces el mismo mes en el buscador. Un cargo que
+   * todavía no existe tiene id 0, así que el mes y el año son parte de la clave
+   * — si no, dos meses previstos del mismo alumno serían indistinguibles.
+   */
+  cuotaClave?: string;
 }
 
 export interface ResultadoEmision {

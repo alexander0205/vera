@@ -135,7 +135,7 @@ function CeldaNumero({
 interface Props {
   items: ItemLinea[];
   regla: TipoEcfRegla | undefined;
-  buscarProductos: (q: string) => Promise<Producto[]>;
+  buscarProductos: (q: string, dependienteId?: number | null) => Promise<Producto[]>;
   onSelectProducto: (idx: number, p: Producto) => void;
   /** Texto libre sin match → crear producto en DB y seleccionarlo. */
   onCrearProductoLibre: (idx: number, texto: string) => void;
@@ -343,7 +343,7 @@ export function ItemsTable({
               <Autocomplete<Producto>
                 placeholder={placeholderDetalle}
                 value={item.nombreItem}
-                onSearch={buscarProductos}
+                onSearch={(q) => buscarProductos(q, item.dependienteId)}
                 onSelect={(p) => onSelectProducto(idx, p)}
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
@@ -741,7 +741,7 @@ export function ItemsTable({
                   <Autocomplete<Producto>
                     placeholder={placeholderDetalle}
                     value={item.nombreItem}
-                    onSearch={buscarProductos}
+                    onSearch={(q) => buscarProductos(q, item.dependienteId)}
                     onSelect={(p) => onSelectProducto(idx, p)}
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}

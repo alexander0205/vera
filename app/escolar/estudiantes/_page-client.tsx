@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import {
   Users, CalendarDays, Wallet, AlertTriangle, Plus, Search, Loader2,
-  ChevronLeft, ChevronRight, UserPlus, Download, Contact, CloudDownload, ExternalLink,
+  ChevronLeft, ChevronRight, UserPlus, Download, Contact, CloudDownload, ExternalLink, Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fmtDOP } from '@/lib/utils/format';
@@ -333,6 +333,7 @@ export default function EstudiantesClient() {
                         <th className="px-3 py-2 font-medium">Tutor</th>
                         <th className="px-3 py-2 font-medium text-right">Balance</th>
                         <th className="px-3 py-2 font-medium">Estado</th>
+                        <th className="px-3 py-2 font-medium text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -401,6 +402,25 @@ export default function EstudiantesClient() {
                               </Button>
                             ) : (
                               <span className="text-xs text-gray-500">Sin matricular</span>
+                            )}
+                          </td>
+                          {/* Facturar sin pasar por la ficha. Lleva a la vista
+                              de cargos del alumno, que es donde se marca lo que
+                              entra en la factura: el botón no puede adivinar
+                              qué meses se le van a cobrar. */}
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                            {!deContactos && puedeGestionar && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={(ev) => {
+                                  ev.stopPropagation();   // la fila entera abre la ficha lateral
+                                  router.push(`/escolar/estudiantes/${e.id}?v=mensualidades`);
+                                }}
+                              >
+                                <Receipt className="mr-1 h-3.5 w-3.5" />Facturar
+                              </Button>
                             )}
                           </td>
                         </tr>
