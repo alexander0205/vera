@@ -8,6 +8,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
 import { CAMPOS_FACTURA } from '@/lib/mcp/campos-facturas';
+import { idValido } from '@/lib/mcp/ids';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -17,8 +18,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const { teamId } = auth;
 
   const { id } = await params;
-  const facturaId = parseInt(id);
-  if (isNaN(facturaId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  const facturaId = idValido(id);
+  if (facturaId === null) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [factura] = await db
     .select(CAMPOS_FACTURA)

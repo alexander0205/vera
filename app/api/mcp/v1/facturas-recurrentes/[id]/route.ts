@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { idValido } from '@/lib/mcp/ids';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,8 +17,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const { teamId } = auth;
 
   const { id } = await params;
-  const recurrenteId = parseInt(id);
-  if (isNaN(recurrenteId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  const recurrenteId = idValido(id);
+  if (recurrenteId === null) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [facturaRecurrente] = await db
     .select()

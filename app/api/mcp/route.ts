@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server';
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 function construirHandler(origin: string, authHeader: string) {
   async function llamar(path: string, params: Record<string, string | undefined> = {}) {
@@ -37,7 +38,7 @@ function construirHandler(origin: string, authHeader: string) {
     server.registerTool(
       'get_client',
       { title: 'Detalle de cliente', description: 'Obtiene un cliente por id.',
-        inputSchema: z.object({ id: z.number().int() }) },
+        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
       async ({ id }) => llamar(`/clientes/${id}`),
     );
 
@@ -63,7 +64,7 @@ function construirHandler(origin: string, authHeader: string) {
     server.registerTool(
       'get_invoice',
       { title: 'Detalle de factura', description: 'Obtiene una factura por id.',
-        inputSchema: z.object({ id: z.number().int() }) },
+        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
       async ({ id }) => llamar(`/facturas/${id}`),
     );
 
@@ -84,7 +85,7 @@ function construirHandler(origin: string, authHeader: string) {
     server.registerTool(
       'get_recurring_invoice',
       { title: 'Detalle de factura recurrente', description: 'Obtiene un plan de facturación recurrente por id.',
-        inputSchema: z.object({ id: z.number().int() }) },
+        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
       async ({ id }) => llamar(`/facturas-recurrentes/${id}`),
     );
 
@@ -108,8 +109,23 @@ async function manejar(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   const authHeader = req.headers.get('authorization')!;
-  const origin = new URL(req.url).origin;
-  const handler = construirHandler(origin, authHeader);
+
+  /**
+   * La base sale del entorno, NO de la petición.
+   *
+   * Antes era `new URL(req.url).origin`, y eso lo decide quien llama: mandando
+   * `X-Forwarded-Proto: https` el origen pasaba a `https://…` y TODAS las tools
+   * fallaban («fetch failed»). No es solo un ataque: cualquier proxy que
+   * termine TLS —nginx, Cloudflare, el de Vercel— manda esa cabecera de forma
+   * legítima, así que en cuanto esto saliera a producción detrás de un proxy el
+   * MCP dejaba de funcionar entero, aunque en local fuera perfecto.
+   *
+   * `baseDeEnlaces()` es justo para esto: el propio módulo dice que se usa
+   * «cuando NO hay petición de la que sacarla», y una llamada de servidor a
+   * servidor que además lleva la key del cliente encaja ahí. Ninguna cabecera
+   * la mueve.
+   */
+  const handler = construirHandler(baseDeEnlaces(), authHeader);
   return handler(req);
 }
 

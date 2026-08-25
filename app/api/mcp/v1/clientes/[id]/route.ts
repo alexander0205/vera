@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clients } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { idValido } from '@/lib/mcp/ids';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,8 +17,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const { teamId } = auth;
 
   const { id } = await params;
-  const clienteId = parseInt(id);
-  if (isNaN(clienteId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  const clienteId = idValido(id);
+  if (clienteId === null) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [cliente] = await db
     .select()
