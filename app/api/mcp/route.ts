@@ -1,0 +1,110 @@
+// app/api/mcp/route.ts
+/**
+ * Endpoint MCP de solo lectura. Cada tool llama por HTTP a su ruta hermana
+ * bajo /api/mcp/v1/*, reenviando el mismo Bearer key que llegó en esta
+ * request — nunca toca la base de datos directamente desde aquí.
+ */
+import { NextRequest } from 'next/server';
+import { createMcpHandler } from 'mcp-handler';
+import { z } from 'zod';
+import { requireApiKey } from '@/lib/auth/api-key-guard';
+
+function construirHandler(origin: string, authHeader: string) {
+  async function llamar(path: string, params: Record<string, string | undefined> = {}) {
+    const url = new URL(`/api/mcp/v1${path}`, origin);
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== '') url.searchParams.set(k, v);
+    }
+    const res = await fetch(url, { headers: { Authorization: authHeader } });
+    const body = await res.json();
+    return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+  }
+
+  return createMcpHandler((server) => {
+    server.registerTool(
+      'list_clients',
+      { title: 'Listar clientes', description: 'Lista los clientes del tenant, con búsqueda opcional por nombre/RNC/email.',
+        inputSchema: z.object({ q: z.string().optional(), limit: z.number().int().min(1).max(500).optional() }) },
+      async ({ q, limit }) => llamar('/clientes', { q, limit: limit?.toString() }),
+    );
+
+    server.registerTool(
+      'get_client',
+      { title: 'Detalle de cliente', description: 'Obtiene un cliente por id.',
+        inputSchema: z.object({ id: z.number().int() }) },
+      async ({ id }) => llamar(`/clientes/${id}`),
+    );
+
+    server.registerTool(
+      'list_invoices',
+      { title: 'Listar facturas', description: 'Lista facturas con filtros opcionales (estado, estadoPago, clientId, desde, hasta, q).',
+        inputSchema: z.object({
+          q: z.string().optional(),
+          estado: z.string().optional(),
+          estadoPago: z.string().optional(),
+          clientId: z.number().int().optional(),
+          desde: z.string().optional(),
+          hasta: z.string().optional(),
+          limit: z.number().int().min(1).max(500).optional(),
+        }) },
+      async (args) => llamar('/facturas', {
+        q: args.q, estado: args.estado, estadoPago: args.estadoPago,
+        clientId: args.clientId?.toString(), desde: args.desde, hasta: args.hasta,
+        limit: args.limit?.toString(),
+      }),
+    );
+
+    server.registerTool(
+      'get_invoice',
+      { title: 'Detalle de factura', description: 'Obtiene una factura por id.',
+        inputSchema: z.object({ id: z.number().int() }) },
+      async ({ id }) => llamar(`/facturas/${id}`),
+    );
+
+    server.registerTool(
+      'list_recurring_invoices',
+      { title: 'Listar facturas recurrentes', description: 'Lista los planes de facturación recurrente, con filtros opcionales (estado, clientId, q).',
+        inputSchema: z.object({
+          q: z.string().optional(),
+          estado: z.string().optional(),
+          clientId: z.number().int().optional(),
+          limit: z.number().int().min(1).max(500).optional(),
+        }) },
+      async (args) => llamar('/facturas-recurrentes', {
+        q: args.q, estado: args.estado, clientId: args.clientId?.toString(), limit: args.limit?.toString(),
+      }),
+    );
+
+    server.registerTool(
+      'get_recurring_invoice',
+      { title: 'Detalle de factura recurrente', description: 'Obtiene un plan de facturación recurrente por id.',
+        inputSchema: z.object({ id: z.number().int() }) },
+      async ({ id }) => llamar(`/facturas-recurrentes/${id}`),
+    );
+
+    server.registerTool(
+      'get_accounts_receivable',
+      { title: 'Cuentas por cobrar', description: 'Lista cuentas por cobrar con totales y antigüedad de saldo. Filtros opcionales: clientId, soloVencidas.',
+        inputSchema: z.object({
+          clientId: z.number().int().optional(),
+          soloVencidas: z.boolean().optional(),
+        }) },
+      async (args) => llamar('/cuentas-por-cobrar', {
+        clientId: args.clientId?.toString(),
+        soloVencidas: args.soloVencidas ? 'true' : undefined,
+      }),
+    );
+  });
+}
+
+async function manejar(req: NextRequest) {
+  const auth = await requireApiKey(req);
+  if (!auth.ok) return auth.response;
+
+  const authHeader = req.headers.get('authorization')!;
+  const origin = new URL(req.url).origin;
+  const handler = construirHandler(origin, authHeader);
+  return handler(req);
+}
+
+export { manejar as GET, manejar as POST };
