@@ -39,7 +39,10 @@ export default function ApiKeysPage() {
 
   function cargarKeys() {
     fetch('/api/api-keys')
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error('No se pudo cargar la lista de keys');
+        return r.json();
+      })
       .then((data: ApiKeyRow[]) => setKeys(data))
       .catch(() => setLoadError('No se pudo cargar la lista de keys'));
   }
@@ -58,18 +61,23 @@ export default function ApiKeysPage() {
   async function handleCrear() {
     setCreating(true);
     setCreateError(null);
-    const res = await fetch('/api/api-keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, permisos: 'read' }),
-    });
-    const data = await res.json();
-    setCreating(false);
-    if (!res.ok) {
-      setCreateError(data.error ?? 'No se pudo crear la key');
-      return;
+    try {
+      const res = await fetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, permisos: 'read' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateError(data.error ?? 'No se pudo crear la key');
+        return;
+      }
+      setRawKey(data.rawKey);
+    } catch {
+      setCreateError('No se pudo crear la key');
+    } finally {
+      setCreating(false);
     }
-    setRawKey(data.rawKey);
   }
 
   function copyRawKey() {
@@ -89,14 +97,19 @@ export default function ApiKeysPage() {
     if (!porRevocar) return;
     setRevocando(true);
     setRevocarError(null);
-    const res = await fetch(`/api/api-keys/${porRevocar.id}`, { method: 'DELETE' });
-    setRevocando(false);
-    if (!res.ok) {
+    try {
+      const res = await fetch(`/api/api-keys/${porRevocar.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setRevocarError('No se pudo revocar la key');
+        return;
+      }
+      setKeys((prev) => (prev ? prev.filter((k) => k.id !== porRevocar.id) : prev));
+      setPorRevocar(null);
+    } catch {
       setRevocarError('No se pudo revocar la key');
-      return;
+    } finally {
+      setRevocando(false);
     }
-    setKeys((prev) => (prev ? prev.filter((k) => k.id !== porRevocar.id) : prev));
-    setPorRevocar(null);
   }
 
   return (
@@ -211,6 +224,7 @@ export default function ApiKeysPage() {
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
                     placeholder="Ej. Asistente de IA"
+                    maxLength={120}
                     autoFocus
                   />
                 </div>
