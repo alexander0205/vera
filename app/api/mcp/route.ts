@@ -15,9 +15,15 @@ function construirHandler(origin: string, authHeader: string) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== '') url.searchParams.set(k, v);
     }
-    const res = await fetch(url, { headers: { Authorization: authHeader } });
+    const res = await fetch(url, {
+      headers: { Authorization: authHeader },
+      signal: AbortSignal.timeout(10_000),
+    });
     const body = await res.json();
-    return { content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }] };
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(body, null, 2) }],
+      ...(res.ok ? {} : { isError: true as const }),
+    };
   }
 
   return createMcpHandler((server) => {
