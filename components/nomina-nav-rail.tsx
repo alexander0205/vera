@@ -22,7 +22,7 @@ const SECCIONES: SeccionNomina[] = [
   { tipo: 'item', id: 'nomina-corridas',   href: '/nomina/corridas',   label: 'Corridas',   icon: CalendarClock },
   // Fase 4: archivo de dispersión bancaria y registro del pago.
   { tipo: 'item', id: 'nomina-pagos',      href: '/nomina/pagos',      label: 'Pagos',      icon: Wallet, oculto: true },
-  { tipo: 'item', id: 'nomina-config',     href: '/nomina/configuracion', label: 'Configuración', icon: Settings, oculto: true },
+  { tipo: 'item', id: 'nomina-config',     href: '/nomina/configuracion', label: 'Configuración', icon: Settings },
 ];
 
 const VISIBLES: RailSeccion[] = SECCIONES.filter(s => !s.oculto);

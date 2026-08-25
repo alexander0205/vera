@@ -3642,3 +3642,36 @@ export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
 export type NewNominaCorrida = typeof nominaCorridas.$inferInsert;
 export type NominaLinea      = typeof nominaLineas.$inferSelect;
 export type NewNominaLinea   = typeof nominaLineas.$inferInsert;
+
+// ─── Nómina — Programación automática (corridas por cron) ─────────────────────
+// Config POR EMPRESA de los días de pago. Un cron diario mira esta fila y, si
+// hoy es un día de pago, crea la corrida de esa frecuencia EN BORRADOR (alguien
+// la aprueba y paga). Espejo de `facturas_recurrentes`, pero la idempotencia no
+// necesita una fecha "próxima": el índice único (team, periodo, tipo) de
+// nomina_corridas ya impide crear dos veces la misma. Por eso aquí solo viven
+// los días configurados, no un puntero de estado.
+//
+// Granularidad por-empresa por ahora (acordado): la corrida mensual incluye a
+// los empleados con frecuencia_pago='mensual'; la quincenal, a los 'quincenal'.
+// Un futuro override por-empleado se cuelga de aquí sin romper esto.
+export const nominaProgramacion = pgTable('nomina_programacion', {
+  id:       serial('id').primaryKey(),
+  teamId:   integer('team_id').notNull().references(() => teams.id),
+  /** Interruptor maestro: apagado, el cron ni mira esta empresa. */
+  activa:   boolean('activa').notNull().default(false),
+  // ── Mensual: un día de pago (1..31; ≥ fin de mes se ajusta al último día). ──
+  mensualActiva: boolean('mensual_activa').notNull().default(true),
+  mensualDia:    integer('mensual_dia').notNull().default(30),
+  // ── Quincenal: dos días de pago. tipo de corrida 'quincenal-1'/'quincenal-2'
+  //    para no chocar con el único (team, periodo, tipo). ──
+  quincenalActiva: boolean('quincenal_activa').notNull().default(false),
+  quincenalDia1:   integer('quincenal_dia1').notNull().default(15),
+  quincenalDia2:   integer('quincenal_dia2').notNull().default(30),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_programacion_team_uniq').on(t.teamId),
+]);
+
+export type NominaProgramacion    = typeof nominaProgramacion.$inferSelect;
+export type NewNominaProgramacion = typeof nominaProgramacion.$inferInsert;

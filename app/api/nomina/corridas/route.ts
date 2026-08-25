@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server';
 import { desc, eq } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
-import { empleados, nominaCorridas, nominaLineas } from '@/lib/db/schema';
-import { tasasDelAnio } from '@/lib/config/nomina-tasas';
-import { construirCorrida } from '@/lib/nomina/corrida';
+import { nominaCorridas } from '@/lib/db/schema';
+import { generarCorrida } from '@/lib/nomina/generar-corrida';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,52 +42,24 @@ export async function POST(req: Request) {
   const tipo = String(body.tipo ?? 'mensual').trim() || 'mensual';
   const descripcion = String(body.descripcion ?? '').trim() || `Nómina ${periodo}`;
   const fechaPago = String(body.fechaPago ?? '').trim() || null;
-  const anioTasas = Number(periodo.slice(0, 4));
 
-  const activos = await db
-    .select()
-    .from(empleados)
-    .where(eq(empleados.teamId, auth.teamId));
+  // Botón manual: incluye a TODOS los empleados activos (sin filtrar frecuencia).
+  const r = await generarCorrida({
+    teamId: auth.teamId, periodo, tipo, descripcion, fechaPago, userId: auth.user.id,
+  });
 
-  const { lineas, totales } = construirCorrida(
-    activos.map((e) => ({
-      id: e.id, nombres: e.nombres, apellidos: e.apellidos, cedula: e.cedula,
-      cargo: e.cargo, salarioBaseCents: e.salarioBaseCents, estado: e.estado,
-    })),
-    tasasDelAnio(anioTasas),
-  );
-
-  if (lineas.length === 0) {
+  if (!r.creada) {
+    if (r.motivo === 'ya-existe') {
+      return NextResponse.json({ error: `Ya existe una corrida ${tipo} para ${periodo}` }, { status: 409 });
+    }
     return NextResponse.json({ error: 'No hay empleados activos para incluir en la corrida' }, { status: 400 });
   }
 
-  try {
-    const corrida = await db.transaction(async (tx) => {
-      const [c] = await tx
-        .insert(nominaCorridas)
-        .values({
-          teamId: auth.teamId, periodo, descripcion, tipo,
-          fechaPago, estado: 'borrador', anioTasas,
-          totalBrutoCents: totales.totalBrutoCents,
-          totalDeduccionesCents: totales.totalDeduccionesCents,
-          totalNetoCents: totales.totalNetoCents,
-          totalPatronalCents: totales.totalPatronalCents,
-          createdBy: auth.user.id,
-        })
-        .returning();
+  const [corrida] = await db
+    .select()
+    .from(nominaCorridas)
+    .where(eq(nominaCorridas.id, r.corridaId))
+    .limit(1);
 
-      await tx.insert(nominaLineas).values(
-        lineas.map((l) => ({ ...l, corridaId: c.id, teamId: auth.teamId })),
-      );
-      return c;
-    });
-
-    return NextResponse.json({ corrida }, { status: 201 });
-  } catch (err) {
-    // Choque con el índice único (team, periodo, tipo): ya existe esa corrida.
-    if (err instanceof Error && /unique|duplicate/i.test(err.message)) {
-      return NextResponse.json({ error: `Ya existe una corrida ${tipo} para ${periodo}` }, { status: 409 });
-    }
-    throw err;
-  }
+  return NextResponse.json({ corrida }, { status: 201 });
 }
