@@ -16,10 +16,13 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const { teamId } = auth;
 
   const { id } = await params;
+  const clienteId = parseInt(id);
+  if (isNaN(clienteId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+
   const [cliente] = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.id, Number(id)), eq(clients.teamId, teamId)))
+    .where(and(eq(clients.id, clienteId), eq(clients.teamId, teamId)))
     .limit(1);
 
   if (!cliente) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });

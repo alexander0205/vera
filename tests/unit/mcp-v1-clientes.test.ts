@@ -59,4 +59,13 @@ describe('GET /api/mcp/v1/clientes/[id]', () => {
     const body = await res.json();
     expect(body.cliente).toEqual(clientesFixture[0]);
   });
+
+  it('id no numérico → 400', async () => {
+    vi.mocked(requireApiKey).mockResolvedValue({ ok: true, teamId: 42, apiKeyId: 1 });
+    const res = await detalle(
+      new NextRequest('http://localhost/api/mcp/v1/clientes/abc'),
+      { params: Promise.resolve({ id: 'abc' }) },
+    );
+    expect(res.status).toBe(400);
+  });
 });
