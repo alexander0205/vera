@@ -91,3 +91,6 @@ docs/mockup-cuentas-por-cobrar-paso-1.html
 
 # worktrees locales de git (superpowers:using-git-worktrees)
 .worktrees/
+
+# mockups locales del brainstorming visual (superpowers:brainstorming)
+.superpowers/
