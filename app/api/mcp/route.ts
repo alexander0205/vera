@@ -100,7 +100,7 @@ function construirHandler(origin: string, authHeader: string) {
         soloVencidas: args.soloVencidas ? 'true' : undefined,
       }),
     );
-  });
+  }, {}, { streamableHttpEndpoint: '/api/mcp', disableSse: true });
 }
 
 async function manejar(req: NextRequest) {
