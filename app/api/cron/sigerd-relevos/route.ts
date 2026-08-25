@@ -78,11 +78,16 @@ async function revisar(base: string): Promise<Revision> {
     return { base, sano: true, ms, detalle: `${j.ip ?? '?'} · ${j.proveedor ?? 'proveedor desconocido'}` };
   } catch (e) {
     const agotado = e instanceof Error && e.name === 'AbortError';
+    // `fetch failed` a secas no dice nada: la razón real (ENOTFOUND, ECONNREFUSED,
+    // un error de certificado) viene en `cause`. Sin esto, un fallo de DNS y uno
+    // de red se ven idénticos en la alerta.
+    const causa = (e as { cause?: { code?: string; message?: string } })?.cause;
+    const porque = causa?.code ?? causa?.message ?? (e instanceof Error ? e.message : String(e));
     return {
       base,
       sano: false,
       ms: Date.now() - t0,
-      detalle: agotado ? `no respondió en ${TIMEOUT_MS / 1000}s` : `no se pudo contactar (${e instanceof Error ? e.message : String(e)})`,
+      detalle: agotado ? `no respondió en ${TIMEOUT_MS / 1000}s` : `no se pudo contactar (${porque})`,
     };
   } finally {
     clearTimeout(timer);
