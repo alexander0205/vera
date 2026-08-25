@@ -62,6 +62,24 @@ interface ComprasLocalesResponse {
   error?: string;
 }
 
+/** Comprobante de compra (e41) registrado desde el formulario de compra. */
+interface ComprobanteCompra {
+  id:           number;
+  estado:       string;
+  estadoPago:   string;
+  proveedor:    string | null;
+  rncProveedor: string | null;
+  ncfProveedor: string | null;
+  montoTotal:   number;
+  fechaGasto:   string | null;
+  createdAt:    string;
+}
+
+interface ComprobantesResponse {
+  items?: ComprobanteCompra[];
+  error?: string;
+}
+
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 // ─── Columns: e-CF recibidas ────────────────────────────────────────────────────
@@ -173,17 +191,82 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
   },
 ];
 
+// ─── Columns: comprobantes de compra (e41) ──────────────────────────────────
+
+const ESTADO_PAGO_CHIP: Record<string, { label: string; bg: string; color: string }> = {
+  PAGADA:    { label: 'Pagado',    bg: '#f1f5f9', color: '#475569' },
+  PARCIAL:   { label: 'Parcial',   bg: '#fff7ed', color: '#c2410c' },
+  PENDIENTE: { label: 'Por pagar', bg: '#fffbeb', color: '#b45309' },
+};
+
+const columnsComprobantes: DataTableColumn<ComprobanteCompra>[] = [
+  {
+    id: 'fecha',
+    header: 'Fecha',
+    render: c => (
+      <Typography component="span" sx={{ fontSize: '0.75rem', color: '#374151', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+        {fmtFechaCorta(c.fechaGasto ?? c.createdAt)}
+      </Typography>
+    ),
+  },
+  {
+    id: 'proveedor',
+    header: 'Proveedor',
+    render: c => (
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.proveedor ?? 'Sin proveedor'}</Typography>
+        {c.rncProveedor && (
+          <Typography sx={{ fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af' }}>{c.rncProveedor}</Typography>
+        )}
+      </Box>
+    ),
+  },
+  {
+    id: 'ncf',
+    header: 'NCF',
+    visibleAt: 'md',
+    render: c => (
+      <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#4b5563' }}>{c.ncfProveedor ?? '—'}</Typography>
+    ),
+  },
+  {
+    id: 'pago',
+    header: 'Pago',
+    align: 'center',
+    render: c => {
+      if (c.estado === 'ANULADO' || c.estado === 'RECHAZADO') {
+        return <Chip label="Anulado" size="small" sx={{ bgcolor: '#f3f4f6', color: '#6b7280', fontSize: '0.6875rem', fontWeight: 500 }} />;
+      }
+      const s = ESTADO_PAGO_CHIP[c.estadoPago] ?? ESTADO_PAGO_CHIP.PENDIENTE;
+      return <Chip label={s.label} size="small" sx={{ bgcolor: s.bg, color: s.color, fontSize: '0.6875rem', fontWeight: 500 }} />;
+    },
+  },
+  {
+    id: 'monto',
+    header: 'Monto',
+    align: 'right',
+    render: c => (
+      <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+        {fmtDOP(c.montoTotal)}
+      </Typography>
+    ),
+  },
+];
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function ComprasPage() {
   const { can, isLoading: permLoading } = usePermissions();
   const [showModal, setShowModal] = useState(false);
 
-  const canVerRecibidas = can('compras:ver');
-  const canRegistrar    = can('productos:gestionar');
-  const canVerLocales   = canRegistrar || can('productos:ver');
+  const canVerRecibidas    = can('compras:ver');
+  const canRegistrar       = can('productos:gestionar');
+  const canVerLocales      = canRegistrar || can('productos:ver');
+  const canVerComprobantes = can('facturas:ver');
 
-  const [tab, setTab] = useState<'recibidas' | 'registradas'>(canVerRecibidas ? 'recibidas' : 'registradas');
+  const [tab, setTab] = useState<'recibidas' | 'comprobantes' | 'registradas'>(
+    canVerRecibidas ? 'recibidas' : canVerComprobantes ? 'comprobantes' : 'registradas',
+  );
 
   const { data, isLoading: swrLoading } = useSWR<ComprasResponse>(
     !permLoading && canVerRecibidas ? '/api/compras' : null,
@@ -198,12 +281,20 @@ export default function ComprasPage() {
       { revalidateOnFocus: false },
     );
 
+  const { data: comprobantesResp, isLoading: comprobantesLoading } =
+    useSWR<ComprobantesResponse>(
+      !permLoading && canVerComprobantes ? '/api/compras/comprobantes' : null,
+      fetcher,
+      { revalidateOnFocus: false },
+    );
+
   const loading        = permLoading || swrLoading;
   const items          = data?.items ?? [];
   const comprasLocales = locales?.compras ?? [];
+  const comprobantes   = comprobantesResp?.items ?? [];
 
   // ── Estados especiales ──
-  if (!permLoading && !canVerRecibidas && !canVerLocales) {
+  if (!permLoading && !canVerRecibidas && !canVerLocales && !canVerComprobantes) {
     return (
       <Box sx={{ p: 3 }}>
         <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', bgcolor: '#fff', p: 5, textAlign: 'center' }}>
@@ -260,6 +351,19 @@ export default function ComprasPage() {
           {canVerRecibidas && (
             <Tab value="recibidas" label="Facturas recibidas" />
           )}
+          {canVerComprobantes && (
+            <Tab
+              value="comprobantes"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                  Comprobantes de compra
+                  {comprobantes.length > 0 && (
+                    <Box component="span" sx={{ ml: 0.75, fontSize: '11px', color: '#9ca3af' }}>({comprobantes.length})</Box>
+                  )}
+                </Box>
+              }
+            />
+          )}
           {canVerLocales && (
             <Tab
               value="registradas"
@@ -288,6 +392,23 @@ export default function ComprasPage() {
                   ? 'Tu empresa aún no está registrada para recibir e-CF'
                   : 'No has recibido facturas todavía',
                 hint: emptyHint,
+              }}
+            />
+          </Box>
+        )}
+
+        {canVerComprobantes && tab === 'comprobantes' && (
+          <Box sx={{ mt: 2 }}>
+            <DataTable<ComprobanteCompra>
+              data={comprobantes}
+              loading={permLoading || comprobantesLoading}
+              columns={columnsComprobantes}
+              rowHref={c => c.estado === 'BORRADOR' ? `/dashboard/facturas/${c.id}/editar` : `/dashboard/facturas/${c.id}`}
+              title="Comprobantes de compra (e41)"
+              emptyState={{
+                icon:  FileText,
+                title: 'No has registrado comprobantes de compra',
+                hint:  'Los comprobantes de compra (e41) que registres desde "Nueva compra" aparecerán aquí.',
               }}
             />
           </Box>
