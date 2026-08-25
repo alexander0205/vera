@@ -88,3 +88,6 @@ transcripciones/
 docs/plan-contabilidad-vera.md
 docs/mini-plan-contabilidad-asientos-reportes.md
 docs/mockup-cuentas-por-cobrar-paso-1.html
+
+# worktrees locales de git (superpowers:using-git-worktrees)
+.worktrees/
