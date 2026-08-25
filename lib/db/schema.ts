@@ -3551,12 +3551,23 @@ export const empleados = pgTable('empleados', {
   telefono:        varchar('telefono', { length: 30 }),
   email:           varchar('email', { length: 160 }),
   notas:           text('notas'),
+  // ── Procedencia — enlace SUAVE (sin FK) a otro módulo ──
+  // 'manual' = alta directa en nómina; 'escolar' = importado de Personal del
+  // colegio. Es un soft-ref a propósito (misma familia que fotos.entidad/id):
+  // el vertical escolar puede no existir, y borrar una fila de personal no debe
+  // romper al empleado. El puntero vive SOLO aquí (schema unidireccional, regla
+  // no-contaminar-genéricas): escolar nunca sabe de nómina en su esquema; su
+  // pantalla solo LEE nómina en runtime si el módulo está activo.
+  origen:          varchar('origen', { length: 20 }).notNull().default('manual'),
+  /** Clave de la persona escolar origen: 'sigerd:<id>' | 'manual:<id>'. Null si origen='manual'. */
+  origenRef:       varchar('origen_ref', { length: 40 }),
   createdBy:       integer('created_by').references(() => users.id),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('empleados_team_idx').on(t.teamId),
   index('empleados_team_estado_idx').on(t.teamId, t.estado),
+  index('empleados_team_origen_idx').on(t.teamId, t.origen),
 ]);
 
 export type Empleado    = typeof empleados.$inferSelect;
