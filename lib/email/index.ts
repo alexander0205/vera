@@ -63,10 +63,13 @@ export async function enviarAlertaEmail(asunto: string, mensaje: string): Promis
   // env var mal puesta seguía enviando a los de siempre sin avisar. Sin la
   // variable no se manda nada y queda dicho en el log — mejor mudo y evidente
   // que enviando a una lista que nadie recuerda haber escrito.
-  const destinatarios = (process.env.HABILITACION_ALERT_EMAIL ?? '')
+  // `ALERTAS_EMAIL` es la general; `HABILITACION_ALERT_EMAIL` se mantiene por
+  // compatibilidad con las instalaciones que ya la tenían puesta. El nombre
+  // viejo hablaba solo de habilitación y esta función ya avisa de otras cosas.
+  const destinatarios = (process.env.ALERTAS_EMAIL ?? process.env.HABILITACION_ALERT_EMAIL ?? '')
     .split(',').map(s => s.trim()).filter(Boolean);
   if (destinatarios.length === 0) {
-    console.warn('[email] HABILITACION_ALERT_EMAIL no configurado, alerta no enviada:', asunto);
+    console.warn('[email] ALERTAS_EMAIL no configurado, alerta no enviada:', asunto);
     return;
   }
   try {
