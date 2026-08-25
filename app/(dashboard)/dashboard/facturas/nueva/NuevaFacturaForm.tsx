@@ -17,7 +17,7 @@ import {
   GraduationCap, Loader2, Printer,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
-import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
+import { getCategoriaDeEcf, CATEGORIAS_ECF, esTipoCompraGasto } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
@@ -238,6 +238,11 @@ export default function NuevaFacturaForm({
   // la DGII es opcional (queda en el menú "Más opciones"), así que la acción
   // primaria guarda como interno en vez de forzar la emisión fiscal.
   const esGasto = tipoEcf === '43' || tipoEcf === '47';
+  // Compra (41) + gasto (43/47): en el editor de líneas registras lo que
+  // COMPRASTE, no lo que vendes. Se usa SOLO para el comportamiento de la tabla
+  // (texto libre, sin catálogo de venta, precios editables); el resto del
+  // formulario sigue distinguiendo compra vs gasto con `esGasto`.
+  const esCompraGasto = esTipoCompraGasto(tipoEcf);
 
   // Título de la pantalla según la categoría de documento.
   const tituloDoc = ({
@@ -2504,8 +2509,9 @@ export default function NuevaFacturaForm({
                   showDescripcion={showItemDesc}
                   showDescuento={showItemDescuento}
                   dependientes={dependientesCliente}
-                  bloquearPrecios={esGasto ? false : bloquearPrecios}
-                  modoGasto={esGasto}
+                  bloquearPrecios={esCompraGasto ? false : bloquearPrecios}
+                  modoGasto={esCompraGasto}
+                  sinBusquedaCatalogo={esCompraGasto}
                 />
                 {/* Las retenciones son de quien le compra al Estado o a un
                     gran contribuyente. Un colegio le cobra a familias: nunca

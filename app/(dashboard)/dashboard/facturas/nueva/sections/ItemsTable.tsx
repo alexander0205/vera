@@ -177,6 +177,13 @@ interface Props {
   bloquearPrecios?: boolean;
   /** Ajusta texto para compra/gasto sin quitar asociación opcional a inventario. */
   modoGasto?: boolean;
+  /**
+   * En compra/gasto el buscador NO debe ofrecer tu catálogo de VENTA (lo que
+   * vendes), porque aquí registras lo que COMPRASTE. Con esta bandera la línea
+   * pasa a texto libre puro: no se consulta el catálogo ni se ofrece crear un
+   * producto de venta. (El catálogo de compras/proveedores es un paso aparte.)
+   */
+  sinBusquedaCatalogo?: boolean;
 }
 
 
@@ -184,15 +191,24 @@ export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
   showReferencia, showDescripcion, dependientes, bloquearPrecios = false, modoGasto = false,
+  sinBusquedaCatalogo = false,
   ocultarItbis = false,
   showDescuento = false,
   ocultarConduce = false,
 }: Props) {
   const { openProximamente, dialog } = useProximamenteDialog();
   const hasDeps = dependientes.length > 0;
-  const etiquetaDetalle = modoGasto ? 'Descripción / producto' : 'Producto / servicio';
-  const placeholderDetalle = modoGasto ? 'Describe gasto o busca producto de inventario...' : 'Buscar producto o servicio...';
+  const etiquetaDetalle = sinBusquedaCatalogo ? 'Descripción' : modoGasto ? 'Descripción / producto' : 'Producto / servicio';
+  const placeholderDetalle = sinBusquedaCatalogo
+    ? 'Describe lo que compraste…'
+    : modoGasto ? 'Describe gasto o busca producto de inventario...' : 'Buscar producto o servicio...';
   const crearLabel = modoGasto ? 'Crear producto para inventario' : 'Nuevo producto';
+
+  // Compra/gasto: sin catálogo de venta → el buscador devuelve vacío y la línea
+  // se completa con texto libre. Se conserva la firma (q, dependienteId).
+  const buscar = sinBusquedaCatalogo
+    ? (async () => []) as (q: string, dependienteId?: number | null) => Promise<Producto[]>
+    : buscarProductos;
 
   /**
    * Ancho de cada columna en píxeles — salvo Producto, que no lleva ninguno.
@@ -343,10 +359,10 @@ export function ItemsTable({
               <Autocomplete<Producto>
                 placeholder={placeholderDetalle}
                 value={item.nombreItem}
-                onSearch={(q) => buscarProductos(q, item.dependienteId)}
+                onSearch={(q) => buscar(q, item.dependienteId)}
                 onSelect={(p) => onSelectProducto(idx, p)}
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
-                onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
+                onCreate={(sinBusquedaCatalogo || bloquearPrecios) ? undefined : () => onOpenNuevoProducto(idx)}
                 createLabel={crearLabel}
                 onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
@@ -741,10 +757,10 @@ export function ItemsTable({
                   <Autocomplete<Producto>
                     placeholder={placeholderDetalle}
                     value={item.nombreItem}
-                    onSearch={(q) => buscarProductos(q, item.dependienteId)}
+                    onSearch={(q) => buscar(q, item.dependienteId)}
                     onSelect={(p) => onSelectProducto(idx, p)}
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
-                    onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
+                    onCreate={(sinBusquedaCatalogo || bloquearPrecios) ? undefined : () => onOpenNuevoProducto(idx)}
                     createLabel={crearLabel}
                     onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}

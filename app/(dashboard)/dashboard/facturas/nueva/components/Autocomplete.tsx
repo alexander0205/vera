@@ -343,8 +343,16 @@ export function Autocomplete<T extends { id: number }>({
           onBlur={() => {
             setTimeout(() => {
               setOpen(false);
-              // Restore displayed text to the selected value if user didn't pick a new one
-              setQuery(value ?? '');
+              // En modo texto libre (compra/gasto), lo tecleado ES la línea: si
+              // el usuario escribe y hace clic afuera sin pulsar Enter, se
+              // conserva en vez de perderse. En modo venta (sin onFreeText) se
+              // restaura al valor seleccionado, como antes.
+              const q = query.trim();
+              if (onFreeText && q && q !== (value ?? '')) {
+                onFreeText(q);
+              } else {
+                setQuery(value ?? '');
+              }
             }, 200);
           }}
           onKeyDown={handleKeyDown}
