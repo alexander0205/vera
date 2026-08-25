@@ -190,6 +190,11 @@ interface Props {
    * Si no se pasa, la línea queda como texto libre puro.
    */
   buscarCatalogoCompras?: (q: string) => Promise<Producto[]>;
+  /**
+   * Crea un artículo en el catálogo de compras a partir del texto tecleado y lo
+   * selecciona en la línea. Solo aplica en modo compra/gasto con catálogo.
+   */
+  onCrearCatalogoCompra?: (idx: number, texto: string) => void;
 }
 
 
@@ -197,7 +202,7 @@ export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
   showReferencia, showDescripcion, dependientes, bloquearPrecios = false, modoGasto = false,
-  sinBusquedaCatalogo = false, buscarCatalogoCompras,
+  sinBusquedaCatalogo = false, buscarCatalogoCompras, onCrearCatalogoCompra,
   ocultarItbis = false,
   showDescuento = false,
   ocultarConduce = false,
@@ -373,6 +378,8 @@ export function ItemsTable({
                 onCreate={(sinBusquedaCatalogo || bloquearPrecios) ? undefined : () => onOpenNuevoProducto(idx)}
                 createLabel={crearLabel}
                 onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
+                onCreateFromText={onCrearCatalogoCompra ? (text) => onCrearCatalogoCompra(idx, text) : undefined}
+                createFromTextLabel="Guardar en catálogo de compras"
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
               />
@@ -771,6 +778,8 @@ export function ItemsTable({
                     onCreate={(sinBusquedaCatalogo || bloquearPrecios) ? undefined : () => onOpenNuevoProducto(idx)}
                     createLabel={crearLabel}
                     onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
+                onCreateFromText={onCrearCatalogoCompra ? (text) => onCrearCatalogoCompra(idx, text) : undefined}
+                createFromTextLabel="Guardar en catálogo de compras"
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
                     // El nombre del producto identifica la línea: cortado a

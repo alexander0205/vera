@@ -1292,6 +1292,31 @@ export default function NuevaFacturaForm({
     return data.items ?? [];
   }
 
+  /**
+   * Crea un artículo en el catálogo de compras desde el texto tecleado y lo
+   * aplica a la línea. Así el catálogo crece "al vuelo" desde el propio gasto.
+   */
+  async function crearArticuloCompra(idx: number, texto: string) {
+    const nombre = texto.trim();
+    if (!nombre) return;
+    try {
+      const res  = await fetch('/api/compras/catalogo', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ nombre }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.item) {
+        // Si falla el guardado en catálogo, al menos no perder lo tecleado.
+        updateItem(items[idx].id, 'nombreItem', nombre);
+        return;
+      }
+      seleccionarProducto(idx, data.item as Producto);
+    } catch {
+      updateItem(items[idx].id, 'nombreItem', nombre);
+    }
+  }
+
   function seleccionarProducto(idx: number, p: Producto) {
     // Una cuota del plan no es un producto: trae su propio precio, su mes y el
     // cargo del que sale. Va por su camino antes de cualquier otra cosa —lo de
@@ -1360,7 +1385,9 @@ export default function NuevaFacturaForm({
       type: 'APPLY_PRODUCTO',
       idx,
       patch: {
-        productoId: p.id,
+        // El catálogo de compras / historial no son productos de venta: su id no
+        // debe viajar como productoId (no existe en `products`).
+        productoId: (p.esCatalogoCompra || p.esHistorial) ? undefined : p.id,
         variantId: undefined,
         variantNombre: undefined,
         nombreItem: p.nombre,
@@ -2534,6 +2561,7 @@ export default function NuevaFacturaForm({
                   modoGasto={esCompraGasto}
                   sinBusquedaCatalogo={esCompraGasto}
                   buscarCatalogoCompras={esCompraGasto ? buscarCatalogoCompras : undefined}
+                  onCrearCatalogoCompra={esCompraGasto ? crearArticuloCompra : undefined}
                 />
                 {/* Las retenciones son de quien le compra al Estado o a un
                     gran contribuyente. Un colegio le cobra a familias: nunca

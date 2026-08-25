@@ -12,10 +12,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { catalogoCompras } from '@/lib/db/schema';
+import { catalogoCompras, ecfDocuments } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { and, eq, ilike, or, desc } from 'drizzle-orm';
+import { and, eq, ilike, or, desc, inArray } from 'drizzle-orm';
 
 /** Mapea una fila del catálogo al shape `Producto` que espera el buscador. */
 function aProducto(row: typeof catalogoCompras.$inferSelect) {
@@ -35,6 +35,7 @@ function aProducto(row: typeof catalogoCompras.$inferSelect) {
     permiteVentaSinStock: true,
     // Marca de origen para que el cliente sepa que vino del catálogo de compras.
     esCatalogoCompra:     true,
+    esHistorial:          false,
   };
 }
 
@@ -64,7 +65,57 @@ export async function GET(req: NextRequest) {
     .orderBy(desc(catalogoCompras.updatedAt))
     .limit(50);
 
-  return NextResponse.json({ items: rows.map(aProducto) });
+  const curados = rows.map(aProducto);
+
+  // ── Historial: nombres de líneas de compras/gastos pasados (e41/e43/e47) ──
+  // Sugerencias además del catálogo curado. Se leen de `lineas_json` (texto),
+  // se deduplican por nombre y se excluyen los que ya están en el catálogo.
+  const yaEnCatalogo = new Set(curados.map((p) => p.nombre.toLowerCase()));
+  const vistos = new Set<string>();
+  const historial: ReturnType<typeof aProducto>[] = [];
+  const ql = q?.toLowerCase();
+
+  const docs = await db
+    .select({ lineas: ecfDocuments.lineasJson })
+    .from(ecfDocuments)
+    .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, ['41', '43', '47'])))
+    .orderBy(desc(ecfDocuments.id))
+    .limit(200);
+
+  let hid = -1;
+  for (const d of docs) {
+    if (!d.lineas) continue;
+    let arr: Array<{ nombreItem?: string; precioUnitarioItem?: number; tasaItbis?: string }>;
+    try { arr = JSON.parse(d.lineas); } catch { continue; }
+    if (!Array.isArray(arr)) continue;
+    for (const li of arr) {
+      const nombre = (li?.nombreItem ?? '').trim();
+      if (!nombre) continue;
+      const key = nombre.toLowerCase();
+      if (yaEnCatalogo.has(key) || vistos.has(key)) continue;
+      if (ql && !key.includes(ql)) continue;
+      vistos.add(key);
+      historial.push({
+        id:          hid--,   // negativo: no choca con ids del catálogo
+        nombre,
+        descripcion: null,
+        precioDOP:   Number(li?.precioUnitarioItem ?? 0),
+        tasaItbis:   String(li?.tasaItbis ?? '0.18'),
+        tipo:        'servicio',
+        referencia:  null,
+        stockActual: 0,
+        stockMinimo: 0,
+        controlaInventario:   false,
+        permiteVentaSinStock: true,
+        esCatalogoCompra:     false,
+        esHistorial:          true,
+      });
+      if (historial.length >= 20) break;
+    }
+    if (historial.length >= 20) break;
+  }
+
+  return NextResponse.json({ items: [...curados, ...historial], curados: curados.length, historial: historial.length });
 }
 
 const crearSchema = z.object({
