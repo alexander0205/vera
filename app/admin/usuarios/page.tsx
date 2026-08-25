@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { desc } from 'drizzle-orm';
@@ -11,6 +12,7 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 
 export default async function AdminUsuariosPage() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const allUsers = await db
     .select({
       id: users.id, name: users.name, email: users.email,

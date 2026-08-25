@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { db } from '@/lib/db/drizzle';
 import { systemLogs, teams } from '@/lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
@@ -6,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import { AlertTriangle, Info, XCircle } from 'lucide-react';
 
 export default async function AdminLogsPage() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const logs = await db
     .select({
       id: systemLogs.id, level: systemLogs.level, source: systemLogs.source,

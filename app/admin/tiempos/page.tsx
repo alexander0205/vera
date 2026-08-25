@@ -12,6 +12,7 @@
  * cola —«una de cada diez tarda esto»— que es donde vive el trabajo pesado.
  */
 
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import Box from '@mui/material/Box';
@@ -40,6 +41,7 @@ const rd = (n: number) =>
   `RD$${Math.round(n).toLocaleString('es-DO')}`;
 
 export default async function AdminTiemposPage() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const [porColegio, porOrigen, total] = await Promise.all([
     db.execute<PorColegio>(sql`
       select t.name as colegio,
