@@ -32,22 +32,26 @@ interface Props {
   /** Subtipo fiscal del gasto (e43 gastos menores / e47 pagos al exterior). */
   tipoEcf: string;
   onChangeTipo: (value: string) => void;
+  /** e41 (compra a proveedor con RNC) en vez de gasto: cambia textos y tipo. */
+  esCompra?: boolean;
 }
 
 /** Captura propia de una compra/gasto. No reutiliza vocabulario de ventas. */
 export function GastoDatosSection({
   proveedor, setProveedor, rncProveedor, setRncProveedor,
   ncfProveedor, setNcfProveedor, categoriaGasto, setCategoriaGasto,
-  fechaGasto, setFechaGasto, tipoEcf, onChangeTipo,
+  fechaGasto, setFechaGasto, tipoEcf, onChangeTipo, esCompra = false,
 }: Props) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
-          Datos del gasto
+          {esCompra ? 'Datos de la compra' : 'Datos del gasto'}
         </Typography>
         <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280', mt: 0.25 }}>
-          Registra una compra o salida real de empresa. Para reponer inventario, usa Compras registradas.
+          {esCompra
+            ? 'Registra una compra a un proveedor. Para reponer inventario y sumar stock, usa Compras registradas.'
+            : 'Registra una compra o salida real de empresa. Para reponer inventario, usa Compras registradas.'}
         </Typography>
       </Box>
 
@@ -80,8 +84,12 @@ export function GastoDatosSection({
             onChange={(e) => onChangeTipo(e.target.value)}
             sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
           >
-            <MenuItem value="43" sx={{ fontSize: '0.875rem' }}>e43 — Gastos menores</MenuItem>
-            <MenuItem value="47" sx={{ fontSize: '0.875rem' }}>e47 — Pagos al exterior</MenuItem>
+            {esCompra ? (
+              <MenuItem value="41" sx={{ fontSize: '0.875rem' }}>e41 — Compras</MenuItem>
+            ) : [
+              <MenuItem key="43" value="43" sx={{ fontSize: '0.875rem' }}>e43 — Gastos menores</MenuItem>,
+              <MenuItem key="47" value="47" sx={{ fontSize: '0.875rem' }}>e47 — Pagos al exterior</MenuItem>,
+            ]}
           </Select>
         </FormControl>
         <FormControl size="small" fullWidth>
@@ -97,7 +105,7 @@ export function GastoDatosSection({
           </Select>
         </FormControl>
         <TextField
-          required type="date" fullWidth size="small" label="Fecha del gasto"
+          required type="date" fullWidth size="small" label={esCompra ? 'Fecha de la compra' : 'Fecha del gasto'}
           value={fechaGasto} onChange={(e) => setFechaGasto(e.target.value)}
           slotProps={{ inputLabel: { shrink: true } }}
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
