@@ -614,7 +614,9 @@ export async function generarContratoPdf(opts: {
         colorPrimario:   team.colorPrimario ?? undefined,
       },
       titulo:     contrato.titulo,
-      cuerpo:     contrato.cuerpo,
+      // Un contrato subido (firmado offline) se sirve como archivo, no por acá;
+      // aquí solo llegan los de plantilla, que siempre tienen cuerpo.
+      cuerpo:     contrato.cuerpo ?? '',
       generadoEn: new Date(contrato.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
       firma: contrato.estado === 'firmado' && contrato.firmaRef && contrato.firmanteNombre
         ? {

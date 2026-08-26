@@ -21,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       id: nominaContratos.id,
       titulo: nominaContratos.titulo,
       estado: nominaContratos.estado,
+      origen: nominaContratos.origen,
       createdAt: nominaContratos.createdAt,
     })
     .from(nominaContratos)

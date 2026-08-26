@@ -58,6 +58,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const firma = body.firma;
   if (firmanteNombre.length < 3) return NextResponse.json({ error: 'Escribe tu nombre completo' }, { status: 400 });
   if (!firmaValida(firma)) return NextResponse.json({ error: 'Falta la firma' }, { status: 400 });
+  // Un contrato subido (firmado offline) no tiene cuerpo ni se firma en línea;
+  // tampoco tiene token, así que esto no debería alcanzarse. Guarda por si acaso.
+  if (c.cuerpo == null) return NextResponse.json({ error: 'Este contrato no se firma en línea' }, { status: 400 });
 
   const firmadoEn = new Date();
   const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || null;

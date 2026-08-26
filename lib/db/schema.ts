@@ -3747,10 +3747,25 @@ export const nominaContratos = pgTable('nomina_contratos', {
   /** Plantilla de origen (traza). Null si se borró la plantilla. */
   plantillaId: integer('plantilla_id').references(() => nominaContratoPlantillas.id, { onDelete: 'set null' }),
   titulo:      varchar('titulo', { length: 200 }).notNull(),
-  /** Cuerpo YA LLENO (snapshot). */
-  cuerpo:      text('cuerpo').notNull(),
+  /** Cuerpo YA LLENO (snapshot). Null en contratos subidos (no tienen texto). */
+  cuerpo:      text('cuerpo'),
   /** 'generado' | 'enviado' | 'firmado'. */
   estado:      varchar('estado', { length: 20 }).notNull().default('generado'),
+  // ── Origen del contrato ──
+  // 'plataforma' = generado desde plantilla (se firma en línea); 'subido' = la
+  // empresa cargó un contrato propio ya firmado (camino offline), archivado
+  // abajo. El subido nace en estado 'firmado' y no pide firma.
+  origen:      varchar('origen', { length: 20 }).notNull().default('plataforma'),
+  // Binario del contrato subido (S3 privado o base64 en la fila). Null si el
+  // contrato es de plataforma.
+  archivoNombre:      varchar('archivo_nombre', { length: 255 }),
+  archivoMime:        varchar('archivo_mime', { length: 100 }),
+  archivoTamanoBytes: integer('archivo_tamano_bytes'),
+  archivoSha256:      char('archivo_sha256', { length: 64 }),
+  /** 's3' | 'db'. */
+  archivoStorage:     varchar('archivo_storage', { length: 4 }),
+  archivoS3Key:       text('archivo_s3_key'),
+  archivoContenido:   text('archivo_contenido'),
   // ── Firma electrónica (fase 2) ──
   // Se envía por un enlace público con token de 256 bits; en la base vive solo
   // el SHA-256 (un volcado no deja firmar por nadie). El empleado firma en

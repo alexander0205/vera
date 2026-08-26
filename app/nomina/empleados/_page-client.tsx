@@ -661,7 +661,7 @@ function DocumentosPaso({
 // del empleado y archiva el texto resuelto.
 
 interface PlantillaContrato { id: number; nombre: string; activa: boolean }
-interface ContratoEmitido { id: number; titulo: string; estado: string; createdAt: string }
+interface ContratoEmitido { id: number; titulo: string; estado: string; origen: string; createdAt: string }
 
 const ESTADO_CONTRATO: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
   generado: { label: 'Generado', variant: 'outline' },
@@ -685,6 +685,7 @@ function ContratosEmpleadoDialog({
   );
   const [plantillaId, setPlantillaId] = useState('');
   const [generando, setGenerando] = useState(false);
+  const [subiendoFirmado, setSubiendoFirmado] = useState(false);
   const [enlaces, setEnlaces] = useState<Record<number, string>>({});
   const [enviandoId, setEnviandoId] = useState<number | null>(null);
 
@@ -733,6 +734,25 @@ function ContratosEmpleadoDialog({
     }
   }
 
+  async function subirFirmado(file: File | undefined) {
+    if (!file || !empleado) return;
+    setSubiendoFirmado(true);
+    try {
+      const fd = new FormData();
+      fd.append('archivo', file);
+      fd.append('titulo', 'Contrato firmado');
+      const res = await fetch(`/api/nomina/empleados/${empleado.id}/contratos/subir`, { method: 'POST', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo subir');
+      toast.success('Contrato firmado subido');
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al subir');
+    } finally {
+      setSubiendoFirmado(false);
+    }
+  }
+
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -767,6 +787,26 @@ function ContratosEmpleadoDialog({
             )
           )}
 
+          {/* O subir un contrato propio ya firmado (camino offline) */}
+          {puedeGestionar && (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-dashed p-2.5">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">¿Ya tienes el contrato firmado?</div>
+                <div className="text-xs text-muted-foreground">Súbelo (PDF o escaneo). Queda como firmado, sin pedir firma.</div>
+              </div>
+              <label className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition hover:bg-muted/50 ${subiendoFirmado ? 'pointer-events-none opacity-60' : ''}`}>
+                {subiendoFirmado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Subir firmado
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  onChange={(e) => { subirFirmado(e.target.files?.[0]); e.target.value = ''; }}
+                />
+              </label>
+            </div>
+          )}
+
           {/* Emitidos */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Contratos generados</Label>
@@ -785,6 +825,7 @@ function ContratosEmpleadoDialog({
                           <div className="flex items-center gap-1.5">
                             <span className="truncate text-sm font-medium">{c.titulo}</span>
                             <Badge variant={est.variant} className="shrink-0">{est.label}</Badge>
+                            {c.origen === 'subido' && <Badge variant="outline" className="shrink-0">Subido</Badge>}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {new Date(c.createdAt).toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}
@@ -792,7 +833,7 @@ function ContratosEmpleadoDialog({
                         </div>
                         <Button variant="outline" size="sm" className="gap-1.5"
                           onClick={() => window.open(`/api/nomina/contratos/${c.id}/pdf`, '_blank')}>
-                          <Download className="h-3.5 w-3.5" /> PDF
+                          <Download className="h-3.5 w-3.5" /> {c.origen === 'subido' ? 'Ver' : 'PDF'}
                         </Button>
                       </div>
 
