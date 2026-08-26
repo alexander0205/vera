@@ -252,7 +252,7 @@ export default function NuevaFacturaForm({
   const tituloDoc = ({
     'nota-credito': { nuevo: 'Nueva nota de crédito', editar: 'Editar nota de crédito' },
     'nota-debito':  { nuevo: 'Nueva nota de débito',  editar: 'Editar nota de débito' },
-    'compras':      { nuevo: 'Nueva compra',          editar: 'Editar compra' },
+    'compras':      { nuevo: 'Nuevo comprobante de compra', editar: 'Editar comprobante de compra' },
     'gastos':       { nuevo: 'Nuevo gasto',           editar: 'Editar gasto' },
   } as Record<string, { nuevo: string; editar: string }>)[categoriaId]
     ?? { nuevo: 'Nueva factura', editar: 'Editar factura' };
@@ -2295,7 +2295,7 @@ export default function NuevaFacturaForm({
                 }}
                 sx={{ textTransform: 'none', borderRadius: '8px' }}
               >
-                {esCompra ? 'Nueva compra' : esGasto ? 'Nuevo gasto' : `Nueva ${docAccent.noun}`}
+                {esCompra ? 'Nuevo comprobante' : esGasto ? 'Nuevo gasto' : `Nueva ${docAccent.noun}`}
               </Button>
               <Button
                 variant="contained"

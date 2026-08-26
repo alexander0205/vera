@@ -323,16 +323,34 @@ export default function ComprasPage() {
             </Typography>
           </Box>
         </Box>
-        {canRegistrar && (
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => setShowModal(true)}
-            startIcon={<Plus style={{ width: 16, height: 16 }} />}
-            sx={{ flexShrink: 0 }}
-          >
-            Nueva compra
-          </Button>
+        {/* Acción según la pestaña: en "Compras registradas" se registra una
+            ENTRADA DE INVENTARIO (modal); en el resto se crea un COMPROBANTE de
+            compra (e41, formulario). Nombres distintos para no confundir. */}
+        {tab === 'registradas' ? (
+          canRegistrar && (
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => setShowModal(true)}
+              startIcon={<Plus style={{ width: 16, height: 16 }} />}
+              sx={{ flexShrink: 0 }}
+            >
+              Entrada de inventario
+            </Button>
+          )
+        ) : (
+          can('facturas:crear') && (
+            <Button
+              component={Link}
+              href="/dashboard/compras/nueva"
+              variant="contained"
+              size="small"
+              startIcon={<Plus style={{ width: 16, height: 16 }} />}
+              sx={{ flexShrink: 0 }}
+            >
+              Nuevo comprobante
+            </Button>
+          )
         )}
       </Box>
 
@@ -408,7 +426,7 @@ export default function ComprasPage() {
               emptyState={{
                 icon:  FileText,
                 title: 'No has registrado comprobantes de compra',
-                hint:  'Los comprobantes de compra (e41) que registres desde "Nueva compra" aparecerán aquí.',
+                hint:  'Los comprobantes de compra (e41) que registres con "Nuevo comprobante" aparecerán aquí.',
               }}
             />
           </Box>
@@ -425,7 +443,7 @@ export default function ComprasPage() {
               emptyState={{
                 icon:  PackagePlus,
                 title: 'No has registrado compras manuales',
-                hint:  'Usa "Nueva compra" para registrar entradas de inventario y actualizar tu stock.',
+                hint:  'Usa "Entrada de inventario" para registrar compras de mercancía y actualizar tu stock.',
               }}
             />
           </Box>
