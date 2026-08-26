@@ -83,12 +83,18 @@ const LABEL_TIPO_DOC: Record<string, string> = {
   antecedentes: 'Verificación de antecedentes', cedula: 'Cédula', titulo: 'Título', otro: 'Otro',
 };
 
-/** Pasos del asistente de alta/edición (estilo Deel). */
-const PASOS = [
+/** Pasos base (edición). */
+const PASOS_BASE = [
   { titulo: 'Identidad', descripcion: 'Datos personales del empleado.' },
   { titulo: 'Puesto y jornada', descripcion: 'Cargo, tipo de contrato, jornada, turno y vacaciones.' },
   { titulo: 'Pago y banco', descripcion: 'Salario y la cuenta donde recibe el pago.' },
   { titulo: 'Documentos', descripcion: 'Adjunta la verificación de antecedentes y otros documentos.' },
+] as const;
+
+/** Pasos extra al CREAR: contrato + revisión (estilo Deel — el empleado nace del contrato). */
+const PASOS_CONTRATO = [
+  { titulo: 'Contrato', descripcion: 'Usa una plantilla nuestra, sube uno firmado, u omítelo por ahora.' },
+  { titulo: 'Revisión', descripcion: 'Confirma que los datos del nuevo empleado están correctos.' },
 ] as const;
 
 /** Bytes legibles para el listado de documentos. */
@@ -142,6 +148,19 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const [aEliminar, setAEliminar] = useState<Empleado | null>(null);
   const [importAbierto, setImportAbierto] = useState(false);
   const [contratoDe, setContratoDe] = useState<Empleado | null>(null);
+  // Paso "Contrato" del alta (solo al crear): una de las tres vías.
+  const [contratoModo, setContratoModo] = useState<'ninguno' | 'plantilla' | 'subido'>('ninguno');
+  const [contratoPlantillaId, setContratoPlantillaId] = useState('');
+  const [contratoArchivo, setContratoArchivo] = useState<File | null>(null);
+  const [revisionPreview, setRevisionPreview] = useState<string | null>(null);
+  const [cargandoRevision, setCargandoRevision] = useState(false);
+
+  // Pasos según modo: al crear se añaden Contrato + Revisión; al editar, no.
+  const pasos = dialogo.editando ? PASOS_BASE : [...PASOS_BASE, ...PASOS_CONTRATO];
+  const { data: dPlantillasAlta } = useSWR<{ plantillas: { id: number; nombre: string; activa: boolean }[] }>(
+    dialogo.abierto && !dialogo.editando ? '/api/nomina/contratos/plantillas' : null, fetcher,
+  );
+  const plantillasAlta = (dPlantillasAlta?.plantillas ?? []).filter((p) => p.activa);
 
   const empleados = data?.empleados ?? [];
   const filtrados = useMemo(() => {
@@ -159,24 +178,65 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
     .filter((e) => esActivo(e.estado))
     .reduce((sum, e) => sum + (e.salarioBaseCents ?? 0), 0);
 
+  function resetContrato() {
+    setContratoModo('ninguno');
+    setContratoPlantillaId('');
+    setContratoArchivo(null);
+    setRevisionPreview(null);
+  }
   function abrirNuevo() {
     setForm(formVacio());
     setPaso(0);
     setDocsPendientes([]);
+    resetContrato();
     setDialogo({ abierto: true, editando: null });
   }
   function abrirEditar(e: Empleado) {
     setForm(empleadoAForm(e));
     setPaso(0);
     setDocsPendientes([]);
+    resetContrato();
     setDialogo({ abierto: true, editando: e });
   }
   const set = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  /** Ensambla la vista previa del contrato con los datos tecleados (paso Revisión). */
+  async function cargarRevision() {
+    if (contratoModo !== 'plantilla') { setRevisionPreview(null); return; }
+    const pid = Number(contratoPlantillaId) || plantillasAlta[0]?.id;
+    if (!pid) { setRevisionPreview(null); return; }
+    setCargandoRevision(true);
+    try {
+      const res = await fetch('/api/nomina/contratos/preview-adhoc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plantillaId: pid, empleado: form }),
+      });
+      const j = await res.json().catch(() => ({}));
+      setRevisionPreview(res.ok ? j.cuerpo : null);
+    } catch {
+      setRevisionPreview(null);
+    } finally {
+      setCargandoRevision(false);
+    }
+  }
+
+  /** Navega a un paso; al entrar a Revisión (último del alta) carga el preview. */
+  function irPaso(i: number) {
+    if (i < 0 || i >= pasos.length) return;
+    if (!dialogo.editando && i === pasos.length - 1) cargarRevision();
+    setPaso(i);
+  }
 
   async function guardar() {
     if (!form.nombres.trim() || !form.apellidos.trim()) {
       toast.error('Nombres y apellidos son obligatorios');
       setPaso(0);
+      return;
+    }
+    if (!dialogo.editando && contratoModo === 'subido' && !contratoArchivo) {
+      toast.error('Elige el archivo del contrato firmado o cambia la opción de contrato');
+      setPaso(pasos.length - 2);
       return;
     }
     setGuardando(true);
@@ -192,21 +252,39 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? 'No se pudo guardar');
       }
-      // En alta nueva, los documentos se encolaron en el paso 4: se suben ahora
-      // que el empleado ya tiene id. Un fallo de subida no descarta el empleado.
-      if (!editando && docsPendientes.length > 0) {
+
+      if (!editando) {
         const j = await res.json().catch(() => ({}));
         const nuevoId = j.empleado?.id;
         if (nuevoId) {
-          let fallidos = 0;
+          // Documentos encolados en el paso Documentos.
+          let docsFallidos = 0;
           for (const d of docsPendientes) {
             const fd = new FormData();
             fd.append('archivo', d.file);
             fd.append('tipo', d.tipo);
             const up = await fetch(`/api/nomina/empleados/${nuevoId}/documentos`, { method: 'POST', body: fd });
-            if (!up.ok) fallidos++;
+            if (!up.ok) docsFallidos++;
           }
-          if (fallidos > 0) toast.error(`${fallidos} documento(s) no se pudieron subir; agrégalos desde la ficha.`);
+          if (docsFallidos > 0) toast.error(`${docsFallidos} documento(s) no se pudieron subir; agrégalos desde la ficha.`);
+
+          // Contrato: una de las tres vías. Un fallo aquí no descarta el empleado.
+          if (contratoModo === 'plantilla') {
+            const pid = Number(contratoPlantillaId) || plantillasAlta[0]?.id;
+            if (pid) {
+              const c = await fetch(`/api/nomina/empleados/${nuevoId}/contratos`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plantillaId: pid }),
+              });
+              if (!c.ok) toast.error('El empleado se creó, pero el contrato no se generó; hazlo desde la ficha.');
+            }
+          } else if (contratoModo === 'subido' && contratoArchivo) {
+            const fd = new FormData();
+            fd.append('archivo', contratoArchivo);
+            fd.append('titulo', 'Contrato firmado');
+            const c = await fetch(`/api/nomina/empleados/${nuevoId}/contratos/subir`, { method: 'POST', body: fd });
+            if (!c.ok) toast.error('El empleado se creó, pero el contrato no se subió; hazlo desde la ficha.');
+          }
         }
       }
       toast.success(editando ? 'Empleado actualizado' : 'Empleado creado');
@@ -356,22 +434,22 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
           <DialogHeader>
             <DialogTitle>{dialogo.editando ? 'Editar empleado' : 'Nuevo empleado'}</DialogTitle>
             <DialogDescription>
-              {PASOS[paso].descripcion}
+              {pasos[paso].descripcion}
             </DialogDescription>
           </DialogHeader>
 
           {/* Barra de pasos */}
-          <div className="flex items-center gap-1.5 px-1">
-            {PASOS.map((p, i) => (
+          <div className="flex items-center gap-1 px-1">
+            {pasos.map((p, i) => (
               <button
                 key={p.titulo}
                 type="button"
-                onClick={() => setPaso(i)}
+                onClick={() => irPaso(i)}
                 className="flex flex-1 flex-col gap-1 text-left"
               >
                 <span className={`h-1.5 rounded-full transition ${i <= paso ? 'bg-zero-500' : 'bg-muted'}`} />
-                <span className={`text-[11px] ${i === paso ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                  {i + 1}. {p.titulo}
+                <span className={`hidden text-[10px] sm:block ${i === paso ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+                  {p.titulo}
                 </span>
               </button>
             ))}
@@ -471,6 +549,89 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                 setPendientes={setDocsPendientes}
               />
             )}
+
+            {/* Paso 5 · Contrato (solo al crear) */}
+            {!dialogo.editando && paso === 4 && (
+              <div className="space-y-3">
+                <OpcionContrato
+                  activo={contratoModo === 'plantilla'}
+                  onClick={() => setContratoModo('plantilla')}
+                  titulo="Usar una plantilla nuestra"
+                  desc="El sistema arma el contrato con los datos del empleado. Se puede enviar a firmar después."
+                >
+                  {contratoModo === 'plantilla' && (
+                    plantillasAlta.length === 0 ? (
+                      <div className="rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+                        No hay plantillas activas. Créalas en <span className="font-medium">Nómina → Contratos</span>, o sube un contrato firmado.
+                      </div>
+                    ) : (
+                      <NativeSelect value={contratoPlantillaId} onChange={(e) => setContratoPlantillaId(e.target.value)}>
+                        {plantillasAlta.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </NativeSelect>
+                    )
+                  )}
+                </OpcionContrato>
+
+                <OpcionContrato
+                  activo={contratoModo === 'subido'}
+                  onClick={() => setContratoModo('subido')}
+                  titulo="Subir contrato firmado"
+                  desc="El empleado ya tiene su contrato firmado (PDF o escaneo). Queda como firmado, sin pedir firma."
+                >
+                  {contratoModo === 'subido' && (
+                    <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition hover:bg-muted/50">
+                      <Upload className="h-4 w-4" />
+                      {contratoArchivo ? 'Cambiar archivo' : 'Elegir archivo'}
+                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        onChange={(e) => setContratoArchivo(e.target.files?.[0] ?? null)} />
+                      {contratoArchivo && <span className="ml-1 truncate text-xs text-muted-foreground">{contratoArchivo.name}</span>}
+                    </label>
+                  )}
+                </OpcionContrato>
+
+                <OpcionContrato
+                  activo={contratoModo === 'ninguno'}
+                  onClick={() => setContratoModo('ninguno')}
+                  titulo="Omitir por ahora"
+                  desc="Crea el empleado sin contrato. Podrás generarlo o subirlo después desde su ficha."
+                />
+              </div>
+            )}
+
+            {/* Paso 6 · Revisión (solo al crear) */}
+            {!dialogo.editando && paso === 5 && (
+              <div className="space-y-4">
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <div className="mb-2 text-sm font-medium">¿Los datos están correctos conforme al nuevo empleado?</div>
+                  <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+                    <Dato k="Nombre" v={`${form.nombres} ${form.apellidos}`.trim()} />
+                    <Dato k="Cédula" v={form.cedula || '—'} />
+                    <Dato k="Cargo" v={form.cargo || '—'} />
+                    <Dato k="Salario" v={form.salarioBase ? `RD$${form.salarioBase}` : '—'} />
+                    <Dato k="Frecuencia" v={LABEL_FRECUENCIA[form.frecuenciaPago] ?? form.frecuenciaPago} />
+                    <Dato k="Jornada" v={LABEL_JORNADA[form.jornada] ?? '—'} />
+                    <Dato k="Ingreso" v={form.fechaIngreso || '—'} />
+                    <Dato k="Contrato" v={contratoModo === 'plantilla' ? 'Plantilla nuestra' : contratoModo === 'subido' ? 'Subido (firmado)' : 'Sin contrato'} />
+                  </div>
+                </div>
+
+                {contratoModo === 'plantilla' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Vista previa del contrato</Label>
+                    {cargandoRevision ? (
+                      <div className="flex items-center justify-center rounded-md border py-8 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                    ) : (
+                      <div className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border bg-background p-3 text-xs leading-relaxed">
+                        {revisionPreview ?? 'No se pudo generar la vista previa. Revisa que haya una plantilla elegida.'}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {contratoModo === 'subido' && (
+                  <p className="text-xs text-muted-foreground">Se subirá el contrato firmado <span className="font-medium">{contratoArchivo?.name ?? '(sin archivo)'}</span> y quedará como firmado.</p>
+                )}
+              </div>
+            )}
           </DialogBody>
 
           <DialogFooter className="flex-row justify-between gap-2">
@@ -479,10 +640,10 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
             </Button>
             <div className="flex gap-2">
               {paso > 0 && (
-                <Button variant="outline" onClick={() => setPaso((p) => p - 1)} disabled={guardando}>Atrás</Button>
+                <Button variant="outline" onClick={() => irPaso(paso - 1)} disabled={guardando}>Atrás</Button>
               )}
-              {paso < PASOS.length - 1 ? (
-                <Button onClick={() => setPaso((p) => p + 1)}>Siguiente</Button>
+              {paso < pasos.length - 1 ? (
+                <Button onClick={() => irPaso(paso + 1)}>Siguiente</Button>
               ) : (
                 <Button onClick={guardar} disabled={guardando} className="gap-1.5">
                   {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -526,6 +687,36 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+/** Una de las opciones (radio) del paso Contrato, con su detalle desplegable. */
+function OpcionContrato({ activo, onClick, titulo, desc, children }: {
+  activo: boolean; onClick: () => void; titulo: string; desc: string; children?: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-lg border p-3 transition ${activo ? 'border-zero-500 bg-zero-50' : ''}`}>
+      <button type="button" onClick={onClick} className="flex w-full items-start gap-3 text-left">
+        <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${activo ? 'border-zero-500' : 'border-muted-foreground/40'}`}>
+          {activo && <span className="h-2 w-2 rounded-full bg-zero-500" />}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">{titulo}</span>
+          <span className="block text-xs text-muted-foreground">{desc}</span>
+        </span>
+      </button>
+      {children && <div className="mt-2 pl-7">{children}</div>}
+    </div>
+  );
+}
+
+/** Par etiqueta/valor del resumen de revisión. */
+function Dato({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-2 border-b border-dashed py-0.5">
+      <span className="text-muted-foreground">{k}</span>
+      <span className="truncate text-right font-medium">{v}</span>
     </div>
   );
 }
