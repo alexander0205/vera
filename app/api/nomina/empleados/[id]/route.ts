@@ -18,6 +18,11 @@ function limpiar(v: unknown): string | null {
   const s = String(v ?? '').trim();
   return s === '' ? null : s;
 }
+function enteroOnull(v: unknown): number | null {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
 
 /** PATCH /api/nomina/empleados/[id] — edita un empleado del team. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -58,9 +63,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       sexo:            limpiar(body.sexo),
       fechaNacimiento: limpiar(body.fechaNacimiento),
       nacionalidad:    limpiar(body.nacionalidad),
+      pais:            limpiar(body.pais),
       telefono:        limpiar(body.telefono),
       email:           limpiar(body.email),
       notas:           limpiar(body.notas),
+      jornada:         limpiar(body.jornada),
+      turno:           limpiar(body.turno),
+      vacacionesDias:  enteroOnull(body.vacacionesDias),
+      diasLibres:      limpiar(body.diasLibres),
       updatedAt:       new Date(),
     })
     .where(and(eq(empleados.id, id), eq(empleados.teamId, auth.teamId)))

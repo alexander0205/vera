@@ -23,6 +23,13 @@ function limpiar(v: unknown): string | null {
   return s === '' ? null : s;
 }
 
+/** Entero ≥ 0 o null (para vacaciones/día). Vacío o inválido → null. */
+function enteroOnull(v: unknown): number | null {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 /** GET /api/nomina/empleados — lista los empleados del team. */
 export async function GET() {
   const auth = await requireModuleAndPermission('nomina', 'empleados:ver');
@@ -72,9 +79,14 @@ export async function POST(req: Request) {
       sexo:            limpiar(body.sexo),
       fechaNacimiento: limpiar(body.fechaNacimiento),
       nacionalidad:    limpiar(body.nacionalidad),
+      pais:            limpiar(body.pais),
       telefono:        limpiar(body.telefono),
       email:           limpiar(body.email),
       notas:           limpiar(body.notas),
+      jornada:         limpiar(body.jornada),
+      turno:           limpiar(body.turno),
+      vacacionesDias:  enteroOnull(body.vacacionesDias),
+      diasLibres:      limpiar(body.diasLibres),
       createdBy:       auth.user.id,
     })
     .returning();

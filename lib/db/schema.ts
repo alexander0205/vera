@@ -3548,9 +3548,20 @@ export const empleados = pgTable('empleados', {
   sexo:            varchar('sexo', { length: 20 }),
   fechaNacimiento: date('fecha_nacimiento'),
   nacionalidad:    varchar('nacionalidad', { length: 60 }),
+  /** País de trabajo/residencia. El asistente de alta lo captura (estilo Deel). */
+  pais:            varchar('pais', { length: 60 }),
   telefono:        varchar('telefono', { length: 30 }),
   email:           varchar('email', { length: 160 }),
   notas:           text('notas'),
+  // ── Condiciones laborales (asistente de alta) ──
+  /** 'tiempo_completo' | 'medio_tiempo' | 'por_horas'. */
+  jornada:         varchar('jornada', { length: 20 }),
+  /** 'diurno' | 'nocturno' | 'mixto' | 'rotativo'. */
+  turno:           varchar('turno', { length: 20 }),
+  /** Días de vacaciones al año (Ley 16-92: 14 al año, 18 tras 5 años). */
+  vacacionesDias:  integer('vacaciones_dias'),
+  /** Descanso semanal, texto libre (ej. "Domingo"). */
+  diasLibres:      varchar('dias_libres', { length: 40 }),
   // ── Procedencia — enlace SUAVE (sin FK) a otro módulo ──
   // 'manual' = alta directa en nómina; 'escolar' = importado de Personal del
   // colegio. Es un soft-ref a propósito (misma familia que fotos.entidad/id):
@@ -3572,6 +3583,37 @@ export const empleados = pgTable('empleados', {
 
 export type Empleado    = typeof empleados.$inferSelect;
 export type NewEmpleado = typeof empleados.$inferInsert;
+
+// ─── Nómina — Documentos del empleado ────────────────────────────────────────
+// Adjuntos de la ficha del empleado: verificación de antecedentes, cédula
+// escaneada, título, etc. Reaprovecha el andamiaje de comprobantes/archivos
+// escolares: S3 privado (storage='s3', s3Key) o fallback base64 en la propia
+// fila (storage='db', contenido). El tipo se detecta por magic bytes; la llave
+// lleva un UUID, nunca el id de la fila. Ver documentos-archivo.ts.
+export const empleadoDocumentos = pgTable('empleado_documentos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  empleadoId:    integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  /** 'antecedentes' | 'cedula' | 'titulo' | 'otro'. Texto libre por ahora. */
+  tipo:          varchar('tipo', { length: 40 }).notNull().default('antecedentes'),
+  archivoNombre: varchar('archivo_nombre', { length: 255 }),
+  mime:          varchar('mime', { length: 100 }).notNull(),
+  tamanoBytes:   integer('tamano_bytes').notNull(),
+  sha256:        char('sha256', { length: 64 }).notNull(),
+  /** 's3' | 'db'. */
+  storage:       varchar('storage', { length: 4 }).notNull(),
+  s3Key:         text('s3_key'),
+  contenido:     text('contenido'),
+  subidoPor:     integer('subido_por').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_documentos_empleado_idx').on(t.empleadoId),
+  index('empleado_documentos_team_idx').on(t.teamId),
+  uniqueIndex('empleado_documentos_sha_uniq').on(t.empleadoId, t.sha256),
+]);
+
+export type EmpleadoDocumento    = typeof empleadoDocumentos.$inferSelect;
+export type NewEmpleadoDocumento = typeof empleadoDocumentos.$inferInsert;
 
 // ─── Nómina — Corridas (Fase 3) ──────────────────────────────────────────────
 // Una corrida es una nómina de un período: toma los empleados activos, corre el

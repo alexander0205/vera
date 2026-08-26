@@ -17,6 +17,7 @@ import { toast } from '@/lib/toast';
 import {
   Users, Search, Loader2, IdCard, Phone, Mail, Briefcase, Wallet, Landmark,
   Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, Download,
+  Upload, X,
 } from 'lucide-react';
 
 interface Empleado {
@@ -39,9 +40,14 @@ interface Empleado {
   sexo: string | null;
   fechaNacimiento: string | null;
   nacionalidad: string | null;
+  pais: string | null;
   telefono: string | null;
   email: string | null;
   notas: string | null;
+  jornada: string | null;
+  turno: string | null;
+  vacacionesDias: number | null;
+  diasLibres: string | null;
   origen: string;
   origenRef: string | null;
 }
@@ -67,6 +73,30 @@ const LABEL_CONTRATO: Record<string, string> = {
 const LABEL_FRECUENCIA: Record<string, string> = {
   mensual: 'Mensual', quincenal: 'Quincenal', semanal: 'Semanal',
 };
+const LABEL_JORNADA: Record<string, string> = {
+  tiempo_completo: 'Tiempo completo', medio_tiempo: 'Medio tiempo', por_horas: 'Por horas',
+};
+const LABEL_TURNO: Record<string, string> = {
+  diurno: 'Diurno', nocturno: 'Nocturno', mixto: 'Mixto', rotativo: 'Rotativo',
+};
+const LABEL_TIPO_DOC: Record<string, string> = {
+  antecedentes: 'Verificación de antecedentes', cedula: 'Cédula', titulo: 'Título', otro: 'Otro',
+};
+
+/** Pasos del asistente de alta/edición (estilo Deel). */
+const PASOS = [
+  { titulo: 'Identidad', descripcion: 'Datos personales del empleado.' },
+  { titulo: 'Puesto y jornada', descripcion: 'Cargo, tipo de contrato, jornada, turno y vacaciones.' },
+  { titulo: 'Pago y banco', descripcion: 'Salario y la cuenta donde recibe el pago.' },
+  { titulo: 'Documentos', descripcion: 'Adjunta la verificación de antecedentes y otros documentos.' },
+] as const;
+
+/** Bytes legibles para el listado de documentos. */
+function tam(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 /** Estado en blanco del formulario (crear). Salario en pesos, texto para el input. */
 function formVacio() {
@@ -75,7 +105,9 @@ function formVacio() {
     tipoContrato: 'indefinido', salarioBase: '', frecuenciaPago: 'mensual',
     fechaIngreso: '', afp: '', ars: '',
     bancoNombre: '', bancoCuenta: '', bancoTipoCuenta: '',
-    sexo: '', fechaNacimiento: '', nacionalidad: '', telefono: '', email: '', notas: '',
+    sexo: '', fechaNacimiento: '', nacionalidad: '', pais: 'República Dominicana',
+    telefono: '', email: '', notas: '',
+    jornada: 'tiempo_completo', turno: 'diurno', vacacionesDias: '', diasLibres: '',
     estado: 'activo', fechaSalida: '',
   };
 }
@@ -89,7 +121,9 @@ function empleadoAForm(e: Empleado): FormState {
     afp: e.afp ?? '', ars: e.ars ?? '',
     bancoNombre: e.bancoNombre ?? '', bancoCuenta: e.bancoCuenta ?? '', bancoTipoCuenta: e.bancoTipoCuenta ?? '',
     sexo: e.sexo ?? '', fechaNacimiento: e.fechaNacimiento ?? '', nacionalidad: e.nacionalidad ?? '',
-    telefono: e.telefono ?? '', email: e.email ?? '', notas: e.notas ?? '',
+    pais: e.pais ?? '', telefono: e.telefono ?? '', email: e.email ?? '', notas: e.notas ?? '',
+    jornada: e.jornada ?? '', turno: e.turno ?? '',
+    vacacionesDias: e.vacacionesDias != null ? String(e.vacacionesDias) : '', diasLibres: e.diasLibres ?? '',
     estado: e.estado, fechaSalida: e.fechaSalida ?? '',
   };
 }
@@ -102,6 +136,8 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const [busca, setBusca] = useState('');
   const [dialogo, setDialogo] = useState<{ abierto: boolean; editando: Empleado | null }>({ abierto: false, editando: null });
   const [form, setForm] = useState<FormState>(formVacio());
+  const [paso, setPaso] = useState(0);
+  const [docsPendientes, setDocsPendientes] = useState<{ file: File; tipo: string }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [aEliminar, setAEliminar] = useState<Empleado | null>(null);
   const [importAbierto, setImportAbierto] = useState(false);
@@ -125,10 +161,14 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
 
   function abrirNuevo() {
     setForm(formVacio());
+    setPaso(0);
+    setDocsPendientes([]);
     setDialogo({ abierto: true, editando: null });
   }
   function abrirEditar(e: Empleado) {
     setForm(empleadoAForm(e));
+    setPaso(0);
+    setDocsPendientes([]);
     setDialogo({ abierto: true, editando: e });
   }
   const set = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -136,6 +176,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   async function guardar() {
     if (!form.nombres.trim() || !form.apellidos.trim()) {
       toast.error('Nombres y apellidos son obligatorios');
+      setPaso(0);
       return;
     }
     setGuardando(true);
@@ -150,6 +191,23 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? 'No se pudo guardar');
+      }
+      // En alta nueva, los documentos se encolaron en el paso 4: se suben ahora
+      // que el empleado ya tiene id. Un fallo de subida no descarta el empleado.
+      if (!editando && docsPendientes.length > 0) {
+        const j = await res.json().catch(() => ({}));
+        const nuevoId = j.empleado?.id;
+        if (nuevoId) {
+          let fallidos = 0;
+          for (const d of docsPendientes) {
+            const fd = new FormData();
+            fd.append('archivo', d.file);
+            fd.append('tipo', d.tipo);
+            const up = await fetch(`/api/nomina/empleados/${nuevoId}/documentos`, { method: 'POST', body: fd });
+            if (!up.ok) fallidos++;
+          }
+          if (fallidos > 0) toast.error(`${fallidos} documento(s) no se pudieron subir; agrégalos desde la ficha.`);
+        }
       }
       toast.success(editando ? 'Empleado actualizado' : 'Empleado creado');
       setDialogo({ abierto: false, editando: null });
@@ -292,75 +350,146 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
         </div>
       )}
 
-      {/* Diálogo crear / editar */}
+      {/* Asistente crear / editar (estilo Deel: varios pasos) */}
       <Dialog open={dialogo.abierto} onOpenChange={(o) => setDialogo((d) => ({ ...d, abierto: o }))}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{dialogo.editando ? 'Editar empleado' : 'Nuevo empleado'}</DialogTitle>
             <DialogDescription>
-              Datos del empleado. El salario y la cuenta de banco alimentan la nómina y el pago.
+              {PASOS[paso].descripcion}
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-5">
-            {/* Identidad */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Campo label="Nombres *"><Input value={form.nombres} onChange={(e) => set('nombres')(e.target.value)} /></Campo>
-              <Campo label="Apellidos *"><Input value={form.apellidos} onChange={(e) => set('apellidos')(e.target.value)} /></Campo>
-              <Campo label="Cédula"><Input value={form.cedula} onChange={(e) => set('cedula')(e.target.value)} placeholder="Solo dígitos" inputMode="numeric" /></Campo>
-              <Campo label="Cargo"><Input value={form.cargo} onChange={(e) => set('cargo')(e.target.value)} /></Campo>
-            </div>
 
-            {/* Contrato y salario */}
-            <div className="rounded-lg border p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Wallet className="h-4 w-4" /> Contrato y salario</div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* Barra de pasos */}
+          <div className="flex items-center gap-1.5 px-1">
+            {PASOS.map((p, i) => (
+              <button
+                key={p.titulo}
+                type="button"
+                onClick={() => setPaso(i)}
+                className="flex flex-1 flex-col gap-1 text-left"
+              >
+                <span className={`h-1.5 rounded-full transition ${i <= paso ? 'bg-zero-500' : 'bg-muted'}`} />
+                <span className={`text-[11px] ${i === paso ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+                  {i + 1}. {p.titulo}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <DialogBody className="space-y-5">
+            {/* Paso 1 · Identidad */}
+            {paso === 0 && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Campo label="Nombres *"><Input value={form.nombres} onChange={(e) => set('nombres')(e.target.value)} /></Campo>
+                <Campo label="Apellidos *"><Input value={form.apellidos} onChange={(e) => set('apellidos')(e.target.value)} /></Campo>
+                <Campo label="Cédula"><Input value={form.cedula} onChange={(e) => set('cedula')(e.target.value)} placeholder="Solo dígitos" inputMode="numeric" /></Campo>
+                <Campo label="Sexo">
+                  <NativeSelect value={form.sexo} onChange={(e) => set('sexo')(e.target.value)}>
+                    <option value="">—</option>
+                    <option value="masculino">Masculino</option>
+                    <option value="femenino">Femenino</option>
+                  </NativeSelect>
+                </Campo>
+                <Campo label="Fecha de nacimiento"><Input type="date" value={form.fechaNacimiento} onChange={(e) => set('fechaNacimiento')(e.target.value)} /></Campo>
+                <Campo label="Nacionalidad"><Input value={form.nacionalidad} onChange={(e) => set('nacionalidad')(e.target.value)} placeholder="Dominicana" /></Campo>
+                <Campo label="País"><Input value={form.pais} onChange={(e) => set('pais')(e.target.value)} /></Campo>
+                <Campo label="Teléfono"><Input value={form.telefono} onChange={(e) => set('telefono')(e.target.value)} /></Campo>
+                <Campo label="Correo"><Input type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} /></Campo>
+              </div>
+            )}
+
+            {/* Paso 2 · Puesto y jornada */}
+            {paso === 1 && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Campo label="Cargo"><Input value={form.cargo} onChange={(e) => set('cargo')(e.target.value)} placeholder="Ej. Cajero" /></Campo>
                 <Campo label="Tipo de contrato">
                   <NativeSelect value={form.tipoContrato} onChange={(e) => set('tipoContrato')(e.target.value)}>
                     {Object.entries(LABEL_CONTRATO).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </NativeSelect>
                 </Campo>
-                <Campo label="Salario base (RD$)">
-                  <Input value={form.salarioBase} onChange={(e) => set('salarioBase')(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                <Campo label="Jornada">
+                  <NativeSelect value={form.jornada} onChange={(e) => set('jornada')(e.target.value)}>
+                    <option value="">—</option>
+                    {Object.entries(LABEL_JORNADA).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </NativeSelect>
                 </Campo>
-                <Campo label="Frecuencia de pago">
-                  <NativeSelect value={form.frecuenciaPago} onChange={(e) => set('frecuenciaPago')(e.target.value)}>
-                    {Object.entries(LABEL_FRECUENCIA).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                <Campo label="Turno">
+                  <NativeSelect value={form.turno} onChange={(e) => set('turno')(e.target.value)}>
+                    <option value="">—</option>
+                    {Object.entries(LABEL_TURNO).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </NativeSelect>
                 </Campo>
                 <Campo label="Fecha de ingreso"><Input type="date" value={form.fechaIngreso} onChange={(e) => set('fechaIngreso')(e.target.value)} /></Campo>
-                <Campo label="AFP"><Input value={form.afp} onChange={(e) => set('afp')(e.target.value)} /></Campo>
-                <Campo label="ARS"><Input value={form.ars} onChange={(e) => set('ars')(e.target.value)} /></Campo>
-              </div>
-            </div>
-
-            {/* Banco (dispersión, Fase 4) */}
-            <div className="rounded-lg border p-3">
-              <div className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Landmark className="h-4 w-4" /> Cuenta para el pago</div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Campo label="Banco"><Input value={form.bancoNombre} onChange={(e) => set('bancoNombre')(e.target.value)} /></Campo>
-                <Campo label="No. de cuenta"><Input value={form.bancoCuenta} onChange={(e) => set('bancoCuenta')(e.target.value)} inputMode="numeric" /></Campo>
-                <Campo label="Tipo de cuenta">
-                  <NativeSelect value={form.bancoTipoCuenta} onChange={(e) => set('bancoTipoCuenta')(e.target.value)}>
-                    <option value="">—</option>
-                    <option value="ahorros">Ahorros</option>
-                    <option value="corriente">Corriente</option>
-                  </NativeSelect>
+                <Campo label="Vacaciones (días/año)">
+                  <Input value={form.vacacionesDias} onChange={(e) => set('vacacionesDias')(e.target.value)} inputMode="numeric" placeholder="14" />
                 </Campo>
+                <Campo label="Día(s) de descanso"><Input value={form.diasLibres} onChange={(e) => set('diasLibres')(e.target.value)} placeholder="Domingo" /></Campo>
               </div>
-            </div>
+            )}
 
-            {/* Contacto */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Campo label="Teléfono"><Input value={form.telefono} onChange={(e) => set('telefono')(e.target.value)} /></Campo>
-              <Campo label="Correo"><Input type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} /></Campo>
-            </div>
+            {/* Paso 3 · Pago y banco */}
+            {paso === 2 && (
+              <div className="space-y-4">
+                <div className="rounded-lg border p-3">
+                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Wallet className="h-4 w-4" /> Salario</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <Campo label="Salario base (RD$)">
+                      <Input value={form.salarioBase} onChange={(e) => set('salarioBase')(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                    </Campo>
+                    <Campo label="Frecuencia de pago">
+                      <NativeSelect value={form.frecuenciaPago} onChange={(e) => set('frecuenciaPago')(e.target.value)}>
+                        {Object.entries(LABEL_FRECUENCIA).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </NativeSelect>
+                    </Campo>
+                    <Campo label="AFP"><Input value={form.afp} onChange={(e) => set('afp')(e.target.value)} /></Campo>
+                    <Campo label="ARS"><Input value={form.ars} onChange={(e) => set('ars')(e.target.value)} /></Campo>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Landmark className="h-4 w-4" /> Cuenta para el pago</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <Campo label="Banco"><Input value={form.bancoNombre} onChange={(e) => set('bancoNombre')(e.target.value)} /></Campo>
+                    <Campo label="No. de cuenta"><Input value={form.bancoCuenta} onChange={(e) => set('bancoCuenta')(e.target.value)} inputMode="numeric" /></Campo>
+                    <Campo label="Tipo de cuenta">
+                      <NativeSelect value={form.bancoTipoCuenta} onChange={(e) => set('bancoTipoCuenta')(e.target.value)}>
+                        <option value="">—</option>
+                        <option value="ahorros">Ahorros</option>
+                        <option value="corriente">Corriente</option>
+                      </NativeSelect>
+                    </Campo>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Paso 4 · Documentos */}
+            {paso === 3 && (
+              <DocumentosPaso
+                empleado={dialogo.editando}
+                pendientes={docsPendientes}
+                setPendientes={setDocsPendientes}
+              />
+            )}
           </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogo({ abierto: false, editando: null })} disabled={guardando}>Cancelar</Button>
-            <Button onClick={guardar} disabled={guardando} className="gap-1.5">
-              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
-              {dialogo.editando ? 'Guardar cambios' : 'Crear empleado'}
+
+          <DialogFooter className="flex-row justify-between gap-2">
+            <Button variant="ghost" onClick={() => setDialogo({ abierto: false, editando: null })} disabled={guardando}>
+              Cancelar
             </Button>
+            <div className="flex gap-2">
+              {paso > 0 && (
+                <Button variant="outline" onClick={() => setPaso((p) => p - 1)} disabled={guardando}>Atrás</Button>
+              )}
+              {paso < PASOS.length - 1 ? (
+                <Button onClick={() => setPaso((p) => p + 1)}>Siguiente</Button>
+              ) : (
+                <Button onClick={guardar} disabled={guardando} className="gap-1.5">
+                  {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {dialogo.editando ? 'Guardar cambios' : 'Crear empleado'}
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -397,6 +526,131 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// ── Paso 4 · Documentos ───────────────────────────────────────────────────────
+// Alta nueva (empleado=null): encola los archivos; el padre los sube tras crear
+// al empleado (ya con id). Edición: sube y borra en vivo contra la ficha.
+
+interface DocumentoResumen { id: number; tipo: string; archivoNombre: string | null; mime: string; tamanoBytes: number; subidoEn: string }
+
+function DocumentosPaso({
+  empleado, pendientes, setPendientes,
+}: {
+  empleado: Empleado | null;
+  pendientes: { file: File; tipo: string }[];
+  setPendientes: React.Dispatch<React.SetStateAction<{ file: File; tipo: string }[]>>;
+}) {
+  const esEdicion = !!empleado;
+  const [tipo, setTipo] = useState('antecedentes');
+  const [subiendo, setSubiendo] = useState(false);
+  const { data, mutate } = useSWR<{ documentos: DocumentoResumen[] }>(
+    esEdicion ? `/api/nomina/empleados/${empleado!.id}/documentos` : null, fetcher,
+  );
+  const existentes = data?.documentos ?? [];
+
+  async function elegir(file: File | undefined) {
+    if (!file) return;
+    if (!esEdicion) {
+      setPendientes((p) => [...p, { file, tipo }]);
+      return;
+    }
+    setSubiendo(true);
+    try {
+      const fd = new FormData();
+      fd.append('archivo', file);
+      fd.append('tipo', tipo);
+      const res = await fetch(`/api/nomina/empleados/${empleado!.id}/documentos`, { method: 'POST', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo subir');
+      toast.success('Documento subido');
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al subir');
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  async function borrar(docId: number) {
+    try {
+      const res = await fetch(`/api/nomina/empleados/${empleado!.id}/documentos/${docId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('No se pudo borrar');
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-end gap-2">
+        <div className="flex-1 space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Tipo de documento</Label>
+          <NativeSelect value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {Object.entries(LABEL_TIPO_DOC).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </NativeSelect>
+        </div>
+        <label className={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition hover:bg-muted/50 ${subiendo ? 'pointer-events-none opacity-60' : ''}`}>
+          {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          Adjuntar
+          <input
+            type="file"
+            className="hidden"
+            accept=".pdf,.jpg,.jpeg,.png,.webp"
+            onChange={(e) => { elegir(e.target.files?.[0]); e.target.value = ''; }}
+          />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">PDF o imagen, hasta 8 MB. Ej. certificación de no antecedentes penales.</p>
+
+      {/* Cola (alta nueva): se suben al crear el empleado */}
+      {!esEdicion && pendientes.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Se subirán al crear</Label>
+          {pendientes.map((d, i) => (
+            <div key={i} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{d.file.name}</span>
+              <Badge variant="outline" className="shrink-0">{LABEL_TIPO_DOC[d.tipo] ?? d.tipo}</Badge>
+              <span className="shrink-0 text-xs text-muted-foreground">{tam(d.file.size)}</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                onClick={() => setPendientes((p) => p.filter((_, j) => j !== i))} aria-label="Quitar">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Ya subidos (edición) */}
+      {esEdicion && (
+        existentes.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Aún no hay documentos.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {existentes.map((d) => (
+              <div key={d.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{d.archivoNombre ?? 'documento'}</span>
+                <Badge variant="outline" className="shrink-0">{LABEL_TIPO_DOC[d.tipo] ?? d.tipo}</Badge>
+                <span className="shrink-0 text-xs text-muted-foreground">{tam(d.tamanoBytes)}</span>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => window.open(`/api/nomina/empleados/${empleado!.id}/documentos/${d.id}`, '_blank')}
+                  aria-label="Ver">
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => borrar(d.id)} aria-label="Borrar">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
