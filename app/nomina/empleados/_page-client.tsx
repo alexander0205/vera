@@ -686,6 +686,8 @@ function ContratosEmpleadoDialog({
   const [plantillaId, setPlantillaId] = useState('');
   const [generando, setGenerando] = useState(false);
   const [subiendoFirmado, setSubiendoFirmado] = useState(false);
+  const [preview, setPreview] = useState<{ titulo: string; cuerpo: string } | null>(null);
+  const [cargandoPreview, setCargandoPreview] = useState(false);
   const [enlaces, setEnlaces] = useState<Record<number, string>>({});
   const [enviandoId, setEnviandoId] = useState<number | null>(null);
 
@@ -699,6 +701,9 @@ function ContratosEmpleadoDialog({
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo enviar');
       setEnlaces((e) => ({ ...e, [contratoId]: j.url }));
+      if (j.emailEnviado) toast.success(`Enlace enviado por correo a ${j.email}`);
+      else if (j.email) toast.error('No se pudo enviar el correo; copia el enlace de abajo.');
+      else toast.success('Enlace listo. El empleado no tiene correo: cópialo abajo.');
       mutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -710,6 +715,26 @@ function ContratosEmpleadoDialog({
   async function copiar(url: string) {
     try { await navigator.clipboard.writeText(url); toast.success('Enlace copiado'); }
     catch { toast.error('No se pudo copiar'); }
+  }
+
+  async function verPreview() {
+    const pid = Number(plantillaId) || plantillas[0]?.id;
+    if (!pid || !empleado) { toast.error('Elige una plantilla'); return; }
+    setCargandoPreview(true);
+    try {
+      const res = await fetch(`/api/nomina/empleados/${empleado.id}/contratos/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plantillaId: pid }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo generar la vista previa');
+      setPreview({ titulo: j.titulo, cuerpo: j.cuerpo });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setCargandoPreview(false);
+    }
   }
 
   async function generar() {
@@ -725,6 +750,7 @@ function ContratosEmpleadoDialog({
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo generar');
       toast.success('Contrato generado');
+      setPreview(null);
       mutate();
       if (j.contrato?.id) window.open(`/api/nomina/contratos/${j.contrato.id}/pdf`, '_blank');
     } catch (err) {
@@ -772,17 +798,38 @@ function ContratosEmpleadoDialog({
                 No hay plantillas activas. Crea una en <span className="font-medium">Nómina → Contratos</span>.
               </div>
             ) : (
-              <div className="flex items-end gap-2">
-                <div className="flex-1 space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Generar desde plantilla</Label>
-                  <NativeSelect value={plantillaId} onChange={(e) => setPlantillaId(e.target.value)}>
-                    {plantillas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </NativeSelect>
+              <div className="space-y-2">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Generar desde plantilla</Label>
+                    <NativeSelect
+                      value={plantillaId}
+                      onChange={(e) => { setPlantillaId(e.target.value); setPreview(null); }}
+                    >
+                      {plantillas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </NativeSelect>
+                  </div>
+                  <Button variant="outline" onClick={verPreview} disabled={cargandoPreview} className="gap-1.5">
+                    {cargandoPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                    Vista previa
+                  </Button>
                 </div>
-                <Button onClick={generar} disabled={generando} className="gap-1.5">
-                  {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Generar
-                </Button>
+
+                {/* Vista previa del contrato lleno, antes de emitirlo */}
+                {preview && (
+                  <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                    <div className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-background p-3 text-xs leading-relaxed">
+                      {preview.cuerpo}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>Cerrar</Button>
+                      <Button size="sm" onClick={generar} disabled={generando} className="gap-1.5">
+                        {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        Generar contrato
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           )}
