@@ -14,12 +14,19 @@ const DEFAULTS = {
   quincenalActiva: false,
   quincenalDia1: 15,
   quincenalDia2: 30,
+  anticipacionDias: 5,
 };
 
 /** Encajona un día de pago a 1..31. */
 function dia(v: unknown, fallback: number): number {
   const n = Math.trunc(Number(v));
   return Number.isFinite(n) && n >= 1 && n <= 31 ? n : fallback;
+}
+
+/** Anticipación 0..30 días; fuera de rango → default. */
+function anticipacion(v: unknown, fallback: number): number {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 && n <= 30 ? n : fallback;
 }
 
 /** GET /api/nomina/programacion — la config de la empresa (o defaults). */
@@ -49,6 +56,7 @@ export async function PUT(req: Request) {
     quincenalActiva: Boolean(body.quincenalActiva),
     quincenalDia1: dia(body.quincenalDia1, DEFAULTS.quincenalDia1),
     quincenalDia2: dia(body.quincenalDia2, DEFAULTS.quincenalDia2),
+    anticipacionDias: anticipacion(body.anticipacionDias, DEFAULTS.anticipacionDias),
     updatedAt: new Date(),
   };
 

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
           periodo: c.periodo,
           tipo: c.tipo,
           descripcion: c.descripcion,
-          fechaPago: hoy,
+          fechaPago: c.fechaPago, // fecha REAL de pago (hoy + anticipación)
           userId: null, // creada por el sistema
           frecuencias: [c.frecuenciaEmpleado],
         });

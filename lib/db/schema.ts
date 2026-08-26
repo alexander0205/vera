@@ -3709,6 +3709,8 @@ export const nominaProgramacion = pgTable('nomina_programacion', {
   quincenalActiva: boolean('quincenal_activa').notNull().default(false),
   quincenalDia1:   integer('quincenal_dia1').notNull().default(15),
   quincenalDia2:   integer('quincenal_dia2').notNull().default(30),
+  /** Días de antelación: la corrida nace (día de pago − anticipación). */
+  anticipacionDias: integer('anticipacion_dias').notNull().default(5),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [

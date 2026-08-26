@@ -16,6 +16,7 @@ interface Programacion {
   quincenalActiva: boolean;
   quincenalDia1: number;
   quincenalDia2: number;
+  anticipacionDias: number;
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -119,6 +120,29 @@ export default function ConfiguracionClient() {
 
       <Card className={`mb-4 transition-opacity ${cfg.activa ? '' : 'pointer-events-none opacity-50'}`}>
         <CardContent className="space-y-5 p-5">
+          {/* Anticipación */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Anticipación</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Label className="text-xs text-muted-foreground">Crear la corrida</Label>
+              <Input
+                type="number"
+                min={0}
+                max={30}
+                value={cfg.anticipacionDias}
+                onChange={(e) => set('anticipacionDias', Math.max(0, Math.min(30, Number(e.target.value) || 0)))}
+                className="w-20"
+              />
+              <span className="text-xs text-muted-foreground">día(s) antes de la fecha de pago</span>
+            </div>
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              La corrida nace en borrador con antelación para que la revises y apruebes antes de que llegue la fecha. La fecha de pago sigue siendo la que fijas abajo.
+            </p>
+          </div>
+
+          <div className="border-t" />
+
           {/* Mensual */}
           <div className="space-y-3">
             <Toggle
