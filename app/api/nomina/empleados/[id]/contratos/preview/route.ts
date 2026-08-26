@@ -11,7 +11,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaContratoPlantillas, teams } from '@/lib/db/schema';
 import { hoyRD } from '@/lib/utils/format';
-import { variablesDeContrato, rellenarPlantilla } from '@/lib/nomina/contratos';
+import { cuerpoDeContrato } from '@/lib/nomina/contrato-estructura';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,19 +46,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .where(eq(teams.id, auth.teamId))
     .limit(1);
 
-  const vars = variablesDeContrato(
+  const { cuerpo, titulo } = cuerpoDeContrato(
+    plantilla,
     {
       nombres: empleado.nombres, apellidos: empleado.apellidos, cedula: empleado.cedula,
       cargo: empleado.cargo, salarioBaseCents: empleado.salarioBaseCents,
       tipoContrato: empleado.tipoContrato, frecuenciaPago: empleado.frecuenciaPago,
       fechaIngreso: empleado.fechaIngreso,
+      jornada: empleado.jornada, turno: empleado.turno,
+      diasLibres: empleado.diasLibres, vacacionesDias: empleado.vacacionesDias,
     },
     { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null },
     hoyRD(),
   );
-
-  const cuerpo = rellenarPlantilla(plantilla.cuerpo, vars);
-  const titulo = (cuerpo.split('\n').find((l) => l.trim()) ?? plantilla.nombre).trim().slice(0, 200);
 
   return NextResponse.json({ titulo, cuerpo });
 }

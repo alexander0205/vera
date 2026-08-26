@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { nominaContratoPlantillas } from '@/lib/db/schema';
+import { normalizarConfig } from '@/lib/nomina/contrato-estructura';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,13 +32,24 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const nombre = limpiar(body.nombre);
-  const cuerpo = limpiar(body.cuerpo);
   if (!nombre) return NextResponse.json({ error: 'El nombre es obligatorio' }, { status: 400 });
-  if (!cuerpo) return NextResponse.json({ error: 'El cuerpo del contrato no puede estar vacío' }, { status: 400 });
+
+  // Estructurada (nueva): trae `config`. Prosa (compat): trae `cuerpo`.
+  const tieneConfig = body.config != null && typeof body.config === 'object';
+  const cuerpo = limpiar(body.cuerpo);
+  if (!tieneConfig && !cuerpo) {
+    return NextResponse.json({ error: 'Falta la configuración del contrato' }, { status: 400 });
+  }
 
   const [fila] = await db
     .insert(nominaContratoPlantillas)
-    .values({ teamId: auth.teamId, nombre, cuerpo, createdBy: auth.user.id })
+    .values({
+      teamId: auth.teamId,
+      nombre,
+      config: tieneConfig ? normalizarConfig(body.config) : null,
+      cuerpo: tieneConfig ? null : cuerpo,
+      createdBy: auth.user.id,
+    })
     .returning();
 
   return NextResponse.json({ plantilla: fila }, { status: 201 });
@@ -54,8 +66,16 @@ export async function PATCH(req: Request) {
 
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if ('nombre' in body) set.nombre = limpiar(body.nombre);
-  if ('cuerpo' in body) set.cuerpo = limpiar(body.cuerpo);
   if ('activa' in body) set.activa = Boolean(body.activa);
+  // Editar la config vuelve la plantilla estructurada (cuerpo se limpia); editar
+  // solo el cuerpo mantiene la vieja de prosa.
+  if (body.config != null && typeof body.config === 'object') {
+    set.config = normalizarConfig(body.config);
+    set.cuerpo = null;
+  } else if ('cuerpo' in body) {
+    set.cuerpo = limpiar(body.cuerpo);
+    set.config = null;
+  }
 
   const [fila] = await db
     .update(nominaContratoPlantillas)

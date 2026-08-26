@@ -3729,8 +3729,13 @@ export const nominaContratoPlantillas = pgTable('nomina_contrato_plantillas', {
   id:       serial('id').primaryKey(),
   teamId:   integer('team_id').notNull().references(() => teams.id),
   nombre:   varchar('nombre', { length: 160 }).notNull(),
-  /** Texto con marcadores `{{nombre}}`, `{{salario}}`… Ver lib/nomina/contratos.ts. */
-  cuerpo:   text('cuerpo').notNull(),
+  /**
+   * Plantillas viejas: texto con marcadores `{{nombre}}`… (lib/nomina/contratos.ts).
+   * Plantillas estructuradas (estilo Deel): null; el contrato se ensambla de `config`.
+   */
+  cuerpo:   text('cuerpo'),
+  /** Config estructurada por pasos (cláusulas + parámetros). Ver contrato-estructura.ts. */
+  config:   jsonb('config'),
   activa:   boolean('activa').notNull().default(true),
   createdBy: integer('created_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
