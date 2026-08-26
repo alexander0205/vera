@@ -9,7 +9,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { nominaContratos } from '@/lib/db/schema';
-import { prepararArchivo } from '@/lib/administracion-escolar/documentos-archivo';
+import { prepararArchivo, borrarArchivoSiHay } from '@/lib/administracion-escolar/documentos-archivo';
 import { leerComprobante } from '@/lib/storage/comprobantes';
 
 export interface ContratoSubidoInput {
@@ -21,10 +21,27 @@ export interface ContratoSubidoInput {
   userId: number | null;
 }
 
+/**
+ * Borra TODOS los contratos de un empleado (y los archivos en S3 de los
+ * subidos). Se usa para el reemplazo: un empleado tiene un solo contrato, así
+ * que generar o subir uno nuevo elimina el anterior. Devuelve cuántos borró.
+ */
+export async function borrarContratosDeEmpleado(teamId: number, empleadoId: number): Promise<number> {
+  const filas = await db
+    .delete(nominaContratos)
+    .where(and(eq(nominaContratos.teamId, teamId), eq(nominaContratos.empleadoId, empleadoId)))
+    .returning({ storage: nominaContratos.archivoStorage, s3Key: nominaContratos.archivoS3Key });
+  for (const f of filas) await borrarArchivoSiHay(f.storage, f.s3Key);
+  return filas.length;
+}
+
 /** Archiva el contrato firmado y devuelve el id de la fila creada. */
 export async function subirContratoFirmado(input: ContratoSubidoInput): Promise<{ id: number; titulo: string }> {
   const guardado = await prepararArchivo(input.teamId, input.buffer, input.nombreOriginal);
   const titulo = (input.titulo || guardado.archivoNombre || 'Contrato firmado').trim().slice(0, 200);
+
+  // Un empleado tiene un solo contrato: el subido reemplaza cualquier anterior.
+  await borrarContratosDeEmpleado(input.teamId, input.empleadoId);
 
   const [fila] = await db
     .insert(nominaContratos)

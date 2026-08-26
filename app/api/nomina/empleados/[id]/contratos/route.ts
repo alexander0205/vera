@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { empleados, nominaContratoPlantillas, nominaContratos, teams } from '@/lib/db/schema';
 import { hoyRD } from '@/lib/utils/format';
 import { cuerpoDeContrato } from '@/lib/nomina/contrato-estructura';
+import { borrarContratosDeEmpleado } from '@/lib/nomina/contratos-subidos';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,6 +81,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null },
     hoyRD(),
   );
+
+  // Un empleado tiene un solo contrato: el generado reemplaza cualquier anterior.
+  await borrarContratosDeEmpleado(auth.teamId, empleadoId);
 
   const [fila] = await db
     .insert(nominaContratos)

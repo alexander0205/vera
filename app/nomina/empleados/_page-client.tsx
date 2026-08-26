@@ -881,6 +881,7 @@ function ContratosEmpleadoDialog({
   const [cargandoPreview, setCargandoPreview] = useState(false);
   const [enlaces, setEnlaces] = useState<Record<number, string>>({});
   const [enviandoId, setEnviandoId] = useState<number | null>(null);
+  const [pendiente, setPendiente] = useState<{ tipo: 'generar' } | { tipo: 'subir'; file: File } | null>(null);
 
   const contratos = dContratos?.contratos ?? [];
   const plantillas = (dPlantillas?.plantillas ?? []).filter((p) => p.activa);
@@ -928,7 +929,15 @@ function ContratosEmpleadoDialog({
     }
   }
 
-  async function generar() {
+  // Un empleado tiene un solo contrato: generar o subir uno nuevo reemplaza al
+  // anterior. Si ya hay contrato, se confirma antes.
+  const pedirGenerar = () => { if (contratos.length > 0) setPendiente({ tipo: 'generar' }); else hacerGenerar(); };
+  const pedirSubir = (file: File | undefined) => {
+    if (!file) return;
+    if (contratos.length > 0) setPendiente({ tipo: 'subir', file }); else hacerSubir(file);
+  };
+
+  async function hacerGenerar() {
     const pid = Number(plantillaId) || plantillas[0]?.id;
     if (!pid || !empleado) { toast.error('Elige una plantilla'); return; }
     setGenerando(true);
@@ -951,7 +960,7 @@ function ContratosEmpleadoDialog({
     }
   }
 
-  async function subirFirmado(file: File | undefined) {
+  async function hacerSubir(file: File | undefined) {
     if (!file || !empleado) return;
     setSubiendoFirmado(true);
     try {
@@ -971,6 +980,7 @@ function ContratosEmpleadoDialog({
   }
 
   return (
+    <>
     <Dialog open={abierto} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -1014,7 +1024,7 @@ function ContratosEmpleadoDialog({
                     </div>
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>Cerrar</Button>
-                      <Button size="sm" onClick={generar} disabled={generando} className="gap-1.5">
+                      <Button size="sm" onClick={pedirGenerar} disabled={generando} className="gap-1.5">
                         {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                         Generar contrato
                       </Button>
@@ -1039,7 +1049,7 @@ function ContratosEmpleadoDialog({
                   type="file"
                   className="hidden"
                   accept=".pdf,.jpg,.jpeg,.png,.webp"
-                  onChange={(e) => { subirFirmado(e.target.files?.[0]); e.target.value = ''; }}
+                  onChange={(e) => { pedirSubir(e.target.files?.[0]); e.target.value = ''; }}
                 />
               </label>
             </div>
@@ -1103,6 +1113,22 @@ function ContratosEmpleadoDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <ConfirmDialog
+      open={!!pendiente}
+      onOpenChange={(o) => !o && setPendiente(null)}
+      title="Reemplazar el contrato actual"
+      description="Este empleado ya tiene un contrato. Si continúas, se eliminará y quedará solo el nuevo. Esta acción no se puede deshacer."
+      confirmLabel="Reemplazar"
+      onConfirm={() => {
+        const p = pendiente;
+        setPendiente(null);
+        if (p?.tipo === 'generar') hacerGenerar();
+        else if (p?.tipo === 'subir') hacerSubir(p.file);
+      }}
+      destructive
+    />
+    </>
   );
 }
 
