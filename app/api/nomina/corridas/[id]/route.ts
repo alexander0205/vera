@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { and, asc, eq } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
-import { nominaCorridas, nominaLineas } from '@/lib/db/schema';
+import { nominaCorridas, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/nomina/corridas/[id] — una corrida con sus líneas. */
+/** GET /api/nomina/corridas/[id] — una corrida con sus líneas y obligaciones. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('nomina', 'empleados:ver');
   if (!auth.ok) return auth.response;
@@ -29,7 +29,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .where(eq(nominaLineas.corridaId, id))
     .orderBy(asc(nominaLineas.nombre));
 
-  return NextResponse.json({ corrida, lineas });
+  const obligaciones = await db
+    .select()
+    .from(nominaObligaciones)
+    .where(eq(nominaObligaciones.corridaId, id))
+    .orderBy(asc(nominaObligaciones.destino));
+
+  return NextResponse.json({ corrida, lineas, obligaciones });
 }
 
 /**

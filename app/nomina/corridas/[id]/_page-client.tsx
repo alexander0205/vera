@@ -40,7 +40,20 @@ interface Linea {
   totalDeduccionesCents: number;
   netoCents: number;
   totalPatronalCents: number;
+  pagada: boolean;
 }
+interface Obligacion {
+  id: number;
+  destino: string;
+  montoCents: number;
+  pagada: boolean;
+  pagadaEn: string | null;
+  asientoId: number | null;
+}
+const LABEL_DESTINO: Record<string, string> = {
+  TSS: 'TSS · Seguridad Social',
+  DGII: 'DGII · ISR retenido',
+};
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 const RD = new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', minimumFractionDigits: 2 });
@@ -75,12 +88,14 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const { can } = usePermissions();
   const puedeCorrer = can('nomina:correr');
   const puedePagar = can('nomina:pagar');
-  const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[] }>(`/api/nomina/corridas/${id}`, fetcher);
+  const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[]; obligaciones: Obligacion[] }>(`/api/nomina/corridas/${id}`, fetcher);
   const [confirmar, setConfirmar] = useState(false);
   const [aprobando, setAprobando] = useState(false);
-  const [confirmarPago, setConfirmarPago] = useState(false);
-  const [pagando, setPagando] = useState(false);
   const [descargando, setDescargando] = useState(false);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [pagandoEmp, setPagandoEmp] = useState(false);
+  const [pagandoObl, setPagandoObl] = useState<number | null>(null);
+  const [metodoObl, setMetodoObl] = useState<'efectivo' | 'transferencia' | 'cheque'>('transferencia');
   const [descargandoTSS, setDescargandoTSS] = useState(false);
   const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
 
@@ -102,10 +117,20 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   }
 
   const { corrida, lineas } = data;
+  const obligaciones = data.obligaciones ?? [];
   const b = BADGE[corrida.estado] ?? BADGE.borrador;
   // Provisiones del período (regalía/vacaciones/cesantía): estimación lineal
   // sobre el bruto de cada línea. No se descuenta al empleado; es costo futuro.
   const prov = provisionesDeLineas(lineas);
+
+  const aprobada = corrida.estado !== 'borrador';
+  const empPagados = lineas.filter((l) => l.pagada).length;
+  const netoPendiente = lineas.filter((l) => !l.pagada).reduce((s, l) => s + l.netoCents, 0);
+  const oblPendiente = obligaciones.filter((o) => !o.pagada).reduce((s, o) => s + o.montoCents, 0);
+  const seleccionables = lineas.filter((l) => !l.pagada);
+  const todosSel = seleccionables.length > 0 && seleccionables.every((l) => sel.has(l.id));
+  const toggleSel = (lid: number) => setSel((s) => { const n = new Set(s); n.has(lid) ? n.delete(lid) : n.add(lid); return n; });
+  const toggleTodosSel = () => setSel(todosSel ? new Set() : new Set(seleccionables.map((l) => l.id)));
 
   async function aprobar() {
     setAprobando(true);
@@ -171,19 +196,38 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     }
   }
 
-  async function pagar() {
-    setPagando(true);
+  async function pagarEmpleados(cuerpo: { lineaIds: number[] } | { todos: true }) {
+    setPagandoEmp(true);
     try {
-      const res = await fetch(`/api/nomina/corridas/${id}/pagar`, { method: 'POST' });
+      const res = await fetch(`/api/nomina/corridas/${id}/pagar-empleados`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
+      });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.error ?? 'No se pudo marcar como pagada');
-      toast.success('Corrida marcada como pagada');
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo registrar el pago');
+      toast.success('Pago a empleados registrado');
+      setSel(new Set());
       mutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
-      setPagando(false);
-      setConfirmarPago(false);
+      setPagandoEmp(false);
+    }
+  }
+
+  async function pagarObligacion(oblId: number) {
+    setPagandoObl(oblId);
+    try {
+      const res = await fetch(`/api/nomina/corridas/${id}/obligaciones/${oblId}/pagar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metodo: metodoObl }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo registrar el pago');
+      toast.success(j.asiento?.creado ? 'Obligación pagada y asentada' : 'Obligación marcada como pagada');
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setPagandoObl(null);
     }
   }
 
@@ -236,11 +280,6 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                 Autodeterminación TSS
               </Button>
             </div>
-          )}
-          {corrida.estado === 'aprobada' && puedePagar && (
-            <Button onClick={() => setConfirmarPago(true)} className="gap-1.5">
-              <Banknote className="h-4 w-4" /> Marcar como pagada
-            </Button>
           )}
         </div>
       </div>
@@ -312,6 +351,82 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         </Card>
       )}
 
+      {/* Obligaciones al Estado (se pagan aparte y después) */}
+      {aprobada && obligaciones.length > 0 && (
+        <Card className="mb-5">
+          <CardContent className="p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Landmark className="h-4 w-4 text-zero-600" /> Obligaciones al Estado
+              </div>
+              {puedePagar && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Pagar con</span>
+                  <NativeSelect value={metodoObl} onChange={(e) => setMetodoObl(e.target.value as typeof metodoObl)} className="h-8 w-auto">
+                    <option value="transferencia">Transferencia</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="cheque">Cheque</option>
+                  </NativeSelect>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {obligaciones.map((o) => (
+                <div key={o.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{LABEL_DESTINO[o.destino] ?? o.destino}</span>
+                      {o.pagada
+                        ? <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3" /> Pagada</Badge>
+                        : <Badge variant="outline" className="border-amber-400 text-amber-700">Pendiente</Badge>}
+                    </div>
+                    <div className="mt-0.5 text-lg font-semibold tabular-nums">{pesos(o.montoCents)}</div>
+                    {o.pagada && o.pagadaEn && (
+                      <div className="text-xs text-muted-foreground">
+                        Pagada el {new Date(o.pagadaEn).toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {o.asientoId ? ` · asiento #${o.asientoId}` : ''}
+                      </div>
+                    )}
+                  </div>
+                  {puedePagar && !o.pagada && (
+                    <Button size="sm" onClick={() => pagarObligacion(o.id)} disabled={pagandoObl === o.id} className="shrink-0 gap-1.5">
+                      {pagandoObl === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
+                      Registrar pago
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {oblPendiente > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">Pendiente a la TSS/DGII: <span className="font-medium">{pesos(oblPendiente)}</span></p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Barra de pago a empleados */}
+      {aprobada && puedePagar && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{empPagados}</span> de {lineas.length} empleados pagados
+            {netoPendiente > 0 && <> · neto pendiente <span className="font-medium text-foreground">{pesos(netoPendiente)}</span></>}
+          </div>
+          <div className="flex items-center gap-2">
+            {sel.size > 0 && (
+              <Button variant="outline" size="sm" onClick={() => pagarEmpleados({ lineaIds: [...sel] })} disabled={pagandoEmp} className="gap-1.5">
+                {pagandoEmp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
+                Marcar pagados ({sel.size})
+              </Button>
+            )}
+            {seleccionables.length > 0 && (
+              <Button size="sm" onClick={() => pagarEmpleados({ todos: true })} disabled={pagandoEmp} className="gap-1.5">
+                <Banknote className="h-3.5 w-3.5" /> Marcar todos pagados
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tabla de líneas */}
       <Card>
         <CardContent className="p-0">
@@ -319,18 +434,34 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
+                  {aprobada && puedePagar && (
+                    <th className="w-10 px-3 py-2">
+                      <input type="checkbox" checked={todosSel} onChange={toggleTodosSel}
+                        disabled={seleccionables.length === 0} className="h-4 w-4 cursor-pointer accent-zero-600"
+                        aria-label="Seleccionar todos" />
+                    </th>
+                  )}
                   <th className="px-4 py-2 font-medium">Empleado</th>
                   <th className="px-4 py-2 text-right font-medium">Bruto</th>
                   <th className="px-4 py-2 text-right font-medium">AFP</th>
                   <th className="px-4 py-2 text-right font-medium">SFS</th>
                   <th className="px-4 py-2 text-right font-medium">ISR</th>
                   <th className="px-4 py-2 text-right font-medium">Neto</th>
+                  {aprobada && <th className="px-4 py-2 text-center font-medium">Pago</th>}
                   <th className="px-4 py-2 text-right font-medium">Volante</th>
                 </tr>
               </thead>
               <tbody>
                 {lineas.map((l) => (
                   <tr key={l.id} className="border-b last:border-0">
+                    {aprobada && puedePagar && (
+                      <td className="px-3 py-2">
+                        {!l.pagada && (
+                          <input type="checkbox" checked={sel.has(l.id)} onChange={() => toggleSel(l.id)}
+                            className="h-4 w-4 cursor-pointer accent-zero-600" aria-label={`Seleccionar ${l.nombre}`} />
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-2">
                       <div className="font-medium">{l.nombre}</div>
                       {l.cargo && <div className="text-xs text-muted-foreground">{l.cargo}</div>}
@@ -340,6 +471,13 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{pesos(l.sfsEmpleadoCents)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{pesos(l.isrCents)}</td>
                     <td className="px-4 py-2 text-right font-medium tabular-nums">{pesos(l.netoCents)}</td>
+                    {aprobada && (
+                      <td className="px-4 py-2 text-center">
+                        {l.pagada
+                          ? <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3" /> Pagado</Badge>
+                          : <Badge variant="outline" className="border-amber-400 text-amber-700">Pendiente</Badge>}
+                      </td>
+                    )}
                     <td className="px-4 py-2 text-right">
                       <a
                         href={`/api/nomina/corridas/${id}/volante/${l.id}`}
@@ -368,14 +506,6 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         onConfirm={aprobar}
       />
 
-      <ConfirmDialog
-        open={confirmarPago}
-        onOpenChange={setConfirmarPago}
-        title="Marcar la corrida como pagada"
-        description="Confírmalo una vez que hayas subido el archivo de dispersión a tu banca en línea. Queda registrada la fecha de pago; la app no mueve el dinero."
-        confirmLabel={pagando ? 'Guardando…' : 'Sí, ya la pagué'}
-        onConfirm={pagar}
-      />
     </div>
   );
 }

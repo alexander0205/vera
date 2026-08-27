@@ -3688,13 +3688,44 @@ export const nominaLineas = pgTable('nomina_lineas', {
   infotepPatronalCents:  bigint('infotep_patronal_cents', { mode: 'number' }).notNull(),
   totalPatronalCents:    bigint('total_patronal_cents', { mode: 'number' }).notNull(),
   netoCents:             bigint('neto_cents', { mode: 'number' }).notNull(),
+  /** Pago al empleado: se marca por línea (pago parcial). Lo no pagado queda pendiente. */
+  pagada:      boolean('pagada').notNull().default(false),
+  pagadaEn:    timestamp('pagada_en'),
 }, (t) => [
   index('nomina_lineas_corrida_idx').on(t.corridaId),
   index('nomina_lineas_team_idx').on(t.teamId),
 ]);
 
+/**
+ * Obligación al Estado que nace de una corrida aprobada. Se paga aparte del
+ * sueldo del empleado y después; queda pendiente hasta saldarse. Un destino por
+ * corrida: 'TSS' (AFP+SFS+SRL+INFOTEP) y 'DGII' (ISR retenido).
+ */
+export const nominaObligaciones = pgTable('nomina_obligaciones', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  corridaId:   integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  /** 'TSS' | 'DGII'. */
+  destino:     varchar('destino', { length: 10 }).notNull(),
+  montoCents:  bigint('monto_cents', { mode: 'number' }).notNull(),
+  /** Parte retenida al empleado (AFP/SFS empleado, o ISR): salda "retenciones por pagar". */
+  parteRetencionesCents: bigint('parte_retenciones_cents', { mode: 'number' }).notNull().default(0),
+  /** Parte patronal (AFP/SFS patronal, SRL, INFOTEP): salda "aportes por pagar". */
+  parteAportesCents:     bigint('parte_aportes_cents', { mode: 'number' }).notNull().default(0),
+  pagada:      boolean('pagada').notNull().default(false),
+  pagadaEn:    timestamp('pagada_en'),
+  /** Asiento de pago que salda el pasivo. Null mientras está pendiente. */
+  asientoId:   integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_obligaciones_corrida_destino_uniq').on(t.corridaId, t.destino),
+  index('nomina_obligaciones_team_idx').on(t.teamId),
+]);
+
 export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
 export type NewNominaCorrida = typeof nominaCorridas.$inferInsert;
+export type NominaObligacion    = typeof nominaObligaciones.$inferSelect;
+export type NewNominaObligacion = typeof nominaObligaciones.$inferInsert;
 export type NominaLinea      = typeof nominaLineas.$inferSelect;
 export type NewNominaLinea   = typeof nominaLineas.$inferInsert;
 

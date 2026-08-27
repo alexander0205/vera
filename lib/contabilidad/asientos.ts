@@ -994,6 +994,71 @@ export async function generarAsientoNomina(
     : { creado: true, asientoId };
 }
 
+/**
+ * Pago de una obligación de nómina (TSS/DGII): salda el pasivo devengado.
+ *
+ *   DEBE  Retenciones por pagar   (parte del empleado: AFP/SFS emp o ISR)
+ *   DEBE  Aportes por pagar       (parte patronal)
+ *     HABER Caja / banco          según el método de pago
+ *
+ * Usa las mismas cuentas por-pagar dedicadas que el devengo (con su fallback a
+ * 2101), así que el pasivo que se abrió al aprobar se cierra en la misma cuenta.
+ */
+export async function generarAsientoPagoNominaObligacion(
+  teamId: number,
+  obligacionId: number,
+  metodo: 'efectivo' | 'transferencia' | 'cheque' = 'efectivo',
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT o.destino, o.monto_cents AS "monto",
+           o.parte_retenciones_cents AS "retenciones", o.parte_aportes_cents AS "aportes",
+           to_char(coalesce(c.fecha_pago, (c.periodo || '-28')::date), 'YYYY-MM-DD') AS fecha,
+           c.periodo
+    FROM nomina_obligaciones o
+    JOIN nomina_corridas c ON c.id = o.corrida_id AND c.team_id = o.team_id
+    WHERE o.team_id = ${teamId} AND o.id = ${obligacionId}
+  `);
+  const o = (filas as unknown as {
+    destino: string; monto: string | number; retenciones: string | number; aportes: string | number; fecha: string; periodo: string;
+  }[])[0];
+  if (!o) return { creado: false, motivo: 'no-es-gasto' };
+
+  const monto = Number(o.monto);
+  const retenciones = Number(o.retenciones);
+  const aportes = Number(o.aportes);
+  if (monto <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+  const cRetenciones = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
+  const cAportesPagar = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
+
+  const salida = (await resolverCuentaCobro(teamId, metodo as ClaveMetodo)) ??
+    (metodo === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null);
+  if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
+
+  const lineas = [
+    { cuentaId: cRetenciones,  debeCents: retenciones, haberCents: 0, descripcion: 'Retenciones pagadas al Estado' },
+    { cuentaId: cAportesPagar, debeCents: aportes,     haberCents: 0, descripcion: 'Aportes patronales pagados' },
+    { cuentaId: salida,        debeCents: 0, haberCents: monto,       descripcion: `Salida de fondos (${o.destino})` },
+  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: o.fecha, concepto: `Pago obligación ${o.destino} · Nómina ${o.periodo}`, origenTipo: 'pago_nomina', origenId: obligacionId },
+    lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
 // ─── Asiento manual ──────────────────────────────────────────────────────────
 
 /** Error de validación de un asiento manual. La API lo traduce a 400. */

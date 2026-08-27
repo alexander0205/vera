@@ -4,6 +4,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { nominaCorridas } from '@/lib/db/schema';
 import { generarAsientoNomina } from '@/lib/contabilidad/asientos';
+import { crearObligacionesCorrida } from '@/lib/nomina/obligaciones-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // El asiento es opcional: si la contabilidad está apagada, la corrida se
   // aprueba igual y queda sin asientoId (motivo 'contabilidad-apagada').
   const asiento = await generarAsientoNomina(auth.teamId, id, auth.user.id);
+
+  // Las obligaciones al Estado (TSS/DGII) nacen aquí, pendientes de pago.
+  await crearObligacionesCorrida(auth.teamId, id);
 
   const [actualizada] = await db
     .update(nominaCorridas)
