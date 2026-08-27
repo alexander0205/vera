@@ -120,6 +120,9 @@ export async function PATCH(req: NextRequest) {
           cuentaNominaRetencionesId:  numeroONulo(b.cuentaNominaRetencionesId),
           cuentaNominaAportesPagarId: numeroONulo(b.cuentaNominaAportesPagarId),
           cuentaNominaPorPagarId:     numeroONulo(b.cuentaNominaPorPagarId),
+          provisionarNomina:          typeof b.provisionarNomina === 'boolean' ? b.provisionarNomina : undefined,
+          cuentaProvisionGastoId:     numeroONulo(b.cuentaProvisionGastoId),
+          cuentaProvisionPorPagarId:  numeroONulo(b.cuentaProvisionPorPagarId),
         }, user.id);
         return NextResponse.json({ config });
       }

@@ -3035,6 +3035,12 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaNominaAportesPagarId: integer('cuenta_nomina_aportes_pagar_id').references(() => contabilidadCuentas.id),
   /** Sueldos netos por pagar al empleado (Haber). Fallback: por pagar → 2101. */
   cuentaNominaPorPagarId:    integer('cuenta_nomina_por_pagar_id').references(() => contabilidadCuentas.id),
+  /** Provisiones de nómina (regalía/vacaciones/cesantía): si se asientan cada mes. Off por defecto. */
+  provisionarNomina:         boolean('provisionar_nomina').notNull().default(false),
+  /** Gasto por provisiones (Debe mensual). Fallback: gastos → 6101. */
+  cuentaProvisionGastoId:    integer('cuenta_provision_gasto_id').references(() => contabilidadCuentas.id),
+  /** Provisiones por pagar (Haber, pasivo que se acumula). Fallback: por pagar → 2101. */
+  cuentaProvisionPorPagarId: integer('cuenta_provision_por_pagar_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.3 — exento capitaliza ITBIS; gravado registra crédito fiscal 1104. */
   regimenItbis: varchar('regimen_itbis', { length: 10 }).notNull().default('exento'),
   updatedBy: integer('updated_by').references(() => users.id),

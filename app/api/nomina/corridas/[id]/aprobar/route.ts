@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { nominaCorridas } from '@/lib/db/schema';
-import { generarAsientoNomina } from '@/lib/contabilidad/asientos';
+import { generarAsientoNomina, generarAsientoProvisionNomina } from '@/lib/contabilidad/asientos';
 import { crearObligacionesCorrida } from '@/lib/nomina/obligaciones-db';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +37,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // aprueba igual y queda sin asientoId (motivo 'contabilidad-apagada').
   const asiento = await generarAsientoNomina(auth.teamId, id, auth.user.id);
 
+  // Provisión (regalía/vac/cesantía): solo si el team activó provisionar en el
+  // libro. Best-effort: no rompe la aprobación.
+  const provision = await generarAsientoProvisionNomina(auth.teamId, id, auth.user.id);
+
   // Las obligaciones al Estado (TSS/DGII) nacen aquí, pendientes de pago.
   await crearObligacionesCorrida(auth.teamId, id);
 
@@ -50,5 +54,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .where(eq(nominaCorridas.id, id))
     .returning();
 
-  return NextResponse.json({ corrida: actualizada, asiento });
+  return NextResponse.json({ corrida: actualizada, asiento, provision });
 }

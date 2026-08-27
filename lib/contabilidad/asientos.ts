@@ -24,6 +24,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { parseLineas } from '@/lib/reportes/shared';
 import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
+import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
 
@@ -91,6 +92,7 @@ export type MotivoSalto =
   | 'sin-cuenta-por-pagar'
   | 'sin-cuenta-gastos'
   | 'sin-cuenta-caja'
+  | 'provisiones-apagadas'
   | 'no-es-gasto';
 
 export interface ResultadoGeneracion {
@@ -1051,6 +1053,64 @@ export async function generarAsientoPagoNominaObligacion(
     teamId,
     { fecha: o.fecha, concepto: `Pago obligación ${o.destino} · Nómina ${o.periodo}`, origenTipo: 'pago_nomina', origenId: obligacionId },
     lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+/**
+ * Asiento de PROVISIÓN de nómina (regalía/vacaciones/cesantía) al aprobar una
+ * corrida. Acumula el costo del empleador que se devengará con el tiempo:
+ *
+ *   DEBE  Gasto por provisiones     (regalía + vacaciones + cesantía)
+ *     HABER Provisiones por pagar    (el pasivo que se acumula)
+ *
+ * Solo corre si la contabilidad está activa Y el team activó `provisionarNomina`
+ * (apagado por defecto): provisionar en el libro es una decisión de política
+ * contable. Idempotente por el índice único de origen.
+ */
+export async function generarAsientoProvisionNomina(
+  teamId: number,
+  corridaId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+  if (!cfg.provisionarNomina) return { creado: false, motivo: 'provisiones-apagadas' };
+
+  const cab = await db.execute(sql`
+    SELECT descripcion, to_char(coalesce(fecha_pago, (periodo || '-28')::date), 'YYYY-MM-DD') AS fecha
+    FROM nomina_corridas WHERE team_id = ${teamId} AND id = ${corridaId}
+  `);
+  const corrida = (cab as unknown as { descripcion: string; fecha: string }[])[0];
+  if (!corrida) return { creado: false, motivo: 'no-es-gasto' };
+
+  const filas = await db.execute(sql`
+    SELECT bruto_cents AS "brutoCents" FROM nomina_lineas WHERE corrida_id = ${corridaId}
+  `);
+  const lineas = (filas as unknown as { brutoCents: string | number }[]).map((l) => ({ brutoCents: Number(l.brutoCents) }));
+  const prov = provisionesDeLineas(lineas);
+  if (prov.totalCents <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaGasto = cfg.cuentaProvisionGastoId ?? cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
+  const cuentaPorPagar = cfg.cuentaProvisionPorPagarId ?? cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+
+  const lineasAsiento = [
+    { cuentaId: cuentaGasto,    debeCents: prov.regaliaCents,    haberCents: 0, descripcion: 'Provisión regalía pascual' },
+    { cuentaId: cuentaGasto,    debeCents: prov.vacacionesCents, haberCents: 0, descripcion: 'Provisión vacaciones' },
+    { cuentaId: cuentaGasto,    debeCents: prov.cesantiaCents,   haberCents: 0, descripcion: 'Provisión cesantía' },
+    { cuentaId: cuentaPorPagar, debeCents: 0, haberCents: prov.totalCents,      descripcion: 'Provisiones por pagar' },
+  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: corrida.fecha, concepto: `Provisión nómina · ${corrida.descripcion}`, origenTipo: 'provision_nomina', origenId: corridaId },
+    lineasAsiento,
     userId,
   );
 

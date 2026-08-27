@@ -307,6 +307,57 @@ export function ConfigClient({
             </Box>
           ))}
         </Box>
+
+        {/* Provisiones (regalía / vacaciones / cesantía) */}
+        <Box sx={{ borderTop: '1px solid #e5e7eb', pt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                Provisionar en contabilidad
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                Asienta cada mes la provisión de regalía, vacaciones y cesantía. Apagado por defecto.
+              </Typography>
+            </Box>
+            {puedeConfigurar && (
+              <Button
+                size="small"
+                variant={configInicial.provisionarNomina ? 'outlined' : 'contained'}
+                color={configInicial.provisionarNomina ? 'inherit' : 'primary'}
+                disabled={guardando}
+                onClick={() => enviar({ seccion: 'nomina', provisionarNomina: !configInicial.provisionarNomina })}
+                sx={configInicial.provisionarNomina ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
+              >
+                {configInicial.provisionarNomina ? 'Apagar' : 'Encender'}
+              </Button>
+            )}
+          </Box>
+
+          {configInicial.provisionarNomina && (
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                  Gasto por provisiones
+                </Typography>
+                {selectCuenta(
+                  configInicial.cuentaProvisionGastoId,
+                  (id) => enviar({ seccion: 'nomina', cuentaProvisionGastoId: id }),
+                )}
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>El gasto mensual (Debe). Vacío: usa la de gastos.</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                  Provisiones por pagar
+                </Typography>
+                {selectCuenta(
+                  configInicial.cuentaProvisionPorPagarId,
+                  (id) => enviar({ seccion: 'nomina', cuentaProvisionPorPagarId: id }),
+                )}
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>El pasivo que se acumula (Haber). Vacío: usa la de por pagar.</Typography>
+              </Box>
+            </Box>
+          )}
+        </Box>
       </Box>
 
       {/* ─── 3. Métodos de cobro ───────────────────────────────────────── */}
