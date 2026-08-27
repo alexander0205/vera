@@ -10,8 +10,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { NativeSelect } from '@/components/ui/native-select';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { FORMATOS_BANCO, FORMATO_POR_DEFECTO } from '@/lib/nomina/formatos-banco';
+import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import { toast } from '@/lib/toast';
-import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark } from 'lucide-react';
 
 interface Corrida {
   id: number;
@@ -58,6 +59,18 @@ interface PreviewDispersion {
   nota?: string;
 }
 
+interface PreviewTSS {
+  totalEmpleados: number;
+  totales: {
+    afpTotalCents: number;
+    sfsTotalCents: number;
+    srlPatronalCents: number;
+    infotepPatronalCents: number;
+    totalTSSCents: number;
+  };
+  nota: string;
+}
+
 export default function CorridaDetalleClient({ id }: { id: string }) {
   const { can } = usePermissions();
   const puedeCorrer = can('nomina:correr');
@@ -68,11 +81,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const [confirmarPago, setConfirmarPago] = useState(false);
   const [pagando, setPagando] = useState(false);
   const [descargando, setDescargando] = useState(false);
+  const [descargandoTSS, setDescargandoTSS] = useState(false);
   const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
 
   const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
   const { data: preview } = useSWR<PreviewDispersion>(
     yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}` : null,
+    fetcher,
+  );
+  const { data: previewTSS } = useSWR<PreviewTSS>(
+    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/tss?preview=1` : null,
     fetcher,
   );
 
@@ -85,6 +103,9 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
 
   const { corrida, lineas } = data;
   const b = BADGE[corrida.estado] ?? BADGE.borrador;
+  // Provisiones del período (regalía/vacaciones/cesantía): estimación lineal
+  // sobre el bruto de cada línea. No se descuenta al empleado; es costo futuro.
+  const prov = provisionesDeLineas(lineas);
 
   async function aprobar() {
     setAprobando(true);
@@ -123,6 +144,30 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setDescargando(false);
+    }
+  }
+
+  async function descargarTSS() {
+    setDescargandoTSS(true);
+    try {
+      const res = await fetch(`/api/nomina/corridas/${id}/tss`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? 'No se pudo generar el archivo');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `autodeterminacion-tss-${corrida.periodo}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setDescargandoTSS(false);
     }
   }
 
@@ -186,6 +231,10 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                 {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Descargar dispersión
               </Button>
+              <Button variant="outline" onClick={descargarTSS} disabled={descargandoTSS} className="gap-1.5" title="Autodeterminación de la TSS (CSV)">
+                {descargandoTSS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
+                Autodeterminación TSS
+              </Button>
             </div>
           )}
           {corrida.estado === 'aprobada' && puedePagar && (
@@ -223,6 +272,45 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         <Totales titulo="Neto a pagar" valor={pesos(corrida.totalNetoCents)} destacado />
         <Totales titulo="Costo patronal" valor={pesos(corrida.totalPatronalCents)} />
       </div>
+
+      {/* Provisiones del período (regalía, vacaciones, cesantía) */}
+      <Card className="mb-5">
+        <CardContent className="p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <PiggyBank className="h-4 w-4 text-zero-600" /> Provisiones del período
+            </div>
+            <span className="text-xs text-muted-foreground">Estimación — costo del empleador, no se descuenta al empleado</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Mini titulo="Regalía (13.º)" valor={pesos(prov.regaliaCents)} />
+            <Mini titulo="Vacaciones" valor={pesos(prov.vacacionesCents)} />
+            <Mini titulo="Cesantía" valor={pesos(prov.cesantiaCents)} />
+            <Mini titulo="Total provisión" valor={pesos(prov.totalCents)} destacado />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Resumen de la autodeterminación TSS (aprobada) */}
+      {corrida.estado !== 'borrador' && puedePagar && previewTSS && (
+        <Card className="mb-5">
+          <CardContent className="p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Landmark className="h-4 w-4 text-zero-600" /> A pagar a la TSS
+              </div>
+              <span className="text-xs text-muted-foreground">{previewTSS.nota}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <Mini titulo="AFP (pensiones)" valor={pesos(previewTSS.totales.afpTotalCents)} />
+              <Mini titulo="SFS (salud)" valor={pesos(previewTSS.totales.sfsTotalCents)} />
+              <Mini titulo="SRL (riesgo)" valor={pesos(previewTSS.totales.srlPatronalCents)} />
+              <Mini titulo="INFOTEP" valor={pesos(previewTSS.totales.infotepPatronalCents)} />
+              <Mini titulo="Total TSS" valor={pesos(previewTSS.totales.totalTSSCents)} destacado />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabla de líneas */}
       <Card>
@@ -298,5 +386,15 @@ function Totales({ titulo, valor, destacado }: { titulo: string; valor: string; 
       <div className="text-xs text-muted-foreground">{titulo}</div>
       <div className={`mt-1 font-semibold ${destacado ? 'text-lg text-zero-700' : ''}`}>{valor}</div>
     </CardContent></Card>
+  );
+}
+
+/** Celda compacta para los desgloses de provisiones y TSS (sin Card propia). */
+function Mini({ titulo, valor, destacado }: { titulo: string; valor: string; destacado?: boolean }) {
+  return (
+    <div className="rounded-md border p-2.5">
+      <div className="text-xs text-muted-foreground">{titulo}</div>
+      <div className={`mt-0.5 font-semibold tabular-nums ${destacado ? 'text-zero-700' : ''}`}>{valor}</div>
+    </div>
   );
 }
