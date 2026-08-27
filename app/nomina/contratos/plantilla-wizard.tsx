@@ -16,7 +16,7 @@ const PASOS = [
   { titulo: 'Jornada', descripcion: 'Jornada y horario. La jornada, el turno y el descanso salen de la ficha del empleado.' },
   { titulo: 'Compensación', descripcion: 'Forma de pago y bonos. El salario y la frecuencia salen de la ficha del empleado.' },
   { titulo: 'Vacaciones', descripcion: 'Vacaciones y beneficios de ley.' },
-  { titulo: 'Prueba', descripcion: 'Período de prueba y terminación.' },
+  { titulo: 'Terminación', descripcion: 'Preaviso y auxilio de cesantía cuando correspondan.' },
   { titulo: 'Cláusulas', descripcion: 'Cláusulas adicionales opcionales.' },
   { titulo: 'Revisión', descripcion: 'Revisa el contrato ensamblado y guarda la plantilla.' },
 ] as const;
@@ -68,6 +68,8 @@ export function PlantillaWizard({
 
   async function guardar() {
     if (!nombre.trim()) { toast.error('Ponle un nombre a la plantilla'); setPaso(0); return; }
+    if (!config.lugarTrabajo.trim()) { toast.error('Indica el lugar de trabajo para el contrato RD'); setPaso(1); return; }
+    if (!config.incluirJornada || !config.jornadaTexto.trim()) { toast.error('Indica el horario de trabajo para el contrato RD'); setPaso(2); return; }
     setGuardando(true);
     try {
       const res = await fetch('/api/nomina/contratos/plantillas', {
@@ -186,18 +188,9 @@ export function PlantillaWizard({
           </div>
         )}
 
-        {/* Paso 6 · Prueba y terminación */}
+        {/* Paso 6 · Terminación */}
         {paso === 5 && (
           <div className="space-y-4">
-            <Toggle checked={config.incluirPrueba} onChange={(v) => set('incluirPrueba', v)}
-              label="Período de prueba" hint="Artículo 80 del Código de Trabajo (máximo 90 días)." />
-            {config.incluirPrueba && (
-              <div className="ml-7 flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Días</Label>
-                <Input type="number" min={0} max={90} value={config.pruebaDias}
-                  onChange={(e) => set('pruebaDias', Math.max(0, Math.min(90, Number(e.target.value) || 0)))} className="w-24" />
-              </div>
-            )}
             <Toggle checked={config.incluirTerminacion} onChange={(v) => set('incluirTerminacion', v)}
               label="Cláusula de terminación" hint="Preaviso y auxilio de cesantía según el Código de Trabajo." />
           </div>

@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   if (!plantilla) return NextResponse.json({ error: 'Plantilla no encontrada' }, { status: 404 });
 
   const [team] = await db
-    .select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc, direccion: teams.direccion })
+    .select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc, direccion: teams.direccion, representanteNombre: teams.nombreRepresentante, representanteCedula: teams.cedulaRepresentante })
     .from(teams)
     .where(eq(teams.id, auth.teamId))
     .limit(1);
@@ -68,12 +68,19 @@ export async function POST(req: Request) {
     turno: limpiar(e.turno),
     diasLibres: limpiar(e.diasLibres),
     vacacionesDias: enteroOnull(e.vacacionesDias),
+    sexo: limpiar(e.sexo),
+    fechaNacimiento: limpiar(e.fechaNacimiento),
+    nacionalidad: limpiar(e.nacionalidad),
+    estadoCivil: limpiar(e.estadoCivil),
+    direccion: limpiar(e.direccion),
+    fechaFinContrato: limpiar(e.fechaFinContrato),
+    objetoContrato: limpiar(e.objetoContrato),
   };
 
   const { cuerpo } = cuerpoDeContrato(
     plantilla,
     empleado,
-    { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null },
+    { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null, representanteNombre: team?.representanteNombre ?? null, representanteCedula: team?.representanteCedula ?? null },
     hoyRD(),
   );
 

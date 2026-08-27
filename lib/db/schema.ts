@@ -3567,6 +3567,9 @@ export const empleados = pgTable('empleados', {
   sexo:            varchar('sexo', { length: 20 }),
   fechaNacimiento: date('fecha_nacimiento'),
   nacionalidad:    varchar('nacionalidad', { length: 60 }),
+  estadoCivil:     varchar('estado_civil', { length: 30 }),
+  /** Domicilio/residencia declarado; requerido al emitir contrato estructurado. */
+  direccion:       varchar('direccion', { length: 255 }),
   /** País de trabajo/residencia. El asistente de alta lo captura (estilo Deel). */
   pais:            varchar('pais', { length: 60 }),
   telefono:        varchar('telefono', { length: 30 }),
@@ -3581,6 +3584,10 @@ export const empleados = pgTable('empleados', {
   vacacionesDias:  integer('vacaciones_dias'),
   /** Descanso semanal, texto libre (ej. "Domingo"). */
   diasLibres:      varchar('dias_libres', { length: 40 }),
+  /** Fecha fin para contratos temporales. */
+  fechaFinContrato: date('fecha_fin_contrato'),
+  /** Obra o servicio concreto para contratos por obra. */
+  objetoContrato:  text('objeto_contrato'),
   // ── Procedencia — enlace SUAVE (sin FK) a otro módulo ──
   // 'manual' = alta directa en nómina; 'escolar' = importado de Personal del
   // colegio. Es un soft-ref a propósito (misma familia que fotos.entidad/id):

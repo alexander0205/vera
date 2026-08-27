@@ -82,6 +82,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       sexo:            limpiar(body.sexo),
       fechaNacimiento: limpiar(body.fechaNacimiento),
       nacionalidad:    limpiar(body.nacionalidad),
+      estadoCivil:     limpiar(body.estadoCivil),
+      direccion:       limpiar(body.direccion),
       pais:            limpiar(body.pais),
       telefono:        limpiar(body.telefono),
       email:           limpiar(body.email),
@@ -90,6 +92,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       turno:           limpiar(body.turno),
       vacacionesDias:  enteroOnull(body.vacacionesDias),
       diasLibres:      limpiar(body.diasLibres),
+      fechaFinContrato: limpiar(body.fechaFinContrato),
+      objetoContrato:  limpiar(body.objetoContrato),
       updatedAt:       new Date(),
     })
     .where(and(eq(empleados.id, id), eq(empleados.teamId, auth.teamId)))

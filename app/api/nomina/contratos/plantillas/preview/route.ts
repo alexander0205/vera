@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const config = normalizarConfig(body.config);
 
   const [team] = await db
-    .select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc, direccion: teams.direccion })
+    .select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc, direccion: teams.direccion, representanteNombre: teams.nombreRepresentante, representanteCedula: teams.cedulaRepresentante })
     .from(teams)
     .where(eq(teams.id, auth.teamId))
     .limit(1);
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const cuerpo = ensamblarContrato(
     config,
     EMPLEADO_EJEMPLO,
-    { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null },
+    { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null, representanteNombre: team?.representanteNombre ?? null, representanteCedula: team?.representanteCedula ?? null },
     hoyRD(),
   );
 

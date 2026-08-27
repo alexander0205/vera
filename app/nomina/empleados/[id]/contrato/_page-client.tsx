@@ -90,7 +90,7 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
         body: JSON.stringify({ plantillaId: pid }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.error ?? 'No se pudo generar la vista previa');
+      if (!res.ok) throw new Error([j.error ?? 'No se pudo generar la vista previa', ...(Array.isArray(j.faltantes) ? j.faltantes : [])].join(': '));
       setPreview({ titulo: j.titulo, cuerpo: j.cuerpo });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -118,7 +118,7 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
         body: JSON.stringify({ plantillaId: pid }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.error ?? 'No se pudo generar');
+      if (!res.ok) throw new Error([j.error ?? 'No se pudo generar', ...(Array.isArray(j.faltantes) ? j.faltantes : [])].join(': '));
       toast.success('Contrato generado');
       setPreview(null);
       mutate();

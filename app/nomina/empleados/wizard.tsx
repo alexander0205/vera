@@ -138,7 +138,11 @@ export function EmpleadoWizard({
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ plantillaId: pid }),
               });
-              if (!c.ok) toast.error('El empleado se creó, pero el contrato no se generó; hazlo desde la ficha.');
+              if (!c.ok) {
+                const error = await c.json().catch(() => ({}));
+                const faltantes = Array.isArray(error.faltantes) ? `: ${error.faltantes.join(', ')}` : '';
+                toast.error(`El empleado se creó, pero el contrato no se generó${faltantes}. Complétalo desde la ficha.`);
+              }
             }
           } else if (contratoModo === 'subido' && contratoArchivo) {
             const fd = new FormData();
@@ -196,6 +200,17 @@ export function EmpleadoWizard({
             </Campo>
             <Campo label="Fecha de nacimiento"><Input type="date" value={form.fechaNacimiento} onChange={(e) => set('fechaNacimiento')(e.target.value)} /></Campo>
             <Campo label="Nacionalidad"><Input value={form.nacionalidad} onChange={(e) => set('nacionalidad')(e.target.value)} placeholder="Dominicana" /></Campo>
+            <Campo label="Estado civil">
+              <NativeSelect value={form.estadoCivil} onChange={(e) => set('estadoCivil')(e.target.value)}>
+                <option value="">—</option>
+                <option value="soltero/a">Soltero/a</option>
+                <option value="casado/a">Casado/a</option>
+                <option value="union libre">Unión libre</option>
+                <option value="divorciado/a">Divorciado/a</option>
+                <option value="viudo/a">Viudo/a</option>
+              </NativeSelect>
+            </Campo>
+            <Campo label="Dirección de residencia"><Input value={form.direccion} onChange={(e) => set('direccion')(e.target.value)} /></Campo>
             <Campo label="País"><Input value={form.pais} onChange={(e) => set('pais')(e.target.value)} /></Campo>
             <Campo label="Teléfono"><Input value={form.telefono} onChange={(e) => set('telefono')(e.target.value)} /></Campo>
             <Campo label="Correo"><Input type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} /></Campo>
@@ -224,6 +239,12 @@ export function EmpleadoWizard({
               </NativeSelect>
             </Campo>
             <Campo label="Fecha de ingreso"><Input type="date" value={form.fechaIngreso} onChange={(e) => set('fechaIngreso')(e.target.value)} /></Campo>
+            {form.tipoContrato === 'temporal' && (
+              <Campo label="Fecha de finalización"><Input type="date" value={form.fechaFinContrato} onChange={(e) => set('fechaFinContrato')(e.target.value)} /></Campo>
+            )}
+            {form.tipoContrato === 'por_obra' && (
+              <div className="sm:col-span-2"><Campo label="Obra o servicio determinado"><Input value={form.objetoContrato} onChange={(e) => set('objetoContrato')(e.target.value)} placeholder="Ej. Implementación del sistema X" /></Campo></div>
+            )}
             <Campo label="Vacaciones (días/año)">
               <Input value={form.vacacionesDias} onChange={(e) => set('vacacionesDias')(e.target.value)} inputMode="numeric" placeholder="14" />
             </Campo>

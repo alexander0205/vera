@@ -79,6 +79,8 @@ export async function POST(req: Request) {
       sexo:            limpiar(body.sexo),
       fechaNacimiento: limpiar(body.fechaNacimiento),
       nacionalidad:    limpiar(body.nacionalidad),
+      estadoCivil:     limpiar(body.estadoCivil),
+      direccion:       limpiar(body.direccion),
       pais:            limpiar(body.pais),
       telefono:        limpiar(body.telefono),
       email:           limpiar(body.email),
@@ -87,6 +89,8 @@ export async function POST(req: Request) {
       turno:           limpiar(body.turno),
       vacacionesDias:  enteroOnull(body.vacacionesDias),
       diasLibres:      limpiar(body.diasLibres),
+      fechaFinContrato: limpiar(body.fechaFinContrato),
+      objetoContrato:  limpiar(body.objetoContrato),
       createdBy:       auth.user.id,
     })
     .returning();

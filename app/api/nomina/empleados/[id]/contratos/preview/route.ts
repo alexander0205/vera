@@ -11,7 +11,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaContratoPlantillas, teams } from '@/lib/db/schema';
 import { hoyRD } from '@/lib/utils/format';
-import { cuerpoDeContrato } from '@/lib/nomina/contrato-estructura';
+import { cuerpoDeContrato, normalizarConfig, validarContratoEstructuradoRD } from '@/lib/nomina/contrato-estructura';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,22 +41,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!plantilla) return NextResponse.json({ error: 'Plantilla no encontrada' }, { status: 404 });
 
   const [team] = await db
-    .select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc, direccion: teams.direccion })
+    .select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc, direccion: teams.direccion, representanteNombre: teams.nombreRepresentante, representanteCedula: teams.cedulaRepresentante })
     .from(teams)
     .where(eq(teams.id, auth.teamId))
     .limit(1);
 
-  const { cuerpo, titulo } = cuerpoDeContrato(
-    plantilla,
-    {
+  const empleadoContrato = {
       nombres: empleado.nombres, apellidos: empleado.apellidos, cedula: empleado.cedula,
       cargo: empleado.cargo, salarioBaseCents: empleado.salarioBaseCents,
       tipoContrato: empleado.tipoContrato, frecuenciaPago: empleado.frecuenciaPago,
       fechaIngreso: empleado.fechaIngreso,
       jornada: empleado.jornada, turno: empleado.turno,
       diasLibres: empleado.diasLibres, vacacionesDias: empleado.vacacionesDias,
-    },
-    { nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null },
+      sexo: empleado.sexo, fechaNacimiento: empleado.fechaNacimiento, nacionalidad: empleado.nacionalidad,
+      estadoCivil: empleado.estadoCivil, direccion: empleado.direccion,
+      fechaFinContrato: empleado.fechaFinContrato, objetoContrato: empleado.objetoContrato,
+  };
+  const empresaContrato = {
+    nombre: team?.razonSocial ?? team?.name ?? 'La empresa', rnc: team?.rnc ?? null, direccion: team?.direccion ?? null,
+    representanteNombre: team?.representanteNombre ?? null, representanteCedula: team?.representanteCedula ?? null,
+  };
+  if (plantilla.config != null && typeof plantilla.config === 'object') {
+    const faltantes = validarContratoEstructuradoRD(normalizarConfig(plantilla.config), empleadoContrato, empresaContrato);
+    if (faltantes.length) return NextResponse.json({ error: 'Faltan datos requeridos para el contrato RD', faltantes }, { status: 422 });
+  }
+
+  const { cuerpo, titulo } = cuerpoDeContrato(
+    plantilla,
+    empleadoContrato,
+    empresaContrato,
     hoyRD(),
   );
 

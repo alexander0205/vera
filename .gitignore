@@ -88,3 +88,8 @@ transcripciones/
 docs/plan-contabilidad-vera.md
 docs/mini-plan-contabilidad-asientos-reportes.md
 docs/mockup-cuentas-por-cobrar-paso-1.html
+
+# Herramientas locales de redacción de video (demo) — nunca versionar
+.inspection/
+.video-tools/
+redact-video.ps1

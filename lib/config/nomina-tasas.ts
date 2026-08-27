@@ -45,7 +45,9 @@ export interface TasasNomina {
   sfsPatronal: number;
   /** Seguro de Riesgos Laborales (SRL). Varía por empresa; este es el piso. */
   srlPatronal: number;
-  /** INFOTEP (formación técnica). */
+  /** INFOTEP (formación técnica), 1 % patronal sobre nómina ordinaria.
+   * El 0.5 % del trabajador aplica únicamente a utilidades/bonificaciones y
+   * se modelará con ese flujo, no como deducción del salario base. */
   infotepPatronal: number;
 
   // ── Topes del salario cotizable a la TSS ──

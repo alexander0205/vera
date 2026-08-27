@@ -22,6 +22,8 @@ export interface Empleado {
   sexo: string | null;
   fechaNacimiento: string | null;
   nacionalidad: string | null;
+  estadoCivil: string | null;
+  direccion: string | null;
   pais: string | null;
   telefono: string | null;
   email: string | null;
@@ -30,6 +32,8 @@ export interface Empleado {
   turno: string | null;
   vacacionesDias: number | null;
   diasLibres: string | null;
+  fechaFinContrato: string | null;
+  objetoContrato: string | null;
   origen: string;
   origenRef: string | null;
 }
@@ -79,9 +83,9 @@ export function formVacio() {
     tipoContrato: 'indefinido', salarioBase: '', frecuenciaPago: 'mensual',
     fechaIngreso: '', afp: '', ars: '',
     bancoNombre: '', bancoCuenta: '', bancoTipoCuenta: '',
-    sexo: '', fechaNacimiento: '', nacionalidad: '', pais: 'República Dominicana',
+    sexo: '', fechaNacimiento: '', nacionalidad: '', estadoCivil: '', direccion: '', pais: 'República Dominicana',
     telefono: '', email: '', notas: '',
-    jornada: 'tiempo_completo', turno: 'diurno', vacacionesDias: '', diasLibres: '',
+    jornada: 'tiempo_completo', turno: 'diurno', vacacionesDias: '', diasLibres: '', fechaFinContrato: '', objetoContrato: '',
     estado: 'activo', fechaSalida: '',
   };
 }
@@ -94,10 +98,10 @@ export function empleadoAForm(e: Empleado): FormState {
     frecuenciaPago: e.frecuenciaPago, fechaIngreso: e.fechaIngreso ?? '',
     afp: e.afp ?? '', ars: e.ars ?? '',
     bancoNombre: e.bancoNombre ?? '', bancoCuenta: e.bancoCuenta ?? '', bancoTipoCuenta: e.bancoTipoCuenta ?? '',
-    sexo: e.sexo ?? '', fechaNacimiento: e.fechaNacimiento ?? '', nacionalidad: e.nacionalidad ?? '',
+    sexo: e.sexo ?? '', fechaNacimiento: e.fechaNacimiento ?? '', nacionalidad: e.nacionalidad ?? '', estadoCivil: e.estadoCivil ?? '', direccion: e.direccion ?? '',
     pais: e.pais ?? '', telefono: e.telefono ?? '', email: e.email ?? '', notas: e.notas ?? '',
     jornada: e.jornada ?? '', turno: e.turno ?? '',
-    vacacionesDias: e.vacacionesDias != null ? String(e.vacacionesDias) : '', diasLibres: e.diasLibres ?? '',
+    vacacionesDias: e.vacacionesDias != null ? String(e.vacacionesDias) : '', diasLibres: e.diasLibres ?? '', fechaFinContrato: e.fechaFinContrato ?? '', objetoContrato: e.objetoContrato ?? '',
     estado: e.estado, fechaSalida: e.fechaSalida ?? '',
   };
 }

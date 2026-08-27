@@ -26,6 +26,8 @@ export interface EmpresaContrato {
   nombre: string;
   rnc: string | null;
   direccion: string | null;
+  representanteNombre?: string | null;
+  representanteCedula?: string | null;
 }
 
 /** Catálogo de marcadores disponibles, para mostrarle al usuario qué puede usar. */

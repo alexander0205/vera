@@ -6,7 +6,8 @@
  * y `ensamblarContrato` produce el texto legal RD juntando fragmentos de
  * cláusula predefinidos con los datos del empleado y la empresa.
  *
- * Puro y sin BD. NO es asesoría legal: son cláusulas base ajustables.
+ * Puro y sin BD. Base revisada contra Código de Trabajo (Ley 16-92), art. 24;
+ * no sustituye revisión jurídica de cláusulas especiales o casos concretos.
  */
 import {
   type EmpleadoContrato, type EmpresaContrato, variablesDeContrato, rellenarPlantilla, fechaLarga,
@@ -18,6 +19,13 @@ export interface EmpleadoContratoExt extends EmpleadoContrato {
   turno: string | null;
   diasLibres: string | null;
   vacacionesDias: number | null;
+  sexo: string | null;
+  fechaNacimiento: string | null;
+  nacionalidad: string | null;
+  estadoCivil: string | null;
+  direccion: string | null;
+  fechaFinContrato: string | null;
+  objetoContrato: string | null;
 }
 
 /** Configuración estructurada de una plantilla (lo que arma el wizard). */
@@ -36,9 +44,7 @@ export interface ContratoConfig {
   // Paso 5 · Vacaciones y beneficios
   incluirVacaciones: boolean;
   incluirRegalia: boolean;
-  // Paso 6 · Prueba y terminación
-  incluirPrueba: boolean;
-  pruebaDias: number;
+  // Paso 6 · Terminación
   incluirTerminacion: boolean;
   // Paso 7 · Cláusulas extra
   confidencialidad: boolean;
@@ -58,8 +64,6 @@ export const CONFIG_DEFAULT: ContratoConfig = {
   bonos: '',
   incluirVacaciones: true,
   incluirRegalia: true,
-  incluirPrueba: true,
-  pruebaDias: 90,
   incluirTerminacion: true,
   confidencialidad: false,
   noCompetencia: false,
@@ -75,11 +79,18 @@ const LABEL_TURNO: Record<string, string> = {
 const LABEL_FORMA_PAGO: Record<ContratoConfig['formaPago'], string> = {
   transferencia: 'transferencia bancaria', efectivo: 'efectivo', cheque: 'cheque',
 };
+const LABEL_SEXO: Record<string, string> = { masculino: 'masculino', femenino: 'femenino' };
+
+/** Edad declarada a la fecha de firma; el documento conserva esa fecha. */
+function edadEnFecha(fechaNacimiento: string, hoyYMD: string): number {
+  const [ny, nm, nd] = fechaNacimiento.split('-').map(Number);
+  const [hy, hm, hd] = hoyYMD.split('-').map(Number);
+  return hy - ny - (hm < nm || (hm === nm && hd < nd) ? 1 : 0);
+}
 
 /** Normaliza una config parcial (de la BD o del cliente) a una completa. */
 export function normalizarConfig(raw: unknown): ContratoConfig {
   const c = (raw ?? {}) as Partial<ContratoConfig>;
-  const dias = Math.trunc(Number(c.pruebaDias));
   return {
     ...CONFIG_DEFAULT,
     ...c,
@@ -89,19 +100,52 @@ export function normalizarConfig(raw: unknown): ContratoConfig {
     bonos: String(c.bonos ?? ''),
     formaPago: (['transferencia', 'efectivo', 'cheque'] as const).includes(c.formaPago as ContratoConfig['formaPago'])
       ? (c.formaPago as ContratoConfig['formaPago']) : 'transferencia',
-    pruebaDias: Number.isFinite(dias) && dias >= 0 && dias <= 90 ? dias : 90,
     // Booleans: respeta lo que venga, cae al default si no es booleano.
     incluirFunciones: typeof c.incluirFunciones === 'boolean' ? c.incluirFunciones : CONFIG_DEFAULT.incluirFunciones,
     incluirJornada: typeof c.incluirJornada === 'boolean' ? c.incluirJornada : CONFIG_DEFAULT.incluirJornada,
     incluirBonos: typeof c.incluirBonos === 'boolean' ? c.incluirBonos : CONFIG_DEFAULT.incluirBonos,
     incluirVacaciones: typeof c.incluirVacaciones === 'boolean' ? c.incluirVacaciones : CONFIG_DEFAULT.incluirVacaciones,
     incluirRegalia: typeof c.incluirRegalia === 'boolean' ? c.incluirRegalia : CONFIG_DEFAULT.incluirRegalia,
-    incluirPrueba: typeof c.incluirPrueba === 'boolean' ? c.incluirPrueba : CONFIG_DEFAULT.incluirPrueba,
     incluirTerminacion: typeof c.incluirTerminacion === 'boolean' ? c.incluirTerminacion : CONFIG_DEFAULT.incluirTerminacion,
     confidencialidad: typeof c.confidencialidad === 'boolean' ? c.confidencialidad : CONFIG_DEFAULT.confidencialidad,
     noCompetencia: typeof c.noCompetencia === 'boolean' ? c.noCompetencia : CONFIG_DEFAULT.noCompetencia,
     propiedadIntelectual: typeof c.propiedadIntelectual === 'boolean' ? c.propiedadIntelectual : CONFIG_DEFAULT.propiedadIntelectual,
   };
+}
+
+/**
+ * Datos mínimos del modelo estructurado según art. 24, Ley 16-92. Las
+ * plantillas de texto libre siguen editables porque su redactor controla el
+ * contenido; no se puede inferir programáticamente que los incluyan.
+ */
+export function validarContratoEstructuradoRD(
+  config: ContratoConfig,
+  empleado: EmpleadoContratoExt,
+  empresa: EmpresaContrato,
+): string[] {
+  const faltantes: string[] = [];
+  const requiere = (ok: unknown, campo: string) => { if (!ok) faltantes.push(campo); };
+
+  requiere(empleado.cedula, 'cédula del trabajador');
+  requiere(empleado.nacionalidad, 'nacionalidad del trabajador');
+  requiere(empleado.fechaNacimiento, 'fecha de nacimiento del trabajador');
+  requiere(empleado.sexo, 'sexo del trabajador');
+  requiere(empleado.estadoCivil, 'estado civil del trabajador');
+  requiere(empleado.direccion, 'dirección de residencia del trabajador');
+  requiere(empleado.cargo, 'servicio o cargo');
+  requiere(empleado.fechaIngreso, 'fecha de inicio');
+  requiere(empleado.salarioBaseCents > 0, 'salario');
+  requiere(config.incluirJornada && config.jornadaTexto.trim(), 'horario de trabajo');
+  requiere(config.lugarTrabajo.trim(), 'lugar de trabajo');
+  requiere(empresa.rnc, 'RNC del empleador');
+  requiere(empresa.direccion, 'domicilio del empleador');
+  requiere(empresa.representanteNombre, 'representante legal del empleador');
+  requiere(empresa.representanteCedula, 'cédula del representante legal');
+
+  if (empleado.tipoContrato === 'temporal') requiere(empleado.fechaFinContrato, 'fecha de finalización del contrato temporal');
+  if (empleado.tipoContrato === 'por_obra') requiere(empleado.objetoContrato?.trim(), 'obra o servicio determinado');
+  if (empleado.tipoContrato === 'pasantia') faltantes.push('modelo específico de pasantía validado legalmente');
+  return faltantes;
 }
 
 const ORDINALES = [
@@ -122,6 +166,15 @@ export function ensamblarContrato(
 ): string {
   const v = variablesDeContrato(empleado, empresa, hoyYMD);
   const clausulas: string[] = [];
+
+  // Modalidad: Ley 16-92, arts. 25, 26 y 31.
+  if (empleado.tipoContrato === 'temporal') {
+    clausulas.push(`Este contrato se celebra por cierto tiempo, desde el ${v.fecha_ingreso} hasta el ${fechaLarga(empleado.fechaFinContrato)}, conforme a la naturaleza temporal del servicio pactado.`);
+  } else if (empleado.tipoContrato === 'por_obra') {
+    clausulas.push(`Este contrato se celebra para la obra o servicio determinado siguiente: ${empleado.objetoContrato?.trim()}. Concluye al terminar dicha obra o servicio, conforme al Código de Trabajo de la República Dominicana.`);
+  } else {
+    clausulas.push('Este contrato se celebra por tiempo indefinido, conforme al Código de Trabajo de la República Dominicana.');
+  }
 
   // Puesto y funciones (siempre)
   let puesto = `EL/LA TRABAJADOR(A) prestará sus servicios a EL EMPLEADOR desempeñando el cargo de ${v.cargo}, a partir del ${v.fecha_ingreso}`;
@@ -145,7 +198,7 @@ export function ensamblarContrato(
   }
 
   // Compensación (siempre)
-  let comp = `EL EMPLEADOR pagará a EL/LA TRABAJADOR(A) un salario de ${v.salario} (${v.salario_letras}), con frecuencia de pago ${v.frecuencia}, mediante ${LABEL_FORMA_PAGO[config.formaPago]}, sujeto a las deducciones de ley (AFP, SFS e ISR) que correspondan.`;
+  let comp = `EL EMPLEADOR pagará a EL/LA TRABAJADOR(A) un salario de ${v.salario} (${v.salario_letras}), con frecuencia de pago ${v.frecuencia}, mediante ${LABEL_FORMA_PAGO[config.formaPago]}, sujeto únicamente a las deducciones y retenciones legalmente aplicables, incluyendo AFP, SFS e ISR cuando correspondan.`;
   if (config.incluirBonos && config.bonos.trim()) comp += ` Adicionalmente: ${config.bonos.trim()}.`;
   clausulas.push(comp);
 
@@ -157,10 +210,6 @@ export function ensamblarContrato(
   // Regalía
   if (config.incluirRegalia) {
     clausulas.push('EL/LA TRABAJADOR(A) tendrá derecho al salario de Navidad (regalía pascual) conforme a los artículos 219 y siguientes del Código de Trabajo.');
-  }
-  // Período de prueba
-  if (config.incluirPrueba) {
-    clausulas.push(`Las partes acuerdan un período de prueba de ${config.pruebaDias} días, conforme al artículo 80 del Código de Trabajo, durante el cual cualquiera de las partes podrá poner término al contrato sin responsabilidad.`);
   }
   // Terminación
   if (config.incluirTerminacion) {
@@ -185,7 +234,7 @@ export function ensamblarContrato(
 
   return `CONTRATO DE TRABAJO ${v.tipo_contrato.toUpperCase()}
 
-Entre ${v.empresa}, RNC ${v.empresa_rnc}, con domicilio en ${v.empresa_direccion}, en lo adelante «EL EMPLEADOR»; y ${v.nombre}, portador(a) de la cédula de identidad y electoral No. ${v.cedula}, en lo adelante «EL/LA TRABAJADOR(A)», se ha convenido el siguiente contrato de trabajo:
+Entre ${v.empresa}, RNC ${v.empresa_rnc}, con domicilio en ${v.empresa_direccion}, debidamente representada por ${empresa.representanteNombre ?? '—'}, titular de la cédula No. ${empresa.representanteCedula ?? '—'}, en lo adelante «EL EMPLEADOR»; y ${v.nombre}, de nacionalidad ${empleado.nacionalidad ?? '—'}, ${empleado.fechaNacimiento ? `${edadEnFecha(empleado.fechaNacimiento, hoyYMD)} años de edad` : '—'}, de sexo ${LABEL_SEXO[empleado.sexo ?? ''] ?? empleado.sexo ?? '—'}, estado civil ${empleado.estadoCivil ?? '—'}, con domicilio en ${empleado.direccion ?? '—'}, portador(a) de la cédula de identidad y electoral No. ${v.cedula}, en lo adelante «EL/LA TRABAJADOR(A)», se ha convenido el siguiente contrato de trabajo:
 
 ${cuerpoClausulas}
 
@@ -241,6 +290,13 @@ export const EMPLEADO_EJEMPLO: EmpleadoContratoExt = {
   turno: 'diurno',
   diasLibres: 'domingo',
   vacacionesDias: 14,
+  sexo: '—',
+  fechaNacimiento: '1990-01-01',
+  nacionalidad: '—',
+  estadoCivil: '—',
+  direccion: '—',
+  fechaFinContrato: null,
+  objetoContrato: null,
 };
 
 export { fechaLarga };

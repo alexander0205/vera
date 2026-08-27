@@ -13,8 +13,6 @@ export interface ContratoConfig {
   bonos: string;
   incluirVacaciones: boolean;
   incluirRegalia: boolean;
-  incluirPrueba: boolean;
-  pruebaDias: number;
   incluirTerminacion: boolean;
   confidencialidad: boolean;
   noCompetencia: boolean;
@@ -26,7 +24,7 @@ export const CONFIG_DEFAULT: ContratoConfig = {
   incluirJornada: true, jornadaTexto: '',
   formaPago: 'transferencia', incluirBonos: false, bonos: '',
   incluirVacaciones: true, incluirRegalia: true,
-  incluirPrueba: true, pruebaDias: 90, incluirTerminacion: true,
+  incluirTerminacion: true,
   confidencialidad: false, noCompetencia: false, propiedadIntelectual: false,
 };
 
@@ -46,7 +44,6 @@ export function resumenClausulas(c: ContratoConfig): string {
   if (c.incluirJornada) on.push('Jornada');
   if (c.incluirVacaciones) on.push('Vacaciones');
   if (c.incluirRegalia) on.push('Regalía');
-  if (c.incluirPrueba) on.push('Prueba');
   if (c.incluirTerminacion) on.push('Terminación');
   if (c.confidencialidad) on.push('Confidencialidad');
   if (c.noCompetencia) on.push('No competencia');
