@@ -24,6 +24,25 @@ function enteroOnull(v: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** GET /api/nomina/empleados/[id] — trae un empleado del team (para su ficha/edición). */
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireModuleAndPermission('nomina', 'empleados:ver');
+  if (!auth.ok) return auth.response;
+
+  const { id: idRaw } = await params;
+  const id = Number(idRaw);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+
+  const [fila] = await db
+    .select()
+    .from(empleados)
+    .where(and(eq(empleados.id, id), eq(empleados.teamId, auth.teamId)))
+    .limit(1);
+
+  if (!fila) return NextResponse.json({ error: 'Empleado no encontrado' }, { status: 404 });
+  return NextResponse.json({ empleado: fila });
+}
+
 /** PATCH /api/nomina/empleados/[id] — edita un empleado del team. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('nomina', 'empleados:gestionar');
