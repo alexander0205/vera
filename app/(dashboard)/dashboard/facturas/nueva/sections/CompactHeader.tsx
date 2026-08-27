@@ -27,6 +27,24 @@ interface Props {
   fechaEmision: string;
   /** Permite elegir la fecha de emisión (permiso facturas:fecha-personalizada). */
   puedeEditarFecha?: boolean;
+  /**
+   * Deja en la cabecera solo la secuencia de NCF y la fecha.
+   *
+   * Cuando la factura se hace desde la ficha de una familia, el emisor sobra:
+   * ya se está dentro del colegio, con su nombre en la barra de arriba, y
+   * repetir el logo y el RNC solo come el ancho del cajón. Lo que sí hay que
+   * poder ver y cambiar es con qué secuencia sale y con qué fecha.
+   */
+  camposMinimos?: boolean;
+  /**
+   * El tipo de comprobante no se elige: viene dado.
+   *
+   * El colegio factura SIN NCF. Dejando el desplegable, cualquiera podía pasar
+   * la factura de una familia a e31 o e32 y mandarla firmada a la DGII —con un
+   * número de la secuencia fiscal gastado y sin vuelta atrás— desde una
+   * pantalla donde eso nunca es lo que se quiere.
+   */
+  tipoBloqueado?: boolean;
   /** Actualiza la fecha de emisión (YYYY-MM-DD). Requerido si puedeEditarFecha. */
   onChangeFecha?: (v: string) => void;
   onEditarNcf: () => void;
@@ -36,6 +54,7 @@ export function CompactHeader({
   empresa, categoriaId, setCategoriaId, tipoEcf, onChangeTipo,
   ocultarCategoria, mostrarCodigoTipo = true, sinComprobante = false,
   secuencia, fechaEmision, puedeEditarFecha = false, onChangeFecha, onEditarNcf,
+  camposMinimos = false, tipoBloqueado = false,
 }: Props) {
   // "Sin comprobante" efectivo: la secuencia es sin-ncf, o es una nota sobre una
   // factura sin e-CF (nunca tendrá e-NCF real).
@@ -60,7 +79,7 @@ export function CompactHeader({
   return (
     <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: { xs: 1.5, md: 2 } }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '20px 10px' }}>
-        <EmpresaBlock empresa={empresa} />
+        {!camposMinimos && <EmpresaBlock empresa={empresa} />}
 
         {/* Tipos selector — categoría (oculta si fija por ruta) + subtipo. El
             subtipo solo se muestra cuando la categoría tiene más de un tipo;
@@ -86,10 +105,14 @@ export function CompactHeader({
               ))}
             </Select>
           )}
-          {ocultarCategoria && (
+          {ocultarCategoria && !camposMinimos && (
             <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937', px: 0.5 }}>{categoriaActual.label}</Typography>
           )}
-          {tiposCategoria.length > 1 ? (
+          {tipoBloqueado ? (
+            <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#2a45c4', px: 1 }}>
+              {tiposCategoria.find(t => t.codigo === tipoEcf)?.etiqueta ?? 'Sin NCF'}
+            </Typography>
+          ) : tiposCategoria.length > 1 ? (
             <Select
               value={tipoEcf}
               onChange={(e) => { if (e.target.value) onChangeTipo(e.target.value); }}

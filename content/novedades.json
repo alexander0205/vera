@@ -117,6 +117,11 @@
         "tipo": "arreglo",
         "titulo": "Crear un cliente ya no te borra la factura recurrente",
         "detalle": "En una factura recurrente, pulsar «Nuevo cliente» te sacaba de la pantalla y al volver todo lo que habías llenado estaba en blanco. Ahora el cliente se crea sin salir, y queda seleccionado al cerrar."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Las secuencias de comprobantes ya no se inventan solas",
+        "detalle": "Al dar de alta una institución se le creaban diez rangos de numeración de oficio, con números que nadie había autorizado. Ahora se crea sin ninguno, y cada rango se carga a mano desde Configuración con los datos exactos de la autorización. Mientras tanto se puede facturar sin comprobante fiscal con normalidad."
       }
     ]
   },

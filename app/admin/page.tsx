@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { db } from '@/lib/db/drizzle';
 import {
   users,
@@ -70,6 +71,7 @@ const ESTADO_META: Record<string, { label: string; dot: string; text: string }> 
 };
 
 export default async function AdminDashboard() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());

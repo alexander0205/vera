@@ -1,8 +1,9 @@
 /**
  * El enlace de pago de un responsable, para poder verlo y mandarlo a mano.
  *
- *   GET ?clientId=N   → { url, referencia }
- *   GET ?facturaId=N  → lo mismo, resolviendo el responsable desde la factura
+ *   GET ?clientId=N               → { existe:true, url, referencia }  · lo crea si falta
+ *   GET ?facturaId=N              → lo mismo, resolviendo el responsable desde la factura
+ *   GET ?clientId=N&consultar=1   → { existe } sin crear nada
  *
  * Lo crea si no existe. No es un efecto raro: el enlace no caduca, es único por
  * responsable y no revela nada por existir — lo que hace falta para verlo es
@@ -18,7 +19,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes, ecfDocuments } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
+import { buscarLink, getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
 import { origenPublico } from '@/lib/http/origen-publico';
 
 export async function GET(req: NextRequest) {
@@ -90,10 +91,23 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // `?consultar=1` mira sin crear. La pantalla lo usa para poder avisar «esto
+  // va a generar un enlace nuevo» ANTES de generarlo: sin esta rama, abrir el
+  // menú por curiosidad ya dejaba fila y nadie se enteraba.
+  if (sp.get('consultar') === '1') {
+    const ya = await buscarLink(auth.teamId, clientId);
+    return NextResponse.json(
+      ya
+        ? { existe: true, url: urlDelLink(ya.token, origenPublico(req)), referencia: ya.referencia }
+        : { existe: false },
+    );
+  }
+
   const link = await getOCrearLink(auth.teamId, clientId);
   // Desde el origen de ESTA petición: lo que se devuelve aquí es para que
   // alguien lo copie del navegador que lo está pidiendo.
   return NextResponse.json({
+    existe: true,
     url: urlDelLink(link.token, origenPublico(req)),
     referencia: link.referencia,
   });

@@ -29,17 +29,31 @@ import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
-import { useTabUrl } from '@/lib/hooks/useUrlEstado';
+import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
 
 import { DetalleCuotaDialog, type CobroDelColegio, type CuotaDetallada, type ReglasCuota } from '@/components/administracion-escolar/DetalleCuotaDialog';
-import { FacturarCargosDialog, type FacturaCreada } from '@/components/administracion-escolar/FacturarCargosDialog';
+import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
+import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { toast } from 'sonner';
+
+/**
+ * Un cargo se puede meter en una factura nueva.
+ *
+ * Las tres condiciones son las mismas que exige el prefill, y se comprueban
+ * aquí para no ofrecer una casilla que después devuelve 409: sin factura
+ * previa —volver a facturarlo le cobraría dos veces a la familia—, con saldo
+ * vivo y en un estado cobrable.
+ */
+const ESTADOS_COBRABLES = ['pendiente', 'parcial', 'vencido'];
+export function cargoMarcable(c: { ecfDocumentId: number | null; saldoCentavos: number; estado: string }) {
+  return c.ecfDocumentId == null && c.saldoCentavos > 0 && ESTADOS_COBRABLES.includes(c.estado);
+}
 
 /** El plan de cobro de cada matrícula, tal como lo devuelve la ficha. */
 export type PlanesPorMatricula = Record<number, { lineas: PlanLinea[]; devenga: boolean }>;
@@ -220,7 +234,7 @@ const VISTAS = ['mensualidades', 'otros', 'facturas', 'pagos'] as const;
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, avisos, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onEnviarFactura, onReenviarAviso, reenviandoCargoId }: {
+export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, avisos, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, perfilEmpresa, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onEnviarFactura, onReenviarAviso, reenviandoCargoId }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   planes: PlanesPorMatricula | undefined;
   /** Recargo del negocio y canales del colegio: para explicar cada cuota. */
@@ -236,6 +250,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   puedeGestionar: boolean;
   estudianteId: number;
   tutorClientId: number | null;
+  /** Datos del emisor, resueltos en el servidor por la página. Los usa el cajón. */
+  perfilEmpresa: EmpresaPerfil | null;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   aplicandoMoraFacturaId: number | null;
@@ -258,12 +274,75 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   // Mes preseleccionado al agregar cargo desde el panel de un mes específico.
   // null = flujo general (elige el mes en el diálogo).
   const [cargoMesInicial, setCargoMesInicial] = useState<{ mes: number; anio: number } | null>(null);
-  const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
-  // Cargos que el modal de facturar arranca marcados. null = cerrado.
-  const [cargosFacturar, setCargosFacturar] = useState<number[] | null>(null);
-  // La factura recién creada: se enseña el resumen y se ofrece cobrarla en el
-  // acto, que es lo que pasa de verdad — el padre está delante del mostrador.
-  const [facturaCreada, setFacturaCreada] = useState<FacturaCreada | null>(null);
+  /** Crear el mismo concepto en varios meses de una vez. */
+  const [crearVariosAbierto, setCrearVariosAbierto] = useState(false);
+  /**
+   * Los cargos marcados para facturar juntos.
+   *
+   * Antes esto era un diálogo aparte: un botón abría una lista con los cargos
+   * repetidos y ahí se marcaban. Eran los MISMOS cargos que ya estaban en la
+   * tabla de detrás, escritos otra vez con otro formato y sin su estado ni su
+   * vencimiento — y para saber cuál era cuál había que cerrarlo y volver a
+   * mirar. Ahora se marcan donde se leen.
+   */
+  const [marcados, setMarcados] = useState<Set<number>>(new Set());
+
+  function alternarCargo(id: number) {
+    setMarcados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  /** Marca o desmarca de golpe los cargos facturables de un mes. */
+  function alternarVarios(ids: number[]) {
+    if (ids.length === 0) return;
+    setMarcados((prev) => {
+      const next = new Set(prev);
+      const todosPuestos = ids.every((id) => next.has(id));
+      for (const id of ids) { if (todosPuestos) next.delete(id); else next.add(id); }
+      return next;
+    });
+  }
+  /**
+   * Facturar ya no es un modal: es el mismo cajón de la ficha de la familia.
+   *
+   * Aquí había un diálogo propio —con su selector de comprobante, su lista de
+   * conceptos y su «Avanzado» que se iba a /dashboard/facturas/nueva— y detrás
+   * un segundo modal con el resumen de lo que había salido. Dos pantallas
+   * distintas para lo mismo, con otras reglas: aquel dejaba elegir e31/e32
+   * —el colegio factura sin NCF— y no ataba los cargos a la factura por el
+   * mismo camino. Ahora el alumno y la familia facturan por el mismo sitio.
+   *
+   * Y vive en la URL, no en un `useState`: recargar no lo cierra y el enlace
+   * se puede mandar.
+   *
+   *   ?factura=c:12,13     → esos cargos
+   *   ?factura=p:2811.44.3 → un mes por adelantado (matrícula.cuota.concepto)
+   */
+  const { params: qs, setParams } = useUrlParams();
+  const enCurso = qs.get('factura');
+
+  const cajon = useMemo(() => {
+    if (!enCurso) return null;
+    if (enCurso.startsWith('c:')) {
+      const ids = enCurso.slice(2).split(',')
+        .map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      return ids.length ? { cargos: ids, previsto: null } : null;
+    }
+    if (enCurso.startsWith('p:')) {
+      const [m, c, k] = enCurso.slice(2).split('.').map(Number);
+      return [m, c, k].every((n) => Number.isInteger(n) && n > 0)
+        ? { cargos: null, previsto: { matriculaId: m, cuotaId: c, conceptoId: k } }
+        : null;
+    }
+    return null;
+  }, [enCurso]);
+
+  const facturarCargos = (ids: number[]) => {
+    if (ids.length) setParams({ factura: `c:${ids.join(',')}` });
+  };
 
   /**
    * Por qué canales ya salió el aviso de cada cargo.
@@ -287,8 +366,6 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   /** La cuota cuyo detalle se está mirando. Solo lectura: no cambia nada. */
   const [cuotaDetalle, setCuotaDetalle] = useState<Previsto | null>(null);
   const [previstoOmitir, setPrevistoOmitir] = useState<Previsto | null>(null);
-  const [previstoFacturar, setPrevistoFacturar] = useState<
-    { matriculaId: number; cuotaId: number; conceptoId: number } | null>(null);
   const [aplicandoPrevisto, setAplicandoPrevisto] = useState(false);
   const matriculaId = grupo.matriculaId;
 
@@ -313,11 +390,10 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
     if (!matriculaId) return;
     if (accion === 'omitir' && previstoOmitir?.key !== p.key) { setPrevistoOmitir(p); return; }
     if (accion === 'adelantar') {
-      // Ya no se crea el cargo aquí. La cuota entra en el modal como una línea
+      // Ya no se crea el cargo aquí. La cuota entra en el cajón como una línea
       // más y se convierte en deuda al confirmar la factura: sin factura no
       // debe haber deuda.
-      setPrevistoFacturar({ matriculaId, cuotaId: p.cuotaId, conceptoId: p.conceptoId });
-      setCargosFacturar([]);
+      setParams({ factura: `p:${matriculaId}.${p.cuotaId}.${p.conceptoId}` });
       return;
     }
     setAplicandoPrevisto(true);
@@ -394,6 +470,24 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
       ? cargosSinFactura.filter((c) => c.conceptoTipo === 'mensualidad')
       : cargosSinFactura;
   /**
+   * Lo marcado que TODAVÍA se puede facturar, y su total.
+   *
+   * Se cruza contra los cargos frescos en vez de fiarse de la marca: al crear
+   * la factura esos cargos dejan de ser facturables y la marca se cae sola. Sin
+   * esto, la barra seguiría diciendo «3 cargos · RD$2,200» encima de tres
+   * cargos ya facturados, y volver a pulsar los facturaría otra vez.
+   *
+   * Mira TODOS los cargos del período, no solo los de la sub-vista: cambiar de
+   * pestaña es un filtro de lectura, y esconder de la barra lo que se marcó en
+   * la otra haría emitir una factura con líneas que no se ven por ninguna parte.
+   */
+  const marcadosVivos = cargosPeriodo.filter((c) => marcados.has(c.id) && cargoMarcable(c));
+  const resumenMarcados = {
+    ids: marcadosVivos.map((c) => c.id),
+    total: marcadosVivos.reduce((acc, c) => acc + c.saldoCentavos, 0),
+  };
+
+  /**
    * Por qué está apagado «Facturar varios». Hay tres razones distintas y solo
    * una es un callejón sin salida:
    *  - no queda nada por cobrar → no hay nada que facturar;
@@ -436,19 +530,20 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
               {grupo.facturaRecurrenteId ? 'Gestionar mensualidad' : 'Configurar mensualidad'}
             </Button>
           )}
-          {puedeFacturar && (
-            /* El span de fuera existe para el tooltip: un <button disabled> no
-               dispara eventos de mouse, así que el `title` puesto en él nunca
-               se vería. Y verlo importa — el botón se apaga por el filtro de la
-               sub-vista activa, que no se ve desde aquí: un alumno con deuda
-               pero sin ninguna mensualidad lo encuentra muerto en «Cuentas por
-               cobrar» y vivo en «Otros cargos», sin nada que lo explique. */
-            <span title={motivoSinFacturar ?? undefined}>
-              <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFacturaVista.length === 0}>
-                <FileText className="h-4 w-4 mr-1.5" />
-                {vista === 'otros' ? 'Facturar varios cargos' : 'Facturar varios meses'}
-              </Button>
-            </span>
+          {/*
+            Facturar varios ya no es un botón: son las casillas de la tabla.
+
+            Aquí había un «Facturar varios meses» que abría un diálogo con los
+            mismos cargos otra vez —sin su estado, sin su vencimiento, sin la
+            factura que ya tuvieran— para marcarlos allí. Marcar y leer estaban
+            en dos pantallas distintas. Lo que queda de aquel diálogo es lo
+            único que no se podía hacer desde la tabla: crear el mismo concepto
+            en varios meses de golpe.
+          */}
+          {puedeGestionar && grupo.matriculaId != null && (
+            <Button size="sm" variant="outline" onClick={() => setCrearVariosAbierto(true)}>
+              <Plus className="h-4 w-4 mr-1.5" />Agregar cargo a varios meses
+            </Button>
           )}
           {/* Antes esto era `window.print()` sobre la ficha entera: salían las
               pestañas y los botones, y no salía el detalle cargo por cargo ni
@@ -517,7 +612,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 puedeGestionar={puedeGestionar}
                 onRegistrarPago={onRegistrarPago}
                 onAplicarMora={onAplicarMora}
-                onCrearFactura={(cargo) => setCargosFacturar([cargo.id])}
+                onCrearFactura={(cargo) => facturarCargos([cargo.id])}
                 onVincular={onVincular}
                 onAnular={onAnular}
                 onAnularFactura={onAnularFactura}
@@ -526,6 +621,9 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 onPrevisto={puedeGestionar ? aplicarPrevisto : undefined}
                 onDetalle={setCuotaDetalle}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+                marcados={marcados}
+                onMarcarCargo={alternarCargo}
+                onMarcarVarios={alternarVarios}
               />
             )}
 
@@ -542,7 +640,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                   puedeGestionar={puedeGestionar}
                   onRegistrarPago={onRegistrarPago}
                   onAplicarMora={onAplicarMora}
-                  onCrearFactura={(cargo) => setCargosFacturar([cargo.id])}
+                  onCrearFactura={(cargo) => facturarCargos([cargo.id])}
                   onVincular={onVincular}
                   onAnular={onAnular}
                   onAnularFactura={onAnularFactura}
@@ -553,6 +651,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                   facturasSueltas={facturasSueltas}
                   onEnviarFactura={onEnviarFactura}
                   enviadosPorCargo={enviadosPorCargo}
+                  marcados={marcados}
+                  onMarcarCargo={alternarCargo}
                 />
               )
             )}
@@ -624,7 +724,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           onCargoCreado();
           // Se pidió facturarlo en el acto: se abre la factura con ese cargo ya
           // marcado, en vez de dejar al usuario buscándolo en la lista.
-          if (cargoId) setCargosFacturar([cargoId]);
+          if (cargoId) facturarCargos([cargoId]);
         }}
         estudianteId={estudianteId}
         matriculaId={grupo.matriculaId}
@@ -648,104 +748,67 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           </div>
         </div>
       )}
-      <ElegirCargosFacturarDialog
-        open={elegirFacturaAbierto}
-        onOpenChange={setElegirFacturaAbierto}
-        cargos={cargosSinFacturaVista}
+      <CrearCargoVariosMesesDialog
+        open={crearVariosAbierto}
+        onOpenChange={setCrearVariosAbierto}
         estudianteId={estudianteId}
         matriculaId={grupo.matriculaId}
         periodoId={grupo.periodoId}
         mesesAcademicos={mesesAcademicos}
         soloTipo={vista === 'otros' ? 'otros' : vista === 'mensualidades' ? 'mensualidad' : null}
         onCargoCreado={onCargoCreado}
-        onConfirm={(ids) => router.push(
-          ids.length > 1
-            ? `/dashboard/facturas/nueva?desdeCargos=${ids.join(',')}`
-            : `/dashboard/facturas/nueva?desdeCargo=${ids[0]}`,
-        )}
       />
 
-      <FacturarCargosDialog
-        open={cargosFacturar !== null}
-        onOpenChange={(o) => { if (!o) { setCargosFacturar(null); setPrevistoFacturar(null); } }}
-        cargoIds={cargosFacturar ?? []}
-        previsto={previstoFacturar}
-        onFacturado={(creada) => {
-          setFacturaCreada(creada);
+      {/*
+        La barra de lo marcado. Igual que en la ficha de la familia.
+
+        Aparece solo cuando hay algo marcado y va pegada abajo: la tabla de un
+        año escolar no cabe en la pantalla, y un botón al final de la lista
+        obliga a bajar hasta el último mes para pulsar lo que se decidió arriba.
+      */}
+      {puedeFacturar && resumenMarcados.ids.length > 0 && (
+        <div className="sticky bottom-0 z-20 -mx-1 mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-zero-200 bg-white/95 px-3.5 py-2.5 shadow-[0_-4px_12px_-6px_rgba(15,17,24,.18)] backdrop-blur">
+          <span className="flex items-center gap-1.5 text-sm text-gray-700">
+            <FileText className="h-4 w-4 text-zero-600" />
+            <b className="font-semibold text-gray-900">
+              {resumenMarcados.ids.length} {resumenMarcados.ids.length === 1 ? 'cargo' : 'cargos'}
+            </b>
+            <span className="text-gray-300">·</span>
+            <b className="font-semibold text-gray-900">{fmtDOP(resumenMarcados.total)}</b>
+          </span>
+          <span className="flex-1" />
+          <Button size="sm" variant="ghost" onClick={() => setMarcados(new Set())}>
+            Quitar marcas
+          </Button>
+          <Button size="sm" className="bg-zero-600 hover:bg-zero-700"
+            onClick={() => { facturarCargos(resumenMarcados.ids); setMarcados(new Set()); }}>
+            <Receipt className="mr-1.5 h-4 w-4" />
+            {resumenMarcados.ids.length === 1 ? 'Facturar' : 'Facturar juntos'}
+          </Button>
+        </div>
+      )}
+
+      {/*
+        Facturar: el mismo cajón que la ficha de la familia, con los mismos
+        tres pasos —factura, pago y envío, comprobante— y las mismas reglas.
+
+        Detrás de esto había DOS modales: uno para armar la factura y otro,
+        después, con el resumen de lo que había salido y un botón «Realizar
+        pago» que abría un tercero. El cobro ahora se registra dentro del
+        propio cajón, en el paso 2, y el paso 3 ya ES el comprobante.
+      */}
+      <FacturaDrawer
+        abierto={cajon != null}
+        onCerrar={() => {
+          setParams({ factura: null });
+          // La ficha entera: los cargos pasan a tener factura, el saldo cambia
+          // y el plan pierde el mes que se acaba de adelantar.
           onCargoCreado();
         }}
+        perfilEmpresa={perfilEmpresa}
+        cargosIniciales={cajon?.cargos ?? []}
+        previsto={cajon?.previsto ?? null}
       />
-
-      {/* Lo que acaba de salir, y qué hacer con ello. Cerrar y dejar al usuario
-          buscando la factura en otra pantalla para cobrarla era el paso que
-          sobraba: quien acaba de facturar suele tener al padre delante. */}
-      <Dialog open={!!facturaCreada} onOpenChange={(o) => { if (!o) setFacturaCreada(null); }}>
-        <DialogContent className="max-w-sm">
-          {facturaCreada && (
-            <>
-              {/* Sin icono y con el detalle: un modal que solo dice "hecho" y un
-                  importe obliga a abrir la factura para saber qué salió. */}
-              <div className="px-6 pt-5">
-                <p className="text-xs font-medium text-zero-700">
-                  {facturaCreada.emitida ? 'Factura emitida' : 'Factura creada'}
-                </p>
-                <p className="mt-0.5 font-mono text-sm text-gray-900">
-                  {facturaCreada.encf || `#${facturaCreada.documentoId}`}
-                </p>
-              </div>
-
-              <div className="px-6 py-3">
-                <div className="rounded-lg border border-gray-200">
-                  <div className="border-b border-gray-100 px-3 py-2">
-                    <p className="truncate text-sm text-gray-800">{facturaCreada.cliente}</p>
-                    <p className="text-xs text-gray-500">
-                      {facturaCreada.vence
-                        ? `Vence el ${fmtFechaCorta(facturaCreada.vence)}`
-                        : 'Sin fecha límite'}
-                    </p>
-                  </div>
-                  {facturaCreada.lineas.map((l, i) => (
-                    <div key={i} className="flex items-start justify-between gap-3 border-b border-gray-100 px-3 py-2 last:border-b-0">
-                      <span className="min-w-0 flex-1 text-xs text-gray-600">{l.titulo}</span>
-                      <span className="shrink-0 text-xs text-gray-800">{fmtDOP(l.montoCentavos)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex justify-between px-1">
-                  <span className="text-sm text-gray-500">Total</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {fmtDOP(Math.round(facturaCreada.montoTotal * 100))}
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFacturaCreada(null)}>Cerrar</Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const id = facturaCreada?.documentoId;
-                setFacturaCreada(null);
-                if (id) router.push(`/dashboard/facturas/${id}`);
-              }}
-            >
-              Ver factura
-            </Button>
-            {puedePagos && (
-              <Button
-                onClick={() => {
-                  const id = facturaCreada?.documentoId;
-                  setFacturaCreada(null);
-                  if (id) onRegistrarPago(id);
-                }}
-              >
-                <Wallet className="mr-1.5 h-4 w-4" />Realizar pago
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* "No cobrar" se confirma: deja de cobrarse una cuota del año y el
           devengo no la va a volver a poner. Adelantar no lo pide — genera un
@@ -802,11 +865,18 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
 // Extra: permite crear un cargo nuevo aplicándolo a varios meses de una vez
 // (concepto + monto + meses). Al crearlos, se refrescan y entran a la lista ya
 // marcados, listos para incluirlos en la misma factura.
-function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, estudianteId, matriculaId, periodoId, mesesAcademicos, soloTipo, onCargoCreado }: {
+/**
+ * Crear el MISMO concepto en varios meses de una vez.
+ *
+ * Es lo que queda del antiguo «Facturar varios meses». Aquel diálogo hacía dos
+ * cosas: elegir cargos para facturarlos —que ahora se hace marcándolos en la
+ * tabla, donde se leen— y esto, que no tiene sitio en una tabla porque crea
+ * filas que todavía no existen: el uniforme de septiembre a diciembre, la
+ * mensualidad de un alumno que entró a mitad de año.
+ */
+function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matriculaId, periodoId, mesesAcademicos, soloTipo, onCargoCreado }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  cargos: Cargo[];
-  onConfirm: (ids: number[]) => void;
   estudianteId: number;
   matriculaId: number | null;
   periodoId: number | null;
@@ -814,19 +884,6 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
   soloTipo: 'mensualidad' | 'otros' | null;
   onCargoCreado: () => void;
 }) {
-  const [sel, setSel] = useState<Set<number>>(new Set());
-  // Se depende de los ids y no del array: `cargos` sale de un filter en el
-  // render del padre, así que es un array nuevo cada vez y el efecto se
-  // redisparaba en cualquier re-render, borrando lo que el usuario acababa de
-  // desmarcar mientras el diálogo seguía abierto.
-  const idsCargos = cargos.map((c) => c.id).join(',');
-  useEffect(() => {
-    if (!open) return;
-    setSel(new Set(idsCargos ? idsCargos.split(',').map(Number) : []));
-  }, [open, idsCargos]);
-
-  // ── Crear cargo para varios meses ──────────────────────────────────────────
-  const [mostrarCrear, setMostrarCrear] = useState(false);
   const [conceptos, setConceptos] = useState<{ id: number; nombre: string; tipo: string }[]>([]);
   const [conceptoId, setConceptoId] = useState('');
   const [monto, setMonto] = useState('');
@@ -835,7 +892,7 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
   const [errorCrear, setErrorCrear] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) { setMostrarCrear(false); setErrorCrear(null); setMonto(''); setMesesCargo(new Set()); setConceptoId(''); return; }
+    if (!open) { setErrorCrear(null); setMonto(''); setMesesCargo(new Set()); setConceptoId(''); return; }
     fetch('/api/administracion-escolar/conceptos')
       .then((r) => r.json())
       .then((d: { conceptos?: { id: number; nombre: string; tipo: string; activo?: boolean }[] }) => {
@@ -848,18 +905,8 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
       .catch(() => setConceptos([]));
   }, [open, soloTipo]);
 
-  const seleccionados = cargos.filter((c) => sel.has(c.id));
-  const ids = seleccionados.map((c) => c.id);
-  const total = seleccionados.reduce((s, c) => s + c.saldoCentavos, 0);
   const montoCentavos = Math.round((parseFloat(monto.replace(',', '.')) || 0) * 100);
 
-  function toggle(id: number) {
-    setSel((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
   function toggleMes(key: string) {
     setMesesCargo((prev) => {
       const next = new Set(prev);
@@ -892,11 +939,7 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
           throw new Error(j.error ?? 'No se pudo crear el cargo');
         }
       }
-      // Refresca la lista: los nuevos cargos entran y quedan marcados (el effect
-      // de arriba re-selecciona todos al cambiar `cargos`).
-      setMonto('');
-      setMesesCargo(new Set());
-      setMostrarCrear(false);
+      onOpenChange(false);
       onCargoCreado();
     } catch (e: unknown) {
       setErrorCrear(e instanceof Error ? e.message : 'Error creando los cargos');
@@ -908,90 +951,47 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
-        <ModalHeader title="Facturar varios meses"
-          subtitle="Une varias mensualidades en una sola factura." />
-        <p className="px-6 text-sm text-gray-500">
-          Marca los meses/cargos a incluir. Se crea <b>una sola factura</b> que los cubre
-          (un mes por línea). Luego la cobras normal: puedes abonar en partes y los
-          pagos se acumulan en su historial hasta saldarla.
-        </p>
-
-        {/* Crear cargo para varios meses de una vez */}
-        {matriculaId != null && mesesAcademicos.length > 0 && (
-          <div className="rounded-lg border border-gray-200">
-            {!mostrarCrear ? (
-              <button type="button" onClick={() => setMostrarCrear(true)}
-                className="flex w-full items-center gap-1.5 px-3 py-2 text-sm font-medium text-zero-600 hover:text-zero-700">
-                <Plus className="h-4 w-4" />Agregar un cargo a varios meses
-              </button>
-            ) : (
-              <div className="space-y-3 p-3">
-                {errorCrear && <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{errorCrear}</div>}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Concepto</Label>
-                    <NativeSelect value={conceptoId} onChange={(e) => setConceptoId(e.target.value)}>
-                      <option value="" disabled>Concepto</option>
-                      {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
-                    </NativeSelect>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Monto por mes (RD$)</Label>
-                    <Input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Meses afectados</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {mesesAcademicos.map((m) => {
-                      const activo = mesesCargo.has(m.key);
-                      return (
-                        <button key={m.key} type="button" onClick={() => toggleMes(m.key)}
-                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${activo ? 'border-zero-600 bg-zero-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
-                          {MESES[m.mes]} {m.anio}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">
-                    {mesesCargo.size > 0 && montoCentavos > 0
-                      ? `${mesesCargo.size} cargo(s) · ${fmtDOP(montoCentavos * mesesCargo.size)} total`
-                      : 'Elige concepto, monto y meses'}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setMostrarCrear(false)} disabled={creando}>Cancelar</Button>
-                    <Button size="sm" className="bg-zero-600 hover:bg-zero-700" onClick={crearCargos} disabled={creando}>
-                      {creando ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Creando…</> : 'Crear cargos'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
+        <ModalHeader title="Agregar cargo a varios meses"
+          subtitle="El mismo concepto y el mismo monto, repetido en los meses que elijas." />
+        <div className="space-y-3 px-6 pb-2">
+          {errorCrear && <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{errorCrear}</div>}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Concepto</Label>
+              <NativeSelect value={conceptoId} onChange={(e) => setConceptoId(e.target.value)}>
+                <option value="" disabled>Concepto</option>
+                {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+              </NativeSelect>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Monto por mes (RD$)</Label>
+              <Input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} />
+            </div>
           </div>
-        )}
-
-        <div className="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
-          {cargos.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-gray-400">Sin cargos por facturar. Agrega uno arriba.</p>
-          ) : cargos.map((cargo) => (
-            <label key={cargo.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-zero-50/50">
-              <input type="checkbox" checked={sel.has(cargo.id)} onChange={() => toggle(cargo.id)}
-                className="h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span>
-                <span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio}{cargo.fechaVencimiento ? ` · vence ${fmtFechaCorta(cargo.fechaVencimiento)}` : ''}</span>
-              </span>
-              <span className="shrink-0 text-sm font-semibold text-red-600">{fmtDOP(cargo.saldoCentavos)}</span>
-            </label>
-          ))}
+          <div className="space-y-1">
+            <Label className="text-xs">Meses afectados</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {mesesAcademicos.map((m) => {
+                const activo = mesesCargo.has(m.key);
+                return (
+                  <button key={m.key} type="button" onClick={() => toggleMes(m.key)}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${activo ? 'border-zero-600 bg-zero-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                    {MESES[m.mes]} {m.anio}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            {mesesCargo.size > 0 && montoCentavos > 0
+              ? `${mesesCargo.size} ${mesesCargo.size === 1 ? 'cargo' : 'cargos'} · ${fmtDOP(montoCentavos * mesesCargo.size)} en total`
+              : 'Elige concepto, monto y meses'}
+          </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button className="bg-zero-600 hover:bg-zero-700" disabled={ids.length === 0}
-            onClick={() => { onConfirm(ids); onOpenChange(false); }}>
-            {ids.length > 1 ? `Facturar ${ids.length} en una factura (${fmtDOP(total)})` : 'Facturar cargo'}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creando}>Cancelar</Button>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={crearCargos} disabled={creando}>
+            {creando ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Creando…</> : 'Crear cargos'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1056,7 +1056,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
  * y en gris con el badge "Previsto" para que nadie los cobre ni los cuente:
  * NO suman en pendiente, ni en el saldo del período, ni en morosidad.
  */
-function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId }: {
+function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   /** Día del mes en que la recurrente factura sola. null = se factura a mano. */
   diaFacturaAuto: number | null;
   cargos: Cargo[];
@@ -1074,6 +1074,11 @@ function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAca
   onAnularFactura: (cargo: Cargo) => void;
   onEnviarCorreo: (cargo: Cargo) => void;
   onAgregarCargoMes?: (mes: number, anio: number) => void;
+  /** Cargos marcados para la próxima factura. */
+  marcados: Set<number>;
+  onMarcarCargo: (id: number) => void;
+  /** Marca o desmarca de golpe los cargos facturables de un mes. */
+  onMarcarVarios: (ids: number[]) => void;
   onPrevisto?: (p: Previsto, accion: 'adelantar' | 'omitir') => void;
   /** Abre el detalle de la cuota: fechas, recargo y avisos. */
   onDetalle?: (p: Previsto) => void;
@@ -1204,6 +1209,9 @@ function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAca
                   onDetalle={onDetalle}
                   enviadosPorCargo={enviadosPorCargo}
                   aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+                  marcados={marcados}
+                  onMarcarCargo={onMarcarCargo}
+                  onMarcarVarios={onMarcarVarios}
                 />
               );
             })}
@@ -1279,7 +1287,7 @@ function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAca
  * Los previstos entran igual que en la otra tabla: en gris, sin importes en
  * pagado/pendiente y sin sumar en ningún total.
  */
-function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFactura, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId }: {
+function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFactura, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo }: {
   cargos: Cargo[];
   previstos: Previsto[];
   /**
@@ -1311,6 +1319,8 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
   aplicandoMoraFacturaId: number | null;
   onReenviarAviso: (cargoId: number) => void;
   reenviandoCargoId: number | null;
+  marcados: Set<number>;
+  onMarcarCargo: (id: number) => void;
 }) {
   const router = useRouter();
   const totalPrevisto = previstos.reduce((s, p) => s + p.montoCentavos, 0);
@@ -1320,6 +1330,9 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-left text-xs text-gray-500">
+            {/* Sin título: una columna de casillas no se explica con una
+                palabra, y «Facturar» encima invitaba a leerla como un botón. */}
+            {puedeFacturar && <th className="w-9 px-3 py-2" />}
             <th className="px-3 py-2 font-medium">Concepto</th>
             {/* Estrecha y con su título: los tres iconos pegados al nombre del
                 concepto se leían como parte del nombre. */}
@@ -1343,6 +1356,9 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
             const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
             const filas = [(
               <tr key={`fs-${f.id}`} className="border-t border-gray-100 hover:bg-gray-50/60">
+                {/* La columna de las casillas. Vacía aquí: no es un cargo
+                    que se pueda meter en una factura nueva. */}
+                {puedeFacturar && <td className="px-3 py-2.5" />}
                 <td className={`px-3 py-2.5 font-medium ${anulada ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   Factura
                   <Link href={`/dashboard/facturas/${f.id}`}
@@ -1410,6 +1426,7 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
             for (const [i, l] of f.lineas.entries()) {
               filas.push(
                 <tr key={`fs-${f.id}-l${i}`} className="border-t border-gray-50 bg-gray-50/30">
+                  {puedeFacturar && <td className="px-3 py-2" />}
                   <td className="py-2 pl-8 pr-3 text-gray-700">
                     {l.nombre}
                     {l.cantidad > 1 && <span className="ml-1 text-xs text-gray-400">×{l.cantidad}</span>}
@@ -1430,7 +1447,18 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
             const anulado = c.estado === 'anulado';
             const pagadoCargo = Math.max(0, c.montoCentavos - c.saldoCentavos);
             return (
-              <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50/60">
+              <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50/60 ${marcados.has(c.id) ? 'bg-zero-50/60' : ''}`}>
+                {puedeFacturar && (
+                  <td className="px-3 py-2.5">
+                    {cargoMarcable(c) && (
+                      <CasillaCargo
+                        marcado={marcados.has(c.id)}
+                        onMarcar={() => onMarcarCargo(c.id)}
+                        etiqueta={`Facturar ${c.concepto ?? 'este cargo'}`}
+                      />
+                    )}
+                  </td>
+                )}
                 <td className={`px-3 py-2.5 font-medium ${anulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {c.concepto ?? 'Sin concepto'}
                 </td>
@@ -1480,7 +1508,15 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
 
           {previstos.map((p) => (
             <tr key={`p-${p.key}`} className="border-t border-dashed border-gray-200 bg-gray-50/30 hover:bg-gray-50/60">
+              {/* Un previsto todavía no es deuda: no hay cargo que marcar. */}
+              {puedeFacturar && <td className="px-3 py-2.5" />}
               <td className="px-3 py-2.5 text-gray-500">{p.concepto}</td>
+              {/* Faltaba: la fila tenía siete celdas contra las ocho de la
+                  cabecera, así que el vencimiento caía bajo «Avisos» y todo lo
+                  demás iba corrido una columna hasta el final. */}
+              <td className="px-3 py-2.5">
+                <AvisoSemaforo titulo="Todavía no es deuda: el aviso sale cuando se genere la factura" />
+              </td>
               <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">
                 {p.fechaVencimiento ? fmtFechaCorta(p.fechaVencimiento) : '—'}
               </td>
@@ -1528,6 +1564,34 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
 // La columna de Avisos va estrecha: son tres iconos de 14 px.
 const ANCHOS_CUENTAS = ['16%', '23%', '7%', '10%', '9%', '10%', '9%', '11%', '5%'];
 
+/**
+ * La casilla para meter un cargo en la próxima factura.
+ *
+ * Va DENTRO de la primera celda y no en una columna nueva: las columnas de
+ * esta tabla tienen anchos fijos —la del mes desplegado es otra tabla dentro de
+ * una celda de ésta, y sin anchos declarados se descuadran— así que añadir una
+ * décima obligaba a recalcular los nueve porcentajes en dos sitios.
+ *
+ * `stopPropagation` porque la fila del mes es clicable para desplegarse:
+ * marcar un cargo abría el mes de paso.
+ */
+function CasillaCargo({ marcado, onMarcar, etiqueta }: {
+  marcado: boolean;
+  onMarcar: () => void;
+  etiqueta: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      checked={marcado}
+      aria-label={etiqueta}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => { e.stopPropagation(); onMarcar(); }}
+      className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-gray-300 text-zero-600 focus:ring-zero-500"
+    />
+  );
+}
+
 function ColumnasCuentas() {
   return <colgroup>{ANCHOS_CUENTAS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>;
 }
@@ -1565,7 +1629,7 @@ type MesRow = {
  * Los pagos del mes salen al desplegar, sin cabecera ni resumen: el abonado y
  * el pendiente ya están en la fila del mes, en sus columnas.
  */
-function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId }: {
+function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   r: MesRow;
   diaFacturaAuto: number | null;
   abierto: boolean;
@@ -1588,7 +1652,20 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
   aplicandoMoraFacturaId: number | null;
   onReenviarAviso: (cargoId: number) => void;
   reenviandoCargoId: number | null;
+  marcados: Set<number>;
+  onMarcarCargo: (id: number) => void;
+  onMarcarVarios: (ids: number[]) => void;
 }) {
+  /**
+   * Los cargos de ESTE mes que se pueden facturar.
+   *
+   * La casilla de la fila del mes los coge todos a la vez: un mes con
+   * mensualidad, uniforme y material son tres cargos, y marcarlos uno por uno
+   * al desplegar es justo lo que el diálogo de antes ya obligaba a hacer.
+   */
+  const facturablesDelMes = r.cargosMes.filter(cargoMarcable).map((c) => c.id);
+  const mesMarcado = facturablesDelMes.length > 0 && facturablesDelMes.every((id) => marcados.has(id));
+
   const cuantos = r.cargosMes.length + r.previstosMes.length;
   // Un solo concepto: la fila del mes ES el concepto, abierta o cerrada.
   const unico = cuantos === 1;
@@ -1619,6 +1696,15 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
       >
         <td className="px-3 py-3 align-top">
           <span className="flex items-center gap-1.5">
+            {puedeFacturar && (
+              facturablesDelMes.length > 0
+                ? <CasillaCargo
+                    marcado={mesMarcado}
+                    onMarcar={() => onMarcarVarios(facturablesDelMes)}
+                    etiqueta={`Facturar ${MESES[r.mes]} ${r.anio}`}
+                  />
+                : <span className="h-3.5 w-3.5 shrink-0" />
+            )}
             {desplegable
               ? <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${desplegado ? 'rotate-90' : ''}`} />
               : <span className="h-3.5 w-3.5 shrink-0" />}
@@ -1719,8 +1805,16 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
         const anulado = c.estado === 'anulado';
         const pagadoCargo = Math.max(0, c.montoCentavos - c.saldoCentavos);
         return (
-          <tr key={`c-${c.id}`} className="border-t border-gray-100 hover:bg-gray-50/60">
-            <td className="px-3 py-3" />
+          <tr key={`c-${c.id}`} className={`border-t border-gray-100 hover:bg-gray-50/60 ${marcados.has(c.id) ? 'bg-zero-50/60' : ''}`}>
+            <td className="px-3 py-3 text-right">
+              {puedeFacturar && cargoMarcable(c) && (
+                <CasillaCargo
+                  marcado={marcados.has(c.id)}
+                  onMarcar={() => onMarcarCargo(c.id)}
+                  etiqueta={`Facturar ${c.concepto ?? 'este cargo'} de ${MESES[r.mes]} ${r.anio}`}
+                />
+              )}
+            </td>
             <td className="px-3 py-3">
               <span className={anulado ? 'text-gray-400 line-through' : 'text-gray-800'}>
                 {c.concepto ?? 'Sin concepto'}

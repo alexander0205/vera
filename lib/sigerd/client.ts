@@ -45,6 +45,7 @@ import {
   type SigerdPerfil,
   type SigerdSesion,
 } from './types';
+import { candidatos, marcarCaido, marcarVivo, type Relevo } from './relevo';
 
 const BASE_URL = process.env.SIGERD_BASE_URL ?? 'https://sigerd.minerd.gob.do';
 
@@ -57,6 +58,9 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
 const TIMEOUT_MS = Number(process.env.SIGERD_TIMEOUT_MS ?? 30_000);
+
+/** Clave compartida con los relés. Solo se manda a un relé, nunca al portal. */
+const RELAY_KEY = process.env.SIGERD_RELAY_KEY ?? '';
 
 /**
  * Detección de "me devolvieron el login".
@@ -468,22 +472,30 @@ export class SigerdClient {
   // ────────────────────────────── Interno ───────────────────────────────
 
   private async pedir(path: string, init: RequestInit): Promise<Response> {
-    const url = path.startsWith('http') ? path : `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    // Una URL absoluta se respeta tal cual (hoy no la usa nadie, pero el
+    // contrato es ese). Lo normal es una ruta, y entonces la base la decide el
+    // pool: el portal directo —solo funciona desde el país— o uno de los relés.
+    const absoluta = path.startsWith('http');
+    const ruta = path.startsWith('/') ? path : `/${path}`;
     const cookies = this.jar.header();
-
-    const headers: Record<string, string> = {
-      'User-Agent': this.userAgent,
-      Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'es-DO,es;q=0.9',
-      ...(cookies ? { Cookie: cookies } : {}),
-      ...((init.headers as Record<string, string>) ?? {}),
-    };
-
     const metodo = init.method ?? 'GET';
 
-    // Una sola petición HTTP, con su propio timeout. La compuerta puede llamar
-    // a esto varias veces (reintento ante caídas del portal).
-    const unaVez = async (): Promise<Response> => {
+    // Una sola petición HTTP contra UNA base, con su propio timeout. La
+    // compuerta puede llamar a esto varias veces (reintento ante caídas).
+    const unaVez = (rele: Relevo) => async (): Promise<Response> => {
+      const url = absoluta ? path : `${rele.base}${ruta}`;
+
+      const headers: Record<string, string> = {
+        'User-Agent': this.userAgent,
+        Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'es-DO,es;q=0.9',
+        ...(cookies ? { Cookie: cookies } : {}),
+        // La clave solo va al relé. Mandársela al portal sería regalarle un
+        // secreto nuestro a un tercero en un header que nadie mira.
+        ...(rele.esRele && RELAY_KEY ? { 'X-Relay-Key': RELAY_KEY } : {}),
+        ...((init.headers as Record<string, string>) ?? {}),
+      };
+
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
       const t0 = Date.now();
@@ -508,12 +520,44 @@ export class SigerdClient {
       }
     };
 
-    // Concurrencia + ritmo + jitter globales, y reintento ante 502/503/504
-    // (el portal del MINERD se cae con frecuencia).
-    const res = await porLaCompuerta(unaVez, (r) => _config.REINTENTABLES.has(r.status));
+    // Relevo: se prueban las bases en orden hasta que una conteste. Cambiar de
+    // relé a mitad de sesión es seguro porque el relé no guarda nada — las
+    // cookies del portal viven en este cliente, no en la máquina que reenvía.
+    const bases: Relevo[] = absoluta ? [{ base: '', esRele: false }] : candidatos();
+    let ultimo: unknown = null;
 
-    this.jar.absorber(res);
-    return res;
+    for (const rele of bases) {
+      try {
+        // Concurrencia + ritmo + jitter globales, y reintento ante 502/503/504
+        // (el portal del MINERD se cae con frecuencia).
+        const res = await porLaCompuerta(unaVez(rele), (r) => _config.REINTENTABLES.has(r.status));
+
+        // Un 502/504 después de que la compuerta ya reintentó no es un bache:
+        // o el relé no levanta, o desde esa IP el portal no contesta. En los dos
+        // casos vale la pena salir por otra máquina.
+        if (rele.esRele && (res.status === 502 || res.status === 504) && bases.length > 1) {
+          this.onEvento?.(`⚠ el relé ${rele.base} devolvió ${res.status} — probando el siguiente`);
+          marcarCaido(rele.base);
+          ultimo = new SigerdError('red', `El relé ${rele.base} devolvió ${res.status}.`);
+          continue;
+        }
+
+        if (rele.esRele) marcarVivo(rele.base);
+        this.jar.absorber(res);
+        return res;
+      } catch (e) {
+        // Solo se releva por fallo de red. Un error del portal (contraseña
+        // mala, sesión muerta) daría igual desde otra máquina: se propaga.
+        if (!(e instanceof SigerdError && e.codigo === 'red')) throw e;
+        if (rele.esRele) marcarCaido(rele.base);
+        this.onEvento?.(`⚠ ${rele.base || 'salida directa'} no responde — probando la siguiente`);
+        ultimo = e;
+      }
+    }
+
+    throw ultimo instanceof Error
+      ? ultimo
+      : new SigerdError('red', 'Ninguna salida hacia SIGERD respondió.');
   }
 }
 

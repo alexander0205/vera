@@ -322,6 +322,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
   // ── Columnas Referencia/Descripción ────────────────────────────────────────
   const [showItemRef, setShowItemRef]   = useState(false);
   const [showItemDesc, setShowItemDesc] = useState(false);
+  // Apagado por defecto: la mayoría de las facturas no llevan descuento y la
+  // casilla vacía en cada renglón robaba ancho a lo que sí se escribe.
+  const [showItemDescuento, setShowItemDescuento] = useState(false);
   useEffect(() => {
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
@@ -363,15 +366,16 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
     return () => { cancelled = true; };
   }, [initialPlan?.clientId]);
 
-  function persistCols(ref: boolean, desc: boolean) {
+  function persistCols(ref: boolean, desc: boolean, descuento: boolean = showItemDescuento) {
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
-      prefs.itemsCols = { referencia: ref, descripcion: desc };
+      prefs.itemsCols = { referencia: ref, descripcion: desc, descuento };
       localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
     } catch {}
   }
   function handleToggleRef(v: boolean) { setShowItemRef(v); persistCols(v, showItemDesc); }
   function handleToggleDesc(v: boolean) { setShowItemDesc(v); persistCols(showItemRef, v); }
+  function handleToggleDescuento(v: boolean) { setShowItemDescuento(v); persistCols(showItemRef, showItemDesc, v); }
 
   // ── Términos / Notas / Pie ─────────────────────────────────────────────────
   // En modo edición no podemos separar términos/notas/pie porque se guardan
@@ -1053,8 +1057,10 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     <ColumnasToggle
                       showReferencia={showItemRef}
                       showDescripcion={showItemDesc}
+                      showDescuento={showItemDescuento}
                       onToggleReferencia={handleToggleRef}
                       onToggleDescripcion={handleToggleDesc}
+                      onToggleDescuento={handleToggleDescuento}
                     />
                   }
                 >
@@ -1071,6 +1077,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     onOpenNuevoProducto={() => router.push('/dashboard/productos/nuevo')}
                     showReferencia={showItemRef}
                     showDescripcion={showItemDesc}
+                    showDescuento={showItemDescuento}
                     dependientes={dependientesCliente}
                   />
 

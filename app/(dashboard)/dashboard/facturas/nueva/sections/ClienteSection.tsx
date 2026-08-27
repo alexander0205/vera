@@ -73,6 +73,18 @@ interface Props {
   setTelefonoManual: (v: string) => void;
   tipoEcf: string;
   totalDocumento: number;
+  /**
+   * El cliente ya viene resuelto y aquí no se cambia.
+   *
+   * Al facturar desde la ficha de la familia el responsable es el dueño de la
+   * pantalla de la que salió el cajón: dejar buscarlo de nuevo solo abre la
+   * puerta a emitirle la factura a otra familia. Se muestra, no se edita.
+   *
+   * Solo muerde si de verdad hay un cliente resuelto. Si el prefill falló,
+   * vuelve el buscador — si no, la factura quedaría sin destinatario y sin
+   * manera de ponerle uno.
+   */
+  soloLectura?: boolean;
 }
 
 /**
@@ -83,11 +95,35 @@ export function ClienteSection({
   clienteSeleccionado, buscarClientes, onSelectCliente, onClearCliente, onOpenNuevoCliente,
   regla, rncManual, rncManualNombre, setRncManual, setRncManualNombre,
   emailManual, setEmailManual, telefonoManual, setTelefonoManual,
-  tipoEcf, totalDocumento,
+  tipoEcf, totalDocumento, soloLectura = false,
 }: Props) {
+  const bloqueado = soloLectura && !!clienteSeleccionado;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {/* Row: autocomplete + "Nuevo contacto" button */}
+      {bloqueado ? (
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500, display: 'block', mb: 0.5 }}
+          >
+            Cliente
+          </Typography>
+          <TextField
+            size="small"
+            fullWidth
+            value={clienteSeleccionado.razonSocial}
+            slotProps={{
+              input: { readOnly: true },
+              htmlInput: { style: { fontSize: '0.875rem', height: '22px' }, tabIndex: -1 },
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' },
+              '& .MuiOutlinedInput-input': { color: '#111827', cursor: 'default' },
+            }}
+          />
+        </Box>
+      ) : (
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 200, position: 'relative' }}>
           <Autocomplete<Cliente>
@@ -147,6 +183,7 @@ export function ClienteSection({
           <Plus size={14} />Nuevo contacto
         </Box>
       </Box>
+      )}
 
       {/* RNC / Teléfono / Email grid */}
       <Box
@@ -178,6 +215,21 @@ export function ClienteSection({
             </Tooltip>
           </Box>
           <Box sx={{ mt: 1 }}>
+          {bloqueado ? (
+            <TextField
+              size="small"
+              fullWidth
+              value={clienteSeleccionado.rnc || '—'}
+              slotProps={{
+                input: { readOnly: true },
+                htmlInput: { style: { fontSize: '0.875rem', height: '22px' }, tabIndex: -1 },
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' },
+                '& .MuiOutlinedInput-input': { color: '#111827', cursor: 'default' },
+              }}
+            />
+          ) : (
           <RncSearch
             placeholder="Buscar RNC, Cédula o razón social…"
             value={
@@ -194,6 +246,7 @@ export function ClienteSection({
             }}
             showSyncHint={!clienteSeleccionado}
           />
+          )}
           </Box>
         </Box>
 

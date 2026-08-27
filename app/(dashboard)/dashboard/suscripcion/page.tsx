@@ -32,6 +32,7 @@ import {
 import {
   getPlan, PLANS, FREE_PLAN, getPlanPriceId, getPlanUserLimit, planesDeFamilia, precioTotal,
   ADDONS, addonIncluido, familiasOfrecibles, limiteTexto,
+  addonBajoCotizacion, familiaBajoCotizacion, precioPublicable,
   LINEAS_PRODUCTO, type PlanDef, type LineaProducto, type FamiliaPlan, type AddonDef,
 } from '@/lib/config/plans';
 import {
@@ -146,7 +147,12 @@ export default async function SuscripcionPage({
     estadoDelTramo(teamId),
     // Sin plan no hay «tu línea»: FREE_PLAN cae en la familia e-CF y sin esto
     // la pestaña Zero ERP saldría marcada como suya sin haber contratado nada.
-    construirLineas({ teamId, planDef, adicionales, lineaActual: sinPlan ? null : linea, tieneSuscripcion }),
+    construirLineas({
+      teamId, planDef, adicionales,
+      lineaActual: sinPlan ? null : linea,
+      tieneSuscripcion,
+      esPrueba: sinPlan,
+    }),
     downgradeProgramado(team),
   ]);
 
@@ -255,11 +261,18 @@ export default async function SuscripcionPage({
       {/* La comparativa se queda en la línea CONTRATADA, no sigue al selector
           de arriba. Es la referencia contra la que el usuario mide: si cambiara
           con la pestaña, al volver de mirar los tramos de colegio ya no tendría
-          contra qué comparar lo suyo. */}
+          contra qué comparar lo suyo.
+
+          El precio va en `null` cuando la familia se cotiza: esta tabla
+          trabaja por FAMILIA y no por línea, así que la pregunta que le toca
+          hacer es `familiaBajoCotizacion` y no la de la línea. */}
       <Comparativa
         planes={planesOfrecidos}
         actual={planDef}
-        precios={Object.fromEntries(planesOfrecidos.map(p => [p.key, precioTotal(p.key, adicionales)]))}
+        precios={Object.fromEntries(planesOfrecidos.map(p => [
+          p.key,
+          familiaBajoCotizacion(p.familia) ? null : precioTotal(p.key, adicionales),
+        ]))}
       />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: sinPlan ? '1fr' : '1.15fr 1fr' }, gap: 2 }}>
@@ -710,6 +723,22 @@ async function construirLineas(d: {
   adicionales: string[];
   lineaActual: LineaProducto | null;
   tieneSuscripcion: boolean;
+  /**
+   * Elegir aquí abre una PRUEBA sin tarjeta en vez de un cobro (empresas en
+   * `sin-plan`). Cambia quién puede pulsar: una línea sin precio publicado no
+   * se auto-CONTRATA, pero sí se puede probar — la prueba no cobra nada y
+   * Stripe la deja en pausa si al terminar no hay método de pago, así que
+   * nadie acaba pagando una cifra que no vio.
+   *
+   * Va atado a `sinPlan`, el MISMO booleano que arriba elige la Server Action
+   * del formulario (`sinPlan ? empezarPruebaAction : checkoutAction`). No es
+   * casualidad y no se pueden separar: `checkoutAction` rechaza los planes
+   * bajo cotización, así que si esto dijera «prueba» donde el formulario manda
+   * al checkout, el botón redirigiría en silencio a la misma pantalla. Si un
+   * día hay más caminos de prueba, este parámetro tiene que seguir contestando
+   * a «¿el botón de esta rejilla cobra?», no a «¿hay prueba en algún sitio?».
+   */
+  esPrueba: boolean;
 }): Promise<LineaVista[]> {
   const ofrecibles = familiasOfrecibles(d.planDef.familia);
 
@@ -742,10 +771,20 @@ async function construirLineas(d: {
     nombre: b.linea.nombre,
     planes: b.planes,
     addons: [...b.linea.addons],
-    precios: Object.fromEntries(b.planes.map(p => [p.key, precioTotal(p.key, b.linea.addons)])),
+    // `null` en toda la línea cuando se cotiza. Sale de `precioPublicable` y
+    // no de `precioTotal` para que el «esconder» no dependa de que cada
+    // pantalla se acuerde: si la cifra no se puede publicar, no llega.
+    precios: Object.fromEntries(b.planes.map(p => [p.key, precioPublicable(b.linea.key, p.key)])),
+    bajoCotizacion: b.linea.precioBajoCotizacion,
+    // Sin precio publicado no hay auto-contratación: el botón que cobra se
+    // cambia por el que escribe. La prueba sin tarjeta es la excepción — ver
+    // el parámetro `esPrueba`.
+    autoservicio: !b.linea.precioBajoCotizacion || d.esPrueba,
+    contacto: contactoDeLinea(`Quiero contratar ${b.linea.nombre}`),
     riesgos: conElAdicionalQueSePierde(
       b.veto ? b.riesgos : sinVetoDeFamilia(b.riesgos),
       adicionalesQuePierde(b.linea, d.planDef, d.adicionales),
+      d.planDef.familia,
     ),
     esLaMia: b.esLaMia,
     pulsable: !b.veto,
@@ -801,13 +840,21 @@ function adicionalesQuePierde(
 function conElAdicionalQueSePierde(
   riesgos: Record<string, RiesgoDeCambio>,
   perdidos: AddonDef[],
+  /** La familia desde la que se está comprando: decide si el adicional lleva cifra. */
+  familia: FamiliaPlan,
 ): Record<string, RiesgoDeCambio> {
   if (perdidos.length === 0) return riesgos;
 
   const motivos: MotivoCambio[] = perdidos.map(a => ({
     gravedad: 'avisa',
     clave: `adicional-se-apaga:${a.key}`,
-    mensaje: `Dejas de pagar ${a.name} (US$${a.price}/mes) y el módulo se apaga.`,
+    // Sin la cifra cuando el adicional se cotiza: esto se lee en una rejilla
+    // de venta, y publicar ahí los US$9 devuelve por la puerta de atrás el
+    // precio que la tarjeta de al lado acaba de retirar. Lo que se le sigue
+    // diciendo es lo que de verdad le pasa: deja de pagarlo y se le apaga.
+    mensaje: addonBajoCotizacion(a.key, familia)
+      ? `Dejas de pagar ${a.name} y el módulo se apaga.`
+      : `Dejas de pagar ${a.name} (US$${a.price}/mes) y el módulo se apaga.`,
     comoResolver: null,
   }));
 
@@ -987,10 +1034,13 @@ function avisoDeLinea(d: {
     && !addonIncluido(d.planDef.key, 'pos');
   if (pierdeElPos) {
     const pos = ADDONS.find(a => a.key === 'pos');
+    // Sin cifra donde el adicional se cotiza. Ver `conElAdicionalQueSePierde`:
+    // es el mismo motivo, contado a nivel de línea en vez de a nivel de plan.
+    const cuanto = addonBajoCotizacion('pos', d.planDef.familia) ? '' : ` los US$${pos?.price ?? 0} del`;
     return {
       tono: 'alerta',
       titulo: `${d.linea.nombre} no incluye el Punto de Venta`,
-      texto: `Al cambiarte a esta línea dejas de pagar los US$${pos?.price ?? 0} del Punto de Venta y el módulo se apaga: ${pos?.descripcion ?? ''} Tus ventas ya hechas siguen siendo facturas y se consultan desde Facturación.`,
+      texto: `Al cambiarte a esta línea dejas de pagar${cuanto || ' el'} Punto de Venta y el módulo se apaga: ${pos?.descripcion ?? ''} Tus ventas ya hechas siguen siendo facturas y se consultan desde Facturación.`,
     };
   }
 
@@ -1002,7 +1052,9 @@ function avisoDeLinea(d: {
     return {
       tono: 'info',
       titulo: `${d.linea.nombre} suma el Punto de Venta`,
-      texto: `Son US$${pos?.price ?? 0} más al mes sobre el plan que elijas. ${pos?.descripcion ?? ''} Todo lo que ya tienes se queda como está.`,
+      texto: addonBajoCotizacion('pos', d.planDef.familia)
+        ? `Se suma al plan que elijas y entra en la cotización. ${pos?.descripcion ?? ''} Todo lo que ya tienes se queda como está.`
+        : `Son US$${pos?.price ?? 0} más al mes sobre el plan que elijas. ${pos?.descripcion ?? ''} Todo lo que ya tienes se queda como está.`,
     };
   }
 

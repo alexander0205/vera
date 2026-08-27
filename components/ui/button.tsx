@@ -3,7 +3,6 @@
 import * as React from 'react';
 import MuiButton from '@mui/material/Button';
 import MuiIconButton from '@mui/material/IconButton';
-import { Slot as RadixSlot } from 'radix-ui';
 import type { SxProps, Theme } from '@mui/material/styles';
 
 type ShadcnVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';

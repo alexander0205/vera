@@ -993,6 +993,7 @@ export async function POST(request: NextRequest) {
           modo:         'borrador',
           documentoId:  saved.id,
           encf:         saved.encf,
+          codigo:       saved.codigo,
           estado:       'BORRADOR',
           montoTotal:   totales.montoTotal,
           pagoRecibido: data.pagoRecibido ?? false,
@@ -1061,7 +1062,9 @@ export async function POST(request: NextRequest) {
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${dupLockKey}))`);
 
           const [dup] = await tx
-            .select({ id: ecfDocuments.id, encf: ecfDocuments.encf })
+            // El código va también en el duplicado: la respuesta lo devuelve
+            // y en un «sin NCF» es el único identificador que tiene el papel.
+            .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo })
             .from(ecfDocuments)
             .where(and(...dupConds))
             .orderBy(desc(ecfDocuments.id))
@@ -1134,6 +1137,7 @@ export async function POST(request: NextRequest) {
           modo:         'borrador',
           documentoId:  outcome.row.id,
           encf:         outcome.row.encf,
+          codigo:       outcome.row.codigo,
           estado:       'BORRADOR',
           montoTotal:   totales.montoTotal,
           pagoRecibido: data.pagoRecibido ?? false,
@@ -1215,6 +1219,7 @@ export async function POST(request: NextRequest) {
         modo:         'borrador',
         documentoId:  saved.id,
         encf:         saved.encf,
+        codigo:       saved.codigo,
         estado:       'BORRADOR',
         montoTotal:   totales.montoTotal,
         pagoRecibido: sumaSplit != null ? true : (data.pagoRecibido ?? false),
@@ -1627,6 +1632,7 @@ export async function POST(request: NextRequest) {
       codigoSeguridad: resultado.codigoSeguridad,
       montoTotal:      totales.montoTotal,
       documentoId:     saved.id,
+      codigo:          saved.codigo,
     });
 
   } catch (err: unknown) {

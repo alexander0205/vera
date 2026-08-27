@@ -22,10 +22,40 @@ const NuevaFacturaForm = dynamic(() => import('./NuevaFacturaForm'), {
 export default function NuevaFacturaFormClient({
   initialPerfil,
   categoriaFija,
+  cargosIniciales,
+  clienteInicial,
+  previsto,
+  onVolver,
+  sinRedirigirAlVincular,
+  modoColegio,
 }: {
   initialPerfil: EmpresaPerfil | null;
   /** Fija la categoría de documento (factura-venta, nota-credito, nota-debito, compras, gastos). */
   categoriaFija?: string;
+  /** Cargos escolares con los que arrancar, cuando no hay URL donde ponerlos. */
+  cargosIniciales?: number[];
+  /** A quién facturarle cuando no hay cargos de los que deducirlo. */
+  clienteInicial?: { id: number; razonSocial: string; rnc: string | null;
+    email: string | null; telefono: string | null } | null;
+  /** Un mes del plan que todavía no es cargo. El cargo nace al vincular. */
+  previsto?: { matriculaId: number; cuotaId: number; conceptoId: number } | null;
+  /** Qué hace «Volver»: dentro de un cajón, cerrarlo en vez de navegar. */
+  onVolver?: () => void;
+  /** No saltar a la ficha del estudiante al terminar (el formulario va en un cajón). */
+  sinRedirigirAlVincular?: boolean;
+  /** Ajusta el formulario a un colegio: sin ITBIS, sin plazo, tipo de ingresos 01. */
+  modoColegio?: boolean;
 }) {
-  return <NuevaFacturaForm initialPerfil={initialPerfil} categoriaFija={categoriaFija} />;
+  return (
+    <NuevaFacturaForm
+      initialPerfil={initialPerfil}
+      categoriaFija={categoriaFija}
+      cargosIniciales={cargosIniciales}
+      clienteInicial={clienteInicial}
+      previsto={previsto}
+      onVolver={onVolver}
+      sinRedirigirAlVincular={sinRedirigirAlVincular}
+      modoColegio={modoColegio}
+    />
+  );
 }

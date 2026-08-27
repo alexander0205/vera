@@ -14,7 +14,9 @@
 
 import type { Metadata } from 'next';
 import {
-  ADDONS, LINEAS_PRODUCTO, planesDeLinea, type Feature, type PlanDef,
+  ADDONS, LINEAS_PRODUCTO, TEXTO_BAJO_COTIZACION,
+  addonBajoCotizacion, lineaBajoCotizacion, planesDeLinea,
+  type Feature, type PlanDef,
 } from '@/lib/config/plans';
 import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
@@ -26,11 +28,12 @@ import { CierreDePrecios, PerfilProvider } from './_perfil';
 
 export const metadata: Metadata = {
   title: 'Planes y precios',
-  // Sin cifras de colegio tampoco aquí: la descripción es lo que Google enseña
-  // debajo del enlace, y prometer «los precios de los colegios» para que al
-  // entrar no haya ninguno es la peor forma de recibir a un director.
+  // Sin cifras aquí: la descripción es lo que Google enseña debajo del enlace,
+  // y prometer «los precios» para que al entrar no haya ninguno es la peor
+  // forma de recibir a nadie. Antes decía «con sus precios y topes», y dejó de
+  // ser cierto el día que las líneas de facturación pasaron a cotizarse.
   description:
-    'Planes de facturación electrónica y punto de venta con sus precios y topes. Los tramos de colegio se arman según el tamaño del colegio. Sin contrato mínimo.',
+    'Planes de facturación electrónica, punto de venta y colegios: qué incluye cada uno y hasta dónde llega. El precio se arma con tus números. Sin contrato mínimo.',
 };
 
 // ─── Traductores de catálogo a celda ─────────────────────────────────────────
@@ -63,6 +66,9 @@ const filaFija = (planes: PlanDef[], celda: Celda) => planes.map(() => celda);
 function gruposDeLinea(planes: PlanDef[], conPos: boolean, esColegio: boolean): Grupo[] {
   const posAddon = ADDONS.find(a => a.key === 'pos');
   const check: Celda = { tipo: 'check' };
+  // El «+US$9» de la fila del POS es una cifra del catálogo como cualquier
+  // otra: si la familia sobre la que se ofrece se cotiza, esta también.
+  const posSinCifra = addonBajoCotizacion('pos', esColegio ? 'colegio' : 'ecf');
 
   const grupos: Grupo[] = [
     {
@@ -142,12 +148,15 @@ function gruposDeLinea(planes: PlanDef[], conPos: boolean, esColegio: boolean): 
         { nombre: MODULE_LABELS.administracion, celdas: planes.map(p => celdaModulo(p, 'administracion')) },
         {
           // En la línea con POS ya viene sumado en el precio de arriba; en la
-          // línea sin él se dice cuánto cuesta, que es la pregunta real.
+          // línea sin él se dice que se agrega —ya no cuánto cuesta, que es lo
+          // que se retiró—, porque la pregunta real sigue siendo si se puede.
           nombre: MODULE_LABELS.pos,
           celdas: planes.map(p =>
             p.modulos.includes('pos') || conPos
               ? check
-              : ({ tipo: 'texto', texto: `+US$${posAddon?.price ?? 0}` } as Celda),
+              : posSinCifra
+                ? ({ tipo: 'texto', texto: 'Se agrega' } as Celda)
+                : ({ tipo: 'texto', texto: `+US$${posAddon?.price ?? 0}` } as Celda),
           ),
         },
         { nombre: MODULE_LABELS.escolar, celdas: planes.map(p => celdaModulo(p, 'escolar')) },
@@ -189,6 +198,18 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
   const esColegio = linea.familia === 'colegio';
   const conPos = linea.addons.includes('pos') || esColegio;
 
+  // Dos motivos distintos para no enseñar la cifra, y conviene no confundirlos
+  // porque el texto que se pinta en su lugar no es el mismo:
+  //
+  //  · `bajoCotizacion` — la línea NO tiene precio de catálogo publicado. Sale
+  //    de `precioBajoCotizacion` y vale en todo el sistema, no solo aquí.
+  //  · `esColegio`      — decisión de MERCADEO de esta página en concreto: el
+  //    tramo sí tiene cifra, y se enseña dentro del sistema, pero publicarla
+  //    hace que el colegio de 600 se descarte solo y el de 80 crea que le
+  //    sobra. Lo que se quiere ahí es la conversación, no el número.
+  const bajoCotizacion = lineaBajoCotizacion(linea.key);
+  const sinCifra = bajoCotizacion || esColegio;
+
   const planes: PlanVista[] = conPrecio.map(({ plan, precio }, i) => {
     // `-1` es el «sin tope» del catálogo; la tarjeta lo pinta con el lazo.
     // Sale de `lib/config/plan-vista` porque la pantalla de suscripción enseña
@@ -199,18 +220,11 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
       key: plan.key,
       nombre: plan.name,
       descripcion: plan.ui.description,
-      // Un colegio no se vende por catálogo: lo que paga depende de cuántos
-      // estudiantes tiene, de cuánta implementación necesita y de lo que ya
-      // trae puesto. Publicar la cifra hace que el colegio de 600 se descarte
-      // solo y que el de 80 crea que le sobra; lo que se quiere es la
-      // conversación, no el número.
-      //
       // Va en `null` desde el servidor y no escondido con CSS: todo lo que se
       // le pase al componente cliente viaja dentro del HTML de una página
       // pública, así que una cifra «oculta» seguiría ahí para quien mire el
-      // fuente. El precio sigue intacto en el catálogo para Stripe y para las
-      // pantallas con sesión.
-      precio: esColegio ? null : precio,
+      // fuente. El precio sigue intacto en el catálogo para Stripe.
+      precio: sinCifra ? null : precio,
       // Ya dividido aquí: es lo único de la cifra que sale hacia el navegador
       // en la línea de colegio. Se divide entre el TOPE del tramo y el
       // recomendador lo reescala a los estudiantes que ponga el visitante.
@@ -231,6 +245,7 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
     descripcion: linea.descripcion,
     gancho: linea.gancho,
     esColegio,
+    bajoCotizacion,
     // De la familia de la línea: 15 en e-CF, 30 en colegio. Es el mismo número
     // que `crearSuscripcionDePrueba` le pasa a Stripe como `trial_period_days`,
     // así que la página no puede prometer una cosa y el cobro contar otra.
@@ -305,6 +320,7 @@ const MOMENTOS = [
 export default function PreciosPage() {
   const lineas = LINEAS_PRODUCTO.map(l => vistaDeLinea(l.key)).filter((l): l is LineaVista => l !== null);
   const addonPos = ADDONS.find(a => a.key === 'pos');
+  const posBajoCotizacion = addonBajoCotizacion('pos', 'ecf');
   const lineaColegio = lineas.find(l => l.esColegio);
 
   const canales = [
@@ -333,8 +349,11 @@ export default function PreciosPage() {
             {addonPos && (
               <div className="rounded-2xl border border-[#e9ebf3] bg-white p-5">
                 <div className="font-[family-name:var(--font-display)] text-sm font-semibold">{addonPos.name}</div>
+                {/* El adicional se vende SOBRE la familia e-CF, que va bajo
+                    cotización: publicar aquí su cifra sería dar por resta el
+                    precio del combinado que la tarjeta de arriba no enseña. */}
                 <div className="mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold text-zero-600">
-                  +US${addonPos.price} / mes
+                  {posBajoCotizacion ? TEXTO_BAJO_COTIZACION : `+US$${addonPos.price} / mes`}
                 </div>
                 <p className="mt-2.5 text-pretty text-xs leading-relaxed text-gray-500">
                   {addonPos.descripcion} Se contrata sobre cualquier plan de facturación.
