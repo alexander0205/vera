@@ -113,6 +113,17 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ config });
       }
 
+      case 'nomina': {
+        const config = await guardarConfig(teamId, {
+          cuentaNominaSueldoId:       numeroONulo(b.cuentaNominaSueldoId),
+          cuentaNominaAportesGastoId: numeroONulo(b.cuentaNominaAportesGastoId),
+          cuentaNominaRetencionesId:  numeroONulo(b.cuentaNominaRetencionesId),
+          cuentaNominaAportesPagarId: numeroONulo(b.cuentaNominaAportesPagarId),
+          cuentaNominaPorPagarId:     numeroONulo(b.cuentaNominaPorPagarId),
+        }, user.id);
+        return NextResponse.json({ config });
+      }
+
       case 'metodo': {
         if (typeof b.clave !== 'string') {
           return NextResponse.json({ error: 'Falta el método.' }, { status: 400 });
@@ -158,7 +169,7 @@ export async function PATCH(req: NextRequest) {
 
       default:
         return NextResponse.json(
-          { error: 'Sección desconocida. Debe ser: general, itbis-compras, compras-activos, metodo, ingreso o activar.' },
+          { error: 'Sección desconocida. Debe ser: general, itbis-compras, compras-activos, nomina, metodo, ingreso o activar.' },
           { status: 400 },
         );
     }

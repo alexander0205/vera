@@ -3022,6 +3022,19 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaDeprecAcumId:  integer('cuenta_deprec_acum_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.2 — gasto por depreciación (Debe mensual). Default 6103. */
   cuentaGastoDeprecId: integer('cuenta_gasto_deprec_id').references(() => contabilidadCuentas.id),
+  // ── Nómina: cuentas dedicadas del asiento de la corrida. Cada una cae al
+  //    genérico (gastos 6101 / por pagar 2101) si se deja sin configurar, así
+  //    que el asiento sigue igual de válido sin tocarlas.
+  /** Gasto de sueldos (Debe, bruto). Fallback: cuentaGastosId → 6101. */
+  cuentaNominaSueldoId:      integer('cuenta_nomina_sueldo_id').references(() => contabilidadCuentas.id),
+  /** Gasto de aportes patronales TSS (Debe). Fallback: sueldo → gastos → 6101. */
+  cuentaNominaAportesGastoId: integer('cuenta_nomina_aportes_gasto_id').references(() => contabilidadCuentas.id),
+  /** Retenciones al empleado por pagar AFP/SFS/ISR (Haber). Fallback: por pagar → 2101. */
+  cuentaNominaRetencionesId: integer('cuenta_nomina_retenciones_id').references(() => contabilidadCuentas.id),
+  /** Aportes patronales por pagar a la TSS (Haber). Fallback: retenciones → por pagar → 2101. */
+  cuentaNominaAportesPagarId: integer('cuenta_nomina_aportes_pagar_id').references(() => contabilidadCuentas.id),
+  /** Sueldos netos por pagar al empleado (Haber). Fallback: por pagar → 2101. */
+  cuentaNominaPorPagarId:    integer('cuenta_nomina_por_pagar_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.3 — exento capitaliza ITBIS; gravado registra crédito fiscal 1104. */
   regimenItbis: varchar('regimen_itbis', { length: 10 }).notNull().default('exento'),
   updatedBy: integer('updated_by').references(() => users.id),

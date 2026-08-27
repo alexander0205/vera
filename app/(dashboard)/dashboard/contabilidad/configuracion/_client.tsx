@@ -63,6 +63,20 @@ const COMPRAS_Y_ACTIVOS: { campo: keyof ConfigContable; label: string; ayuda: st
     ayuda: 'Gasto mensual que reconoce el uso de los activos fijos.' },
 ];
 
+/** Cuentas dedicadas del asiento de nómina. Vacías → usa gastos/por-pagar. */
+const NOMINA: { campo: keyof ConfigContable; label: string; ayuda: string }[] = [
+  { campo: 'cuentaNominaSueldoId', label: 'Gasto de sueldos',
+    ayuda: 'El sueldo bruto del período (Debe). Vacío: usa la de gastos.' },
+  { campo: 'cuentaNominaAportesGastoId', label: 'Gasto de aportes patronales',
+    ayuda: 'Lo que aporta la empresa a la TSS (AFP/SFS/SRL/INFOTEP) como gasto (Debe).' },
+  { campo: 'cuentaNominaRetencionesId', label: 'Retenciones por pagar',
+    ayuda: 'AFP, SFS e ISR que le retienes al empleado y le debes a la TSS/DGII (Haber).' },
+  { campo: 'cuentaNominaAportesPagarId', label: 'Aportes patronales por pagar',
+    ayuda: 'Los aportes de la empresa que quedan por pagar a la TSS (Haber).' },
+  { campo: 'cuentaNominaPorPagarId', label: 'Sueldos netos por pagar',
+    ayuda: 'El neto que se le debe al empleado hasta que se dispersa (Haber).' },
+];
+
 /** Métodos que se ofrecen para configurar, sin los que no mueven dinero. */
 const METODOS_CONFIGURABLES = (Object.keys(CLAVE_METODO_LABEL) as ClaveMetodo[])
   .filter((c) => !CLAVES_SIN_COBRO.includes(c));
@@ -261,6 +275,33 @@ export function ConfigClient({
               {selectCuenta(
                 configInicial[g.campo] as number | null,
                 (id) => enviar({ seccion: 'compras-activos', [g.campo]: id }),
+              )}
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{g.ayuda}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* ─── Nómina ────────────────────────────────────────────────────── */}
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Nómina
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            Cuentas del asiento que nace al aprobar una corrida. Si las dejas sin configurar, usa la de gastos y la de por pagar generales.
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+          {NOMINA.map((g) => (
+            <Box key={g.campo} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                {g.label}
+              </Typography>
+              {selectCuenta(
+                configInicial[g.campo] as number | null,
+                (id) => enviar({ seccion: 'nomina', [g.campo]: id }),
               )}
               <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{g.ayuda}</Typography>
             </Box>

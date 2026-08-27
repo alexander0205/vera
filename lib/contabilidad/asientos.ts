@@ -920,9 +920,9 @@ export async function generarAsientoGastoDoc(
  *   HABER Sueldos por pagar           (neto)
  *
  * Cuadra: bruto + patronal (debe) = deducciones + patronal + neto (haber),
- * porque bruto = neto + deducciones. Mientras no exista una cuenta de nómina
- * dedicada en la config, usa la de gastos y la de por-pagar genéricas: es
- * correcto y balanceado; separar en cuentas propias es refinamiento posterior.
+ * porque bruto = neto + deducciones. Cada línea usa su cuenta de nómina
+ * dedicada si el team la configuró; si no, cae a la de gastos (6101) y la de
+ * por-pagar (2101) genéricas — igual de correcto y balanceado.
  */
 export async function generarAsientoNomina(
   teamId: number,
@@ -965,12 +965,21 @@ export async function generarAsientoNomina(
   const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
 
+  // Cuentas dedicadas de nómina: cada línea usa la suya si el team la configuró;
+  // si no, cae DIRECTO a su genérica (gasto 6101 / por-pagar 2101). Así
+  // configurar una sola cuenta mueve solo esa línea, sin arrastrar a las demás.
+  const cSueldo        = cfg.cuentaNominaSueldoId ?? cuentaGasto;
+  const cAportesGasto  = cfg.cuentaNominaAportesGastoId ?? cuentaGasto;
+  const cRetenciones   = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
+  const cAportesPagar  = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
+  const cSueldosPagar  = cfg.cuentaNominaPorPagarId ?? cuentaPorPagar;
+
   const lineas = [
-    { cuentaId: cuentaGasto,     debeCents: c.bruto,       haberCents: 0, descripcion: 'Sueldos del período' },
-    { cuentaId: cuentaGasto,     debeCents: c.patronal,    haberCents: 0, descripcion: 'Aportes patronales TSS' },
-    { cuentaId: cuentaPorPagar,  debeCents: 0, haberCents: c.deducciones, descripcion: 'Retenciones por pagar (AFP/SFS/ISR)' },
-    { cuentaId: cuentaPorPagar,  debeCents: 0, haberCents: c.patronal,    descripcion: 'Aportes patronales por pagar' },
-    { cuentaId: cuentaPorPagar,  debeCents: 0, haberCents: c.neto,        descripcion: 'Sueldos por pagar' },
+    { cuentaId: cSueldo,       debeCents: c.bruto,       haberCents: 0, descripcion: 'Sueldos del período' },
+    { cuentaId: cAportesGasto, debeCents: c.patronal,    haberCents: 0, descripcion: 'Aportes patronales TSS' },
+    { cuentaId: cRetenciones,  debeCents: 0, haberCents: c.deducciones, descripcion: 'Retenciones por pagar (AFP/SFS/ISR)' },
+    { cuentaId: cAportesPagar, debeCents: 0, haberCents: c.patronal,    descripcion: 'Aportes patronales por pagar' },
+    { cuentaId: cSueldosPagar, debeCents: 0, haberCents: c.neto,        descripcion: 'Sueldos por pagar' },
   ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
 
   const asientoId = await insertarAsiento(
