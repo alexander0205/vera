@@ -3,21 +3,25 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import useSWR, { mutate as revalidar } from 'swr';
-import { toast } from 'sonner';
 import {
-  AlertTriangle, ArrowLeft, CalendarDays, Download, HandCoins, Loader2, Mail,
-  MessageCircle, Pencil, Receipt, Smartphone,
+  AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, Download,
+  HandCoins, Loader2, Mail, MessageCircle, Pencil, Receipt, Smartphone,
 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import { alpha } from '@mui/material/styles';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
-import { useTabUrl } from '@/lib/hooks/useUrlEstado';
+import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { EnlacePagoFamilia } from '@/components/administracion-escolar/EnlacePagoFamilia';
 import { PeriodosDeLaFamilia } from '@/components/administracion-escolar/PeriodosDeLaFamilia';
-import { FacturarCargosDialog, type FacturaCreada } from '@/components/administracion-escolar/FacturarCargosDialog';
+import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { DetalleResponsable } from '@/lib/administracion-escolar/responsables';
+import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 /**
  * La ficha completa de una familia.
@@ -64,10 +68,12 @@ function descargarCsv(nombre: string, filas: (string | number)[][]) {
   URL.revokeObjectURL(url);
 }
 
-export default function FamiliaPerfilClient({ clientId }: { clientId: number }) {
+export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
+  clientId: number;
+  perfilEmpresa: EmpresaPerfil | null;
+}) {
   const volver = useVolver('/escolar/responsables');
   const [vista, setVista] = useTabUrl('v', VISTAS, 'cuenta');
-  const [hijoAbierto, setHijoAbierto] = useState<string | null>(null);
 
   const { permissions } = usePermissions();
   // Facturar toca dos módulos: mueve dinero en el escolar y emite un documento
@@ -76,15 +82,40 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
     && permissions.includes('facturas:crear');
 
   /**
-   * Lo que se va a facturar: cargos ya existentes, o UNA cuota adelantada.
+   * El cajón de facturar vive en la URL, no en un `useState`.
    *
-   * Se guardan aparte porque no se combinan —el motor admite un solo previsto
-   * por documento— y porque abrir el diálogo con los dos llenos facturaría de
-   * más sin que nadie lo hubiera marcado.
+   * Era estado suelto: recargar lo cerraba, no se podía mandar el enlace a
+   * quien tiene que cobrar, y el «atrás» del navegador —el gesto natural para
+   * cerrar algo que se abrió encima— sacaba de la ficha entera. Las pestañas
+   * de más abajo ya vivían en la query; esto solo termina de aplicar la misma
+   * regla a lo que se abre encima de ellas.
+   *
+   *   ?factura=nueva                  → todo lo que la familia debe sin facturar
+   *   ?factura=c:12,13                → esos cargos (viene de «Facturar juntos»)
+   *   ?factura=p:2811.44.3            → un mes por adelantado (matrícula.cuota.concepto)
    */
-  const [cargosAFacturar, setCargosAFacturar] = useState<number[]>([]);
-  const [previsto, setPrevisto] = useState<
-    { matriculaId: number; cuotaId: number; conceptoId: number } | null>(null);
+  const { params, setParams } = useUrlParams();
+  const enCurso = params.get('factura');
+
+  const cajon = useMemo(() => {
+    if (!enCurso) return null;
+    if (enCurso.startsWith('c:')) {
+      const ids = enCurso.slice(2).split(',')
+        .map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      return ids.length ? { cargos: ids, previsto: null } : null;
+    }
+    if (enCurso.startsWith('p:')) {
+      const [m, c, k] = enCurso.slice(2).split('.').map(Number);
+      return [m, c, k].every((n) => Number.isInteger(n) && n > 0)
+        ? { cargos: null, previsto: { matriculaId: m, cuotaId: c, conceptoId: k } }
+        : null;
+    }
+    // Cualquier otra cosa se trata como «Nueva factura» a secas antes que
+    // dejar la ficha con un cajón que no abre y una URL que parece decir que sí.
+    return { cargos: null, previsto: null };
+  }, [enCurso]);
+
+  const abrirCajon = (valor: string) => setParams({ factura: valor });
 
   const { data, error, isLoading } = useSWR<DetalleResponsable>(
     `/api/administracion-escolar/responsables/${clientId}`, traer,
@@ -101,13 +132,16 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
    * repetido no permite ni ver el subtotal de cada uno.
    */
   const porHijo = useMemo(() => {
-    const m = new Map<string, {
+    // Por el ID del alumno y no por su nombre: dos hermanos homónimos —o el
+    // mismo alumno registrado dos veces— se sumaban en una fila con el doble
+    // de deuda, y no había manera de notarlo mirando la pantalla.
+    const m = new Map<number, {
       alumno: string; total: number; pendiente: number; vencido: number;
       cargos: NonNullable<DetalleResponsable['cargos']>;
     }>();
     for (const g of data?.cargos ?? []) {
-      const k = g.alumno || 'Sin alumno';
-      const e = m.get(k) ?? { alumno: k, total: 0, pendiente: 0, vencido: 0, cargos: [] };
+      const k = g.estudianteId;
+      const e = m.get(k) ?? { alumno: g.alumno || 'Sin alumno', total: 0, pendiente: 0, vencido: 0, cargos: [] };
       e.total += g.montoCentavos;
       e.pendiente += g.saldoCentavos;
       if (g.saldoCentavos > 0 && g.fechaVencimiento && g.fechaVencimiento < hoy) {
@@ -120,29 +154,76 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
   }, [data?.cargos, hoy]);
 
   if (isLoading) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
+        <CircularProgress size={32} />
+      </Box>
+    );
   }
   if (error || !data?.contacto) {
     return (
-      <section className="mx-auto max-w-4xl p-6">
-        <p className="text-sm text-gray-500">Esa familia no existe o no pertenece a este colegio.</p>
-        <button type="button" onClick={volver} className="mt-3 inline-flex items-center gap-1 text-sm text-zero-600">
+      <Box component="section" sx={{ mx: 'auto', maxWidth: 900, p: 3 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          Esa familia no existe o no pertenece a este colegio.
+        </Typography>
+        <Button variant="link" onClick={volver} className="mt-3 px-0">
           <ArrowLeft className="h-4 w-4" />Volver a responsables
-        </button>
-      </section>
+        </Button>
+      </Box>
     );
   }
 
   const c = data.contacto;
-  const facturado = data.cargos.reduce((s, g) => s + g.montoCentavos, 0);
-  const pendiente = data.cargos.reduce((s, g) => s + g.saldoCentavos, 0);
-  const cobrado = facturado - pendiente;
-  const vencido = porHijo.reduce((s, h) => s + h.vencido, 0);
-  const porVencer = pendiente - vencido;
+
+  /*
+    Las cuatro cifras tienen que contar EL MISMO dinero.
+
+    «Facturado» salía solo de los cargos y «Pendiente» sumaba además las
+    facturas sueltas, así que la familia 1022 enseñaba a la vez «100 % cobrado»
+    y «Pendiente RD$500»: los RD$500 eran de una factura fuera del plan, que
+    para el numerador no existía. Ahora las dos caras cuentan cargos + facturas
+    sueltas, y la barra mide sobre esa misma base.
+  */
+  const facturadoCargos = data.cargos.reduce((s, g) => s + g.montoCentavos, 0);
+  const pendienteCargos = data.cargos.reduce((s, g) => s + g.saldoCentavos, 0);
   const deudaFacturas = data.facturas.reduce(
     (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0);
+  const facturadoSueltas = data.facturas.reduce((s, f) => s + f.montoTotal, 0);
+  // Acotado al monto: un cobro de más —una transferencia redonda sobre una
+  // factura con centavos— no puede hacer que lo cobrado pase de lo facturado.
+  const cobradoSueltas = data.facturas.reduce(
+    (s, f) => s + Math.min(f.pagadoCentavos, f.montoTotal), 0);
+
+  const facturado = facturadoCargos + facturadoSueltas;
+  const pendiente = pendienteCargos + deudaFacturas;
+  const cobrado = (facturadoCargos - pendienteCargos) + cobradoSueltas;
+  const vencido = porHijo.reduce((s, h) => s + h.vencido, 0);
   const totalPagado = data.pagos.reduce((s, p) => s + p.montoCentavos, 0);
-  const sinFacturar = data.cargos.filter((g) => g.ecfDocumentId == null);
+
+  /*
+    Lo que se puede meter en una factura nueva.
+
+    No basta con «no tiene factura»: el prefill exige que el cargo esté
+    COBRABLE, y en cuanto uno solo de la lista no lo está devuelve 409 y tumba
+    la preparación ENTERA —los otros seis se pierden con él—. Un cargo saldado
+    a mano, o uno cerrado sin comprobante, bastaba para dejar «Nueva factura»
+    inservible en esa familia.
+  */
+  const COBRABLES = ['pendiente', 'parcial', 'vencido'];
+  const sinFacturar = data.cargos.filter((g) =>
+    g.ecfDocumentId == null && g.saldoCentavos > 0 && COBRABLES.includes(g.estado));
+  const cargosSaldados = data.cargos.filter((g) => g.saldoCentavos <= 0).length;
+  // El más reciente por fecha, no el primero de la lista: el orden que llega
+  // de la consulta no es contrato de esta pantalla.
+  const ultimoPago = [...data.pagos].sort((a, b) => b.fechaPago.localeCompare(a.fechaPago))[0] ?? null;
+  // Se redondea hacia abajo: un 99.6% cobrado no puede decir «100%» mientras
+  // quede un peso vivo. Y al revés, si de verdad está todo, tiene que decir 100.
+  const pctCobrado = facturado > 0
+    ? (cobrado >= facturado ? 100 : Math.floor((cobrado / facturado) * 100))
+    : 0;
+  // Cobrado, pero tan poco que redondea a cero. Se dice «menos de 1%» en vez
+  // de «0%», que con un pago ya aplicado se lee como que no entró nada.
+  const casiNada = cobrado > 0 && pctCobrado === 0;
 
   const canales = [
     { icon: Mail, label: 'Correo', valor: c.email?.trim() || null },
@@ -158,143 +239,245 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
         <ArrowLeft className="h-4 w-4" />Volver a responsables
       </button>
 
-      {/* Violeta, y no el azul del sistema, en toda la cabecera.
-          Esta ficha y la del alumno tienen la misma forma —avatar redondo,
-          nombre, chips, deuda— y quien llega desde un hijo no distinguía en
-          qué de las dos estaba: leía «Debe RD$14,800» creyendo que era del
-          niño cuando es de la familia entera. El color es lo que se ve antes
-          de leer, así que la diferencia va ahí: barra, avatar y etiqueta. */}
-      <div className="overflow-hidden rounded-xl border border-violet-200 bg-violet-50/40">
-        <div className="h-1 bg-violet-400" />
-        <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-violet-100 text-lg font-semibold text-violet-700">
-              {c.razonSocial.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              {/* Dice qué se está mirando antes que a quién: es la línea que
-                  faltaba para no confundirla con la ficha de un alumno. */}
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600">
-                Familia · responsable de pago
-              </p>
-              <p className="truncate text-lg font-bold text-gray-900">{c.razonSocial}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Chip k="RNC / Cédula" v={c.rnc ?? '—'} />
-                <Chip k="Hijos" v={String(data.hijos.length)} />
-                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
-                  pendiente + deudaFacturas > 0
-                    ? 'border-red-200 bg-red-50 text-red-600'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                  <span className="text-[11px] opacity-70">Debe</span>
-                  <b className="font-semibold">
-                    {pendiente + deudaFacturas > 0 ? fmtDOP(pendiente + deudaFacturas) : 'Al día'}
-                  </b>
-                </span>
-              </div>
-            </div>
-          </div>
+      {/*
+        Tarjeta blanca, no la banda violeta de antes.
 
-          <div className="shrink-0 md:min-w-[200px] md:border-l md:border-violet-200/70 md:pl-4">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-violet-500">Se le puede avisar por</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {canales.map((x) => (
-                <span key={x.label} title={x.valor ? `${x.label}: ${x.valor}` : `Sin ${x.label}`}>
-                  <x.icon className={`h-4 w-4 ${x.valor ? 'text-zero-600' : 'text-red-500'}`} />
-                </span>
-              ))}
-              {sinCanal && <span className="text-[11px] font-medium text-red-600">No se le puede avisar</span>}
-            </div>
-            {/* Su enlace de pago, al lado de por dónde escribirle: el caso en
-                que hace falta es siempre el mismo —el padre llama diciendo que
-                no le llegó— y entonces hay que copiarlo y mandárselo por donde
-                sea que sí se le pueda escribir. */}
-            <div className="mt-2">
-              <EnlacePagoFamilia clientId={clientId} />
-            </div>
-          </div>
+        El violeta estaba para no confundir esta ficha con la de un alumno —se
+        leía «Debe RD$14,800» creyendo que era del niño—. Esa distinción ahora
+        la hace el texto: el rótulo «Familia · responsable de pago» encima del
+        nombre y el «N hijos matriculados» en la línea de datos. El color deja
+        de gritar y la pantalla se parece al resto del sistema.
+      */}
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: '16px',
+          borderColor: '#E6E8F0',
+          boxShadow: '0 1px 2px rgba(15,17,24,.03)',
+          p: { xs: 2, sm: '20px 22px' },
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          alignItems: { md: 'center' },
+          gap: 2.25,
+        }}
+      >
+        <Box sx={{
+          width: 60, height: 60, flex: '0 0 60px', borderRadius: '50%',
+          bgcolor: '#EDF1FE', color: '#2A48C4',
+          display: 'grid', placeItems: 'center',
+          fontSize: '1.25rem', fontWeight: 600, letterSpacing: '-0.5px',
+        }}>
+          {c.razonSocial.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()}
+        </Box>
 
-          <Button asChild variant="outline" size="sm" className="shrink-0 self-start md:self-center">
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{
+            fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase',
+            letterSpacing: '.07em', color: '#8A90A0', mb: 0.25,
+          }}>
+            Familia · responsable de pago
+          </Typography>
+          <Typography component="h1" sx={{
+            m: 0, fontSize: { xs: '1.375rem', sm: '1.625rem' }, fontWeight: 600,
+            letterSpacing: '-0.9px', lineHeight: 1.15,
+          }}>
+            {c.razonSocial}
+          </Typography>
+
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.75,
+            mt: 1.125, flexWrap: 'wrap',
+          }}>
+            <Typography component="span" sx={{ fontSize: '0.78125rem', color: '#6B7280' }}>
+              RNC / Cédula{' '}
+              <Box component="strong" sx={{ color: '#1E2433', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                {c.rnc ?? '—'}
+              </Box>
+            </Typography>
+            <Separador />
+            <Typography component="span" sx={{ fontSize: '0.78125rem', color: '#6B7280' }}>
+              {data.hijos.length} {data.hijos.length === 1 ? 'hijo matriculado' : 'hijos matriculados'}
+            </Typography>
+            <Separador />
+            {pendiente > 0 ? (
+              <Pastilla tono="rojo" icono={<AlertTriangle className="h-3 w-3" />}>
+                Debe {fmtDOP(pendiente)}
+              </Pastilla>
+            ) : (
+              <Pastilla tono="verde" icono={<Check className="h-3 w-3" />}>Al día</Pastilla>
+            )}
+            <Pastilla tono="gris">
+              {sinCanal ? 'No se le puede avisar' : 'Cuenta activa'}
+            </Pastilla>
+          </Box>
+        </Box>
+
+        {/* Por dónde escribirle y su enlace de pago. No están en el diseño de
+            referencia, pero es lo que se busca cuando el padre llama diciendo
+            que no le llegó nada: hay que ver por dónde sí se le puede escribir
+            y copiarle el enlace. */}
+        <Box sx={{
+          flexShrink: 0, minWidth: { md: 190 },
+          borderLeft: { md: '1px solid #EDEFF5' }, pl: { md: 2.25 },
+        }}>
+          <Typography sx={{
+            fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase',
+            letterSpacing: '.07em', color: '#8A90A0',
+          }}>
+            Se le puede avisar por
+          </Typography>
+          <Box sx={{ mt: 0.75, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+            {canales.map((x) => (
+              <Box component="span" key={x.label}
+                title={x.valor ? `${x.label}: ${x.valor}` : `Sin ${x.label}`}
+                sx={{ display: 'inline-flex', color: x.valor ? '#3658E1' : '#C3C8D4' }}>
+                <x.icon className="h-4 w-4" />
+              </Box>
+            ))}
+          </Box>
+          <Box sx={{ mt: 1 }}>
+            <EnlacePagoFamilia clientId={clientId} />
+          </Box>
+        </Box>
+
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 1.125, flex: '0 0 auto',
+          alignSelf: { xs: 'flex-start', md: 'center' },
+        }}>
+          <Button asChild variant="outline" size="sm">
             <Link href={`/dashboard/clientes/${clientId}/editar`}>
               <Pencil className="mr-1.5 h-4 w-4" />Editar contacto
             </Link>
           </Button>
-        </div>
-      </div>
+          {puedeFacturar && (
+            <Button
+              variant="default"
+              size="sm"
+              // Explícito: «Nueva factura» arranca de todo lo que la familia
+              // debe sin facturar, no de lo que quedara de un «Adelantar».
+              onClick={() => abrirCajon('nueva')}
+            >
+              <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
+            </Button>
+          )}
+        </Box>
+      </Paper>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Cifra icon={Receipt} label="Facturado" valor={fmtDOP(facturado)}
-          detalle={`${data.cargos.length} cargo(s)`} />
-        <Cifra icon={HandCoins} label="Cobrado" valor={fmtDOP(cobrado)}
-          detalle={`${data.pagos.length} pago(s)`} />
-        <Cifra icon={AlertTriangle} label="Pendiente" valor={fmtDOP(pendiente + deudaFacturas)}
-          detalle={deudaFacturas > 0 ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas` : 'Del plan de cobro'}
-          tono={pendiente + deudaFacturas > 0 ? 'red' : 'gris'} />
-        <Cifra icon={CalendarDays} label="Vencido" valor={fmtDOP(vencido)}
-          detalle="Ya pasó su fecha" tono={vencido > 0 ? 'red' : 'gris'} />
-      </div>
+      <FacturaDrawer
+        abierto={cajon != null}
+        onCerrar={() => {
+          setParams({ factura: null });
+          // Las DOS consultas. La cabecera saca la deuda de una y los meses
+          // de otra: refrescando solo la primera, las cifras de arriba
+          // cambiaban y los cargos de abajo seguían diciendo «Sin facturar»
+          // encima de una factura que acababa de salir.
+          void revalidar(`/api/administracion-escolar/responsables/${clientId}`);
+          void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
+        }}
+        perfilEmpresa={perfilEmpresa}
+        // Solo los cargos QUE AÚN NO TIENEN FACTURA. Volver a facturar uno ya
+        // facturado le cobraría dos veces a la familia: el error que más caro
+        // sale y el que nadie nota hasta que el padre reclama.
+        cargosIniciales={cajon?.previsto ? [] : (cajon?.cargos ?? sinFacturar.map((g) => g.id))}
+        // La familia de esta ficha, para cuando no hay ningún cargo que
+        // facturar: sin esto el cajón abría sin comprador y sin beneficiarios.
+        clienteInicial={{
+          id: clientId, razonSocial: c.razonSocial,
+          rnc: c.rnc, email: c.email, telefono: c.telefono ?? c.celular,
+        }}
+        previsto={cajon?.previsto ?? null}
+      />
 
-      {/* Dónde está la deuda: por hijo y por antigüedad. Dos barras dicen en un
-          vistazo lo que quince renglones no dicen leídos uno a uno. */}
-      {pendiente > 0 && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel titulo="Deuda por hijo">
-            <div className="space-y-2.5 p-4">
-              {porHijo.map((h) => (
-                <Barra key={h.alumno} etiqueta={h.alumno} valor={h.pendiente} total={pendiente}
-                  detalle={h.vencido > 0 ? `${fmtDOP(h.vencido)} vencido` : undefined} />
-              ))}
-            </div>
-          </Panel>
+      {/*
+        Las cuatro cifras en UNA tarjeta con divisores, no en cuatro tarjetas
+        sueltas. Son las cuatro caras del mismo dinero —lo facturado se cobra o
+        se queda pendiente, y lo pendiente vence o no— y separarlas en cajas
+        las hacía leer como cuatro datos sin relación.
+      */}
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: '16px', borderColor: '#E6E8F0', overflow: 'hidden',
+          boxShadow: '0 1px 2px rgba(15,17,24,.03)',
+        }}
+      >
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+          <Cifra icon={Receipt} label="Facturado" valor={fmtDOP(facturado)}
+            detalle={[
+              `${data.cargos.length} ${data.cargos.length === 1 ? 'cargo' : 'cargos'} del año escolar`,
+              // Se nombran aparte porque no salen del plan de cobro: si no,
+              // la cifra no cuadra con los cargos que se ven más abajo.
+              data.facturas.length > 0
+                ? `${data.facturas.length} ${data.facturas.length === 1 ? 'factura suelta' : 'facturas sueltas'}`
+                : null,
+            ].filter(Boolean).join(' · ')}
+            primera />
+          <Cifra icon={HandCoins} label="Cobrado" valor={fmtDOP(cobrado)}
+            detalle={`${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`}
+            tono={cobrado > 0 ? 'verde' : 'gris'} />
+          <Cifra icon={AlertTriangle} label="Pendiente" valor={fmtDOP(pendiente)}
+            detalle={deudaFacturas > 0
+              ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas`
+              : (pendiente > 0 ? 'Del plan de cobro' : 'Nada por cobrar')}
+            tono={pendiente > 0 ? 'rojo' : 'gris'} />
+          <Cifra icon={CalendarDays} label="Vencido" valor={fmtDOP(vencido)}
+            // Solo del plan de cobro: una factura suelta no lleva fecha de
+            // vencimiento en el módulo, y contarla aquí sería inventarle una.
+            detalle={vencido > 0 ? 'Ya pasó su fecha · del plan de cobro' : 'Sin atrasos registrados'}
+            tono={vencido > 0 ? 'rojo' : 'gris'} />
+        </Box>
 
-          <Panel titulo="Cómo está esa deuda">
-            <div className="space-y-2.5 p-4">
-              <Barra etiqueta="Vencido" valor={vencido} total={pendiente} tono="red"
-                detalle="ya pasó su fecha de pago" />
-              <Barra etiqueta="Por vencer" valor={porVencer} total={pendiente}
-                detalle="todavía en plazo" />
-              {sinFacturar.length > 0 && (
-                <Barra etiqueta="Sin factura emitida"
-                  valor={sinFacturar.reduce((s, g) => s + g.saldoCentavos, 0)} total={pendiente}
-                  tono="ambar" detalle="la familia no ha recibido comprobante" />
+        {/* Cuánto de lo facturado ya entró. Sin nada emitido no hay porcentaje
+            que enseñar: 0 de 0 sería un 0% que parece un problema. */}
+        {(data.cargos.length > 0 || data.facturas.length > 0) && (
+          <Box sx={{
+            borderTop: '1px solid #EDEFF5', bgcolor: '#FBFCFE',
+            px: 2.75, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.75,
+          }}>
+            <Box component="span" sx={{
+              flex: 1, minWidth: 0, height: 6, borderRadius: 999,
+              bgcolor: '#E7EBF6', overflow: 'hidden', display: 'block',
+            }}>
+              <Box component="span" sx={{
+                display: 'block', height: 6, borderRadius: 999,
+                // Con un 0.3% la barra medía menos de un píxel y se veía
+                // vacía justo cuando el renglón de al lado decía que ya hay
+                // un cargo cobrado. Se le da un mínimo para que se vea que
+                // algo entró.
+                width: casiNada ? '4px' : `${pctCobrado}%`,
+                minWidth: cobrado > 0 ? '4px' : 0,
+                bgcolor: pctCobrado === 100 ? '#0F7A4A' : '#3658E1',
+              }} />
+            </Box>
+            <Typography component="span" sx={{ fontSize: '0.71875rem', color: '#4A5164', whiteSpace: 'nowrap' }}>
+              <Box component="strong" sx={{ fontWeight: 600, color: pctCobrado === 100 ? '#0F7A4A' : '#2A48C4' }}>
+                {casiNada ? 'menos de 1%' : `${pctCobrado}%`} cobrado
+              </Box>
+              {data.cargos.length > 0 && (
+                <>{' · '}{cargosSaldados} de {data.cargos.length} cargos cobrados</>
               )}
-            </div>
-          </Panel>
-        </div>
-      )}
-
-      {/* Los hijos, SIEMPRE a la vista.
-          Al pasar el detalle a pestañas se quedaron dentro del estado de
-          cuenta, agrupados por sus cargos — y una familia al día, sin cargos,
-          se quedaba sin ellos: la cabecera decía «Hijos 1» y no había forma de
-          saber quién era. */}
-      <Panel titulo={`Hijos · ${data.hijos.length}`}>
-        {data.hijos.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm text-gray-500">
-            Ninguno de sus beneficiarios tiene ficha escolar todavía.
-          </p>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {data.hijos.map((h) => (
-              <Link key={h.estudianteId} href={`/escolar/estudiantes/${h.estudianteId}`}
-                className="flex flex-wrap items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zero-100 text-[11px] font-semibold text-zero-700">
-                  {h.nombre.trim().split(/\s+/).slice(0, 2).map((x) => x[0]).join('').toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{h.nombre}</span>
-                <span className="shrink-0 text-xs text-gray-500">{h.curso ?? 'sin matrícula'}</span>
-                <Badge variant="outline" className="shrink-0 capitalize text-gray-600">
-                  {h.estado ?? '—'}
-                </Badge>
-                <span className={`shrink-0 text-sm font-semibold ${
-                  h.deudaCentavos > 0 ? 'text-red-600' : 'text-zero-700'}`}>
-                  {h.deudaCentavos > 0 ? fmtDOP(h.deudaCentavos) : 'Al día'}
-                </span>
-              </Link>
-            ))}
-          </div>
+              {/* Lo que antes hacía que la barra dijera 100 % con dinero vivo.
+                  Ahora ni se esconde ni descuadra: se nombra. */}
+              {deudaFacturas > 0 && (
+                <>{' · '}{fmtDOP(deudaFacturas)} en facturas sueltas</>
+              )}
+            </Typography>
+          </Box>
         )}
-      </Panel>
+      </Paper>
 
+      {/*
+        Aquí vivían tres paneles —«Deuda por hijo», «Cómo está esa deuda» y
+        «Hijos · N»— que ahora dicen lo mismo que las tarjetas de abajo: cada
+        hijo trae su curso, su estado, lo que debe y sus meses. Dejarlos era
+        enseñar la misma deuda tres veces en la misma pantalla, y la tercera
+        contradecía a la primera en cuanto una consulta se refrescaba antes
+        que la otra.
+
+        Los hijos SIN matrícula no se pierden: `PeriodosDeLaFamilia` sale de
+        la misma tabla y con el mismo filtro (`facturar_a_client_id`), y a
+        quien no tiene matrícula le pinta su tarjeta diciéndolo.
+      */}
       {/* Los meses de todos los hijos, cada uno con los suyos.
           Antes esto era una sola línea por hijo —«sin plan», «activa»— y para
           ver de qué meses se trataba había que entrar ficha por ficha. El
@@ -303,133 +486,133 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
       <PeriodosDeLaFamilia
         clientId={clientId}
         puedeFacturar={puedeFacturar}
-        onFacturar={(ids) => { setPrevisto(null); setCargosAFacturar(ids); }}
-        onFacturarPrevisto={(p) => { setCargosAFacturar([]); setPrevisto(p); }}
+        // «Facturar juntos» va al mismo sitio que «Adelantar»: el formulario
+        // completo por la derecha, con esos cargos ya cargados. Antes abría el
+        // diálogo rápido, que es otra pantalla con otras reglas — y sobre todo
+        // otra manera de no vincular los cargos.
+        onFacturar={(ids) => abrirCajon(`c:${ids.join(',')}`)}
+        // «Adelantar» va derecho al formulario completo. El diálogo rápido no
+        // aportaba nada aquí: el mes ya está elegido, y lo que hace falta —el
+        // beneficiario, el descuento de la beca, cobrar en el acto— vive en el
+        // formulario grande.
+        onFacturarPrevisto={(p) =>
+          abrirCajon(`p:${p.matriculaId}.${p.cuotaId}.${p.conceptoId}`)}
       />
 
-      {/* El detalle, en pestañas: cinco tablas apiladas eran una pared. */}
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 px-2">
-          {([['cuenta', `Estado de cuenta (${data.cargos.length})`],
+      {/*
+        El detalle, en pestañas.
+
+        «Estado de cuenta» ya no repite los cargos hijo por hijo: eso está
+        arriba, en la tarjeta de cada uno. Aquí quedan las tres cifras que se
+        miran al descolgar el teléfono —cuánto debe hoy, cuánto está vencido y
+        cuándo pagó la última vez— y las tres se leen de un vistazo.
+      */}
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: '16px', borderColor: '#E6E8F0', overflow: 'hidden',
+          boxShadow: '0 1px 2px rgba(15,17,24,.03)',
+        }}
+      >
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 0.5, px: 2.75,
+          borderBottom: '1px solid #EDEFF5', overflowX: 'auto',
+        }}>
+          {([['cuenta', 'Estado de cuenta'],
              ['pagos', `Pagos (${data.pagos.length})`],
              ['facturas', `Facturas sueltas (${data.facturas.length})`],
              ['avisos', `Recordatorios (${data.avisosProgramados.length + data.avisos.length})`]] as const)
             .map(([v, etiqueta]) => (
-            <button key={v} type="button" onClick={() => setVista(v)}
-              className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                vista === v ? 'border-zero-600 text-zero-700' : 'border-transparent text-gray-500 hover:text-gray-900'
-              }`}>
+            <Box
+              key={v}
+              component="button"
+              type="button"
+              onClick={() => setVista(v)}
+              aria-current={vista === v ? 'page' : undefined}
+              sx={{
+                height: 48, px: 1.5, flex: '0 0 auto', cursor: 'pointer',
+                bgcolor: 'transparent', border: 0, font: 'inherit',
+                borderBottom: '2px solid',
+                borderColor: vista === v ? '#3658E1' : 'transparent',
+                color: vista === v ? '#102A72' : '#6B7280',
+                fontSize: '0.8125rem', fontWeight: vista === v ? 600 : 500,
+                whiteSpace: 'nowrap', transition: 'color .15s',
+                '&:hover': { color: '#102A72' },
+              }}
+            >
               {etiqueta}
-            </button>
+            </Box>
           ))}
-          <div className="ml-auto py-1.5">
+          <Box sx={{ flex: 1 }} />
+          <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
             <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
               <Download className="mr-1.5 h-4 w-4" />Exportar
             </Button>
-          </div>
-        </div>
+          </Box>
+        </Box>
 
-        <div className="p-4">
+        <Box sx={{ px: 2.75, pt: 0.75, pb: 1.75 }}>
           {vista === 'cuenta' && (
-            porHijo.length === 0 ? <Vacio texto="Sin cargos registrados." /> : (
-              <div className="space-y-3">
-                {porHijo.map((h) => {
-                  const abierto = hijoAbierto === h.alumno || porHijo.length === 1;
-                  return (
-                    <div key={h.alumno} className="overflow-hidden rounded-lg border border-gray-200">
-                      <button type="button"
-                        onClick={() => setHijoAbierto(abierto && porHijo.length > 1 ? null : h.alumno)}
-                        className="flex w-full flex-wrap items-center gap-3 bg-gray-50 px-3 py-2.5 text-left hover:bg-gray-100">
-                        <span className="font-medium text-gray-900">{h.alumno}</span>
-                        <span className="text-xs text-gray-500">{h.cargos.length} cargo(s)</span>
-                        {h.vencido > 0 && (
-                          <Badge className="border-red-200 bg-red-50 text-red-700">
-                            {fmtDOP(h.vencido)} vencido
-                          </Badge>
-                        )}
-                        <span className="ml-auto text-sm">
-                          <span className="text-gray-500">de {fmtDOP(h.total)} debe </span>
-                          <b className={h.pendiente > 0 ? 'text-red-600' : 'text-zero-700'}>
-                            {fmtDOP(h.pendiente)}
-                          </b>
-                        </span>
-                      </button>
-
-                      {abierto && (
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-t border-gray-100 text-left text-xs uppercase text-gray-500">
-                              <th className="px-3 py-2 font-medium">Concepto</th>
-                              <th className="px-3 py-2 font-medium">Mes</th>
-                              <th className="px-3 py-2 font-medium">Vence</th>
-                              <th className="px-3 py-2 font-medium">Factura</th>
-                              <th className="px-3 py-2 text-right font-medium">Monto</th>
-                              <th className="px-3 py-2 text-right font-medium">Pendiente</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {h.cargos.map((g) => {
-                              const atrasado = g.saldoCentavos > 0 && !!g.fechaVencimiento
-                                && g.fechaVencimiento < hoy;
-                              return (
-                                <tr key={g.id} className="border-t border-gray-100 hover:bg-gray-50/60">
-                                  <td className="px-3 py-2 text-gray-900">{g.concepto ?? 'Sin concepto'}</td>
-                                  <td className="whitespace-nowrap px-3 py-2 text-gray-600">
-                                    {g.mes ? `${MESES[g.mes]} ${g.anio}` : g.anio}
-                                  </td>
-                                  <td className={`whitespace-nowrap px-3 py-2 ${atrasado ? 'font-medium text-red-600' : 'text-gray-500'}`}>
-                                    {g.fechaVencimiento ? fmtFechaCorta(g.fechaVencimiento) : '—'}
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    {g.ecfDocumentId ? (
-                                      <Link href={`/dashboard/facturas/${g.ecfDocumentId}`}
-                                        className="text-xs text-zero-600 hover:underline">
-                                        {g.encf || g.codigo || 'Ver'}
-                                      </Link>
-                                    ) : <span className="text-xs text-amber-700">Sin facturar</span>}
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-gray-800">{fmtDOP(g.montoCentavos)}</td>
-                                  <td className="px-3 py-2 text-right">
-                                    <span className={g.saldoCentavos > 0 ? 'font-medium text-red-600' : 'text-zero-700'}>
-                                      {fmtDOP(g.saldoCentavos)}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )
+            <>
+              <FilaResumen
+                icono={<HandCoins size={17} />}
+                tono={pendiente > 0 ? 'rojo' : 'verde'}
+                titulo="Saldo al día de hoy"
+                detalle={pendiente > 0
+                  ? `${porHijo.filter((h) => h.pendiente > 0).length} de ${porHijo.length} estudiantes con saldo`
+                  : 'No hay saldo pendiente en ningún estudiante'}
+                monto={fmtDOP(pendiente)}
+              />
+              <FilaResumen
+                icono={<AlertTriangle size={17} />}
+                tono={vencido > 0 ? 'rojo' : 'gris'}
+                titulo="Vencido"
+                detalle={vencido > 0
+                  ? 'Ya pasó su fecha de pago · genera mora si está configurada'
+                  : 'Sin atrasos registrados'}
+                monto={fmtDOP(vencido)}
+              />
+              <FilaResumen
+                icono={<Receipt size={17} />}
+                tono="azul"
+                titulo="Último pago recibido"
+                detalle={ultimoPago
+                  ? [ultimoPago.encf || ultimoPago.codigo, fmtFechaCorta(ultimoPago.fechaPago), ultimoPago.metodo]
+                      .filter(Boolean).join(' · ')
+                  : 'Todavía no ha pagado nada'}
+                monto={ultimoPago ? fmtDOP(ultimoPago.montoCentavos) : '—'}
+                href={ultimoPago ? `/dashboard/facturas/${ultimoPago.ecfDocumentId}` : undefined}
+                ultima
+              />
+            </>
           )}
 
           {vista === 'pagos' && (
             data.pagos.length === 0 ? <Vacio texto="Todavía no ha pagado nada." /> : (
-              <Tabla cabeceras={['Fecha', 'Alumno', 'Factura', 'Método', 'Referencia', 'Monto']} numericas={[5]}>
-                {data.pagos.map((p) => (
-                  <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50/60">
-                    <td className="whitespace-nowrap px-3 py-2 text-gray-600">{fmtFechaCorta(p.fechaPago)}</td>
-                    <td className="px-3 py-2 text-gray-700">{p.alumno ?? '—'}</td>
-                    <td className="px-3 py-2">
-                      <Link href={`/dashboard/facturas/${p.ecfDocumentId}`}
-                        className="text-xs text-zero-600 hover:underline">
-                        {p.encf || p.codigo || `#${p.ecfDocumentId}`}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2 capitalize text-gray-600">{p.metodo ?? '—'}</td>
-                    <td className="px-3 py-2 text-gray-500">{p.referencia ?? '—'}</td>
-                    <td className="px-3 py-2 text-right font-medium text-gray-900">{fmtDOP(p.montoCentavos)}</td>
-                  </tr>
-                ))}
-                <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
-                  <td className="px-3 py-2" colSpan={5}>Total cobrado</td>
-                  <td className="px-3 py-2 text-right">{fmtDOP(totalPagado)}</td>
-                </tr>
-              </Tabla>
+              <TablaLista
+                columnas={[
+                  { nombre: 'Fecha', ancho: '100px' },
+                  { nombre: 'Alumno' },
+                  { nombre: 'Factura', ancho: '150px' },
+                  { nombre: 'Método', ancho: '120px' },
+                  { nombre: 'Referencia', ancho: '130px' },
+                  { nombre: 'Monto', ancho: '120px', alinear: 'right' },
+                ]}
+                filas={data.pagos.map((x) => ({
+                  key: String(x.id),
+                  celdas: [
+                    fmtFechaCorta(x.fechaPago),
+                    x.alumno ?? '—',
+                    <Enlace key="f" href={`/dashboard/facturas/${x.ecfDocumentId}`}>
+                      {x.encf || x.codigo || `#${x.ecfDocumentId}`}
+                    </Enlace>,
+                    <Box key="m" component="span" sx={{ textTransform: 'capitalize' }}>{x.metodo ?? '—'}</Box>,
+                    x.referencia ?? '—',
+                    <Num key="n">{fmtDOP(x.montoCentavos)}</Num>,
+                  ],
+                }))}
+                pie={['Total cobrado', fmtDOP(totalPagado)]}
+              />
             )
           )}
 
@@ -437,110 +620,120 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
             data.facturas.length === 0 ? (
               <Vacio texto="Ninguna factura fuera del plan de cobro." />
             ) : (
-              <Tabla cabeceras={['Fecha', 'Comprobante', 'Monto', 'Pagado', 'Pendiente']} numericas={[2, 3, 4]}>
-                {data.facturas.map((f) => {
+              <TablaLista
+                columnas={[
+                  { nombre: 'Fecha', ancho: '100px' },
+                  { nombre: 'Comprobante' },
+                  { nombre: 'Monto', ancho: '120px', alinear: 'right' },
+                  { nombre: 'Pagado', ancho: '120px', alinear: 'right' },
+                  { nombre: 'Pendiente', ancho: '120px', alinear: 'right' },
+                ]}
+                filas={data.facturas.map((f) => {
                   const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
-                  return (
-                    <tr key={f.id} className="border-t border-gray-100 hover:bg-gray-50/60">
-                      <td className="whitespace-nowrap px-3 py-2 text-gray-600">{fmtFechaCorta(f.fecha)}</td>
-                      <td className="px-3 py-2">
-                        <Link href={`/dashboard/facturas/${f.id}`} className="text-zero-600 hover:underline">
-                          {f.encf || f.codigo || `#${f.id}`}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-800">{fmtDOP(f.montoTotal)}</td>
-                      <td className="px-3 py-2 text-right text-gray-700">
-                        {f.pagadoCentavos > 0 ? fmtDOP(f.pagadoCentavos) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <span className={saldo > 0 ? 'font-medium text-red-600' : 'text-zero-700'}>
-                          {fmtDOP(saldo)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
+                  return {
+                    key: String(f.id),
+                    celdas: [
+                      fmtFechaCorta(f.fecha),
+                      <Enlace key="c" href={`/dashboard/facturas/${f.id}`}>
+                        {f.encf || f.codigo || `#${f.id}`}
+                      </Enlace>,
+                      <Num key="m">{fmtDOP(f.montoTotal)}</Num>,
+                      <Num key="p" apagada={f.pagadoCentavos <= 0}>
+                        {f.pagadoCentavos > 0 ? fmtDOP(f.pagadoCentavos) : '—'}
+                      </Num>,
+                      <Num key="s" tono={saldo > 0 ? 'rojo' : undefined}>{fmtDOP(saldo)}</Num>,
+                    ],
+                  };
                 })}
-              </Tabla>
+              />
             )
           )}
 
           {vista === 'avisos' && (
-            <div className="space-y-4">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1.5 }}>
               {/* Lo que le VA a salir, con la misma cuenta que usa el cron:
                   si aquí no aparece, el motor tampoco lo va a mandar. */}
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Programados
-                </p>
+              <Box>
+                <Rotulo>Programados</Rotulo>
                 {data.avisosProgramados.length === 0 ? (
-                  <Vacio texto="No le toca ningún recordatorio: sus cargos no tienen avisos encendidos." />
+                  /*
+                    Sin afirmar POR QUÉ está vacío.
+
+                    Decía «sus cargos no tienen avisos encendidos», y eso es
+                    solo uno de los tres motivos: también sale vacío cuando el
+                    concepto sí los tiene encendidos pero el cargo ya está
+                    pagado —un cargo saldado no se recuerda—, y cuando las
+                    fechas de aviso ya pasaron. Afirmando la causa equivocada,
+                    quien lo lee se va a revisar una configuración que estaba
+                    bien.
+                  */
+                  <Vacio texto="No hay ningún recordatorio por salir. Los avisos se encienden por concepto y solo salen sobre cargos con saldo pendiente." />
                 ) : (
-                  <Tabla cabeceras={['Cuándo sale', 'Alumno', 'Aviso', 'Canales', 'Monto']} numericas={[4]}>
-                    {data.avisosProgramados.map((a, i) => (
-                      <tr key={`${a.estudianteId}-${a.tipo}-${i}`} className="border-t border-gray-100">
-                        <td className="whitespace-nowrap px-3 py-2 text-gray-600">{fmtFechaCorta(a.fecha)}</td>
-                        <td className="px-3 py-2 text-gray-900">{a.alumno}</td>
-                        <td className="px-3 py-2 text-gray-700">
+                  <TablaLista
+                    columnas={[
+                      { nombre: 'Cuándo sale', ancho: '110px' },
+                      { nombre: 'Alumno' },
+                      { nombre: 'Aviso' },
+                      { nombre: 'Canales', ancho: '150px' },
+                      { nombre: 'Monto', ancho: '120px', alinear: 'right' },
+                    ]}
+                    filas={data.avisosProgramados.map((a, i) => ({
+                      key: `${a.estudianteId}-${a.tipo}-${i}`,
+                      celdas: [
+                        fmtFechaCorta(a.fecha),
+                        a.alumno,
+                        <Box key="t">
                           {AVISO_TEXTO[a.tipo] ?? a.tipo}
-                          {a.concepto && <span className="block text-xs text-gray-400">{a.concepto}</span>}
-                        </td>
-                        <td className="px-3 py-2 capitalize text-gray-600">{a.canales.join(', ')}</td>
-                        <td className="px-3 py-2 text-right text-gray-700">{fmtDOP(a.montoCentavos)}</td>
-                      </tr>
-                    ))}
-                  </Tabla>
+                          {a.concepto && (
+                            <Typography sx={{ fontSize: '0.65625rem', color: '#9AA0AC' }}>{a.concepto}</Typography>
+                          )}
+                        </Box>,
+                        <Box key="c" component="span" sx={{ textTransform: 'capitalize' }}>{a.canales.join(', ')}</Box>,
+                        <Num key="m">{fmtDOP(a.montoCentavos)}</Num>,
+                      ],
+                    }))}
+                  />
                 )}
-              </div>
+              </Box>
 
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Ya enviados
-                </p>
-            {data.avisos.length === 0 ? (
-              <Vacio texto="Todavía no se le ha mandado ningún recordatorio." />
-            ) : (
-              <Tabla cabeceras={['Cuándo', 'Alumno', 'Aviso', 'Canal', 'A dónde fue']}>
-                {data.avisos.map((a) => (
-                  <tr key={a.id} className="border-t border-gray-100 hover:bg-gray-50/60">
-                    <td className="whitespace-nowrap px-3 py-2 text-gray-600">{fmtFechaCorta(a.enviadoAt)}</td>
-                    <td className="px-3 py-2 text-gray-900">{a.alumno}</td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {AVISO_TEXTO[a.tipo] ?? a.tipo}
-                      {a.concepto && <span className="block text-xs text-gray-400">{a.concepto}</span>}
-                    </td>
-                    <td className="px-3 py-2 capitalize text-gray-600">{a.canal}</td>
-                    {/* El destino de ese día, no el de hoy: eso es lo que lo
-                        convierte en constancia. */}
-                    <td className="px-3 py-2 text-gray-500">{a.destino ?? '—'}</td>
-                  </tr>
-                ))}
-              </Tabla>
-            )}
-              </div>
-            </div>
+              <Box>
+                <Rotulo>Ya enviados</Rotulo>
+                {data.avisos.length === 0 ? (
+                  <Vacio texto="Todavía no se le ha mandado ningún recordatorio." />
+                ) : (
+                  <TablaLista
+                    columnas={[
+                      { nombre: 'Cuándo', ancho: '110px' },
+                      { nombre: 'Alumno' },
+                      { nombre: 'Aviso' },
+                      { nombre: 'Canal', ancho: '110px' },
+                      { nombre: 'A dónde fue' },
+                    ]}
+                    filas={data.avisos.map((a) => ({
+                      key: String(a.id),
+                      celdas: [
+                        fmtFechaCorta(a.enviadoAt),
+                        a.alumno,
+                        <Box key="t">
+                          {AVISO_TEXTO[a.tipo] ?? a.tipo}
+                          {a.concepto && (
+                            <Typography sx={{ fontSize: '0.65625rem', color: '#9AA0AC' }}>{a.concepto}</Typography>
+                          )}
+                        </Box>,
+                        <Box key="c" component="span" sx={{ textTransform: 'capitalize' }}>{a.canal}</Box>,
+                        // El destino de ese día, no el de hoy: eso es lo que lo
+                        // convierte en constancia.
+                        a.destino ?? '—',
+                      ],
+                    }))}
+                  />
+                )}
+              </Box>
+            </Box>
           )}
-        </div>
-      </div>
+        </Box>
+      </Paper>
 
-      {/* Quién cabe en la misma factura lo decide el prefill, no esta pantalla:
-          todos los que salen aquí comparten responsable de pago, que es justo
-          su condición. */}
-      <FacturarCargosDialog
-        open={cargosAFacturar.length > 0 || previsto != null}
-        onOpenChange={(o) => { if (!o) { setCargosAFacturar([]); setPrevisto(null); } }}
-        cargoIds={cargosAFacturar}
-        previsto={previsto}
-        onFacturado={(creada: FacturaCreada) => {
-          setCargosAFacturar([]);
-          setPrevisto(null);
-          toast.success(creada.encf ? `Factura ${creada.encf} creada` : 'Factura creada');
-          // Las dos: la cabecera saca la deuda de una consulta y los meses de
-          // otra, y dejar una sin refrescar enseña la factura hecha encima de
-          // la deuda vieja.
-          void revalidar(`/api/administracion-escolar/responsables/${clientId}`);
-          void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
-        }}
-      />
     </section>
   );
 }
@@ -575,113 +768,294 @@ function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
       ]),
     ]);
   } else {
+    // Las DOS tablas de la pestaña, no solo los enviados.
+    //
+    // La pantalla enseña «Programados» y «Ya enviados» y el CSV traía la
+    // segunda: quien exportaba para preparar las llamadas del día se llevaba
+    // justo lo que YA había salido y nada de lo que estaba por salir. La
+    // columna «Estado» es la que distingue las dos mitades dentro del archivo.
     descargarCsv(`recordatorios-${nombre}.csv`, [
-      ['Cuándo', 'Alumno', 'Aviso', 'Canal', 'Destino'],
+      ['Estado', 'Cuándo', 'Alumno', 'Aviso', 'Canal', 'Destino', 'Monto'],
+      ...d.avisosProgramados.map((a) => [
+        'Programado', a.fecha.slice(0, 10), a.alumno,
+        AVISO_TEXTO[a.tipo] ?? a.tipo, a.canales.join(', '), '',
+        (a.montoCentavos / 100).toFixed(2),
+      ]),
       ...d.avisos.map((a) => [
-        a.enviadoAt.slice(0, 16).replace('T', ' '), a.alumno,
-        AVISO_TEXTO[a.tipo] ?? a.tipo, a.canal, a.destino ?? '',
+        'Enviado', a.enviadoAt.slice(0, 16).replace('T', ' '), a.alumno,
+        AVISO_TEXTO[a.tipo] ?? a.tipo, a.canal, a.destino ?? '', '',
       ]),
     ]);
   }
 }
 
-function Chip({ k, v }: { k: string; v: string }) {
+/* ── Piezas de la ficha ────────────────────────────────────────────────────
+ *
+ * Todas en MUI y sin una clase de Tailwind. Son las que se repiten por toda
+ * la pantalla —los chips de la cabecera, las cuatro cifras, los paneles, las
+ * barras y las tablas de cada pestaña—, así que aquí es donde el cambio de
+ * librería se nota de verdad: cambiando estas seis se convierte casi todo lo
+ * que se ve, sin tocar la lógica que las llama.
+ *
+ * El violeta se mantiene a propósito: distingue la ficha de la FAMILIA de la
+ * del ALUMNO, que tienen la misma forma y se confundían.
+ */
+
+/** La rayita vertical que separa los datos de la cabecera. */
+function Separador() {
+  return <Box component="span" sx={{ width: '1px', height: 13, bgcolor: '#E2E6F2', flexShrink: 0 }} />;
+}
+
+const PASTILLA = {
+  verde: { bg: '#E8F6EF', fg: '#0F7A4A' },
+  rojo:  { bg: '#FDECEC', fg: '#B4231F' },
+  gris:  { bg: '#F2F4FA', fg: '#4A5164' },
+} as const;
+
+/** Etiqueta de estado: «Al día», «Debe RD$…», «Cuenta activa». */
+function Pastilla({ tono, icono, children }: {
+  tono: keyof typeof PASTILLA; icono?: React.ReactNode; children: React.ReactNode;
+}) {
+  const c = PASTILLA[tono];
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs">
-      <span className="text-violet-400">{k}</span>
-      <b className="font-semibold text-gray-800">{v}</b>
-    </span>
+    <Box component="span" sx={{
+      display: 'inline-flex', alignItems: 'center', gap: 0.75,
+      height: 24, px: 1.25, borderRadius: '7px',
+      bgcolor: c.bg, color: c.fg, fontSize: '0.71875rem', fontWeight: 600,
+      whiteSpace: 'nowrap',
+    }}>
+      {icono}{children}
+    </Box>
   );
 }
 
 const TONOS = {
-  gris:  'text-gray-900',
-  red:   'text-red-600',
-  ambar: 'text-amber-700',
-} as const;
-
-function Cifra({ icon: Icon, label, valor, detalle, tono = 'gris' }: {
-  icon: typeof Receipt; label: string; valor: string; detalle: string;
-  tono?: keyof typeof TONOS;
-}) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-        <Icon className="h-3.5 w-3.5" />{label}
-      </div>
-      <p className={`mt-1 truncate text-2xl font-bold ${TONOS[tono]}`}>{valor}</p>
-      <p className="truncate text-xs text-gray-400">{detalle}</p>
-    </div>
-  );
-}
-
-function Panel({ titulo, children }: { titulo: string; children: React.ReactNode }) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-4 py-2.5">
-        <h2 className="text-sm font-semibold text-gray-900">{titulo}</h2>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-const BARRA = {
-  zero:  'bg-zero-500',
-  red:   'bg-red-500',
-  ambar: 'bg-amber-500',
+  gris:  '#0F1118',
+  verde: '#0F7A4A',
+  rojo:  '#B4231F',
 } as const;
 
 /**
- * Una barra con su cifra. Sin librería: son tres barras y una regla de tres,
- * y la CSP de la app no deja cargar nada de fuera.
+ * Una de las cuatro cifras de la banda.
+ *
+ * El número se escribe grande y con `clamp`, no con un tamaño fijo: «Facturado»
+ * puede ser RD$299,520.00 y a 26px en una columna de 230px se salía de la
+ * tarjeta. Y `tabular-nums` porque los cuatro números se leen en fila y con
+ * cifras de ancho distinto no cuadran entre sí.
  */
-function Barra({ etiqueta, valor, total, detalle, tono = 'zero' }: {
-  etiqueta: string; valor: number; total: number; detalle?: string;
-  tono?: keyof typeof BARRA;
+function Cifra({ icon: Icon, label, valor, detalle, tono = 'gris', primera = false }: {
+  icon: typeof Receipt; label: string; valor: string; detalle: string;
+  tono?: keyof typeof TONOS;
+  /** La primera no lleva divisor: sería una raya pegada al borde de la tarjeta. */
+  primera?: boolean;
 }) {
-  const pct = total > 0 ? Math.round((valor / total) * 100) : 0;
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="min-w-0 truncate text-gray-700">{etiqueta}</span>
-        <span className="shrink-0 font-medium text-gray-900">{fmtDOP(valor)}</span>
-      </div>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-gray-100">
-        <div className={`h-full rounded-full ${BARRA[tono]}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="mt-0.5 text-xs text-gray-400">
-        {pct}%{detalle ? ` · ${detalle}` : ''}
-      </p>
-    </div>
+    <Box sx={{
+      px: 2.75, py: 2.25, minWidth: 0,
+      borderLeft: primera ? '1px solid transparent' : '1px solid #EDEFF5',
+    }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box component="span" sx={{ display: 'flex', color: TONOS[tono] === '#0F1118' ? '#2A48C4' : TONOS[tono] }}>
+          <Icon className="h-[15px] w-[15px]" />
+        </Box>
+        <Typography component="span" noWrap sx={{
+          fontSize: '0.6875rem', fontWeight: 600, color: '#8A90A0',
+          textTransform: 'uppercase', letterSpacing: '.07em',
+        }}>
+          {label}
+        </Typography>
+      </Box>
+      <Typography noWrap sx={{
+        mt: 1, fontSize: 'clamp(1.1875rem, 1.55vw, 1.625rem)', fontWeight: 600,
+        letterSpacing: '-0.9px', color: TONOS[tono], fontVariantNumeric: 'tabular-nums',
+      }}>
+        {valor}
+      </Typography>
+      <Typography noWrap sx={{ mt: 0.375, fontSize: '0.71875rem', color: '#9AA0AC' }}>
+        {detalle}
+      </Typography>
+    </Box>
+  );
+}
+
+const TONO_FILA = {
+  verde: { bg: '#E8F6EF', fg: '#0F7A4A' },
+  rojo:  { bg: '#FDECEC', fg: '#B4231F' },
+  azul:  { bg: '#EDF1FE', fg: '#2A48C4' },
+  gris:  { bg: '#F2F4FA', fg: '#8A90A0' },
+} as const;
+
+/**
+ * Un renglón del resumen: icono, qué es, el detalle y la cifra.
+ *
+ * Sustituye al acordeón que repetía los cargos hijo por hijo. Ese detalle ya
+ * está arriba en la tarjeta de cada uno, y tenerlo dos veces hacía que las dos
+ * copias se contradijeran en cuanto una de las dos consultas se refrescaba
+ * antes que la otra.
+ */
+function FilaResumen({ icono, tono, titulo, detalle, monto, href, ultima = false }: {
+  icono: React.ReactNode;
+  tono: keyof typeof TONO_FILA;
+  titulo: string;
+  detalle: string;
+  monto: string;
+  /** Si lleva, la fila entera es un enlace. */
+  href?: string;
+  ultima?: boolean;
+}) {
+  const c = TONO_FILA[tono];
+  const cuerpo = (
+    <Box sx={{
+      display: 'flex', alignItems: 'center', gap: 1.75, py: 1.75,
+      borderBottom: ultima ? 'none' : '1px solid #F1F3F9',
+      cursor: href ? 'pointer' : 'default',
+      transition: 'background .12s',
+      '&:hover': href ? { bgcolor: '#FBFCFE' } : undefined,
+    }}>
+      <Box sx={{
+        width: 36, height: 36, flex: '0 0 36px', borderRadius: '10px',
+        bgcolor: c.bg, color: c.fg, display: 'grid', placeItems: 'center',
+      }}>
+        {icono}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.84375rem', fontWeight: 600, color: '#0F1118' }}>{titulo}</Typography>
+        <Typography noWrap sx={{ mt: 0.25, fontSize: '0.75rem', color: '#8A90A0' }}>{detalle}</Typography>
+      </Box>
+      <Typography sx={{
+        flex: '0 0 auto', fontSize: '0.9375rem', fontWeight: 600,
+        color: tono === 'rojo' ? '#B4231F' : tono === 'verde' ? '#0F7A4A' : '#0F1118',
+        letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums',
+      }}>
+        {monto}
+      </Typography>
+      {href && <ChevronRight size={15} style={{ flexShrink: 0, color: '#C3C8D4' }} />}
+    </Box>
+  );
+  return href
+    ? <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>{cuerpo}</Link>
+    : cuerpo;
+}
+
+/** Cifra alineada a la derecha, con dígitos de ancho fijo. */
+function Num({ children, tono, apagada = false }: {
+  children: React.ReactNode; tono?: 'rojo'; apagada?: boolean;
+}) {
+  return (
+    <Box component="span" sx={{
+      display: 'block', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+      fontWeight: tono === 'rojo' ? 600 : 500,
+      color: tono === 'rojo' ? '#B4231F' : apagada ? '#C3C8D4' : '#1E2433',
+    }}>
+      {children}
+    </Box>
+  );
+}
+
+function Enlace({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} style={{ textDecoration: 'none' }}>
+      <Box component="span" sx={{
+        fontSize: '0.78125rem', color: '#3658E1', fontVariantNumeric: 'tabular-nums',
+        '&:hover': { textDecoration: 'underline' },
+      }}>
+        {children}
+      </Box>
+    </Link>
+  );
+}
+
+function Rotulo({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography sx={{
+      mb: 0.75, fontSize: '0.65625rem', fontWeight: 600, color: '#8A90A0',
+      textTransform: 'uppercase', letterSpacing: '.07em',
+    }}>
+      {children}
+    </Typography>
+  );
+}
+
+/**
+ * Tabla de lista, en rejilla y no en `<table>`.
+ *
+ * Con `subgrid` cada fila se alinea con la cabecera sin repetir los anchos, y
+ * la fila entera puede llevar su propio fondo al pasar por encima — que en un
+ * `<table>` obliga a pintar celda por celda.
+ */
+function TablaLista({ columnas, filas, pie }: {
+  columnas: { nombre: string; ancho?: string; alinear?: 'left' | 'right' | 'center' }[];
+  filas: { key: string; celdas: React.ReactNode[] }[];
+  /** Fila de total: etiqueta a la izquierda y cifra en la última columna. */
+  pie?: [string, string];
+}) {
+  const plantilla = columnas.map((c) => c.ancho ?? 'minmax(120px, 1fr)').join(' ');
+  return (
+    <Box sx={{ overflowX: 'auto' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: plantilla, minWidth: 620 }}>
+        {columnas.map((c) => (
+          <Box key={c.nombre} sx={{
+            fontSize: '0.65625rem', fontWeight: 600, color: '#8A90A0',
+            textTransform: 'uppercase', letterSpacing: '.07em',
+            pt: 1.5, pb: 1, pr: 1.25, textAlign: c.alinear ?? 'left',
+          }}>
+            {c.nombre}
+          </Box>
+        ))}
+
+        {filas.map((f) => (
+          <Box key={f.key} sx={{
+            gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'subgrid',
+            alignItems: 'center', borderTop: '1px solid #F1F3F9',
+            transition: 'background .12s', '&:hover': { bgcolor: '#FBFCFE' },
+          }}>
+            {f.celdas.map((celda, i) => (
+              <Box key={i} sx={{
+                py: 1.375, pr: 1.25, minWidth: 0,
+                fontSize: '0.8125rem', color: '#1E2433',
+                textAlign: columnas[i]?.alinear ?? 'left',
+              }}>
+                {celda}
+              </Box>
+            ))}
+          </Box>
+        ))}
+
+        {pie && (
+          <Box sx={{
+            gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'subgrid',
+            borderTop: '1.5px solid #E2E6F2', bgcolor: '#FBFCFE',
+          }}>
+            <Box sx={{
+              gridColumn: `1 / ${columnas.length}`, py: 1.5,
+              fontSize: '0.78125rem', fontWeight: 600, color: '#4A5164',
+            }}>
+              {pie[0]}
+            </Box>
+            <Box sx={{
+              py: 1.5, pr: 1.25, textAlign: 'right', fontSize: '0.9375rem',
+              fontWeight: 600, color: '#102A72', letterSpacing: '-0.4px',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {pie[1]}
+            </Box>
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 }
 
 function Vacio({ texto }: { texto: string }) {
   return (
-    <p className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
+    <Typography
+      variant="body2"
+      sx={{
+        borderRadius: 2, border: 1, borderStyle: 'dashed', borderColor: 'divider',
+        px: 2, py: 4, textAlign: 'center', color: 'text.secondary',
+      }}
+    >
       {texto}
-    </p>
-  );
-}
-
-function Tabla({ cabeceras, numericas = [], children }: {
-  cabeceras: string[]; numericas?: number[]; children: React.ReactNode;
-}) {
-  return (
-    <div className="overflow-x-auto rounded-lg border border-gray-100">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
-            {cabeceras.map((c, i) => (
-              <th key={c} className={`px-3 py-2 font-medium ${numericas.includes(i) ? 'text-right' : ''}`}>
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
+    </Typography>
   );
 }

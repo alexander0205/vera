@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/drizzle';
-import { teams, sequences, invitations } from '@/lib/db/schema';
+import { teams, invitations } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import { seedSystemRoles } from '@/lib/auth/permissions';
@@ -45,20 +45,18 @@ export async function crearEmpresa(formData: FormData) {
   // Sembrar roles de sistema (owner/admin/vendedor/auditor) + permisos default
   await seedSystemRoles(team.id);
 
-  // Crear 10 secuencias e-NCF
-  const venc = new Date('2027-12-31');
-  await db.insert(sequences).values([
-    { teamId: team.id, tipoEcf: '31', secuenciaActual: BigInt(1),    secuenciaHasta: BigInt(1000), fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '32', secuenciaActual: BigInt(1),    secuenciaHasta: BigInt(5000), fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '33', secuenciaActual: BigInt(1),    secuenciaHasta: BigInt(500),  fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '34', secuenciaActual: BigInt(1),    secuenciaHasta: BigInt(500),  fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '41', secuenciaActual: BigInt(1),    secuenciaHasta: BigInt(500),  fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '43', secuenciaActual: BigInt(1),    secuenciaHasta: BigInt(200),  fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '44', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '45', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '46', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: venc },
-    { teamId: team.id, tipoEcf: '47', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: venc },
-  ]);
+  // NO se siembran secuencias e-NCF. Hasta el 2026-08-06 aquí se insertaban 10
+  // rangos fijos (31: 1-1000, 32: 1-5000, 33/34/41: 1-500, 43: 1-200,
+  // 44/45/46/47: 1000-2000, todos venciendo el 2027-12-31). Eran inventados: la
+  // DGII nunca los autorizó. Una empresa recién creada quedaba lista para
+  // emitir e-NCF fuera de cualquier rango autorizado, y en producción varias
+  // se quedaron con esos defaults sin tocar.
+  //
+  // Las secuencias son un dato fiscal que solo existe cuando la DGII aprueba la
+  // solicitud del contribuyente. El dueño las carga a mano desde Configuración
+  // → Secuencias (POST /api/secuencias) con el rango y el vencimiento reales
+  // del comprobante de autorización. Sin secuencia, la empresa puede facturar
+  // sin comprobante fiscal (sin-ncf) pero no emitir e-CF, que es lo correcto.
 
   // Invitar primer usuario si se indicó email.
   //

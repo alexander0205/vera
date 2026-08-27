@@ -22,7 +22,12 @@ export type ItemsAction =
   | { type: 'UPDATE';   id: number; field: keyof ItemLinea; value: string | number | null }
   | { type: 'UPDATE_BENEFICIARIO'; id: number; dependienteId: number | null; dependienteNombre: string }
   | { type: 'CLEAR_BENEFICIARIOS' }
-  | { type: 'APPLY_PRODUCTO'; idx: number; patch: Partial<ItemLinea> & { productoId: number } }
+  /**
+   * `productoId` puede venir vacío: una cuota del plan cuyo concepto no tiene
+   * producto vinculado se factura igual, con su nombre y su precio. Antes el
+   * tipo lo exigía y obligaba a inventar un id.
+   */
+  | { type: 'APPLY_PRODUCTO'; idx: number; patch: Partial<ItemLinea> & { productoId?: number } }
   | { type: 'APPLY_LISTA_PORC'; porcentaje: number }
   | { type: 'FORCE_EXENTO' }
   | { type: 'RESET' };

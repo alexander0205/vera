@@ -4,7 +4,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getPlanByPriceId } from '@/lib/config/plans';
+import { getPlanByPriceId, planBajoCotizacion } from '@/lib/config/plans';
 import { validarCambioDePlan } from '@/lib/suscripcion/cambio-plan';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,6 +50,34 @@ export async function POST(req: NextRequest) {
   // Antes de tocar Stripe. Para él un cambio de plan son dos números; que el
   // colegio tenga 442 estudiantes contra un tope de 300 solo lo sabemos aquí.
   const planDestino = getPlanByPriceId(newPriceId);
+
+  // ── Planes sin precio publicado ───────────────────────────────────────────
+  //
+  // Su línea va bajo cotización (`precioBajoCotizacion`): el precio se acuerda
+  // con el cliente y no sale de la lista. Aplicar el cambio desde aquí cobraría
+  // un prorrateo calculado sobre una cifra que a esa empresa nunca se le
+  // enseñó. La pantalla ya cambia el botón por el de contacto; esto es lo que
+  // hace que la regla valga también para un POST a mano.
+  //
+  // Va con la forma de un bloqueo normal para que el diálogo de la pantalla lo
+  // pinte como cualquier otro motivo, con su «cómo lo resuelvo».
+  if (planBajoCotizacion(planDestino.key)) {
+    return NextResponse.json(
+      {
+        error: 'Este plan no se contrata desde aquí.',
+        code: 'CAMBIO_BLOQUEADO',
+        bloqueos: [{
+          gravedad: 'bloquea',
+          clave: 'plan-bajo-cotizacion',
+          mensaje: `El precio de ${planDestino.name} se acuerda contigo, no sale de una lista.`,
+          comoResolver: 'Escríbenos y lo dejamos por escrito antes de tocar tu suscripción.',
+        }],
+        avisos: [],
+      },
+      { status: 409 },
+    );
+  }
+
   const adicionales = Array.isArray(team.adicionales)
     ? team.adicionales.filter((a): a is string => typeof a === 'string')
     : [];

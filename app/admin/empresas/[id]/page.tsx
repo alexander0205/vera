@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { notFound, redirect } from 'next/navigation';
 import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/drizzle';
@@ -396,6 +397,7 @@ export default async function EmpresaDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const { id }        = await params;
   const { ok, error } = await searchParams;
   const teamId        = parseInt(id);

@@ -91,7 +91,16 @@ export default function RootLayout({
             </SWRConfig>
           </MuiProviders>
         </AppRouterCacheProvider>
-        <Toaster richColors position="top-right" />
+        {/*
+          Bajados 64px del borde.
+
+          Pegados arriba a la derecha caían justo encima de la X de los
+          cajones que se abren por ese lado, y el aviso de éxito no es un
+          cartel: sonner PARA su cuenta atrás mientras el ratón está encima.
+          Quien iba a cerrar el cajón dejaba el puntero sobre el aviso, el
+          aviso ya no se iba, y la X quedaba tapada para siempre.
+        */}
+        <Toaster richColors position="top-right" offset={{ top: '64px', right: '16px' }} />
       </body>
     </html>
   );

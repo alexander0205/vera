@@ -6,6 +6,7 @@
  * media hora de arqueología.
  */
 
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { MessageSquare, Wifi, WifiOff, AlertTriangle, Building2 } from 'lucide-react';
@@ -26,6 +27,7 @@ function Etiqueta({ texto, color, fondo }: { texto: string; color: string; fondo
 }
 
 export default async function AdminWhatsAppPage() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const [zero, empresas] = await Promise.all([getEstadoZero(), getUsoPorEmpresa()]);
 
   const porZero  = empresas.filter((e) => !e.numeroPropio);

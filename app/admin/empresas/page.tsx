@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, ecfDocuments } from '@/lib/db/schema';
 import { desc, count } from 'drizzle-orm';
@@ -13,6 +14,7 @@ import TableCell from '@mui/material/TableCell';
 import { Building2, Plus, Users } from 'lucide-react';
 
 export default async function AdminEmpresasPage() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const allTeams = await db
     .select({
       id: teams.id, name: teams.name, rnc: teams.rnc,

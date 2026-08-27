@@ -42,7 +42,9 @@ export default function PosTicketPage() {
   const fecha = new Date(t.doc.fechaEmision).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' });
 
   return (
-    <Box sx={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: '12px', color: '#000', lineHeight: 1.35 }}>
+    // `print-area`: el CSS global apaga `body *` al imprimir y solo deja ver lo
+    // que cuelga de esta clase. Sin ella el ticket sale en blanco.
+    <Box className="print-area" sx={{ width: '80mm', margin: '0 auto', padding: '6px 8px', fontFamily: 'monospace', fontSize: '12px', color: '#000', lineHeight: 1.35 }}>
       <Box sx={{ textAlign: 'center', marginBottom: '6px' }}>
         <Box sx={{ fontWeight: 700, fontSize: '14px' }}>{t.empresa.nombre}</Box>
         {t.empresa.rnc && <Box>RNC: {t.empresa.rnc}</Box>}

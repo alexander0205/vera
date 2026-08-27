@@ -8,7 +8,7 @@
  */
 
 import Link from 'next/link';
-import { PLANS, ADDONS, planesDeFamilia } from '@/lib/config/plans';
+import { PLANS, ADDONS, addonBajoCotizacion, familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
 import { LazoZero } from '@/lib/marca/isotipo';
 import {
   Contenedor, Flecha, Iconos, LazoDeFondo, LlamadoFinal,
@@ -18,16 +18,25 @@ import { ComparativaIndustrias } from './_industrias';
 // ─── Cifras derivadas del catálogo ───────────────────────────────────────────
 
 /**
- * El «desde» se calcula SIN los tramos de colegio, que en el sitio público no
- * llevan precio (ver `precios/page.tsx`): hoy el mínimo lo pone igual el plan
- * de entrada de facturación, pero atado a `PLANS` entero bastaría con abaratar
- * un tramo escolar para que la portada publicara una cifra de colegio que la
- * página de precios ya no enseña.
+ * El «desde US$N» de la portada, o `null` cuando no hay ninguno que publicar.
+ *
+ * Se calculaba SIN los tramos de colegio, que en el sitio público no llevan
+ * precio (ver `precios/page.tsx`); ahora la familia de facturación tampoco
+ * publica el suyo (`precioBajoCotizacion`), así que no queda cifra de la que
+ * sacar un mínimo. Se deja calculado y no borrado a propósito: el día que una
+ * línea vuelva a publicar precio, la portada lo recupera sola en vez de
+ * quedarse con la frase genérica para siempre.
  */
-const PRECIO_MINIMO = Math.min(...PLANS.filter(p => p.familia !== 'colegio').map(p => p.price));
+const PRECIO_MINIMO: number | null = (() => {
+  const publicables = PLANS.filter(p => !familiaBajoCotizacion(p.familia) && p.familia !== 'colegio');
+  return publicables.length > 0 ? Math.min(...publicables.map(p => p.price)) : null;
+})();
 const CANTIDAD_PLANES = PLANS.length;
 const HAY_SIN_TOPE = PLANS.some(p => p.limits.docs === -1);
-const PRECIO_POS = ADDONS.find(a => a.key === 'pos')?.price ?? 0;
+/** `null` = el adicional se cotiza con el plan y no se anuncia por su cuenta. */
+const PRECIO_POS: number | null = addonBajoCotizacion('pos', 'ecf')
+  ? null
+  : ADDONS.find(a => a.key === 'pos')?.price ?? 0;
 /** El tramo escolar más alto: es la promesa de techo del módulo de colegios. */
 const TOPE_ESTUDIANTES = Math.max(...planesDeFamilia('colegio').map(p => p.limits.estudiantes));
 
@@ -39,7 +48,9 @@ const MODULOS = [
   },
   {
     nombre: 'Punto de venta',
-    detalle: `Caja con turnos y cuadre al cierre. Se agrega por US$${PRECIO_POS} al mes.`,
+    detalle: PRECIO_POS === null
+      ? 'Caja con turnos y cuadre al cierre. Se agrega sobre cualquier plan de facturación.'
+      : `Caja con turnos y cuadre al cierre. Se agrega por US$${PRECIO_POS} al mes.`,
     icono: Iconos.pos,
   },
   {
@@ -145,7 +156,10 @@ export default function PortadaMarketing() {
             </p>
             <p className="mx-auto mt-3.5 max-w-[600px] text-pretty text-[15px] leading-relaxed text-gray-500">
               Una sola carga de datos. Cada venta cae directo en tu inventario, tu facturación y tu
-              contabilidad. Desde US${PRECIO_MINIMO} al mes, sin instalación y sin contrato mínimo.
+              contabilidad.{' '}
+              {PRECIO_MINIMO === null
+                ? 'Sin instalación y sin contrato mínimo: el precio lo armamos con tu operación.'
+                : `Desde US$${PRECIO_MINIMO} al mes, sin instalación y sin contrato mínimo.`}
             </p>
 
             <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -177,7 +191,12 @@ export default function PortadaMarketing() {
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
               {[
-                { valor: `Desde US$${PRECIO_MINIMO}`, etiqueta: 'al mes, sin instalación' },
+                // Sin cifra que publicar, el hueco lo ocupa lo que sí es
+                // verdad y además vende: que no hay que instalar nada. Dejarlo
+                // en «Desde US$» a secas sería un precio a medio decir.
+                PRECIO_MINIMO === null
+                  ? { valor: 'Sin instalación', etiqueta: 'ni contrato mínimo' }
+                  : { valor: `Desde US$${PRECIO_MINIMO}`, etiqueta: 'al mes, sin instalación' },
                 { valor: 'e-CF', etiqueta: 'certificado ante la DGII' },
                 { valor: '606 · 607', etiqueta: 'reportes incluidos' },
               ].map((m, i) => (
@@ -198,7 +217,11 @@ export default function PortadaMarketing() {
         <Contenedor className="mt-12">
           <div className="grid grid-cols-1 divide-y divide-[#e9ebf3] rounded-2xl border border-[#e9ebf3] bg-[#fafbfe] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {[
-              { valor: `${CANTIDAD_PLANES} planes`, etiqueta: `desde US$${PRECIO_MINIMO} al mes`, icono: Iconos.dinero },
+              {
+                valor: `${CANTIDAD_PLANES} planes`,
+                etiqueta: PRECIO_MINIMO === null ? 'con precio a tu medida' : `desde US$${PRECIO_MINIMO} al mes`,
+                icono: Iconos.dinero,
+              },
               { valor: 'e-CF', etiqueta: 'emisión en segundos', icono: Iconos.reloj },
               // El «sin tope» se dibuja, no se escribe: el lazo ES el infinito
               // de la marca, y en una cifra suelta dice más que dos palabras.

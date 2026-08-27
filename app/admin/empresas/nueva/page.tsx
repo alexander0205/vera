@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import Link from 'next/link';
 import { NuevaEmpresaForm } from './form';
 import { getProvincias } from '@/lib/dgii/catalogos';
@@ -5,6 +6,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
 export default async function NuevaEmpresaPage() {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   // Cargar provincias server-side desde la BD local — fallback a [] si falla
   let provincias: { codigo: string; nombre: string }[] = [];
   try {

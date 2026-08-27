@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { getPlanByPriceId, planBajoCotizacion } from '@/lib/config/plans';
 import { getSuscripcion } from '@/lib/suscripcion/queries';
 import { sincronizarConStripe } from '@/lib/payments/sincronizar';
 import {
@@ -23,8 +24,30 @@ function addonsDelForm(formData: FormData): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Ir al pago seguro de Stripe a contratar un plan.
+ *
+ * Con una excepción que NO es de maquetación: los planes cuya línea va bajo
+ * cotización (`precioBajoCotizacion`) no se auto-contratan. Esconder el precio
+ * y dejar abierto el botón que cobra es cobrarle a alguien una cifra que nunca
+ * vio, y esconder el botón sin cerrar la acción no esconde nada — esta es una
+ * Server Action y un POST a mano llega igual. Por eso el corte está aquí, y la
+ * pantalla se limita a ofrecer el camino que sí existe (hablar con nosotros).
+ *
+ * La PRUEBA sin tarjeta sigue abierta (`empezarPruebaAction`): no cobra nada y
+ * Stripe la deja en pausa si al terminar no hay método de pago, así que por ahí
+ * nadie acaba pagando sin haber visto el número.
+ */
 export const checkoutAction = withTeam(async (formData, team) => {
   const priceId = formData.get('priceId') as string;
+
+  if (planBajoCotizacion(getPlanByPriceId(priceId).key)) {
+    // De vuelta a la pantalla, que es donde está el botón de contacto con el
+    // motivo escrito. Sin mensaje de error propio a propósito: aquí no se
+    // llega por la interfaz, solo a mano.
+    redirect('/dashboard/suscripcion#planes');
+  }
+
   await createCheckoutSession({ team, priceId, addons: addonsDelForm(formData) });
 });
 

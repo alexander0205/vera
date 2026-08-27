@@ -20,7 +20,9 @@ import { Loader2, ArrowRight, Check } from 'lucide-react';
 import { terminar } from './actions';
 import type { ActionState } from '@/lib/auth/middleware';
 import { BILLING_ENABLED } from '@/lib/config/billing';
-import { LINEAS_PRODUCTO, precioTotal, type PlanDef } from '@/lib/config/plans';
+import {
+  LINEAS_PRODUCTO, TEXTO_BAJO_COTIZACION, precioPublicable, type PlanDef,
+} from '@/lib/config/plans';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import type { LineaKey } from '@/lib/onboarding/deducir';
 
@@ -45,7 +47,9 @@ export function PasoPlan({ plan, linea, tamano, razonSocial }: {
     );
   }
 
-  const precio = precioTotal(plan.key, def.addons);
+  // `null` = esta línea no publica precio y lo que va en su sitio es la
+  // invitación a cotizar. La cifra ni se calcula aquí: la decide el catálogo.
+  const precio = precioPublicable(def.key, plan.key);
   const esColegio = def.familia === 'colegio';
 
   // El porqué, con sus propias palabras: es lo que hace que la recomendación
@@ -73,14 +77,33 @@ export function PasoPlan({ plan, linea, tamano, razonSocial }: {
             <p className="mt-0.5 text-sm text-gray-500">{def.descripcion}</p>
           </div>
           {/* Sin billing encendido no se enseña precio: el plan se asigna
-              igual, pero prometer un cobro que todavía no existe confunde. */}
+              igual, pero prometer un cobro que todavía no existe confunde.
+
+              Con billing y sin cifra publicada tampoco se deja el hueco: la
+              prueba que empieza abajo no cobra ni pide tarjeta, así que lo
+              honesto es decir que el precio se acuerda y por dónde pedirlo, no
+              callarse el asunto entero. */}
           {BILLING_ENABLED && (
-            <p className="shrink-0 text-right">
-              <span className="font-[family-name:var(--font-display)] text-[28px] font-bold tabular-nums text-gray-950">
-                ${precio}
-              </span>
-              <span className="block text-xs text-gray-400">USD/mes</span>
-            </p>
+            precio === null ? (
+              <p className="shrink-0 text-right">
+                <span className="block font-[family-name:var(--font-display)] text-[15px] font-semibold text-gray-950">
+                  {TEXTO_BAJO_COTIZACION}
+                </span>
+                <Link
+                  href="/contacto"
+                  className="mt-0.5 block text-xs font-medium text-zero-600 underline underline-offset-2"
+                >
+                  Pedir cotización
+                </Link>
+              </p>
+            ) : (
+              <p className="shrink-0 text-right">
+                <span className="font-[family-name:var(--font-display)] text-[28px] font-bold tabular-nums text-gray-950">
+                  ${precio}
+                </span>
+                <span className="block text-xs text-gray-400">USD/mes</span>
+              </p>
+            )
           )}
         </div>
 

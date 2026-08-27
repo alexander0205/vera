@@ -24,6 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { conErrorJson } from '@/lib/api/error-json';
 import { labelMetodo } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
 import {
@@ -34,10 +35,29 @@ import {
 /** Máximo de excepciones (anulados / a crédito) que se listan. */
 const EXCEPCIONES_MAX = 20;
 
-export async function GET(
+type Ctx = { params: Promise<{ id: string }> };
+
+/*
+  Un fallo aquí NO puede salir como un 500 vacío.
+
+  La hoja del cuadre solo sabe que la respuesta no fue `ok`, así que enseñaba
+  «No autorizado o turno no encontrado» pasara lo que pasara — y una vez lo que
+  pasaba era una columna que faltaba en la base. El envoltorio guarda el
+  detalle en los logs y devuelve un cuerpo que al menos dice de qué lado está
+  el problema.
+*/
+export async function GET(req: NextRequest, ctx: Ctx) {
+  return conErrorJson(
+    'api/caja/turnos/[id]/detalle',
+    'No se pudo cargar el detalle del turno.',
+    () => detalleDelTurno(req, ctx),
+  );
+}
+
+async function detalleDelTurno(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+  { params }: Ctx,
+): Promise<Response> {
   const auth = await requirePermission('caja:ver');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;

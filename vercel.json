@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/escolar-documentos",
       "schedule": "0 13 * * 2"
+    },
+    {
+      "path": "/api/cron/sigerd-relevos",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
