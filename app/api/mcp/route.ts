@@ -130,6 +130,36 @@ function construirHandler(origin: string, authHeader: string) {
         inputSchema: z.object({ id: z.number().int().positive().safe() }) },
       async ({ id }) => llamar(`/pagos/${id}`),
     );
+
+    server.registerTool(
+      'list_school_charges',
+      { title: 'Listar cargos escolares',
+        description:
+          'Cargos del plan de pago de los estudiantes: mensualidades, inscripción y demás conceptos, con su fecha de vencimiento. Es la única herramienta que mira HACIA ADELANTE — las otras cuentan lo ya facturado, un cargo con vencimiento futuro es dinero que todavía no se cobró. Usá `desde`/`hasta` sobre el VENCIMIENTO para responder «¿a quién le vence esta semana?» o «¿cuánto voy a cobrar en octubre?». Devuelve `total` (lo facturado), `saldo` (lo que FALTA cobrar, este es el que responde cuánto se va a cobrar) y `count`, calculados sobre todo el filtro y no sobre la página. Filtros: estado, estudianteId, mes (1-12), anio, desde, hasta (YYYY-MM-DD).',
+        inputSchema: z.object({
+          estado: z.string().optional(),
+          estudianteId: z.number().int().optional(),
+          mes: z.number().int().min(1).max(12).optional(),
+          anio: z.number().int().optional(),
+          desde: z.string().optional(),
+          hasta: z.string().optional(),
+          limit: z.number().int().min(1).max(500).optional(),
+        }) },
+      async (args) => llamar('/cargos-escolares', {
+        estado: args.estado,
+        estudianteId: args.estudianteId?.toString(),
+        mes: args.mes?.toString(), anio: args.anio?.toString(),
+        desde: args.desde, hasta: args.hasta,
+        limit: args.limit?.toString(),
+      }),
+    );
+
+    server.registerTool(
+      'get_school_charge',
+      { title: 'Detalle de cargo escolar', description: 'Obtiene un cargo escolar por id.',
+        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
+      async ({ id }) => llamar(`/cargos-escolares/${id}`),
+    );
   }, {}, { streamableHttpEndpoint: '/api/mcp', disableSse: true });
 }
 
