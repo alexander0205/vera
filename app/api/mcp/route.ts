@@ -101,6 +101,35 @@ function construirHandler(origin: string, authHeader: string) {
         soloVencidas: args.soloVencidas ? 'true' : undefined,
       }),
     );
+
+    server.registerTool(
+      'list_payments',
+      { title: 'Listar pagos recibidos',
+        description:
+          'Lista los pagos cobrados: cuándo, por cuánto y por qué vía. Devuelve además `total` (centavos) y `count` de TODOS los pagos que cumplen el filtro, no solo de la página — usa esos para responder cuánto se cobró, sin sumar a mano. Filtros opcionales: metodo (efectivo, transferencia, tarjeta, cheque, deposito, nota_credito…), ecfDocumentId, clientId, desde, hasta (YYYY-MM-DD). Ojo: un pago con metodo="nota_credito" no es dinero que entró.',
+        inputSchema: z.object({
+          metodo: z.string().optional(),
+          ecfDocumentId: z.number().int().optional(),
+          clientId: z.number().int().optional(),
+          desde: z.string().optional(),
+          hasta: z.string().optional(),
+          limit: z.number().int().min(1).max(500).optional(),
+        }) },
+      async (args) => llamar('/pagos', {
+        metodo: args.metodo,
+        ecfDocumentId: args.ecfDocumentId?.toString(),
+        clientId: args.clientId?.toString(),
+        desde: args.desde, hasta: args.hasta,
+        limit: args.limit?.toString(),
+      }),
+    );
+
+    server.registerTool(
+      'get_payment',
+      { title: 'Detalle de pago', description: 'Obtiene un pago recibido por id.',
+        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
+      async ({ id }) => llamar(`/pagos/${id}`),
+    );
   }, {}, { streamableHttpEndpoint: '/api/mcp', disableSse: true });
 }
 
