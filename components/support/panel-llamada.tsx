@@ -1,9 +1,17 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Phone, ScreenShare, ScreenShareOff, PhoneOff, Volume2, MonitorUp, Maximize, Minimize } from 'lucide-react';
+import { Mic, MicOff, Phone, ScreenShare, ScreenShareOff, PhoneOff, Volume2, MonitorUp, Maximize, Minimize, ChevronsLeftRight, ChevronsRightLeft } from 'lucide-react';
 import type { EstadoLlamada } from '@/lib/webrtc/useLlamada';
 import { PulsoLlamada } from './pulso-llamada';
+
+// Fuera del componente: es el mismo objeto siempre, no hay por qué rehacerlo
+// en cada render.
+const BOTON_ESQUINA: React.CSSProperties = {
+  width: 32, height: 32, borderRadius: 8, border: 'none',
+  cursor: 'pointer', background: 'rgba(15, 23, 42, 0.6)', color: 'white',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+};
 
 export function PanelLlamada({
   estado,
@@ -15,6 +23,8 @@ export function PanelLlamada({
   onAlternarMicrofono,
   onAlternarPantalla,
   onColgar,
+  ancho,
+  onAlternarAncho,
 }: {
   estado: EstadoLlamada;
   error: string | null;
@@ -25,6 +35,10 @@ export function PanelLlamada({
   onAlternarMicrofono: () => void;
   onAlternarPantalla: () => void;
   onColgar: () => void;
+  /** El panel ocupa el área principal en vez de la columna angosta. */
+  ancho?: boolean;
+  /** Si no se pasa, no se dibuja el botón de ensanchar. */
+  onAlternarAncho?: () => void;
 }) {
   // Dos elementos separados, no uno. Confirmado con logs reales: un único
   // <video> reproduciendo un MediaStream que todavía es solo-audio (sin
@@ -158,18 +172,28 @@ export function PanelLlamada({
           </span>
         ) : null}
 
-        <button
-          onClick={alternarPantallaCompleta}
-          title={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
-          aria-label={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
-          style={{
-            position: 'absolute', top: 10, right: 10, width: 32, height: 32, borderRadius: 8, border: 'none',
-            cursor: 'pointer', background: 'rgba(15, 23, 42, 0.6)', color: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {pantallaCompleta ? <Minimize size={16} /> : <Maximize size={16} />}
-        </button>
+        {/* En pantalla completa el ancho del panel dentro de la página ya no
+            significa nada, así que el botón de ensanchar desaparece ahí. */}
+        <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
+          {onAlternarAncho && !pantallaCompleta ? (
+            <button
+              onClick={onAlternarAncho}
+              title={ancho ? 'Achicar el video' : 'Agrandar el video'}
+              aria-label={ancho ? 'Achicar el video' : 'Agrandar el video'}
+              style={BOTON_ESQUINA}
+            >
+              {ancho ? <ChevronsRightLeft size={16} /> : <ChevronsLeftRight size={16} />}
+            </button>
+          ) : null}
+          <button
+            onClick={alternarPantallaCompleta}
+            title={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            aria-label={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            style={BOTON_ESQUINA}
+          >
+            {pantallaCompleta ? <Minimize size={16} /> : <Maximize size={16} />}
+          </button>
+        </div>
       </div>
       {estado === 'activa' && (
         <div style={{ padding: '4px 14px', fontSize: 11, color: '#94a3b8', textAlign: 'center', background: '#1e293b', borderTop: '1px solid #334155' }}>

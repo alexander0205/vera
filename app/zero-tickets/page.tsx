@@ -105,6 +105,12 @@ export default function ZeroTicketsPage() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const llamada = useLlamada('agent', call);
   const finalizadaReciente = useLlamadaFinalizadaReciente(call);
+  // El video arranca grande a propósito: en una llamada de soporte lo que hay
+  // que mirar es la pantalla del cliente, no el chat. En 420 px un escritorio
+  // de 1920 entra a menos de una cuarta parte y el texto no se lee.
+  const [videoAncho, setVideoAncho] = useState(true);
+  // Derivado en el render, no en un efecto: es una función de lo que ya hay.
+  const videoLlenandoElArea = videoAncho && (call?.status === 'activa' || Boolean(finalizadaReciente));
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [available, setAvailable] = useState(false);
@@ -400,7 +406,9 @@ export default function ZeroTicketsPage() {
   return (
     <div className="flex h-[calc(100vh-120px)] gap-4">
       {lightbox && <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />}
-      <div className="w-80 shrink-0 flex flex-col gap-3">
+      {/* Durante una llamada la cola estorba: lo que hay que mirar es la
+          pantalla del cliente. Vuelve con el mismo botón que achica el video. */}
+      <div className={`w-80 shrink-0 flex-col gap-3 ${videoLlenandoElArea ? 'hidden' : 'flex'}`}>
         <div className="border rounded-lg bg-white p-3 flex items-center justify-between">
           <div>
             <div className="text-sm font-medium text-gray-900">Mi estado</div>
@@ -478,18 +486,21 @@ export default function ZeroTicketsPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4">
-      <div className="flex-1 border rounded-lg bg-white flex flex-col min-w-0">
+      <div className="flex-1 flex gap-4 min-w-0">
+      <div className={`border rounded-lg bg-white flex flex-col min-w-0 ${videoLlenandoElArea ? 'w-[380px] shrink-0' : 'flex-1'}`}>
         {selectedId == null || !selected ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Selecciona un ticket</div>
         ) : (
           <>
-            <div className="px-4 py-3 border-b flex justify-between items-center">
-              <div>
-                <div className="font-bold text-gray-900">{selected.userName ?? selected.userEmail}</div>
-                <div className="text-xs text-gray-500">{selected.teamName}</div>
+            {/* Con el video ocupando el área, la columna del chat queda en
+                380 px y los cuatro botones no entran en la misma línea que el
+                nombre: ahí se apilan. */}
+            <div className={`px-4 py-3 border-b flex gap-2 ${videoLlenandoElArea ? 'flex-col items-start' : 'justify-between items-center'}`}>
+              <div className="min-w-0">
+                <div className="font-bold text-gray-900 truncate">{selected.userName ?? selected.userEmail}</div>
+                <div className="text-xs text-gray-500 truncate">{selected.teamName}</div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap shrink-0">
                 {!selected.assignedAgentId && (
                   <button onClick={() => claim(selected.id)} className="text-xs px-3 py-1.5 rounded bg-[#3658e1] text-white hover:bg-[#2c46b4]">
                     Tomar ticket
@@ -632,13 +643,19 @@ export default function ZeroTicketsPage() {
         )}
       </div>
 
-      {finalizadaReciente && (
-        <div style={{ width: 420 }} className="shrink-0">
+      {finalizadaReciente ? (
+        <div
+          style={videoLlenandoElArea ? undefined : { width: 420 }}
+          className={videoLlenandoElArea ? 'flex-1 min-w-0' : 'shrink-0'}
+        >
           <LlamadaFinalizada />
         </div>
-      )}
-      {call?.status === 'activa' && (
-        <div style={{ width: 420 }} className="shrink-0">
+      ) : null}
+      {call?.status === 'activa' ? (
+        <div
+          style={videoLlenandoElArea ? undefined : { width: 420 }}
+          className={videoLlenandoElArea ? 'flex-1 min-w-0' : 'shrink-0'}
+        >
           <PanelLlamada
             estado={llamada.estado}
             error={llamada.error}
@@ -649,9 +666,11 @@ export default function ZeroTicketsPage() {
             onAlternarMicrofono={llamada.alternarMicrofono}
             onAlternarPantalla={llamada.alternarPantalla}
             onColgar={() => llamada.colgar('colgada')}
+            ancho={videoAncho}
+            onAlternarAncho={() => setVideoAncho((v) => !v)}
           />
         </div>
-      )}
+      ) : null}
       </div>
 
       {showManageModal && (
