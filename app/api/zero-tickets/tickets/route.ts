@@ -50,6 +50,11 @@ async function notificarNuevoTicketSlack(teamId: number, remitente: string, cont
     ]},
   ];
 
+  // El tercer argumento es un OVERRIDE opcional, no el canal principal: si
+  // `SUPPORT_SLACK_WEBHOOK_URL` no está puesta llega `undefined` y
+  // `enviarAlertaSlackBlocks` cae solo a `SLACK_WEBHOOK_URL` (ver el `??` en
+  // lib/slack.ts). Existe para poder mandar los tickets a un canal distinto
+  // del de las alertas de infraestructura; sin ella, ambos van al mismo.
   await enviarAlertaSlackBlocks(
     blocks,
     `Nuevo ticket de ${teamName} (${remitente}): ${preview}`,
