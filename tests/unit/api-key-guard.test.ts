@@ -42,6 +42,15 @@ vi.mock('bcryptjs', () => ({
   },
 }));
 
+/** Topes: cada prueba decide si dejan pasar. Por defecto sí. */
+let ipPermite = true;
+let keyPermite = true;
+vi.mock('@/lib/rate-limit', () => ({
+  rateLimit: () => ({ allowed: ipPermite, remaining: 0, reset: Date.now() + 60_000 }),
+  rateLimitDb: () =>
+    Promise.resolve({ allowed: keyPermite, remaining: 0, resetAt: new Date(Date.now() + 60_000) }),
+}));
+
 const { requireApiKey } = await import('@/lib/auth/api-key-guard');
 
 function reqCon(auth?: string) {
@@ -54,6 +63,8 @@ beforeEach(() => {
   filas = [fila()];
   updateSetLlamado = null;
   comparaciones = 0;
+  ipPermite = true;
+  keyPermite = true;
 });
 
 describe('requireApiKey', () => {
@@ -153,5 +164,35 @@ describe('requireApiKey', () => {
     const r = await requireApiKey(reqCon('Bearer emdo_mala'));
     expect(r.ok).toBe(false);
     expect(comparaciones).toBe(1);
+  });
+
+  /**
+   * El señuelo de arriba es correcto pero cuesta ~140 ms de CPU, y lo paga
+   * cualquiera SIN credenciales. Por eso el tope por IP va antes: pasado el
+   * límite la petición no debe llegar al bcrypt. Si esta prueba falla, el
+   * tope quedó del lado equivocado y la ruta volvió a ser un amplificador.
+   */
+  it('pasado el tope por IP → 429 y NO se gasta bcrypt', async () => {
+    ipPermite = false;
+    const r = await requireApiKey(reqCon('Bearer emdo_valida'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.response.status).toBe(429);
+      expect(r.response.headers.get('Retry-After')).toBeTruthy();
+    }
+    expect(comparaciones).toBe(0);
+  });
+
+  it('pasado el tope por key → 429, aunque la key sea válida', async () => {
+    keyPermite = false;
+    const r = await requireApiKey(reqCon('Bearer emdo_valida'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.response.status).toBe(429);
+  });
+
+  it('dentro de los topes → sigue entrando normal', async () => {
+    const r = await requireApiKey(reqCon('Bearer emdo_valida'));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.teamId).toBe(42);
   });
 });

@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { CAMPOS_RECURRENTE_DETALLE } from '@/lib/mcp/campos-recurrentes';
 import { idValido } from '@/lib/mcp/ids';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   if (recurrenteId === null) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [facturaRecurrente] = await db
-    .select()
+    .select(CAMPOS_RECURRENTE_DETALLE)
     .from(facturasRecurrentes)
     .where(and(eq(facturasRecurrentes.id, recurrenteId), eq(facturasRecurrentes.teamId, teamId)))
     .limit(1);
