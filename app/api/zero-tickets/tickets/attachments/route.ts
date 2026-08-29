@@ -6,6 +6,12 @@ import { tickets, ticketMessages, ticketAttachments } from '@/lib/db/schema';
 import { s3Disponible, construirKeyTicket, subirAdjuntoTicket } from '@/lib/storage/tickets';
 
 const MAX_BYTES = 15 * 1024 * 1024;
+// Tope del respaldo en base. Va MUY por debajo de MAX_BYTES a propósito:
+// guardar en `data_base64` infla el archivo un tercio y lo mete en una
+// columna TEXT — con adjuntos grandes eso ya costó latencias de más de 100 s
+// en este proyecto. Una captura de pantalla ronda los 150 KB, así que 2 MB
+// cubre el caso real sin poner a Postgres a cargar videos.
+const MAX_BYTES_EN_BASE = 2 * 1024 * 1024;
 const TIPOS_PERMITIDOS = /^(image\/|video\/|application\/pdf$)/;
 
 function kindDeMime(mime: string): 'image' | 'video' | 'file' {
@@ -48,10 +54,33 @@ export async function POST(req: NextRequest) {
 
   // Sube a S3 (o prepara el base64) ANTES de tocar la base de datos: si esto
   // falla, no queremos ningún registro huérfano de ticketMessages.
-  const usarS3 = s3Disponible();
-  const key = usarS3 ? construirKeyTicket(teamId, ext) : null;
+  //
+  // El `try` no estaba y esa era la falla: el respaldo a base solo corría
+  // cuando S3 NO estaba configurado. Con S3 configurado pero rechazando la
+  // subida —credenciales sin permiso sobre el prefijo, por ejemplo— este
+  // await tiraba y la ruta devolvía 500: cada captura que mandara un cliente
+  // se caía sin recuperación. Ahora un fallo de S3 degrada a base en vez de
+  // romper el envío.
+  let usarS3 = s3Disponible();
+  let key = usarS3 ? construirKeyTicket(teamId, ext) : null;
   if (usarS3 && key) {
-    await subirAdjuntoTicket(key, buffer, file.type);
+    try {
+      await subirAdjuntoTicket(key, buffer, file.type);
+    } catch (err) {
+      console.error('[zero-tickets/tickets/attachments POST] S3 falló, se guarda en base', err);
+      usarS3 = false;
+      key = null;
+    }
+  }
+
+  // Guardar en base es el respaldo, no un camino equivalente: pasado el tope
+  // conviene decirlo y que la persona reintente, no meter megabytes de
+  // base64 en una columna TEXT.
+  if (!usarS3 && buffer.length > MAX_BYTES_EN_BASE) {
+    return NextResponse.json(
+      { error: 'No se pudo guardar el archivo ahora mismo. Probá con uno más liviano o en un momento.' },
+      { status: 503 },
+    );
   }
 
   const msg = await db.transaction(async (tx) => {
