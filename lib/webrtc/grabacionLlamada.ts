@@ -36,7 +36,17 @@ export class GrabacionLlamada {
   }
 
   private iniciarSegmento(stream: MediaStream): void {
-    const candidatos = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'audio/webm'];
+    // El mimeType tiene que corresponderse con lo que el stream trae de
+    // verdad. Al dejar de compartir pantalla el stream local queda con audio
+    // solo, y pedirle a MediaRecorder un contenedor de video para un stream
+    // sin ningún track de video lo hace tirar NotSupportedError. Como ese
+    // error se traga abajo (`catch { this.recorder = null }`), la llamada
+    // seguía normal pero DEJABA DE GRABARSE en silencio a partir de ahí —
+    // justo la parte que después hay que poder revisar.
+    const tieneVideo = stream.getVideoTracks().length > 0;
+    const candidatos = tieneVideo
+      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      : ['audio/webm;codecs=opus', 'audio/webm'];
     const mimeType = candidatos.find((m) => MediaRecorder.isTypeSupported(m));
     // Sin ningún mimeType soportado no se graba — degradación silenciosa,
     // no debe romper la llamada por esto.

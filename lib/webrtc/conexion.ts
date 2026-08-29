@@ -141,7 +141,16 @@ export class ConexionLlamada {
   }
 
   async activarMicrofono(): Promise<void> {
-    this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Las tres restricciones van EXPLÍCITAS. `audio: true` a secas deja el
+    // procesamiento a criterio del navegador y no todos cancelan el eco por
+    // su cuenta — sin esto, el sonido que sale por el parlante vuelve a
+    // entrar por el micrófono, se reenvía, el otro lado lo reproduce, su
+    // micrófono lo vuelve a tomar… y el lazo se realimenta hasta el
+    // chillido. Es la causa de los silbidos en una llamada de soporte, donde
+    // casi nadie usa audífonos.
+    this.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
     const track = this.micStream.getAudioTracks()[0];
     await this.senderNegociado('audio').replaceTrack(track);
     this.streamLocal.getAudioTracks().forEach((t) => this.streamLocal.removeTrack(t));
@@ -173,7 +182,16 @@ export class ConexionLlamada {
   dejarDeCompartirPantalla(): void {
     this.screenStream?.getTracks().forEach((t) => t.stop());
     this.screenStream = null;
-    this.senderNegociado('video').replaceTrack(null).catch(() => {});
+    // `senderNegociado()` TIRA de forma síncrona si el transceiver todavía no
+    // tiene mid — y ese throw no lo agarraba el `.catch()` de la promesa, que
+    // solo cubre el `replaceTrack`. Se escapaba de acá, cortaba
+    // `alternarPantalla` antes del `setCompartiendoPantalla(false)` y el botón
+    // se quedaba diciendo "compartiendo" con la pantalla ya apagada.
+    try {
+      this.senderNegociado('video').replaceTrack(null).catch(() => {});
+    } catch {
+      // Sin transceiver negociado no hay nada que soltar.
+    }
     this.streamLocal.getVideoTracks().forEach((t) => this.streamLocal.removeTrack(t));
   }
 

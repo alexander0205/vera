@@ -41,7 +41,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const key = construirKeyGrabacion(callId, auth.role);
 
   try {
-    await subirAdjuntoTicket(key, buffer, 'video/webm');
+    // Un segmento grabado sin pantalla compartida es audio/webm, no
+    // video/webm: si se sube con el tipo equivocado el navegador después
+    // intenta abrirlo como video y muestra un cuadro negro en vez de un
+    // reproductor de audio.
+    const tipo = file.type === 'audio/webm' || file.type.startsWith('audio/webm;') ? 'audio/webm' : 'video/webm';
+    await subirAdjuntoTicket(key, buffer, tipo);
     await db.insert(ticketCallRecordings).values({ callId, role: auth.role, s3Key: key, duracionSegundos });
   } catch (err) {
     console.error('[zero-tickets/calls/[id]/grabacion POST]', err);
