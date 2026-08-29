@@ -7,6 +7,7 @@ import { and, eq, ilike } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { CAMPOS_RECURRENTE } from '@/lib/mcp/campos-recurrentes';
 import { idValido } from '@/lib/mcp/ids';
 
 export async function GET(req: NextRequest) {
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
   if (q) condiciones.push(ilike(facturasRecurrentes.nombre, `%${q}%`));
 
   const facturasRecurrentesRows = await db
-    .select()
+    .select(CAMPOS_RECURRENTE)
     .from(facturasRecurrentes)
     .where(and(...condiciones))
     .orderBy(facturasRecurrentes.nombre)
