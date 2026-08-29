@@ -5,8 +5,47 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { apiKeys } from '@/lib/db/schema';
+import { rateLimit, rateLimitDb } from '@/lib/rate-limit';
 
 const PERMISOS_CON_LECTURA = ['read', 'write', 'admin'];
+
+/**
+ * Dos topes, porque son dos abusos distintos.
+ *
+ * POR IP, y ANTES del bcrypt. Abajo, cuando el prefijo no existe, se gasta un
+ * bcrypt señuelo a propósito para que tarde lo mismo que uno que sí existe —
+ * es la defensa contra el ataque de tiempo y está bien. Pero son ~140 ms de
+ * CPU medidos, y los paga cualquiera que mande `Bearer emdo_loquesea`, SIN
+ * credenciales. Sin este tope, un bucle contra la ruta factura CPU en Vercel
+ * indefinidamente. Va en memoria a propósito: el objetivo es no hacer trabajo,
+ * y consultar la base para decidir si trabajar ya es trabajo.
+ *
+ * POR KEY, y después de validarla. Este sí va a la base: una key legítima
+ * puede pedir `list_invoices?limit=500` en bucle desde donde quiera, y ahí el
+ * tope tiene que valer entre instancias o no vale. Una conversación con el MCP
+ * son unas pocas llamadas; 300 por minuto es holgado para el uso real y
+ * acota el costo igual.
+ */
+const MAX_POR_IP = 120;
+const MAX_POR_KEY = 300;
+const VENTANA_MS = 60_000;
+
+/** IP del cliente. En Vercel la cabecera la pone la plataforma, no el que llama. */
+function ipDe(req: NextRequest): string {
+  const xff = req.headers.get('x-forwarded-for');
+  return xff?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'desconocida';
+}
+
+function demasiadas(resetMs: number) {
+  const segundos = Math.max(1, Math.ceil((resetMs - Date.now()) / 1000));
+  return {
+    ok: false as const,
+    response: NextResponse.json(
+      { error: 'Demasiadas peticiones. Reintentá en un momento.' },
+      { status: 429, headers: { 'Retry-After': String(segundos) } },
+    ),
+  };
+}
 
 /** Puro: dado el valor de `permisos` de una key, ¿alcanza para leer? */
 export function permiteLectura(permisos: string): boolean {
@@ -46,6 +85,11 @@ export async function requireApiKey(req: NextRequest): Promise<ApiKeyAuthOk | Ap
   const rawKey = header.slice('Bearer '.length).trim();
   if (!rawKey.startsWith('emdo_')) return rechazo();
 
+  // Antes de la consulta y del bcrypt: pasado el tope, la petición no cuesta
+  // más que leer un Map.
+  const porIp = rateLimit(`mcp_ip:${ipDe(req)}`, MAX_POR_IP, VENTANA_MS);
+  if (!porIp.allowed) return demasiadas(porIp.reset);
+
   const keyPrefix = rawKey.slice(0, 12);
 
   /**
@@ -74,6 +118,12 @@ export async function requireApiKey(req: NextRequest): Promise<ApiKeyAuthOk | Ap
     if (fila.revokedAt) return rechazo();
     if (fila.expiresAt && fila.expiresAt.getTime() < Date.now()) return rechazo();
     if (!permiteLectura(fila.permisos)) return rechazo();
+
+    // Tope por key. Va contra la base porque tiene que valer entre instancias:
+    // el mismo cliente puede caer en cualquiera y el tope en memoria se
+    // multiplicaría por el número de instancias vivas.
+    const porKey = await rateLimitDb(`mcp_key:${fila.id}`, MAX_POR_KEY, VENTANA_MS);
+    if (!porKey.allowed) return demasiadas(porKey.resetAt.getTime());
 
     // Fire-and-forget: no bloquear la respuesta por esto.
     void db.update(apiKeys).set({ ultimoUsoAt: new Date() })
