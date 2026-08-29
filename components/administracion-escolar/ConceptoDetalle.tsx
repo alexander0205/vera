@@ -2,7 +2,7 @@
 
 import useSWR from 'swr';
 import {
-  CheckCircle2, Loader2, Mail, MessageCircle, PiggyBank, Receipt, Smartphone, Trash2,
+  CheckCircle2, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import {
   type Frecuencia,
 } from '@/lib/administracion-escolar/calendario';
 import { CANALES_DEL_AVISO, type Aviso, type Canal } from '@/lib/administracion-escolar/ciclo-cobro';
+import { moduleUrl } from '@/lib/config/modules';
 import { CalendarioCuotas, type ApiCalendario } from './CalendarioCuotas';
 
 /**
@@ -84,6 +85,45 @@ const traerEstado = (u: string): Promise<EstadoWhatsApp> =>
 // pantalla: es preferible no ofrecerlo a ofrecer un envío que no sale.
 const traerSms = (u: string): Promise<EstadoSms> =>
   fetch(u).then((r) => (r.ok ? r.json() : { habilitado: false })).catch(() => ({ habilitado: false }));
+
+/**
+ * Cuánto cobra de recargo la EMPRESA. Solo los campos que se enseñan.
+ *
+ * El importe no es del concepto: el concepto decide a qué se le cobra mora y
+ * desde cuándo, pero el porcentaje es uno solo para toda la empresa y se toca
+ * en Facturación. Aquí se lee para poder decirlo, no para editarlo.
+ */
+interface RecargoEmpresa {
+  recargoMoraActivo: boolean;
+  recargoMoraPorcentaje: number | null;
+  recargoMoraModo: string | null;
+  recargoMoraMontoCents: number | null;
+}
+
+// Si no se puede leer, se calla el importe en vez de inventarlo: el panel
+// sigue diciendo CUÁNDO entra el recargo, que es lo que sí sabe.
+const traerRecargo = (u: string): Promise<RecargoEmpresa | null> =>
+  fetch(u).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
+/**
+ * El recargo en palabras: «10 % del monto» o «RD$500 fijos».
+ *
+ * `recargoMoraPorcentaje` viene en puntos básicos (1000 = 10 %) y el monto fijo
+ * en centavos, que es como los guarda la empresa. Devuelve null cuando la
+ * empresa no cobra recargo — y entonces este concepto tampoco, por mucho que
+ * tenga `cobraMora` puesto.
+ */
+function recargoEnPalabras(r: RecargoEmpresa | null | undefined): string | null {
+  if (!r?.recargoMoraActivo) return null;
+  if (r.recargoMoraModo === 'fijo') {
+    const pesos = (r.recargoMoraMontoCents ?? 0) / 100;
+    if (pesos <= 0) return null;
+    return `RD$${pesos.toLocaleString('es-DO', { minimumFractionDigits: 2 })} fijos`;
+  }
+  const pct = (r.recargoMoraPorcentaje ?? 0) / 100;
+  if (pct <= 0) return null;
+  return `${pct % 1 === 0 ? pct : pct.toFixed(2)} % del monto`;
+}
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -248,6 +288,20 @@ export function ConceptoDetalle({
   const { data: sms } = useSWR<EstadoSms>('/api/sms/estado', traerSms);
   const whatsappListo = whatsapp?.conectado === true;
   const smsListo = sms?.habilitado === true;
+
+  /**
+   * Cuánto es el recargo. Se lee del perfil de la empresa porque el importe no
+   * vive aquí: esta pantalla decide a qué conceptos se les cobra mora y desde
+   * qué día, pero el porcentaje es de toda la empresa.
+   *
+   * Sin esto el panel decía «se le aplica el recargo» sin decir de cuánto, que
+   * es justo el número que el colegio quiere ver antes de encenderlo.
+   */
+  const { data: recargo } = useSWR<RecargoEmpresa | null>('/api/equipo/perfil', traerRecargo);
+  const importeRecargo = recargoEnPalabras(recargo);
+  // Facturación puede vivir en otro host. `moduleUrl` devuelve la ruta relativa
+  // cuando comparten dominio y la absoluta cuando no.
+  const urlRecargo = `${moduleUrl('facturacion')}/configuracion`;
 
   const periodico = borrador.frecuencia !== 'unico';
   const diaEmision = borrador.diaEmision ?? 1;
@@ -810,7 +864,11 @@ export function ConceptoDetalle({
 
             if (hayMora) hitos.push({
               d: diaMora, tono: 'mora',
-              titulo: 'Se le aplica el recargo',
+              // El importe delante del plazo: lo primero que se pregunta al
+              // ver esta línea es de cuánto, no cuándo.
+              titulo: importeRecargo
+                ? `Se le aplica el recargo: ${importeRecargo}`
+                : 'Se le aplica el recargo',
               detalle: gracia === 0
                 ? 'El mismo día que vence, sin margen.'
                 : `${gracia} día(s) después de vencer.`,
@@ -853,6 +911,35 @@ export function ConceptoDetalle({
             <p className="mt-2 flex items-start gap-2 text-xs text-gray-600">
               <PiggyBank className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zero-600" />
               <span>{borrador.descuentoAdelantoPct}% de rebaja si salda de una vez todo lo pendiente.</span>
+            </p>
+          )}
+
+          {/* De dónde sale el importe del recargo, y dónde se cambia.
+              Este concepto decide A QUÉ se le cobra mora y DESDE CUÁNDO; el
+              cuánto es de toda la empresa y se toca en Facturación. Sin decirlo
+              aquí, quien pone los días de gracia da por hecho que el porcentaje
+              también se configura en esta pantalla y lo busca sin encontrarlo. */}
+          {borrador.cobraMora && (
+            <p className="mt-2 flex items-start gap-2 text-xs text-gray-600">
+              <Percent className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zero-600" />
+              {importeRecargo ? (
+                <span>
+                  El recargo es de <strong className="font-medium text-gray-900">{importeRecargo}</strong>,
+                  igual para toda la empresa.{' '}
+                  <a href={urlRecargo} className="text-zero-700 underline underline-offset-2 hover:text-zero-900">
+                    Cambiarlo en Facturación → Configuración
+                  </a>.
+                </span>
+              ) : (
+                <span>
+                  Este concepto cobra mora, pero{' '}
+                  <strong className="font-medium text-gray-900">la empresa tiene el recargo apagado</strong>,
+                  así que no se le aplicará nada a nadie.{' '}
+                  <a href={urlRecargo} className="text-zero-700 underline underline-offset-2 hover:text-zero-900">
+                    Encenderlo en Facturación → Configuración
+                  </a>.
+                </span>
+              )}
             </p>
           )}
         </div>

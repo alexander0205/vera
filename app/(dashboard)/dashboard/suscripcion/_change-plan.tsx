@@ -33,7 +33,7 @@ import DialogContent from '@mui/material/DialogContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Calendar, X, CircleSlash, TriangleAlert, Check, Info, MessageCircle } from 'lucide-react';
 
-import type { PlanDef } from '@/lib/config/plans';
+import { TEXTO_BAJO_COTIZACION, type PlanDef } from '@/lib/config/plans';
 import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
 import { LazoZero } from '@/lib/marca/isotipo';
 import { CanalesAviso } from '@/components/canales-aviso';
@@ -88,8 +88,33 @@ export interface LineaVista {
   key: string;
   nombre: string;
   planes: PlanDef[];
-  /** Precio real de cada plan EN ESTA LÍNEA. */
-  precios: Record<string, number>;
+  /**
+   * Precio real de cada plan EN ESTA LÍNEA, o `null` cuando se cotiza.
+   *
+   * Llega ya resuelto por `precioPublicable`: el servidor decide si la cifra
+   * se puede enseñar y, cuando no, no la manda. Aquí no hay `?? plan.price`
+   * que valga — ese respaldo sería exactamente el que devuelve el precio que
+   * se acaba de retirar.
+   */
+  precios: Record<string, number | null>;
+  /**
+   * La línea no publica precio de catálogo (`precioBajoCotizacion`).
+   *
+   * Se manda además de los `precios` en null porque el texto que ocupa el
+   * hueco depende de por qué falta la cifra, y desde aquí no se puede deducir.
+   */
+  bajoCotizacion: boolean;
+  /**
+   * ¿Se puede contratar desde esta pantalla, o hay que hablarlo?
+   *
+   * Es la otra mitad de esconder el precio: dejar el botón que cobra al lado
+   * de un «hablemos» sería cobrarle a alguien una cifra que no vio. La prueba
+   * sin tarjeta sí sigue abierta —no cobra nada— y por eso esto lo decide el
+   * servidor, que es quien sabe si el botón abre una prueba o un cobro.
+   */
+  autoservicio: boolean;
+  /** Por dónde se pide el precio cuando no se publica. */
+  contacto: { whatsapp: string | null; correo: string };
   /** Riesgo de cambiarse a cada plan DE ESTA LÍNEA. */
   riesgos: Record<string, RiesgoDeCambio>;
   /**
@@ -403,7 +428,7 @@ export function ChangePlan({
           const actual = riesgo.nivel === 'actual';
           const veta   = riesgo.nivel === 'bloquea';
           const programado = pendingPlan?.name === plan.name;
-          const precio = linea.precios[plan.key] ?? plan.price;
+          const precio = linea.precios[plan.key] ?? null;
           const conPos = linea.addons.includes('pos') || plan.modulos.includes('pos');
           const esColegio = plan.familia === 'colegio';
           const topes = topesDePlan(plan, { conPos, esColegio });
@@ -438,12 +463,26 @@ export function ChangePlan({
                 {plan.ui.description}
               </Typography>
 
-              <Box sx={{ mt: 1.75, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-1px', color: TINTA }}>
-                  {usd(precio)}
-                </Typography>
-                <Typography sx={{ fontSize: '0.78rem', color: GRIS }}>/ mes</Typography>
-              </Box>
+              {/* Con precio se pinta la cifra; sin él, lo que ocupa su sitio
+                  es de qué depende. Un hueco en blanco en una rejilla de
+                  cuatro columnas parece un fallo de carga. */}
+              {precio === null ? (
+                <Box sx={{ mt: 1.75 }}>
+                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '-.2px', color: TINTA }}>
+                    {TEXTO_BAJO_COTIZACION}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.72rem', color: GRIS, lineHeight: 1.45, mt: 0.375 }}>
+                    Se arma con tu volumen, tus usuarios y lo que haya que migrar.
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ mt: 1.75, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-1px', color: TINTA }}>
+                    {usd(precio)}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.78rem', color: GRIS }}>/ mes</Typography>
+                </Box>
+              )}
 
               <Box sx={{
                 mt: 1.75, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1,
@@ -502,6 +541,27 @@ export function ChangePlan({
                   sx={{ mt: 1.75, height: 42, borderRadius: '11px', textTransform: 'none', fontSize: '0.82rem', fontWeight: 600, bgcolor: '#edeff5', color: GRIS, '&.Mui-disabled': { bgcolor: '#edeff5', color: GRIS } }}>
                   Plan actual
                 </Button>
+              ) : !linea.autoservicio ? (
+                /* Línea sin precio publicado: el botón escribe, no cobra.
+                   Dejar aquí «Contratar» sería mandar a Stripe a alguien que
+                   nunca vio la cifra —y el servidor lo rechazaría igual, ver
+                   `checkoutAction`—, así que el camino que se ofrece es el
+                   único que existe de verdad. */
+                <Button
+                  fullWidth disableElevation
+                  component="a"
+                  href={linea.contacto.whatsapp ?? linea.contacto.correo}
+                  {...(linea.contacto.whatsapp ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  variant="contained"
+                  startIcon={<MessageCircle size={15} />}
+                  sx={{
+                    mt: 1.75, height: 42, borderRadius: '11px', textTransform: 'none',
+                    fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.2, px: 1.5,
+                    bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: '#0c2059' },
+                  }}
+                >
+                  Pedir precio de {plan.name}
+                </Button>
               ) : (
                 <Button
                   fullWidth disableElevation
@@ -553,11 +613,15 @@ export function ChangePlan({
       {/* Cómo se aplica el cambio. No se le habla de prorrateo a quien todavía
           no tiene suscripción: es explicarle una mecánica que no le va a pasar. */}
       <Typography sx={{ fontSize: '0.75rem', color: GRIS, lineHeight: 1.5 }}>
-        {tieneSuscripcion
-          ? 'Subir de plan aplica de inmediato y se cobra solo la diferencia del período que queda. Bajar aplica al terminar tu ciclo ya pagado.'
-          : pruebaPorFamilia
-            ? 'Todos los planes empiezan con días de prueba y sin tarjeta. Al terminar la prueba decides si sigues.'
-            : 'Tu plan de hoy no tiene cobro automático. Al contratar uno, la facturación pasa a ser mensual por tarjeta y puedes cambiarlo o cancelarlo cuando quieras.'}
+        {!linea.autoservicio
+          // Explicar el prorrateo de un cambio que esta línea no deja hacer
+          // sola sería contarle una mecánica que no le va a pasar.
+          ? `${linea.nombre} no se contrata desde aquí: su precio se arma con tu operación. Escríbenos y lo dejamos por escrito antes de tocar nada.`
+          : tieneSuscripcion
+            ? 'Subir de plan aplica de inmediato y se cobra solo la diferencia del período que queda. Bajar aplica al terminar tu ciclo ya pagado.'
+            : pruebaPorFamilia
+              ? 'Todos los planes empiezan con días de prueba y sin tarjeta. Al terminar la prueba decides si sigues.'
+              : 'Tu plan de hoy no tiene cobro automático. Al contratar uno, la facturación pasa a ser mensual por tarjeta y puedes cambiarlo o cancelarlo cuando quieras.'}
       </Typography>
 
       {abierto && (
@@ -568,7 +632,7 @@ export function ChangePlan({
           riesgo={bloqueosTardios
             ? { ...linea.riesgos[abierto.key]!, nivel: 'bloquea', bloqueos: bloqueosTardios }
             : linea.riesgos[abierto.key]!}
-          precio={linea.precios[abierto.key] ?? abierto.price}
+          precio={linea.precios[abierto.key] ?? null}
           priceId={priceIds[abierto.key] ?? ''}
           adicionales={linea.addons}
           tieneSuscripcion={tieneSuscripcion}
@@ -605,7 +669,8 @@ function DialogoCambio({
   /** La línea desde la que se pulsó. El plan solo no identifica lo que compra. */
   nombreDeLinea: string;
   riesgo: RiesgoDeCambio;
-  precio: number;
+  /** `null` = la línea se cotiza y aquí no se enseña ninguna cifra. */
+  precio: number | null;
   priceId: string;
   adicionales: string[];
   tieneSuscripcion: boolean;
@@ -642,13 +707,22 @@ function DialogoCambio({
    * nivel de riesgo: con suscripción se modifica la que hay, y sin ella el
    * botón lleva al checkout de Stripe y no hay prorrateo que explicar.
    */
+  //
+  // Sin cifra publicada el diálogo NO se inventa una: se dice qué pasa —que es
+  // lo que de verdad tiene que decidir— y el precio queda para la conversación
+  // que abre el botón de la tarjeta. Este camino solo se llega con la prueba
+  // sin tarjeta: la línea que se cotiza no tiene botón de cobro (ver
+  // `autoservicio`), así que aquí nunca hay un cobro sin número delante.
+  const cuanto = precio === null ? null : usd(precio);
   const mecanica = !tieneSuscripcion
     ? diasDePrueba
-      ? `Empiezas hoy con ${diasDePrueba} días de prueba, sin tarjeta. Después son ${usd(precio)} al mes; puedes cambiar o cancelar cuando quieras.`
-      : `Vas al pago seguro de Stripe para contratar ${nombreDeLinea} · ${plan.name} por ${usd(precio)} al mes.`
+      ? cuanto === null
+        ? `Empiezas hoy con ${diasDePrueba} días de prueba, sin tarjeta y sin cobro. Antes de que termine acordamos el precio contigo; si no lo haces, no se te cobra nada.`
+        : `Empiezas hoy con ${diasDePrueba} días de prueba, sin tarjeta. Después son ${cuanto} al mes; puedes cambiar o cancelar cuando quieras.`
+      : `Vas al pago seguro de Stripe para contratar ${nombreDeLinea} · ${plan.name}${cuanto ? ` por ${cuanto} al mes` : ''}.`
     : sube
-      ? `${usd(precio)} al mes. El cambio aplica de inmediato y se cobra ahora solo la diferencia del período que queda.`
-      : `${usd(precio)} al mes. El cambio entra en vigor al terminar tu ciclo ya pagado; hasta entonces conservas ${planActual.name}.`;
+      ? `${cuanto ? `${cuanto} al mes. ` : ''}El cambio aplica de inmediato y se cobra ahora solo la diferencia del período que queda.`
+      : `${cuanto ? `${cuanto} al mes. ` : ''}El cambio entra en vigor al terminar tu ciclo ya pagado; hasta entonces conservas ${planActual.name}.`;
 
   // La casilla solo cuando hay algo que aceptar. Pedir «entiendo lo que
   // pierdo» cuando no se pierde nada es un trámite inventado.
@@ -733,7 +807,9 @@ function DialogoCambio({
               <input type="hidden" name="addons" value={adicionales.join(',')} />
               <Button type="submit" variant="contained" disableElevation disabled={!puedeSeguir || !priceId}
                 sx={{ height: 38, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', bgcolor: NAVY, '&:hover': { bgcolor: '#0c2059' } }}>
-                {diasDePrueba ? `Empezar ${diasDePrueba} días gratis` : `Contratar ${usd(precio)}/mes`}
+                {diasDePrueba
+                  ? `Empezar ${diasDePrueba} días gratis`
+                  : cuanto ? `Contratar ${cuanto}/mes` : `Contratar ${plan.name}`}
               </Button>
             </Box>
           )

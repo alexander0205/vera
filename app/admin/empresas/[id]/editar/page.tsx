@@ -1,3 +1,4 @@
+import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
@@ -14,6 +15,7 @@ export default async function EditarEmpresaPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const { id } = await params;
   const teamId = parseInt(id);
 

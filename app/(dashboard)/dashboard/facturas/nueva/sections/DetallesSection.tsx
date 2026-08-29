@@ -9,8 +9,6 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 
 export const MOTIVOS_NOTA = [
   { value: 'devolucion',   label: 'Devolución de mercancía',   codigo: 3 },
@@ -45,6 +43,32 @@ const TIPOS_INGRESO = [
 // Tipos donde TipoIngresos NO aplica (campo prohibido en IdDoc): Compras, Gastos, Pagos Exterior.
 const SIN_TIPO_INGRESO = ['41', '43', '47'];
 
+/**
+ * Etiqueta de campo, en versalitas y encima del control.
+ *
+ * Es la misma que usan «RNC O CÉDULA», «TELÉFONO» y «EMAIL» en la tarjeta del
+ * cliente. Aquí se usaba la etiqueta flotante de MUI, que dibuja el texto
+ * incrustado en el borde: dos campos vecinos quedaban con la etiqueta a dos
+ * alturas distintas y en dos tamaños distintos.
+ */
+function Etiqueta({ children, atenuada = false }: { children: React.ReactNode; atenuada?: boolean }) {
+  return (
+    <Typography
+      variant="caption"
+      sx={{
+        display: 'block',
+        mb: 0.5,
+        color: atenuada ? 'text.disabled' : 'text.secondary',
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        fontWeight: 500,
+      }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
 /** Formatea YYYY-MM-DD → DD/MM/YYYY */
 interface Props {
   regla: TipoEcfRegla | undefined;
@@ -61,6 +85,16 @@ interface Props {
   empresa?: EmpresaPerfil | null;
   /** true = el usuario no ha registrado ningún pago en esta factura. */
   sinPagoRegistrado?: boolean;
+  /**
+   * Deja solo lo que un colegio necesita: condición de pago y fecha.
+   *
+   * «Tipo de ingresos» siempre es 01 (giro del negocio) en una institución
+   * educativa, así que es un desplegable de un solo valor útil. Y el plazo de
+   * vencimiento no aplica al contado —que es como entra el 100% de lo que se
+   * factura desde la ficha de familia—, aunque reaparece si alguien pasa la
+   * factura a crédito, porque ahí sí es obligatorio.
+   */
+  camposMinimos?: boolean;
 }
 
 export function DetallesSection({
@@ -72,9 +106,15 @@ export function DetallesSection({
   fechaLimitePago,
   empresa,
   sinPagoRegistrado = false,
+  camposMinimos = false,
 }: Props) {
   const esCredito = condicionPago === '2';
-  const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
+  const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf) && !camposMinimos;
+  // Plazo y vencimiento son el mismo dato contado dos veces: el vencimiento
+  // sale del plazo. Ocultar uno y dejar el otro deshabilitado y vacío llenaba
+  // media tarjeta de un campo gris que no dice nada.
+  const muestraVencimiento = !camposMinimos || esCredito;
+  const campos = 1 + (muestraVencimiento ? 2 : 0) + (muestraTipoIngresos ? 1 : 0);
 
   // Qué mora aplicaría si la factura vence sin pagarse. null si la empresa no
   // la tiene activa — entonces no hay nada que advertir.
@@ -96,12 +136,27 @@ export function DetallesSection({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
-        <FormControl size="small" fullWidth>
-          <InputLabel sx={{ fontSize: '0.75rem' }}>Condición de pago</InputLabel>
+      <Box
+        sx={{
+          display: 'grid',
+          // Ancho tope por columna en vez de repartir el contenedor: en modo
+          // colegio solo queda «Condición de pago», y con `1fr` ese único
+          // desplegable se estiraba de lado a lado del cajón.
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: `repeat(${Math.min(campos, 2)}, minmax(0, 1fr))`,
+            lg: `repeat(${campos}, minmax(0, 240px))`,
+          },
+          gap: 1.5,
+          alignItems: 'start',
+        }}
+      >
+        <Box>
+          <Etiqueta>Condición de pago</Etiqueta>
           <Select
+            size="small"
+            fullWidth
             value={condicionPago}
-            label="Condición de pago"
             onChange={(e) => setCondicionPago(e.target.value)}
             sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
           >
@@ -109,47 +164,53 @@ export function DetallesSection({
               <MenuItem key={c.value} value={c.value} sx={{ fontSize: '0.875rem' }}>{c.label}</MenuItem>
             ))}
           </Select>
-        </FormControl>
-
-        <Box>
-          <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: esCredito ? '#4b5563' : '#d1d5db', mb: 0.5 }}>
-            Plazo de vencimiento {esCredito && <Box component="span" sx={{ color: '#ef4444' }}>*</Box>}
-          </Typography>
-          <Box sx={{ position: 'relative', width: 112 }}>
-            <TextField
-              type="number"
-              size="small"
-              value={diasParaPago}
-              onChange={(e) => setDiasParaPago(e.target.value)}
-              disabled={!esCredito}
-              slotProps={{ htmlInput: { min: 1 } }}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem', pr: '36px' } }}
-            />
-            <Typography sx={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#9ca3af', pointerEvents: 'none' }}>
-              días
-            </Typography>
-          </Box>
         </Box>
 
+        {muestraVencimiento && (
         <Box>
-          <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: esCredito ? '#4b5563' : '#d1d5db', mb: 0.5 }}>
-            Vence el
-          </Typography>
+          <Etiqueta atenuada={!esCredito}>
+            Plazo de vencimiento {esCredito && <Box component="span" sx={{ color: 'error.main' }}>*</Box>}
+          </Etiqueta>
+          <TextField
+            type="number"
+            size="small"
+            fullWidth
+            value={diasParaPago}
+            onChange={(e) => setDiasParaPago(e.target.value)}
+            disabled={!esCredito}
+            slotProps={{
+              htmlInput: { min: 1, style: { fontSize: '0.875rem' } },
+              input: {
+                endAdornment: (
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', pl: 0.5 }}>días</Typography>
+                ),
+              },
+            }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+          />
+        </Box>
+        )}
+
+        {muestraVencimiento && (
+        <Box>
+          <Etiqueta atenuada={!esCredito}>Vence el</Etiqueta>
           {/* Solo lectura: se recalcula solo cuando cambia el plazo. */}
           <TextField
             type="date" size="small" fullWidth disabled
             value={esCredito ? fechaLimitePago : ''}
-            slotProps={{ htmlInput: { readOnly: true, tabIndex: -1 } }}
+            slotProps={{ htmlInput: { readOnly: true, tabIndex: -1, style: { fontSize: '0.875rem' } } }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
           />
         </Box>
+        )}
 
         {muestraTipoIngresos && (
-          <FormControl size="small" fullWidth>
-            <InputLabel sx={{ fontSize: '0.75rem' }}>Tipo de ingresos</InputLabel>
+          <Box>
+            <Etiqueta>Tipo de ingresos</Etiqueta>
             <Select
+              size="small"
+              fullWidth
               value={tipoIngresos}
-              label="Tipo de ingresos"
               onChange={(e) => setTipoIngresos(e.target.value)}
               sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
             >
@@ -157,7 +218,7 @@ export function DetallesSection({
                 <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.875rem' }}>{t.label}</MenuItem>
               ))}
             </Select>
-          </FormControl>
+          </Box>
         )}
       </Box>
 

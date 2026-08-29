@@ -6,6 +6,7 @@ import { teams } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { getTeamModules } from '@/lib/auth/modules';
 import { MODULES } from '@/lib/config/modules';
+import { ADDONS, addonBajoCotizacion, getPlan } from '@/lib/config/plans';
 import { activarModulo, desactivarModulo, moduleBillingEnabled } from '@/lib/payments/modulos';
 
 /**
@@ -46,6 +47,19 @@ export async function POST(req: NextRequest) {
 
   const [team] = await db.select().from(teams).where(eq(teams.id, auth.teamId)).limit(1);
   if (!team) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 });
+
+  // El adicional que abre este módulo no publica precio sobre la familia que
+  // tiene contratada: se cotiza. Activarlo aquí le crea un item en Stripe con
+  // un prorrateo que nunca vio. Mismo criterio que en /api/stripe/change-plan
+  // y en `checkoutAction` — y aquí importa el doble, porque esta ruta no tiene
+  // pantalla que la llame y solo se alcanza por HTTP.
+  const addon = ADDONS.find(a => a.modulo === parsed.data.modulo);
+  if (addon && addonBajoCotizacion(addon.key, getPlan(team.planName).familia)) {
+    return NextResponse.json(
+      { error: `${addon.name} se agrega con nosotros: su precio va dentro de tu cotización. Escríbenos y lo ajustamos.` },
+      { status: 409 },
+    );
+  }
 
   try {
     const result = await activarModulo(team, parsed.data.modulo, auth.user.id);

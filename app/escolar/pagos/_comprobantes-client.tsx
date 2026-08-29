@@ -17,13 +17,12 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AprobarComprobanteDialog } from '@/components/administracion-escolar/AprobarComprobanteDialog';
 import { fmtDOP } from '@/lib/utils/format';
 import {
-  CheckCircle2, Clock, FileText, Loader2, Paperclip, XCircle, AlertTriangle, ExternalLink,
+  CheckCircle2, Clock, FileText, Loader2, Paperclip, XCircle, AlertTriangle, ExternalLink, Search,
 } from 'lucide-react';
 
 interface CargoSnapshot {
@@ -52,11 +51,30 @@ interface Comprobante {
   revisadoEn: string | null;
 }
 
-const ESTADO: Record<string, { label: string; clase: string; icono: typeof Clock }> = {
-  pendiente: { label: 'Pendiente', clase: 'bg-amber-100 text-amber-800', icono: Clock },
-  aprobado:  { label: 'Aprobado',  clase: 'bg-emerald-100 text-emerald-800', icono: CheckCircle2 },
-  rechazado: { label: 'Rechazado', clase: 'bg-red-100 text-red-800', icono: XCircle },
+/**
+ * El estado va en un `<span>` y no en `<Badge>` a propósito.
+ *
+ * `Badge` es un Chip de MUI y su `sx` pisa las clases de Tailwind: pendiente y
+ * aprobado salían los dos del mismo azul, que en una cola de revisión es el
+ * peor error posible — no se distingue lo hecho de lo que falta.
+ */
+const ESTADO: Record<string, { label: string; clase: string; borde: string; icono: typeof Clock }> = {
+  pendiente: { label: 'Pendiente', clase: 'bg-amber-50 text-amber-800 ring-amber-200',     borde: 'border-l-amber-400',   icono: Clock },
+  aprobado:  { label: 'Aprobado',  clase: 'bg-emerald-50 text-emerald-800 ring-emerald-200', borde: 'border-l-emerald-400', icono: CheckCircle2 },
+  rechazado: { label: 'Rechazado', clase: 'bg-red-50 text-red-800 ring-red-200',           borde: 'border-l-red-400',     icono: XCircle },
 };
+
+/** Los cargos llegan repetidos por estudiante; agrupados se leen de un vistazo. */
+function porEstudiante(cargos: CargoSnapshot[]): Array<{ estudiante: string; lineas: CargoSnapshot[]; total: number }> {
+  const mapa = new Map<string, CargoSnapshot[]>();
+  for (const c of cargos) {
+    const k = c.estudiante || 'Sin estudiante';
+    (mapa.get(k) ?? mapa.set(k, []).get(k)!).push(c);
+  }
+  return [...mapa.entries()].map(([estudiante, lineas]) => ({
+    estudiante, lineas, total: lineas.reduce((t, l) => t + l.montoCentavos, 0),
+  }));
+}
 
 function cuando(iso: string): string {
   const d = new Date(iso);
@@ -75,6 +93,8 @@ export function ComprobantesClient() {
   const [aprobando, setAprobando] = useState<Comprobante | null>(null);
   const [rechazando, setRechazando] = useState<number | null>(null);
   const [motivo, setMotivo] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'aprobado' | 'rechazado'>('todos');
+  const [busca, setBusca] = useState('');
 
   const cargar = useCallback(async () => {
     setCargando(true); setError(null);
@@ -137,6 +157,27 @@ export function ComprobantesClient() {
   const pendientes = filas.filter((f) => f.estado === 'pendiente');
   const montoPendiente = pendientes.reduce((s, f) => s + f.montoCentavos, 0);
 
+  // El aviso de arriba cuenta SIEMPRE sobre el total, no sobre lo filtrado:
+  // esconder pendientes con un filtro no los hace desaparecer de la cola.
+  const cuenta = {
+    todos: filas.length,
+    pendiente: pendientes.length,
+    aprobado: filas.filter((f) => f.estado === 'aprobado').length,
+    rechazado: filas.filter((f) => f.estado === 'rechazado').length,
+  };
+
+  const q = busca.trim().toLowerCase();
+  const visibles = filas.filter((f) => {
+    if (filtroEstado !== 'todos' && f.estado !== filtroEstado) return false;
+    if (!q) return true;
+    // Se busca por lo que alguien tiene delante cuando compara con el banco:
+    // el nombre del padre, la referencia, el banco y el nombre de los hijos.
+    return [
+      f.responsable, f.referencia, f.bancoOrigen,
+      ...f.cargos.map((c) => c.estudiante),
+    ].some((t) => (t ?? '').toLowerCase().includes(q));
+  });
+
   if (cargando) {
     return (
       <div className="flex justify-center py-16">
@@ -171,6 +212,44 @@ export function ComprobantesClient() {
         </div>
       )}
 
+      {filas.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+            {([
+              ['todos', 'Todos'], ['pendiente', 'Por revisar'],
+              ['aprobado', 'Aprobados'], ['rechazado', 'Rechazados'],
+            ] as const).map(([clave, etiqueta]) => (
+              <button
+                key={clave}
+                type="button"
+                onClick={() => setFiltroEstado(clave)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filtroEstado === clave
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {etiqueta}
+                <span className={`ml-1.5 tabular-nums ${filtroEstado === clave ? 'text-gray-400' : 'text-gray-400'}`}>
+                  {cuenta[clave]}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Familia, estudiante, referencia o banco…"
+              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none placeholder:text-gray-400 focus:border-zero-500 focus:ring-1 focus:ring-zero-500"
+            />
+          </div>
+        </div>
+      )}
+
       {filas.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
@@ -181,19 +260,38 @@ export function ComprobantesClient() {
             </p>
           </CardContent>
         </Card>
+      ) : visibles.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Search className="mx-auto mb-3 h-9 w-9 text-gray-300" />
+            <p className="font-medium text-gray-900">Nada con ese filtro</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Hay {filas.length} {filas.length === 1 ? 'comprobante' : 'comprobantes'} en total.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setFiltroEstado('todos'); setBusca(''); }}
+              className="mt-3 text-sm font-medium text-zero-600 hover:underline"
+            >
+              Quitar los filtros
+            </button>
+          </CardContent>
+        </Card>
       ) : (
-        filas.map((c) => {
+        visibles.map((c) => {
           const e = ESTADO[c.estado] ?? ESTADO.pendiente;
           const Icono = e.icono;
           const esImagen = c.archivoMime.startsWith('image/');
           return (
-            <Card key={c.id}>
+            <Card key={c.id} className={`border-l-4 ${e.borde}`}>
               <CardContent className="space-y-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-gray-900">{c.responsable ?? 'Responsable eliminado'}</span>
-                      <Badge className={e.clase}><Icono className="mr-1 h-3 w-3" />{e.label}</Badge>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${e.clase}`}>
+                        <Icono className="h-3 w-3" />{e.label}
+                      </span>
                     </div>
                     <p className="text-sm text-gray-500">
                       {cuando(c.creadoEn)}
@@ -209,14 +307,24 @@ export function ComprobantesClient() {
                     <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Lo que debía al subirlo
                     </p>
-                    <ul className="space-y-1 text-sm text-gray-700">
-                      {c.cargos.map((x) => (
-                        <li key={x.cargoId} className="flex justify-between gap-3">
-                          <span className="truncate">{x.concepto} · {x.estudiante}</span>
-                          <span className="shrink-0 tabular-nums">{fmtDOP(x.montoCentavos)}</span>
-                        </li>
+                    <div className="space-y-2.5">
+                      {porEstudiante(c.cargos).map((g) => (
+                        <div key={g.estudiante}>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="truncate text-sm font-semibold text-gray-900">{g.estudiante}</span>
+                            <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">{fmtDOP(g.total)}</span>
+                          </div>
+                          <ul className="mt-0.5 space-y-0.5 text-sm text-gray-600">
+                            {g.lineas.map((x) => (
+                              <li key={x.cargoId} className="flex justify-between gap-3 pl-3">
+                                <span className="truncate">{x.concepto}</span>
+                                <span className="shrink-0 tabular-nums">{fmtDOP(x.montoCentavos)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
 

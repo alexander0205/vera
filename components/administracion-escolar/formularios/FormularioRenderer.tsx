@@ -4,14 +4,14 @@
 //
 // Adaptaciones respecto al CRM:
 //  - `_id: string` (ObjectId de Mongo) → `id: number` (serial de Postgres).
-//  - El endpoint de envío (`/api/.../respuestas`) y el de subida de archivos
-//    (`/api/.../upload-url`) TODAVÍA NO EXISTEN — esta tarea es solo el
-//    constructor, no la página pública ni el envío de respuestas (ver tarea).
-//    `handleSubmit` ya cortaba en seco si `isPreview` (igual que el CRM), así
-//    que el POST de envío nunca se dispara desde el constructor. Lo que SÍ
-//    hacía falta tocar es `subirArchivo`: en el CRM llamaba a la red sin mirar
-//    `isPreview`, y aquí esa red no existe todavía. En vista previa se acepta
-//    el archivo en el momento (sin subirlo) para poder ver el campo funcionando.
+//  - La subida de archivos NO usa presigned URL como el CRM. Aquí el archivo
+//    pasa por `/api/formularios-publicos/[slug]/borrador/[token]/archivo`, que
+//    valida tipo y tamaño antes de guardarlo — un PUT firmado contra S3 se
+//    salta esa validación (misma regla que `lib/storage/comprobantes.ts`).
+//    Las imágenes se encogen en el navegador antes de mandarlas: el cuerpo de
+//    una petición a Vercel se corta en 4.5 MB y una foto de teléfono no cabe.
+//    En vista previa no hay borrador, así que el archivo se acepta en el
+//    momento para poder ver el campo funcionando.
 //  - `configuracion` deja fuera `crearProspecto` (no hay leads en Zero).
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
@@ -103,6 +103,8 @@ function CampoRenderer({
   colorPrimario,
   isPreview,
   idioma,
+  slug,
+  token,
 }: {
   campo: ICampo;
   value: unknown;
@@ -111,6 +113,9 @@ function CampoRenderer({
   colorPrimario: string;
   isPreview: boolean;
   idioma: 'es' | 'en';
+  /** Del enlace público. Sin los dos no hay a dónde subir. */
+  slug?: string;
+  token?: string;
 }) {
   const [subiendo, setSubiendo] = useState(false);
 
@@ -121,35 +126,82 @@ function CampoRenderer({
   const ayuda = (en && campo.ayudaEn) || campo.ayuda;
   const opcionLabel = (op: string, i: number) => (en && campo.opcionesEn?.[i]) || op;
 
-  // En vista previa no hay a dónde subir todavía (el endpoint de envío es
-  // trabajo futuro), así que se acepta el archivo localmente para poder ver
-  // el campo funcionando sin pegarle a una ruta que no existe.
-  const subirArchivo = async (file: File) => {
-    if (file.size > 15 * 1024 * 1024) { alert('Archivo muy grande (máx 15MB)'); return; }
-    if (isPreview) {
-      onChange({ nombre: file.name, tipo: file.type, size: file.size, key: 'preview-local' });
+  /**
+   * Encoger la imagen ANTES de mandarla.
+   *
+   * Una foto de teléfono son 4–8 MB y el cuerpo de una petición a Vercel se
+   * corta en 4.5 MB: sin esto, media escuela no podría subir su 2×2. A 1600 px
+   * de lado largo y JPEG al 82% una foto queda en 200–400 KB y sigue viéndose
+   * bien impresa en una ficha.
+   *
+   * Si algo falla —un HEIC que el navegador no sabe decodificar— se devuelve el
+   * archivo original y que decida el servidor: mejor un error claro de tamaño
+   * que una foto en blanco.
+   */
+  const encogerImagen = (file: File): Promise<File> =>
+    new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) { resolve(file); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const LADO = 1600;
+        const escala = Math.min(1, LADO / Math.max(img.width, img.height));
+        if (escala === 1 && file.size <= 1_500_000) { resolve(file); return; }
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * escala);
+        c.height = Math.round(img.height * escala);
+        const ctx = c.getContext('2d');
+        if (!ctx) { resolve(file); return; }
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(
+          (b) => resolve(b
+            ? new File([b], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
+            : file),
+          'image/jpeg',
+          0.82,
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+
+  const subirArchivo = async (original: File) => {
+    // En vista previa no hay borrador al que colgar el archivo: se acepta en el
+    // momento para poder ver el campo funcionando.
+    if (isPreview || !slug || !token) {
+      onChange({ nombre: original.name, tipo: original.type, size: original.size, key: 'preview-local' });
       return;
     }
+
     setSubiendo(true);
     try {
-      const res = await fetch(`/api/administracion-escolar/formularios/${campo.id}/upload-url`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'No se pudo preparar la subida');
+      const file = await encogerImagen(original);
+      if (file.size > 4 * 1024 * 1024) {
+        throw new Error(`El archivo pesa ${(file.size / 1024 / 1024).toFixed(1)} MB y el máximo son 4 MB.`);
+      }
 
-      const put = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      });
-      if (!put.ok) throw new Error('Error al subir el archivo');
+      const fd = new FormData();
+      fd.append('archivo', file);
+      const res = await fetch(
+        `/api/formularios-publicos/${slug}/borrador/${token}/archivo`,
+        { method: 'POST', body: fd },
+      );
+
+      // El servidor puede contestar con la página de error de Next, que es
+      // HTML: `res.json()` a secas reventaba con «Unexpected token '<'», que no
+      // le dice nada a un padre. Se lee como texto y se intenta interpretar.
+      const crudo = await res.text();
+      let data: { key?: string; error?: string } = {};
+      try { data = JSON.parse(crudo); } catch { /* no era JSON */ }
+
+      if (!res.ok || !data.key) {
+        throw new Error(data.error ?? 'No se pudo subir el archivo. Inténtelo otra vez.');
+      }
 
       onChange({ nombre: file.name, tipo: file.type, size: file.size, key: data.key });
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al subir el archivo');
+      alert(e instanceof Error ? e.message : 'No se pudo subir el archivo.');
     } finally {
       setSubiendo(false);
     }
@@ -447,7 +499,7 @@ function CampoRenderer({
               >
                 <CloudUploadIcon />
                 <Typography variant="body2" color="text.secondary">{campo.placeholder || 'Haz clic para subir un archivo'}</Typography>
-                <Typography variant="caption">Máx 15MB · PDF, imágenes</Typography>
+                <Typography variant="caption">Máx 4MB · PDF o imagen</Typography>
                 <Box
                   component="input"
                   type="file"
@@ -760,6 +812,8 @@ export default function FormularioRenderer({
               colorPrimario={color}
               isPreview={isPreview}
               idioma={idioma}
+              slug={slug}
+              token={token}
               onChange={(val) => {
                 setDatos((prev) => ({ ...prev, [campo.id]: val }));
                 if (errors[campo.id]) setErrors((prev) => ({ ...prev, [campo.id]: '' }));

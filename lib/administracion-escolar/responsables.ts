@@ -231,7 +231,16 @@ export interface DetalleResponsable {
   }[];
   /** El estado de cuenta: todo lo que se le ha cargado, por hijo. */
   cargos: {
-    id: number; alumno: string; concepto: string | null; mes: number | null; anio: number;
+    id: number;
+    /**
+     * El alumno POR ID, no solo por nombre.
+     *
+     * El estado de cuenta se agrupa por hijo, y agrupando por el nombre dos
+     * homónimos de la misma familia se sumaban en una sola fila con el doble
+     * de deuda. Un id no se repite.
+     */
+    estudianteId: number;
+    alumno: string; concepto: string | null; mes: number | null; anio: number;
     fechaVencimiento: string | null; montoCentavos: number; saldoCentavos: number;
     estado: string; encf: string | null; codigo: string | null; ecfDocumentId: number | null;
   }[];
@@ -322,6 +331,7 @@ export async function detalleResponsable(
     db.execute(sql`
       SELECT g.id, g.mes, g.anio, g.fecha_vencimiento, g.monto_centavos,
              g.saldo_centavos, g.estado, g.ecf_document_id,
+             e.id AS estudiante_id,
              e.nombres || ' ' || COALESCE(e.apellidos, '') AS alumno,
              p.nombre AS concepto, x.encf, x.codigo
         FROM admin_escolar_cargos g
@@ -417,6 +427,7 @@ export async function detalleResponsable(
     })),
     cargos: filas(cargos).map((g) => ({
       id: Number(g.id),
+      estudianteId: Number(g.estudiante_id ?? 0),
       alumno: String(g.alumno ?? '').trim(),
       concepto: (g.concepto as string) ?? null,
       mes: g.mes == null ? null : Number(g.mes),

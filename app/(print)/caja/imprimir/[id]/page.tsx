@@ -120,10 +120,27 @@ export default function ImprimirCajaPage() {
   const [printed, setPrinted] = useState(false);
 
   useEffect(() => {
+    /*
+      El mensaje lo pone el SERVIDOR cuando lo manda.
+
+      Aquí había un único texto —«No autorizado o turno no encontrado»— para
+      cualquier respuesta que no fuera `ok`. Con un 500 decía lo mismo, así que
+      un fallo de base de datos se leía como un problema de permisos y mandaba
+      a revisar dónde no era. Ahora se lee el `error` de la respuesta, y solo
+      se inventa un texto cuando de verdad no viene ninguno.
+    */
     fetch(`/api/caja/turnos/${id}/detalle`)
-      .then(r => {
-        if (!r.ok) throw new Error('No autorizado o turno no encontrado');
-        return r.json();
+      .then(async (r) => {
+        if (r.ok) return r.json();
+        const cuerpo = await r.json().catch(() => null);
+        throw new Error(
+          cuerpo?.error
+          ?? (r.status === 401 || r.status === 403
+                ? 'No tienes permiso para ver este turno.'
+                : r.status === 404
+                  ? 'Ese turno no existe en esta empresa.'
+                  : `El servidor falló al cargar el turno (error ${r.status}).`),
+        );
       })
       .then(setData)
       .catch(e => setError(e.message));
@@ -290,7 +307,16 @@ export default function ImprimirCajaPage() {
           '@media print': { pt: 0 },
         }}
       >
-        <Box sx={{ maxWidth: '672px', mx: 'auto', p: 3, '& > * + *': { mt: 2.5 }, '@media print': { p: 0 } }}>
+        {/*
+          `print-area` NO es decorativo: sin él, esta hoja se imprime EN BLANCO.
+
+          El CSS global apaga la página entera al imprimir —`body * { visibility:
+          hidden }`— y vuelve a encender solo lo que cuelga de `.print-area`.
+          Esta pantalla se escondía la barra de acciones con su propio
+          `@media print`, que es lo que se ve en pantalla, y por eso el fallo no
+          se notaba hasta darle a Imprimir: salía un PDF de una página vacía.
+        */}
+        <Box className="print-area" sx={{ maxWidth: '672px', mx: 'auto', p: 3, '& > * + *': { mt: 2.5 }, '@media print': { p: 0 } }}>
 
           {/* ENCABEZADO */}
           <Box sx={{
