@@ -8,13 +8,14 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { MessageCircle, Maximize2, X, Paperclip, Camera, Send, Phone } from 'lucide-react';
+import { Maximize2, X, Paperclip, Camera, Send } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
 import { InvitacionLlamada } from '@/components/support/invitacion-llamada';
 import { PanelLlamada } from '@/components/support/panel-llamada';
+import { useSoporte } from './soporte-context';
 import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
 import { useLlamadaGlobal } from '@/lib/webrtc/LlamadaGlobalProvider';
 import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
@@ -26,7 +27,11 @@ const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
 const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 
 export function TicketWidget() {
-  const [open, setOpen] = useState(false);
+  // El abierto/cerrado vive en el contexto: lo comparte con el botón de la
+  // barra superior, que es quien lo dispara desde que se fue el flotante.
+  const soporte = useSoporte();
+  const open = soporte?.abierto ?? false;
+  const setOpen = (v: boolean) => (v ? soporte?.abrir() : soporte?.cerrar());
   const chat = useTicketChat(open);
   // La conexión WebRTC vive en un provider único montado en el layout raíz
   // (LlamadaGlobalProvider) — nunca este componente. Si este widget se
@@ -109,48 +114,11 @@ export function TicketWidget() {
   }, [open, chat.messages, chat.pending]);
 
   if (!open) {
-    const llamadaEntrante = call?.status === 'pendiente';
+    // Cerrado no significa desmontado: si hay una llamada viva, su audio tiene
+    // que seguir sonando aunque el panel no esté a la vista. El resto de la UI
+    // sí se va — el disparador ahora vive en la barra superior.
     const llamadaEnCurso = llamada.estado === 'activa';
-    return (
-      <>
-        {/* Fuera de PanelLlamada a propósito — el panel no está montado
-            mientras el widget está minimizado, así que el audio de la
-            llamada en curso necesita su propio elemento acá para no
-            cortarse al cerrar el widget. */}
-        {llamadaEnCurso && <audio ref={audioMinimizadoRef} />}
-        <button
-          onClick={() => setOpen(true)}
-          title={llamadaEntrante ? 'Llamada entrante — abrir soporte' : llamadaEnCurso ? 'Llamada en curso — abrir' : 'Chatear con soporte'}
-          style={{
-            position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
-            width: 56, height: 56, borderRadius: '50%', background: llamadaEnCurso ? '#16a34a' : '#3658e1',
-            color: 'white', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          }}
-        >
-          {llamadaEnCurso ? <Phone size={24} /> : <MessageCircle size={26} />}
-          {(llamadaEntrante || llamadaEnCurso) && (
-            <span
-              aria-hidden
-              style={{
-                position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: '50%',
-                background: llamadaEntrante ? '#ef4444' : '#22c55e', border: '2px solid white',
-                animation: 'zt-badge-llamada 1.4s ease-out infinite',
-              }}
-            />
-          )}
-          {(llamadaEntrante || llamadaEnCurso) && (
-            <style>{`
-              @keyframes zt-badge-llamada {
-                0%, 100% { box-shadow: 0 0 0 0 rgba(${llamadaEntrante ? '239, 68, 68' : '34, 197, 94'}, 0.6); }
-                50% { box-shadow: 0 0 0 6px rgba(${llamadaEntrante ? '239, 68, 68' : '34, 197, 94'}, 0); }
-              }
-            `}</style>
-          )}
-        </button>
-      </>
-    );
+    return llamadaEnCurso ? <audio ref={audioMinimizadoRef} /> : null;
   }
 
   return (
@@ -162,8 +130,15 @@ export function TicketWidget() {
     <div
       ref={panelRef}
       style={{
-        position: 'fixed', bottom: 20, right: 20, zIndex: 9999,
-        width: 360, height: 520, background: 'white',
+        // Abajo a la derecha, que es donde la gente busca un chat. Lo probé
+        // colgado de la barra superior —donde vive su botón— y se siente
+        // fuera de sitio: un panel de conversación se espera en el pie.
+        //
+        // El tope de alto sí importa: sin él, en pantallas cortas el panel se
+        // metía debajo de la barra superior. `100vh - 104px` lo deja siempre
+        // por debajo del header, con sus 20px de margen inferior incluidos.
+        position: 'fixed', bottom: 20, right: 20, zIndex: 1200,
+        width: 360, height: 'min(520px, calc(100vh - 104px))', background: 'white',
         borderRadius: 16, boxShadow: '0 12px 32px rgba(15, 23, 42, 0.18)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}

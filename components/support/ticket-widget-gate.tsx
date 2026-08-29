@@ -7,13 +7,14 @@
  * zero-tickets (el propio equipo de soporte, no un cliente).
  */
 
-import { usePathname } from 'next/navigation';
 import { TicketWidget } from './ticket-widget';
-
-const PREFIJOS_EXCLUIDOS = ['/pos-reporte', '/pos-ticket', '/zero-tickets', '/dashboard/soporte'];
+import { useSoporte } from './soporte-context';
 
 export function TicketWidgetGate() {
-  const pathname = usePathname();
-  if (PREFIJOS_EXCLUIDOS.some((p) => pathname?.startsWith(p))) return null;
+  // La lista de rutas excluidas se mudó a `soporte-context`: la necesitan el
+  // panel Y el botón de la barra superior, y tenerla en dos sitios era pedir
+  // que se desincronizaran.
+  const soporte = useSoporte();
+  if (!soporte?.disponible) return null;
   return <TicketWidget />;
 }
