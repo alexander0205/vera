@@ -39,6 +39,12 @@ export async function GET() {
     .innerJoin(teams, eq(teams.id, tickets.teamId))
     .innerJoin(users, eq(users.id, tickets.userId))
     .leftJoin(agentUsers, eq(agentUsers.id, tickets.assignedAgentId))
+    // Antes no filtraba nada, y no hacía falta: cada persona tenía UNA fila
+    // reutilizada para siempre. Ahora cada conversación cerrada deja la suya,
+    // así que sin este corte la cola se convierte en un archivo histórico que
+    // crece sin techo. Se muestra lo que sigue vivo más lo cerrado en el
+    // último día, para que el agente vea lo que acaba de despachar.
+    .where(sql`${tickets.status} <> 'cerrado' OR ${tickets.closedAt} > NOW() - INTERVAL '24 hours'`)
     .orderBy(desc(tickets.lastMessageAt));
 
   return NextResponse.json({ tickets: rows });

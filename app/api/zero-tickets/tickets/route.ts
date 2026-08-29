@@ -67,15 +67,20 @@ async function getOrCreateTicket(teamId: number, userId: number) {
 
   if (existing && existing.status !== 'cerrado') return { ticket: existing, isNew: false };
 
-  if (existing && existing.status === 'cerrado') {
-    const [reopened] = await db
-      .update(tickets)
-      .set({ status: 'esperando', assignedAgentId: null, closedAt: null })
-      .where(eq(tickets.id, existing.id))
-      .returning();
-    return { ticket: reopened, isNew: true };
-  }
-
+  // Ticket cerrado + mensaje nuevo = conversación nueva, FILA nueva. Antes se
+  // reabría la misma fila, y con eso una persona tenía un único ticket para
+  // toda su vida en el sistema. Tres consecuencias, todas reales:
+  //
+  //   1. El hilo no terminaba nunca. El problema del cuadre de caja de marzo
+  //      quedaba arriba de la pregunta de hoy, en el mismo scroll.
+  //   2. `ticket_ratings` tiene una fila por ticket: una vez calificado, toda
+  //      calificación posterior chocaba con 409 «ya fue calificado». El agente
+  //      de la segunda conversación heredaba la estrella de la primera y el
+  //      promedio quedaba clavado en una muestra por persona, para siempre.
+  //   3. No se podía contar cuántos tickets abrió un colegio: siempre uno.
+  //
+  // Reabrir sigue existiendo, pero es del AGENTE (botón «Reabrir»): ahí sí es
+  // la misma conversación, que se cerró antes de tiempo.
   const [created] = await db.insert(tickets).values({ teamId, userId }).returning();
   return { ticket: created, isNew: true };
 }
