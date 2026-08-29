@@ -20,6 +20,9 @@
         "current",
         "glibc"
       ]
+    },
+    "overrides": {
+      "@modelcontextprotocol/sdk": "1.26.0"
     }
   },
   "scripts": {
@@ -58,7 +61,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "1.26.0",
     "@mui/icons-material": "^9.1.1",
     "@mui/material": "^9.1.1",
     "@mui/material-nextjs": "^9.1.1",
@@ -105,7 +108,7 @@
     "tailwindcss": "4.1.7",
     "tw-animate-css": "^1.3.0",
     "typescript": "^5.8.3",
-    "zod": "^3.24.4"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
