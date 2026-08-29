@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { fmtFechaHora } from '@/lib/utils/format';
+import { GuiaConexion } from '@/components/mcp/GuiaConexion';
 
 interface ApiKeyRow {
   id: number;
@@ -125,6 +126,8 @@ export default function ApiKeysPage() {
           <Plus className="h-4 w-4 mr-2" />Crear key
         </Button>
       </div>
+
+      <GuiaConexion />
 
       <Card>
         <CardContent className="p-4 space-y-4">

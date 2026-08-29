@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clients } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { CAMPOS_CLIENTE } from '@/lib/mcp/campos-clientes';
 import { idValido } from '@/lib/mcp/ids';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   if (clienteId === null) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [cliente] = await db
-    .select()
+    .select(CAMPOS_CLIENTE)
     .from(clients)
     .where(and(eq(clients.id, clienteId), eq(clients.teamId, teamId)))
     .limit(1);

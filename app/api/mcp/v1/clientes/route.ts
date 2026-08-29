@@ -7,6 +7,7 @@ import { and, eq, ilike, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { clients } from '@/lib/db/schema';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
+import { CAMPOS_CLIENTE } from '@/lib/mcp/campos-clientes';
 
 export async function GET(req: NextRequest) {
   const auth = await requireApiKey(req);
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
     : eq(clients.teamId, teamId);
 
   const clientes = await db
-    .select()
+    .select(CAMPOS_CLIENTE)
     .from(clients)
     .where(condicion)
     .orderBy(clients.razonSocial)
