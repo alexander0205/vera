@@ -12,6 +12,7 @@ import {
 } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { sembrarAlmacenPorDefecto } from '@/lib/pos/asignaciones';
 import { eq, and, sql, desc, asc } from 'drizzle-orm';
 
 // Ejes de variante (igual que en POST /api/productos).
@@ -303,6 +304,14 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
           updatedAt:          new Date(),
         })
         .where(eq(products.id, prodId));
+    }
+
+    // Igual que al crear: encender «visible en POS» o «controla inventario» en
+    // un producto que nunca se asignó lo dejaba invisible en la caja, y desde la
+    // pantalla no había forma de notarlo. Solo siembra si NO tiene ya almacén,
+    // así que un reparto hecho a mano no se toca.
+    if (row.visiblePos && row.controlaInventario && !reconciliaVariantes) {
+      await sembrarAlmacenPorDefecto(tx, teamId, prodId, row.stockActual);
     }
 
     return row;
