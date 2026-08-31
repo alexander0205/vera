@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     .from(adminEscolarPeriodos)
     .where(eq(adminEscolarPeriodos.activo, true));
 
-  const detalle: { teamId: number; cargosCreados: number; error?: string }[] = [];
+  const detalle: { teamId: number; cargosCreados: number; noGeneradas?: number; error?: string }[] = [];
   let creados = 0;
 
   for (const periodo of activos) {
@@ -43,7 +43,13 @@ export async function GET(req: NextRequest) {
     try {
       const r = await devengarPeriodo(periodo.teamId, periodo.id, hasta);
       creados += r.cargosCreados;
-      detalle.push({ teamId: periodo.teamId, cargosCreados: r.cargosCreados });
+      // El diagnóstico (cuotas válidas que no salieron) viaja en la respuesta
+      // para que un pendiente que no se facturó tenga un motivo visible (#5).
+      detalle.push({
+        teamId: periodo.teamId,
+        cargosCreados: r.cargosCreados,
+        ...(r.diagnostico.length ? { noGeneradas: r.diagnostico.length } : {}),
+      });
     } catch (e: unknown) {
       detalle.push({
         teamId: periodo.teamId,

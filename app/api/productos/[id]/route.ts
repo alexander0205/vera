@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import {
   products, inventoryMovements, productVariants, productVariantAlmacenStock, almacenes,
+  adminEscolarConceptosPago, adminEscolarConceptoPrecios,
 } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
@@ -334,6 +335,29 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const [existing] = await db.select({ id: products.id }).from(products)
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!existing) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
+
+  // Consistencia entre pantallas (regla #3): un servicio atado a tarifas
+  // escolares no se borra desde aquí. Su ciclo de vida —y la decisión de si hay
+  // factura que proteger— vive en la configuración escolar. Se dirige allí en
+  // vez de borrar por un lado lo que el otro cree intacto (o de reventar por la
+  // FK NO ACTION que va del concepto/tarifa al producto).
+  const [concepto] = await db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre })
+    .from(adminEscolarConceptosPago)
+    .where(and(eq(adminEscolarConceptosPago.teamId, teamId), eq(adminEscolarConceptosPago.productId, prodId)))
+    .limit(1);
+  const [tarifa] = concepto ? [undefined] : await db.select({ id: adminEscolarConceptoPrecios.id })
+    .from(adminEscolarConceptoPrecios)
+    .where(and(eq(adminEscolarConceptoPrecios.teamId, teamId), eq(adminEscolarConceptoPrecios.productId, prodId)))
+    .limit(1);
+  if (concepto || tarifa) {
+    return NextResponse.json(
+      {
+        error: 'Este servicio está vinculado a tarifas escolares. Elimínalo desde Configuración escolar → Tarifas; allí se decide si hay facturas que conservar.',
+        vinculadoEscolar: true,
+      },
+      { status: 409 },
+    );
+  }
 
   await db.delete(products).where(eq(products.id, prodId));
   return NextResponse.json({ ok: true });
