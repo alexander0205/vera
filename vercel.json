@@ -29,6 +29,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/zero-tickets-auto-close",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/escolar-devengo",
       "schedule": "0 7 * * *"
     },

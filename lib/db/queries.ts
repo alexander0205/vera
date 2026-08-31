@@ -272,6 +272,21 @@ export const getTeamIdForUser = cache(async (): Promise<number | null> => {
 });
 
 /** Retorna todos los teams del usuario (admin → todos los teams) */
+/**
+ * URL al logo en vez del logo embebido.
+ *
+ * `teams.logo` es un data URI guardado inline (hasta ~800 KB por empresa).
+ * Traerlo en este listado hacía que `/api/empresa/list` arrastrara ~1.6 MB
+ * desde Neon en cada carga — medido: 63s, contra 108ms sin esa columna. Como
+ * los consumidores lo usan siempre como `<img src={...}>`, cambiar el data URI
+ * por la ruta que lo sirve no les cambia nada, pero saca el blob del camino.
+ */
+const logoUrl = sql<string | null>`
+  case when ${teams.logo} is not null
+       then '/api/empresa/' || ${teams.id}::text || '/logo'
+  end
+`.as('logo');
+
 export async function getUserTeams() {
   const user = await getUser();
   if (!user) return [];
@@ -289,7 +304,7 @@ export async function getUserTeams() {
         subscriptionStatus: teams.subscriptionStatus,
         createdAt: teams.createdAt,
         role: sql<string>`'admin'`.as('role'),
-        logo: teams.logo,
+        logo: logoUrl,
         cajaHabilitada: teams.cajaHabilitada,
         posHabilitado: teams.posHabilitado,
         habilitacionCompletadoAt: teams.habilitacionCompletadoAt,

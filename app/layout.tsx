@@ -9,6 +9,9 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { MuiProviders } from '@/components/mui-providers';
 import { ScriptTapaLlegada } from '@/components/loader-llegada';
 import { RastreadorDeNavegacion } from '@/lib/hooks/useVolver';
+import { TicketWidgetGate } from '@/components/support/ticket-widget-gate';
+import { SoporteProvider } from '@/components/support/soporte-context';
+import { LlamadaGlobalProvider } from '@/lib/webrtc/LlamadaGlobalProvider';
 
 export const metadata: Metadata = {
   title: 'Zero — Facturación Electrónica República Dominicana',
@@ -87,7 +90,12 @@ export default function RootLayout({
                 }
               }}
             >
-              {children}
+              <LlamadaGlobalProvider>
+                <SoporteProvider>
+                  {children}
+                  <TicketWidgetGate />
+                </SoporteProvider>
+              </LlamadaGlobalProvider>
             </SWRConfig>
           </MuiProviders>
         </AppRouterCacheProvider>
