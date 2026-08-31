@@ -8,9 +8,9 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require', max: 1 });
   const host = new URL(process.env.POSTGRES_URL!).host;
   console.log(`→ Base: ${host}`);
 
-  const t = readFileSync(join(process.cwd(), 'lib/db/migrations/0158_catalogo_compras.sql'), 'utf-8');
+  const t = readFileSync(join(process.cwd(), 'lib/db/migrations/0171_catalogo_compras.sql'), 'utf-8');
   await sql.unsafe(t);
-  console.log('✓ Migración 0158 ejecutada.');
+  console.log('✓ Migración 0171 ejecutada.');
 
   const cols = await sql`
     SELECT column_name, data_type

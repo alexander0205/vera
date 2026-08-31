@@ -1,7 +1,7 @@
--- 0158 · Catálogo de compras (artículos/servicios que el negocio COMPRA)
+-- 0171 · Catálogo de compras (artículos/servicios que el negocio COMPRA)
 -- Simétrico a `products` (catálogo de venta) pero separado: en gasto/compra
 -- el buscador NO debe ofrecer lo que vendes. No toca inventario/stock.
--- Numerada 0158 a propósito: va DESPUÉS de nómina (0151–0157), que se mergea
+-- Numerada 0171 a propósito: va DESPUÉS de nómina (0156–0170), que se mergea
 -- primero. Aditiva → segura en la DB compartida.
 
 CREATE TABLE IF NOT EXISTS catalogo_compras (
