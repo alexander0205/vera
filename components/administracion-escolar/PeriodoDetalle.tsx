@@ -13,7 +13,7 @@
  * decide qué hace al cobrar, al anular o al facturar.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -425,6 +425,11 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
   const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
   const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
+  // «Facturado» es solo lo que tiene e-CF emitido; el resto es deuda cargada
+  // pero todavía no facturada. Antes la tarjeta sumaba todo bajo «Facturado»,
+  // así que un período sin una sola factura mostraba «Facturado RD$26,000».
+  const facturadoCentavos = facturas.reduce((s, c) => s + c.montoCentavos, 0);
+  const porFacturarCentavos = total - facturadoCentavos;
   const saldo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .reduce((s, c) => s + c.saldoCentavos, 0);
@@ -558,7 +563,14 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <PeriodoStat icon={Receipt} label="Facturado" value={fmtDOP(total)} detail="Total del período" tone="blue" />
+        <PeriodoStat
+          icon={Receipt}
+          label="Facturado"
+          value={fmtDOP(facturadoCentavos)}
+          detail={porFacturarCentavos > 0
+            ? <span className="font-medium text-amber-700">Por facturar {fmtDOP(porFacturarCentavos)}</span>
+            : 'Todo facturado'}
+          tone="blue" />
         <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
         <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
         <PeriodoStat
@@ -1020,7 +1032,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   icon: typeof Receipt;
   label: string;
   value: string;
-  detail: string;
+  detail: ReactNode;
   tone: 'blue' | 'verde' | 'red' | 'gray';
 }) {
   // El color no decora: es lo que hace que "pendiente" salte antes que
