@@ -598,7 +598,23 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         </div>
 
         {vista === 'mensualidades' && (
-              <MensualidadesTabla
+          <>
+            {/* Motivo visible: sin plan recurrente, la mensualidad se DEVENGA
+                como deuda pero nunca se emite su factura sola. Antes solo se veía
+                «Sin facturar» sin decir por qué, y el colegio esperaba la factura
+                del día de emisión que nunca salía. */}
+            {grupo.facturaRecurrenteId == null && (mensualidades.length > 0 || previstosMensualidad.length > 0) && (
+              <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  La mensualidad no está configurada para facturarse automáticamente: los cargos se generan como deuda, pero <b>no se emite la factura sola</b> en su fecha.
+                  {puedeFacturar && grupo.matriculaId
+                    ? <> Pulsa <b>«Configurar mensualidad»</b> arriba para que se emita cada mes.</>
+                    : <> Configúrala desde el botón de arriba para que se emita cada mes.</>}
+                </div>
+              </div>
+            )}
+            <MensualidadesTabla
                 onReenviarAviso={onReenviarAviso}
                 reenviandoCargoId={reenviandoCargoId}
                 diaFacturaAuto={grupo.diaFacturaAuto}
@@ -625,7 +641,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 onMarcarCargo={alternarCargo}
                 onMarcarVarios={alternarVarios}
               />
-            )}
+          </>
+        )}
 
             {vista === 'otros' && (
               otrosCargos.length === 0 && previstosOtros.length === 0 && facturasSueltas.length === 0
