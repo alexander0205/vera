@@ -10,7 +10,7 @@ import { ProductoDialog } from '@/components/shared/producto-dialog';
 import { ClienteDialog } from '@/components/shared/cliente-dialog';
 import { montosRapidos } from '@/lib/pos/montos';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap, Banknote, CreditCard, ArrowLeftRight, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap, Banknote, CreditCard, ArrowLeftRight, MoreHorizontal, LayoutGrid, Rows3, ChevronUp, ChevronDown, Pencil, Volume2, VolumeX, Vibrate, Trash2, Check, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -19,6 +19,10 @@ import IconButton from '@mui/material/IconButton';
 import ButtonBase from '@mui/material/ButtonBase';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
+import Menu from '@mui/material/Menu';
+import Divider from '@mui/material/Divider';
+import Switch from '@mui/material/Switch';
+import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -27,6 +31,8 @@ import { RncSearch } from '@/components/RncSearch';
 import { ModalSeleccionarVariante } from '@/app/(dashboard)/dashboard/facturas/nueva/modals/ModalSeleccionarVariante';
 import type { VariantePick } from '@/app/(dashboard)/dashboard/facturas/nueva/utils/types';
 import { estaAgotado } from '@/lib/pos/agotado';
+import { useFeedbackPos } from '@/lib/hooks/useFeedbackPos';
+import type { PrefsFeedback } from '@/lib/pos/feedback';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
 
@@ -416,6 +422,120 @@ function Venta({
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
   const [ventaSimpleAbierta, setVentaSimpleAbierta] = useState(false);
 
+  /**
+   * Cuadrícula o lista compacta.
+   *
+   * La foto ayuda cuando se busca «esa bolsa amarilla»; estorba cuando se busca
+   * un nombre, porque cada tarjeta ocupa el alto de cuatro renglones. La lista
+   * cabe el doble de productos en la misma pantalla. Cuál sirve depende del
+   * catálogo —una cafetería de 30 golosinas no es una papelería de 300— así que
+   * lo elige quien atiende, y se recuerda para no repetir el gesto cada turno.
+   */
+  const [densidad, setDensidad] = useState<'grid' | 'lista'>('grid');
+  useEffect(() => {
+    try {
+      const g = localStorage.getItem('pos-densidad');
+      if (g === 'lista' || g === 'grid') setDensidad(g);
+    } catch { /* almacenamiento bloqueado: se queda en cuadrícula */ }
+  }, []);
+  function cambiarDensidad(d: 'grid' | 'lista') {
+    setDensidad(d);
+    try { localStorage.setItem('pos-densidad', d); } catch { /* da igual */ }
+  }
+
+  /**
+   * Tamaño de la zona de productos.
+   *
+   * Las tarjetas están dimensionadas para un dedo y una tableta a un brazo de
+   * distancia. En una pantalla grande, o para quien conoce su catálogo de
+   * memoria, esa letra enorme solo significa menos productos por pantalla y más
+   * desplazamiento. Reducir la escala mete más mercancía a la vista sin tocar
+   * nada más.
+   *
+   * Se aplica con `zoom` y no con `transform: scale` a propósito: `zoom`
+   * REFLUYE —la rejilla recoloca sus columnas y el desplazamiento sigue siendo
+   * el de siempre—, mientras que `scale` solo estira el dibujo y deja la caja
+   * ocupando el sitio de antes, con el contenido desbordando o sobrando.
+   *
+   * No toca el carrito: ahí se leen importes que se cobran, y encoger eso para
+   * ver más productos es un mal cambio.
+   */
+  const ESCALAS = [0.8, 0.9, 1, 1.15] as const;
+  const [escala, setEscala] = useState<number>(1);
+  useEffect(() => {
+    try {
+      const g = Number(localStorage.getItem('pos-escala'));
+      if (ESCALAS.includes(g as typeof ESCALAS[number])) setEscala(g);
+    } catch { /* almacenamiento bloqueado: se queda en el tamaño normal */ }
+    // ESCALAS es una constante literal; no cambia entre renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function cambiarEscala(direccion: 1 | -1) {
+    setEscala((prev) => {
+      const i = ESCALAS.indexOf(prev as typeof ESCALAS[number]);
+      const j = Math.min(ESCALAS.length - 1, Math.max(0, (i < 0 ? 2 : i) + direccion));
+      const siguiente = ESCALAS[j];
+      try { localStorage.setItem('pos-escala', String(siguiente)); } catch { /* da igual */ }
+      return siguiente;
+    });
+  }
+
+  /** Filtro de favoritos, como una categoría más. */
+  const [soloFavoritos, setSoloFavoritos] = useState(false);
+
+  /** Menú «⋯» con lo que se usa una o dos veces por turno. */
+  const [menuAcciones, setMenuAcciones] = useState<HTMLElement | null>(null);
+
+  /** Sonido y vibración: el aviso que no obliga a mirar la pantalla. */
+  const {
+    prefs: feedback, cambiar: cambiarFeedback, subirVolumen, senal, conVibracion,
+    nivel: nivelVolumen, nivelMaximo: nivelMaximoVolumen,
+  } = useFeedbackPos();
+
+  /**
+   * Destello del producto recién agregado, en la tarjeta y en su línea del
+   * carrito.
+   *
+   * Sin señal de que el toque entró, el cajero toca otra vez «por si acaso» y
+   * factura dos. El destello dura lo justo para verse de reojo sin quedarse
+   * encendido mientras se agrega el siguiente.
+   */
+  const [flash, setFlash] = useState<{ productId: number; key: string } | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
+
+  /** Pastilla «entró esto, llevas tantas», anclada al panel de productos. */
+  const [aviso, setAviso] = useState<{ nombre: string; unidades: number } | null>(null);
+  const avisoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!aviso) return;
+    if (avisoTimer.current) clearTimeout(avisoTimer.current);
+    avisoTimer.current = setTimeout(() => setAviso(null), 1400);
+    return () => { if (avisoTimer.current) clearTimeout(avisoTimer.current); };
+  }, [aviso]);
+
+  /** Confirma que la línea entró: destello + aviso con el acumulado. */
+  const confirmarAgregado = useCallback((productId: number, key: string, nombre: string, unidades: number) => {
+    senal('agregar');
+    setFlash({ productId, key });
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 700);
+    /**
+     * El aviso NO es un toast.
+     *
+     * El de la librería trae dos renglones, icono grande y ancho de tarjeta:
+     * casi el tamaño de una tarjeta de producto para decir que entró una unidad.
+     * Y vive en una esquina fija de la ventana, así que se plantaba encima del
+     * buscador o de la barra del carrito según dónde se pusiera.
+     *
+     * Anclado al panel de productos cae siempre en el mismo sitio útil —arriba,
+     * centrado, sobre el borde de la rejilla— sin números mágicos y sin tapar
+     * nada de lo que se está usando. El acumulado y no «+1»: lo que hay que
+     * comprobar es CUÁNTAS llevas, que es el número con el que uno se equivoca.
+     */
+    setAviso({ nombre, unidades });
+  }, [senal]);
+
   /** Venta simple: línea de monto libre sin producto de catálogo (id negativo). */
   function agregarVentaSimple(concepto: string, precioCentavos: number, tasaItbis: string) {
     const id = -Date.now();  // sintético — nunca colisiona con ids de catálogo
@@ -426,6 +546,7 @@ function Venta({
       stockAlmacen: null, categoriaId: null, categoriaNombre: null, imagen: null,
       qty: 1,
     }]);
+    confirmarAgregado(id, String(id), concepto || 'Venta simple', 1);
     setVentaSimpleAbierta(false);
   }
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
@@ -433,19 +554,6 @@ function Venta({
   const [aparcadas, setAparcadas] = useState<VentaAparcada[]>([]);
   const [aparcadasAbierto, setAparcadasAbierto] = useState(false);
 
-  // El botón "Nuevo producto" vive SIEMPRE en la misma fila que los chips de
-  // categoría (a su misma altura, alineado a la derecha). Cuando el botón con
-  // texto + todos los chips no caben en el ancho de la fila colapsa al ícono "+"
-  // para que los chips quepan sin recortarse (se veía como colisión). Se decide
-  // por medición real —no por breakpoints— porque el ancho disponible depende
-  // del split de dos columnas (md) y de cuántas categorías haya, así que el
-  // umbral no es monótono respecto al viewport.
-  const filaCategoriasRef = useRef<HTMLDivElement>(null);
-  const chipsRef = useRef<HTMLDivElement>(null);
-  // 'pill' = botón con texto en línea; 'compacto' = botón "+" en línea con los
-  // chips; 'abajo' = botón "+" en su propia fila debajo (cuando ni el "+" en
-  // línea deja espacio a los chips sin recortarlos feo — móviles angostos).
-  const [dispNuevo, setDispNuevo] = useState<'pill' | 'compacto' | 'abajo'>('pill');
 
   useEffect(() => {
     void traerJson<{ listasPrecios?: ListaPrecio[] }>('/api/listas-precios')
@@ -485,36 +593,32 @@ function Venta({
     return [...vistas.entries()].map(([id, nombre]) => ({ id, nombre }));
   }, [productos]);
 
-  useEffect(() => {
-    const fila = filaCategoriasRef.current;
-    if (!fila) return;
-    const ANCHO_PILL = 160; // ancho aprox del botón con el texto "Nuevo producto"
-    const ANCHO_COMPACTO = 40; // círculo "+" (h-10 w-10)
-    const GAP = 8; // gap-2 entre el scroller de chips y el botón
-    const TOL = 12; // recorte tolerable de chips antes de bajar el botón a otra fila
-    const medir = () => {
-      const anchoChips = chipsRef.current?.scrollWidth ?? 0;
-      const disponible = fila.clientWidth;
-      if (anchoChips + GAP + ANCHO_PILL <= disponible) setDispNuevo('pill');
-      else if (anchoChips + GAP + ANCHO_COMPACTO <= disponible + TOL) setDispNuevo('compacto');
-      else setDispNuevo('abajo');
-    };
-    medir();
-    const ro = new ResizeObserver(medir);
-    ro.observe(fila);
-    return () => ro.disconnect();
-  }, [categorias]);
+  /** Sin ningún favorito marcado el chip no aporta: filtraría a una lista vacía. */
+  const hayFavoritos = useMemo(() => productos.some((p) => p.favorito), [productos]);
+
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return productos.filter((p) => {
+      if (soloFavoritos && !p.favorito) return false;
       if (categoriaActiva !== 'todas' && p.categoriaId !== categoriaActiva) return false;
       if (!q) return true;
       return p.nombre.toLowerCase().includes(q) || (p.referencia ?? '').toLowerCase().includes(q);
     });
-  }, [productos, busqueda, categoriaActiva]);
+  }, [productos, busqueda, categoriaActiva, soloFavoritos]);
 
   const totales = useMemo(() => totalesCarrito(carrito, descuentoAplicado), [carrito, descuentoAplicado]);
+
+  const unidadesCarrito = useMemo(() => carrito.reduce((n, c) => n + c.qty, 0), [carrito]);
+
+  /** Los últimos productos agregados, del más reciente al más viejo. */
+  const resumenMovil = useMemo(() => {
+    if (carrito.length === 0) return 'Carrito vacío';
+    const nombres = [...carrito].reverse().map((c) => (c.qty > 1 ? `${c.qty}× ${c.nombre}` : c.nombre));
+    const cabeza = nombres.slice(0, 2).join(', ');
+    const resto = nombres.length - 2;
+    return resto > 0 ? `${cabeza} +${resto}` : cabeza;
+  }, [carrito]);
 
   function qtyEnLinea(key: string) {
     return carrito.find((c) => lineKey(c) === key)?.qty ?? 0;
@@ -528,6 +632,7 @@ function Venta({
     if (p.controlaInventario && !p.permiteVentaSinStock) {
       const disp = p.stockAlmacen ?? 0;
       if (yaEnCarrito + 1 > disp) {
+        senal('rechazo');
         toast.error(`Sin stock suficiente de "${p.nombre}" (${disp} disp.)`);
         return;
       }
@@ -537,6 +642,7 @@ function Venta({
       if (ex) return prev.map((c) => (lineKey(c) === key ? { ...c, qty: c.qty + 1 } : c));
       return [...prev, { ...p, qty: 1 }];
     });
+    confirmarAgregado(p.id, key, p.nombre, yaEnCarrito + 1);
   }
 
   /** Agrega una variante concreta al carrito como su propia línea. */
@@ -556,6 +662,7 @@ function Venta({
     if (p.controlaInventario && !p.permiteVentaSinStock) {
       const disp = v.stockActual ?? 0;
       if (qtyEnLinea(key) + 1 > disp) {
+        senal('rechazo');
         toast.error(`Sin stock suficiente de "${linea.nombre}" (${disp} disp.)`);
         return;
       }
@@ -565,6 +672,7 @@ function Venta({
       if (ex) return prev.map((c) => (lineKey(c) === key ? { ...c, qty: c.qty + 1 } : c));
       return [...prev, linea];
     });
+    confirmarAgregado(p.id, key, linea.nombre, qtyEnLinea(key) + 1);
   }
 
   /** Escaneo (lector USB) o Enter: match exacto por código de barras o referencia. */
@@ -576,7 +684,7 @@ function Venta({
          ?? productos.find((x) => x.referencia && x.referencia.toLowerCase() === lc);
     if (!p && filtrados.length === 1) p = filtrados[0];   // único resultado de la búsqueda
     if (p) { agregar(p); setBusqueda(''); }
-    else toast.error(`Sin producto para "${code}"`);
+    else { senal('rechazo'); toast.error(`Sin producto para "${code}"`); }
   }
 
   async function toggleFavorito(p: ProductoPos) {
@@ -591,12 +699,39 @@ function Venta({
     if (!res.ok) { toast.error('No se pudo cambiar favorito'); cargarCatalogo(); }
   }
 
+  /**
+   * Sube o baja una línea con los botones «−» y «+».
+   *
+   * Suena igual que tocar el producto en la grilla: subir es agregar y bajar es
+   * quitar, se haga desde donde se haga. Que el mismo hecho suene distinto según
+   * el botón que lo provoque enseña una diferencia que no existe.
+   */
   function cambiarQty(key: string, delta: number) {
+    const antes = qtyEnLinea(key);
+    const despues = Math.max(0, antes + delta);
+    if (despues === antes) return;
+    senal(delta > 0 ? 'agregar' : 'quitar');
     setCarrito((prev) =>
       prev
         .map((c) => (lineKey(c) === key ? { ...c, qty: c.qty + delta } : c))
         .filter((c) => c.qty > 0),
     );
+  }
+
+  /**
+   * Fija la cantidad exacta de una línea. 0 la quita.
+   *
+   * Escribir «12» donde había 3 son nueve unidades que entran: suena a agregar.
+   * Escribir «1» donde había 8 es lo contrario. Se compara con lo que había en
+   * vez de suponer, porque desde el teclado se puede ir en las dos direcciones.
+   */
+  function fijarQty(key: string, qty: number) {
+    const antes = qtyEnLinea(key);
+    const despues = Math.max(0, Math.floor(qty));
+    if (despues !== antes) senal(despues > antes ? 'agregar' : 'quitar');
+    setCarrito((prev) => prev
+      .map((c) => (lineKey(c) === key ? { ...c, qty: despues } : c))
+      .filter((c) => c.qty > 0));
   }
 
   /** Fija un precio manual (centavos) a la línea; null restaura el de catálogo. */
@@ -739,7 +874,48 @@ function Venta({
     if (await guardarComanda(true)) { toast.success('Comanda guardada'); volverAMesas(); }
   }
 
+  /**
+   * Cobrar DOS VECES la misma venta es el peor fallo de una caja, y había tres
+   * puertas abiertas para que pasara:
+   *
+   *  1. El modal se cierra al confirmar, pero el carrito no se vacía hasta que
+   *     contesta el servidor. En ese hueco el botón «Cobrar» del panel volvía a
+   *     estar ahí, con el mismo carrito, y NO miraba si ya se estaba cobrando:
+   *     dos toques, dos ventas, dos comprobantes fiscales.
+   *  2. `setCobrando(false)` se hacía nada más volver del fetch, ANTES de vaciar
+   *     el carrito — otro hueco con el botón vivo y la venta ya emitida.
+   *  3. Sin `finally`: si el fetch reventaba (se cayó el wifi del colegio) el
+   *     botón quedaba bloqueado para siempre y había que recargar la página en
+   *     medio de la fila.
+   *
+   * El candado de verdad es la ref, no el estado: dos toques seguidos caen en el
+   * mismo lote de React y los dos leerían `cobrando === false`. La ref cambia en
+   * el acto.
+   */
+  const cobrandoRef = useRef(false);
+
   async function cobrar(
+    pagos: { metodo: MetodoCobro; valorCentavos: number }[],
+    recibidoCentavos: number,
+    propinaCentavos = 0,
+    tipoOrden: TipoOrden = comandaId != null ? 'comer-aqui' : 'mostrador',
+  ): Promise<boolean> {
+    if (cobrandoRef.current) return false;
+    cobrandoRef.current = true;
+    setCobrando(true);
+    try {
+      const ok = await ejecutarCobro(pagos, recibidoCentavos, propinaCentavos, tipoOrden);
+      // La hoja del carrito del teléfono se cierra sola al terminar: quedarse
+      // abierta sobre un carrito ya vacío hace dudar de si la venta pasó.
+      if (ok) setCarritoMovilAbierto(false);
+      return ok;
+    } finally {
+      cobrandoRef.current = false;
+      setCobrando(false);
+    }
+  }
+
+  async function ejecutarCobro(
     pagos: { metodo: MetodoCobro; valorCentavos: number }[],
     recibidoCentavos: number,
     propinaCentavos = 0,
@@ -754,26 +930,25 @@ function Venta({
     // Sin alguien a quien cobrarle, la deuda queda huérfana en la cartera.
     if (esCredito && !cliente && !estudiante) {
       toast.error('Para fiar hay que elegir el cliente o el estudiante');
-      return;
+      return false;
     }
 
     // Crédito fiscal (e31) exige RNC del comprador (DGII #38). El servidor lo
     // revalida, pero se corta aquí para no perder la venta con un error tardío.
     if (tipoEcf === '31' && !cliente?.rnc) {
       toast.error('El crédito fiscal (e31) requiere el RNC del comprador');
-      return;
+      return false;
     }
 
     // Pre-chequeo del monedero (el servidor lo re-valida atómicamente).
     if (esMonedero) {
-      if (!estudiante) { toast.error('Selecciona un estudiante'); return; }
-      if (estudiante.saldoCentavos < totalConPropina) { toast.error('Saldo insuficiente en el monedero'); return; }
+      if (!estudiante) { toast.error('Selecciona un estudiante'); return false; }
+      if (estudiante.saldoCentavos < totalConPropina) { toast.error('Saldo insuficiente en el monedero'); return false; }
       if (estudiante.disponibleHoyCentavos != null && totalConPropina > estudiante.disponibleHoyCentavos) {
-        toast.error('La venta excede el límite diario del estudiante'); return;
+        toast.error('La venta excede el límite diario del estudiante'); return false;
       }
     }
 
-    setCobrando(true);
     let docId: number | null = null;
     const items = carrito.map((c) => {
       const descCentavos = descuentoLinea(c, descuentoAplicado);
@@ -861,17 +1036,18 @@ function Venta({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ monederoId: estudiante.id, emitPayload: payload }),
       });
-      setCobrando(false);
       const r = await res.json().catch(() => ({}));
       if (!res.ok) {
         // El e-NCF quedó reservado en un borrador: guardarlo para que el
         // próximo intento lo reuse en vez de consumir otro número.
         if (typeof r.docId === 'number') setReservaDocId(r.docId);
+        senal('rechazo');
         toast.error(r.error ?? 'No se pudo completar la venta');
         await refrescarEstudiante(estudiante.dependienteId);  // refleja la reversa
-        return;
+        return false;
       }
       setReservaDocId(null);
+      senal('cobrar');
       toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(r.saldoCentavos)}`);
       await refrescarEstudiante(estudiante.dependienteId);
       if (r.documentoId) { docId = r.documentoId; }
@@ -891,15 +1067,16 @@ function Venta({
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
-      setCobrando(false);
       const venta = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (typeof venta.docId === 'number') setReservaDocId(venta.docId);
+        senal('rechazo');
         toast.error(venta.error ?? 'No se pudo completar la venta');
-        return;
+        return false;
       }
       setReservaDocId(null);
       const cambio = recibidoCentavos - totalConPropina;
+      senal('cobrar');
       toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
       if (venta.documentoId) { docId = venta.documentoId; }
     }
@@ -912,12 +1089,13 @@ function Venta({
       }).catch(() => {});
       volverAMesas();
       cargarCatalogo(true);   // refresca stock sin parpadeo
-      return;
+      return true;
     }
 
     setCarrito([]);
     setDescuentoAplicado(null);
     cargarCatalogo(true);   // refresca stock sin parpadeo
+    return true;
   }
 
   const [carritoMovilAbierto, setCarritoMovilAbierto] = useState(false);
@@ -964,15 +1142,31 @@ function Venta({
           </Button>
         </Box>
       )}
-      <Box component="header" sx={{ zIndex: 20, display: 'flex', flexShrink: 0, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #e5e7eb', bgcolor: '#fff', px: { xs: 1.5, sm: 2 }, py: 1 }}>
-        <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: { xs: 1, sm: 1.5 } }}>
-          <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={iconActionSx}>
-            <ArrowLeft style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, fontSize: 14 }}>Panel</Box>
+      {/* `nowrap`: la cabecera de la caja es UNA línea, pase lo que pase.
+          Con `wrap`, en cuanto el nombre de la terminal y el del almacén no
+          dejaban sitio, el buscador o los botones caían a un segundo renglón —
+          y cada renglón de cabecera es una fila de productos menos. Ahora lo
+          que sobra se encoge o se esconde por orden de importancia: primero el
+          nombre del almacén, después la palabra «Panel», y el buscador se
+          estrecha; nada se va a otra línea. */}
+      <Box component="header" sx={{ zIndex: 20, display: 'flex', flexShrink: 0, flexWrap: 'nowrap', alignItems: 'center', gap: 1, borderBottom: '1px solid #e5e7eb', bgcolor: '#fff', px: { xs: 1.5, sm: 2 }, py: 1 }}>
+        {/* En el teléfono esta fila entera desaparece.
+            La flecha de volver ya está en la barra de la app, justo encima, y
+            repetirla gastaba un renglón completo de los pocos que caben; el
+            nombre de la caja se lee en el menú «⋯». En tablet y escritorio sí
+            hay sitio de sobra y se quedan donde estaban. */}
+        <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexShrink: 1, minWidth: 0, alignItems: 'center', gap: { sm: 1, lg: 1.5 } }}>
+          <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={{ ...iconActionSx, flexShrink: 0 }}>
+            <ArrowLeft style={{ width: 18, height: 18 }} />
+            {/* La palabra se va antes que el nombre de la caja: la flecha sola
+                ya se entiende, y saber en qué terminal estás no. */}
+            <Box component="span" sx={{ display: { sm: 'none', lg: 'inline' }, fontSize: 14 }}>Panel</Box>
           </Button>
           <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1, fontSize: 14, fontWeight: 500 }}>
             <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{terminal?.nombre ?? 'Punto de venta'}</Box>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, color: '#9ca3af' }}>·</Box>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6b7280' }}>{terminal?.almacenNombre ?? ''}</Box>
+            {/* El almacén es lo primero que sobra: casi siempre hay uno solo. */}
+            <Box component="span" sx={{ display: { xs: 'none', xl: 'inline' }, color: '#9ca3af' }}>·</Box>
+            <Box component="span" sx={{ display: { xs: 'none', xl: 'inline' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6b7280' }}>{terminal?.almacenNombre ?? ''}</Box>
           </Box>
         </Box>
         <TextField
@@ -993,19 +1187,26 @@ function Venta({
           placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
           autoFocus
           sx={{
-            order: { xs: 3, sm: 0 },
-            width: { xs: '100%', sm: 'auto' },
-            flex: { sm: 1 },
-            // minWidth evita que los botones del header lo aplasten a nada en
-            // tablet; con flexWrap del header baja a su propia fila si no cabe.
-            minWidth: { sm: 260 },
+            // Comparte fila con Aparcar y «⋯» también en el teléfono: ahí ya no
+            // hay nada más en la cabecera con lo que competir.
+            order: 0,
+            width: 'auto',
+            flex: 1,
+            // En tablet el mínimo evita que los botones lo aplasten a nada; en
+            // el teléfono tiene que poder encogerse o desborda la fila.
+            minWidth: { xs: 0, sm: 260 },
             maxWidth: { sm: 380, md: 460 },
             mx: { sm: 1.5 },
             '& .MuiInputBase-root': { height: { xs: 52, sm: 52 }, fontSize: 16, borderRadius: '10px' },
           }}
         />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1 } }}>
-          <Chip label="Turno abierto" sx={{ display: { xs: 'none', lg: 'inline-flex' }, bgcolor: '#f0fdf4', color: '#15803d', borderRadius: '9999px', px: 0.5, py: 1.5, fontSize: 12, fontWeight: 500 }} />
+        {/* Barra de acciones.
+            «Aparcar» se queda fuera porque se usa EN MEDIO de una venta —el
+            cliente que se olvidó la cartera en el carro— y esconderla tras dos
+            toques con alguien esperando no vale la pena. Aparcadas, Reporte X y
+            Cerrar turno se usan una o dos veces por turno: al menú. Lo que gana
+            el sitio que dejan es la búsqueda, que es por donde pasa casi todo. */}
+        <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: { xs: 0.75, sm: 1 } }}>
           <Button
             onClick={aparcar}
             disabled={carrito.length === 0}
@@ -1016,59 +1217,128 @@ function Venta({
             <PauseCircle style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcar</Box>
           </Button>
           <Button
-            onClick={() => setAparcadasAbierto(true)}
+            onClick={(e) => setMenuAcciones(e.currentTarget)}
             variant="outlined"
-            title="Ventas aparcadas (F4)"
-            sx={{ ...iconActionSx, position: 'relative' }}
+            title="Más acciones"
+            aria-label="Más acciones"
+            sx={{ ...iconActionSx, position: 'relative', minWidth: 48, px: 1.25 }}
           >
-            <ListChecks style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcadas</Box>
+            <MoreHorizontal style={{ width: 20, height: 20 }} />
             {aparcadas.length > 0 && (
               <Box component="span" sx={{ position: 'absolute', right: -4, top: -4, display: 'flex', height: 20, minWidth: 20, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 0.5, fontSize: 11, fontWeight: 600, color: '#fff' }}>{aparcadas.length}</Box>
             )}
           </Button>
-          <Button
-            onClick={() => window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680')}
-            variant="outlined"
-            title="Corte X del turno"
-            sx={iconActionSx}
+          <Menu
+            anchorEl={menuAcciones}
+            open={Boolean(menuAcciones)}
+            onClose={() => setMenuAcciones(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            slotProps={{ paper: { sx: { minWidth: 232, borderRadius: '12px', mt: 0.5 } } }}
           >
-            <FileText style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Reporte X</Box>
-          </Button>
-          <Button
-            onClick={() => setCierreAbierto(true)}
-            variant="outlined"
-            title="Cerrar turno (corte Z)"
-            sx={iconActionSx}
-          >
-            <LogOut style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Cerrar turno</Box>
-          </Button>
+            {/* En el teléfono el menú es también el sitio donde se dice en qué
+                caja se está y por dónde se sale: son las dos cosas que se
+                quitaron de la cabecera para ganar el renglón. */}
+            <Box sx={{ display: { xs: 'block', sm: 'none' }, px: 2, pt: 0.5, pb: 1 }}>
+              <Box sx={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{terminal?.nombre ?? 'Punto de venta'}</Box>
+              <Box sx={{ fontSize: 12, color: '#6b7280' }}>{terminal?.almacenNombre ?? ''}</Box>
+            </Box>
+            <MenuItem
+              component={Link}
+              href="/dashboard"
+              onClick={() => setMenuAcciones(null)}
+              sx={{ display: { xs: 'flex', sm: 'none' }, gap: 1.25, minHeight: 48, fontSize: 15 }}
+            >
+              <ArrowLeft style={{ width: 18, height: 18, color: '#6b7280' }} />
+              Volver al panel
+            </MenuItem>
+            <Divider sx={{ display: { xs: 'block', sm: 'none' }, my: 0.5 }} />
+            {/* Dar de alta un producto en medio de una venta pasa una vez cada
+                muchas ventas. Ocupaba un botón fijo en la fila de categorías —la
+                que no puede partirse en dos— y ese sitio vale más para los
+                chips. Aquí sigue a un toque de distancia. */}
+            <MenuItem
+              onClick={() => { setMenuAcciones(null); setNuevoProductoAbierto(true); }}
+              sx={{ gap: 1.25, minHeight: 48, fontSize: 15 }}
+            >
+              <Plus style={{ width: 18, height: 18, color: '#6b7280' }} />
+              Nuevo producto
+            </MenuItem>
+            <MenuItem
+              onClick={() => { setMenuAcciones(null); setAparcadasAbierto(true); }}
+              sx={{ gap: 1.25, minHeight: 48, fontSize: 15 }}
+            >
+              <ListChecks style={{ width: 18, height: 18, color: '#6b7280' }} />
+              Ventas aparcadas
+              {aparcadas.length > 0 && (
+                <Box component="span" sx={{ ml: 'auto', display: 'flex', height: 22, minWidth: 22, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#eef2fe', px: 0.75, fontSize: 12, fontWeight: 700, color: '#2a45c4' }}>{aparcadas.length}</Box>
+              )}
+            </MenuItem>
+            <MenuItem
+              onClick={() => { setMenuAcciones(null); window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680'); }}
+              sx={{ gap: 1.25, minHeight: 48, fontSize: 15 }}
+            >
+              <FileText style={{ width: 18, height: 18, color: '#6b7280' }} />
+              Reporte X
+            </MenuItem>
+            <Divider sx={{ my: 0.5 }} />
+
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem
+              onClick={() => { setMenuAcciones(null); setCierreAbierto(true); }}
+              sx={{ gap: 1.25, minHeight: 48, fontSize: 15, color: '#b91c1c' }}
+            >
+              <LogOut style={{ width: 18, height: 18 }} />
+              Cerrar turno
+            </MenuItem>
+          </Menu>
         </Box>
       </Box>
 
       <Box sx={{ display: 'grid', minHeight: 0, flex: 1, gridTemplateColumns: { xs: '1fr', md: '1.55fr 1fr' }, gap: 1.5, p: 1.5 }}>
         {/* Grilla */}
-        <Box sx={{ display: 'flex', minHeight: 0, flexDirection: 'column' }}>
-          <Box
-            ref={filaCategoriasRef}
-            sx={{ mb: 1.5, display: 'flex', flexShrink: 0, ...(dispNuevo === 'abajo' ? { flexDirection: 'column', gap: 1.5 } : { alignItems: 'center', gap: 1 }) }}
-          >
-            {/* Chips scrolleables + botón "Nuevo producto". El wrapper interno
-                (chipsRef) mide el ancho natural de los chips para decidir la
-                disposición del botón: 'pill' con texto en línea, 'compacto' como
-                ícono "+" en línea, o 'abajo' en su propia fila cuando ni el "+"
-                cabría sin recortar los chips (móviles angostos). En 'abajo' hay
-                gap-3 vertical para que no se confunda al tocar una categoría. */}
-            <Box sx={{ display: 'flex', minWidth: 0, overflowX: 'auto', pb: 0.5, ...(dispNuevo === 'abajo' ? { width: '100%' } : { flex: 1 }) }}>
-              <Box ref={chipsRef} sx={{ display: 'flex', gap: 1 }}>
+        {/* `minWidth: 0` en las DOS columnas: un ítem de rejilla nace con
+            min-width:auto, o sea que se niega a encogerse por debajo del ancho
+            mínimo de su contenido. Un nombre largo sin cortar en el carrito
+            ensanchaba su pista, la suma de las dos pistas pasaba del contenedor
+            y el pie —con el botón de Cobrar— se salía por el borde derecho. */}
+        <Box sx={{ display: 'flex', minWidth: 0, minHeight: 0, flexDirection: 'column', zoom: escala }}>
+          {/* Una sola línea, pase lo que pase.
+              La tira de chips se desplaza y el botón de ajustes se queda fijo a
+              la derecha. Antes esto se medía para decidir si el botón cabía y,
+              cuando no, la fila se partía en dos renglones — cuatro productos
+              menos a la vista en una pantalla donde lo que se mira es la
+              mercancía. Con un botón en vez de tres, no hay nada que medir. */}
+          <Box sx={{ mb: 1.5, display: 'flex', flexShrink: 0, flexWrap: 'nowrap', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', flex: 1, minWidth: 0, overflowX: 'auto', pb: 0.5 }}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {/* Favoritos va PRIMERO y existe aunque no haya categorías: es
+                    el atajo del cajero a lo que vende todo el día. Antes, sin
+                    categorías configuradas, la única forma de llegar a un
+                    producto era escribir su nombre. */}
+                {hayFavoritos && (
+                  <ButtonBase
+                    onClick={() => setSoloFavoritos((v) => !v)}
+                    sx={{
+                      flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, minHeight: 44, fontSize: 16, fontWeight: 500, gap: 0.75,
+                      borderColor: soloFavoritos ? '#f59e0b' : '#e5e7eb',
+                      bgcolor: soloFavoritos ? '#fffbeb' : 'transparent',
+                      color: soloFavoritos ? '#b45309' : '#4b5563',
+                    }}
+                  >
+                    <Star style={{ width: 16, height: 16, fill: soloFavoritos ? '#f59e0b' : 'none', color: soloFavoritos ? '#f59e0b' : 'currentColor' }} />
+                    Favoritos
+                  </ButtonBase>
+                )}
                 {categorias.length > 0 && (
                   <>
                     <ButtonBase
-                      onClick={() => setCategoriaActiva('todas')}
+                      onClick={() => { setCategoriaActiva('todas'); setSoloFavoritos(false); }}
                       sx={{
-                        flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, py: 1.25, fontSize: 16, fontWeight: 500,
-                        borderColor: categoriaActiva === 'todas' ? '#3658e1' : '#e5e7eb',
-                        bgcolor: categoriaActiva === 'todas' ? '#eef2fe' : 'transparent',
-                        color: categoriaActiva === 'todas' ? '#2a45c4' : '#4b5563',
+                        flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, minHeight: 44, fontSize: 16, fontWeight: 500, gap: 0.75,
+                        borderColor: categoriaActiva === 'todas' && !soloFavoritos ? '#3658e1' : '#e5e7eb',
+                        bgcolor: categoriaActiva === 'todas' && !soloFavoritos ? '#eef2fe' : 'transparent',
+                        color: categoriaActiva === 'todas' && !soloFavoritos ? '#2a45c4' : '#4b5563',
                       }}
                     >
                       Todas
@@ -1076,9 +1346,9 @@ function Venta({
                     {categorias.map((c) => (
                       <ButtonBase
                         key={c.id}
-                        onClick={() => setCategoriaActiva(c.id)}
+                        onClick={() => { setCategoriaActiva(c.id); setSoloFavoritos(false); }}
                         sx={{
-                          flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, py: 1.25, fontSize: 16, fontWeight: 500,
+                          flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, minHeight: 44, fontSize: 16, fontWeight: 500, gap: 0.75,
                           borderColor: categoriaActiva === c.id ? '#3658e1' : '#e5e7eb',
                           bgcolor: categoriaActiva === c.id ? '#eef2fe' : 'transparent',
                           color: categoriaActiva === c.id ? '#2a45c4' : '#4b5563',
@@ -1091,63 +1361,171 @@ function Venta({
                 )}
               </Box>
             </Box>
-            <Button
-              onClick={() => setNuevoProductoAbierto(true)}
-              title="Nuevo producto"
-              variant="contained"
-              color="primary"
-              disableElevation
-              sx={{
-                flexShrink: 0, minWidth: 0, gap: 0.75,
-                alignSelf: dispNuevo === 'abajo' ? 'flex-end' : 'auto',
-                ...(dispNuevo === 'pill'
-                  ? { borderRadius: '10px', px: 2.5, py: 1.5 }
-                  : { width: 48, height: 48, p: 0, borderRadius: '9999px' }),
-              }}
-            >
-              <Plus style={{ width: dispNuevo === 'pill' ? 18 : 22, height: dispNuevo === 'pill' ? 18 : 22 }} />
-              {dispNuevo === 'pill' && <Box component="span" sx={{ fontSize: 15, fontWeight: 600 }}>Nuevo producto</Box>}
-            </Button>
+            {/* Un solo botón para vista + aviso. Antes eran dos botones fijos
+                más el de «Nuevo producto», y con seis categorías la fila se
+                partía en dos renglones — que en una caja son cuatro productos
+                menos a la vista. Lo que no cabe se va al menú «⋯». */}
+            <AjustesCaja
+              densidad={densidad}
+              onDensidad={cambiarDensidad}
+              escala={escala}
+              escalas={ESCALAS}
+              onEscala={cambiarEscala}
+              prefs={feedback}
+              onPrefs={cambiarFeedback}
+              onVolumen={subirVolumen}
+              nivel={nivelVolumen}
+              nivelMaximo={nivelMaximoVolumen}
+              conVibracion={conVibracion}
+            />
           </Box>
           {cargando ? (
             <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Cargando catálogo…</Typography>
           ) : (
-            <Box sx={{ display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', xl: 'repeat(4, 1fr)' }, alignContent: 'start', gap: 2, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}>
+            <Box sx={{ position: 'relative', display: 'flex', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+            {/* La pastilla vive DENTRO del panel de productos, no en una esquina
+                fija de la ventana: así cae siempre en el mismo sitio útil —el
+                borde de arriba de la rejilla— sin tapar el buscador, los chips
+                ni la barra del carrito, y sin depender de medir alturas. */}
+            {aviso && (
+              <Box
+                onClick={() => setAviso(null)}
+                sx={{
+                  position: 'absolute', left: '50%', top: 8, zIndex: 4, transform: 'translateX(-50%)',
+                  display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', pointerEvents: 'auto',
+                  maxWidth: 'calc(100% - 16px)', borderRadius: '9999px', bgcolor: '#111827', color: '#fff',
+                  pl: 1.25, pr: 0.75, py: 0.75, boxShadow: 4,
+                }}
+              >
+                <Check style={{ width: 15, height: 15, color: '#4ade80', flexShrink: 0 }} />
+                <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13.5, fontWeight: 500 }}>
+                  {aviso.nombre}
+                </Box>
+                <Box component="span" sx={{ flexShrink: 0, borderRadius: '9999px', bgcolor: 'rgba(255,255,255,0.16)', px: 0.875, fontSize: 12.5, fontWeight: 700, ...MONEY }}>
+                  {aviso.unidades}
+                </Box>
+              </Box>
+            )}
+            <Box
+              sx={densidad === 'lista'
+                ? { display: 'flex', flex: 1, flexDirection: 'column', gap: 0.75, overflow: 'auto', pb: { xs: 12, md: 1.5 } }
+                /* Columnas por ANCHO MÍNIMO y no un número fijo por breakpoint.
+                   Con `repeat(3, 1fr)` el tamaño no hacía nada visible: al
+                   achicar, las tres columnas simplemente se ensanchaban y se
+                   veían los mismos productos. Con `auto-fill` + `minmax`, la
+                   rejilla mete tantas tarjetas como quepan — que es justo lo
+                   que se pide al bajar el tamaño. A los anchos de siempre da
+                   las mismas columnas de siempre. */
+                : { display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(148px, 1fr))', md: 'repeat(auto-fill, minmax(210px, 1fr))' }, alignContent: 'start', gap: 2, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}
+            >
               {/* Venta simple: monto libre sin producto (patrón Alegra) */}
               <ButtonBase
                 onClick={() => setVentaSimpleAbierta(true)}
-                sx={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
-                  borderRadius: '16px', border: '2px dashed #d1d5db', bgcolor: '#fff', minHeight: 180,
-                  '&:hover': { borderColor: '#8193f5', bgcolor: '#eef2fe' },
-                  '&:active': { transform: 'scale(0.97)' },
-                }}
+                sx={densidad === 'lista'
+                  ? { display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0, borderRadius: '12px', border: '2px dashed #d1d5db', bgcolor: '#fff', px: 1.5, py: 1.25, justifyContent: 'flex-start',
+                      '&:hover': { borderColor: '#8193f5', bgcolor: '#eef2fe' }, '&:active': { transform: 'scale(0.99)' } }
+                  : { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
+                      borderRadius: '16px', border: '2px dashed #d1d5db', bgcolor: '#fff', minHeight: 180,
+                      '&:hover': { borderColor: '#8193f5', bgcolor: '#eef2fe' }, '&:active': { transform: 'scale(0.97)' } }}
               >
-                <Box sx={{ display: 'flex', height: 60, width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6' }}>
-                  <Zap style={{ width: 28, height: 28, color: '#3658e1' }} />
+                <Box sx={{ display: 'flex', height: densidad === 'lista' ? 44 : 60, width: densidad === 'lista' ? 44 : 60, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6', flexShrink: 0 }}>
+                  <Zap style={{ width: densidad === 'lista' ? 20 : 28, height: densidad === 'lista' ? 20 : 28, color: '#3658e1' }} />
                 </Box>
-                <Box component="span" sx={{ fontSize: 17, fontWeight: 700, color: '#374151' }}>Venta simple</Box>
+                <Box component="span" sx={{ fontSize: densidad === 'lista' ? 15 : 17, fontWeight: 700, color: '#374151' }}>Venta simple</Box>
               </ButtonBase>
               {filtrados.length === 0 && (
-                <Box sx={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Sin productos para esta terminal — crea el primero o usa Venta simple.</Typography>
+                <Box sx={{ gridColumn: densidad === 'lista' ? undefined : '2 / -1', display: 'flex', alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: 14, color: '#6b7280' }}>
+                    {soloFavoritos
+                      ? 'Ningún favorito todavía — toca la estrella de un producto para marcarlo.'
+                      : 'Sin productos para esta terminal — crea el primero o usa Venta simple.'}
+                  </Typography>
                 </Box>
               )}
               {filtrados.map((p) => {
                 const agotado = estaAgotado(p);
                 // Suma de todas las líneas de este producto (incluye sus variantes).
                 const qty = carrito.filter((c) => c.id === p.id).reduce((s, c) => s + c.qty, 0);
+                const destella = flash?.productId === p.id;
+                const stockTexto = p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : '';
+
+                // El borde y el fondo azules dicen «esto ya está en el carrito»
+                // sin obligar a leer el panel de la derecha, que es donde el
+                // cajero tenía que ir a comprobarlo.
+                const enCarrito = {
+                  borderColor: qty > 0 ? '#8193f5' : '#e5e7eb',
+                  boxShadow:   qty > 0 ? '0 0 0 1px #8193f5' : 'none',
+                  bgcolor:     destella ? '#dbeafe' : qty > 0 ? '#f5f7ff' : '#fff',
+                  // El destello entra de golpe y se va despacio: aparecer es la
+                  // señal, desaparecer no debe robar la vista del siguiente toque.
+                  transition:  destella ? 'none' : 'background-color .45s ease-out',
+                };
+
+                const insignia = qty > 0 && (
+                  <Box component="span" sx={{ position: 'absolute', left: densidad === 'lista' ? 4 : 8, top: densidad === 'lista' ? 4 : 8, display: 'flex', height: densidad === 'lista' ? 22 : 32, minWidth: densidad === 'lista' ? 22 : 32, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 0.75, fontSize: densidad === 'lista' ? 12 : 14, fontWeight: 700, color: '#fff', boxShadow: 1, ...MONEY }}>
+                    {qty}
+                  </Box>
+                );
+
+                if (densidad === 'lista') {
+                  return (
+                    <ButtonBase
+                      key={p.id}
+                      disabled={agotado}
+                      onClick={() => agregar(p)}
+                      sx={{
+                        position: 'relative', display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.5,
+                        borderRadius: '12px', border: '1px solid', px: 1.5, py: 1.25, textAlign: 'left',
+                        minHeight: 60, opacity: agotado ? 0.5 : 1, ...enCarrito,
+                        '&:active': { transform: 'scale(0.99)' },
+                        '&:hover': { borderColor: agotado ? '#e5e7eb' : '#8193f5' },
+                      }}
+                    >
+                      <Box sx={{ position: 'relative', height: 44, width: 44, flexShrink: 0, overflow: 'hidden', borderRadius: '10px', bgcolor: '#f9fafb' }}>
+                        {p.imagen ? (
+                          <Box component="img" src={p.imagen} alt={p.nombre} sx={{ display: 'block', height: '100%', width: '100%', objectFit: 'cover' }} />
+                        ) : (() => {
+                          const c = tileColor(p.nombre);
+                          return (
+                            <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg }}>
+                              <Box component="span" sx={{ fontSize: 15, fontWeight: 700, color: c.fg }}>{iniciales(p.nombre)}</Box>
+                            </Box>
+                          );
+                        })()}
+                        {insignia}
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 16, fontWeight: 600, lineHeight: 1.25 }}>{p.nombre}</Box>
+                        {(p.categoriaNombre || stockTexto) && (
+                          <Box sx={{ mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5, color: agotado ? '#b91c1c' : '#9ca3af' }}>
+                            {[p.categoriaNombre, stockTexto].filter(Boolean).join(' · ')}
+                          </Box>
+                        )}
+                      </Box>
+                      <Box component="span" sx={{ flexShrink: 0, fontSize: 18, fontWeight: 800, color: '#111827', ...MONEY }}>{fmt(p.precio)}</Box>
+                      <Box
+                        component="span"
+                        role="button"
+                        title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
+                        onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
+                        sx={{ display: 'flex', height: 44, width: 44, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', cursor: 'pointer', '&:hover': { bgcolor: '#f3f4f6' } }}
+                      >
+                        <Star style={{ width: 18, height: 18, color: p.favorito ? '#fbbf24' : '#d1d5db', fill: p.favorito ? '#fbbf24' : 'none' }} />
+                      </Box>
+                    </ButtonBase>
+                  );
+                }
+
                 return (
                   <ButtonBase
                     key={p.id}
                     disabled={agotado}
                     onClick={() => agregar(p)}
                     sx={{
-                      position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', overflow: 'hidden', borderRadius: '12px', border: '1px solid', bgcolor: '#fff', textAlign: 'left',
+                      position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', overflow: 'hidden', borderRadius: '12px', border: '1px solid', textAlign: 'left',
                       '&:active': { transform: 'scale(0.97)' },
-                      borderColor: qty > 0 ? '#8193f5' : '#e5e7eb',
-                      boxShadow: qty > 0 ? '0 0 0 1px #8193f5' : 'none',
                       opacity: agotado ? 0.5 : 1,
+                      ...enCarrito,
                       '&:hover': { borderColor: agotado ? '#e5e7eb' : '#8193f5' },
                     }}
                   >
@@ -1173,27 +1551,23 @@ function Venta({
                           );
                         })()
                       )}
-                      {qty > 0 && (
-                        <Box component="span" sx={{ position: 'absolute', left: 8, top: 8, display: 'flex', height: 32, minWidth: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 1, fontSize: 14, fontWeight: 700, color: '#fff', boxShadow: 1, ...MONEY }}>
-                          {qty}
-                        </Box>
-                      )}
+                      {insignia}
                       <Box
                         component="span"
                         role="button"
                         title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
                         onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
-                        sx={{ position: 'absolute', right: 4, top: 4, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                        sx={{ position: 'absolute', right: 4, top: 4, display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
                       >
-                        <Star style={{ width: 24, height: 24, color: p.favorito ? '#fbbf24' : '#9ca3af', fill: p.favorito ? '#fbbf24' : 'none' }} />
+                        <Star style={{ width: 22, height: 22, color: p.favorito ? '#fbbf24' : '#9ca3af', fill: p.favorito ? '#fbbf24' : 'none' }} />
                       </Box>
                     </Box>
                     <Box sx={{ display: 'flex', flex: 1, flexDirection: 'column', justifyContent: 'space-between', p: 2 }}>
                       <Box>
                         <Box sx={{ fontSize: { xs: 17, sm: 19 }, fontWeight: 700, lineHeight: 1.25 }}>{p.nombre}</Box>
-                        <Box sx={{ mt: 0.5, fontSize: 14, color: '#9ca3af' }}>
+                        <Box sx={{ mt: 0.5, fontSize: 14, color: agotado ? '#b91c1c' : '#9ca3af' }}>
                           {p.referencia ? p.referencia + ' · ' : ''}
-                          {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
+                          {stockTexto}
                         </Box>
                       </Box>
                       <Box sx={{ mt: 1, fontSize: 24, fontWeight: 800, color: '#111827', ...MONEY }}>{fmt(p.precio)}</Box>
@@ -1202,16 +1576,19 @@ function Venta({
                 );
               })}
             </Box>
+            </Box>
           )}
         </Box>
 
         {/* Carrito — panel fijo en escritorio, hoja deslizable en móvil */}
-        <Box sx={{ display: { xs: 'none', md: 'flex' }, minHeight: 0, width: { md: '100%' } }}>
+        <Box sx={{ display: { xs: 'none', md: 'flex' }, minWidth: 0, minHeight: 0, width: { md: '100%' } }}>
           <CarritoPanel
             carrito={carrito}
             totales={totales}
             cambiarQty={cambiarQty}
+            fijarQty={fijarQty}
             editarPrecio={editarPrecio}
+            flashKey={flash?.key ?? null}
             cobrando={cobrando}
             onCobrar={cobrar}
             escolar={escolarHabilitado}
@@ -1238,11 +1615,22 @@ function Venta({
       {/* Barra flotante móvil: total + abrir carrito */}
       <ButtonBase
         onClick={() => setCarritoMovilAbierto(true)}
-        disabled={carrito.length === 0}
+        disabled={cobrando || carrito.length === 0}
         sx={{ position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 30, display: { xs: 'flex', md: 'none' }, alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px', bgcolor: '#3658e1', px: 2, py: 1.75, color: '#fff', boxShadow: 4, '&.Mui-disabled': { opacity: 0.5 } }}
       >
-        <Box component="span" sx={{ fontSize: 14, fontWeight: 500 }}>{carrito.length} {carrito.length === 1 ? 'artículo' : 'artículos'}</Box>
-        <Box component="span" sx={{ fontWeight: 500, ...MONEY }}>Ver carrito · {fmt(totales.total)}</Box>
+        <Box sx={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.3 }}>
+          {/* En el teléfono la barra es TODO lo que se ve del carrito: la lista
+              está detrás de un toque. «3 artículos» no deja comprobar nada;
+              con los nombres, el cajero ve lo último que agregó sin abrirla —
+              que es justo cuando se detecta el toque de más. */}
+          <Box component="span" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 600 }}>
+            {resumenMovil}
+          </Box>
+          <Box component="span" sx={{ display: 'block', fontSize: 11.5, opacity: 0.85 }}>
+            {carrito.length} {carrito.length === 1 ? 'línea' : 'líneas'} · {unidadesCarrito} u.
+          </Box>
+        </Box>
+        <Box component="span" sx={{ flexShrink: 0, ml: 1.5, fontWeight: 600, ...MONEY }}>{fmt(totales.total)}</Box>
       </ButtonBase>
 
       {carritoMovilAbierto && (
@@ -1252,14 +1640,26 @@ function Venta({
               y el botón de cobrar quedaba por debajo del borde del teléfono. */}
           <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', maxHeight: '85vh', minHeight: 0, borderRadius: '16px 16px 0 0', bgcolor: '#fff', p: 1.5 }} onClick={(e) => e.stopPropagation()}>
             <Box sx={{ mb: 0.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>Tu carrito</Box>
-              <IconButton onClick={() => setCarritoMovilAbierto(false)} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+              <Box component="span" sx={{ fontSize: 15, fontWeight: 600, color: '#374151' }}>Tu carrito</Box>
+              {/* 44px de lado: era un botón «small» con un icono de 18 en la
+                  esquina superior de una hoja a pantalla completa — el objetivo
+                  más difícil de acertar de toda la caja, y el que se toca con
+                  prisa para volver a la rejilla. */}
+              <IconButton
+                onClick={() => setCarritoMovilAbierto(false)}
+                aria-label="Cerrar el carrito"
+                sx={{ height: 44, width: 44, color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
+              >
+                <X style={{ width: 24, height: 24 }} />
+              </IconButton>
             </Box>
             <CarritoPanel
               carrito={carrito}
               totales={totales}
               cambiarQty={cambiarQty}
+              fijarQty={fijarQty}
               editarPrecio={editarPrecio}
+              flashKey={flash?.key ?? null}
               cobrando={cobrando}
               onCobrar={cobrar}
               escolar={escolarHabilitado}
@@ -1334,20 +1734,26 @@ function Venta({
 // ─── Panel de carrito + cobro ────────────────────────────────────────────────
 
 function CarritoPanel({
-  carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, bloquearPrecios, estudiante, onSelectEstudiante,
+  carrito, totales, cambiarQty, fijarQty, editarPrecio, flashKey = null, cobrando, onCobrar, escolar, alertaMetodoPago, bloquearPrecios, estudiante, onSelectEstudiante,
   listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
   descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido, enMesa = false,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
   cambiarQty: (key: string, delta: number) => void;
+  /** Fija la cantidad de una línea a un número escrito (0 = quitar). */
+  fijarQty: (key: string, qty: number) => void;
   editarPrecio: (key: string, centavos: number | null) => void;
+  /** Línea recién agregada: destella y se centra sola en la lista. */
+  flashKey?: string | null;
   cobrando: boolean;
   /** Doble confirmación del método antes de cerrar el cobro. */
   alertaMetodoPago: boolean;
   /** Sin `facturas:precio-editar`: precio de catálogo, sin retoques. */
   bloquearPrecios: boolean;
-  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
+  /** Resuelve a true solo si la venta quedó emitida: es lo que decide si el
+   *  modal de cobro puede cerrarse o tiene que quedarse para reintentar. */
+  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => Promise<boolean>;
   escolar: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
@@ -1367,6 +1773,52 @@ function CarritoPanel({
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
   const [panelDescuento, setPanelDescuento] = useState(false);
+  const [configAbierta, setConfigAbierta] = useState(false);
+
+  const listaNombre = listaPreciosId === 'general'
+    ? 'General'
+    : (listas.find((l) => l.id === listaPreciosId)?.nombre ?? 'General');
+  const numeracionNombre = tipoEcf === '31' ? 'Crédito fiscal'
+    : tipoEcf === '32' ? 'Consumo'
+    : 'Ticket';
+
+  const unidadesTotales = carrito.reduce((n, c) => n + c.qty, 0);
+
+  /**
+   * Cuántas líneas quedan fuera de vista, arriba y abajo.
+   *
+   * Se cuenta en LÍNEAS y no en píxeles porque «2 líneas más» se entiende de un
+   * vistazo y «quedan 130 px» no. La cuenta usa el alto medio de una línea: no
+   * hay que ser exacto, hay que no mentir en el orden de magnitud.
+   */
+  const listaRef = useRef<HTMLDivElement>(null);
+  const lineaFlashRef = useRef<HTMLDivElement>(null);
+  const [ocultasArriba, setOcultasArriba] = useState(0);
+  const [ocultasAbajo, setOcultasAbajo] = useState(0);
+
+  const medirScroll = useCallback(() => {
+    const el = listaRef.current;
+    if (!el || carrito.length === 0) { setOcultasArriba(0); setOcultasAbajo(0); return; }
+    const altoLinea = el.scrollHeight / carrito.length;
+    if (altoLinea <= 0) return;
+    // Medio renglón de margen: una línea asomando por el borde ya se ve, y
+    // anunciarla como oculta haría parpadear la pastilla al desplazarse.
+    const arriba = Math.floor((el.scrollTop + altoLinea / 2) / altoLinea);
+    const restante = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const abajo = Math.floor((restante + altoLinea / 2) / altoLinea);
+    setOcultasArriba(Math.max(0, arriba));
+    setOcultasAbajo(Math.max(0, abajo));
+  }, [carrito.length]);
+
+  useEffect(() => { medirScroll(); }, [medirScroll, carrito]);
+
+  // La línea recién tocada se trae a la vista. Sin esto, agregar el producto
+  // número doce lo mandaba a un sitio del carrito que el cajero no está viendo,
+  // y el destello se lo perdía entero.
+  useEffect(() => {
+    if (!flashKey) return;
+    lineaFlashRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [flashKey]);
 
   // Gate DGII: sin conexión DGII lista, el POS solo emite tickets sin NCF.
   // Oculta e31/e32 del selector y fuerza sin-ncf si la terminal traía otro
@@ -1375,6 +1827,12 @@ function CarritoPanel({
   useEffect(() => {
     if (!dgiiReady && tipoEcf !== 'sin-ncf') onSelectTipoEcf('sin-ncf');
   }, [dgiiReady, tipoEcf, onSelectTipoEcf]);
+
+  // Crédito fiscal sin RNC: el cobro está bloqueado y la salida es cargar el
+  // comprador. Se abre el panel solo, en vez de dejar «Cambiar» como acertijo.
+  useEffect(() => {
+    if (tipoEcf === '31' && !cliente?.rnc) setConfigAbierta(true);
+  }, [tipoEcf, cliente?.rnc]);
 
   // F2: abre el cobro desde el panel si hay ítems en el carrito.
   useEffect(() => {
@@ -1402,7 +1860,28 @@ function CarritoPanel({
     // scroll que los alcanzara: el cajero veía la lista y ningún sitio donde
     // cobrar. Lo que se desplaza es la LISTA; la cabecera y el pie se quedan.
     <Box sx={{ display: 'flex', height: '100%', minHeight: 0, width: '100%', flexDirection: 'column', overflow: 'hidden', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 1.5 }}>
-      <Box sx={{ mb: 1.5, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* Resumen plegado de la configuración de la venta.
+          Lista de precio, Numeración y Cliente se tocan una vez por turno —a
+          veces ninguna— y ocupaban un tercio del panel con dos selectores altos
+          y un buscador. Plegados en una línea, ese tercio se lo queda el
+          carrito: son tres o cuatro líneas más de venta a la vista, que es
+          donde el cajero mira. Se abre solo cuando hay que tocar algo. */}
+      <Box sx={{ mb: 1, flexShrink: 0, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1, borderRadius: '10px', border: '1px solid #e5e7eb', bgcolor: '#fafbff', px: 1.25, minHeight: 44 }}>
+        <Box sx={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: '#4b5563' }}>
+          <Box component="span" sx={{ fontWeight: 600, color: '#111827' }}>{cliente?.razonSocial ?? 'Consumidor Final'}</Box>
+          <Box component="span" sx={{ color: '#c7cedd' }}> · </Box>{listaNombre}
+          <Box component="span" sx={{ color: '#c7cedd' }}> · </Box>{numeracionNombre}
+        </Box>
+        <ButtonBase
+          onClick={() => setConfigAbierta((v) => !v)}
+          sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '8px', px: 1, minHeight: 36, fontSize: 13, fontWeight: 600, color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }}
+        >
+          {configAbierta ? <ChevronUp style={{ width: 15, height: 15 }} /> : <Pencil style={{ width: 14, height: 14 }} />}
+          {configAbierta ? 'Listo' : 'Cambiar'}
+        </ButtonBase>
+      </Box>
+
+      <Box sx={{ mb: configAbierta ? 1.5 : 0, flexShrink: 0, display: configAbierta ? 'flex' : 'none', flexDirection: 'column', gap: 1 }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
           <Box>
             <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Lista de precio</Typography>
@@ -1442,8 +1921,14 @@ function CarritoPanel({
           </Box>
         </Box>
         <ClientePicker cliente={cliente} onSelect={onSelectCliente} />
+      </Box>
+
+      {/* El RNC del crédito fiscal NO se pliega: sin él no se puede cobrar, y
+          esconder el único campo que desbloquea la venta detrás de «Cambiar»
+          deja al cajero con un botón apagado y ninguna pista. */}
+      <Box sx={{ flexShrink: 0 }}>
         {tipoEcf === '31' && (
-          <Box sx={{ mt: 1, borderRadius: '8px', border: '1px solid #fde68a', bgcolor: '#fffbeb', p: 1.25 }}>
+          <Box sx={{ mb: 1, borderRadius: '8px', border: '1px solid #fde68a', bgcolor: '#fffbeb', p: 1.25 }}>
             <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#92400e' }}>
               RNC del comprador · obligatorio para crédito fiscal
             </Typography>
@@ -1466,7 +1951,9 @@ function CarritoPanel({
       </Box>
       {escolar && <EstudiantePicker estudiante={estudiante} onSelect={onSelectEstudiante} />}
       <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box component="span" sx={{ fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Carrito ({carrito.length})</Box>
+        <Box component="span" sx={{ fontSize: 12, fontWeight: 500, color: '#6b7280' }}>
+          Carrito{carrito.length > 0 && ` · ${carrito.length} ${carrito.length === 1 ? 'línea' : 'líneas'} · ${unidadesTotales} u.`}
+        </Box>
         <ButtonBase
           onClick={() => setPanelDescuento(true)}
           disabled={carrito.length === 0 || bloquearPrecios}
@@ -1479,30 +1966,72 @@ function CarritoPanel({
       {/* `minHeight: 0` no es cosmético: sin él un hijo flex se niega a
           encoger por debajo de su contenido, así que la lista empujaba al pie
           fuera de la pantalla en vez de llevarse el scroll. */}
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      {/* La lista lleva su propio scroll y el pie no se mueve. Lo que faltaba
+          era decir que hay más: una línea cortada por el borde se lee como un
+          fallo de pintado, no como «seguí bajando». Las pastillas dicen CUÁNTAS
+          quedan y llevan hasta ellas de un toque. */}
+      <Box sx={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        {ocultasArriba > 0 && (
+          <ButtonBase
+            onClick={() => listaRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+            sx={{ position: 'absolute', left: '50%', top: 4, zIndex: 2, transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '9999px', border: '1px solid #dbe2f5', bgcolor: 'rgba(255,255,255,0.96)', px: 1.5, minHeight: 32, fontSize: 12, fontWeight: 600, color: '#2a45c4', boxShadow: 2 }}
+          >
+            <ChevronUp style={{ width: 14, height: 14 }} />
+            {ocultasArriba} {ocultasArriba === 1 ? 'línea arriba' : 'líneas arriba'}
+          </ButtonBase>
+        )}
+        {ocultasAbajo > 0 && (
+          <ButtonBase
+            onClick={() => listaRef.current?.scrollTo({ top: listaRef.current.scrollHeight, behavior: 'smooth' })}
+            sx={{ position: 'absolute', left: '50%', bottom: 4, zIndex: 2, transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '9999px', border: '1px solid #dbe2f5', bgcolor: 'rgba(255,255,255,0.96)', px: 1.5, minHeight: 32, fontSize: 12, fontWeight: 600, color: '#2a45c4', boxShadow: 2 }}
+          >
+            <ChevronDown style={{ width: 14, height: 14 }} />
+            {ocultasAbajo} {ocultasAbajo === 1 ? 'línea más' : 'líneas más'}
+          </ButtonBase>
+        )}
+        <Box ref={listaRef} onScroll={medirScroll} sx={{ height: '100%', overflow: 'auto' }}>
         {carrito.length === 0 ? (
           <Typography sx={{ py: 4, textAlign: 'center', fontSize: 14, color: '#9ca3af' }}>Toca productos para agregarlos</Typography>
         ) : (
           carrito.map((c) => {
             const desc = descuentoLinea(c, descuentoAplicado);
+            const key = lineKey(c);
+            const destella = flashKey === key;
             return (
-              <Box key={lineKey(c)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #f3f4f6', py: 1.75 }}>
+              <LineaCarritoDeslizable
+                key={key}
+                destella={destella}
+                refFlash={destella ? lineaFlashRef : undefined}
+                /* La señal de «quitar» la emite fijarQty: si se disparara
+                   también aquí sonaría dos veces por un solo gesto. */
+                onBorrar={() => fijarQty(key, 0)}
+              >
+              <Box
+                sx={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
+                  borderBottom: '1px solid #f3f4f6', py: 1.75, px: 0.75, mx: -0.75, borderRadius: '8px',
+                  bgcolor: destella ? '#dbeafe' : 'transparent',
+                  transition: destella ? 'none' : 'background-color .45s ease-out',
+                }}
+              >
                 <Box sx={{ minWidth: 0, lineHeight: 1.25 }}>
                   <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 600 }}>{c.nombre}</Box>
                   <Box sx={{ mt: 0.25, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 15, color: '#9ca3af' }}>
-                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(lineKey(c), cents)} bloqueado={bloquearPrecios} />
+                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(key, cents)} bloqueado={bloquearPrecios} />
                     {desc > 0 && <Box component="span" sx={{ color: '#059669' }}>−{descuentoAplicado!.pct}%</Box>}
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.25 }}>
-                  <ButtonBase onClick={() => cambiarQty(lineKey(c), -1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
-                  <Box component="span" sx={{ width: 34, textAlign: 'center', fontSize: 20, fontWeight: 700, ...MONEY }}>{c.qty}</Box>
-                  <ButtonBase onClick={() => cambiarQty(lineKey(c), 1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
+                  <ButtonBase onClick={() => cambiarQty(key, -1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
+                  <CantidadEditable qty={c.qty} nombre={c.nombre} onFijar={(n) => fijarQty(key, n)} />
+                  <ButtonBase onClick={() => cambiarQty(key, 1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
                 </Box>
               </Box>
+              </LineaCarritoDeslizable>
             );
           })
         )}
+        </Box>
       </Box>
 
       {/* El pie —totales y Cobrar— nunca se desplaza ni se encoge: es lo que
@@ -1523,15 +2052,20 @@ function CarritoPanel({
         {tipoEcf === '31' && !cliente?.rnc && carrito.length > 0 && (
           <Typography sx={{ mb: 1, textAlign: 'center', fontSize: 14, fontWeight: 500, color: '#d97706' }}>Carga el RNC del comprador para el crédito fiscal</Typography>
         )}
+        {/* Bloqueado mientras se cobra. Aunque el modal ahora se queda
+            encima, el botón sigue existiendo debajo: dejarlo tocable era una
+            de las puertas por las que se colaba una segunda venta. */}
         <Button
-          disabled={carrito.length === 0 || (tipoEcf === '31' && !cliente?.rnc)}
+          disabled={cobrando || carrito.length === 0 || (tipoEcf === '31' && !cliente?.rnc)}
           onClick={() => setAbrirCobro(true)}
           variant="contained"
           fullWidth
           disableElevation
-          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2.5, fontSize: 22, fontWeight: 700, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' }, ...MONEY }}
+          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2.5, fontSize: 22, fontWeight: 700, color: '#fff', gap: 1.5, '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' }, ...MONEY }}
         >
-          Cobrar {fmt(totales.total)}
+          {cobrando
+            ? <><CircularProgress size={22} thickness={5} sx={{ color: '#fff' }} />Cobrando…</>
+            : `Cobrar ${fmt(totales.total)}`}
         </Button>
       </Box>
 
@@ -1544,7 +2078,15 @@ function CarritoPanel({
           cliente={cliente}
           enMesa={enMesa}
           onClose={() => setAbrirCobro(false)}
-          onConfirm={(pagos, recibido, propina, tipoOrden) => { onCobrar(pagos, recibido, propina, tipoOrden); setAbrirCobro(false); }}
+          /* El modal NO se cierra al confirmar: se queda con el «Cobrando…»
+             y solo se va cuando la venta está emitida. Cerrarlo antes dejaba
+             al cajero mirando el carrito lleno y un botón de cobrar activo,
+             sin saber si la venta había pasado — y tocándolo otra vez. Si
+             falla, se queda abierto para reintentar sin rehacer el cobro. */
+          onConfirm={async (pagos, recibido, propina, tipoOrden) => {
+            const ok = await onCobrar(pagos, recibido, propina, tipoOrden);
+            if (ok) setAbrirCobro(false);
+          }}
         />
       )}
     </Box>
@@ -1841,9 +2383,11 @@ function CobroModal({
   /** true si se cobra desde una mesa (comanda) → ofrece "Comer aquí". */
   enMesa?: boolean;
   onClose: () => void;
-  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
+  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void | Promise<void>;
 }) {
   const [propina, setPropina] = useState('');
+  /** El campo de propina solo aparece si se pide: casi ninguna venta lleva. */
+  const [propinaAbierta, setPropinaAbierta] = useState(false);
   const [split, setSplit] = useState(false);
   /**
    * Cobro a la espera de que se reconfirme el método.
@@ -1888,6 +2432,26 @@ function CobroModal({
   const excedeLimite = esMonedero && !!estudiante
     && estudiante.disponibleHoyCentavos != null && totalCobrar > estudiante.disponibleHoyCentavos;
   const monederoBloqueado = esMonedero && (saldoCorto || excedeLimite);
+
+  /**
+   * Una tecla del teclado numérico sobre «efectivo recibido».
+   *
+   * Se escribe la cadena tal cual en vez de acumular centavos: teclear «5» y
+   * ver 0.05 desconcierta a quien está cobrando 50 pesos. Se corta a dos
+   * decimales y se impide un segundo punto —lo único que puede dejar el campo
+   * en un número que no existe.
+   */
+  function teclear(k: string) {
+    setRecibido((prev) => {
+      if (k === '⌫') return prev.slice(0, -1);
+      const siguiente = prev + k;
+      const [, dec] = siguiente.split('.');
+      if ((siguiente.match(/\./g)?.length ?? 0) > 1) return prev;
+      if (dec != null && dec.length > 2) return prev;
+      // Sin ceros a la izquierda: «007» no es una cantidad.
+      return siguiente.replace(/^0+(?=\d)/, '');
+    });
+  }
 
   function setFilaMetodo(i: number, m: Metodo) {
     setFilas((prev) => prev.map((f, idx) => (idx === i ? { ...f, metodo: m } : f)));
@@ -1943,63 +2507,124 @@ function CobroModal({
 
   const puedeConfirmar = !cobrando && (split ? splitCuadra : (!faltaEfectivo && !monederoBloqueado));
 
+  /**
+   * En el teléfono es una hoja a pantalla completa, no un diálogo centrado.
+   *
+   * Antes había que recorrer todo —total, tipo de orden, propina, dividido,
+   * métodos, efectivo, atajos— para llegar al botón de confirmar, que quedaba
+   * por debajo del borde. En una caja eso es un cliente esperando mientras
+   * alguien busca el botón con el pulgar.
+   *
+   * Tres zonas: la cabecera con el total y el pie con el botón se quedan
+   * clavados; solo se desplaza lo de en medio. Así el importe que se cobra y la
+   * acción que lo cobra están SIEMPRE a la vista, con dos opciones o con ocho.
+   */
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 560, maxHeight: '94vh', m: 2, borderRadius: '16px' } } }}>
-      <Box sx={{ p: { xs: 2.5, sm: 3.5 } }}>
-        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box component="span" sx={{ fontSize: 20, fontWeight: 700 }}>Cobrar venta</Box>
-          <IconButton onClick={onClose} sx={{ color: '#9ca3af' }}><X style={{ width: 22, height: 22 }} /></IconButton>
+    <Dialog
+      open
+      onClose={onClose}
+      fullWidth
+      maxWidth={false}
+      slotProps={{ paper: { sx: {
+        maxWidth: { xs: '100%', sm: 560 },
+        width: { xs: '100%', sm: 'auto' },
+        height: { xs: '100%', sm: 'auto' },
+        maxHeight: { xs: '100%', sm: '94vh' },
+        m: { xs: 0, sm: 2 },
+        borderRadius: { xs: 0, sm: '16px' },
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      } } }}
+    >
+      {/* ── Cabecera fija: qué se cobra y cuánto ── */}
+      <Box sx={{ flexShrink: 0, borderBottom: '1px solid #f3f4f6', px: { xs: 2, sm: 3 }, pt: { xs: 1.5, sm: 2.5 }, pb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Box component="span" sx={{ fontSize: 17, fontWeight: 700 }}>Cobrar venta</Box>
+          <IconButton onClick={onClose} sx={{ color: '#9ca3af', mr: -1 }}><X style={{ width: 22, height: 22 }} /></IconButton>
+        </Box>
+        {/* El importe en UNA línea y sin partirse: a 34px el «RD$» se caía a un
+            renglón propio en el teléfono y el total parecía otro número. */}
+        <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
+          <Box component="span" sx={{ flexShrink: 0, fontSize: 13, color: '#6b7280' }}>Total a cobrar</Box>
+          <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: { xs: 26, sm: 30 }, fontWeight: 800, ...MONEY }}>
+            {fmt(totalCobrar)}
+          </Box>
+        </Box>
+        {propinaCentavos > 0 && (
+          <Box sx={{ mt: 0.25, textAlign: 'right', fontSize: 12, color: '#9ca3af', ...MONEY }}>Incluye propina {fmt(propinaCentavos)}</Box>
+        )}
+      </Box>
+
+      {/* ── Cuerpo: lo único que se desplaza ── */}
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: { xs: 2, sm: 3 }, py: 2 }}>
+        {/* Tipo de orden (operativo, no fiscal) — clasifica el recibo en el
+            historial. Con una sola opción no hay nada que elegir: se calla. */}
+        {opcionesTipoOrden.length > 1 && (
+          <Box sx={{ mb: 1.5, display: 'flex', gap: 0.75 }}>
+            {opcionesTipoOrden.map((t) => (
+              <Button
+                key={t}
+                onClick={() => setTipoOrden(t)}
+                disableElevation
+                variant={tipoOrden === t ? 'contained' : 'outlined'}
+                sx={{
+                  flex: 1, textTransform: 'none', borderRadius: '10px', fontSize: 14, fontWeight: 600, minHeight: 44, py: 0.75, minWidth: 0,
+                  ...(tipoOrden === t
+                    ? { bgcolor: '#10b981', color: '#fff', '&:hover': { bgcolor: '#059669' } }
+                    : { color: '#374151', borderColor: '#d1d5db' }),
+                }}
+              >
+                {TIPO_ORDEN_LABEL[t]}
+              </Button>
+            ))}
+          </Box>
+        )}
+
+        {/* Propina y pago dividido: dos fichas, no dos bloques.
+            Casi ninguna venta lleva propina y casi ninguna se divide, y entre
+            las dos ocupaban 140px por encima de los métodos de pago — que es lo
+            que de verdad hay que tocar. La propina se abre solo si se pide. */}
+        <Box sx={{ mb: 2, display: 'flex', gap: 0.75 }}>
+          <ButtonBase
+            onClick={() => setPropinaAbierta((v) => !v)}
+            sx={{
+              flex: 1, minHeight: 44, gap: 0.75, borderRadius: '10px', border: '1px solid', fontSize: 14, fontWeight: 600,
+              borderColor: propinaCentavos > 0 ? '#10b981' : '#e5e7eb',
+              bgcolor: propinaCentavos > 0 ? '#f0fdf4' : 'transparent',
+              color: propinaCentavos > 0 ? '#15803d' : '#6b7280',
+            }}
+          >
+            <Plus style={{ width: 15, height: 15 }} />
+            {propinaCentavos > 0 ? `Propina ${fmt(propinaCentavos)}` : 'Propina'}
+          </ButtonBase>
+          <ButtonBase
+            onClick={() => setSplit((v) => !v)}
+            sx={{
+              flex: 1, minHeight: 44, gap: 0.75, borderRadius: '10px', border: '1px solid', fontSize: 14, fontWeight: 600,
+              borderColor: split ? '#3658e1' : '#e5e7eb',
+              bgcolor: split ? '#eef2fe' : 'transparent',
+              color: split ? '#2a45c4' : '#6b7280',
+            }}
+          >
+            <ArrowLeftRight style={{ width: 15, height: 15 }} />
+            Dividir pago
+          </ButtonBase>
         </Box>
 
-        <Box sx={{ mb: 2, borderRadius: '12px', bgcolor: '#f9fafb', p: 2, textAlign: 'center' }}>
-          <Box sx={{ fontSize: 13, color: '#6b7280' }}>Total a cobrar</Box>
-          <Box sx={{ fontSize: 34, fontWeight: 700, ...MONEY }}>{fmt(totalCobrar)}</Box>
-          {propinaCentavos > 0 && (
-            <Box sx={{ mt: 0.25, fontSize: 12, color: '#9ca3af', ...MONEY }}>Incluye propina {fmt(propinaCentavos)}</Box>
-          )}
-        </Box>
-
-        {/* Tipo de orden (operativo, no fiscal) — clasifica el recibo en el historial. */}
-        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Tipo de orden</Typography>
-        <Box sx={{ mb: 1.5, display: 'flex', gap: 0.75 }}>
-          {opcionesTipoOrden.map((t) => (
-            <Button
-              key={t}
-              onClick={() => setTipoOrden(t)}
-              disableElevation
-              variant={tipoOrden === t ? 'contained' : 'outlined'}
-              sx={{
-                flex: 1, textTransform: 'none', borderRadius: '10px', fontSize: 15, fontWeight: 600, py: 1.25, minWidth: 0,
-                ...(tipoOrden === t
-                  ? { bgcolor: '#10b981', color: '#fff', '&:hover': { bgcolor: '#059669' } }
-                  : { color: '#374151', borderColor: '#d1d5db' }),
-              }}
-            >
-              {TIPO_ORDEN_LABEL[t]}
-            </Button>
-          ))}
-        </Box>
-
-        {/* Propina */}
-        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Propina (opcional)</Typography>
-        <TextField
-          type="number"
-          value={propina}
-          onChange={(e) => setPropina(e.target.value)}
-          placeholder="0.00"
-          fullWidth
-          slotProps={{
-            input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
-            htmlInput: { min: 0, step: 0.01 },
-          }}
-          sx={{ mb: 1.5 }}
-        />
-
-        {/* Toggle pago dividido */}
-        <Box component="label" sx={{ mb: 2, display: 'flex', cursor: 'pointer', alignItems: 'center', justifyContent: 'space-between', borderRadius: '10px', border: '1px solid #e5e7eb', px: 2, py: 1.5, fontSize: 15, fontWeight: 500 }}>
-          <Box component="span" sx={{ color: '#374151' }}>Pago dividido</Box>
-          <Checkbox checked={split} onChange={(e) => setSplit(e.target.checked)} sx={{ p: 0 }} />
-        </Box>
+        {(propinaAbierta || propinaCentavos > 0) && (
+          <TextField
+            type="number"
+            value={propina}
+            onChange={(e) => setPropina(e.target.value)}
+            placeholder="0.00"
+            label="Propina"
+            fullWidth
+            slotProps={{
+              input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+              htmlInput: { min: 0, step: 0.01 },
+            }}
+            sx={{ mb: 2 }}
+          />
+        )}
 
         {!split ? (
           <>
@@ -2012,14 +2637,17 @@ function CobroModal({
                     onClick={() => setMetodo(m)}
                     sx={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75,
-                      borderRadius: '14px', border: '1px solid', minHeight: 90, py: 1.5, fontSize: 15, fontWeight: 600, textTransform: 'capitalize',
+                      borderRadius: '14px', border: '1px solid', minHeight: 72, px: 0.5, py: 1, fontWeight: 600, textTransform: 'capitalize',
+                      // «Transferencia» no cabe a 14px en un tercio del ancho y
+                      // se salía de su tarjeta: se encoge solo esa palabra.
+                      fontSize: m.length > 9 ? 12.5 : 14, lineHeight: 1.2, textAlign: 'center',
                       borderColor: metodo === m ? '#3658e1' : '#e5e7eb',
                       bgcolor: metodo === m ? '#eef2fe' : 'transparent',
                       color: metodo === m ? '#2a45c4' : '#4b5563',
                       '&:active': { transform: 'scale(0.97)' },
                     }}
                   >
-                    <Ico style={{ width: 32, height: 32 }} />
+                    <Ico style={{ width: 24, height: 24 }} />
                     {m}
                   </ButtonBase>
                 );
@@ -2086,20 +2714,49 @@ function CobroModal({
                   }}
                   sx={{ mb: 1, '& input': { fontSize: 18, py: 1.25 } }}
                 />
-                {/* Montos rápidos: exacto + redondeos comunes de billetes */}
+                {/* Montos rápidos: exacto + redondeos comunes de billetes.
+                    Sin el «RD$» en cada botón: el campo de arriba ya lo dice y
+                    repetirlo tres veces obligaba a partir el número en dos
+                    renglones en un teléfono. */}
                 <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
                   {montosRapidos(totalCobrar).map((mc) => (
                     <ButtonBase
                       key={mc}
                       onClick={() => setRecibido((mc / 100).toFixed(2))}
                       sx={{
-                        borderRadius: '10px', border: '1px solid', py: 1.5, fontSize: 15, fontWeight: 600, ...MONEY,
+                        borderRadius: '10px', border: '1px solid', minHeight: 48, fontSize: 15, fontWeight: 700, ...MONEY,
                         borderColor: recibidoCentavos === mc ? '#3658e1' : '#e5e7eb',
                         bgcolor: recibidoCentavos === mc ? '#eef2fe' : 'transparent',
                         color: recibidoCentavos === mc ? '#2a45c4' : '#4b5563',
                       }}
                     >
-                      {fmt(mc)}
+                      {fmt(mc).replace('RD$', '').trim()}
+                    </ButtonBase>
+                  ))}
+                </Box>
+                {/* Teclado propio.
+                    En una tableta, tocar el campo levanta el teclado del sistema
+                    y se come media pantalla —justo la mitad donde están los
+                    métodos y el botón de cobrar—, así que hay que bajarlo para
+                    seguir. Con teclas dentro del diálogo no aparece nunca y las
+                    cifras se escriben con el pulgar, que es como se cobra de
+                    pie. El campo sigue aceptando el teclado físico: en el
+                    mostrador con computadora eso es más rápido. */}
+                <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                  {(['1','2','3','4','5','6','7','8','9','00','0','⌫'] as const).map((k) => (
+                    <ButtonBase
+                      key={k}
+                      onClick={() => teclear(k)}
+                      aria-label={k === '⌫' ? 'Borrar' : k}
+                      sx={{
+                        minHeight: 52, borderRadius: '10px', border: '1px solid #e5e7eb',
+                        fontSize: k === '⌫' ? 18 : 20, fontWeight: 700,
+                        color: k === '⌫' ? '#b91c1c' : '#111827',
+                        '&:active': { bgcolor: '#eef2fe', transform: 'scale(0.97)' },
+                        ...MONEY,
+                      }}
+                    >
+                      {k}
                     </ButtonBase>
                   ))}
                 </Box>
@@ -2158,15 +2815,19 @@ function CobroModal({
           </>
         )}
 
+      </Box>
+
+      {/* ── Pie fijo: el botón nunca se va por debajo del borde ── */}
+      <Box sx={{ flexShrink: 0, borderTop: '1px solid #f3f4f6', px: { xs: 2, sm: 3 }, pt: 1.5, pb: { xs: 2, sm: 2.5 } }}>
         <Button
           disabled={!puedeConfirmar}
           onClick={confirmar}
           variant="contained"
           fullWidth
           disableElevation
-          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2, fontSize: 18, fontWeight: 700, textTransform: 'none', color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' } }}
+          sx={{ borderRadius: '14px', bgcolor: '#10b981', minHeight: 56, fontSize: 18, fontWeight: 700, textTransform: 'none', color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' } }}
         >
-          {cobrando ? 'Procesando…'
+          {cobrando ? <><CircularProgress size={20} thickness={5} sx={{ color: '#fff', mr: 1.5 }} />Cobrando…</>
             : split ? (splitCuadra ? 'Confirmar venta' : 'El pago no cuadra')
             : faltaEfectivo ? 'Efectivo insuficiente'
             : monederoBloqueado ? (saldoCorto ? 'Saldo insuficiente' : 'Excede límite diario')
@@ -2190,6 +2851,373 @@ function CobroModal({
         />
       )}
     </Dialog>
+  );
+}
+
+// ─── Ajustes de la caja (vista + aviso) ──────────────────────────────────────
+
+/**
+ * Un solo botón para «cómo se ve y cómo suena esta caja».
+ *
+ * Antes eran dos botones fijos —cuadrícula y lista— comiendo sitio en la fila de
+ * categorías, que es la que no puede partirse en dos renglones. Un botón que
+ * abre un panel ocupa la mitad y cabe todo lo demás: el volumen, que no tenía
+ * dónde vivir, y la vibración.
+ *
+ * Todo se guarda en el navegador, por aparato. La caja de la cafetería y la de
+ * administración entran con la misma cuenta y no quieren lo mismo.
+ */
+function AjustesCaja({
+  densidad, onDensidad, escala, escalas, onEscala,
+  prefs, onPrefs, onVolumen, nivel, nivelMaximo, conVibracion,
+}: {
+  densidad: 'grid' | 'lista';
+  onDensidad: (d: 'grid' | 'lista') => void;
+  escala: number;
+  escalas: readonly number[];
+  onEscala: (d: 1 | -1) => void;
+  prefs: PrefsFeedback;
+  onPrefs: (p: Partial<PrefsFeedback>) => void;
+  onVolumen: (d: 1 | -1) => void;
+  nivel: number;
+  nivelMaximo: number;
+  conVibracion: boolean;
+}) {
+  const [ancla, setAncla] = useState<HTMLElement | null>(null);
+  const mudo = !prefs.sonido || nivel === 0;
+
+  return (
+    <>
+      <ButtonBase
+        onClick={(e) => setAncla(e.currentTarget)}
+        title="Vista y avisos de la caja"
+        aria-label="Vista y avisos de la caja"
+        sx={{
+          position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5,
+          height: 44, px: 1.25, borderRadius: '10px', border: '1px solid #e5e7eb', color: '#4b5563',
+          '&:hover': { borderColor: '#8193f5', bgcolor: '#f5f7ff' },
+        }}
+      >
+        {densidad === 'grid'
+          ? <LayoutGrid style={{ width: 18, height: 18 }} />
+          : <Rows3 style={{ width: 18, height: 18 }} />}
+        <ChevronDown style={{ width: 14, height: 14, opacity: 0.6 }} />
+        {/* Punto rojo cuando el aviso está mudo: si no, apagarlo sin querer se
+            descubre media hora después, cuando ya se facturó de más. */}
+        {mudo && (
+          <Box component="span" sx={{ position: 'absolute', right: 6, top: 6, height: 6, width: 6, borderRadius: '9999px', bgcolor: '#ef4444' }} />
+        )}
+      </ButtonBase>
+
+      <Menu
+        anchorEl={ancla}
+        open={Boolean(ancla)}
+        onClose={() => setAncla(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ paper: { sx: { width: 268, borderRadius: '12px', mt: 0.5, p: 1 } } }}
+      >
+        <Box sx={{ px: 1, pb: 0.75, fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: '#9ca3af' }}>VISTA</Box>
+        <Box sx={{ display: 'flex', gap: 0.75, px: 0.5, pb: 1 }}>
+          {([
+            { modo: 'grid'  as const, Icono: LayoutGrid, texto: 'Cuadrícula' },
+            { modo: 'lista' as const, Icono: Rows3,      texto: 'Lista' },
+          ]).map(({ modo, Icono, texto }) => (
+            <ButtonBase
+              key={modo}
+              onClick={() => onDensidad(modo)}
+              aria-pressed={densidad === modo}
+              sx={{
+                flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, py: 1, borderRadius: '10px',
+                border: '1px solid', fontSize: 12.5, fontWeight: 600,
+                borderColor: densidad === modo ? '#3658e1' : '#e5e7eb',
+                bgcolor:     densidad === modo ? '#eef2fe' : 'transparent',
+                color:       densidad === modo ? '#2a45c4' : '#6b7280',
+              }}
+            >
+              <Icono style={{ width: 18, height: 18 }} />
+              {texto}
+            </ButtonBase>
+          ))}
+        </Box>
+
+        <Divider sx={{ my: 0.75 }} />
+
+        {/* Tamaño de la mercancía a la vista. No toca el carrito: ahí se leen
+            importes que se cobran, y encogerlos para ver más productos sería un
+            mal cambio. */}
+        <Box sx={{ px: 1, pb: 0.75, fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: '#9ca3af' }}>TAMAÑO</Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, pb: 1 }}>
+          {/* Las dos «A» dicen de un vistazo para qué es esto: una letra chica y
+              una grande se leen sin etiqueta y en cualquier idioma. */}
+          <Box component="span" sx={{ flexShrink: 0, width: 40, textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#9ca3af' }}>A</Box>
+          <Box sx={{ display: 'flex', flex: 1, alignItems: 'center', gap: 0.5 }}>
+            {escalas.map((e) => (
+              <Box
+                key={e}
+                sx={{
+                  flex: 1, height: 4, borderRadius: '2px',
+                  bgcolor: e <= escala ? '#3658e1' : '#e5e7eb',
+                }}
+              />
+            ))}
+          </Box>
+          <Box component="span" sx={{ flexShrink: 0, width: 44, textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#6b7280', ...MONEY }}>
+            {Math.round(escala * 100)}%
+          </Box>
+          <ButtonBase
+            onClick={() => onEscala(-1)}
+            disabled={escala <= escalas[0]}
+            title="Achicar productos"
+            aria-label="Achicar productos"
+            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+          >−</ButtonBase>
+          <ButtonBase
+            onClick={() => onEscala(1)}
+            disabled={escala >= escalas[escalas.length - 1]}
+            title="Agrandar productos"
+            aria-label="Agrandar productos"
+            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+          >+</ButtonBase>
+        </Box>
+
+        <Divider sx={{ my: 0.75 }} />
+
+        <Box sx={{ px: 1, pb: 0.75, fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: '#9ca3af' }}>AVISO AL TOCAR</Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, pb: 1 }}>
+          <ButtonBase
+            onClick={() => (mudo ? onPrefs({ sonido: true }) : onPrefs({ sonido: false }))}
+            title={mudo ? 'Activar sonido' : 'Silenciar'}
+            aria-label={mudo ? 'Activar sonido' : 'Silenciar'}
+            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', color: mudo ? '#9ca3af' : '#2a45c4', '&:hover': { bgcolor: '#f3f4f6' } }}
+          >
+            {mudo ? <VolumeX style={{ width: 20, height: 20 }} /> : <Volume2 style={{ width: 20, height: 20 }} />}
+          </ButtonBase>
+
+          {/* Barritas en vez de un número: se lee de un vistazo cuánto queda por
+              subir, que es lo único que hace falta saber para decidir. */}
+          <Box sx={{ display: 'flex', flex: 1, alignItems: 'flex-end', gap: 0.5, height: 22 }}>
+            {Array.from({ length: nivelMaximo }, (_, i) => (
+              <Box
+                key={i}
+                sx={{
+                  flex: 1, borderRadius: '2px',
+                  height: `${40 + i * 20}%`,
+                  bgcolor: !mudo && i < nivel ? '#3658e1' : '#e5e7eb',
+                }}
+              />
+            ))}
+          </Box>
+
+          <ButtonBase
+            onClick={() => onVolumen(-1)}
+            disabled={nivel === 0}
+            title="Bajar volumen"
+            aria-label="Bajar volumen"
+            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+          >−</ButtonBase>
+          <ButtonBase
+            onClick={() => onVolumen(1)}
+            disabled={nivel === nivelMaximo}
+            title="Subir volumen"
+            aria-label="Subir volumen"
+            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+          >+</ButtonBase>
+        </Box>
+
+        {/* Solo donde el aparato puede vibrar: Safari (iPad, iPhone) no tiene la
+            API, y un interruptor que no hace nada se lee como avería. */}
+        {conVibracion && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.25, py: 0.5, minHeight: 44 }}>
+            <Vibrate style={{ width: 18, height: 18, color: prefs.vibracion ? '#2a45c4' : '#9ca3af' }} />
+            <Box component="span" sx={{ flex: 1, fontSize: 14, color: '#374151' }}>Vibración</Box>
+            <Switch checked={prefs.vibracion} size="small" onChange={() => onPrefs({ vibracion: !prefs.vibracion })} />
+          </Box>
+        )}
+      </Menu>
+    </>
+  );
+}
+
+// ─── Deslizar una línea del carrito para quitarla ────────────────────────────
+
+/** Píxeles de arrastre a partir de los cuales la línea se da por quitada. */
+const UMBRAL_BORRAR = 96;
+/** Antes de esto no se decide nada: hay que saber si el dedo va de lado o baja. */
+const UMBRAL_INTENCION = 10;
+
+/**
+ * Deslizar hacia la izquierda para quitar una línea.
+ *
+ * Quitar un producto obligaba a bajar la cantidad a cero con el «−»: cuatro
+ * toques para deshacer uno. El deslizamiento es el gesto que ya trae aprendido
+ * cualquiera que use un teléfono.
+ *
+ * Lo delicado es no pelearse con el scroll vertical de la lista. Hasta que el
+ * dedo no recorre UMBRAL_INTENCION píxeles no se decide nada; y si en ese tramo
+ * mandó la vertical, la línea no se mueve en todo el gesto — se deja bajar en
+ * paz. Sin eso, intentar desplazar la lista arrastraba las líneas de lado.
+ */
+function useDeslizarParaBorrar(onBorrar: () => void) {
+  const [dx, setDx] = useState(0);
+  const inicio = useRef<{ x: number; y: number } | null>(null);
+  const eje = useRef<'indeciso' | 'horizontal' | 'vertical'>('indeciso');
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // Solo dedo o ratón; con lápiz y rueda se queda quieto.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    inicio.current = { x: e.clientX, y: e.clientY };
+    eje.current = 'indeciso';
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p0 = inicio.current;
+    if (!p0) return;
+    const ddx = e.clientX - p0.x;
+    const ddy = e.clientY - p0.y;
+
+    if (eje.current === 'indeciso') {
+      if (Math.abs(ddx) < UMBRAL_INTENCION && Math.abs(ddy) < UMBRAL_INTENCION) return;
+      eje.current = Math.abs(ddx) > Math.abs(ddy) ? 'horizontal' : 'vertical';
+      // Ganó la vertical: es un scroll, no un borrado. Fuera hasta el próximo dedo.
+      if (eje.current === 'vertical') { inicio.current = null; return; }
+      // Ganó la horizontal: se captura el puntero para seguir recibiendo el
+      // movimiento aunque el dedo se salga de la línea.
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+    // Solo hacia la izquierda; a la derecha no hay nada que hacer.
+    setDx(Math.min(0, ddx));
+  };
+
+  const soltar = () => {
+    if (dx <= -UMBRAL_BORRAR) onBorrar();
+    setDx(0);
+    inicio.current = null;
+    eje.current = 'indeciso';
+  };
+
+  return {
+    dx,
+    /** true cuando soltar ahora mismo borraría: sirve para teñir de rojo. */
+    armado: dx <= -UMBRAL_BORRAR,
+    manejadores: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: soltar,
+      onPointerCancel: soltar,
+      onPointerLeave: () => { if (eje.current !== 'horizontal') { inicio.current = null; } },
+    },
+  };
+}
+
+/** Una línea del carrito con su gesto de borrado. */
+function LineaCarritoDeslizable({ children, destella, refFlash, onBorrar }: {
+  children: React.ReactNode;
+  destella: boolean;
+  refFlash?: React.Ref<HTMLDivElement>;
+  onBorrar: () => void;
+}) {
+  const { dx, armado, manejadores } = useDeslizarParaBorrar(onBorrar);
+  const arrastrando = dx !== 0;
+
+  return (
+    <Box ref={refFlash} sx={{ position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
+      {/* El fondo rojo solo existe mientras se arrastra: si estuviera siempre,
+          asomaría por los bordes en cada repintado. */}
+      {arrastrando && (
+        <Box sx={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          borderRadius: '8px', bgcolor: armado ? '#dc2626' : '#fee2e2', px: 2,
+          color: armado ? '#fff' : '#b91c1c', fontSize: 13, fontWeight: 600, gap: 0.75,
+        }}>
+          <Trash2 style={{ width: 16, height: 16 }} />
+          {armado ? 'Soltar para quitar' : 'Quitar'}
+        </Box>
+      )}
+      <Box
+        {...manejadores}
+        sx={{
+          position: 'relative',
+          transform: `translateX(${dx}px)`,
+          // Sin transición mientras el dedo manda (tiene que ir pegado a él) y
+          // con ella al soltar, para que vuelva a su sitio con suavidad.
+          transition: arrastrando ? 'none' : 'transform .18s ease-out',
+          bgcolor: destella ? '#dbeafe' : '#fff',
+          borderRadius: '8px',
+          touchAction: 'pan-y',
+          userSelect: 'none',
+        }}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+// ─── Cantidad editable en línea del carrito ──────────────────────────────────
+
+/**
+ * La cantidad es un campo, no solo un número entre − y +.
+ *
+ * Doce unidades de lo mismo son doce toques en el «+», y a mitad de camino nadie
+ * sabe si va por siete o por ocho. Tocando el número se escribe directo. Los
+ * botones se quedan: para pasar de 1 a 2 siguen siendo lo más rápido.
+ */
+function CantidadEditable({ qty, nombre, onFijar }: {
+  qty: number;
+  nombre: string;
+  onFijar: (n: number) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState('');
+
+  function confirmar() {
+    const n = parseInt(valor, 10);
+    // Vacío o basura: se deja como estaba. Poner 0 sí es válido —es quitar la
+    // línea— pero tiene que escribirlo, no salir de un dedo resbalado.
+    if (Number.isFinite(n) && n >= 0) onFijar(n);
+    setEditando(false);
+  }
+
+  if (editando) {
+    return (
+      <Box
+        component="input"
+        type="number"
+        inputMode="numeric"
+        autoFocus
+        value={valor}
+        aria-label={`Cantidad de ${nombre}`}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValor(e.target.value)}
+        onBlur={confirmar}
+        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+          if (e.key === 'Enter') { e.preventDefault(); confirmar(); }
+          if (e.key === 'Escape') { e.preventDefault(); setEditando(false); }
+        }}
+        onFocus={(e: React.FocusEvent<HTMLInputElement>) => e.target.select()}
+        sx={{
+          width: 56, height: 44, borderRadius: '8px', border: '2px solid #3658e1', textAlign: 'center',
+          fontSize: 20, fontWeight: 700, color: '#111827', outline: 'none', p: 0,
+          '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+          MozAppearance: 'textfield',
+          ...MONEY,
+        }}
+      />
+    );
+  }
+
+  return (
+    <ButtonBase
+      onClick={() => { setValor(String(qty)); setEditando(true); }}
+      title="Tocar para escribir la cantidad"
+      aria-label={`Cantidad de ${nombre}: ${qty}. Tocar para escribirla.`}
+      sx={{
+        width: 56, height: 44, borderRadius: '8px', fontSize: 20, fontWeight: 700,
+        color: '#111827', '&:hover': { bgcolor: '#f3f4f6' }, ...MONEY,
+      }}
+    >
+      {qty}
+    </ButtonBase>
   );
 }
 

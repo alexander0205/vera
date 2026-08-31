@@ -63,9 +63,15 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
 
   return (
     <>
+      {/* En el teléfono queda el icono a secas.
+          «Punto de Venta» salía cortado a «Punto de Ve» y desbordaba la barra;
+          además el nombre del módulo en el que ya estás es la información menos
+          útil de esa franja. El icono sigue abriendo la misma lista, con los
+          nombres completos. */}
       <Button
         onClick={e => setAnchor(e.currentTarget)}
         size="small"
+        aria-label="Cambiar de módulo"
         startIcon={<LayoutGrid style={{ width: 16, height: 16 }} />}
         sx={{
           textTransform: 'none',
@@ -73,11 +79,16 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
           fontSize: '0.8125rem',
           color: 'text.secondary',
           borderRadius: '8px',
-          px: 1.25,
+          flexShrink: 0,
+          px: { xs: 0.75, sm: 1.25 },
+          minWidth: { xs: 40, sm: 64 },
+          '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: 0 },
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
-        {current ? MODULE_LABELS[current] : 'Ir a…'}
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          {current ? MODULE_LABELS[current] : 'Ir a…'}
+        </Box>
       </Button>
       <Menu
         anchorEl={anchor}
