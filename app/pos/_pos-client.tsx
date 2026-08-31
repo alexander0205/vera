@@ -26,6 +26,7 @@ import Chip from '@mui/material/Chip';
 import { RncSearch } from '@/components/RncSearch';
 import { ModalSeleccionarVariante } from '@/app/(dashboard)/dashboard/facturas/nueva/modals/ModalSeleccionarVariante';
 import type { VariantePick } from '@/app/(dashboard)/dashboard/facturas/nueva/utils/types';
+import { estaAgotado } from '@/lib/pos/agotado';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
 
@@ -1133,7 +1134,7 @@ function Venta({
                 </Box>
               )}
               {filtrados.map((p) => {
-                const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
+                const agotado = estaAgotado(p);
                 // Suma de todas las líneas de este producto (incluye sus variantes).
                 const qty = carrito.filter((c) => c.id === p.id).reduce((s, c) => s + c.qty, 0);
                 return (
@@ -1150,9 +1151,18 @@ function Venta({
                       '&:hover': { borderColor: agotado ? '#e5e7eb' : '#8193f5' },
                     }}
                   >
-                    <Box sx={{ position: 'relative', aspectRatio: '1 / 1', width: '100%', bgcolor: '#f9fafb' }}>
+                    {/* El marco es cuadrado y la foto se recorta dentro (objectFit
+                        cover). `minHeight: 0` no es adorno: la tarjeta es una
+                        columna flex, y en una columna flex cada hijo recibe
+                        min-height:auto = el alto de su contenido. La <img> pide
+                        height:100% contra un padre de alto aún indefinido, así
+                        que cae a su alto REAL — y ese mínimo pisa el
+                        aspect-ratio. Con una foto vertical el marco crecía, la
+                        tarjeta se estiraba y los precios de la fila dejaban de
+                        alinearse. Las apaisadas no lo enseñaban. */}
+                    <Box sx={{ position: 'relative', aspectRatio: '1 / 1', width: '100%', minHeight: 0, flexShrink: 0, bgcolor: '#f9fafb' }}>
                       {p.imagen ? (
-                        <Box component="img" src={p.imagen} alt={p.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
+                        <Box component="img" src={p.imagen} alt={p.nombre} sx={{ display: 'block', height: '100%', width: '100%', objectFit: 'cover' }} />
                       ) : (
                         (() => {
                           const c = tileColor(p.nombre);

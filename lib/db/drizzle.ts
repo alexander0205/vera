@@ -27,7 +27,11 @@ export const client =
     // las recicla para que ninguna quede huérfana indefinidamente.
     idle_timeout: 300,
     max_lifetime: 60 * 30,
-    connect_timeout: 10,
+    // Neon en autosuspend puede tardar bastante más que unos pocos segundos
+    // en despertar cuando el wake coincide con una ráfaga de conexiones
+    // simultáneas (ver warm-up abajo) — 10s cortaba esa espera a mitad de
+    // camino y el request fallaba en vez de simplemente tardar un poco más.
+    connect_timeout: 20,
     ssl: isLocalDb ? false : 'require',
   });
 
@@ -36,3 +40,15 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export const db = drizzle(client, { schema });
+
+// Precalienta la conexión ni bien arranca el proceso, en vez de esperar a
+// que la dispare el primer request real. Sin esto, el primer load de página
+// dispara ~8-10 fetches en paralelo (ticket, presencia, empresa, usuario,
+// etc.) — si Neon estaba en autosuspend, esos 10 disparan 10 intentos de
+// reconexión/wake simultáneos contra el mismo compute recién arrancando, y
+// algunos quedan esperando minutos en vez de los ~1-2s normales de un cold
+// start. Con esta única conexión ya en camino desde que carga el módulo, el
+// compute suele estar despierto para cuando esa ráfaga llega.
+if (!globalForDb._pgClient) {
+  client`select 1`.catch(() => {});
+}

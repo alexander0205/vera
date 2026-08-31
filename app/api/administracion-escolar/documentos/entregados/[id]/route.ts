@@ -43,10 +43,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!actual) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
   if (accion === 'aprobar') {
+    /**
+     * Cuántos archivos hay DE VERDAD.
+     *
+     * `archivoNombre` es la columna de cuando un renglón tenía un solo archivo.
+     * Lo que sube la familia va a `documento_archivos` y deja esa columna en
+     * NULL, así que mirarla decía «No hay archivo entregado para aprobar» con
+     * el archivo listado en pantalla, sus kilobytes y todo. La validación de
+     * cantidad, veinte líneas más abajo, ya contaba bien esta tabla: eran dos
+     * criterios distintos para la misma pregunta dentro del mismo bloque.
+     */
+    const [{ n: nArchivos }] = await db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(adminEscolarDocumentoArchivos)
+      .where(eq(adminEscolarDocumentoArchivos.entregadoId, actual.id));
+
     // Solo hay algo que aprobar si hay un archivo de verdad. Un "no aplica" no
     // se aprueba —ya está resuelto por su propio camino— y un "pendiente" no
     // debería poder llegar aquí porque sin fila no hay id que mandar.
-    if (!actual.archivoNombre) {
+    // Se acepta `archivoNombre` para las filas viejas, de antes de que los
+    // archivos vivieran en su propia tabla.
+    if (nArchivos === 0 && !actual.archivoNombre) {
       // Salvo que el renglón sea un formulario: ahí lo entregado no es un
       // papel, es lo que la familia contestó. Sin esta salida, un formulario
       // recibido se quedaba en «por aprobar» para siempre.
@@ -76,16 +93,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .where(eq(adminEscolarDocumentosRequeridos.id, actual.requeridoId))
       .limit(1);
 
-    if (renglon && !renglon.formularioId && renglon.cantidad > 1) {
-      const [{ n }] = await db
-        .select({ n: sql<number>`COUNT(*)::int` })
-        .from(adminEscolarDocumentoArchivos)
-        .where(eq(adminEscolarDocumentoArchivos.entregadoId, actual.id));
-      if (n < renglon.cantidad) {
-        return NextResponse.json({
-          error: `«${renglon.nombre}» pide ${renglon.cantidad} y solo hay ${n}. Pídele el resto a la familia o baja la cantidad en Configuración.`,
-        }, { status: 422 });
-      }
+    if (renglon && !renglon.formularioId && renglon.cantidad > 1 && nArchivos < renglon.cantidad) {
+      return NextResponse.json({
+        error: `«${renglon.nombre}» pide ${renglon.cantidad} y solo hay ${nArchivos}. Pídele el resto a la familia o baja la cantidad en Configuración.`,
+      }, { status: 422 });
     }
     const [fila] = await db
       .update(adminEscolarDocumentosEntregados)

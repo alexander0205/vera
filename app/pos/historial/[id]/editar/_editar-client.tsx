@@ -29,6 +29,7 @@ import Dialog from '@mui/material/Dialog';
 import Chip from '@mui/material/Chip';
 import { ArrowLeft, X, Plus, Lock, Trash2 } from 'lucide-react';
 import { montosRapidos } from '@/lib/pos/montos';
+import { estaAgotado } from '@/lib/pos/agotado';
 
 const MONEY = { fontVariantNumeric: 'tabular-nums' } as const;
 const fmt = (c: number) => (c / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -243,7 +244,7 @@ export default function EditarReciboClient({ docId, terminal }: { docId: number;
                 <Typography sx={{ gridColumn: '1 / -1', fontSize: 14, color: '#6b7280' }}>Sin productos.</Typography>
               )}
               {filtrados.map((p) => {
-                const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
+                const agotado = estaAgotado(p);
                 const qty = qtyDe(p.id);
                 return (
                   <ButtonBase key={p.id} disabled={agotado} onClick={() => agregar(p)}
@@ -253,9 +254,12 @@ export default function EditarReciboClient({ docId, terminal }: { docId: number;
                       borderColor: qty > 0 ? '#8193f5' : '#e5e7eb', boxShadow: qty > 0 ? '0 0 0 1px #8193f5' : 'none',
                       '&:active': { transform: 'scale(0.97)' }, '&:hover': { borderColor: agotado ? '#e5e7eb' : '#8193f5' },
                     }}>
-                    <Box sx={{ position: 'relative', aspectRatio: '1 / 1', width: '100%', bgcolor: '#f9fafb' }}>
+                    {/* Cuadrado siempre: sin minHeight:0 el alto real de una foto
+                        vertical pisa el aspect-ratio y estira la tarjeta.
+                        Ver la nota larga en app/pos/_pos-client.tsx. */}
+                    <Box sx={{ position: 'relative', aspectRatio: '1 / 1', width: '100%', minHeight: 0, flexShrink: 0, bgcolor: '#f9fafb' }}>
                       {p.imagen ? (
-                        <Box component="img" src={p.imagen} alt={p.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
+                        <Box component="img" src={p.imagen} alt={p.nombre} sx={{ display: 'block', height: '100%', width: '100%', objectFit: 'cover' }} />
                       ) : (() => {
                         const c = tileColor(p.nombre);
                         return <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center', bgcolor: c.bg }}>

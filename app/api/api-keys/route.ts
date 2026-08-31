@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { apiKeys } from '@/lib/db/schema';
@@ -14,9 +13,20 @@ const createSchema = z.object({
   permisos: z.enum(['read', 'write', 'admin']).default('read'),
 });
 
+/**
+ * Pide el mismo permiso que crear y revocar.
+ *
+ * Antes solo comprobaba que hubiera equipo, así que cualquier miembro
+ * autenticado —aunque no tuviera acceso a Configuración— podía listar los
+ * nombres, prefijos y niveles de permiso de las keys de la empresa. No expone
+ * la key en sí (solo se guarda el hash), pero es el inventario de qué
+ * integraciones hay y con cuánto permiso, y `POST`/`DELETE` de este mismo
+ * recurso ya exigían `configuracion:gestionar`.
+ */
 export async function GET() {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const keys = await db
     .select({

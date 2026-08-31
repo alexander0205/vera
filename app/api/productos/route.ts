@@ -11,6 +11,7 @@ import { db } from '@/lib/db/drizzle';
 import { products, productVariants, productVariantAlmacenStock, almacenes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { sembrarAlmacenPorDefecto } from '@/lib/pos/asignaciones';
 import { eq, ilike, or, and, sql, getTableColumns, desc, asc } from 'drizzle-orm';
 
 // Ejes de variante definidos por el usuario (MVP "por producto"):
@@ -227,6 +228,15 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Nace vendible. Sin fila de almacén el producto no sale en ninguna caja
+    // por mucho que esté marcado visible en POS — ver sembrarAlmacenPorDefecto.
+    // Con variantes no hace falta: el bloque de arriba ya sembró el stock fino
+    // por talla, que es lo que mira el catálogo en ese caso.
+    if (prod.visiblePos && prod.controlaInventario && !conVariantes) {
+      await sembrarAlmacenPorDefecto(tx, teamId, prod.id, prod.stockActual);
+    }
+
     return prod;
   });
 

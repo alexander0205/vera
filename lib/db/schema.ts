@@ -1036,6 +1036,147 @@ export const anulacionesNcf = pgTable('anulaciones_ncf', {
   index('anulncf_team_estado_idx').on(t.teamId, t.estado),
 ]);
 
+// ─── Zero Tickets ───────────────────────────────────────────────────────────
+
+export const tickets = pgTable('tickets', {
+  id:                 serial('id').primaryKey(),
+  teamId:             integer('team_id').notNull().references(() => teams.id),
+  userId:             integer('user_id').notNull().references(() => users.id),
+  assignedAgentId:    integer('assigned_agent_id').references(() => users.id),
+  status:             varchar('status', { length: 20 }).notNull().default('esperando'), // esperando | abierto | cerrado
+  lastMessageAt:      timestamp('last_message_at').notNull().defaultNow(),
+  lastReadByUserAt:   timestamp('last_read_by_user_at'),
+  lastReadByAgentAt:  timestamp('last_read_by_agent_at'),
+  userTypingUntil:    timestamp('user_typing_until'),
+  agentTypingUntil:   timestamp('agent_typing_until'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+  closedAt:           timestamp('closed_at'),
+  onHold:             boolean('on_hold').notNull().default(false),
+});
+
+export const ticketMessages = pgTable('ticket_messages', {
+  id:          serial('id').primaryKey(),
+  ticketId:    integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  senderType:  varchar('sender_type', { length: 10 }).notNull(), // user | agent | system
+  senderId:    integer('sender_id').references(() => users.id),
+  messageType: varchar('message_type', { length: 20 }).notNull().default('text'), // text | screenshot_request
+  content:     text('content'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+export const ticketAttachments = pgTable('ticket_attachments', {
+  id:            serial('id').primaryKey(),
+  messageId:     integer('message_id').notNull().references(() => ticketMessages.id, { onDelete: 'cascade' }),
+  fileName:      varchar('file_name', { length: 255 }).notNull(),
+  mimeType:      varchar('mime_type', { length: 100 }).notNull(),
+  fileSizeBytes: integer('file_size_bytes').notNull(),
+  kind:          varchar('kind', { length: 10 }).notNull(), // image | video | file
+  storage:       varchar('storage', { length: 10 }).notNull(), // s3 | db
+  s3Key:         varchar('s3_key', { length: 500 }),
+  dataBase64:    text('data_base64'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+export const ticketCalls = pgTable('ticket_calls', {
+  id:           serial('id').primaryKey(),
+  ticketId:     integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  requestedBy:  integer('requested_by').notNull().references(() => users.id),
+  status:       varchar('status', { length: 20 }).notNull().default('pendiente'), // pendiente | activa | terminada | rechazada
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  answeredAt:   timestamp('answered_at'),
+  endedAt:      timestamp('ended_at'),
+  endedReason:  varchar('ended_reason', { length: 20 }), // colgada | rechazada | timeout | error | desconexion
+}, (t) => [
+  // Una sola llamada viva (pendiente o activa) por ticket — el segundo
+  // agente que intente llamar al mismo ticket choca acá, no en el código.
+  uniqueIndex('ticket_calls_activa_uniq').on(t.ticketId).where(sql`status IN ('pendiente', 'activa')`),
+]);
+
+export const ticketCallSignals = pgTable('ticket_call_signals', {
+  id:         serial('id').primaryKey(),
+  callId:     integer('call_id').notNull().references(() => ticketCalls.id, { onDelete: 'cascade' }),
+  fromRole:   varchar('from_role', { length: 10 }).notNull(), // user | agent
+  kind:       varchar('kind', { length: 10 }).notNull(),      // offer | answer
+  payload:    jsonb('payload').notNull(),                     // RTCSessionDescriptionInit completo
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
+export const ticketCallRecordings = pgTable('ticket_call_recordings', {
+  id:                serial('id').primaryKey(),
+  callId:            integer('call_id').notNull().references(() => ticketCalls.id, { onDelete: 'cascade' }),
+  role:              varchar('role', { length: 10 }).notNull(), // user | agent
+  s3Key:             varchar('s3_key', { length: 500 }).notNull(),
+  duracionSegundos:  integer('duracion_segundos').notNull(),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
+export const agentPresence = pgTable('agent_presence', {
+  userId:      integer('user_id').primaryKey().references(() => users.id),
+  isAvailable: boolean('is_available').notNull().default(false),
+  lastSeenAt:  timestamp('last_seen_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const supportAgents = pgTable('support_agents', {
+  id:        serial('id').primaryKey(),
+  userId:    integer('user_id').notNull().unique().references(() => users.id),
+  active:    boolean('active').notNull().default(true),
+  addedBy:   integer('added_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ticketRatings = pgTable('ticket_ratings', {
+  id:        serial('id').primaryKey(),
+  ticketId:  integer('ticket_id').notNull().unique().references(() => tickets.id, { onDelete: 'cascade' }),
+  agentId:   integer('agent_id').references(() => users.id),
+  rating:    integer('rating').notNull(), // 1 a 5
+  comment:   text('comment'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const cannedResponses = pgTable('canned_responses', {
+  id:        serial('id').primaryKey(),
+  label:     varchar('label', { length: 100 }).notNull(),
+  category:  varchar('category', { length: 30 }).notNull().default('general'), // saludo | espera | cierre | general
+  content:   text('content').notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ticketsRelations = relations(tickets, ({ one, many }) => ({
+  team: one(teams, { fields: [tickets.teamId], references: [teams.id] }),
+  user: one(users, { fields: [tickets.userId], references: [users.id] }),
+  assignedAgent: one(users, { fields: [tickets.assignedAgentId], references: [users.id] }),
+  messages: many(ticketMessages),
+}));
+
+export const ticketMessagesRelations = relations(ticketMessages, ({ one, many }) => ({
+  ticket: one(tickets, { fields: [ticketMessages.ticketId], references: [tickets.id] }),
+  sender: one(users, { fields: [ticketMessages.senderId], references: [users.id] }),
+  attachments: many(ticketAttachments),
+}));
+
+export const ticketAttachmentsRelations = relations(ticketAttachments, ({ one }) => ({
+  message: one(ticketMessages, { fields: [ticketAttachments.messageId], references: [ticketMessages.id] }),
+}));
+
+export const supportAgentsRelations = relations(supportAgents, ({ one }) => ({
+  user: one(users, { fields: [supportAgents.userId], references: [users.id] }),
+  addedByUser: one(users, { fields: [supportAgents.addedBy], references: [users.id] }),
+}));
+
+export const ticketRatingsRelations = relations(ticketRatings, ({ one }) => ({
+  ticket: one(tickets, { fields: [ticketRatings.ticketId], references: [tickets.id] }),
+  agent: one(users, { fields: [ticketRatings.agentId], references: [users.id] }),
+}));
+
+export const cannedResponsesRelations = relations(cannedResponses, ({ one }) => ({
+  creator: one(users, { fields: [cannedResponses.createdBy], references: [users.id] }),
+}));
+
 // ─── Relaciones ───────────────────────────────────────────────────────────────
 
 export const teamsRelations = relations(teams, ({ many }) => ({
@@ -1050,6 +1191,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   categorias: many(categorias),
   facturasRecurrentes: many(facturasRecurrentes),
   impresoras: many(impresoras),
+  tickets: many(tickets),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
