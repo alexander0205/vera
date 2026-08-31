@@ -189,10 +189,15 @@ export function CompanySwitcher({
             {(label[0] ?? 'E').toUpperCase()}
           </Avatar>
         )}
+        {/* En el teléfono se queda solo el avatar.
+            «YISRAEL KIDS SCHOOL SRL» recortado a «YI…» no dice qué empresa es
+            —la inicial del avatar dice lo mismo— y esos 140px empujaban al
+            resto de la barra fuera de la pantalla. El nombre completo sigue
+            estando al abrir el selector. */}
         <Typography
           variant="body2"
           noWrap
-          sx={{ maxWidth: 140, flex: 1, textAlign: 'left', fontWeight: 600, color: 'text.primary' }}
+          sx={{ display: { xs: 'none', sm: 'block' }, maxWidth: 140, flex: 1, textAlign: 'left', fontWeight: 600, color: 'text.primary' }}
         >
           {label}
         </Typography>
