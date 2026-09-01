@@ -858,17 +858,18 @@ export default function NuevaFacturaForm({
   }, [modoColegio, tipoIngresos]);
 
   /*
-    El colegio factura SIN NCF, y punto.
+    El colegio factura con la MISMA config fiscal que «Nueva factura».
 
-    No es una preferencia: este colegio no emite comprobantes fiscales, y la
-    cabecera ofrecía e31 y e32 en un desplegable. Un clic de más convertía la
-    factura de una familia en un e-CF firmado camino de la DGII —número de la
-    secuencia gastado, sin deshacer—. Se fija aquí además de esconder el
-    desplegable, por si el tipo llega de otro sitio (un borrador viejo, la URL).
+    Antes esto forzaba `sin-ncf` a cualquier factura escolar y bloqueaba el
+    desplegable de tipo, por miedo a que un clic de más gastara una secuencia de
+    la DGII. Pero ese candado ya lo pone `useTiposDisponibles`, compartido con el
+    resto del formulario: e31/e32 solo aparecen si el colegio está listo para la
+    DGII (tiene secuencias); si no —el caso normal— la única opción sigue siendo
+    `sin-ncf`, que además es el tipo por defecto de «factura-venta». Forzarlo aquí
+    hacía que un colegio que SÍ configuró sus comprobantes no pudiera elegirlos,
+    que es justo lo que el MD de facturas pide arreglar: los dos flujos ofrecen lo
+    mismo. El emisor exento se sigue respetando por el ITBIS de cada producto.
   */
-  useEffect(() => {
-    if (modoColegio && tipoEcf !== 'sin-ncf') setTipoEcf('sin-ncf');
-  }, [modoColegio, tipoEcf]);
 
   const [showNuevoProductoIdx, setShowNuevoProductoIdx] = useState<number | null>(null);
 
@@ -2387,7 +2388,11 @@ export default function NuevaFacturaForm({
               {!esGasto && (
                 <CompactHeader
                   camposMinimos={modoColegio}
-                  tipoBloqueado={modoColegio}
+                  // No se bloquea el tipo en el flujo escolar: qué comprobantes
+                  // se ofrecen lo decide `useTiposDisponibles` igual que en
+                  // «Nueva factura» (sin-ncf siempre; e31/e32 solo si el colegio
+                  // está listo para la DGII). Ver el MD de facturas.
+                  tipoBloqueado={false}
                   empresa={empresa}
                   categoriaId={categoriaId} setCategoriaId={setCategoriaId}
                   tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
