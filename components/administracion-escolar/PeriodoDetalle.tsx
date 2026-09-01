@@ -626,6 +626,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 onReenviarAviso={onReenviarAviso}
                 reenviandoCargoId={reenviandoCargoId}
                 diaFacturaAuto={grupo.diaFacturaAuto}
+                tutorClientId={tutorClientId}
                 cargos={mensualidades}
                 previstos={previstosMensualidad}
                 enviadosPorCargo={enviadosPorCargo}
@@ -1080,9 +1081,11 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
  * y en gris con el badge "Previsto" para que nadie los cobre ni los cuente:
  * NO suman en pendiente, ni en el saldo del período, ni en morosidad.
  */
-function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
+function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   /** Día del mes en que la recurrente factura sola. null = se factura a mano. */
   diaFacturaAuto: number | null;
+  /** Responsable: los meses previstos todavía no tienen factura propia. */
+  tutorClientId: number | null;
   cargos: Cargo[];
   previstos: Previsto[];
   pagos: Pago[];
@@ -1213,6 +1216,7 @@ function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAca
                   key={key}
                   r={r}
                   diaFacturaAuto={diaFacturaAuto}
+                  tutorClientId={tutorClientId}
                   abierto={expandidos.has(key)}
                   onToggle={() => setExpandidos((prev) => {
                     const next = new Set(prev);
@@ -1660,9 +1664,10 @@ type MesRow = {
  * Los pagos del mes salen al desplegar, sin cabecera ni resumen: el abonado y
  * el pendiente ya están en la fila del mes, en sus columnas.
  */
-function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
+function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   r: MesRow;
   diaFacturaAuto: number | null;
+  tutorClientId: number | null;
   abierto: boolean;
   onToggle: () => void;
   puedePagos: boolean;
@@ -1803,7 +1808,12 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
           )}
         </td>
         <td className="px-3 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
-          {accion ? (
+          {soloPrevistos && tutorClientId ? (
+            // Una cuota prevista no tiene documento todavía. El mismo enlace de
+            // pago de la familia sirve para mandarle el cobro actual; cuando la
+            // recurrente emita este mes, el botón pasa a su factura acotada.
+            <CopiarLinkPago clientId={tutorClientId} como="boton" />
+          ) : accion ? (
             <CargoActionsMenu
               cargo={accion}
               puedePagos={puedePagos}
