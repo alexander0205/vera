@@ -844,12 +844,27 @@ export default function NuevaFacturaForm({
   // ── Items (useReducer) ─────────────────────────────────────────────────────
   const [items, dispatchItems] = useItemsState(itemsIniciales);
 
-  // Deja en exento todo lo que entre —precargado, nuevo o traído de un
-  // producto— mientras el emisor esté exento.
+  // Las líneas SIN producto (manuales/en blanco) salen exentas por defecto: un
+  // colegio no cobra ITBIS en un renglón suelto que escribió a mano. Las que
+  // traen producto conservan la tasa que resolvió la tarifa —R1—: si el colegio
+  // configuró un producto con ITBIS (un uniforme), se factura con su ITBIS, en
+  // vez de forzar todo a exento y contradecir lo que puso. La columna de ITBIS
+  // aparece sola cuando hay algo que cobrar o cuando se emite un comprobante
+  // fiscal (ver `ocultarItbisEscolar`).
   useEffect(() => {
     if (!modoColegio) return;
-    if (items.some((i) => i.tasaItbis !== 'exento')) dispatchItems({ type: 'FORCE_EXENTO' });
+    if (items.some((i) => !i.productoId && i.tasaItbis !== 'exento')) {
+      dispatchItems({ type: 'FORCE_EXENTO_SIN_PRODUCTO' });
+    }
   }, [modoColegio, items]);
+
+  // La columna de ITBIS en el flujo escolar: escondida en el caso normal —un
+  // colegio que factura sin-ncf y todo exento no la necesita y una columna de
+  // ceros solo estorba—, pero VISIBLE en cuanto hay algo que cobrar (un producto
+  // con ITBIS) o se emite un comprobante fiscal (e31/e32), donde el ITBIS importa
+  // y hay que poder verlo y ajustarlo.
+  const hayItbisNoExento = items.some((i) => i.tasaItbis && i.tasaItbis !== 'exento');
+  const ocultarItbisEscolar = modoColegio && tipoEcf === 'sin-ncf' && !hayItbisNoExento;
 
   // 01 · Operaciones (giro del negocio). Es lo que se le manda a la DGII con
   // el campo oculto, y se fija por si un borrador traía otro valor.
@@ -2495,7 +2510,7 @@ export default function NuevaFacturaForm({
                 <ItemsTable
                   items={items}
                   regla={regla}
-                  ocultarItbis={modoColegio}
+                  ocultarItbis={ocultarItbisEscolar}
                   ocultarConduce={modoColegio}
                   buscarProductos={buscarProductos}
                   onSelectProducto={seleccionarProducto}
