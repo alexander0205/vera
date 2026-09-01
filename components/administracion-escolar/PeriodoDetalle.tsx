@@ -37,6 +37,7 @@ import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
+import { CopiarLinkPago } from '@/components/administracion-escolar/CopiarLinkPago';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
@@ -1511,7 +1512,7 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                   <span className="inline-flex items-center justify-end gap-2">
                     {/* Enlace de pago de la factura, visible: se copia y se manda
                         al padre sin tener que abrir el detalle de la factura. */}
-                    {c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado) && (
+                    {c.ecfDocumentId != null && (
                       <BotonLinkPagoFactura facturaId={c.ecfDocumentId} />
                     )}
                     <CargoActionsMenu
@@ -1876,7 +1877,7 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
               <span className="inline-flex items-center justify-end gap-2">
                 {/* Enlace de pago de la factura, visible: se copia y se manda al
                     padre sin abrir el detalle de la factura. */}
-                {c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado) && (
+                {c.ecfDocumentId != null && (
                   <BotonLinkPagoFactura facturaId={c.ecfDocumentId} />
                 )}
                 <CargoActionsMenu
@@ -2427,30 +2428,9 @@ function facturaLink(cargo: Cargo) {
  * todo lo que debe el responsable (`?f=` acota la página pública).
  */
 function BotonLinkPagoFactura({ facturaId }: { facturaId: number }) {
-  const [cargando, setCargando] = useState(false);
-  async function copiar() {
-    if (cargando) return;
-    setCargando(true);
-    try {
-      const r = await fetch(`/api/administracion-escolar/link-pago?facturaId=${facturaId}`);
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) { toast.error(d.error ?? 'No se pudo obtener el enlace'); return; }
-      await navigator.clipboard.writeText(d.url);
-      toast.success(`Enlace de pago copiado · referencia ${d.referencia}`);
-    } catch {
-      toast.error('No se pudo copiar el enlace');
-    } finally {
-      setCargando(false);
-    }
-  }
-  return (
-    <button type="button" onClick={copiar} disabled={cargando}
-      title="Copiar el enlace de pago de esta factura"
-      className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors disabled:opacity-50">
-      {cargando ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
-      Link de pago
-    </button>
-  );
+  // Mismo control de Facturación: consulta antes de crear, confirma el primer
+  // enlace y usa el respaldo de portapapeles fuera de HTTPS.
+  return <CopiarLinkPago facturaId={facturaId} como="boton" />;
 }
 
 function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincular, onFacturar, onRegistrarPago }: {
@@ -2723,4 +2703,3 @@ export function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactN
     </div>
   );
 }
-
