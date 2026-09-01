@@ -429,6 +429,14 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .reduce((s, c) => s + c.saldoCentavos, 0);
   const pagado = Math.max(0, total - saldo);
+  // El saldo, partido en lo que ya se puede cobrar y lo que falta por emitir. El
+  // rojo de «Pendiente» es de lo primero: una factura emitida con el saldo
+  // abierto. Lo segundo se debe, pero lo que toca con ello es facturarlo, no
+  // cobrarlo, y pintarlo en rojo lo confundía con una cuota vencida.
+  const saldoPorCobrar = cargosPeriodo
+    .filter((c) => c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+    .reduce((s, c) => s + c.saldoCentavos, 0);
+  const saldoPorFacturar = Math.max(0, saldo - saldoPorCobrar);
   // Mes solo identifica fecha. La tabla mensual agrupa exclusivamente concepto
   // mensualidad; uniforme/actividad con mes van a Otros cargos.
   const mensualidades = cargosPeriodo.filter((c) => c.conceptoTipo === 'mensualidad');
@@ -560,7 +568,22 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <PeriodoStat icon={Receipt} label="Facturado" value={fmtDOP(total)} detail="Total del período" tone="blue" />
         <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
-        <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
+        <PeriodoStat
+          icon={AlertTriangle}
+          label="Pendiente"
+          value={fmtDOP(saldo)}
+          // Rojo solo si hay algo emitido sin cobrar. Si todo lo que se debe
+          // está aún «Sin facturar», la tarjeta no alarma: lo que toca es
+          // emitir, no perseguir un pago. Ver criterio del MD de facturas.
+          detail={
+            saldoPorCobrar > 0 && saldoPorFacturar > 0
+              ? `Por cobrar ${fmtDOP(saldoPorCobrar)} · por facturar ${fmtDOP(saldoPorFacturar)}`
+              : saldoPorCobrar > 0 ? 'Saldo por cobrar'
+              : saldoPorFacturar > 0 ? 'Aún por facturar'
+              : 'Sin deuda'
+          }
+          tone={saldoPorCobrar > 0 ? 'red' : 'gray'}
+        />
         <PeriodoStat
           icon={CalendarDays}
           label="Próximo vencimiento"
@@ -1479,7 +1502,7 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                   {anulado ? (
                     <span className="text-gray-300">—</span>
                   ) : (
-                    <span className={c.saldoCentavos > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>
+                    <span className={clsSaldo(c.saldoCentavos, c.ecfDocumentId != null)}>
                       {fmtDOP(c.saldoCentavos)}
                     </span>
                   )}
@@ -1766,7 +1789,7 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
           {soloPrevistos ? (
             <span className="text-gray-300">—</span>
           ) : (
-            <span className={r.saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>
+            <span className={clsSaldo(r.saldo, !!r.factura)}>
               {fmtDOP(r.saldo)}
             </span>
           )}
@@ -1837,7 +1860,7 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
               {anulado ? (
                 <span className="text-gray-300">—</span>
               ) : (
-                <span className={c.saldoCentavos > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>
+                <span className={clsSaldo(c.saldoCentavos, c.ecfDocumentId != null)}>
                   {fmtDOP(c.saldoCentavos)}
                 </span>
               )}
@@ -2249,7 +2272,7 @@ function MesAcademico({ mes, cargos, pagos }: { mes: number; cargos: Cargo[]; pa
       </div>
       <div className="text-xs text-gray-500 space-y-1">
         <div className="flex justify-between gap-2"><span>Total</span><span className="font-medium text-gray-700">{fmtDOP(total)}</span></div>
-        <div className="flex justify-between gap-2"><span>Saldo</span><span className={saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>{fmtDOP(saldo)}</span></div>
+        <div className="flex justify-between gap-2"><span>Saldo</span><span className={clsSaldo(saldo, factura != null)}>{fmtDOP(saldo)}</span></div>
         {pagosMes.length > 0 && (
           <div className="flex justify-between gap-2"><span>Pagos</span><span className="font-medium text-gray-700">{pagosMes.length}</span></div>
         )}
@@ -2320,17 +2343,32 @@ function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pend
  * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
  * de mes no significa nada.
  */
+/**
+ * Color del saldo pendiente de un cargo o mes.
+ *
+ * Rojo = deuda por cobrar: hay una factura emitida y su saldo sigue abierto. Un
+ * cargo aún SIN factura se debe, pero lo que toca con él es emitirlo, no
+ * cobrarlo — se pinta neutro para no confundirlo con una cuota vencida, que es
+ * lo que el rojo significa en el resto de la pantalla.
+ */
+function clsSaldo(saldo: number, tieneFactura: boolean): string {
+  if (saldo <= 0) return 'font-medium text-zero-700';
+  return tieneFactura ? 'font-medium text-red-600' : 'font-medium text-gray-700';
+}
+
 function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?: boolean }) {
+  if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
   if (estado === 'pagado')  return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
+  // El cargo nace al matricular, no al facturar: la inscripción y el uniforme se
+  // deben desde el primer día, mucho antes de que salga ningún comprobante.
+  // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
+  // pueda estar vencido ni saldo que cobrar todavía, aunque su fecha de
+  // vencimiento ya haya pasado. El rojo/«Vencido» es de una factura emitida con
+  // saldo abierto. Sigue contando como deuda; lo único que cambia es que lo dice
+  // en vez de pintarlo en rojo.
+  if (sinFactura) return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
   if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
   if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
-  if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
-  // El cargo nace al matricular, no al facturar: la inscripción y el uniforme
-  // se deben desde el primer día, mucho antes de que salga ningún comprobante.
-  // Decirlo "pendiente" mezclaba dos cosas distintas —lo que falta por cobrar y
-  // lo que falta por emitir— y dejaba al usuario preguntándose de qué factura
-  // venía. Sigue contando como deuda; lo único que cambia es que lo dice.
-  if (sinFactura) return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
   return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Pendiente</Badge>;
 }
 

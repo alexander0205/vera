@@ -106,9 +106,12 @@ function Chip({ tono, children }: { tono: keyof typeof CHIP; children: React.Rea
 
 function EstadoChip({ fila, hoy }: { fila: FilaMes; hoy: string }) {
   if (fila.saldoCentavos <= 0) return <Chip tono="verde">Pagado</Chip>;
+  // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
+  // pueda estar vencido, aunque su fecha del plan ya pasara. Lo que toca es
+  // emitirlo, no cobrarlo; el rojo/«Vencido» es de una factura con saldo abierto.
+  if (fila.ecfDocumentId == null) return <Chip tono="violeta">Sin facturar</Chip>;
   if (fila.fechaVencimiento && fila.fechaVencimiento < hoy) return <Chip tono="rojo">Vencido</Chip>;
   if (fila.saldoCentavos < fila.montoCentavos) return <Chip tono="ambar">Parcial</Chip>;
-  if (fila.ecfDocumentId == null) return <Chip tono="violeta">Sin facturar</Chip>;
   return <Chip tono="gris">Pendiente</Chip>;
 }
 
