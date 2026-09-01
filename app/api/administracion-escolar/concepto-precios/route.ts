@@ -113,7 +113,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
   }
 
-  const [c] = await db.select({ id: adminEscolarConceptosPago.id }).from(adminEscolarConceptosPago)
+  const [c] = await db.select({ id: adminEscolarConceptosPago.id, productId: adminEscolarConceptosPago.productId })
+    .from(adminEscolarConceptosPago)
     .where(and(eq(adminEscolarConceptosPago.id, cId), eq(adminEscolarConceptosPago.teamId, t))).limit(1);
   if (!c) return NextResponse.json({ error: 'Concepto no encontrado' }, { status: 404 });
 
@@ -154,6 +155,23 @@ export async function POST(req: NextRequest) {
 
   if (!Number.isFinite(montoCentavos) || montoCentavos == null || montoCentavos < 0) {
     return NextResponse.json({ error: 'Monto inválido' }, { status: 400 });
+  }
+
+  /**
+   * R2: una tarifa tiene que poder facturarse contra un producto.
+   *
+   * El producto es lo que carga el ITBIS y el tipo (bien/servicio) en la
+   * factura; una tarifa sin producto —ni propio ni heredado del concepto— sale
+   * exenta por defecto sin que nadie lo decida. Además, un override de grado o
+   * sección con monto pero sin producto GANA la resolución y deja al nodo sin
+   * producto aunque el servicio sí lo tuviera. Se exige aquí, al configurar, en
+   * vez de descubrirlo al emitir. No es retroactivo: solo valida altas nuevas.
+   */
+  if (prodId == null && c.productId == null) {
+    return NextResponse.json(
+      { error: 'La tarifa necesita un producto de facturación. Elige uno o créalo aquí (así la factura sale con el ITBIS correcto).' },
+      { status: 400 },
+    );
   }
 
   const [row] = await db.insert(adminEscolarConceptoPrecios)
