@@ -45,6 +45,8 @@ export interface PeriodoDeHijo {
   filas: FilaMes[];
   /** Lo que ya es deuda de este período. Los previstos no cuentan. */
   pendienteCentavos: number;
+  /** Saldo de cargos que ya tienen factura y sí se puede cobrar. */
+  porCobrarCentavos: number;
   /** Lo que va a salir y todavía no ha salido. */
   previstoCentavos: number;
 }

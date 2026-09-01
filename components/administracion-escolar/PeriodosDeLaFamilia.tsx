@@ -804,6 +804,8 @@ function CabeceraHijo({ hijo, periodo }: {
   periodo?: PeriodoDeHijo;
 }) {
   const alDia = (periodo?.pendienteCentavos ?? 0) <= 0;
+  const porCobrar = periodo?.porCobrarCentavos ?? 0;
+  const porFacturar = Math.max(0, (periodo?.pendienteCentavos ?? 0) - porCobrar);
   return (
     <Box sx={{
       px: 2.75, pt: 2, pb: 1.875,
@@ -832,7 +834,14 @@ function CabeceraHijo({ hijo, periodo }: {
           {periodo && (
             alDia
               ? <Chip tono="verde">{periodo.activo ? 'Activa · al día' : 'Al día'}</Chip>
-              : <Chip tono="rojo">Debe {fmtDOP(periodo.pendienteCentavos)}</Chip>
+              : porCobrar > 0
+                ? <Chip tono="rojo">Debe {fmtDOP(porCobrar)}</Chip>
+                : <Chip tono="gris">Por facturar {fmtDOP(porFacturar)}</Chip>
+          )}
+          {periodo && porCobrar > 0 && porFacturar > 0 && (
+            <Typography component="span" sx={{ fontSize: '0.71875rem', color: '#9AA0AC' }}>
+              Por facturar {fmtDOP(porFacturar)}
+            </Typography>
           )}
           {periodo && periodo.previstoCentavos > 0 && (
             <Typography component="span" sx={{ fontSize: '0.71875rem', color: '#9AA0AC' }}>
