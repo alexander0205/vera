@@ -1508,22 +1508,29 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  <CargoActionsMenu
-                    cargo={c}
-                    puedePagos={puedePagos}
-                    puedeFacturar={puedeFacturar}
-                    puedeGestionar={puedeGestionar}
-                    onRegistrarPago={onRegistrarPago}
-                    onAplicarMora={onAplicarMora}
-                    onCrearFactura={onCrearFactura}
-                    onVincular={onVincular}
-                    onAnular={onAnular}
-                    onAnularFactura={onAnularFactura}
-                    onEnviarCorreo={onEnviarCorreo}
-                    onReenviarAviso={onReenviarAviso}
-                    reenviando={reenviandoCargoId === c.id}
-                    aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
-                  />
+                  <span className="inline-flex items-center justify-end gap-2">
+                    {/* Enlace de pago de la factura, visible: se copia y se manda
+                        al padre sin tener que abrir el detalle de la factura. */}
+                    {c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado) && (
+                      <BotonLinkPagoFactura facturaId={c.ecfDocumentId} />
+                    )}
+                    <CargoActionsMenu
+                      cargo={c}
+                      puedePagos={puedePagos}
+                      puedeFacturar={puedeFacturar}
+                      puedeGestionar={puedeGestionar}
+                      onRegistrarPago={onRegistrarPago}
+                      onAplicarMora={onAplicarMora}
+                      onCrearFactura={onCrearFactura}
+                      onVincular={onVincular}
+                      onAnular={onAnular}
+                      onAnularFactura={onAnularFactura}
+                      onEnviarCorreo={onEnviarCorreo}
+                      onReenviarAviso={onReenviarAviso}
+                      reenviando={reenviandoCargoId === c.id}
+                      aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
+                    />
+                  </span>
                 </td>
               </tr>
             );
@@ -1866,23 +1873,30 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
               )}
             </td>
             <td className="px-3 py-3 text-right">
-              <CargoActionsMenu
-                cargo={c}
-                puedePagos={puedePagos}
-                puedeFacturar={puedeFacturar}
-                puedeGestionar={puedeGestionar}
-                mesTieneFactura={!!r.factura}
-                onRegistrarPago={onRegistrarPago}
-                onAplicarMora={onAplicarMora}
-                onCrearFactura={onCrearFactura}
-                onVincular={onVincular}
-                onAnular={onAnular}
-                onAnularFactura={onAnularFactura}
-                onEnviarCorreo={onEnviarCorreo}
-                onReenviarAviso={onReenviarAviso}
-                reenviando={reenviandoCargoId === c.id}
-                aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
-              />
+              <span className="inline-flex items-center justify-end gap-2">
+                {/* Enlace de pago de la factura, visible: se copia y se manda al
+                    padre sin abrir el detalle de la factura. */}
+                {c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado) && (
+                  <BotonLinkPagoFactura facturaId={c.ecfDocumentId} />
+                )}
+                <CargoActionsMenu
+                  cargo={c}
+                  puedePagos={puedePagos}
+                  puedeFacturar={puedeFacturar}
+                  puedeGestionar={puedeGestionar}
+                  mesTieneFactura={!!r.factura}
+                  onRegistrarPago={onRegistrarPago}
+                  onAplicarMora={onAplicarMora}
+                  onCrearFactura={onCrearFactura}
+                  onVincular={onVincular}
+                  onAnular={onAnular}
+                  onAnularFactura={onAnularFactura}
+                  onEnviarCorreo={onEnviarCorreo}
+                  onReenviarAviso={onReenviarAviso}
+                  reenviando={reenviandoCargoId === c.id}
+                  aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
+                />
+              </span>
             </td>
           </tr>
         );
@@ -2401,6 +2415,41 @@ function facturaLink(cargo: Cargo) {
       <Receipt className="h-3 w-3 shrink-0" />
       <span className="truncate">{ref}</span>
     </Link>
+  );
+}
+
+/**
+ * Copia el enlace de pago DE ESA factura (no el agregado de la familia).
+ *
+ * El enlace ya existía escondido en el menú de tres puntos del detalle de la
+ * factura, y llegar hasta ahí desde la ficha era un rodeo. Aquí queda a un clic,
+ * junto a la factura. Abre el cobro de esa factura y su importe, no la suma de
+ * todo lo que debe el responsable (`?f=` acota la página pública).
+ */
+function BotonLinkPagoFactura({ facturaId }: { facturaId: number }) {
+  const [cargando, setCargando] = useState(false);
+  async function copiar() {
+    if (cargando) return;
+    setCargando(true);
+    try {
+      const r = await fetch(`/api/administracion-escolar/link-pago?facturaId=${facturaId}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error ?? 'No se pudo obtener el enlace'); return; }
+      await navigator.clipboard.writeText(d.url);
+      toast.success(`Enlace de pago copiado · referencia ${d.referencia}`);
+    } catch {
+      toast.error('No se pudo copiar el enlace');
+    } finally {
+      setCargando(false);
+    }
+  }
+  return (
+    <button type="button" onClick={copiar} disabled={cargando}
+      title="Copiar el enlace de pago de esta factura"
+      className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors disabled:opacity-50">
+      {cargando ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+      Link de pago
+    </button>
   );
 }
 
