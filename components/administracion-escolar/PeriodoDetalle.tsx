@@ -1812,7 +1812,14 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
             // Una cuota prevista no tiene documento todavía. El mismo enlace de
             // pago de la familia sirve para mandarle el cobro actual; cuando la
             // recurrente emita este mes, el botón pasa a su factura acotada.
-            <CopiarLinkPago clientId={tutorClientId} como="boton" />
+            // El icono se suma a Detalle y al menú: no reemplaza sus acciones.
+            <span className="inline-flex items-center justify-end gap-1">
+              <CopiarLinkPago clientId={tutorClientId} como="boton" soloIcono />
+              {previstoUnico && onDetalle && <BotonDetalleCuota previsto={previstoUnico} onDetalle={onDetalle} />}
+              {puedeGestionar && previstoUnico && previstoUnico.cuotaId > 0 && onPrevisto && (
+                <PrevistoActionsMenu previsto={previstoUnico} onPrevisto={onPrevisto} />
+              )}
+            </span>
           ) : accion ? (
             <CargoActionsMenu
               cargo={accion}
@@ -2440,7 +2447,7 @@ function facturaLink(cargo: Cargo) {
 function BotonLinkPagoFactura({ facturaId }: { facturaId: number }) {
   // Mismo control de Facturación: consulta antes de crear, confirma el primer
   // enlace y usa el respaldo de portapapeles fuera de HTTPS.
-  return <CopiarLinkPago facturaId={facturaId} como="boton" />;
+  return <CopiarLinkPago facturaId={facturaId} como="boton" soloIcono />;
 }
 
 function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincular, onFacturar, onRegistrarPago }: {

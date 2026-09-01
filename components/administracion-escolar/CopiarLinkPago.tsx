@@ -29,6 +29,8 @@ type Props = {
   nombre?: string | null;
   /** `menu` pinta una fila de menú; `boton` un botón suelto. */
   como?: 'menu' | 'boton';
+  /** En tablas densas: conserva accesibilidad, ahorra el texto visible. */
+  soloIcono?: boolean;
   className?: string;
 };
 
@@ -66,7 +68,7 @@ async function alPortapapeles(texto: string): Promise<boolean> {
   }
 }
 
-export function CopiarLinkPago({ clientId, facturaId, nombre, como = 'menu', className }: Props) {
+export function CopiarLinkPago({ clientId, facturaId, nombre, como = 'menu', soloIcono = false, className }: Props) {
   const [cargando, setCargando] = useState(false);
   const [preguntando, setPreguntando] = useState(false);
 
@@ -137,10 +139,11 @@ export function CopiarLinkPago({ clientId, facturaId, nombre, como = 'menu', cla
           type="button"
           onClick={alHacerClic}
           disabled={inutil || cargando}
-          title="Copiar link de pago del responsable"
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50 ${className ?? ''}`}
+          aria-label="Copiar link de pago"
+          title="Copiar link de pago"
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50 ${soloIcono ? 'h-7 w-7 justify-center p-0' : ''} ${className ?? ''}`}
         >
-          {icono}<span className="hidden sm:inline">Link de pago</span>
+          {icono}{!soloIcono && <span className="hidden sm:inline">Link de pago</span>}
         </button>
       )}
 
