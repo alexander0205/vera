@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarPeriodos } from '@/lib/db/schema';
-import { devengarPeriodo, finDeMes } from '@/lib/administracion-escolar/devengar';
+import { devengarPeriodo } from '@/lib/administracion-escolar/devengar';
 
 /**
  * Devengo mensual de la deuda escolar.
@@ -25,7 +25,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
-  const hasta = finDeMes(new Date().toISOString().slice(0, 10));
+  // HOY, no fin de mes. Un cargo nace el día en que se emite, ni un día antes:
+  // la cuota de septiembre que se emite el 30 no puede figurar como deuda el
+  // día 2. Cortar en fin de mes adelantaba hasta 30 días cada mensualidad —en
+  // producción llegó a haber 373 cargos por RD$2.4M con la emisión todavía por
+  // llegar—, y la pantalla los mostraba como pendientes porque un cargo que
+  // existe ES deuda. Lo que el corte de fin de mes intentaba lograr (que el
+  // colegio vea el mes completo) ya lo cubre «Previsto», que enseña la cuota
+  // sin inventarle una deuda.
+  const hasta = new Date().toISOString().slice(0, 10);
 
   // Un año activo por colegio; el índice parcial de la migración 0105 lo
   // garantiza, así que esto es un período por team con módulo escolar en uso.

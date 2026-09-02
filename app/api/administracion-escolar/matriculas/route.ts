@@ -11,7 +11,7 @@ import {
 } from '@/lib/db/schema';
 import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
 import { armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
-import { cuotasVigentes, finDeMes } from '@/lib/administracion-escolar/devengar';
+import { cuotasVigentes } from '@/lib/administracion-escolar/devengar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
@@ -211,7 +211,10 @@ export async function POST(req: NextRequest) {
       // aquí: el padre que matricula en agosto no debe la cuota de junio, y
       // escribirla como deuda inflaría el saldo pendiente de todo el colegio.
       // El resto lo va creando el devengo mensual cuando llega su mes.
-      const hasta = finDeMes(inscripcion);
+      // Hasta la fecha de inscripción, no hasta fin de su mes: si el alumno
+      // entra el día 2 y la mensualidad se emite el 30, esa cuota todavía no
+      // le toca. La crea el devengo cuando llegue su día.
+      const hasta = inscripcion;
       const filas = cuotasVigentes(plan, pedidos, hasta).map(({ linea, cuota }) => ({
         teamId,
         estudianteId: estudianteIdOk,

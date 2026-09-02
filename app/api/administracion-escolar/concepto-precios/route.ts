@@ -10,7 +10,7 @@ import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/e
 import {
   calcularImpactoPrecio, eliminarPrecioCompleto, eliminarSoloTarifa, matriculasBajoObjetivo,
 } from '@/lib/administracion-escolar/tarifa-lifecycle';
-import { devengarPeriodo, finDeMes } from '@/lib/administracion-escolar/devengar';
+import { devengarPeriodo } from '@/lib/administracion-escolar/devengar';
 
 const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion']);
 
@@ -200,7 +200,9 @@ export async function POST(req: NextRequest) {
   try {
     const matriculaIds = await matriculasBajoObjetivo(db, t, pId, objetivoTipo, oId);
     if (matriculaIds.length) {
-      const hasta = finDeMes(new Date().toISOString().slice(0, 10));
+      // Mismo criterio que el cron: hasta hoy, no hasta fin de mes. Poner el
+      // precio no debe adelantar cuotas que todavía no toca emitir.
+      const hasta = new Date().toISOString().slice(0, 10);
       const r = await devengarPeriodo(t, pId, hasta, false, { soloMatriculas: matriculaIds, soloConceptos: [cId] });
       cargosCreados = r.cargosCreados;
     }
