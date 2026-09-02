@@ -565,6 +565,53 @@ export async function getGastos(teamId: number, limit = 100) {
 }
 
 /**
+ * Listado de COMPROBANTES DE COMPRA (e41) que el negocio registra desde el
+ * formulario de compra (dinero que sale a un proveedor con RNC, reclama ITBIS).
+ * Son ecf_documents tipo 41 —distinto de las "Facturas recibidas" (recepción
+ * DGII) y de las "Compras registradas" (entradas de inventario, compras_locales).
+ * Totales excluyen anulados/rechazados; la lista los muestra igual. Centavos.
+ */
+export async function getComprobantesCompra(teamId: number, limit = 100) {
+  const base  = and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.tipoEcf, '41'));
+  const vivos = and(base, sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`);
+
+  const [docs, totRows] = await Promise.all([
+    db
+      .select({
+        id:           ecfDocuments.id,
+        encf:         ecfDocuments.encf,
+        estado:       ecfDocuments.estado,
+        estadoPago:   ecfDocuments.estadoPago,
+        proveedor:    ecfDocuments.razonSocialComprador,
+        rncProveedor: ecfDocuments.rncComprador,
+        ncfProveedor: ecfDocuments.ncfProveedor,
+        pagoMetodo:   ecfDocuments.pagoMetodo,
+        pagoCuenta:   ecfDocuments.pagoCuenta,
+        montoTotal:   ecfDocuments.montoTotal,
+        fechaGasto:   ecfDocuments.fechaGasto,
+        createdAt:    ecfDocuments.createdAt,
+      })
+      .from(ecfDocuments)
+      .where(base)
+      .orderBy(desc(ecfDocuments.createdAt))
+      .limit(limit),
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        count: sql<number>`count(*)`,
+      })
+      .from(ecfDocuments)
+      .where(vivos),
+  ]);
+
+  return {
+    docs,
+    totalCents: Number(totRows[0]?.total ?? 0),
+    count:      Number(totRows[0]?.count ?? 0),
+  };
+}
+
+/**
  * Reporte "Ventas generales".
  * Devuelve agregados + lista de documentos del rango.
  *

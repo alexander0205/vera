@@ -17,7 +17,7 @@ import {
   GraduationCap, Loader2, Printer,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
-import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
+import { getCategoriaDeEcf, CATEGORIAS_ECF, esTipoCompraGasto } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
@@ -238,12 +238,21 @@ export default function NuevaFacturaForm({
   // la DGII es opcional (queda en el menú "Más opciones"), así que la acción
   // primaria guarda como interno en vez de forzar la emisión fiscal.
   const esGasto = tipoEcf === '43' || tipoEcf === '47';
+  // Compra (41) + gasto (43/47): en el editor de líneas registras lo que
+  // COMPRASTE, no lo que vendes. Se usa SOLO para el comportamiento de la tabla
+  // (texto libre, sin catálogo de venta, precios editables); el resto del
+  // formulario sigue distinguiendo compra vs gasto con `esGasto`.
+  const esCompraGasto = esTipoCompraGasto(tipoEcf);
+  // Compra (e41) vs gasto (e43/e47): mismo chrome de "salida de dinero"
+  // (proveedor, pago, sin catálogo de venta), pero con etiquetas propias.
+  const esCompra = tipoEcf === '41';
+  const nounSalida = esCompra ? 'compra' : 'gasto';
 
   // Título de la pantalla según la categoría de documento.
   const tituloDoc = ({
     'nota-credito': { nuevo: 'Nueva nota de crédito', editar: 'Editar nota de crédito' },
     'nota-debito':  { nuevo: 'Nueva nota de débito',  editar: 'Editar nota de débito' },
-    'compras':      { nuevo: 'Nueva compra',          editar: 'Editar compra' },
+    'compras':      { nuevo: 'Nuevo comprobante de compra', editar: 'Editar comprobante de compra' },
     'gastos':       { nuevo: 'Nuevo gasto',           editar: 'Editar gasto' },
   } as Record<string, { nuevo: string; editar: string }>)[categoriaId]
     ?? { nuevo: 'Nueva factura', editar: 'Editar factura' };
@@ -269,6 +278,8 @@ export default function NuevaFacturaForm({
   const detalleBase =
     categoriaId === 'nota-credito' ? '/dashboard/notas-credito'
     : categoriaId === 'nota-debito' ? '/dashboard/notas-debito'
+    : categoriaId === 'compras' ? '/dashboard/compras'
+    : categoriaId === 'gastos' ? '/dashboard/gastos'
     : '/dashboard/facturas';
 
   const regla = TIPO_ECF_REGLAS[tipoEcf];
@@ -945,7 +956,7 @@ export default function NuevaFacturaForm({
   // Al editar un borrador con split, restauramos las líneas desde initialData.
   // Un gasto normalmente ya se pagó al registrarlo (saliste con el dinero), así
   // que arranca como pagado; una venta arranca sin cobro. Se puede desmarcar.
-  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? esGasto);
+  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? esCompraGasto);
   const [pagoFecha, setPagoFecha]       = useState(
     initialData?.pagoFecha ?? new Date().toISOString().slice(0, 10),
   );
@@ -1269,6 +1280,43 @@ export default function NuevaFacturaForm({
     return [...cuotasComoProductos(dependienteId, q), ...(data.productos ?? [])];
   }
 
+  /**
+   * Buscador del catálogo de COMPRAS (lo que compras), para las líneas de
+   * compra/gasto. Separado del catálogo de venta a propósito. Devuelve el
+   * mismo shape `Producto` para que el Autocomplete y `seleccionarProducto`
+   * funcionen igual. El historial de compras pasadas se sumará aquí después.
+   */
+  async function buscarCatalogoCompras(q: string): Promise<Producto[]> {
+    const res  = await fetch(`/api/compras/catalogo?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    return data.items ?? [];
+  }
+
+  /**
+   * Crea un artículo en el catálogo de compras desde el texto tecleado y lo
+   * aplica a la línea. Así el catálogo crece "al vuelo" desde el propio gasto.
+   */
+  async function crearArticuloCompra(idx: number, texto: string) {
+    const nombre = texto.trim();
+    if (!nombre) return;
+    try {
+      const res  = await fetch('/api/compras/catalogo', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ nombre }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.item) {
+        // Si falla el guardado en catálogo, al menos no perder lo tecleado.
+        updateItem(items[idx].id, 'nombreItem', nombre);
+        return;
+      }
+      seleccionarProducto(idx, data.item as Producto);
+    } catch {
+      updateItem(items[idx].id, 'nombreItem', nombre);
+    }
+  }
+
   function seleccionarProducto(idx: number, p: Producto) {
     // Una cuota del plan no es un producto: trae su propio precio, su mes y el
     // cargo del que sale. Va por su camino antes de cualquier otra cosa —lo de
@@ -1337,7 +1385,9 @@ export default function NuevaFacturaForm({
       type: 'APPLY_PRODUCTO',
       idx,
       patch: {
-        productoId: p.id,
+        // El catálogo de compras / historial no son productos de venta: su id no
+        // debe viajar como productoId (no existe en `products`).
+        productoId: (p.esCatalogoCompra || p.esHistorial) ? undefined : p.id,
         variantId: undefined,
         variantNombre: undefined,
         nombreItem: p.nombre,
@@ -1489,9 +1539,9 @@ export default function NuevaFacturaForm({
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
-      categoriaGasto: esGasto ? categoriaGasto : undefined,
-      ncfProveedor: esGasto ? ncfProveedor : undefined,
-      fechaGasto: esGasto ? fechaGasto : undefined,
+      categoriaGasto: esCompraGasto ? categoriaGasto : undefined,
+      ncfProveedor: esCompraGasto ? ncfProveedor : undefined,
+      fechaGasto: esCompraGasto ? fechaGasto : undefined,
       borradorId: initialData?.id ?? null,
     });
   }
@@ -1506,14 +1556,27 @@ export default function NuevaFacturaForm({
   // sola línea en efectivo; si el usuario cambia el método o agrega líneas (pago
   // dividido / a crédito), se respeta lo que puso y deja de autocompletarse.
   useEffect(() => {
-    if (!esGasto || !pagoRecibido || initialData) return;
+    if (!esCompraGasto || !pagoRecibido || initialData) return;
     if (pagoLineas.length !== 1 || pagoLineas[0].metodo !== 'efectivo') return;
     const objetivo = totalNeto > 0 ? totalNeto.toFixed(2) : '';
     if (pagoLineas[0].valor !== objetivo) {
       setPagoLineas([{ ...pagoLineas[0], valor: objetivo }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [esGasto, pagoRecibido, totalNeto]);
+  }, [esCompraGasto, pagoRecibido, totalNeto]);
+
+  // Tipos que NO permiten ITBIS (e43 gastos menores, e47 pagos al exterior, y
+  // e44/e46): una línea de texto libre o recién agregada arrastra el 0.18 por
+  // defecto. Eso inflaba el total con un ITBIS que al emitir se fuerza a exento
+  // (y dejaba el selector en un valor fuera de rango → warning MUI). Se coacciona
+  // a 'exento' para que el total del formulario coincida con lo declarado.
+  useEffect(() => {
+    if (!regla || regla.permiteItbis) return;
+    items.forEach((it) => {
+      if (it.tasaItbis !== 'exento') updateItem(it.id, 'tasaItbis', 'exento');
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regla, items]);
 
   // Motivo (código de modificación) obligatorio para notas 33/34 — también al
   // guardar como borrador: la DGII lo exige y evita notas incompletas que luego
@@ -1528,8 +1591,8 @@ export default function NuevaFacturaForm({
   function validar(): string | null {
     const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
     const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
-    if (esGasto && !razonFinal.trim()) return 'Indica el nombre del proveedor';
-    if (esGasto && !fechaGasto) return 'Indica la fecha del gasto';
+    if (esCompraGasto && !razonFinal.trim()) return 'Indica el nombre del proveedor';
+    if (esCompraGasto && !fechaGasto) return `Indica la fecha de la ${nounSalida}`;
     if (regla?.requiereRncComprador && !rncFinal.trim())
       return `El ${regla.rncLabel} es obligatorio para este tipo de comprobante`;
     if (regla?.requiereRazonSocial && !razonFinal.trim())
@@ -1851,7 +1914,7 @@ export default function NuevaFacturaForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     // Gasto: la acción primaria guarda como interno; emitir a DGII es opcional.
-    await emitir(esGasto ? 'borrador' : 'emitir');
+    await emitir(esCompraGasto ? 'borrador' : 'emitir');
   }
 
   // ─── Cmd/Ctrl + Enter → emitir ────────────────────────────────────────────
@@ -1860,14 +1923,14 @@ export default function NuevaFacturaForm({
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         if (!loading && !resultado) {
-          void emitir(esGasto ? 'borrador' : 'emitir');
+          void emitir(esCompraGasto ? 'borrador' : 'emitir');
         }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, resultado, esGasto]);
+  }, [loading, resultado, esCompraGasto]);
 
   // ─── Guardar NCF modal ────────────────────────────────────────────────────
   async function handleGuardarNcf() {
@@ -1996,10 +2059,12 @@ export default function NuevaFacturaForm({
             ) : esSinEcf ? (
               <>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
-                  ¡{esGasto ? 'Gasto guardado' : 'Factura guardada'}!
+                  ¡{esCompra ? 'Compra guardada' : esGasto ? 'Gasto guardado' : 'Factura guardada'}!
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                  {esGasto ? 'Tu gasto fue registrado correctamente.' : 'Tu factura fue guardada correctamente.'}
+                  {esCompra ? 'Tu compra fue registrada correctamente.'
+                    : esGasto ? 'Tu gasto fue registrado correctamente.'
+                    : 'Tu factura fue guardada correctamente.'}
                 </Typography>
               </>
             ) : (
@@ -2052,16 +2117,16 @@ export default function NuevaFacturaForm({
               </Box>
               {resultado.modo === 'borrador' && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">{esGasto ? 'Pago' : 'Cobro'}</Typography>
+                  <Typography variant="body2" color="text.secondary">{esCompraGasto ? 'Pago' : 'Cobro'}</Typography>
                   {resultado.pagoRecibido ? (
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'success.dark' }}>
-                      ✓ {esGasto ? 'Pagado' : 'Cobrado'}
+                      ✓ {esCompraGasto ? 'Pagado' : 'Cobrado'}
                       {resultado.pagoMetodo ? ` · ${resultado.pagoMetodo.charAt(0).toUpperCase() + resultado.pagoMetodo.slice(1).replace('_', ' ')}` : ''}
                       {resultado.pagoValor != null ? ` · DOP ${resultado.pagoValor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : ''}
                     </Typography>
                   ) : (
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.dark' }}>
-                      ⏳ {esGasto ? 'Pendiente de pago' : 'Pendiente de cobro'}
+                      ⏳ {esCompraGasto ? 'Pendiente de pago' : 'Pendiente de cobro'}
                     </Typography>
                   )}
                 </Box>
@@ -2230,7 +2295,7 @@ export default function NuevaFacturaForm({
                 }}
                 sx={{ textTransform: 'none', borderRadius: '8px' }}
               >
-                {esGasto ? 'Nuevo gasto' : `Nueva ${docAccent.noun}`}
+                {esCompra ? 'Nuevo comprobante' : esGasto ? 'Nuevo gasto' : `Nueva ${docAccent.noun}`}
               </Button>
               <Button
                 variant="contained"
@@ -2348,7 +2413,7 @@ export default function NuevaFacturaForm({
           }}
           sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          {!esGasto && (
+          {!esCompraGasto && (
             <TopBar
               showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
               showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}
@@ -2384,7 +2449,7 @@ export default function NuevaFacturaForm({
             {/* LEFT column — en modo colegio, solo el paso 1 */}
             {(!modoColegio || paso === 1) && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              {!esGasto && (
+              {!esCompraGasto && (
                 <CompactHeader
                   camposMinimos={modoColegio}
                   tipoBloqueado={modoColegio}
@@ -2425,9 +2490,10 @@ export default function NuevaFacturaForm({
                 />
               )}
 
-              {esGasto ? (
-                <SectionCard number={1} title="Registro del gasto" icon={Calendar}>
+              {esCompraGasto ? (
+                <SectionCard number={1} title={esCompra ? 'Registro de la compra' : 'Registro del gasto'} icon={Calendar}>
                   <GastoDatosSection
+                    esCompra={esCompra}
                     proveedor={rncManualNombre} setProveedor={setRncManualNombre}
                     rncProveedor={rncManual} setRncProveedor={setRncManual}
                     ncfProveedor={ncfProveedor} setNcfProveedor={setNcfProveedor}
@@ -2473,8 +2539,8 @@ export default function NuevaFacturaForm({
               )}
 
               <SectionCard
-                number={esGasto ? 2 : 3}
-                title={esGasto ? 'Detalle e importe' : 'Productos y servicios'}
+                number={esCompraGasto ? 2 : 3}
+                title={esCompraGasto ? 'Detalle e importe' : 'Productos y servicios'}
                 icon={Package}
                 actions={
                   <ColumnasToggle
@@ -2504,8 +2570,11 @@ export default function NuevaFacturaForm({
                   showDescripcion={showItemDesc}
                   showDescuento={showItemDescuento}
                   dependientes={dependientesCliente}
-                  bloquearPrecios={esGasto ? false : bloquearPrecios}
-                  modoGasto={esGasto}
+                  bloquearPrecios={esCompraGasto ? false : bloquearPrecios}
+                  modoGasto={esCompraGasto}
+                  sinBusquedaCatalogo={esCompraGasto}
+                  buscarCatalogoCompras={esCompraGasto ? buscarCatalogoCompras : undefined}
+                  onCrearCatalogoCompra={esCompraGasto ? crearArticuloCompra : undefined}
                 />
                 {/* Las retenciones son de quien le compra al Estado o a un
                     gran contribuyente. Un colegio le cobra a familias: nunca
@@ -2518,20 +2587,20 @@ export default function NuevaFacturaForm({
                 )}
               </SectionCard>
 
-              {!esGasto && (
+              {!esCompraGasto && (
                 <AccordionSection number={4} title="Términos y condiciones" icon={ScrollText} defaultOpen={terminosCondiciones.trim().length > 0}>
                   <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
                 </AccordionSection>
               )}
 
               <AccordionSection
-                number={esGasto ? 3 : 5} title={esGasto ? 'Notas internas' : 'Notas'} icon={StickyNote}
+                number={esCompraGasto ? 3 : 5} title={esCompraGasto ? 'Notas internas' : 'Notas'} icon={StickyNote}
                 defaultOpen={notas.trim().length > 0}
               >
                 <Notas notas={notas} setNotas={setNotas} />
               </AccordionSection>
 
-              {!esGasto && (<>
+              {!esCompraGasto && (<>
                 <AccordionSection number={6} title="Pie de factura" icon={FileText} defaultOpen={pieFactura.trim().length > 0}>
                   <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} label={docAccent.noun === 'factura' ? 'Pie de factura' : 'Pie del documento'} />
                 </AccordionSection>
@@ -2559,7 +2628,7 @@ export default function NuevaFacturaForm({
               // Una Nota de Crédito acredita al cliente — no se cobra ningún pago al
               // crearla. Ocultar el card "Pago".
               showPago={tipoEcf !== '34'}
-              pagoLabel={esGasto ? 'Pagado (sale de la caja)' : undefined}
+              pagoLabel={esCompraGasto ? 'Pagado (sale de la caja)' : undefined}
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
@@ -2574,10 +2643,10 @@ export default function NuevaFacturaForm({
             loading={loading}
             loadingPreview={loadingPreview}
             primaryBtnClass={docAccent.primaryBtnClass}
-            primaryLabel={esGasto ? 'Guardar gasto'
+            primaryLabel={esCompraGasto ? (esCompra ? 'Guardar compra' : 'Guardar gasto')
               : (enPasos || tipoEcf === 'sin-ncf') ? 'Guardar factura'
               : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
-            loadingPrimaryLabel={(esGasto || enPasos || tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
+            loadingPrimaryLabel={(esCompraGasto || enPasos || tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
             // El paso 1 no emite nada: su botón lleva al pago. Emitir vive al
@@ -2593,7 +2662,7 @@ export default function NuevaFacturaForm({
               // estaba facturando— se cambiaba por el listado de facturas, y al
               // cerrar el cajón uno aparecía en otro sitio sin haberlo pedido.
               if (onVolver) { onVolver(); return; }
-              router.push(esGasto ? '/dashboard/gastos/nueva' : '/dashboard/facturas');
+              router.push(esCompra ? '/dashboard/compras/nueva' : esGasto ? '/dashboard/gastos/nueva' : '/dashboard/facturas');
             }}
           />
         </Box>

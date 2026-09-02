@@ -94,3 +94,8 @@ docs/mockup-cuentas-por-cobrar-paso-1.html
 
 # mockups locales del brainstorming visual (superpowers:brainstorming)
 .superpowers/
+
+# Herramientas locales de redacción de video (demo) — nunca versionar
+.inspection/
+.video-tools/
+redact-video.ps1

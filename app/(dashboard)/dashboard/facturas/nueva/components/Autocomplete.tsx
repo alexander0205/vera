@@ -9,7 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
-  onFreeText, freeTextLabel, dropdownMinWidth, multilinea = false,
+  onFreeText, freeTextLabel, onCreateFromText, createFromTextLabel, dropdownMinWidth, multilinea = false,
 }: {
   placeholder: string;
   onSearch: (q: string) => Promise<T[]>;
@@ -23,6 +23,14 @@ export function Autocomplete<T extends { id: number }>({
   onFreeText?: (text: string) => void;
   /** Etiqueta del botón "usar texto libre" cuando no hay match. */
   freeTextLabel?: string;
+  /**
+   * Si está definido, ofrece "crear <texto>" cuando no hay match: crea la
+   * entidad a partir de lo tecleado y la selecciona (p. ej. guardar un
+   * artículo en el catálogo de compras). Recibe el texto actual.
+   */
+  onCreateFromText?: (text: string) => void;
+  /** Etiqueta del botón "crear desde texto". */
+  createFromTextLabel?: string;
   /** Ancho mínimo (px) del dropdown. Si supera el ancho del input, el panel se
    *  ensancha más allá de la celda (útil para opciones tipo tabla). */
   dropdownMinWidth?: number;
@@ -256,6 +264,40 @@ export function Autocomplete<T extends { id: number }>({
               {freeTextLabel ?? `Usar "${query.trim()}" como descripción`}
             </Box>
           )}
+          {onCreateFromText && query.trim() && (
+            <Box
+              component="button"
+              type="button"
+              onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+              onClick={() => {
+                const q = query.trim();
+                setOpen(false);
+                setResults([]);
+                onCreateFromText(q);
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                width: '100%',
+                textAlign: 'left',
+                px: 2,
+                py: 1.25,
+                fontSize: '0.875rem',
+                color: '#2a45c4',
+                fontWeight: 600,
+                bgcolor: 'transparent',
+                border: 'none',
+                borderTop: '1px solid',
+                borderColor: 'grey.200',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'rgba(13,148,136,0.06)' },
+              }}
+            >
+              <Plus size={16} />
+              {createFromTextLabel ? `${createFromTextLabel}: "${query.trim()}"` : `Crear "${query.trim()}"`}
+            </Box>
+          )}
         </>
       ) : (
         results.map((item, idx) => (
@@ -343,8 +385,16 @@ export function Autocomplete<T extends { id: number }>({
           onBlur={() => {
             setTimeout(() => {
               setOpen(false);
-              // Restore displayed text to the selected value if user didn't pick a new one
-              setQuery(value ?? '');
+              // En modo texto libre (compra/gasto), lo tecleado ES la línea: si
+              // el usuario escribe y hace clic afuera sin pulsar Enter, se
+              // conserva en vez de perderse. En modo venta (sin onFreeText) se
+              // restaura al valor seleccionado, como antes.
+              const q = query.trim();
+              if (onFreeText && q && q !== (value ?? '')) {
+                onFreeText(q);
+              } else {
+                setQuery(value ?? '');
+              }
             }, 200);
           }}
           onKeyDown={handleKeyDown}

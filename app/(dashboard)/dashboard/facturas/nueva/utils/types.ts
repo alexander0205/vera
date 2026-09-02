@@ -43,6 +43,13 @@ export interface Producto {
     productoId:     number | null;
     contexto:       string;
   };
+  /**
+   * Viene del catálogo de COMPRAS (no de `products`) o del historial de compras
+   * pasadas. Su `id` no es un producto real → al aplicarlo a la línea NO se
+   * guarda como `productoId`.
+   */
+  esCatalogoCompra?: boolean;
+  esHistorial?:      boolean;
 }
 
 /** Variante concreta de un producto (talla, color…), con su stock y precio. */
