@@ -70,13 +70,29 @@ function EnlaceNoValido() {
   );
 }
 
-export default async function PagarPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function PagarPage({ params, searchParams }: {
+  params: Promise<{ token: string }>;
+  // `?f=<facturaId>` acota el enlace a una sola factura: la página cobra solo su
+  // importe, no todo lo que debe la familia. Sin él, el enlace agregado de
+  // siempre. El token sigue siendo la única credencial; `f` solo estrecha lo que
+  // ya autoriza, y el servidor comprueba que la factura sea del responsable.
+  searchParams: Promise<{ f?: string }>;
+}) {
   const { token } = await params;
+  const { f } = await searchParams;
+  const facturaId = f != null && /^\d+$/.test(f) ? Number(f) : undefined;
 
-  const link = await resolverLink(token);
+  const link = await resolverLink(token, facturaId);
   if (!link) return <EnlaceNoValido />;
 
   await marcarAcceso(link.linkId);
 
-  return <PagarClient token={token} vista={link.vista} tarjetaHabilitada={PAGOS_ONLINE_ENABLED} />;
+  return (
+    <PagarClient
+      token={token}
+      facturaId={facturaId ?? null}
+      vista={link.vista}
+      tarjetaHabilitada={PAGOS_ONLINE_ENABLED}
+    />
+  );
 }

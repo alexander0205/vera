@@ -32,6 +32,7 @@ import {
   adminEscolarConceptosPago,
   clients,
   teams,
+  ecfDocuments,
 } from '@/lib/db/schema';
 
 /**
@@ -187,6 +188,13 @@ export interface VistaLinkPago {
   comprobantes: ComprobanteEnEspera[];
   /** Hay uno subido esperando al colegio: se enseña el aviso naranja. */
   hayPendiente: boolean;
+  /**
+   * El enlace abierto para UNA factura concreta, no para todo lo que debe la
+   * familia. Cuando está, la página cobra solo esa factura y su importe; los
+   * demás cargos del responsable ni se muestran ni entran en el total. `null` es
+   * el enlace de siempre, agregado por responsable.
+   */
+  facturaScope: { id: number; encf: string | null; codigo: string | null } | null;
 }
 
 /** Contexto interno: lo que las rutas necesitan y la página no enseña. */
@@ -212,7 +220,10 @@ function hoyISO(): string {
  * propósito: un token inválido y uno revocado dan la misma pantalla, para no
  * confirmarle a nadie que un token existió.
  */
-export async function resolverLink(token: string): Promise<LinkResuelto | null> {
+export async function resolverLink(
+  token: string,
+  facturaScopeId?: number,
+): Promise<LinkResuelto | null> {
   const [link] = await db
     .select({
       id:         adminEscolarLinksPago.id,
@@ -250,6 +261,49 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
    */
   if (!(await teamHasModule(link.teamId, 'escolar'))) return null;
 
+  /**
+   * Enlace de UNA factura, no de todo lo que debe la familia.
+   *
+   * Se valida que la factura sea de ESTE responsable —mismo team y su
+   * `client_id`— antes de acotar nada. Un id de otra familia no se acota a sus
+   * cargos: deja la lista vacía (no se enseña la deuda agregada de nadie). Si se
+   * pidió acotar pero la factura no es del responsable, se fuerza un id
+   * imposible para que no se cuele el enlace agregado.
+   */
+  let facturaScope: { id: number; encf: string | null; codigo: string | null } | null = null;
+  // Los cargos de ESA factura, pagados o no. Sirve para acotar también los
+  // comprobantes: en la página de una factura solo aparece el pago de esa
+  // factura, no un «Pago confirmado» de otra cuota de la misma familia.
+  let facturaCargoIds: Set<number> | null = null;
+  const acotaFactura = facturaScopeId != null && Number.isInteger(facturaScopeId);
+  if (acotaFactura) {
+    const [f] = await db
+      .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.id, facturaScopeId!),
+        eq(ecfDocuments.teamId, link.teamId),
+        eq(ecfDocuments.clientId, link.clientId),
+      ))
+      .limit(1);
+    facturaScope = f ?? null;
+
+    facturaCargoIds = new Set<number>();
+    if (facturaScope) {
+      const filasFactura = await db
+        .select({ id: adminEscolarCargos.id })
+        .from(adminEscolarCargos)
+        .where(and(
+          eq(adminEscolarCargos.teamId, link.teamId),
+          eq(adminEscolarCargos.ecfDocumentId, facturaScope.id),
+        ));
+      for (const r of filasFactura) facturaCargoIds.add(r.id);
+    }
+  }
+  const scopeCondition = acotaFactura
+    ? eq(adminEscolarCargos.ecfDocumentId, facturaScope?.id ?? -1)
+    : undefined;
+
   const [cargos, datos, cuentas, comprobantes] = await Promise.all([
     db
       .select({
@@ -271,6 +325,9 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
         gt(adminEscolarCargos.saldoCentavos, 0),
         ne(adminEscolarCargos.estado, 'anulado'),
         ne(adminEscolarCargos.estado, 'pagado'),
+        // Enlace de una factura: solo sus cargos. `undefined` cuando el enlace
+        // es el agregado de siempre, y `and()` lo ignora.
+        scopeCondition,
       ))
       .orderBy(asc(adminEscolarCargos.fechaVencimiento), asc(adminEscolarCargos.id)),
 
@@ -303,12 +360,20 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
         estado:        adminEscolarComprobantes.estado,
         creadoEn:      adminEscolarComprobantes.creadoEn,
         motivoRechazo: adminEscolarComprobantes.motivoRechazo,
+        cargos:        adminEscolarComprobantes.cargos,
       })
       .from(adminEscolarComprobantes)
       .where(eq(adminEscolarComprobantes.linkId, link.id))
       .orderBy(desc(adminEscolarComprobantes.id))
       .limit(10),
   ]);
+
+  // En la página de una factura, solo sus comprobantes: los que tocaron alguno
+  // de sus cargos. Sin acotar, todos los del responsable (el enlace agregado).
+  const comprobantesVista = facturaCargoIds
+    ? comprobantes.filter((c) => Array.isArray(c.cargos)
+        && c.cargos.some((x) => facturaCargoIds!.has(x.cargoId)))
+    : comprobantes;
 
   const hoy = hoyISO();
   const filas: CargoPendiente[] = cargos.map((c) => ({
@@ -353,14 +418,15 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
       cargos: filas,
       totalCentavos: filas.reduce((a, f) => a + f.montoCentavos, 0),
       transferencia,
-      comprobantes: comprobantes.map((c) => ({
+      comprobantes: comprobantesVista.map((c) => ({
         id: c.id,
         montoCentavos: c.montoCentavos,
         estado: c.estado,
         creadoEn: c.creadoEn.toISOString(),
         motivoRechazo: c.motivoRechazo,
       })),
-      hayPendiente: comprobantes.some((c) => c.estado === 'pendiente'),
+      hayPendiente: comprobantesVista.some((c) => c.estado === 'pendiente'),
+      facturaScope,
     },
   };
 }

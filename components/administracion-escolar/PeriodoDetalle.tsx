@@ -37,6 +37,7 @@ import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
+import { CopiarLinkPago } from '@/components/administracion-escolar/CopiarLinkPago';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
@@ -434,6 +435,14 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .reduce((s, c) => s + c.saldoCentavos, 0);
   const pagado = Math.max(0, total - saldo);
+  // El saldo, partido en lo que ya se puede cobrar y lo que falta por emitir. El
+  // rojo de «Pendiente» es de lo primero: una factura emitida con el saldo
+  // abierto. Lo segundo se debe, pero lo que toca con ello es facturarlo, no
+  // cobrarlo, y pintarlo en rojo lo confundía con una cuota vencida.
+  const saldoPorCobrar = cargosPeriodo
+    .filter((c) => c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+    .reduce((s, c) => s + c.saldoCentavos, 0);
+  const saldoPorFacturar = Math.max(0, saldo - saldoPorCobrar);
   // Mes solo identifica fecha. La tabla mensual agrupa exclusivamente concepto
   // mensualidad; uniforme/actividad con mes van a Otros cargos.
   const mensualidades = cargosPeriodo.filter((c) => c.conceptoTipo === 'mensualidad');
@@ -572,7 +581,22 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
             : 'Todo facturado'}
           tone="blue" />
         <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
-        <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
+        <PeriodoStat
+          icon={AlertTriangle}
+          label="Pendiente"
+          value={fmtDOP(saldo)}
+          // Rojo solo si hay algo emitido sin cobrar. Si todo lo que se debe
+          // está aún «Sin facturar», la tarjeta no alarma: lo que toca es
+          // emitir, no perseguir un pago. Ver criterio del MD de facturas.
+          detail={
+            saldoPorCobrar > 0 && saldoPorFacturar > 0
+              ? `Por cobrar ${fmtDOP(saldoPorCobrar)} · por facturar ${fmtDOP(saldoPorFacturar)}`
+              : saldoPorCobrar > 0 ? 'Saldo por cobrar'
+              : saldoPorFacturar > 0 ? 'Aún por facturar'
+              : 'Sin deuda'
+          }
+          tone={saldoPorCobrar > 0 ? 'red' : 'gray'}
+        />
         <PeriodoStat
           icon={CalendarDays}
           label="Próximo vencimiento"
@@ -630,6 +654,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 onReenviarAviso={onReenviarAviso}
                 reenviandoCargoId={reenviandoCargoId}
                 diaFacturaAuto={grupo.diaFacturaAuto}
+                tutorClientId={tutorClientId}
                 cargos={mensualidades}
                 previstos={previstosMensualidad}
                 enviadosPorCargo={enviadosPorCargo}
@@ -1085,9 +1110,11 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
  * y en gris con el badge "Previsto" para que nadie los cobre ni los cuente:
  * NO suman en pendiente, ni en el saldo del período, ni en morosidad.
  */
-function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
+function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   /** Día del mes en que la recurrente factura sola. null = se factura a mano. */
   diaFacturaAuto: number | null;
+  /** Responsable: los meses previstos todavía no tienen factura propia. */
+  tutorClientId: number | null;
   cargos: Cargo[];
   previstos: Previsto[];
   pagos: Pago[];
@@ -1218,6 +1245,7 @@ function MensualidadesTabla({ diaFacturaAuto, cargos, previstos, pagos, mesesAca
                   key={key}
                   r={r}
                   diaFacturaAuto={diaFacturaAuto}
+                  tutorClientId={tutorClientId}
                   abierto={expandidos.has(key)}
                   onToggle={() => setExpandidos((prev) => {
                     const next = new Set(prev);
@@ -1508,28 +1536,35 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                   {anulado ? (
                     <span className="text-gray-300">—</span>
                   ) : (
-                    <span className={c.saldoCentavos > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>
+                    <span className={clsSaldo(c.saldoCentavos, c.ecfDocumentId != null)}>
                       {fmtDOP(c.saldoCentavos)}
                     </span>
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  <CargoActionsMenu
-                    cargo={c}
-                    puedePagos={puedePagos}
-                    puedeFacturar={puedeFacturar}
-                    puedeGestionar={puedeGestionar}
-                    onRegistrarPago={onRegistrarPago}
-                    onAplicarMora={onAplicarMora}
-                    onCrearFactura={onCrearFactura}
-                    onVincular={onVincular}
-                    onAnular={onAnular}
-                    onAnularFactura={onAnularFactura}
-                    onEnviarCorreo={onEnviarCorreo}
-                    onReenviarAviso={onReenviarAviso}
-                    reenviando={reenviandoCargoId === c.id}
-                    aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
-                  />
+                  <span className="inline-flex items-center justify-end gap-2">
+                    {/* Enlace de pago de la factura, visible: se copia y se manda
+                        al padre sin tener que abrir el detalle de la factura. */}
+                    {c.ecfDocumentId != null && (
+                      <BotonLinkPagoFactura facturaId={c.ecfDocumentId} />
+                    )}
+                    <CargoActionsMenu
+                      cargo={c}
+                      puedePagos={puedePagos}
+                      puedeFacturar={puedeFacturar}
+                      puedeGestionar={puedeGestionar}
+                      onRegistrarPago={onRegistrarPago}
+                      onAplicarMora={onAplicarMora}
+                      onCrearFactura={onCrearFactura}
+                      onVincular={onVincular}
+                      onAnular={onAnular}
+                      onAnularFactura={onAnularFactura}
+                      onEnviarCorreo={onEnviarCorreo}
+                      onReenviarAviso={onReenviarAviso}
+                      reenviando={reenviandoCargoId === c.id}
+                      aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
+                    />
+                  </span>
                 </td>
               </tr>
             );
@@ -1658,9 +1693,10 @@ type MesRow = {
  * Los pagos del mes salen al desplegar, sin cabecera ni resumen: el abonado y
  * el pendiente ya están en la fila del mes, en sus columnas.
  */
-function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
+function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   r: MesRow;
   diaFacturaAuto: number | null;
+  tutorClientId: number | null;
   abierto: boolean;
   onToggle: () => void;
   puedePagos: boolean;
@@ -1795,13 +1831,25 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
           {soloPrevistos ? (
             <span className="text-gray-300">—</span>
           ) : (
-            <span className={r.saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>
+            <span className={clsSaldo(r.saldo, !!r.factura)}>
               {fmtDOP(r.saldo)}
             </span>
           )}
         </td>
         <td className="px-3 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
-          {accion ? (
+          {soloPrevistos && tutorClientId ? (
+            // Una cuota prevista no tiene documento todavía. El mismo enlace de
+            // pago de la familia sirve para mandarle el cobro actual; cuando la
+            // recurrente emita este mes, el botón pasa a su factura acotada.
+            // El icono se suma a Detalle y al menú: no reemplaza sus acciones.
+            <span className="inline-flex items-center justify-end gap-1">
+              <CopiarLinkPago clientId={tutorClientId} como="boton" soloIcono />
+              {previstoUnico && onDetalle && <BotonDetalleCuota previsto={previstoUnico} onDetalle={onDetalle} />}
+              {puedeGestionar && previstoUnico && previstoUnico.cuotaId > 0 && onPrevisto && (
+                <PrevistoActionsMenu previsto={previstoUnico} onPrevisto={onPrevisto} />
+              )}
+            </span>
+          ) : accion ? (
             <CargoActionsMenu
               cargo={accion}
               puedePagos={puedePagos}
@@ -1866,29 +1914,36 @@ function MesFila({ r, diaFacturaAuto, abierto, onToggle, enviadosPorCargo, puede
               {anulado ? (
                 <span className="text-gray-300">—</span>
               ) : (
-                <span className={c.saldoCentavos > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>
+                <span className={clsSaldo(c.saldoCentavos, c.ecfDocumentId != null)}>
                   {fmtDOP(c.saldoCentavos)}
                 </span>
               )}
             </td>
             <td className="px-3 py-3 text-right">
-              <CargoActionsMenu
-                cargo={c}
-                puedePagos={puedePagos}
-                puedeFacturar={puedeFacturar}
-                puedeGestionar={puedeGestionar}
-                mesTieneFactura={!!r.factura}
-                onRegistrarPago={onRegistrarPago}
-                onAplicarMora={onAplicarMora}
-                onCrearFactura={onCrearFactura}
-                onVincular={onVincular}
-                onAnular={onAnular}
-                onAnularFactura={onAnularFactura}
-                onEnviarCorreo={onEnviarCorreo}
-                onReenviarAviso={onReenviarAviso}
-                reenviando={reenviandoCargoId === c.id}
-                aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
-              />
+              <span className="inline-flex items-center justify-end gap-2">
+                {/* Enlace de pago de la factura, visible: se copia y se manda al
+                    padre sin abrir el detalle de la factura. */}
+                {c.ecfDocumentId != null && (
+                  <BotonLinkPagoFactura facturaId={c.ecfDocumentId} />
+                )}
+                <CargoActionsMenu
+                  cargo={c}
+                  puedePagos={puedePagos}
+                  puedeFacturar={puedeFacturar}
+                  puedeGestionar={puedeGestionar}
+                  mesTieneFactura={!!r.factura}
+                  onRegistrarPago={onRegistrarPago}
+                  onAplicarMora={onAplicarMora}
+                  onCrearFactura={onCrearFactura}
+                  onVincular={onVincular}
+                  onAnular={onAnular}
+                  onAnularFactura={onAnularFactura}
+                  onEnviarCorreo={onEnviarCorreo}
+                  onReenviarAviso={onReenviarAviso}
+                  reenviando={reenviandoCargoId === c.id}
+                  aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
+                />
+              </span>
             </td>
           </tr>
         );
@@ -2278,7 +2333,7 @@ function MesAcademico({ mes, cargos, pagos }: { mes: number; cargos: Cargo[]; pa
       </div>
       <div className="text-xs text-gray-500 space-y-1">
         <div className="flex justify-between gap-2"><span>Total</span><span className="font-medium text-gray-700">{fmtDOP(total)}</span></div>
-        <div className="flex justify-between gap-2"><span>Saldo</span><span className={saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>{fmtDOP(saldo)}</span></div>
+        <div className="flex justify-between gap-2"><span>Saldo</span><span className={clsSaldo(saldo, factura != null)}>{fmtDOP(saldo)}</span></div>
         {pagosMes.length > 0 && (
           <div className="flex justify-between gap-2"><span>Pagos</span><span className="font-medium text-gray-700">{pagosMes.length}</span></div>
         )}
@@ -2349,17 +2404,32 @@ function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pend
  * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
  * de mes no significa nada.
  */
+/**
+ * Color del saldo pendiente de un cargo o mes.
+ *
+ * Rojo = deuda por cobrar: hay una factura emitida y su saldo sigue abierto. Un
+ * cargo aún SIN factura se debe, pero lo que toca con él es emitirlo, no
+ * cobrarlo — se pinta neutro para no confundirlo con una cuota vencida, que es
+ * lo que el rojo significa en el resto de la pantalla.
+ */
+function clsSaldo(saldo: number, tieneFactura: boolean): string {
+  if (saldo <= 0) return 'font-medium text-zero-700';
+  return tieneFactura ? 'font-medium text-red-600' : 'font-medium text-gray-700';
+}
+
 function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?: boolean }) {
+  if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
   if (estado === 'pagado')  return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
+  // El cargo nace al matricular, no al facturar: la inscripción y el uniforme se
+  // deben desde el primer día, mucho antes de que salga ningún comprobante.
+  // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
+  // pueda estar vencido ni saldo que cobrar todavía, aunque su fecha de
+  // vencimiento ya haya pasado. El rojo/«Vencido» es de una factura emitida con
+  // saldo abierto. Sigue contando como deuda; lo único que cambia es que lo dice
+  // en vez de pintarlo en rojo.
+  if (sinFactura) return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
   if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
   if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
-  if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
-  // El cargo nace al matricular, no al facturar: la inscripción y el uniforme
-  // se deben desde el primer día, mucho antes de que salga ningún comprobante.
-  // Decirlo "pendiente" mezclaba dos cosas distintas —lo que falta por cobrar y
-  // lo que falta por emitir— y dejaba al usuario preguntándose de qué factura
-  // venía. Sigue contando como deuda; lo único que cambia es que lo dice.
-  if (sinFactura) return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
   return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Pendiente</Badge>;
 }
 
@@ -2393,6 +2463,20 @@ function facturaLink(cargo: Cargo) {
       <span className="truncate">{ref}</span>
     </Link>
   );
+}
+
+/**
+ * Copia el enlace de pago DE ESA factura (no el agregado de la familia).
+ *
+ * El enlace ya existía escondido en el menú de tres puntos del detalle de la
+ * factura, y llegar hasta ahí desde la ficha era un rodeo. Aquí queda a un clic,
+ * junto a la factura. Abre el cobro de esa factura y su importe, no la suma de
+ * todo lo que debe el responsable (`?f=` acota la página pública).
+ */
+function BotonLinkPagoFactura({ facturaId }: { facturaId: number }) {
+  // Mismo control de Facturación: consulta antes de crear, confirma el primer
+  // enlace y usa el respaldo de portapapeles fuera de HTTPS.
+  return <CopiarLinkPago facturaId={facturaId} como="boton" soloIcono />;
 }
 
 function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincular, onFacturar, onRegistrarPago }: {
@@ -2665,4 +2749,3 @@ export function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactN
     </div>
   );
 }
-

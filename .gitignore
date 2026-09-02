@@ -94,3 +94,7 @@ docs/mockup-cuentas-por-cobrar-paso-1.html
 
 # mockups locales del brainstorming visual (superpowers:brainstorming)
 .superpowers/
+
+# artefactos locales del análisis de audio/video de WhatsApp (frames, venv de whisper)
+.tmp-video-audio-*/
+transcripciones/video_frames_*/

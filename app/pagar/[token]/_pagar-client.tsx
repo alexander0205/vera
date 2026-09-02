@@ -99,8 +99,10 @@ function FilaDato({ etiqueta, valor, copiable, destacado }: {
 
 // ─── Pantalla ────────────────────────────────────────────────────────────────
 
-export function PagarClient({ token, vista, tarjetaHabilitada }: {
+export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
   token: string;
+  /** Enlace de UNA factura: se cobra solo ella. `null` es el enlace agregado. */
+  facturaId: number | null;
   vista: VistaLinkPago;
   tarjetaHabilitada: boolean;
 }) {
@@ -147,7 +149,12 @@ export function PagarClient({ token, vista, tarjetaHabilitada }: {
       if (otroMonto && monto) fd.append('monto', monto);
       if (referencia.trim()) fd.append('referencia', referencia.trim());
 
-      const r = await fetch(`/api/pagar/${token}/comprobante`, { method: 'POST', body: fd });
+      // El mismo acotado que trajo la página: si es el enlace de una factura, el
+      // comprobante entra contra esa factura, no contra toda la deuda.
+      const url = facturaId != null
+        ? `/api/pagar/${token}/comprobante?f=${facturaId}`
+        : `/api/pagar/${token}/comprobante`;
+      const r = await fetch(url, { method: 'POST', body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) { setError(data.error ?? 'No se pudo enviar el comprobante'); return; }
 
@@ -194,12 +201,22 @@ export function PagarClient({ token, vista, tarjetaHabilitada }: {
 
       <main style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 16px 56px' }}>
         <h1 style={{ fontSize: 30, fontWeight: 700, color: AZUL, margin: '0 0 6px' }}>
-          Pagos pendientes
+          {vista.facturaScope ? 'Pago de factura' : 'Pagos pendientes'}
         </h1>
         <p style={{ fontSize: 14, color: '#4b5563', margin: '0 0 22px' }}>
-          {sinDeuda
-            ? 'No tienes cargos pendientes en este momento.'
-            : 'Revisa lo que debes y realiza tu transferencia.'}
+          {vista.facturaScope ? (
+            sinDeuda
+              // Acotado a una factura y sin saldo: ya está pagada (o el pago
+              // espera aprobación, que se ve en el aviso de abajo).
+              ? <>Esta factura no tiene saldo pendiente.</>
+              : <>Estás pagando la factura{' '}
+                  <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>.
+                  Revisa el importe y realiza tu transferencia.</>
+          ) : (
+            sinDeuda
+              ? 'No tienes cargos pendientes en este momento.'
+              : 'Revisa lo que debes y realiza tu transferencia.'
+          )}
         </p>
 
         {/* Resumen */}

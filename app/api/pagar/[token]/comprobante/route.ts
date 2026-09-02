@@ -66,7 +66,14 @@ export async function POST(
 ) {
   const { token } = await params;
 
-  const link = await resolverLink(token);
+  // Mismo acotado que la página: si el padre subió desde el enlace de UNA
+  // factura, el comprobante toca solo los cargos de esa factura (y su tope es su
+  // importe), no toda la deuda de la familia. `f` solo estrecha lo que el token
+  // ya autoriza; `resolverLink` valida que la factura sea del responsable.
+  const crudoF = request.nextUrl.searchParams.get('f');
+  const facturaId = crudoF != null && /^\d+$/.test(crudoF) ? Number(crudoF) : undefined;
+
+  const link = await resolverLink(token, facturaId);
   if (!link) return NextResponse.json({ error: 'Enlace no válido' }, { status: 404 });
 
   if (!link.vista.transferencia.completo) {
