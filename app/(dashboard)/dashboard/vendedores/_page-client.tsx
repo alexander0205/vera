@@ -19,6 +19,7 @@ import TableCell from '@mui/material/TableCell';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import { UserCheck, Plus, Pencil, Trash2, Search, AlertTriangle, X } from 'lucide-react';
+import { DocumentoIdentidadInput } from '@/components/shared/documento-identidad-input';
 
 interface Vendedor {
   id: number;
@@ -223,9 +224,15 @@ export default function VendedoresPage() {
           <TextField label="Nombre *" size="small" fullWidth placeholder="Ej. Juan Pérez"
             value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, mt: 1 }} />
-          <TextField label="Identificación" size="small" fullWidth placeholder="Cédula o RNC del vendedor"
-            value={form.identificacion} onChange={e => setForm(f => ({ ...f, identificacion: e.target.value }))}
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>
+              Identificación
+            </Typography>
+            <DocumentoIdentidadInput
+              value={form.identificacion}
+              onChange={v => setForm(f => ({ ...f, identificacion: v }))}
+            />
+          </Box>
           <TextField label="Observación" size="small" fullWidth multiline rows={3}
             placeholder="Notas internas opcionales sobre este vendedor"
             value={form.observacion} onChange={e => setForm(f => ({ ...f, observacion: e.target.value }))}

@@ -58,6 +58,11 @@ export function PasoEmpresa({
   );
 
   const [rnc, setRnc] = useState(rncActual ?? '');
+  // RNC o cédula: una empresa se registra con cualquiera de los dos. Elegir
+  // primero evita el «tecleé 11 dígitos de mi cédula y no sabía si iba aquí».
+  const [tipoDoc, setTipoDoc] = useState<'rnc' | 'cedula'>(
+    (rncActual ?? '').replace(/\D/g, '').length === 11 ? 'cedula' : 'rnc',
+  );
   const [buscando, setBuscando] = useState(false);
   const [hallazgo, setHallazgo] = useState<Hallazgo | null>(null);
   const [aMano, setAMano] = useState(false);
@@ -109,12 +114,22 @@ export function PasoEmpresa({
           oculta: se llega con «Buscar otro RNC», que reactiva este bloque. */}
       {!modoVolver && (
         <div className="mt-8 flex gap-3">
+          <select
+            value={tipoDoc}
+            onChange={(e) => setTipoDoc(e.target.value as 'rnc' | 'cedula')}
+            aria-label="Tipo de documento"
+            className="h-12 shrink-0 rounded-xl border border-gray-200 bg-white px-3 text-[15px] text-gray-900 outline-none transition focus:border-zero-500 focus:ring-4 focus:ring-zero-500/10"
+          >
+            <option value="rnc">RNC</option>
+            <option value="cedula">Cédula</option>
+          </select>
           <input
             value={rnc}
             onChange={(e) => setRnc(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } }}
-            inputMode="numeric" maxLength={13} placeholder="131793916"
-            aria-label="RNC" className={campo}
+            inputMode="numeric" maxLength={13}
+            placeholder={tipoDoc === 'cedula' ? '001-0000000-0' : '131793916'}
+            aria-label={tipoDoc === 'cedula' ? 'Cédula' : 'RNC'} className={campo}
           />
           <button
             type="button" onClick={buscar} disabled={buscando}

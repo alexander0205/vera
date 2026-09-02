@@ -7,6 +7,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { DocumentoIdentidadInput } from '@/components/shared/documento-identidad-input';
 
 const CATEGORIAS_GASTO = [
   'Materiales y suministros',
@@ -51,19 +52,19 @@ export function GastoDatosSection({
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.5fr) 1fr 1fr' }, gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.5fr) 1.2fr 1fr' }, gap: 1.5, alignItems: 'flex-end' }}>
         <TextField
           required fullWidth size="small" label="Proveedor"
           placeholder="Nombre del proveedor o comercio"
           value={proveedor} onChange={(e) => setProveedor(e.target.value)}
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
         />
-        <TextField
-          fullWidth size="small" label="RNC / cédula"
-          placeholder="Opcional"
-          value={rncProveedor} onChange={(e) => setRncProveedor(e.target.value)}
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>
+            Documento (opcional)
+          </Typography>
+          <DocumentoIdentidadInput value={rncProveedor} onChange={setRncProveedor} />
+        </Box>
         <TextField
           fullWidth size="small" label="NCF / No. documento"
           placeholder="B0100000001"
