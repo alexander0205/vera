@@ -33,6 +33,7 @@ import {
   clients,
   teams,
   ecfDocuments,
+  pagosRecibidos,
 } from '@/lib/db/schema';
 
 /**
@@ -168,6 +169,22 @@ export interface DatosTransferencia {
   completo: boolean;
 }
 
+/**
+ * Lo que se enseña cuando el enlace apunta a una factura YA SALDADA.
+ *
+ * Sin esto la página caía en «Esta factura no tiene saldo pendiente» y nada
+ * más: ni cuánto, ni cuándo, ni de qué alumno. El padre que entra a comprobar
+ * que su pago llegó necesita justo lo contrario de una pantalla de cobro —un
+ * comprobante—, y la lista de cargos no sirve para armarlo porque descarta a
+ * propósito lo pagado.
+ */
+export interface FacturaPagada {
+  montoCentavos: number;
+  /** Alumno y concepto de cada línea, aunque el cargo ya esté saldado. */
+  lineas: { estudiante: string; concepto: string }[];
+  pagos: { montoCentavos: number; metodo: string; fecha: string }[];
+}
+
 export interface VistaLinkPago {
   referencia: string;
   colegio: {
@@ -195,6 +212,8 @@ export interface VistaLinkPago {
    * el enlace de siempre, agregado por responsable.
    */
   facturaScope: { id: number; encf: string | null; codigo: string | null } | null;
+  /** Solo con `?f=` y la factura sin saldo: el recibo. */
+  facturaPagada: FacturaPagada | null;
 }
 
 /** Contexto interno: lo que las rutas necesitan y la página no enseña. */
@@ -303,6 +322,66 @@ export async function resolverLink(
   const scopeCondition = acotaFactura
     ? eq(adminEscolarCargos.ecfDocumentId, facturaScope?.id ?? -1)
     : undefined;
+
+  /**
+   * El recibo de una factura ya saldada.
+   *
+   * Va en su propia consulta y no sale de `cargos` porque esa lista descarta a
+   * propósito lo pagado (`saldo > 0`, `estado <> 'pagado'`): sirve para cobrar,
+   * no para dar constancia. Se resuelve aquí, con el mismo cerco de equipo y
+   * cliente que ya validó `facturaScope`, así que no abre nada nuevo.
+   */
+  let facturaPagada: FacturaPagada | null = null;
+  if (facturaScope) {
+    const [doc] = await db
+      .select({ monto: ecfDocuments.montoTotal, estadoPago: ecfDocuments.estadoPago })
+      .from(ecfDocuments)
+      .where(eq(ecfDocuments.id, facturaScope.id))
+      .limit(1);
+
+    if (doc && doc.estadoPago === 'PAGADA') {
+      const [lineas, pagos] = await Promise.all([
+        db
+          .select({
+            nombres:   adminEscolarEstudiantes.nombres,
+            apellidos: adminEscolarEstudiantes.apellidos,
+            concepto:  adminEscolarConceptosPago.nombre,
+          })
+          .from(adminEscolarCargos)
+          .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
+          .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+          .where(and(
+            eq(adminEscolarCargos.teamId, link.teamId),
+            eq(adminEscolarCargos.ecfDocumentId, facturaScope.id),
+          )),
+        db
+          .select({
+            montoCentavos: pagosRecibidos.montoCentavos,
+            metodo:        pagosRecibidos.metodo,
+            fecha:         pagosRecibidos.fechaPago,
+          })
+          .from(pagosRecibidos)
+          .where(and(
+            eq(pagosRecibidos.teamId, link.teamId),
+            eq(pagosRecibidos.ecfDocumentId, facturaScope.id),
+          ))
+          .orderBy(asc(pagosRecibidos.fechaPago)),
+      ]);
+
+      facturaPagada = {
+        montoCentavos: Number(doc.monto ?? 0),
+        lineas: lineas.map((l) => ({
+          estudiante: `${l.nombres} ${l.apellidos}`.trim(),
+          concepto: l.concepto,
+        })),
+        pagos: pagos.map((p) => ({
+          montoCentavos: p.montoCentavos,
+          metodo: p.metodo,
+          fecha: String(p.fecha),
+        })),
+      };
+    }
+  }
 
   const [cargos, datos, cuentas, comprobantes] = await Promise.all([
     db
@@ -427,6 +506,7 @@ export async function resolverLink(
       })),
       hayPendiente: comprobantesVista.some((c) => c.estado === 'pendiente'),
       facturaScope,
+      facturaPagada,
     },
   };
 }

@@ -20,6 +20,8 @@ import { ZonaArchivo } from '@/components/shared/ZonaArchivo';
 const AZUL = '#1d4ed8';
 const BORDE = '#d8dae0';
 const TENUE = '#6b7280';
+const VERDE = '#15803d';
+const VERDE_BORDE = '#bbf7d0';
 
 function dinero(centavos: number): string {
   return `RD$${(centavos / 100).toLocaleString('es-DO', {
@@ -120,6 +122,11 @@ export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
 
   const { transferencia: t, cargos, totalCentavos } = vista;
   const sinDeuda = cargos.length === 0;
+  // Pagada de verdad: el servidor solo arma `facturaPagada` cuando la factura
+  // existe, es de este responsable y su estado de pago es PAGADA. No basta con
+  // que no haya cargos: un enlace sin deuda también puede ser una factura cuyo
+  // comprobante todavía espera aprobación, y eso NO es un recibo.
+  const pagada = Boolean(vista.facturaPagada);
 
   /**
    * Guarda el archivo y, si es imagen, su miniatura.
@@ -200,24 +207,72 @@ export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
       </header>
 
       <main style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 16px 56px' }}>
-        <h1 style={{ fontSize: 30, fontWeight: 700, color: AZUL, margin: '0 0 6px' }}>
-          {vista.facturaScope ? 'Pago de factura' : 'Pagos pendientes'}
+        <h1 style={{
+          fontSize: 30, fontWeight: 700, margin: '0 0 6px',
+          color: pagada ? VERDE : AZUL,
+        }}>
+          {pagada ? 'Factura pagada' : vista.facturaScope ? 'Pago de factura' : 'Pagos pendientes'}
         </h1>
         <p style={{ fontSize: 14, color: '#4b5563', margin: '0 0 22px' }}>
           {vista.facturaScope ? (
-            sinDeuda
-              // Acotado a una factura y sin saldo: ya está pagada (o el pago
-              // espera aprobación, que se ve en el aviso de abajo).
-              ? <>Esta factura no tiene saldo pendiente.</>
-              : <>Estás pagando la factura{' '}
-                  <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>.
-                  Revisa el importe y realiza tu transferencia.</>
+            pagada
+              ? <>La factura{' '}
+                  <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>{' '}
+                  está saldada. No hay nada que pagar.</>
+              : sinDeuda
+                // Sin saldo pero sin pago confirmado: el comprobante puede estar
+                // esperando aprobación, y eso se ve en el aviso de abajo.
+                ? <>Esta factura no tiene saldo pendiente.</>
+                : <>Estás pagando la factura{' '}
+                    <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>.
+                    Revisa el importe y realiza tu transferencia.</>
           ) : (
             sinDeuda
               ? 'No tienes cargos pendientes en este momento.'
               : 'Revisa lo que debes y realiza tu transferencia.'
           )}
         </p>
+
+        {/* Recibo. Va antes del resumen porque es la respuesta a lo que el padre
+            vino a comprobar; el resto de la página es de cobro y aquí ya no hay
+            nada que cobrar. */}
+        {pagada && vista.facturaPagada ? (
+          <section style={{
+            background: '#fff', border: `1px solid ${VERDE_BORDE}`, borderLeft: `4px solid ${VERDE}`,
+            borderRadius: 6, padding: '18px 20px', marginBottom: 18,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: VERDE }}>Comprobante de pago</h2>
+              <span style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>
+                {dinero(vista.facturaPagada.montoCentavos)}
+              </span>
+            </div>
+
+            {vista.facturaPagada.lineas.length > 0 ? (
+              <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 14, lineHeight: 1.8, color: '#374151' }}>
+                {vista.facturaPagada.lineas.map((l, i) => (
+                  <li key={`${l.estudiante}-${l.concepto}-${i}`}>
+                    <b>{l.estudiante}</b> · {l.concepto}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {vista.facturaPagada.pagos.length > 0 ? (
+              <div style={{ marginTop: 14, borderTop: `1px solid ${BORDE}`, paddingTop: 12 }}>
+                {vista.facturaPagada.pagos.map((p, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', gap: 12,
+                    fontSize: 14, color: '#374151', padding: '3px 0',
+                  }}>
+                    <span>Pagado el {fecha(p.fecha)} · {p.metodo}</span>
+                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{dinero(p.montoCentavos)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* Resumen */}
         <section style={{
