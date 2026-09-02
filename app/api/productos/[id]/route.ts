@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import {
   products, inventoryMovements, productVariants, productVariantAlmacenStock, almacenes,
+  adminEscolarConceptosPago, adminEscolarConceptoPrecios,
 } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
@@ -322,7 +323,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   return NextResponse.json({ ok: true, producto: { ...updated, precioDOP: updated.precio / 100, costoDOP: updated.costo / 100 } });
 }
 
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
   const auth = await requirePermission('productos:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
@@ -330,10 +331,38 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const prodId = parseInt(id);
   if (isNaN(prodId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  // Chequeo previo: la pantalla lo llama para saber, ANTES de ofrecer "eliminar",
+  // si el servicio está atado a tarifas escolares y no debe borrarse desde aquí.
+  const preview = new URL(req.url).searchParams.get('preview') === '1';
 
   const [existing] = await db.select({ id: products.id }).from(products)
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!existing) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
+
+  // Consistencia entre pantallas (regla #3): un servicio atado a tarifas
+  // escolares no se borra desde aquí. Su ciclo de vida —y la decisión de si hay
+  // factura que proteger— vive en la configuración escolar. Se dirige allí en
+  // vez de borrar por un lado lo que el otro cree intacto (o de reventar por la
+  // FK NO ACTION que va del concepto/tarifa al producto).
+  const [concepto] = await db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre })
+    .from(adminEscolarConceptosPago)
+    .where(and(eq(adminEscolarConceptosPago.teamId, teamId), eq(adminEscolarConceptosPago.productId, prodId)))
+    .limit(1);
+  const [tarifa] = concepto ? [undefined] : await db.select({ id: adminEscolarConceptoPrecios.id })
+    .from(adminEscolarConceptoPrecios)
+    .where(and(eq(adminEscolarConceptoPrecios.teamId, teamId), eq(adminEscolarConceptoPrecios.productId, prodId)))
+    .limit(1);
+  const vinculadoEscolar = Boolean(concepto || tarifa);
+
+  const mensajeEscolar = 'Este servicio está vinculado a tarifas escolares. Elimínalo desde Configuración escolar → Tarifas; allí se decide si hay facturas que conservar.';
+
+  if (preview) {
+    return NextResponse.json({ vinculadoEscolar, ...(vinculadoEscolar ? { error: mensajeEscolar } : {}) });
+  }
+
+  if (vinculadoEscolar) {
+    return NextResponse.json({ error: mensajeEscolar, vinculadoEscolar: true }, { status: 409 });
+  }
 
   await db.delete(products).where(eq(products.id, prodId));
   return NextResponse.json({ ok: true });

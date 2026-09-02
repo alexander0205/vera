@@ -61,6 +61,21 @@ interface Data {
 
 type ObjTipo = 'servicio' | 'grado' | 'seccion';
 
+/** Impacto de borrar un concepto (lo calcula el servidor con `?preview=1`). */
+interface ImpactoConcepto {
+  conceptoId: number; nombre: string;
+  precioIds: number[]; cuotaCount: number;
+  cargosSinHistorial: number[]; cargosProtegidos: number[];
+  productIds: number[]; productosBorrables: number[]; productosConservados: number[];
+  tieneHistorial: boolean; bloqueadoPorMensualidad: boolean;
+}
+/** Impacto de quitar una tarifa (un precio). */
+interface ImpactoPrecio {
+  precioId: number; conceptoId: number; objetivoTipo: string; objetivoId: number;
+  productId: number | null; cargosSinHistorial: number[]; cargosProtegidos: number[];
+  tieneHistorial: boolean; productoBorrable: number | null;
+}
+
 const jsonReq = (url: string, method: string, body: unknown) =>
   fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -92,8 +107,14 @@ export function ConceptosPanel() {
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<Objetivo | null>(null);
   const [porBorrar, setPorBorrar] = useState<Concepto | null>(null);
+  const [impacto, setImpacto] = useState<ImpactoConcepto | null>(null);
   const [borrando, setBorrando] = useState(false);
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
+  // Quitar una sola tarifa (precio de un objetivo).
+  const [precioPorQuitar, setPrecioPorQuitar] = useState<Precio | null>(null);
+  const [impactoPrecio, setImpactoPrecio] = useState<ImpactoPrecio | null>(null);
+  const [quitando, setQuitando] = useState(false);
+  const [errorPrecio, setErrorPrecio] = useState<string | null>(null);
 
   const cargar = useCallback(async (pid?: number | null) => {
     setLoading(true);
@@ -126,27 +147,56 @@ export function ConceptosPanel() {
    * navegador embebido de la app devuelve `false` sin enseñar nada y el borrado
    * se quedaba sin hacer, en silencio.
    */
-  async function confirmarBorrado() {
+  /** Abre el diálogo pidiendo antes el impacto real al servidor. */
+  async function pedirBorrado(c: Concepto) {
+    setPorBorrar(c); setImpacto(null); setErrorBorrado(null);
+    const r = await fetch(`/api/administracion-escolar/conceptos/${c.id}?preview=1`, { method: 'DELETE' });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.impacto) setImpacto(j.impacto);
+    else setErrorBorrado(j.error ?? 'No se pudo calcular el impacto.');
+  }
+
+  /** `modo`: 'completo' (sin historial) o 'solo-config' (conserva facturas). */
+  async function ejecutarBorrado(modo: 'completo' | 'solo-config') {
     const c = porBorrar;
     if (!c) return;
     setBorrando(true);
     try {
-      const r = await fetch(`/api/administracion-escolar/conceptos/${c.id}`, { method: 'DELETE' });
+      const r = await fetch(`/api/administracion-escolar/conceptos/${c.id}?modo=${modo}`, { method: 'DELETE' });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
         setErrorBorrado(j.error ?? 'No se pudo eliminar.');
         return;
       }
-      setPorBorrar(null);
-      setErrorBorrado(null);
+      setPorBorrar(null); setImpacto(null); setErrorBorrado(null);
+      if (conceptoSel === c.id) setConceptoSel(null);
       await cargar(data?.periodo?.id);
     } finally { setBorrando(false); }
   }
 
-  async function quitarPrecio(precioId: number) {
-    const r = await fetch(`/api/administracion-escolar/concepto-precios?id=${precioId}`, { method: 'DELETE' });
-    if (!r.ok) return;
-    setData((d) => d && ({ ...d, precios: d.precios.filter((p) => p.id !== precioId) }));
+  /** Abre el diálogo de quitar una tarifa con su impacto. */
+  async function pedirQuitarPrecio(precio: Precio) {
+    setPrecioPorQuitar(precio); setImpactoPrecio(null); setErrorPrecio(null);
+    const r = await fetch(`/api/administracion-escolar/concepto-precios?id=${precio.id}&preview=1`, { method: 'DELETE' });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.impacto) setImpactoPrecio(j.impacto);
+    else setErrorPrecio(j.error ?? 'No se pudo calcular el impacto.');
+  }
+
+  async function ejecutarQuitarPrecio(modo: 'completo' | 'solo-tarifa') {
+    const p = precioPorQuitar;
+    if (!p) return;
+    setQuitando(true);
+    try {
+      const r = await fetch(`/api/administracion-escolar/concepto-precios?id=${p.id}&modo=${modo}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErrorPrecio(j.error ?? 'No se pudo quitar la tarifa.');
+        return;
+      }
+      setPrecioPorQuitar(null); setImpactoPrecio(null); setErrorPrecio(null);
+      await cargar(data?.periodo?.id);
+    } finally { setQuitando(false); }
   }
 
   const concepto = data?.conceptos.find((c) => c.id === conceptoSel) ?? null;
@@ -199,7 +249,7 @@ export function ConceptosPanel() {
                   on ? 'border-zero-500 bg-zero-50 font-medium text-zero-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                 <button onClick={() => setConceptoSel(c.id)}>{c.nombre}</button>
                 {c.frecuencia !== 'unico' && <Repeat className="h-3 w-3 opacity-60" aria-label={ETIQUETA_FRECUENCIA[c.frecuencia]} />}
-                <button onClick={() => setPorBorrar(c)} className="text-gray-300 hover:text-red-500" title="Eliminar concepto">
+                <button onClick={() => void pedirBorrado(c)} className="text-gray-300 hover:text-red-500" title="Eliminar concepto">
                   <X className="h-3 w-3" />
                 </button>
               </span>
@@ -255,7 +305,7 @@ export function ConceptosPanel() {
                         {pSv ? (
                           <span className="flex shrink-0 items-center gap-1.5">
                             <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pSv.montoCentavos)}</span>
-                            <button onClick={() => quitarPrecio(pSv.id)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => void pedirQuitarPrecio(pSv)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
                           </span>
                         ) : (
                           <button onClick={() => setModal({ tipo: 'servicio', id: sv.id, servicio: sv.nombre, tanda: sv.tanda })}
@@ -295,7 +345,7 @@ export function ConceptosPanel() {
                                   {pG ? (
                                     <>
                                       <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pG.montoCentavos)}</span>
-                                      <button onClick={() => quitarPrecio(pG.id)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => void pedirQuitarPrecio(pG)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                     </>
                                   ) : (
                                     <>
@@ -321,7 +371,7 @@ export function ConceptosPanel() {
                                         {pS ? (
                                           <>
                                             <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pS.montoCentavos)}</span>
-                                            <button onClick={() => quitarPrecio(pS.id)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
+                                            <button onClick={() => void pedirQuitarPrecio(pS)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                           </>
                                         ) : (
                                           <>
@@ -383,25 +433,101 @@ export function ConceptosPanel() {
         />
       )}
 
-      <ConfirmDialog
-        open={porBorrar !== null}
-        onOpenChange={(o: boolean) => { if (!o) { setPorBorrar(null); setErrorBorrado(null); } }}
-        title={`Eliminar "${porBorrar?.nombre ?? ''}"`}
-        description={
-          <>
-            Se va con él su calendario de cuotas y las tarifas de cada grado. Si ya
-            se le cobró a algún alumno, no se puede borrar.
-            {errorBorrado && (
-              <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-                {errorBorrado}
-              </span>
-            )}
-          </>
-        }
-        confirmLabel="Eliminar"
-        destructive
-        loading={borrando}
-        onConfirm={() => void confirmarBorrado()} />
+      {porBorrar && (() => {
+        const nombresProd = (ids: number[]) =>
+          ids.map((id) => data.productos.find((p) => p.id === id)?.nombre).filter(Boolean).join('», «');
+        const cargando = !impacto && !errorBorrado;
+        const bloqueado = impacto?.bloqueadoPorMensualidad ?? false;
+        const historial = impacto?.tieneHistorial ?? false;
+        const modo: 'completo' | 'solo-config' = historial ? 'solo-config' : 'completo';
+        return (
+          <ConfirmDialog
+            open
+            onOpenChange={(o: boolean) => { if (!o) { setPorBorrar(null); setImpacto(null); setErrorBorrado(null); } }}
+            title={
+              bloqueado ? `No se puede eliminar "${porBorrar.nombre}"`
+              : historial ? `"${porBorrar.nombre}" ya tiene facturas`
+              : `Eliminar "${porBorrar.nombre}"`
+            }
+            description={
+              <>
+                {cargando && <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Calculando el impacto…</span>}
+                {impacto && bloqueado && (
+                  <>Hay matrículas que generan su mensualidad con este concepto. Cambia primero la mensualidad de esas matrículas y vuelve a intentarlo.</>
+                )}
+                {impacto && !bloqueado && historial && (
+                  <>
+                    Ya existen facturas o pagos con este concepto, así que <b>no se puede borrar por completo</b>: el historial se conserva.
+                    Puedes quitarlo de la configuración escolar: dejará de generar cargos nuevos y se
+                    conservan el servicio de <b>Productos y servicios</b> y todas las facturas y cargos ya emitidos.
+                  </>
+                )}
+                {impacto && !bloqueado && !historial && (
+                  <>
+                    Se eliminarán el concepto y su calendario{impacto.cuotaCount > 0 ? ` (${impacto.cuotaCount} cuota${impacto.cuotaCount === 1 ? '' : 's'})` : ''},
+                    {' '}{impacto.precioIds.length} tarifa{impacto.precioIds.length === 1 ? '' : 's'}
+                    {impacto.cargosSinHistorial.length > 0 && <> y {impacto.cargosSinHistorial.length} cargo{impacto.cargosSinHistorial.length === 1 ? '' : 's'} aún sin facturar</>}.
+                    {impacto.productosBorrables.length > 0 && <> También se elimina el servicio «{nombresProd(impacto.productosBorrables)}» de <b>Productos y servicios</b>.</>}
+                    {impacto.productosConservados.length > 0 && <span className="mt-1 block text-xs text-gray-500">El servicio «{nombresProd(impacto.productosConservados)}» se conserva porque se usa en otro lugar.</span>}
+                  </>
+                )}
+                {errorBorrado && (
+                  <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                    {errorBorrado}
+                  </span>
+                )}
+              </>
+            }
+            confirmLabel={bloqueado ? 'Entendido' : historial ? 'Quitar solo de la configuración' : 'Eliminar todo'}
+            destructive={!bloqueado}
+            loading={borrando || cargando}
+            onConfirm={() => {
+              if (bloqueado) { setPorBorrar(null); setImpacto(null); setErrorBorrado(null); return; }
+              void ejecutarBorrado(modo);
+            }} />
+        );
+      })()}
+
+      {precioPorQuitar && (() => {
+        const cargando = !impactoPrecio && !errorPrecio;
+        const historial = impactoPrecio?.tieneHistorial ?? false;
+        const modo: 'completo' | 'solo-tarifa' = historial ? 'solo-tarifa' : 'completo';
+        const prodNombre = impactoPrecio?.productoBorrable != null
+          ? data.productos.find((p) => p.id === impactoPrecio.productoBorrable)?.nombre ?? null : null;
+        return (
+          <ConfirmDialog
+            open
+            onOpenChange={(o: boolean) => { if (!o) { setPrecioPorQuitar(null); setImpactoPrecio(null); setErrorPrecio(null); } }}
+            title={historial ? 'Esta tarifa ya tiene facturas' : 'Quitar tarifa'}
+            description={
+              <>
+                {cargando && <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Calculando el impacto…</span>}
+                {impactoPrecio && historial && (
+                  <>
+                    Hay cargos ya facturados o pagados con esta tarifa. Se quitará solo la tarifa de la
+                    configuración; los cargos y facturas ya emitidos se conservan.
+                  </>
+                )}
+                {impactoPrecio && !historial && (
+                  <>
+                    Se quita esta tarifa
+                    {impactoPrecio.cargosSinHistorial.length > 0 && <> y {impactoPrecio.cargosSinHistorial.length} cargo{impactoPrecio.cargosSinHistorial.length === 1 ? '' : 's'} aún sin facturar de los alumnos afectados</>}.
+                    {prodNombre && <> También se elimina el servicio «{prodNombre}» de <b>Productos y servicios</b>.</>}
+                  </>
+                )}
+                {errorPrecio && (
+                  <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                    {errorPrecio}
+                  </span>
+                )}
+              </>
+            }
+            confirmLabel={historial ? 'Quitar solo la tarifa' : 'Quitar'}
+            destructive
+            loading={quitando || cargando}
+            onConfirm={() => void ejecutarQuitarPrecio(modo)} />
+        );
+      })()}
     </div>
   );
 }

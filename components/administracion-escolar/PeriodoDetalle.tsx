@@ -13,7 +13,7 @@
  * decide qué hace al cobrar, al anular o al facturar.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -425,6 +425,11 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
   const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
   const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
+  // «Facturado» es solo lo que tiene e-CF emitido; el resto es deuda cargada
+  // pero todavía no facturada. Antes la tarjeta sumaba todo bajo «Facturado»,
+  // así que un período sin una sola factura mostraba «Facturado RD$26,000».
+  const facturadoCentavos = facturas.reduce((s, c) => s + c.montoCentavos, 0);
+  const porFacturarCentavos = total - facturadoCentavos;
   const saldo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .reduce((s, c) => s + c.saldoCentavos, 0);
@@ -558,7 +563,14 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <PeriodoStat icon={Receipt} label="Facturado" value={fmtDOP(total)} detail="Total del período" tone="blue" />
+        <PeriodoStat
+          icon={Receipt}
+          label="Facturado"
+          value={fmtDOP(facturadoCentavos)}
+          detail={porFacturarCentavos > 0
+            ? <span className="font-medium text-amber-700">Por facturar {fmtDOP(porFacturarCentavos)}</span>
+            : 'Todo facturado'}
+          tone="blue" />
         <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
         <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
         <PeriodoStat
@@ -598,7 +610,23 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         </div>
 
         {vista === 'mensualidades' && (
-              <MensualidadesTabla
+          <>
+            {/* Motivo visible: sin plan recurrente, la mensualidad se DEVENGA
+                como deuda pero nunca se emite su factura sola. Antes solo se veía
+                «Sin facturar» sin decir por qué, y el colegio esperaba la factura
+                del día de emisión que nunca salía. */}
+            {grupo.facturaRecurrenteId == null && (mensualidades.length > 0 || previstosMensualidad.length > 0) && (
+              <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  La mensualidad no está configurada para facturarse automáticamente: los cargos se generan como deuda, pero <b>no se emite la factura sola</b> en su fecha.
+                  {puedeFacturar && grupo.matriculaId
+                    ? <> Pulsa <b>«Configurar mensualidad»</b> arriba para que se emita cada mes.</>
+                    : <> Configúrala desde el botón de arriba para que se emita cada mes.</>}
+                </div>
+              </div>
+            )}
+            <MensualidadesTabla
                 onReenviarAviso={onReenviarAviso}
                 reenviandoCargoId={reenviandoCargoId}
                 diaFacturaAuto={grupo.diaFacturaAuto}
@@ -625,7 +653,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 onMarcarCargo={alternarCargo}
                 onMarcarVarios={alternarVarios}
               />
-            )}
+          </>
+        )}
 
             {vista === 'otros' && (
               otrosCargos.length === 0 && previstosOtros.length === 0 && facturasSueltas.length === 0
@@ -1003,7 +1032,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   icon: typeof Receipt;
   label: string;
   value: string;
-  detail: string;
+  detail: ReactNode;
   tone: 'blue' | 'verde' | 'red' | 'gray';
 }) {
   // El color no decora: es lo que hace que "pendiente" salte antes que
