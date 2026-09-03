@@ -57,14 +57,29 @@ function SelectItem({
   children,
   className,
   disabled,
+  ...rest
 }: {
   value: string;
   children?: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  /**
+   * MUI dibuja la selección clonando los hijos del Select e inyectándoles
+   * `onClick`, `data-value`, `role`, `selected`, etc. Como aquí el `MenuItem`
+   * va envuelto en este componente, hay que REENVIARLE esos props: sin ellos
+   * el `MenuItem` renderizado no lleva el `onClick` de MUI y hacer clic en una
+   * opción no guardaba nada. `rest` los captura y los pasa tal cual.
+   */
+  [key: string]: unknown;
 }) {
   return (
-    <MenuItem value={value} className={className} disabled={disabled} sx={{ fontSize: '0.875rem' }}>
+    <MenuItem
+      value={value}
+      className={className}
+      disabled={disabled}
+      sx={{ fontSize: '0.875rem' }}
+      {...(rest as Record<string, unknown>)}
+    >
       {children}
     </MenuItem>
   );
