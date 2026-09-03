@@ -12,7 +12,11 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface Factura {
   id: number;
-  encf: string;
+  /** Vacío en borradores: el eNCF nace al emitir en DGII. */
+  encf: string | null;
+  /** Código interno (ej. BOR-000123). Sí existe en borradores. */
+  codigo: string | null;
+  razonSocialComprador: string | null;
   estado: string;
   estadoPago: string;
   montoTotal: number;
@@ -110,7 +114,7 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
             <>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input className="pl-8" placeholder="Buscar por NCF…" autoFocus
+                <Input className="pl-8" placeholder="Buscar por NCF, código o comprador…" autoFocus
                   value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               {buscando ? (
@@ -121,8 +125,14 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
                     <button key={f.id} onClick={() => vincular(f.id)} disabled={saving}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{f.encf}</p>
-                        <p className="text-xs text-gray-400">{fmtFechaCorta(f.createdAt)}</p>
+                        {/* Un borrador no tiene eNCF todavía; sin fallback la fila
+                            salía en blanco y no se distinguía una de otra. */}
+                        <p className="font-medium text-gray-900 truncate">{f.encf || f.codigo || 'Borrador'}</p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {f.razonSocialComprador
+                            ? `${f.razonSocialComprador} · ${fmtFechaCorta(f.createdAt)}`
+                            : fmtFechaCorta(f.createdAt)}
+                        </p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-medium text-gray-900">{fmtDOP(f.montoTotal)}</p>
