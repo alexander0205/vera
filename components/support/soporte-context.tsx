@@ -16,14 +16,14 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { soporteAplica } from './rutas-sin-soporte';
 
 /**
- * Dónde no va el soporte: páginas de impresión (van a papel, no a alguien
- * mirando) y la consola de agentes (son el equipo de soporte, no un cliente).
- * Estaba en el gate del widget; sube acá para que el BOTÓN respete la misma
- * lista — si no, en esas rutas habría un botón que no abre nada.
+ * La lista de rutas sin soporte vive en `rutas-sin-soporte.ts`, fuera de este
+ * contexto: el sondeo de llamadas también la necesita y no puede importar un
+ * provider de React solo para leer un array. Tenerla en dos sitios ya se
+ * desincronizó una vez.
  */
-const PREFIJOS_EXCLUIDOS = ['/pos-reporte', '/pos-ticket', '/zero-tickets', '/dashboard/soporte'];
 
 interface Soporte {
   /** El panel está a la vista. */
@@ -40,7 +40,7 @@ const SoporteContext = createContext<Soporte | null>(null);
 export function SoporteProvider({ children }: { children: React.ReactNode }) {
   const [abierto, setAbierto] = useState(false);
   const pathname = usePathname();
-  const disponible = !PREFIJOS_EXCLUIDOS.some((p) => pathname?.startsWith(p));
+  const disponible = soporteAplica(pathname);
 
   const abrir = useCallback(() => setAbierto(true), []);
   const cerrar = useCallback(() => setAbierto(false), []);

@@ -20,6 +20,7 @@ import 'server-only';
 import { randomBytes } from 'crypto';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
 import { teamHasModule } from '@/lib/auth/modules';
+import { morasPendientesDeResponsable, type MoraPendiente } from './mora-familia';
 import { and, eq, gt, ne, asc, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
@@ -200,6 +201,17 @@ export interface VistaLinkPago {
   };
   estudiantes: string[];
   cargos: CargoPendiente[];
+  /**
+   * Los recargos por pago tardío, aparte de los cargos.
+   *
+   * Van en su propia lista y no mezclados con las cuotas porque son otra cosa:
+   * una nota de débito con su propio documento y su propio saldo, no una
+   * mensualidad. Pero SÍ entran en `totalCentavos` — si no, el padre transfiere
+   * la colegiatura, se queda tranquilo, y la mora sigue creciendo sin que él
+   * haya visto nunca que existía. Eso es exactamente lo que pasaba: RD$215,321
+   * de mora repartidos en 124 notas que ningún padre podía ver.
+   */
+  moras: MoraPendiente[];
   totalCentavos: number;
   transferencia: DatosTransferencia;
   comprobantes: ComprobanteEnEspera[];
@@ -454,6 +466,12 @@ export async function resolverLink(
         && c.cargos.some((x) => facturaCargoIds!.has(x.cargoId)))
     : comprobantes;
 
+  // La mora del responsable, acotada igual que los cargos cuando el enlace
+  // apunta a una factura concreta.
+  const moras = await morasPendientesDeResponsable(
+    link.teamId, link.clientId, acotaFactura ? (facturaScope?.id ?? -1) : null,
+  );
+
   const hoy = hoyISO();
   const filas: CargoPendiente[] = cargos.map((c) => ({
     cargoId: c.cargoId,
@@ -495,7 +513,9 @@ export async function resolverLink(
       },
       estudiantes: [...new Set(filas.map((f) => f.estudiante))],
       cargos: filas,
-      totalCentavos: filas.reduce((a, f) => a + f.montoCentavos, 0),
+      moras,
+      totalCentavos: filas.reduce((a, f) => a + f.montoCentavos, 0)
+        + moras.reduce((a, m) => a + m.montoCentavos, 0),
       transferencia,
       comprobantes: comprobantesVista.map((c) => ({
         id: c.id,

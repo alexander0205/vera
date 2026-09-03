@@ -2699,6 +2699,23 @@ export interface CargoDelComprobante {
 }
 
 /**
+ * Una nota de mora que el padre estaba pagando.
+ *
+ * Va aparte de `cargos` porque no es la misma cosa: un cargo apunta a la
+ * factura donde se cobra, y una mora YA es esa factura (una ND tipo 33). Sin
+ * esto, el dinero de un padre que transfería la mora a propósito no tenía a
+ * dónde ir — la aprobación solo sabía repartir contra facturas de cargos.
+ */
+export interface MoraDelComprobante {
+  /** El id de la nota de débito. Es contra esto que se registra el cobro. */
+  facturaId: number;
+  codigo: string | null;
+  /** La factura que se venció y la causó, para reconocerla en la pantalla. */
+  origenCodigo: string | null;
+  montoCentavos: number;
+}
+
+/**
  * Alguien DICE que transfirió, y trae una foto. No mueve un peso.
  *
  * No es un pago a propósito: el cobro de verdad vive en `pagos_recibidos`,
@@ -2730,6 +2747,9 @@ export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
    * forma de saber qué creyó el padre que estaba pagando.
    */
   cargos:        jsonb('cargos').$type<CargoDelComprobante[]>().notNull().default([]),
+
+  /** Las notas de mora que también estaba pagando. Ver `MoraDelComprobante`. */
+  moras:         jsonb('moras').$type<MoraDelComprobante[]>().notNull().default([]),
 
   /** pendiente | aprobado | rechazado */
   estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),

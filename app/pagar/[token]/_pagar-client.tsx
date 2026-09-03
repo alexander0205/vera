@@ -120,8 +120,15 @@ export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
   const [error, setError] = useState('');
   const [listo, setListo] = useState(false);
 
-  const { transferencia: t, cargos, totalCentavos } = vista;
-  const sinDeuda = cargos.length === 0;
+  const { transferencia: t, cargos, moras, totalCentavos } = vista;
+  /**
+   * Sin deuda es sin NADA que cobrar, cuotas y recargos.
+   *
+   * Mirando solo los cargos, una familia que ya pagó la colegiatura pero debe
+   * el recargo veía «no tienes pagos pendientes» encima de una mora viva. El
+   * recargo es deuda igual, y con su propio documento.
+   */
+  const sinDeuda = cargos.length === 0 && moras.length === 0;
   // Pagada de verdad: el servidor solo arma `facturaPagada` cuando la factura
   // existe, es de este responsable y su estado de pago es PAGADA. No basta con
   // que no haya cargos: un enlace sin deuda también puede ser una factura cuyo
@@ -345,6 +352,33 @@ export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
                     </td>
                     <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {dinero(c.montoCentavos)}
+                    </td>
+                  </tr>
+                ))}
+                {/*
+                  El recargo por mora va en su propia fila, no mezclado con las
+                  cuotas: es otro documento (una nota de débito colgada de la
+                  factura que se venció), y decir de cuál viene es lo que permite
+                  al padre reconocerlo. Antes no aparecía en ningún sitio —ni
+                  aquí ni en el total— y por eso se transfería la colegiatura y
+                  la mora seguía viva sin que nadie la hubiera visto.
+                */}
+                {moras.map((m) => (
+                  <tr key={`mora-${m.facturaId}`}>
+                    <td style={{ ...celda, color: '#b91c1c' }}>
+                      Recargo por mora
+                      {m.origenCodigo && (
+                        <span style={{ display: 'block', fontSize: 12, color: '#6b7280' }}>
+                          de {m.origenCodigo}
+                        </span>
+                      )}
+                    </td>
+                    <td style={celda}>—</td>
+                    <td style={{ ...celda, whiteSpace: 'nowrap', color: '#b91c1c' }}>
+                      {m.periodo ? fecha(m.periodo) : '—'}
+                    </td>
+                    <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {dinero(m.montoCentavos)}
                     </td>
                   </tr>
                 ))}
