@@ -93,11 +93,20 @@ function Select({
   onValueChange,
   disabled,
   children,
+  id,
 }: {
   value?: string;
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   children?: React.ReactNode;
+  /**
+   * Id del control. Lo inyecta el `<Field>` compartido (clona su hijo con un
+   * `id`) para que su `<Label htmlFor>` apunte al control. Sin reenviarlo aquí,
+   * la etiqueta quedaba colgada: un `<Input>` sí recibe el id, pero este Select
+   * lo ignoraba, así que hacer clic en la etiqueta —«Sexo», p. ej.— no abría
+   * nada. Se pasa al MuiSelect para reponer esa asociación.
+   */
+  id?: string;
 }) {
   /**
    * Se recorre un solo nivel a propósito. Los 18 consumidores escriben el
@@ -129,6 +138,7 @@ function Select({
   return (
     <FormControl size="small" disabled={disabled} className={triggerClassName}>
       <MuiSelect
+        id={id}
         value={value ?? ''}
         onChange={(e) => onValueChange?.(String(e.target.value))}
         displayEmpty
