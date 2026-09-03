@@ -26,6 +26,10 @@ interface Factura {
 interface Props {
   cargoId: number;
   cargoLabel: string;
+  /** Saldo pendiente del cargo, en centavos. Sirve para avisar cuando la
+   *  factura elegida no llega a cubrirlo (un cargo se ata a UNA sola factura,
+   *  así que atar una más chica lo deja descuadrado sin remedio). */
+  cargoSaldoCentavos?: number;
   /** Cliente vinculado al tutor responsable del estudiante. Null si el tutor
    *  aún no está vinculado a un contacto — no hay dónde buscar facturas. */
   clienteId: number | null;
@@ -39,12 +43,14 @@ interface Props {
  * ni emite facturas — solo busca y enlaza (mismo patrón que Vincular
  * Dependiente/Tutor: buscar entidad existente, guardar el id).
  */
-export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, onClose, onSaved }: Props) {
+export function VincularFacturaDialog({ cargoId, cargoLabel, cargoSaldoCentavos = 0, clienteId, open, onClose, onSaved }: Props) {
   const [query, setQuery]         = useState('');
   const [facturas, setFacturas]   = useState<Factura[]>([]);
   const [buscando, setBuscando]   = useState(false);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  /** Factura elegida que NO cubre el saldo: se pide confirmar antes de atarla. */
+  const [porConfirmar, setPorConfirmar] = useState<Factura | null>(null);
 
   const buscar = useCallback(async (q: string) => {
     if (!clienteId) return;
@@ -62,8 +68,16 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
   // Al abrir se limpia lo que quedó de la vez anterior.
   useEffect(() => {
     if (!open) return;
-    setQuery(''); setError(null);
+    setQuery(''); setError(null); setPorConfirmar(null);
   }, [open]);
+
+  // Al elegir una factura: si no cubre el saldo del cargo, se pide confirmar
+  // antes de atarla; si lo cubre (o lo supera, porque puede cubrir varios
+  // cargos), se vincula directo.
+  function elegir(f: Factura) {
+    if (cargoSaldoCentavos > 0 && f.montoTotal < cargoSaldoCentavos) setPorConfirmar(f);
+    else void vincular(f.id);
+  }
 
   // Una sola búsqueda. Antes había dos efectos y ambos disparaban al abrir, así
   // que el diálogo pedía la misma lista dos veces. La primera no espera al
@@ -113,6 +127,38 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>El tutor responsable de este estudiante no está vinculado a un contacto. Vincúlalo primero en la pestaña Tutores para poder buscar sus facturas.</span>
             </div>
+          ) : porConfirmar ? (
+            // La factura elegida no llega a cubrir el saldo del cargo. Como el
+            // cargo se ata a UNA sola factura, atarla lo deja descuadrado: se
+            // avisa y se pide confirmar antes de seguir.
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>Esta factura no cubre el saldo del cargo. Un cargo se ata a una sola factura, así que quedaría una parte sin cubrir y no podrás atarle otra.</span>
+              </div>
+              <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 text-sm">
+                <div className="flex justify-between px-3 py-2">
+                  <span className="text-gray-500">Factura</span>
+                  <span className="font-medium text-gray-900">{fmtDOP(porConfirmar.montoTotal)}</span>
+                </div>
+                <div className="flex justify-between px-3 py-2">
+                  <span className="text-gray-500">Saldo del cargo</span>
+                  <span className="font-medium text-gray-900">{fmtDOP(cargoSaldoCentavos)}</span>
+                </div>
+                <div className="flex justify-between px-3 py-2 bg-amber-50/60">
+                  <span className="text-amber-800">Quedaría sin cubrir</span>
+                  <span className="font-semibold text-amber-800">{fmtDOP(cargoSaldoCentavos - porConfirmar.montoTotal)}</span>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPorConfirmar(null)} disabled={saving}>
+                  Elegir otra
+                </Button>
+                <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => vincular(porConfirmar.id)} disabled={saving}>
+                  {saving ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Vinculando…</> : 'Vincular igual'}
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
               <div className="relative">
@@ -125,7 +171,7 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
               ) : facturas.length > 0 ? (
                 <div className="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto">
                   {facturas.map((f) => (
-                    <button key={f.id} onClick={() => vincular(f.id)} disabled={saving}
+                    <button key={f.id} onClick={() => elegir(f)} disabled={saving}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         {/* Un borrador no tiene eNCF todavía; sin fallback la fila
