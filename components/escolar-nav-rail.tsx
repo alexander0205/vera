@@ -54,7 +54,7 @@ const SECCIONES: SeccionEscolar[] = [
   { tipo: 'item', id: 'escolar-documentos',  href: '/escolar/documentos',    label: 'Documentos',     icon: FileText },
   { tipo: 'item', id: 'escolar-condicion',   href: '/escolar/condicion-academica', label: 'Condición académica', icon: ClipboardCheck, oculto: true },
   { tipo: 'item', id: 'escolar-personal',    href: '/escolar/personal',      label: 'Personal',       icon: Contact,  oculto: true },
-  { tipo: 'item', id: 'escolar-cargos',      href: '/escolar/cargos',        label: 'Cargos y deudas', icon: Receipt, oculto: true },
+  { tipo: 'item', id: 'escolar-cargos',      href: '/escolar/cargos',        label: 'Cargos y deudas', icon: Receipt },
   // Las familias que pagan. Va antes de Pagos porque la pregunta llega en ese
   // orden: primero quién debe, después qué entró.
   { tipo: 'item', id: 'escolar-responsables', href: '/escolar/responsables', label: 'Responsables',   icon: Contact },
