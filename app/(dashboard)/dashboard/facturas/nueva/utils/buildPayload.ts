@@ -1,5 +1,6 @@
 import type { Cliente, ItemLinea, Retencion } from './types';
 import { tasaToFloat } from './calculos';
+import { datosComprador } from './comprador';
 import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 
 export interface BuildPayloadInput {
@@ -80,8 +81,8 @@ export function buildPayload(input: BuildPayloadInput) {
   const pagoCuenta = single.cuenta;
   const pagoValor  = single.valor > 0 ? single.valor.toFixed(2) : '';
 
-  const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
-  const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
+  const { rnc: rncFinal, razonSocial: razonFinal } =
+    datosComprador(clienteSeleccionado, rncManual, rncManualNombre);
   const emailFinal = clienteSeleccionado?.email ?? emailManual;
 
   // ── Resumen denormalizado de beneficiarios para nivel factura ──────────────

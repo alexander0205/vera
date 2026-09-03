@@ -215,39 +215,51 @@ export function ClienteSection({
             </Tooltip>
           </Box>
           <Box sx={{ mt: 1 }}>
-          {bloqueado ? (
-            <TextField
-              size="small"
-              fullWidth
-              value={clienteSeleccionado.rnc || '—'}
-              slotProps={{
-                input: { readOnly: true },
-                htmlInput: { style: { fontSize: '0.875rem', height: '22px' }, tabIndex: -1 },
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' },
-                '& .MuiOutlinedInput-input': { color: '#111827', cursor: 'default' },
-              }}
-            />
-          ) : (
+          {/*
+            El RNC se edita SIEMPRE, incluso con el cliente bloqueado.
+
+            Son dos datos distintos: a quién se le cobra (el responsable de
+            pago, que aquí no se toca) y con qué RNC sale el comprobante. El
+            padre que paga la colegiatura de su hijo y la quiere a nombre de su
+            empresa es el caso corriente, no la excepción — y la base ya los
+            guarda por separado (`client_id` vs `rnc_comprador`).
+
+            Antes esto era un campo gris de solo lectura y no había forma de
+            hacerlo sin salir del colegio y facturar a mano.
+          */}
           <RncSearch
             placeholder="Buscar RNC, Cédula o razón social…"
+            // El nombre que acompaña al RNC sale de `rncManualNombre` cuando se
+            // eligió otro RNC, y del contacto cuando el RNC sigue siendo el
+            // suyo. Sin ese segundo caso el campo enseñaría el número pelado en
+            // cuanto se elige un cliente, porque al elegirlo se limpia
+            // `rncManualNombre` a propósito.
             value={
-              clienteSeleccionado?.rnc
-                ? `${clienteSeleccionado.rnc} · ${clienteSeleccionado.razonSocial}`
-                : rncManual
-                  ? `${rncManual}${rncManualNombre ? ` · ${rncManualNombre}` : ''}`
+              rncManual
+                ? `${rncManual} · ${rncManualNombre
+                    || (rncManual === clienteSeleccionado?.rnc ? clienteSeleccionado.razonSocial : '')}`
+                    .replace(/ · $/, '')
+                : clienteSeleccionado?.rnc
+                  ? `${clienteSeleccionado.rnc} · ${clienteSeleccionado.razonSocial}`
                   : undefined
             }
             onSelect={(r) => { setRncManual(r.rnc); setRncManualNombre(r.nombre); }}
             onClear={() => {
-              if (clienteSeleccionado) onClearCliente();
+              // Con el cliente bloqueado, vaciar el RNC es quitar el RNC — no
+              // soltar al cliente, que es el dueño de la pantalla de la que
+              // salió el cajón y no se puede cambiar desde aquí.
+              if (clienteSeleccionado && !bloqueado) onClearCliente();
               else { setRncManual(''); setRncManualNombre(''); }
             }}
             showSyncHint={!clienteSeleccionado}
           />
-          )}
           </Box>
+          {bloqueado && clienteSeleccionado && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+              Se le cobra a {clienteSeleccionado.razonSocial}. Cambia el RNC si la
+              factura va a nombre de una empresa.
+            </Typography>
+          )}
         </Box>
 
         {/* Teléfono */}

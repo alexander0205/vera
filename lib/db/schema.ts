@@ -193,6 +193,17 @@ export const teams = pgTable('teams', {
   // Capa escolar (monedero del estudiante): exclusiva de colegios. Solo aplica con posHabilitado.
   posEscolarHabilitado:   boolean('pos_escolar_habilitado').notNull().default(false),
 
+  /**
+   * Desde qué fecha de emisión el cron factura solo las cuotas escolares.
+   * NULL = apagado, que es el estado de todos los colegios hasta que lo pidan.
+   *
+   * Es una fecha y no un booleano porque encender esto tiene un pasado: un
+   * colegio puede llevar meses con cargos devengados y sin facturar, y un
+   * simple `true` los habría facturado todos de una vez el primer día. La
+   * fecha es la línea a partir de la cual el calendario manda.
+   */
+  escolarFacturacionAutomaticaDesde: date('escolar_facturacion_automatica_desde'),
+
   // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
   plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
 

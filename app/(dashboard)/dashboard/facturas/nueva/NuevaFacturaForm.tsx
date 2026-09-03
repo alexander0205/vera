@@ -62,6 +62,7 @@ import { useItemsState } from './hooks/useFacturaState';
 
 import { calcularTotales } from './utils/calculos';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
+import { datosComprador } from './utils/comprador';
 import { validate as validateEcf } from '@/lib/factura/validator';
 import type {
   BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Producto,
@@ -1542,8 +1543,8 @@ export default function NuevaFacturaForm({
   }
 
   function validar(): string | null {
-    const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
-    const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
+    const { rnc: rncFinal, razonSocial: razonFinal } =
+      datosComprador(clienteSeleccionado, rncManual, rncManualNombre);
     if (esGasto && !razonFinal.trim()) return 'Indica el nombre del proveedor';
     if (esGasto && !fechaGasto) return 'Indica la fecha del gasto';
     if (regla?.requiereRncComprador && !rncFinal.trim())
@@ -1581,8 +1582,8 @@ export default function NuevaFacturaForm({
     const TIPOS_VENTA = ['31', '32', '45', '46', '47', 'sin-ncf'];
     if (!TIPOS_VENTA.includes(tipoEcf)) return null;
     if (condicionPago === '3' || condicionPago === '4') return null; // gratuito / uso: no es por cobrar
-    const rncFinal   = (clienteSeleccionado?.rnc ?? rncManual).trim();
-    const razonFinal = (clienteSeleccionado?.razonSocial ?? rncManualNombre).trim();
+    const { rnc: rncFinal, razonSocial: razonFinal } =
+      datosComprador(clienteSeleccionado, rncManual, rncManualNombre);
     if (rncFinal || razonFinal) return null;                          // ya hay a quién cobrarle
     const pagado = pagoRecibido ? sumaPagos(pagoLineas) : 0;
     const pagoCompleto = totalNeto > 0 && Math.round(pagado * 100) >= Math.round(totalNeto * 100);
