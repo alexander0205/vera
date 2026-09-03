@@ -2032,7 +2032,7 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
   // en la factura. También se oculta si el MES ya tiene factura en otro cargo
   // (mensualidad duplicada) — borrar la factura es otro flujo, no "anular cargo".
   const puedeAnular = puedeGestionar && cargo.estado !== 'anulado' && !tieneFactura && !mesTieneFactura;
-  const tieneAccion = (pendiente && tieneFactura && (puedePagos || puedeFacturar)) || (pendiente && !tieneFactura && puedeFacturar) || tieneFactura || puedeAnular;
+  const tieneAccion = (pendiente && tieneFactura && (puedePagos || puedeFacturar)) || (pendiente && !tieneFactura && (puedeFacturar || puedePagos)) || tieneFactura || puedeAnular;
   if (!tieneAccion) return <span className="text-gray-300 text-xs">—</span>;
 
   return (
@@ -2071,7 +2071,10 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
             <Receipt className="h-4 w-4" />Facturar
           </DropdownMenuItem>
         )}
-        {pendiente && !tieneFactura && puedeFacturar && (
+        {/* Vincular ata el cargo a una factura existente vía el endpoint
+            `saldar-con-factura`, que pide permiso de pagos —no de facturar—:
+            se gatea por `puedePagos` para no ofrecer un botón que daría 403. */}
+        {pendiente && !tieneFactura && puedePagos && (
           <DropdownMenuItem onSelect={() => onVincular(cargo)}>
             <Link2 className="h-4 w-4" />Vincular factura
           </DropdownMenuItem>

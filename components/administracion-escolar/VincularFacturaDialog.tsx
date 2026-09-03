@@ -78,8 +78,11 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/administracion-escolar/cargos/${cargoId}`, {
-        method: 'PATCH',
+      // Vincular va por el endpoint dedicado: el PATCH del cargo solo DESvincula.
+      // Aquí se ata el cargo a la factura (setea `ecfDocumentId`); el cobro se
+      // hace luego en la factura y el saldo del cargo se refleja de ella.
+      const res = await fetch(`/api/administracion-escolar/cargos/${cargoId}/saldar-con-factura`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ecfDocumentId }),
       });
