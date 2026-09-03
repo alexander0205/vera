@@ -7,11 +7,10 @@ import {
   adminEscolarCursos,
   adminEscolarGrados,
   adminEscolarServicios,
-  adminEscolarCargos,
 } from '@/lib/db/schema';
 import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
 import { armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
-import { cuotasVigentes, finDeMes } from '@/lib/administracion-escolar/devengar';
+import { crearMatriculaConCargos } from '@/lib/administracion-escolar/matricula-alta';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
@@ -171,77 +170,35 @@ export async function POST(req: NextRequest) {
   const pedidos: number[] = Array.isArray(conceptos) ? conceptos.map(Number).filter(Boolean) : [];
 
   try {
+    // El plan se recalcula en el servidor en vez de fiarse de los montos que
+    // mandó el cliente: el navegador puede traer precios viejos, o alterados a
+    // mano. Sin contexto de tarifa el plan va vacío → matrícula sin cargos.
+    const ctx = pedidos.length > 0
+      ? await contextoDeSeccion(teamId, periodoIdOk, cursoIdOk, { tipo: becaTipoOk, valor: becaValorOk })
+      : null;
+    const plan = ctx ? await armarPlanDeCobro(teamId, ctx, inscripcion) : [];
+
     // Matrícula y cargos en una sola transacción: una matrícula sin su deuda
     // es peor que ninguna, porque nadie se entera de que falta hasta que el
     // padre no recibe la factura.
-    const row = await db.transaction(async (tx) => {
-      const [matricula] = await tx.insert(adminEscolarMatriculas).values({
-        teamId,
-        estudianteId: estudianteIdOk,
-        periodoId:    periodoIdOk,
-        cursoId:      cursoIdOk,
-        // Qué papeles se le piden a esta familia. Lo elige quien matricula: el
-        // colegio sabe si viene de traslado, y ninguna regla lo adivina.
-        documentoListaId: Number(documentoListaId) || null,
-        codigoMatricula: codigoMatricula?.trim() || null,
-        fechaInscripcion: fechaInscripcion || null,
-        estado: estadoNorm,
-        notas: notas?.trim() || null,
-        becaTipo: becaTipoOk,
-        becaValor: becaValorOk,
-        becaMotivo: becaMotivo?.trim() || null,
-        // Lo que se marcó aquí es lo que se le cobra el año entero: el devengo
-        // mensual sigue esta lista. Sin ella no podía saber si un concepto sin
-        // cargos estaba desmarcado a propósito o solo no le había tocado aún.
-        conceptosIds: pedidos,
-      }).returning();
-
-      if (pedidos.length === 0) return matricula;
-
-      // Se recalcula aquí en vez de fiarse de los montos que mandó el cliente:
-      // el navegador puede traer precios viejos, o alterados a mano.
-      const ctx = await contextoDeSeccion(teamId, periodoIdOk, cursoIdOk, {
-        tipo: becaTipoOk, valor: becaValorOk,
-      });
-      if (!ctx) return matricula;
-
-      const plan = await armarPlanDeCobro(teamId, ctx, inscripcion);
-
-      // Solo lo que ya entró en vigor. Las diez mensualidades del año NO nacen
-      // aquí: el padre que matricula en agosto no debe la cuota de junio, y
-      // escribirla como deuda inflaría el saldo pendiente de todo el colegio.
-      // El resto lo va creando el devengo mensual cuando llega su mes.
-      const hasta = finDeMes(inscripcion);
-      const filas = cuotasVigentes(plan, pedidos, hasta).map(({ linea, cuota }) => ({
-        teamId,
-        estudianteId: estudianteIdOk,
-        matriculaId:  matricula.id,
-        periodoId:    periodoIdOk,
-        conceptoId:   linea.conceptoId,
-        // `cuotaId` 0 es el pago único de un concepto sin calendario: no
-        // existe como fila, así que se guarda nulo.
-        cuotaId:      cuota.cuotaId || null,
-        mes:          cuota.mes,
-        // El año es el de la EMISIÓN: junto con `mes` dice de qué mensualidad
-        // es el cargo, y el del vencimiento se iría al año siguiente en la
-        // cuota de diciembre de un concepto que dé días para pagar.
-        anio:         Number(cuota.fechaEmision.slice(0, 4)),
-        montoCentavos: cuota.montoCentavos,
-        // Nace debiéndose entero. Matricular no cobra: el dinero se mueve
-        // después, en Pagos.
-        saldoCentavos: cuota.montoCentavos,
-        fechaVencimiento: cuota.fechaVencimiento,
-        estado: 'pendiente',
-      }));
-
-      if (filas.length > 0) {
-        // `onConflictDoNothing` contra el índice (matricula_id, cuota_id): si
-        // el usuario da dos clics o reintenta tras un error de red, la segunda
-        // pasada no le vuelve a cobrar al padre.
-        await tx.insert(adminEscolarCargos).values(filas).onConflictDoNothing();
-      }
-      return matricula;
-    });
+    const row = await crearMatriculaConCargos({
+      teamId,
+      estudianteId:     estudianteIdOk,
+      periodoId:        periodoIdOk,
+      cursoId:          cursoIdOk,
+      // Qué papeles se le piden a esta familia. Lo elige quien matricula: el
+      // colegio sabe si viene de traslado, y ninguna regla lo adivina.
+      documentoListaId: Number(documentoListaId) || null,
+      codigoMatricula:  codigoMatricula?.trim() || null,
+      fechaInscripcion: fechaInscripcion || null,
+      inscripcionEfectiva: inscripcion,
+      estado:           estadoNorm,
+      notas:            notas?.trim() || null,
+      becaTipo:         becaTipoOk,
+      becaValor:        becaValorOk,
+      becaMotivo:       becaMotivo?.trim() || null,
+      conceptos:        pedidos,
+    }, plan);
 
     return NextResponse.json({ matricula: row });
   } catch (err: unknown) {
