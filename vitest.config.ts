@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.ts'],
     environment: 'node',
+    // Corre antes que cualquier prueba: impide que `.env` (producción) se cuele
+    // por el `dotenv.config()` de drizzle. Ver el archivo para la historia.
+    setupFiles: ['./tests/setup-sin-produccion.ts'],
   },
   resolve: {
     alias: {
