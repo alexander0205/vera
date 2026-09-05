@@ -34,6 +34,15 @@ const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then((r) => r.jso
 /** Mismo aspecto que las flechas del árbol de Estructura: se ordena igual. */
 const FLECHA = 'shrink-0 rounded text-gray-300 enabled:hover:bg-gray-200 enabled:hover:text-gray-700 disabled:opacity-30';
 
+/** Impacto de borrar un concepto (lo calcula el servidor con `?preview=1`). */
+interface ImpactoConcepto {
+  conceptoId: number; nombre: string;
+  precioIds: number[]; cuotaCount: number;
+  cargosSinHistorial: number[]; cargosProtegidos: number[];
+  productIds: number[]; productosBorrables: number[]; productosConservados: number[];
+  tieneHistorial: boolean; bloqueadoPorMensualidad: boolean;
+}
+
 export function ConceptosCatalogo() {
   const { data, isLoading, mutate } = useSWR<{ conceptos: Concepto[] }>(
     '/api/administracion-escolar/conceptos', fetcher,
@@ -54,6 +63,7 @@ export function ConceptosCatalogo() {
    */
   const calendario = useRef<ApiCalendario | null>(null);
   const [porBorrar, setPorBorrar] = useState<Concepto | null>(null);
+  const [impacto, setImpacto] = useState<ImpactoConcepto | null>(null);
   const [borrando, setBorrando] = useState(false);
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
   const [arrastre, setArrastre] = useState<number | null>(null);
@@ -208,19 +218,27 @@ export function ConceptosCatalogo() {
    * `false` al instante y sin enseñar nada, así que la papelera no hacía
    * absolutamente nada —ni borraba ni avisaba— y parecía rota.
    */
-  async function confirmarBorrado() {
+  /** Abre el diálogo pidiendo antes el impacto real (mismo contrato que Tarifas). */
+  async function pedirBorrado(c: Concepto) {
+    setPorBorrar(c); setImpacto(null); setErrorBorrado(null);
+    const r = await fetch(`/api/administracion-escolar/conceptos/${c.id}?preview=1`, { method: 'DELETE' });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.impacto) setImpacto(j.impacto);
+    else setErrorBorrado(j.error ?? 'No se pudo calcular el impacto.');
+  }
+
+  async function ejecutarBorrado(modo: 'completo' | 'solo-config') {
     const c = porBorrar;
     if (!c) return;
     setBorrando(true);
     try {
-      const res = await fetch(`/api/administracion-escolar/conceptos/${c.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/administracion-escolar/conceptos/${c.id}?modo=${modo}`, { method: 'DELETE' });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         setErrorBorrado(j.error ?? 'No se pudo eliminar');
         return;
       }
-      setPorBorrar(null);
-      setErrorBorrado(null);
+      setPorBorrar(null); setImpacto(null); setErrorBorrado(null);
       if (selId === c.id) setSelId(null);
       await mutate();
     } finally {
@@ -313,30 +331,62 @@ export function ConceptosCatalogo() {
           guardando={guardando}
           error={error}
           onGuardar={() => void guardar()}
-          onBorrar={() => setPorBorrar(borrador)}
+          onBorrar={() => { if (borrador) void pedirBorrado(borrador); }}
           calendario={calendario}
         />
       )}
 
-      <ConfirmDialog
-        open={porBorrar !== null}
-        onOpenChange={(o: boolean) => { if (!o) { setPorBorrar(null); setErrorBorrado(null); } }}
-        title={`Eliminar "${porBorrar?.nombre ?? ''}"`}
-        description={
-          <>
-            Se va con él lo que tenga puesto: su calendario de cuotas y las tarifas
-            de cada grado. Si ya se le cobró a algún alumno, no se puede borrar.
-            {errorBorrado && (
-              <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-                {errorBorrado}
-              </span>
-            )}
-          </>
-        }
-        confirmLabel="Eliminar"
-        destructive
-        loading={borrando}
-        onConfirm={() => void confirmarBorrado()} />
+      {porBorrar && (() => {
+        const cargando = !impacto && !errorBorrado;
+        const bloqueado = impacto?.bloqueadoPorMensualidad ?? false;
+        const historial = impacto?.tieneHistorial ?? false;
+        const modo: 'completo' | 'solo-config' = historial ? 'solo-config' : 'completo';
+        return (
+          <ConfirmDialog
+            open
+            onOpenChange={(o: boolean) => { if (!o) { setPorBorrar(null); setImpacto(null); setErrorBorrado(null); } }}
+            title={
+              bloqueado ? `No se puede eliminar "${porBorrar.nombre}"`
+              : historial ? `"${porBorrar.nombre}" ya tiene facturas`
+              : `Eliminar "${porBorrar.nombre}"`
+            }
+            description={
+              <>
+                {cargando && <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Calculando el impacto…</span>}
+                {impacto && bloqueado && (
+                  <>Hay matrículas que generan su mensualidad con este concepto. Cambia primero la mensualidad de esas matrículas y vuelve a intentarlo.</>
+                )}
+                {impacto && !bloqueado && historial && (
+                  <>
+                    Ya existen facturas o pagos con este concepto, así que <b>no se puede borrar por completo</b>: el historial se conserva.
+                    Puedes quitarlo de la configuración escolar: dejará de generar cargos nuevos y se
+                    conservan el servicio de <b>Productos y servicios</b> y las facturas y cargos ya emitidos.
+                  </>
+                )}
+                {impacto && !bloqueado && !historial && (
+                  <>
+                    Se eliminarán el concepto y su calendario{impacto.cuotaCount > 0 ? ` (${impacto.cuotaCount} cuota${impacto.cuotaCount === 1 ? '' : 's'})` : ''},
+                    {' '}{impacto.precioIds.length} tarifa{impacto.precioIds.length === 1 ? '' : 's'}
+                    {impacto.cargosSinHistorial.length > 0 && <> y {impacto.cargosSinHistorial.length} cargo{impacto.cargosSinHistorial.length === 1 ? '' : 's'} aún sin facturar</>}.
+                    {impacto.productosBorrables.length > 0 && <> También se elimina su servicio de <b>Productos y servicios</b>.</>}
+                  </>
+                )}
+                {errorBorrado && (
+                  <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                    {errorBorrado}
+                  </span>
+                )}
+              </>
+            }
+            confirmLabel={bloqueado ? 'Entendido' : historial ? 'Quitar solo de la configuración' : 'Eliminar todo'}
+            destructive={!bloqueado}
+            loading={borrando || cargando}
+            onConfirm={() => {
+              if (bloqueado) { setPorBorrar(null); setImpacto(null); setErrorBorrado(null); return; }
+              void ejecutarBorrado(modo);
+            }} />
+        );
+      })()}
     </div>
   );
 }

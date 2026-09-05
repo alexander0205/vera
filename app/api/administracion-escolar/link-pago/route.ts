@@ -2,7 +2,9 @@
  * El enlace de pago de un responsable, para poder verlo y mandarlo a mano.
  *
  *   GET ?clientId=N               → { existe:true, url, referencia }  · lo crea si falta
- *   GET ?facturaId=N              → lo mismo, resolviendo el responsable desde la factura
+ *   GET ?facturaId=N              → igual, pero la url viene ACOTADA a esa factura
+ *                                   (`…/pagar/{token}?f=N`): cobra solo su importe,
+ *                                   no toda la deuda de la familia
  *   GET ?clientId=N&consultar=1   → { existe } sin crear nada
  *
  * Lo crea si no existe. No es un efecto raro: el enlace no caduca, es único por
@@ -45,6 +47,10 @@ export async function GET(req: NextRequest) {
   const crudoFactura = sp.get('facturaId');
   const crudoClient = sp.get('clientId');
   let clientId = crudoClient == null ? NaN : Number(crudoClient);
+  // Cuando se pide por factura, el enlace se acota a ESA factura (`?f=`): abre el
+  // cobro de su importe, no de todo lo que debe la familia. El enlace por
+  // contacto (`clientId`) sigue siendo el agregado de siempre.
+  let facturaScopeId: number | null = null;
   if (crudoFactura != null) {
     const facturaId = Number(crudoFactura);
     if (!Number.isInteger(facturaId)) {
@@ -62,7 +68,9 @@ export async function GET(req: NextRequest) {
       );
     }
     clientId = doc.clientId;
+    facturaScopeId = facturaId;
   }
+  const sufijoFactura = facturaScopeId != null ? `?f=${facturaScopeId}` : '';
 
   if (!Number.isInteger(clientId)) {
     return NextResponse.json({ error: 'Falta clientId o facturaId' }, { status: 400 });
@@ -98,7 +106,7 @@ export async function GET(req: NextRequest) {
     const ya = await buscarLink(auth.teamId, clientId);
     return NextResponse.json(
       ya
-        ? { existe: true, url: urlDelLink(ya.token, origenPublico(req)), referencia: ya.referencia }
+        ? { existe: true, url: urlDelLink(ya.token, origenPublico(req)) + sufijoFactura, referencia: ya.referencia }
         : { existe: false },
     );
   }
@@ -108,7 +116,7 @@ export async function GET(req: NextRequest) {
   // alguien lo copie del navegador que lo está pidiendo.
   return NextResponse.json({
     existe: true,
-    url: urlDelLink(link.token, origenPublico(req)),
+    url: urlDelLink(link.token, origenPublico(req)) + sufijoFactura,
     referencia: link.referencia,
   });
 }

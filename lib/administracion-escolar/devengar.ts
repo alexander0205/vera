@@ -30,9 +30,21 @@ export function finDeMes(fecha: string): string {
   return ultimo.toISOString().slice(0, 10);
 }
 
+/** Por qué una generación válida NO ocurrió, para no dejar un pendiente mudo. */
+export interface DiagnosticoDevengo {
+  matriculaId: number;
+  /** 'sin-estructura' | 'cuota-omitida-vigente' */
+  motivo: string;
+  detalle: string;
+}
+
 export interface ResultadoDevengo {
   matriculas: number;
   cargosCreados: number;
+  /** Vacío en el caso normal. Cada entrada explica una cuota que debía salir y
+   *  no salió (plan #5): estructura incompleta, o cuota emitida antes de que el
+   *  alumno entrara. */
+  diagnostico: DiagnosticoDevengo[];
 }
 
 /**
@@ -54,6 +66,22 @@ export function cuotasVigentes(plan: LineaPlan[], conceptos: number[], hasta: st
     .flatMap((l) => l.cuotas
       .filter((c) => !c.omitida && c.fechaEmision <= hasta)
       .map((c) => ({ linea: l, cuota: c })));
+}
+
+/**
+ * Cuotas que YA deberían haberse cobrado (su emisión llegó) pero el motor va a
+ * saltarse porque están `omitida` —emitidas antes de que el alumno entrara—.
+ *
+ * Es justo el «pendiente silencioso» que pedía dejar de existir (plan #5): sin
+ * esto, una mensualidad cuya emisión cae el día 30 nunca aparece como factura y
+ * nadie sabe por qué. No cambia el comportamiento; solo lo hace explicable.
+ */
+export function cuotasOmitidasVigentes(plan: LineaPlan[], conceptos: number[], hasta: string) {
+  return plan
+    .filter((l) => conceptos.includes(l.conceptoId))
+    .flatMap((l) => l.cuotas
+      .filter((c) => c.omitida && c.fechaEmision <= hasta)
+      .map((c) => ({ conceptoId: l.conceptoId, concepto: l.nombre, fechaEmision: c.fechaEmision, mes: c.mes })));
 }
 
 /**
@@ -92,7 +120,22 @@ export async function devengarPeriodo(
    * ya terminó. Se enciende para cerrar un año escolar o subir el histórico.
    */
   incluirFinalizadas = false,
+  /**
+   * Acota el devengo a ciertas matrículas y/o conceptos.
+   *
+   * Lo usa el alta de una tarifa: al ponerle precio a una sección, se materializa
+   * ya la deuda de ESE concepto para las matrículas de esa sección, sin esperar
+   * al cron mensual (regla #4 del plan). Sigue respetando lo que cada matrícula
+   * eligió y el índice único, así que es idempotente: reintentarlo no duplica.
+   */
+  filtro?: { soloMatriculas?: number[]; soloConceptos?: number[] },
 ): Promise<ResultadoDevengo> {
+  // Un filtro vacío (array sin elementos) significaría "ninguna": se trata como
+  // "sin filtro" solo cuando el campo no viene.
+  if (filtro?.soloMatriculas && filtro.soloMatriculas.length === 0) return { matriculas: 0, cargosCreados: 0, diagnostico: [] };
+  if (filtro?.soloConceptos && filtro.soloConceptos.length === 0) return { matriculas: 0, cargosCreados: 0, diagnostico: [] };
+  const soloConceptos = filtro?.soloConceptos ? new Set(filtro.soloConceptos) : null;
+
   const matriculas = await db
     .select({
       id: adminEscolarMatriculas.id,
@@ -117,9 +160,10 @@ export async function devengarPeriodo(
       incluirFinalizadas
         ? inArray(adminEscolarMatriculas.estado, ['activa', 'finalizada'])
         : eq(adminEscolarMatriculas.estado, 'activa'),
+      ...(filtro?.soloMatriculas ? [inArray(adminEscolarMatriculas.id, filtro.soloMatriculas)] : []),
     ));
 
-  if (matriculas.length === 0) return { matriculas: 0, cargosCreados: 0 };
+  if (matriculas.length === 0) return { matriculas: 0, cargosCreados: 0, diagnostico: [] };
 
   /**
    * Un solo devengo a la vez por (colegio, período).
@@ -148,12 +192,18 @@ export async function devengarPeriodo(
   const existentes = new Set(yaHechos.map(claveHecho));
 
   const filas: (typeof adminEscolarCargos.$inferInsert)[] = [];
+  const diagnostico: DiagnosticoDevengo[] = [];
 
   for (const m of matriculas) {
     const ctx = await contextoDeSeccion(teamId, periodoId, m.cursoId, {
       tipo: m.becaTipo, valor: m.becaValor,
     });
-    if (!ctx) continue;
+    if (!ctx) {
+      // La sección de la matrícula no resuelve grado/servicio: sin eso no hay
+      // tarifa que aplicar. Se anota para que no sea un pendiente mudo.
+      diagnostico.push({ matriculaId: m.id, motivo: 'sin-estructura', detalle: `La sección ${m.cursoId} no resuelve grado/servicio.` });
+      continue;
+    }
 
     // El plan se arma desde la inscripción del alumno, no desde hoy: así lo
     // que ya estaba vencido cuando entró sigue sin cobrársele.
@@ -174,7 +224,20 @@ export async function devengarPeriodo(
     const conceptosVivos = plan
       .filter((l) => elegidos.has(l.conceptoId)
         || (elegidos.size === 0 && l.cuotas.some((c) => yaUsados.has(c.cuotaId))))
+      // Con filtro de conceptos, solo esos: el alta de una tarifa no debe
+      // materializar de paso la deuda de otros conceptos pendientes.
+      .filter((l) => !soloConceptos || soloConceptos.has(l.conceptoId))
       .map((l) => l.conceptoId);
+
+    // Cuotas que ya debían salir pero el plan salta por `omitida` (emitidas
+    // antes de que el alumno entrara): el «pendiente silencioso» del plan #5.
+    for (const o of cuotasOmitidasVigentes(plan, conceptosVivos, hasta)) {
+      diagnostico.push({
+        matriculaId: m.id,
+        motivo: 'cuota-omitida-vigente',
+        detalle: `«${o.concepto}» emite ${o.fechaEmision} (antes de la inscripción ${String(desde)}); no se genera.`,
+      });
+    }
 
     for (const { linea, cuota } of cuotasVigentes(plan, conceptosVivos, hasta)) {
       const clave = claveHecho({ matriculaId: m.id, cuotaId: cuota.cuotaId || null, conceptoId: linea.conceptoId });
@@ -202,13 +265,19 @@ export async function devengarPeriodo(
     }
   }
 
-  if (filas.length === 0) return { matriculas: matriculas.length, cargosCreados: 0 };
+  // Un motivo visible en vez de un pendiente callado (plan #5): si algo válido
+  // se saltó, queda en el log del cron y en el resultado.
+  if (diagnostico.length) {
+    console.warn(`[devengo] team ${teamId} período ${periodoId}: ${diagnostico.length} cuota(s) no generadas`, diagnostico);
+  }
+
+  if (filas.length === 0) return { matriculas: matriculas.length, cargosCreados: 0, diagnostico };
 
   const creados = await tx.insert(adminEscolarCargos)
       .values(filas)
       .onConflictDoNothing()
       .returning({ id: adminEscolarCargos.id });
 
-    return { matriculas: matriculas.length, cargosCreados: creados.length };
+    return { matriculas: matriculas.length, cargosCreados: creados.length, diagnostico };
   });
 }

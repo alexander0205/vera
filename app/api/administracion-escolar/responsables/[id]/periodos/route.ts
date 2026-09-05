@@ -127,6 +127,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         recurrenteProxima: m.recurrenteProxima,
         filas,
         pendienteCentavos: vivos.reduce((s, c) => s + c.saldoCentavos, 0),
+        // Un cargo sin factura se debe, pero todavía no se puede cobrar. La
+        // ficha necesita separarlo para no pintar «Debe» en rojo antes de que
+        // exista el documento que la familia puede pagar.
+        porCobrarCentavos: vivos
+          .filter((c) => c.ecfDocumentId != null)
+          .reduce((s, c) => s + c.saldoCentavos, 0),
         previstoCentavos: previstos.reduce((s, p) => s + p.montoCentavos, 0),
       });
     }

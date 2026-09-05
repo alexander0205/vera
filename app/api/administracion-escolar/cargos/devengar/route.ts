@@ -37,9 +37,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No hay un año escolar activo' }, { status: 404 });
   }
 
-  // Hasta fin de mes y no hasta hoy: la mensualidad de septiembre tiene que
-  // existir durante todo septiembre, no solo desde el día 5 que vence.
-  const hasta = finDeMes(cuerpo?.hasta || new Date().toISOString().slice(0, 10));
+  // Por defecto hasta HOY: un cargo nace el día de su emisión, no antes. Ver
+  // el comentario largo en el cron de devengo. Si quien llama manda `hasta`
+  // explícito se respeta —la pantalla de cierre de año necesita llegar al
+  // final del período—, y ahí sí se completa el mes.
+  const hasta = cuerpo?.hasta ? finDeMes(cuerpo.hasta) : new Date().toISOString().slice(0, 10);
   // El cron no manda la bandera; la pantalla de cierre de año sí.
   const incluirFinalizadas = cuerpo?.incluirFinalizadas === true;
   const resultado = await devengarPeriodo(teamId, periodo.id, hasta, incluirFinalizadas);
