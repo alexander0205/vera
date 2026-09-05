@@ -116,6 +116,7 @@ const PLACEHOLDER: Record<ModuleKey, string> = {
   pos:            'Buscar productos, ventas, clientes…',
   escolar:        'Buscar estudiantes, familias, facturas…',
   administracion: 'Buscar usuarios, clientes, facturas…',
+  nomina:         'Buscar empleados, corridas de nómina…',
 };
 
 const MIN_CARACTERES = 2;

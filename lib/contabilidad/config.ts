@@ -52,6 +52,22 @@ export interface ConfigContable {
   cuentaDeprecAcumId:  number | null;
   /** Nivel 4.2 — gasto por depreciación (Debe mensual). */
   cuentaGastoDeprecId: number | null;
+  /** Nómina — gasto de sueldos (Debe, bruto). Fallback: gastos → 6101. */
+  cuentaNominaSueldoId:       number | null;
+  /** Nómina — gasto de aportes patronales (Debe). Fallback: sueldo → gastos → 6101. */
+  cuentaNominaAportesGastoId: number | null;
+  /** Nómina — retenciones al empleado por pagar (Haber). Fallback: por pagar → 2101. */
+  cuentaNominaRetencionesId:  number | null;
+  /** Nómina — aportes patronales por pagar (Haber). Fallback: retenciones → por pagar → 2101. */
+  cuentaNominaAportesPagarId: number | null;
+  /** Nómina — sueldos netos por pagar (Haber). Fallback: por pagar → 2101. */
+  cuentaNominaPorPagarId:     number | null;
+  /** Nómina — si se asienta la provisión (regalía/vac/cesantía) cada mes. Off por defecto. */
+  provisionarNomina:          boolean;
+  /** Nómina — gasto por provisiones (Debe). Fallback: gastos → 6101. */
+  cuentaProvisionGastoId:     number | null;
+  /** Nómina — provisiones por pagar (Haber). Fallback: por pagar → 2101. */
+  cuentaProvisionPorPagarId:  number | null;
   /** Nivel 4.3 — tratamiento del ITBIS pagado en compras. */
   regimenItbis:       RegimenItbis;
 }
@@ -63,6 +79,9 @@ const CONFIG_VACIA: ConfigContable = {
   cuentaSaldosFavorId: null, cuentaRetencionesId: null,
   cuentaInventarioId: null, cuentaPorPagarId: null, cuentaGastosId: null,
   cuentaActivoFijoId: null, cuentaDeprecAcumId: null, cuentaGastoDeprecId: null,
+  cuentaNominaSueldoId: null, cuentaNominaAportesGastoId: null,
+  cuentaNominaRetencionesId: null, cuentaNominaAportesPagarId: null, cuentaNominaPorPagarId: null,
+  provisionarNomina: false, cuentaProvisionGastoId: null, cuentaProvisionPorPagarId: null,
   regimenItbis: 'exento',
 };
 
@@ -92,6 +111,14 @@ export const getConfig = cache(async function getConfig(teamId: number): Promise
            cuenta_activo_fijo_id  AS "cuentaActivoFijoId",
            cuenta_deprec_acum_id  AS "cuentaDeprecAcumId",
            cuenta_gasto_deprec_id AS "cuentaGastoDeprecId",
+           cuenta_nomina_sueldo_id        AS "cuentaNominaSueldoId",
+           cuenta_nomina_aportes_gasto_id AS "cuentaNominaAportesGastoId",
+           cuenta_nomina_retenciones_id   AS "cuentaNominaRetencionesId",
+           cuenta_nomina_aportes_pagar_id AS "cuentaNominaAportesPagarId",
+           cuenta_nomina_por_pagar_id     AS "cuentaNominaPorPagarId",
+           provisionar_nomina             AS "provisionarNomina",
+           cuenta_provision_gasto_id      AS "cuentaProvisionGastoId",
+           cuenta_provision_por_pagar_id  AS "cuentaProvisionPorPagarId",
            regimen_itbis          AS "regimenItbis"
     FROM contabilidad_config
     WHERE team_id = ${teamId}
@@ -204,6 +231,14 @@ export interface GuardarConfigInput {
   cuentaActivoFijoId?:  number | null;
   cuentaDeprecAcumId?:  number | null;
   cuentaGastoDeprecId?: number | null;
+  cuentaNominaSueldoId?:       number | null;
+  cuentaNominaAportesGastoId?: number | null;
+  cuentaNominaRetencionesId?:  number | null;
+  cuentaNominaAportesPagarId?: number | null;
+  cuentaNominaPorPagarId?:     number | null;
+  provisionarNomina?:          boolean;
+  cuentaProvisionGastoId?:     number | null;
+  cuentaProvisionPorPagarId?:  number | null;
   regimenItbis?:       RegimenItbis;
 }
 
@@ -230,13 +265,21 @@ export async function guardarConfig(
     cuentaActivoFijoId:  'cuenta_activo_fijo_id',
     cuentaDeprecAcumId:  'cuenta_deprec_acum_id',
     cuentaGastoDeprecId: 'cuenta_gasto_deprec_id',
+    cuentaNominaSueldoId:       'cuenta_nomina_sueldo_id',
+    cuentaNominaAportesGastoId: 'cuenta_nomina_aportes_gasto_id',
+    cuentaNominaRetencionesId:  'cuenta_nomina_retenciones_id',
+    cuentaNominaAportesPagarId: 'cuenta_nomina_aportes_pagar_id',
+    cuentaNominaPorPagarId:     'cuenta_nomina_por_pagar_id',
+    provisionarNomina:          'provisionar_nomina',
+    cuentaProvisionGastoId:     'cuenta_provision_gasto_id',
+    cuentaProvisionPorPagarId:  'cuenta_provision_por_pagar_id',
     regimenItbis:       'regimen_itbis',
   };
 
   const entradas = Object.entries(input)
     .filter(([k, v]) => k in campos && v !== undefined) as [
       keyof GuardarConfigInput,
-      number | null | RegimenItbis,
+      number | null | boolean | RegimenItbis,
     ][];
 
   if (entradas.length === 0) return getConfig(teamId);

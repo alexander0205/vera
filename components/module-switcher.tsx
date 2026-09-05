@@ -23,7 +23,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2 } from 'lucide-react';
+import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2, Users } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZeroLoader } from '@/components/zero-loader';
 import { anunciarCambioDeModulo } from '@/components/loader-llegada';
@@ -36,6 +36,7 @@ const ICONS: Record<ModuleKey, typeof FileText> = {
   administracion: Building2,
   pos: Store,
   escolar: GraduationCap,
+  nomina: Users,
 };
 
 /**

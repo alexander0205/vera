@@ -20,6 +20,9 @@ const schema = z.object({
                        .regex(/^\d{9}$|^\d{11}$/, 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)')
                        .optional(),
   direccion:         z.string().max(500).optional(),
+  // Representante legal — obliga el contrato laboral estructurado (Ley 16-92 art. 24).
+  nombreRepresentante: z.string().max(255).optional().or(z.literal('')),
+  cedulaRepresentante: z.string().max(11).optional().or(z.literal('')),
   provincia:         z.string().max(100).optional().or(z.literal('')),
   municipio:         z.string().max(100).optional().or(z.literal('')),
   telefono:          z.string().max(30).optional(),
@@ -106,6 +109,8 @@ export async function POST(req: NextRequest) {
     ...(data.nombreComercial   !== undefined && { nombreComercial: data.nombreComercial }),
     ...(data.rnc               !== undefined && { rnc: data.rnc }),
     ...(data.direccion         !== undefined && { direccion: data.direccion }),
+    ...(data.nombreRepresentante !== undefined && { nombreRepresentante: data.nombreRepresentante || null }),
+    ...(data.cedulaRepresentante !== undefined && { cedulaRepresentante: data.cedulaRepresentante || null }),
     ...(data.provincia         !== undefined && { provincia: data.provincia || null }),
     ...(data.municipio         !== undefined && { municipio: data.municipio || null }),
     ...(data.telefono          !== undefined && { telefono: data.telefono } as any),
@@ -184,6 +189,8 @@ export async function GET(_req: NextRequest) {
     nombreComercial:   team.nombreComercial,
     rnc:               team.rnc,
     direccion:         team.direccion,
+    nombreRepresentante: team.nombreRepresentante,
+    cedulaRepresentante: team.cedulaRepresentante,
     provincia:         team.provincia,
     municipio:         team.municipio,
     telefono:          (team as any).telefono,

@@ -6,7 +6,7 @@
  * componentes cliente (module-switcher, hooks).
  */
 
-export const MODULES = ['facturacion', 'administracion', 'pos', 'escolar'] as const;
+export const MODULES = ['facturacion', 'administracion', 'pos', 'escolar', 'nomina'] as const;
 export type ModuleKey = (typeof MODULES)[number];
 
 /**
@@ -31,6 +31,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   administracion: 'Administración',
   pos: 'Punto de Venta',
   escolar: 'Gobernanza de Colegios',
+  nomina: 'Nómina',
 };
 
 /**
@@ -43,6 +44,9 @@ export const MODULE_DEPENDENCIES: Record<ModuleKey, readonly ModuleKey[]> = {
   administracion: [],
   pos: [],
   escolar: ['facturacion'],
+  // Nómina se sostiene sola: los pagos al personal se resuelven con archivo de
+  // dispersión bancaria, no dependen de facturación como el cobro escolar.
+  nomina: [],
 };
 
 /** Expande una lista de módulos con sus dependencias (activar escolar activa facturación). */
@@ -65,6 +69,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   administracion: 'Mi empresa, usuarios y roles',
   pos: 'Terminal de venta, turnos de caja e inventario en piso',
   escolar: 'Estudiantes, matrículas, cargos y pagos del colegio',
+  nomina: 'Empleados, corridas de nómina y pagos al personal',
 };
 
 /** Icono lucide-react de cada módulo (para switcher y cards). */
@@ -73,6 +78,7 @@ export const MODULE_ICONS: Record<ModuleKey, string> = {
   administracion: 'Building2',
   pos: 'Store',
   escolar: 'GraduationCap',
+  nomina: 'Users',
 };
 
 /** Ruta interna raíz de cada módulo (rewrites del proxy apuntan aquí). */
@@ -81,6 +87,7 @@ export const MODULE_HOME: Record<ModuleKey, string> = {
   administracion: '/cuenta',
   pos: '/pos',
   escolar: '/escolar',
+  nomina: '/nomina',
 };
 
 /**

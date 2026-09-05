@@ -63,6 +63,20 @@ const COMPRAS_Y_ACTIVOS: { campo: keyof ConfigContable; label: string; ayuda: st
     ayuda: 'Gasto mensual que reconoce el uso de los activos fijos.' },
 ];
 
+/** Cuentas dedicadas del asiento de nómina. Vacías → usa gastos/por-pagar. */
+const NOMINA: { campo: keyof ConfigContable; label: string; ayuda: string }[] = [
+  { campo: 'cuentaNominaSueldoId', label: 'Gasto de sueldos',
+    ayuda: 'El sueldo bruto del período (Debe). Vacío: usa la de gastos.' },
+  { campo: 'cuentaNominaAportesGastoId', label: 'Gasto de aportes patronales',
+    ayuda: 'Lo que aporta la empresa a la TSS (AFP/SFS/SRL/INFOTEP) como gasto (Debe).' },
+  { campo: 'cuentaNominaRetencionesId', label: 'Retenciones por pagar',
+    ayuda: 'AFP, SFS e ISR que le retienes al empleado y le debes a la TSS/DGII (Haber).' },
+  { campo: 'cuentaNominaAportesPagarId', label: 'Aportes patronales por pagar',
+    ayuda: 'Los aportes de la empresa que quedan por pagar a la TSS (Haber).' },
+  { campo: 'cuentaNominaPorPagarId', label: 'Sueldos netos por pagar',
+    ayuda: 'El neto que se le debe al empleado hasta que se dispersa (Haber).' },
+];
+
 /** Métodos que se ofrecen para configurar, sin los que no mueven dinero. */
 const METODOS_CONFIGURABLES = (Object.keys(CLAVE_METODO_LABEL) as ClaveMetodo[])
   .filter((c) => !CLAVES_SIN_COBRO.includes(c));
@@ -265,6 +279,84 @@ export function ConfigClient({
               <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{g.ayuda}</Typography>
             </Box>
           ))}
+        </Box>
+      </Box>
+
+      {/* ─── Nómina ────────────────────────────────────────────────────── */}
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Nómina
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            Cuentas del asiento que nace al aprobar una corrida. Si las dejas sin configurar, usa la de gastos y la de por pagar generales.
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+          {NOMINA.map((g) => (
+            <Box key={g.campo} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                {g.label}
+              </Typography>
+              {selectCuenta(
+                configInicial[g.campo] as number | null,
+                (id) => enviar({ seccion: 'nomina', [g.campo]: id }),
+              )}
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{g.ayuda}</Typography>
+            </Box>
+          ))}
+        </Box>
+
+        {/* Provisiones (regalía / vacaciones / cesantía) */}
+        <Box sx={{ borderTop: '1px solid #e5e7eb', pt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                Provisionar en contabilidad
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                Asienta cada mes la provisión de regalía, vacaciones y cesantía. Apagado por defecto.
+              </Typography>
+            </Box>
+            {puedeConfigurar && (
+              <Button
+                size="small"
+                variant={configInicial.provisionarNomina ? 'outlined' : 'contained'}
+                color={configInicial.provisionarNomina ? 'inherit' : 'primary'}
+                disabled={guardando}
+                onClick={() => enviar({ seccion: 'nomina', provisionarNomina: !configInicial.provisionarNomina })}
+                sx={configInicial.provisionarNomina ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
+              >
+                {configInicial.provisionarNomina ? 'Apagar' : 'Encender'}
+              </Button>
+            )}
+          </Box>
+
+          {configInicial.provisionarNomina && (
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                  Gasto por provisiones
+                </Typography>
+                {selectCuenta(
+                  configInicial.cuentaProvisionGastoId,
+                  (id) => enviar({ seccion: 'nomina', cuentaProvisionGastoId: id }),
+                )}
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>El gasto mensual (Debe). Vacío: usa la de gastos.</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                  Provisiones por pagar
+                </Typography>
+                {selectCuenta(
+                  configInicial.cuentaProvisionPorPagarId,
+                  (id) => enviar({ seccion: 'nomina', cuentaProvisionPorPagarId: id }),
+                )}
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>El pasivo que se acumula (Haber). Vacío: usa la de por pagar.</Typography>
+              </Box>
+            </Box>
+          )}
         </Box>
       </Box>
 
