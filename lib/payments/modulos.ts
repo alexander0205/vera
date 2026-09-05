@@ -18,7 +18,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams, users, type Team } from '@/lib/db/schema';
 import { stripe } from '@/lib/payments/stripe';
 import { MODULES, sanitizeModules, type ModuleKey } from '@/lib/config/modules';
-import { ADDONS } from '@/lib/config/plans';
+import { adicionalDelItem } from '@/lib/payments/catalogo-stripe';
 
 export const MODULE_PRICE_IDS: Record<ModuleKey, string> = {
   facturacion: process.env.STRIPE_PRICE_MODULO_FACTURACION ?? '',
@@ -67,19 +67,19 @@ export function modulesFromSubscription(subscription: Stripe.Subscription): Modu
  * desde dos épocas del producto: el POS se vende hoy como el adicional de
  * US$9 sobre cualquier plan de la línea e-CF, y comparte el price
  * (STRIPE_PRICE_MODULO_POS) con el esquema anterior de billing por módulo.
- * Por eso esto lee la misma env que MODULE_PRICE_IDS en vez de una nueva:
- * dos nombres para el mismo precio terminarían desincronizados.
+ *
+ * Se resuelve por precio primero y por PRODUCTO después, igual que el plan: a
+ * un adicional también se le puede colgar un precio negociado en Stripe, y
+ * comparando solo el price ID el POS de ese cliente desaparecía de la lista
+ * aunque lo estuviera pagando todos los meses.
  */
-export function addonsFromSubscription(subscription: Stripe.Subscription): string[] {
-  const activos = new Set<string>();
-  for (const item of subscription.items.data) {
-    const priceId = item.price?.id ?? '';
-    if (!priceId) continue;
-    for (const addon of ADDONS) {
-      if (process.env[addon.priceEnvKey] === priceId) activos.add(addon.key);
-    }
-  }
-  return [...activos];
+export async function addonsFromSubscription(
+  subscription: Stripe.Subscription,
+): Promise<string[]> {
+  const encontrados = await Promise.all(
+    subscription.items.data.map(item => adicionalDelItem(item)),
+  );
+  return [...new Set(encontrados.filter(Boolean).map(a => a!.key))];
 }
 
 /** Segundos de época de Stripe → Date. null cuando el campo no viene. */
@@ -155,7 +155,7 @@ export async function syncModulesFromSubscription(
     .set({
       // Al perder la suscripción los adicionales se caen: son items de esa
       // suscripción y sin ella no hay nada contratado.
-      adicionales: vigente ? addonsFromSubscription(subscription) : [],
+      adicionales: vigente ? await addonsFromSubscription(subscription) : [],
       ...fechasDelCiclo(subscription),
       updatedAt: new Date(),
     })

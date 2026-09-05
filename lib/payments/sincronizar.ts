@@ -26,7 +26,8 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { stripe } from '@/lib/payments/stripe';
 import { syncModulesFromSubscription } from '@/lib/payments/modulos';
-import { getPlanByPriceId, FREE_PLAN } from '@/lib/config/plans';
+import { FREE_PLAN } from '@/lib/config/plans';
+import { planDelItem, productoDelItem } from '@/lib/payments/catalogo-stripe';
 
 export type ResultadoSync =
   | { aplicado: false; motivo: 'team-no-existe' | 'acceso-admin' | 'sin-customer' }
@@ -118,17 +119,34 @@ export async function sincronizarConStripe(teamId: number): Promise<ResultadoSyn
     return { aplicado: true, status: null, plan: null };
   }
 
-  const priceId = sub.items.data[0]?.price?.id ?? '';
   const vigente = sigueVigente(sub.status);
+
+  /**
+   * Cuál de los items es el PLAN.
+   *
+   * Antes se daba por hecho que era el primero y que su precio sería uno del
+   * catálogo. Las dos cosas fallan: una suscripción con adicional trae varios
+   * items y Stripe no promete el orden, y el precio puede ser uno negociado
+   * que no está en ninguna variable de entorno. Cuando cualquiera de las dos
+   * pasaba, el plan salía `free` y el cliente perdía los módulos que paga.
+   *
+   * Se busca entre TODOS los items el primero que resuelva a un plan —por
+   * precio, y si no por producto—. Si ninguno resuelve se conserva el primer
+   * item para `stripeProductId`, que sigue siendo el dato más fiel de qué se
+   * le vendió.
+   */
+  const items = sub.items.data;
+  const resueltos = await Promise.all(items.map(async it => ({ it, plan: await planDelItem(it) })));
+  const delPlan = resueltos.find(r => r.plan) ?? { it: items[0], plan: null };
 
   // past_due y paused CONSERVAN el plan: son «arregla el pago», no «no tienes
   // nada», y la ventana de solo-lectura necesita seguir enseñando cuál era.
-  const planName = vigente ? getPlanByPriceId(priceId).key : FREE_PLAN.key;
+  const planName = vigente ? (delPlan.plan ?? FREE_PLAN).key : FREE_PLAN.key;
 
   await db.update(teams)
     .set({
       stripeSubscriptionId: sub.id,
-      stripeProductId: vigente ? ((sub.items.data[0]?.price?.product as string) ?? null) : null,
+      stripeProductId: vigente ? productoDelItem(delPlan.it ?? {}) : null,
       planName,
       subscriptionStatus: sub.status,
       updatedAt: new Date(),
