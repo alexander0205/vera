@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import ComprobantesUploader, { type Pendiente } from '@/components/pagos/ComprobantesUploader';
 import { PagoMetodos, sumaPagos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 import type { EmpresaPerfil, Retencion, ItemLinea } from '../utils/types';
 import { calcularMontoItem } from '../utils/calculos';
@@ -33,6 +34,13 @@ interface Props {
   /** Líneas de pago (1 línea = pago normal). Controladas por el padre. */
   pagoLineas?: PagoLinea[];
   setPagoLineas?: (v: PagoLinea[]) => void;
+  /**
+   * Comprobantes elegidos antes de que la factura exista. El padre los sube en
+   * cuanto la crea; aquí solo se recogen. Sin estas props el bloque no se
+   * dibuja, así que las pantallas que no lo quieran no cambian.
+   */
+  comprobantesPendientes?: Pendiente[];
+  setComprobantesPendientes?: (v: Pendiente[]) => void;
   /**
    * Deja de ser barra lateral y pasa a ser un paso del formulario.
    *
@@ -83,6 +91,7 @@ export function ResumenSidebar({
   pagoRecibido = false, setPagoRecibido,
   pagoFecha = '', setPagoFecha,
   pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
+  comprobantesPendientes, setComprobantesPendientes,
   enPaso = false,
 }: Props) {
   const [resumenOpen, setResumenOpen] = useState(true);
@@ -415,6 +424,20 @@ export function ResumenSidebar({
                     total={totalNeto}
                     showCuenta
                   />
+
+                  {/* Comprobante en el mismo acto de facturar. `docId={null}`
+                      porque la factura todavía no existe: los archivos esperan
+                      en memoria y suben en cuanto nace. */}
+                  {setComprobantesPendientes && (
+                    <ComprobantesUploader
+                      docId={null}
+                      adjuntos={[]}
+                      onChange={() => {}}
+                      pendientes={comprobantesPendientes ?? []}
+                      onPendientesChange={setComprobantesPendientes}
+                      compacto
+                    />
+                  )}
 
                   {/* Fecha — compacta, default hoy, secundaria */}
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, pt: 0.5 }}>

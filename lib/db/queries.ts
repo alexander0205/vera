@@ -11,6 +11,7 @@ import {
   sequences,
   ecfDocuments,
   pagosRecibidos,
+  adminEscolarCuentasBanco,
   cajaTurnos,
 } from './schema';
 import { cookies } from 'next/headers';
@@ -1255,6 +1256,34 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
   return sum;
 }
 
+/**
+ * De unos ids de cuenta bancaria, cuáles son de ESTE equipo.
+ *
+ * El id viaja desde el navegador, así que sin comprobarlo se podría atar un
+ * cobro a la cuenta de otra empresa —y con ella saldría en su reporte de
+ * «cuánto entró por esta cuenta»—. Un id ajeno no revienta el cobro: se guarda
+ * como null y queda la etiqueta en `cuenta`, porque tumbar un pago legítimo por
+ * esto sería peor que perder una referencia.
+ */
+async function cuentasBancoDelEquipo(
+  teamId: number,
+  ids: (number | null | undefined)[],
+): Promise<Set<number>> {
+  const pedidos = [...new Set(
+    ids.filter((x): x is number => typeof x === 'number' && x > 0),
+  )];
+  if (pedidos.length === 0) return new Set();
+
+  const filas = await db
+    .select({ id: adminEscolarCuentasBanco.id })
+    .from(adminEscolarCuentasBanco)
+    .where(and(
+      eq(adminEscolarCuentasBanco.teamId, teamId),
+      inArray(adminEscolarCuentasBanco.id, pedidos),
+    ));
+  return new Set(filas.map(f => f.id));
+}
+
 export async function registrarPago(input: {
   teamId:        number;
   ecfDocumentId: number;
@@ -1262,6 +1291,7 @@ export async function registrarPago(input: {
   metodo:        string;
   referencia?:   string | null;
   cuenta?:       string | null;
+  cuentaBancoId?: number | null;
   fechaPago:     string; // YYYY-MM-DD
   notas?:        string | null;
   turnoCajaId?:  number | null;
@@ -1280,6 +1310,7 @@ export async function registrarPago(input: {
       metodo:        input.metodo,
       referencia:    input.referencia ?? null,
       cuenta:        input.cuenta ?? null,
+      cuentaBancoId: input.cuentaBancoId ?? null,
       notas:         input.notas ?? null,
     }],
   });
@@ -1312,6 +1343,8 @@ export async function registrarPagosSplit(input: {
     metodo:        string;
     referencia?:   string | null;
     cuenta?:       string | null;
+    /** Cuenta de la empresa a la que entró. Se valida que sea SUYA. */
+    cuentaBancoId?: number | null;
     notas?:        string | null;
   }>;
 }) {
@@ -1360,6 +1393,10 @@ export async function registrarPagosSplit(input: {
     throw new Error(`Monto excede saldo pendiente (RD$${(saldo / 100).toFixed(2)})`);
   }
 
+  const cuentasPropias = await cuentasBancoDelEquipo(
+    input.teamId, input.pagos.map(p => p.cuentaBancoId),
+  );
+
   const pagos = await db.insert(pagosRecibidos).values(
     input.pagos.map(p => ({
       teamId:        input.teamId,
@@ -1368,6 +1405,7 @@ export async function registrarPagosSplit(input: {
       metodo:        p.metodo,
       referencia:    p.referencia ?? null,
       cuenta:        p.cuenta ?? null,
+      cuentaBancoId: cuentasPropias.has(p.cuentaBancoId ?? -1) ? p.cuentaBancoId! : null,
       fechaPago:     input.fechaPago,
       notas:         p.notas ?? null,
       turnoCajaId:   input.turnoCajaId ?? null,
@@ -1410,6 +1448,8 @@ export async function registrarPagoFacturaConMora(input: {
     metodo:        string;
     referencia?:   string | null;
     cuenta?:       string | null;
+    /** Cuenta de la empresa a la que entró. Se valida que sea SUYA. */
+    cuentaBancoId?: number | null;
     notas?:        string | null;
     /** NC consumida (metodo='nota_credito'). Voucher de uso único. */
     notaCreditoId?: number | null;
@@ -1488,6 +1528,7 @@ export async function registrarPagoFacturaConMora(input: {
     metodo:        string;
     referencia:    string | null;
     cuenta:        string | null;
+    cuentaBancoId: number | null;
     notas:         string | null;
     notaCreditoId: number | null;
   };
@@ -1511,6 +1552,7 @@ export async function registrarPagoFacturaConMora(input: {
         metodo:        linea.metodo,
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
+        cuentaBancoId: linea.cuentaBancoId ?? null,
         notas:         linea.notas ?? null,
         notaCreditoId: ncId,
       });
@@ -1530,6 +1572,7 @@ export async function registrarPagoFacturaConMora(input: {
         metodo:        linea.metodo,
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
+        cuentaBancoId: linea.cuentaBancoId ?? null,
         notas:         linea.notas ?? null,
         notaCreditoId: ncId,
       });
@@ -1541,6 +1584,9 @@ export async function registrarPagoFacturaConMora(input: {
 
   let filasInsertadas: { id: number }[] = [];
   if (inserts.length > 0) {
+    const cuentasPropias = await cuentasBancoDelEquipo(
+      input.teamId, inserts.map(i => i.cuentaBancoId),
+    );
     filasInsertadas = await db.insert(pagosRecibidos).values(
       inserts.map(i => ({
         teamId:        input.teamId,
@@ -1550,6 +1596,7 @@ export async function registrarPagoFacturaConMora(input: {
         notaCreditoId: i.notaCreditoId,
         referencia:    i.referencia,
         cuenta:        i.cuenta,
+        cuentaBancoId: cuentasPropias.has(i.cuentaBancoId ?? -1) ? i.cuentaBancoId : null,
         fechaPago:     input.fechaPago,
         notas:         i.notas,
         turnoCajaId:   input.turnoCajaId ?? null,

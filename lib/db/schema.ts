@@ -885,8 +885,19 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   notaCreditoId:   integer('nota_credito_id'),
   /** Identificador opcional: número de cheque, últimos 4 de tarjeta, etc. */
   referencia:      varchar('referencia', { length: 100 }),
-  /** Cuenta bancaria/caja a la que entró (free-text). */
+  /**
+   * Lo que se le enseñó al usuario: «Banco Popular · Corriente ····4821»,
+   * «Caja general», o los slugs viejos («bhd»). Texto libre a propósito —
+   * no todo cobro entra en una cuenta de la empresa.
+   */
   cuenta:          varchar('cuenta', { length: 100 }),
+  /**
+   * La cuenta de la empresa a la que entró, cuando se eligió una real. ESTA es
+   * la que manda para agrupar: sobrevive a que renombren la cuenta, mientras
+   * que `cuenta` guarda el nombre del día del cobro. Null en efectivo, tarjeta,
+   * «Otro» y en todo el histórico anterior a la migración 0173.
+   */
+  cuentaBancoId:   integer('cuenta_banco_id'),
   /** Fecha del pago (YYYY-MM-DD), separada de createdAt para registros backdated. */
   fechaPago:       date('fecha_pago').notNull(),
   notas:           text('notas'),

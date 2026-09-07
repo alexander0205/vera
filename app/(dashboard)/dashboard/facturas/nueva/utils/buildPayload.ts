@@ -65,17 +65,27 @@ export function buildPayload(input: BuildPayloadInput) {
       metodo: l.metodo,
       valor:  parseFloat(l.valor || '0') || 0,
       cuenta: l.cuenta?.trim() || '',
+      cuentaBancoId: l.cuentaBancoId ?? null,
     }))
     .filter(l => l.valor > 0);
   const usarSplit = pagoRecibido && lineasValidas.length > 1;
+  // La cuenta y la referencia viajan por línea: `registrarPagosSplit` las acepta
+  // desde siempre y esto las tiraba, así que un pago dividido perdía a qué banco
+  // entró cada parte mientras que el pago simple sí lo guardaba.
   const pagosArray = usarSplit
-    ? lineasValidas.map(l => ({ metodo: l.metodo, valor: l.valor }))
+    ? lineasValidas.map(l => ({
+        metodo: l.metodo,
+        valor: l.valor,
+        cuenta: l.cuenta || undefined,
+        cuentaBancoId: l.cuentaBancoId ?? undefined,
+      }))
     : [];
   // En modo single tomamos la primera línea válida (o la primera si ninguna tiene valor).
   const single = lineasValidas[0] ?? {
     metodo: pagoLineas[0]?.metodo ?? 'efectivo',
     valor:  0,
     cuenta: pagoLineas[0]?.cuenta?.trim() || '',
+    cuentaBancoId: pagoLineas[0]?.cuentaBancoId ?? null,
   };
   const pagoMetodo = single.metodo;
   const pagoCuenta = single.cuenta;
@@ -137,6 +147,10 @@ export function buildPayload(input: BuildPayloadInput) {
           // Beneficiario por línea — el backend valida items[].dependienteId.
           dependienteId:          item.dependienteId ?? undefined,
           dependienteNombre:      item.dependienteNombre || undefined,
+          // De qué cuota escolar salió la línea. Viaja para poder reconstruir
+          // el vínculo cargo↔factura sin depender de que alguien pulse
+          // «Vincular»: ver el comentario en `LineaPrefill.cuotaClave`.
+          cuotaClave:             item.cuotaClave || undefined,
         };
       }),
     // Campos extra
@@ -151,6 +165,7 @@ export function buildPayload(input: BuildPayloadInput) {
     pagoRecibido: (pagoRecibido || usarSplit) || undefined,
     pagoMetodo:   (pagoRecibido && !usarSplit) ? pagoMetodo : undefined,
     pagoCuenta:   (pagoRecibido && !usarSplit) ? pagoCuenta : undefined,
+    pagoCuentaBancoId: (pagoRecibido && !usarSplit) ? (single.cuentaBancoId ?? undefined) : undefined,
     pagoValor:    (pagoRecibido && !usarSplit && pagoValor) ? parseFloat(pagoValor) : undefined,
     pagoFecha:    (pagoRecibido || usarSplit) ? pagoFecha : undefined,
     pagos:        usarSplit ? pagosArray : undefined,
@@ -183,6 +198,7 @@ export function buildPayload(input: BuildPayloadInput) {
         variantNombre:          i.variantNombre ?? null,
         dependienteId:          i.dependienteId ?? null,
         dependienteNombre:      i.dependienteNombre ?? '',
+        cuotaClave:             i.cuotaClave ?? null,
       }))
     ),
   };
