@@ -144,7 +144,10 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
       const e = m.get(k) ?? { alumno: g.alumno || 'Sin alumno', total: 0, pendiente: 0, vencido: 0, cargos: [] };
       e.total += g.montoCentavos;
       e.pendiente += g.saldoCentavos;
-      if (g.saldoCentavos > 0 && g.fechaVencimiento && g.fechaVencimiento < hoy) {
+      // Vencido solo cuenta lo YA facturado: sin factura emitida no hay
+      // documento que pueda estar vencido, aunque la fecha del plan ya pasara.
+      // Lo que toca con un cargo sin facturar es emitirlo, no perseguir un pago.
+      if (g.saldoCentavos > 0 && g.ecfDocumentId != null && g.fechaVencimiento && g.fechaVencimiento < hoy) {
         e.vencido += g.saldoCentavos;
       }
       e.cargos.push(g);
@@ -199,6 +202,19 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const cobrado = (facturadoCargos - pendienteCargos) + cobradoSueltas;
   const vencido = porHijo.reduce((s, h) => s + h.vencido, 0);
   const totalPagado = data.pagos.reduce((s, p) => s + p.montoCentavos, 0);
+
+  /*
+    Lo pendiente, partido en lo que ya se puede cobrar y lo que falta por emitir.
+
+    El rojo de «Pendiente»/«Debe» es de lo primero: una factura emitida (suelta o
+    de un cargo) con el saldo abierto. Un cargo aún sin facturar se debe, pero lo
+    que toca con él es emitirlo; pintarlo en rojo lo hacía leer como una cuota
+    vencida y perseguir un pago que todavía no se puede cobrar.
+  */
+  const pendientePorFacturar = data.cargos
+    .filter((g) => g.ecfDocumentId == null)
+    .reduce((s, g) => s + Math.max(0, g.saldoCentavos), 0);
+  const pendientePorCobrar = Math.max(0, pendiente - pendientePorFacturar);
 
   /*
     Lo que se puede meter en una factura nueva.
@@ -299,12 +315,18 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
               {data.hijos.length} {data.hijos.length === 1 ? 'hijo matriculado' : 'hijos matriculados'}
             </Typography>
             <Separador />
-            {pendiente > 0 ? (
+            {pendiente <= 0 ? (
+              <Pastilla tono="verde" icono={<Check className="h-3 w-3" />}>Al día</Pastilla>
+            ) : pendientePorCobrar > 0 ? (
               <Pastilla tono="rojo" icono={<AlertTriangle className="h-3 w-3" />}>
                 Debe {fmtDOP(pendiente)}
               </Pastilla>
             ) : (
-              <Pastilla tono="verde" icono={<Check className="h-3 w-3" />}>Al día</Pastilla>
+              // Todo lo que se debe está aún sin facturar: no se alarma, se
+              // emite. Lo dice en vez de pintarlo en rojo.
+              <Pastilla tono="gris" icono={<Receipt className="h-3 w-3" />}>
+                Por facturar {fmtDOP(pendiente)}
+              </Pastilla>
             )}
             <Pastilla tono="gris">
               {sinCanal ? 'No se le puede avisar' : 'Cuenta activa'}
@@ -416,10 +438,15 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             detalle={`${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`}
             tono={cobrado > 0 ? 'verde' : 'gris'} />
           <Cifra icon={AlertTriangle} label="Pendiente" valor={fmtDOP(pendiente)}
-            detalle={deudaFacturas > 0
-              ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas`
-              : (pendiente > 0 ? 'Del plan de cobro' : 'Nada por cobrar')}
-            tono={pendiente > 0 ? 'rojo' : 'gris'} />
+            // Rojo solo por lo emitido sin cobrar. Si además queda por facturar,
+            // se dice aparte para no mezclarlo con lo que ya es exigible.
+            detalle={pendientePorCobrar > 0 && pendientePorFacturar > 0
+              ? `Por cobrar ${fmtDOP(pendientePorCobrar)} · por facturar ${fmtDOP(pendientePorFacturar)}`
+              : pendientePorCobrar > 0
+              ? (deudaFacturas > 0 ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas` : 'Del plan de cobro')
+              : pendientePorFacturar > 0 ? 'Aún por facturar'
+              : 'Nada por cobrar'}
+            tono={pendientePorCobrar > 0 ? 'rojo' : 'gris'} />
           <Cifra icon={CalendarDays} label="Vencido" valor={fmtDOP(vencido)}
             // Solo del plan de cobro: una factura suelta no lleva fecha de
             // vencimiento en el módulo, y contarla aquí sería inventarle una.

@@ -20,6 +20,7 @@ import 'server-only';
 import { randomBytes } from 'crypto';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
 import { teamHasModule } from '@/lib/auth/modules';
+import { morasPendientesDeResponsable, type MoraPendiente } from './mora-familia';
 import { and, eq, gt, ne, asc, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
@@ -32,6 +33,8 @@ import {
   adminEscolarConceptosPago,
   clients,
   teams,
+  ecfDocuments,
+  pagosRecibidos,
 } from '@/lib/db/schema';
 
 /**
@@ -167,6 +170,22 @@ export interface DatosTransferencia {
   completo: boolean;
 }
 
+/**
+ * Lo que se enseña cuando el enlace apunta a una factura YA SALDADA.
+ *
+ * Sin esto la página caía en «Esta factura no tiene saldo pendiente» y nada
+ * más: ni cuánto, ni cuándo, ni de qué alumno. El padre que entra a comprobar
+ * que su pago llegó necesita justo lo contrario de una pantalla de cobro —un
+ * comprobante—, y la lista de cargos no sirve para armarlo porque descarta a
+ * propósito lo pagado.
+ */
+export interface FacturaPagada {
+  montoCentavos: number;
+  /** Alumno y concepto de cada línea, aunque el cargo ya esté saldado. */
+  lineas: { estudiante: string; concepto: string }[];
+  pagos: { montoCentavos: number; metodo: string; fecha: string }[];
+}
+
 export interface VistaLinkPago {
   referencia: string;
   colegio: {
@@ -182,11 +201,31 @@ export interface VistaLinkPago {
   };
   estudiantes: string[];
   cargos: CargoPendiente[];
+  /**
+   * Los recargos por pago tardío, aparte de los cargos.
+   *
+   * Van en su propia lista y no mezclados con las cuotas porque son otra cosa:
+   * una nota de débito con su propio documento y su propio saldo, no una
+   * mensualidad. Pero SÍ entran en `totalCentavos` — si no, el padre transfiere
+   * la colegiatura, se queda tranquilo, y la mora sigue creciendo sin que él
+   * haya visto nunca que existía. Eso es exactamente lo que pasaba: RD$215,321
+   * de mora repartidos en 124 notas que ningún padre podía ver.
+   */
+  moras: MoraPendiente[];
   totalCentavos: number;
   transferencia: DatosTransferencia;
   comprobantes: ComprobanteEnEspera[];
   /** Hay uno subido esperando al colegio: se enseña el aviso naranja. */
   hayPendiente: boolean;
+  /**
+   * El enlace abierto para UNA factura concreta, no para todo lo que debe la
+   * familia. Cuando está, la página cobra solo esa factura y su importe; los
+   * demás cargos del responsable ni se muestran ni entran en el total. `null` es
+   * el enlace de siempre, agregado por responsable.
+   */
+  facturaScope: { id: number; encf: string | null; codigo: string | null } | null;
+  /** Solo con `?f=` y la factura sin saldo: el recibo. */
+  facturaPagada: FacturaPagada | null;
 }
 
 /** Contexto interno: lo que las rutas necesitan y la página no enseña. */
@@ -212,7 +251,10 @@ function hoyISO(): string {
  * propósito: un token inválido y uno revocado dan la misma pantalla, para no
  * confirmarle a nadie que un token existió.
  */
-export async function resolverLink(token: string): Promise<LinkResuelto | null> {
+export async function resolverLink(
+  token: string,
+  facturaScopeId?: number,
+): Promise<LinkResuelto | null> {
   const [link] = await db
     .select({
       id:         adminEscolarLinksPago.id,
@@ -250,6 +292,109 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
    */
   if (!(await teamHasModule(link.teamId, 'escolar'))) return null;
 
+  /**
+   * Enlace de UNA factura, no de todo lo que debe la familia.
+   *
+   * Se valida que la factura sea de ESTE responsable —mismo team y su
+   * `client_id`— antes de acotar nada. Un id de otra familia no se acota a sus
+   * cargos: deja la lista vacía (no se enseña la deuda agregada de nadie). Si se
+   * pidió acotar pero la factura no es del responsable, se fuerza un id
+   * imposible para que no se cuele el enlace agregado.
+   */
+  let facturaScope: { id: number; encf: string | null; codigo: string | null } | null = null;
+  // Los cargos de ESA factura, pagados o no. Sirve para acotar también los
+  // comprobantes: en la página de una factura solo aparece el pago de esa
+  // factura, no un «Pago confirmado» de otra cuota de la misma familia.
+  let facturaCargoIds: Set<number> | null = null;
+  const acotaFactura = facturaScopeId != null && Number.isInteger(facturaScopeId);
+  if (acotaFactura) {
+    const [f] = await db
+      .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.id, facturaScopeId!),
+        eq(ecfDocuments.teamId, link.teamId),
+        eq(ecfDocuments.clientId, link.clientId),
+      ))
+      .limit(1);
+    facturaScope = f ?? null;
+
+    facturaCargoIds = new Set<number>();
+    if (facturaScope) {
+      const filasFactura = await db
+        .select({ id: adminEscolarCargos.id })
+        .from(adminEscolarCargos)
+        .where(and(
+          eq(adminEscolarCargos.teamId, link.teamId),
+          eq(adminEscolarCargos.ecfDocumentId, facturaScope.id),
+        ));
+      for (const r of filasFactura) facturaCargoIds.add(r.id);
+    }
+  }
+  const scopeCondition = acotaFactura
+    ? eq(adminEscolarCargos.ecfDocumentId, facturaScope?.id ?? -1)
+    : undefined;
+
+  /**
+   * El recibo de una factura ya saldada.
+   *
+   * Va en su propia consulta y no sale de `cargos` porque esa lista descarta a
+   * propósito lo pagado (`saldo > 0`, `estado <> 'pagado'`): sirve para cobrar,
+   * no para dar constancia. Se resuelve aquí, con el mismo cerco de equipo y
+   * cliente que ya validó `facturaScope`, así que no abre nada nuevo.
+   */
+  let facturaPagada: FacturaPagada | null = null;
+  if (facturaScope) {
+    const [doc] = await db
+      .select({ monto: ecfDocuments.montoTotal, estadoPago: ecfDocuments.estadoPago })
+      .from(ecfDocuments)
+      .where(eq(ecfDocuments.id, facturaScope.id))
+      .limit(1);
+
+    if (doc && doc.estadoPago === 'PAGADA') {
+      const [lineas, pagos] = await Promise.all([
+        db
+          .select({
+            nombres:   adminEscolarEstudiantes.nombres,
+            apellidos: adminEscolarEstudiantes.apellidos,
+            concepto:  adminEscolarConceptosPago.nombre,
+          })
+          .from(adminEscolarCargos)
+          .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
+          .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+          .where(and(
+            eq(adminEscolarCargos.teamId, link.teamId),
+            eq(adminEscolarCargos.ecfDocumentId, facturaScope.id),
+          )),
+        db
+          .select({
+            montoCentavos: pagosRecibidos.montoCentavos,
+            metodo:        pagosRecibidos.metodo,
+            fecha:         pagosRecibidos.fechaPago,
+          })
+          .from(pagosRecibidos)
+          .where(and(
+            eq(pagosRecibidos.teamId, link.teamId),
+            eq(pagosRecibidos.ecfDocumentId, facturaScope.id),
+          ))
+          .orderBy(asc(pagosRecibidos.fechaPago)),
+      ]);
+
+      facturaPagada = {
+        montoCentavos: Number(doc.monto ?? 0),
+        lineas: lineas.map((l) => ({
+          estudiante: `${l.nombres} ${l.apellidos}`.trim(),
+          concepto: l.concepto,
+        })),
+        pagos: pagos.map((p) => ({
+          montoCentavos: p.montoCentavos,
+          metodo: p.metodo,
+          fecha: String(p.fecha),
+        })),
+      };
+    }
+  }
+
   const [cargos, datos, cuentas, comprobantes] = await Promise.all([
     db
       .select({
@@ -271,6 +416,9 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
         gt(adminEscolarCargos.saldoCentavos, 0),
         ne(adminEscolarCargos.estado, 'anulado'),
         ne(adminEscolarCargos.estado, 'pagado'),
+        // Enlace de una factura: solo sus cargos. `undefined` cuando el enlace
+        // es el agregado de siempre, y `and()` lo ignora.
+        scopeCondition,
       ))
       .orderBy(asc(adminEscolarCargos.fechaVencimiento), asc(adminEscolarCargos.id)),
 
@@ -303,12 +451,26 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
         estado:        adminEscolarComprobantes.estado,
         creadoEn:      adminEscolarComprobantes.creadoEn,
         motivoRechazo: adminEscolarComprobantes.motivoRechazo,
+        cargos:        adminEscolarComprobantes.cargos,
       })
       .from(adminEscolarComprobantes)
       .where(eq(adminEscolarComprobantes.linkId, link.id))
       .orderBy(desc(adminEscolarComprobantes.id))
       .limit(10),
   ]);
+
+  // En la página de una factura, solo sus comprobantes: los que tocaron alguno
+  // de sus cargos. Sin acotar, todos los del responsable (el enlace agregado).
+  const comprobantesVista = facturaCargoIds
+    ? comprobantes.filter((c) => Array.isArray(c.cargos)
+        && c.cargos.some((x) => facturaCargoIds!.has(x.cargoId)))
+    : comprobantes;
+
+  // La mora del responsable, acotada igual que los cargos cuando el enlace
+  // apunta a una factura concreta.
+  const moras = await morasPendientesDeResponsable(
+    link.teamId, link.clientId, acotaFactura ? (facturaScope?.id ?? -1) : null,
+  );
 
   const hoy = hoyISO();
   const filas: CargoPendiente[] = cargos.map((c) => ({
@@ -351,16 +513,20 @@ export async function resolverLink(token: string): Promise<LinkResuelto | null> 
       },
       estudiantes: [...new Set(filas.map((f) => f.estudiante))],
       cargos: filas,
-      totalCentavos: filas.reduce((a, f) => a + f.montoCentavos, 0),
+      moras,
+      totalCentavos: filas.reduce((a, f) => a + f.montoCentavos, 0)
+        + moras.reduce((a, m) => a + m.montoCentavos, 0),
       transferencia,
-      comprobantes: comprobantes.map((c) => ({
+      comprobantes: comprobantesVista.map((c) => ({
         id: c.id,
         montoCentavos: c.montoCentavos,
         estado: c.estado,
         creadoEn: c.creadoEn.toISOString(),
         motivoRechazo: c.motivoRechazo,
       })),
-      hayPendiente: comprobantes.some((c) => c.estado === 'pendiente'),
+      hayPendiente: comprobantesVista.some((c) => c.estado === 'pendiente'),
+      facturaScope,
+      facturaPagada,
     },
   };
 }

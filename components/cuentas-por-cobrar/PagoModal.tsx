@@ -16,6 +16,7 @@ import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
+import ComprobantesUploader, { type AdjuntoSubido } from '@/components/pagos/ComprobantesUploader';
 
 /**
  * Cuenta por cobrar (factura con saldo pendiente). Shape devuelto por
@@ -116,7 +117,32 @@ export function PagoModal({
     { metodo: 'transferencia', valor: '', referencia: '' },
   ]);
 
-  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
+  const [adjuntos, setAdjuntos] = useState<AdjuntoSubido[]>([]);
+
+  /**
+   * Métodos que la empresa marcó como «exige comprobante».
+   *
+   * Hasta ahora este modal no los miraba y tampoco dejaba adjuntar nada, así
+   * que un cobro con un método marcado era un callejón sin salida: el servidor
+   * lo rechazaba («necesita el comprobante adjunto») y desde aquí no había
+   * ninguna forma de darle uno.
+   */
+  const [metodosExige, setMetodosExige] = useState<string[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/equipo/perfil')
+      .then(r => r.json())
+      .then(j => { if (vivo) setMetodosExige(Array.isArray(j.metodosExigeComprobante) ? j.metodosExigeComprobante : []); })
+      .catch(() => { if (vivo) setMetodosExige([]); });
+    return () => { vivo = false; };
+  }, []);
+
+  const exigeComprobante = lineas.some(
+    l => (parseFloat(l.valor || '0') || 0) > 0 && metodosExige.includes(l.metodo),
+  );
+  const faltaComprobante = exigeComprobante && adjuntos.length === 0;
+
+  const valido = pagosValidos(lineas, totalDOP, pagadoDOP) && !faltaComprobante;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -131,13 +157,21 @@ export function PagoModal({
           montoDOP:      parseFloat(l.valor),
           metodo:        l.metodo,
           referencia:    l.referencia?.trim() || undefined,
+          // A qué cuenta entró. El endpoint la acepta desde siempre; este
+          // submit no la mandaba y el banco elegido se perdía en silencio.
+          cuenta:        l.cuenta?.trim() || undefined,
+          cuentaBancoId: l.cuentaBancoId ?? undefined,
           notaCreditoId: l.notaCreditoId ?? undefined,
         }));
 
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaPago: fecha, pagos }),
+        body: JSON.stringify({
+          fechaPago: fecha,
+          pagos,
+          adjuntoIds: adjuntos.map(a => a.id),
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -249,8 +283,17 @@ export function PagoModal({
             total={totalDOP}
             yaPagado={pagadoDOP}
             disabled={guardando}
+            showCuenta
             showReferencia
             notasCredito={notasCredito}
+          />
+
+          <ComprobantesUploader
+            docId={cuenta.id}
+            adjuntos={adjuntos}
+            onChange={setAdjuntos}
+            disabled={guardando}
+            obligatorio={exigeComprobante}
           />
 
           {error && (

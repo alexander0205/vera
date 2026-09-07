@@ -10,6 +10,7 @@ import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
+import { useCuentasBanco } from '@/lib/hooks/useCuentasBanco';
 
 // Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
 export { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -19,7 +20,14 @@ export { METODOS_PAGO } from '@/lib/pagos/metodos';
 export interface PagoLinea {
   metodo: string;      // ver lib/pagos/metodos — fuente única de métodos
   valor: string;       // DOP como string (input controlado)
-  cuenta?: string;     // cuenta bancaria (opcional)
+  cuenta?: string;     // etiqueta de la cuenta, tal como se vio (opcional)
+  /**
+   * La cuenta de la EMPRESA a la que entró, por referencia. `cuenta` guarda el
+   * nombre del día del cobro —y sirve para «Caja general», «Otro» y el
+   * histórico—; esto es lo que sobrevive a que renombren la cuenta y lo que
+   * permite agrupar un reporte por cuenta de verdad. Ver migración 0173.
+   */
+  cuentaBancoId?: number | null;
   referencia?: string; // opcional
   notaCreditoId?: number | null; // NC consumida si metodo='nota_credito'
 }
@@ -33,14 +41,33 @@ export interface NotaCreditoDisponible {
   montoCents: number;
 }
 
-/** Cuentas bancarias sugeridas (igual que en las pantallas originales). */
-const CUENTAS_BANCARIAS: MetodoOption[] = [
+/**
+ * Cuentas de reserva, para la empresa que todavía no cargó las suyas.
+ *
+ * Eran la lista ENTERA hasta ahora: cinco nombres quemados que no tenían nada
+ * que ver con los bancos reales de nadie. Se quedan solo como red — si la
+ * empresa tiene cuentas cargadas manda esa lista, y si no, al menos hay algo
+ * que elegir en vez de un desplegable vacío.
+ *
+ * Los valores son los mismos slugs de siempre (`bhd`, `popular`…) porque en
+ * producción ya hay pagos guardados con ellos y no se van a huerfanizar.
+ */
+const CUENTAS_RESERVA: MetodoOption[] = [
   { value: 'caja',        label: 'Caja general' },
   { value: 'banreservas', label: 'Banreservas' },
   { value: 'popular',     label: 'Banco Popular' },
   { value: 'bhd',         label: 'BHD' },
   { value: 'otro',        label: 'Otro' },
 ];
+
+/**
+ * Métodos en los que el dinero cae en una cuenta concreta.
+ *
+ * Para estos el campo de cuenta se abre SOLO, sin tener que descubrir el enlace
+ * «+ Cuenta». No es cosmético: en producción hay 809 transferencias y 9 dicen a
+ * qué banco entraron. El campo existía; lo que no existía era encontrarlo.
+ */
+const METODOS_CON_BANCO = new Set(['transferencia', 'deposito']);
 
 interface PagoMetodosProps {
   lineas: PagoLinea[];
@@ -119,7 +146,51 @@ export function PagoMetodos({
   // siempre se usan: se ocultan tras un link "+ ..." para no saturar el form.
   const [verCuenta, setVerCuenta]         = useState<Set<number>>(new Set());
   const [verReferencia, setVerReferencia] = useState<Set<number>>(new Set());
-  const cuentaVisible = (i: number, l: PagoLinea) => !!l.cuenta || verCuenta.has(i);
+  // En transferencia y depósito el campo se abre solo: preguntar a qué cuenta
+  // entró el dinero es la mitad del registro, no un extra que haya que buscar.
+  const cuentaVisible = (i: number, l: PagoLinea) =>
+    !!l.cuenta || verCuenta.has(i) || METODOS_CON_BANCO.has(l.metodo);
+
+  /**
+   * Las cuentas que se ofrecen: las de la empresa si las tiene cargadas, y si
+   * no la lista de reserva.
+   *
+   * Se guardan las DOS cosas. La etiqueta en `cuenta`, porque el historial, el
+   * cuadre y el PDF la leen tal cual sin resolver ninguna referencia —y porque
+   * «Caja general» u «Otro» no son cuentas de nadie—. Y el id en
+   * `cuentaBancoId`, que es lo que sobrevive a un renombre y lo que permite
+   * agrupar de verdad. Ver migración 0173.
+   */
+  const { cuentas } = useCuentasBanco();
+  /**
+   * El `value` de una cuenta real es `banco:<id>`, no su etiqueta: dos cuentas
+   * pueden llamarse igual, y del prefijo se saca la referencia que se guarda.
+   * Las de reserva conservan sus slugs de siempre («caja», «otro», «bhd»),
+   * que es lo que hay guardado en producción.
+   */
+  const opcionesCuenta: MetodoOption[] = cuentas.length > 0
+    ? [
+        ...cuentas.map(c => ({ value: `banco:${c.id}`, label: c.etiqueta })),
+        { value: 'caja', label: 'Caja general' },
+        { value: 'otro', label: 'Otro' },
+      ]
+    : CUENTAS_RESERVA;
+
+  /** El valor guardado de una línea, traducido al `value` de la lista. */
+  function valorSeleccionado(l: PagoLinea): string {
+    if (l.cuentaBancoId) return `banco:${l.cuentaBancoId}`;
+    return l.cuenta ?? '';
+  }
+
+  /** Al elegir: se guardan la etiqueta (lo que se vio) y la referencia. */
+  function elegirCuenta(i: number, value: string) {
+    const opcion = opcionesCuenta.find(o => o.value === value);
+    const id = value.startsWith('banco:') ? Number(value.slice(6)) : null;
+    setLinea(i, {
+      cuenta: opcion?.label ?? value,
+      cuentaBancoId: Number.isInteger(id) && id! > 0 ? id : null,
+    });
+  }
   const refVisible    = (i: number, l: PagoLinea) => !!l.referencia || verReferencia.has(i);
   const toggleSet = (set: Set<number>, i: number) => {
     const next = new Set(set); next.add(i); return next;
@@ -260,22 +331,28 @@ export function PagoMetodos({
               />
             </Box>
 
-            {showCuenta && cuentaVisible(i, l) && (
+            {showCuenta && cuentaVisible(i, l) && l.metodo !== METODO_NOTA_CREDITO && (
               <Box sx={{ minWidth: 0 }}>
-                <FieldLabel>Cuenta</FieldLabel>
+                <FieldLabel>{METODOS_CON_BANCO.has(l.metodo) ? 'Banco' : 'Cuenta'}</FieldLabel>
                 <Select
                   size="small"
                   fullWidth
                   displayEmpty
-                  value={l.cuenta ?? ''}
-                  onChange={(e) => setLinea(i, { cuenta: e.target.value })}
+                  value={valorSeleccionado(l)}
+                  onChange={(e) => elegirCuenta(i, e.target.value)}
                   disabled={disabled}
+                  // Un valor guardado que ya no está en la lista —una cuenta
+                  // desactivada, o los slugs viejos— se muestra tal cual en vez
+                  // de dejar el campo en blanco y borrarlo al guardar.
                   renderValue={(selected) => selected
-                    ? (CUENTAS_BANCARIAS.find(c => c.value === selected)?.label ?? String(selected))
+                    ? (opcionesCuenta.find(c => c.value === selected)?.label
+                       // Una cuenta desactivada, o un slug viejo: se enseña la
+                       // etiqueta guardada en vez de dejar el campo en blanco.
+                       ?? l.cuenta ?? String(selected))
                     : <Box component="span" sx={{ color: '#9ca3af' }}>—</Box>}
                   sx={{ mt: 0.5 }}
                 >
-                  {CUENTAS_BANCARIAS.map(c => (
+                  {opcionesCuenta.map(c => (
                     <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
                   ))}
                 </Select>

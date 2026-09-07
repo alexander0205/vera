@@ -61,6 +61,10 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
   const [deleting, setDeleting]         = useState(false);
   const [showImport, setShowImport]     = useState(false);
   const [opError, setOpError]           = useState<string | null>(null);
+  // Si el servicio está atado a tarifas escolares, se sabe ANTES de ofrecer
+  // borrar: el diálogo cambia a una guía en vez del confirm destructivo.
+  const [bloqueoEscolar, setBloqueoEscolar] = useState<string | null>(null);
+  const [chequeandoVinculo, setChequeandoVinculo] = useState(false);
 
   const search = filterValues.q     ?? '';
   const tipoFilter = filterValues.tipo ?? '';
@@ -101,6 +105,18 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
   function abrirEdicion(p: Producto) {
     setEditProductoId(p.id);
     setShowForm(true);
+  }
+
+  /** Abre el borrado, pero antes pregunta si el servicio es escolar. */
+  async function pedirEliminar(p: Producto) {
+    setDeleteTarget(p); setOpError(null); setBloqueoEscolar(null);
+    setChequeandoVinculo(true);
+    try {
+      const res = await fetch(`/api/productos/${p.id}?preview=1`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.vinculadoEscolar) setBloqueoEscolar(data.error as string);
+    } catch { /* si el chequeo falla, cae al confirm normal; el server bloquea igual */ }
+    finally { setChequeandoVinculo(false); }
   }
 
   async function handleEliminar() {
@@ -200,7 +216,7 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
     ...(p.tipo === 'bien' && p.controlaInventario
       ? [{ icon: PackagePlus, title: 'Ver movimientos', onClick: () => { window.location.href = `/dashboard/inventario?productoId=${p.id}`; } }]
       : []),
-    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' as const },
+    { icon: Trash2, title: 'Eliminar', onClick: () => { void pedirEliminar(p); }, variant: 'danger' as const },
   ];
 
   return (
@@ -280,27 +296,49 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
       />
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
+      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) { setDeleteTarget(null); setBloqueoEscolar(null); setOpError(null); } }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar ítem?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Las facturas existentes no se verán afectadas.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Este ítem dejará de aparecer en el selector de nueva factura.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+          {bloqueoEscolar ? (
+            <>
+              <DialogHeader><DialogTitle>No se puede eliminar aquí</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{bloqueoEscolar}</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cerrar</Button>
+                <a href="/escolar/configuracion/tarifas">
+                  <Button>Ir a Tarifas</Button>
+                </a>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader><DialogTitle>¿Eliminar ítem?</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-3">
+                {opError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
+                )}
+                <p className="text-sm text-gray-700">
+                  Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Las facturas existentes no se verán afectadas.
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Este ítem dejará de aparecer en el selector de nueva factura.</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
+                <Button variant="destructive" onClick={handleEliminar} disabled={deleting || chequeandoVinculo}>
+                  {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</>
+                    : chequeandoVinculo ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Comprobando…</>
+                    : 'Sí, eliminar'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </section>

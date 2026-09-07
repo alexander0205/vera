@@ -26,11 +26,36 @@ export interface AdjuntoSubido {
   tieneThumb?: boolean;
 }
 
+/**
+ * Un archivo elegido antes de que exista la factura.
+ *
+ * Al CREAR una factura con su pago todavía no hay `docId` —lo asigna el
+ * servidor— así que no hay nada a lo que colgar el comprobante. En vez de
+ * negarle la subida a la secretaria hasta que guarde, el archivo se queda en
+ * memoria y sube en cuanto la factura nace, con `subirPendientes`.
+ *
+ * El `id` es negativo a propósito: comparte la lista con los ya subidos, que
+ * llevan id real y positivo, y así la galería se pinta con un solo bucle.
+ */
+export interface Pendiente {
+  id:         number;
+  archivo:    File;
+  /** objectURL para la miniatura; null en PDF. Se revoca al quitarlo. */
+  previewUrl: string | null;
+}
+
 interface Props {
-  docId:            number;
+  /**
+   * La factura a la que se cuelgan. `null` = todavía no existe (creación):
+   * los archivos se acumulan en `pendientes` y suben después.
+   */
+  docId:            number | null;
   /** Ids ya subidos. El padre los manda al registrar el pago. */
   adjuntos:         AdjuntoSubido[];
   onChange:         (adjuntos: AdjuntoSubido[]) => void;
+  /** Solo en modo diferido (`docId === null`). */
+  pendientes?:      Pendiente[];
+  onPendientesChange?: (pendientes: Pendiente[]) => void;
   disabled?:        boolean;
   /** El método elegido exige comprobante: cambia el copy y marca el bloque. */
   obligatorio?:     boolean;
@@ -40,6 +65,40 @@ interface Props {
   compacto?:        boolean;
 }
 
+/**
+ * Sube a la factura recién creada los archivos que esperaban en memoria.
+ *
+ * Devuelve los que lograron subir. NO lanza: la factura ya está creada y
+ * emitida, y tumbar ese flujo porque una foto no subió sería cambiar un
+ * problema pequeño por uno grande. Lo que no suba se puede adjuntar después
+ * desde el detalle de la factura, que es justo para lo que sirve esa tarjeta.
+ */
+export async function subirPendientes(
+  docId: number,
+  pendientes: Pendiente[],
+): Promise<{ subidos: AdjuntoSubido[]; fallidos: number }> {
+  const subidos: AdjuntoSubido[] = [];
+  let fallidos = 0;
+
+  for (const p of pendientes) {
+    try {
+      const fd = new FormData();
+      fd.append('docId', String(docId));
+      fd.append('archivo', p.archivo);
+      const res  = await fetch('/api/pagos/adjuntos', { method: 'POST', body: fd });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { fallidos++; continue; }
+      subidos.push(json.adjunto);
+    } catch {
+      fallidos++;
+    } finally {
+      if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+    }
+  }
+
+  return { subidos, fallidos };
+}
+
 function kb(bytes: number): string {
   return bytes < 1024 * 1024
     ? `${Math.round(bytes / 1024)} KB`
@@ -47,12 +106,14 @@ function kb(bytes: number): string {
 }
 
 export default function ComprobantesUploader({
-  docId, adjuntos, onChange, disabled = false, obligatorio = false, max = 5, compacto = false,
+  docId, adjuntos, onChange, pendientes = [], onPendientesChange,
+  disabled = false, obligatorio = false, max = 5, compacto = false,
 }: Props) {
   const [subiendo, setSubiendo]     = useState(false);
   const [viendo, setViendo]         = useState<number | null>(null);
   const [error, setError]           = useState<string | null>(null);
-  const lleno = adjuntos.length >= max;
+  const diferido = docId === null;
+  const lleno = adjuntos.length + pendientes.length >= max;
   const aceptaSoltar = !disabled && !lleno && !subiendo;
 
   // Los archivos llegan ya comprimidos de `ZonaArchivo`: una foto de celular
@@ -60,11 +121,27 @@ export default function ComprobantesUploader({
   const subir = useCallback(async (files: File[]) => {
     if (!files.length) return;
     setError(null);
+
+    const sitio = max - adjuntos.length - pendientes.length;
+    if (sitio <= 0) return;
+
+    // Sin factura todavía: se guardan en memoria y suben al crearla.
+    if (diferido) {
+      const nuevos: Pendiente[] = files.slice(0, sitio).map((archivo, i) => ({
+        // Negativo y decreciente: no puede chocar con un id real.
+        id: -(pendientes.length + i + 1),
+        archivo,
+        previewUrl: archivo.type.startsWith('image/') ? URL.createObjectURL(archivo) : null,
+      }));
+      onPendientesChange?.([...pendientes, ...nuevos]);
+      return;
+    }
+
     setSubiendo(true);
 
     const nuevos: AdjuntoSubido[] = [];
     try {
-      for (const archivo of files.slice(0, max - adjuntos.length)) {
+      for (const archivo of files.slice(0, sitio)) {
         const fd = new FormData();
         fd.append('docId', String(docId));
         fd.append('archivo', archivo);
@@ -81,9 +158,16 @@ export default function ComprobantesUploader({
     } finally {
       setSubiendo(false);
     }
-  }, [adjuntos, docId, max, onChange]);
+  }, [adjuntos, docId, diferido, max, onChange, onPendientesChange, pendientes]);
 
   async function quitar(id: number) {
+    // Id negativo = todavía no subió: solo hay que soltar el objectURL.
+    if (id < 0) {
+      const fuera = pendientes.find(p => p.id === id);
+      if (fuera?.previewUrl) URL.revokeObjectURL(fuera.previewUrl);
+      onPendientesChange?.(pendientes.filter(p => p.id !== id));
+      return;
+    }
     onChange(adjuntos.filter(a => a.id !== id));
     // Si el usuario no tiene permiso de borrar, el archivo queda en la factura
     // pero fuera de este pago. No es un error que valga la pena mostrar.
@@ -107,9 +191,32 @@ export default function ComprobantesUploader({
   // imprimir y guardar salen gratis, y no hay que reimplementar nada.
   const esImagen = (a: AdjuntoSubido) => a.mime.startsWith('image/');
 
+  /**
+   * Subidos y pendientes en una sola lista, para pintarlos con un solo bucle.
+   * Los pendientes traen `previewUrl` porque no tienen endpoint del que sacar
+   * la miniatura: todavía no existen en el servidor.
+   */
+  type Item = AdjuntoSubido & { previewUrl?: string | null };
+  const items: Item[] = [
+    ...adjuntos,
+    ...pendientes.map(p => ({
+      id:          p.id,
+      nombre:      p.archivo.name,
+      mime:        p.archivo.type,
+      tamanoBytes: p.archivo.size,
+      previewUrl:  p.previewUrl,
+    })),
+  ];
+
+  // El visor pide las imágenes al servidor, así que solo entran las ya subidas.
   const imagenes = adjuntos.filter(esImagen);
 
-  function abrir(a: AdjuntoSubido) {
+  function abrir(a: Item) {
+    if (a.id < 0) {
+      // Pendiente: se abre el objectURL, que es lo único que existe de él.
+      if (a.previewUrl) window.open(a.previewUrl, '_blank', 'noopener');
+      return;
+    }
     if (esImagen(a)) {
       setViendo(imagenes.findIndex(i => i.id === a.id));
       return;
@@ -141,7 +248,7 @@ export default function ComprobantesUploader({
       </div>
 
       <div className="flex gap-2 flex-wrap items-start">
-        {adjuntos.map(a => (
+        {items.map(a => (
           <div key={a.id} className="flex flex-col gap-1 w-[70px] group">
             <div className="relative h-[64px] w-[70px] rounded-lg border border-gray-200 bg-white overflow-hidden">
               <button
@@ -156,7 +263,7 @@ export default function ComprobantesUploader({
                   // `size=thumb` trae ~5 KB en vez del original completo. El
                   // binario sale del proxy con sesión; no hay URL pública.
                   <img
-                    src={`/api/pagos/adjuntos/${a.id}?size=thumb`}
+                    src={a.previewUrl ?? `/api/pagos/adjuntos/${a.id}?size=thumb`}
                     alt={a.nombre}
                     loading="lazy"
                     decoding="async"

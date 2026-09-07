@@ -57,9 +57,12 @@ export default function RecordFinancieroClient({ ficha, colegio }: {
   // creó y alguien los anuló— y esconderlos hace que el papel no cuadre con lo
   // que la familia recuerda haber recibido.
   const vivos = cargos.filter((c) => c.estado !== 'anulado');
-  const facturado = vivos.reduce((s, c) => s + c.montoCentavos, 0);
+  const total = vivos.reduce((s, c) => s + c.montoCentavos, 0);
   const pendiente = vivos.reduce((s, c) => s + c.saldoCentavos, 0);
-  const cobrado = facturado - pendiente;
+  const cobrado = total - pendiente;
+  // «Facturado» es solo lo que tiene e-CF; el resto es deuda cargada sin
+  // factura (se detalla en el aviso ámbar de abajo).
+  const facturado = vivos.filter((c) => c.ecfDocumentId != null).reduce((s, c) => s + c.montoCentavos, 0);
 
   const totalPagos = pagos.reduce((s, p) => s + p.montoCentavos, 0);
 

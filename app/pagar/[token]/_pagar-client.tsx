@@ -20,6 +20,8 @@ import { ZonaArchivo } from '@/components/shared/ZonaArchivo';
 const AZUL = '#1d4ed8';
 const BORDE = '#d8dae0';
 const TENUE = '#6b7280';
+const VERDE = '#15803d';
+const VERDE_BORDE = '#bbf7d0';
 
 function dinero(centavos: number): string {
   return `RD$${(centavos / 100).toLocaleString('es-DO', {
@@ -99,8 +101,10 @@ function FilaDato({ etiqueta, valor, copiable, destacado }: {
 
 // ─── Pantalla ────────────────────────────────────────────────────────────────
 
-export function PagarClient({ token, vista, tarjetaHabilitada }: {
+export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
   token: string;
+  /** Enlace de UNA factura: se cobra solo ella. `null` es el enlace agregado. */
+  facturaId: number | null;
   vista: VistaLinkPago;
   tarjetaHabilitada: boolean;
 }) {
@@ -116,8 +120,20 @@ export function PagarClient({ token, vista, tarjetaHabilitada }: {
   const [error, setError] = useState('');
   const [listo, setListo] = useState(false);
 
-  const { transferencia: t, cargos, totalCentavos } = vista;
-  const sinDeuda = cargos.length === 0;
+  const { transferencia: t, cargos, moras, totalCentavos } = vista;
+  /**
+   * Sin deuda es sin NADA que cobrar, cuotas y recargos.
+   *
+   * Mirando solo los cargos, una familia que ya pagó la colegiatura pero debe
+   * el recargo veía «no tienes pagos pendientes» encima de una mora viva. El
+   * recargo es deuda igual, y con su propio documento.
+   */
+  const sinDeuda = cargos.length === 0 && moras.length === 0;
+  // Pagada de verdad: el servidor solo arma `facturaPagada` cuando la factura
+  // existe, es de este responsable y su estado de pago es PAGADA. No basta con
+  // que no haya cargos: un enlace sin deuda también puede ser una factura cuyo
+  // comprobante todavía espera aprobación, y eso NO es un recibo.
+  const pagada = Boolean(vista.facturaPagada);
 
   /**
    * Guarda el archivo y, si es imagen, su miniatura.
@@ -147,7 +163,12 @@ export function PagarClient({ token, vista, tarjetaHabilitada }: {
       if (otroMonto && monto) fd.append('monto', monto);
       if (referencia.trim()) fd.append('referencia', referencia.trim());
 
-      const r = await fetch(`/api/pagar/${token}/comprobante`, { method: 'POST', body: fd });
+      // El mismo acotado que trajo la página: si es el enlace de una factura, el
+      // comprobante entra contra esa factura, no contra toda la deuda.
+      const url = facturaId != null
+        ? `/api/pagar/${token}/comprobante?f=${facturaId}`
+        : `/api/pagar/${token}/comprobante`;
+      const r = await fetch(url, { method: 'POST', body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) { setError(data.error ?? 'No se pudo enviar el comprobante'); return; }
 
@@ -193,14 +214,72 @@ export function PagarClient({ token, vista, tarjetaHabilitada }: {
       </header>
 
       <main style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 16px 56px' }}>
-        <h1 style={{ fontSize: 30, fontWeight: 700, color: AZUL, margin: '0 0 6px' }}>
-          Pagos pendientes
+        <h1 style={{
+          fontSize: 30, fontWeight: 700, margin: '0 0 6px',
+          color: pagada ? VERDE : AZUL,
+        }}>
+          {pagada ? 'Factura pagada' : vista.facturaScope ? 'Pago de factura' : 'Pagos pendientes'}
         </h1>
         <p style={{ fontSize: 14, color: '#4b5563', margin: '0 0 22px' }}>
-          {sinDeuda
-            ? 'No tienes cargos pendientes en este momento.'
-            : 'Revisa lo que debes y realiza tu transferencia.'}
+          {vista.facturaScope ? (
+            pagada
+              ? <>La factura{' '}
+                  <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>{' '}
+                  está saldada. No hay nada que pagar.</>
+              : sinDeuda
+                // Sin saldo pero sin pago confirmado: el comprobante puede estar
+                // esperando aprobación, y eso se ve en el aviso de abajo.
+                ? <>Esta factura no tiene saldo pendiente.</>
+                : <>Estás pagando la factura{' '}
+                    <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>.
+                    Revisa el importe y realiza tu transferencia.</>
+          ) : (
+            sinDeuda
+              ? 'No tienes cargos pendientes en este momento.'
+              : 'Revisa lo que debes y realiza tu transferencia.'
+          )}
         </p>
+
+        {/* Recibo. Va antes del resumen porque es la respuesta a lo que el padre
+            vino a comprobar; el resto de la página es de cobro y aquí ya no hay
+            nada que cobrar. */}
+        {pagada && vista.facturaPagada ? (
+          <section style={{
+            background: '#fff', border: `1px solid ${VERDE_BORDE}`, borderLeft: `4px solid ${VERDE}`,
+            borderRadius: 6, padding: '18px 20px', marginBottom: 18,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: VERDE }}>Comprobante de pago</h2>
+              <span style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>
+                {dinero(vista.facturaPagada.montoCentavos)}
+              </span>
+            </div>
+
+            {vista.facturaPagada.lineas.length > 0 ? (
+              <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 14, lineHeight: 1.8, color: '#374151' }}>
+                {vista.facturaPagada.lineas.map((l, i) => (
+                  <li key={`${l.estudiante}-${l.concepto}-${i}`}>
+                    <b>{l.estudiante}</b> · {l.concepto}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {vista.facturaPagada.pagos.length > 0 ? (
+              <div style={{ marginTop: 14, borderTop: `1px solid ${BORDE}`, paddingTop: 12 }}>
+                {vista.facturaPagada.pagos.map((p, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', gap: 12,
+                    fontSize: 14, color: '#374151', padding: '3px 0',
+                  }}>
+                    <span>Pagado el {fecha(p.fecha)} · {p.metodo}</span>
+                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{dinero(p.montoCentavos)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* Resumen */}
         <section style={{
@@ -273,6 +352,33 @@ export function PagarClient({ token, vista, tarjetaHabilitada }: {
                     </td>
                     <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {dinero(c.montoCentavos)}
+                    </td>
+                  </tr>
+                ))}
+                {/*
+                  El recargo por mora va en su propia fila, no mezclado con las
+                  cuotas: es otro documento (una nota de débito colgada de la
+                  factura que se venció), y decir de cuál viene es lo que permite
+                  al padre reconocerlo. Antes no aparecía en ningún sitio —ni
+                  aquí ni en el total— y por eso se transfería la colegiatura y
+                  la mora seguía viva sin que nadie la hubiera visto.
+                */}
+                {moras.map((m) => (
+                  <tr key={`mora-${m.facturaId}`}>
+                    <td style={{ ...celda, color: '#b91c1c' }}>
+                      Recargo por mora
+                      {m.origenCodigo && (
+                        <span style={{ display: 'block', fontSize: 12, color: '#6b7280' }}>
+                          de {m.origenCodigo}
+                        </span>
+                      )}
+                    </td>
+                    <td style={celda}>—</td>
+                    <td style={{ ...celda, whiteSpace: 'nowrap', color: '#b91c1c' }}>
+                      {m.periodo ? fecha(m.periodo) : '—'}
+                    </td>
+                    <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {dinero(m.montoCentavos)}
                     </td>
                   </tr>
                 ))}

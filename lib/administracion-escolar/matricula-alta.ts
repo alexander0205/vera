@@ -14,7 +14,7 @@
 
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarMatriculas, adminEscolarCargos } from '@/lib/db/schema';
-import { cuotasVigentes, finDeMes } from './devengar';
+import { cuotasVigentes } from './devengar';
 import type { LineaPlan } from './plan-cobro';
 
 export interface AltaMatriculaParams {
@@ -82,7 +82,10 @@ export async function crearMatriculaConCargos(
     // Solo lo que ya entró en vigor. Las mensualidades futuras NO nacen aquí:
     // el que matricula en agosto no debe junio. El devengo mensual crea el
     // resto cuando llega su mes.
-    const hasta = finDeMes(params.inscripcionEfectiva);
+    // Hasta la fecha de inscripción, no hasta fin de su mes: si el alumno entra
+    // el día 2 y la mensualidad se emite el 30, esa cuota todavía no le toca —
+    // la crea el devengo cuando llegue su día. (Alineado con v2.)
+    const hasta = params.inscripcionEfectiva;
     const filas = cuotasVigentes(plan, params.conceptos, hasta).map(({ linea, cuota }) => ({
       teamId:        params.teamId,
       estudianteId:  params.estudianteId,

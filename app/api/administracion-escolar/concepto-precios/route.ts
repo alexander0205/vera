@@ -7,6 +7,10 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
+import {
+  calcularImpactoPrecio, eliminarPrecioCompleto, eliminarSoloTarifa, matriculasBajoObjetivo,
+} from '@/lib/administracion-escolar/tarifa-lifecycle';
+import { devengarPeriodo } from '@/lib/administracion-escolar/devengar';
 
 const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion']);
 
@@ -113,7 +117,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
   }
 
-  const [c] = await db.select({ id: adminEscolarConceptosPago.id }).from(adminEscolarConceptosPago)
+  const [c] = await db.select({ id: adminEscolarConceptosPago.id, productId: adminEscolarConceptosPago.productId })
+    .from(adminEscolarConceptosPago)
     .where(and(eq(adminEscolarConceptosPago.id, cId), eq(adminEscolarConceptosPago.teamId, t))).limit(1);
   if (!c) return NextResponse.json({ error: 'Concepto no encontrado' }, { status: 404 });
 
@@ -156,6 +161,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Monto inválido' }, { status: 400 });
   }
 
+  /**
+   * R2: una tarifa tiene que poder facturarse contra un producto.
+   *
+   * El producto es lo que carga el ITBIS y el tipo (bien/servicio) en la
+   * factura; una tarifa sin producto —ni propio ni heredado del concepto— sale
+   * exenta por defecto sin que nadie lo decida. Además, un override de grado o
+   * sección con monto pero sin producto GANA la resolución y deja al nodo sin
+   * producto aunque el servicio sí lo tuviera. Se exige aquí, al configurar, en
+   * vez de descubrirlo al emitir. No es retroactivo: solo valida altas nuevas.
+   */
+  if (prodId == null && c.productId == null) {
+    return NextResponse.json(
+      { error: 'La tarifa necesita un producto de facturación. Elige uno o créalo aquí (así la factura sale con el ITBIS correcto).' },
+      { status: 400 },
+    );
+  }
+
   const [row] = await db.insert(adminEscolarConceptoPrecios)
     .values({ teamId: t, conceptoId: cId, periodoId: pId, objetivoTipo, objetivoId: oId, montoCentavos, productId: prodId })
     .onConflictDoUpdate({
@@ -168,19 +190,73 @@ export async function POST(req: NextRequest) {
     })
     .returning();
   invalidarEstructura(t);
-  return NextResponse.json({ precio: row });
+
+  // Propagación al alta (regla #4): la tarifa se aplica a los estudiantes ya
+  // matriculados en el objetivo, materializando la deuda vigente de ESTE
+  // concepto. Es un devengo acotado e idempotente —el índice único evita
+  // duplicados—; si falla, el precio ya quedó guardado y el cron mensual
+  // recupera lo que falte, así que no tumba la respuesta.
+  let cargosCreados = 0;
+  try {
+    const matriculaIds = await matriculasBajoObjetivo(db, t, pId, objetivoTipo, oId);
+    if (matriculaIds.length) {
+      // Mismo criterio que el cron: hasta hoy, no hasta fin de mes. Poner el
+      // precio no debe adelantar cuotas que todavía no toca emitir.
+      const hasta = new Date().toISOString().slice(0, 10);
+      const r = await devengarPeriodo(t, pId, hasta, false, { soloMatriculas: matriculaIds, soloConceptos: [cId] });
+      cargosCreados = r.cargosCreados;
+    }
+  } catch (e) {
+    console.error('[concepto-precios] devengo al alta de tarifa falló:', e);
+  }
+
+  return NextResponse.json({ precio: row, cargosCreados });
 }
 
+/**
+ * Quita una tarifa (un precio de un objetivo) con el mismo ciclo de vida que el
+ * concepto, un escalón más abajo (ver `tarifa-lifecycle.ts`).
+ *
+ * - `?preview=1`: devuelve el impacto sin borrar.
+ * - `?modo=completo`: sin historial, se lleva los cargos huérfanos sin factura
+ *   y el servicio si quedó sin dueño.
+ * - `?modo=solo-tarifa`: quita solo la fila del precio, conserva el historial.
+ * - sin parámetros: completo si se puede; si hay historial, 409 con impacto.
+ */
 export async function DELETE(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
   if (!auth.ok) return auth.response;
-  const id = Number(new URL(req.url).searchParams.get('id'));
+  const t = auth.teamId;
+  const url = new URL(req.url);
+  const id = Number(url.searchParams.get('id'));
   if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 });
+  const preview = url.searchParams.get('preview') === '1';
+  const modo = url.searchParams.get('modo'); // 'completo' | 'solo-tarifa' | null
 
-  const [row] = await db.delete(adminEscolarConceptoPrecios)
-    .where(and(eq(adminEscolarConceptoPrecios.id, id), eq(adminEscolarConceptoPrecios.teamId, auth.teamId)))
-    .returning({ id: adminEscolarConceptoPrecios.id });
-  if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
-  invalidarEstructura(auth.teamId);
-  return NextResponse.json({ ok: true });
+  const impacto = await calcularImpactoPrecio(db, t, id);
+  if (!impacto) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+
+  if (preview) return NextResponse.json({ impacto });
+
+  if (modo === 'solo-tarifa') {
+    await db.transaction((tx) => eliminarSoloTarifa(tx, t, id));
+    invalidarEstructura(t);
+    return NextResponse.json({ ok: true, modo: 'solo-tarifa' });
+  }
+
+  if (impacto.tieneHistorial) {
+    return NextResponse.json(
+      {
+        error: 'No se puede quitar por completo: hay cargos facturados o pagados con esta tarifa.',
+        requiereConfirmacion: true,
+        alternativa: 'solo-tarifa',
+        impacto,
+      },
+      { status: 409 },
+    );
+  }
+
+  await db.transaction((tx) => eliminarPrecioCompleto(tx, t, id));
+  invalidarEstructura(t);
+  return NextResponse.json({ ok: true, modo: 'completo', impacto });
 }

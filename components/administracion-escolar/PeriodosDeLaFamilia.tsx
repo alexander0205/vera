@@ -106,9 +106,12 @@ function Chip({ tono, children }: { tono: keyof typeof CHIP; children: React.Rea
 
 function EstadoChip({ fila, hoy }: { fila: FilaMes; hoy: string }) {
   if (fila.saldoCentavos <= 0) return <Chip tono="verde">Pagado</Chip>;
+  // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
+  // pueda estar vencido, aunque su fecha del plan ya pasara. Lo que toca es
+  // emitirlo, no cobrarlo; el rojo/«Vencido» es de una factura con saldo abierto.
+  if (fila.ecfDocumentId == null) return <Chip tono="violeta">Sin facturar</Chip>;
   if (fila.fechaVencimiento && fila.fechaVencimiento < hoy) return <Chip tono="rojo">Vencido</Chip>;
   if (fila.saldoCentavos < fila.montoCentavos) return <Chip tono="ambar">Parcial</Chip>;
-  if (fila.ecfDocumentId == null) return <Chip tono="violeta">Sin facturar</Chip>;
   return <Chip tono="gris">Pendiente</Chip>;
 }
 
@@ -801,6 +804,8 @@ function CabeceraHijo({ hijo, periodo }: {
   periodo?: PeriodoDeHijo;
 }) {
   const alDia = (periodo?.pendienteCentavos ?? 0) <= 0;
+  const porCobrar = periodo?.porCobrarCentavos ?? 0;
+  const porFacturar = Math.max(0, (periodo?.pendienteCentavos ?? 0) - porCobrar);
   return (
     <Box sx={{
       px: 2.75, pt: 2, pb: 1.875,
@@ -829,7 +834,14 @@ function CabeceraHijo({ hijo, periodo }: {
           {periodo && (
             alDia
               ? <Chip tono="verde">{periodo.activo ? 'Activa · al día' : 'Al día'}</Chip>
-              : <Chip tono="rojo">Debe {fmtDOP(periodo.pendienteCentavos)}</Chip>
+              : porCobrar > 0
+                ? <Chip tono="rojo">Debe {fmtDOP(porCobrar)}</Chip>
+                : <Chip tono="gris">Por facturar {fmtDOP(porFacturar)}</Chip>
+          )}
+          {periodo && porCobrar > 0 && porFacturar > 0 && (
+            <Typography component="span" sx={{ fontSize: '0.71875rem', color: '#9AA0AC' }}>
+              Por facturar {fmtDOP(porFacturar)}
+            </Typography>
           )}
           {periodo && periodo.previstoCentavos > 0 && (
             <Typography component="span" sx={{ fontSize: '0.71875rem', color: '#9AA0AC' }}>

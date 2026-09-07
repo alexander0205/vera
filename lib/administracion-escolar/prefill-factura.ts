@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { armarPlanDeCobro } from './plan-cobro';
-import { contextoDeSeccion } from './tarifas';
+import { contextoDeSeccion, resolverTarifa } from './tarifas';
 import {
   adminEscolarCargos,
   adminEscolarConceptosPago,
@@ -42,6 +42,21 @@ export interface LineaPrefill {
   indicadorBienoServicio: string;
   dependienteId: number | null;
   dependienteNombre: string;
+  /**
+   * De qué cuota salió esta línea: `estudiante:cargo:mes:año`.
+   *
+   * Es lo que convierte la línea en algo que se puede volver a atar al cargo.
+   * Sin ella, la factura dice «MENSUALIDAD — Septiembre 2026» y eso solo lo
+   * entiende un humano: el sistema no sabe de qué alumno ni de qué mes, así que
+   * si nadie pulsa «Vincular» el cargo queda huérfano para siempre y la ficha
+   * enseña «Sin facturar» encima de una factura que existe.
+   *
+   * El cargo ES el mes —«la mensualidad de septiembre de Zahel»—, así que
+   * llevar su id es llevar el mes sin ambigüedad. El alumno, el mes y el año
+   * van también porque un mes ADELANTADO todavía no tiene cargo (id 0) y sin
+   * ellos dos meses previstos del mismo alumno serían indistinguibles.
+   */
+  cuotaClave: string;
 }
 
 export interface OpcionCargo {
@@ -67,6 +82,12 @@ export interface OpcionCargo {
   anio: number;
   fechaVencimiento: string | null;
   saldoCentavos: number;
+  /**
+   * R2: ni la tarifa ni el concepto resuelven un producto, así que esta línea
+   * saldría exenta por defecto. La UI la marca para que el colegio lo arregle
+   * en Tarifas antes de cobrarla, en vez de emitir un ITBIS que nadie decidió.
+   */
+  sinProducto: boolean;
   linea: LineaPrefill;
 }
 
@@ -452,23 +473,23 @@ export async function prefillDeCargos(
     .select({
       id: adminEscolarCargos.id,
       estudianteId: adminEscolarCargos.estudianteId,
+      matriculaId: adminEscolarCargos.matriculaId,
+      conceptoId: adminEscolarCargos.conceptoId,
       mes: adminEscolarCargos.mes,
       anio: adminEscolarCargos.anio,
       saldoCentavos: adminEscolarCargos.saldoCentavos,
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
       conceptoNombre: adminEscolarConceptosPago.nombre,
       conceptoTipo: adminEscolarConceptosPago.tipo,
-      productId: adminEscolarConceptosPago.productId,
-      productNombre: products.nombre,
-      productTasa: products.tasaItbis,
-      productTipo: products.tipo,
+      // Fallback: el producto del concepto. El que MANDA es el de la tarifa
+      // (se resuelve abajo), pero si la tarifa no fija ninguno se usa este.
+      conceptoProductId: adminEscolarConceptosPago.productId,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarConceptosPago, and(
       eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
       eq(adminEscolarConceptosPago.teamId, teamId),
     ))
-    .leftJoin(products, eq(adminEscolarConceptosPago.productId, products.id))
     .where(and(
       eq(adminEscolarCargos.teamId, teamId),
       // De todos los hermanos, no solo del alumno del cargo pedido: es lo que
@@ -482,13 +503,51 @@ export async function prefillDeCargos(
   const pedidosSet = new Set(cargoIds);
   let faltaProducto = false;
 
-  const opciones: OpcionCargo[] = filas.map((f) => {
+  /**
+   * De qué producto se factura cada cargo.
+   *
+   * El colegio configura el "servicio de facturación" en Tarifas, por nodo
+   * (sección→grado→servicio), y es lo que el plan de cobro ya usa. La emisión,
+   * en cambio, leía `concepto.productId` —un campo aparte que casi nadie
+   * rellena—, así que la factura salía sin el producto configurado (y por tanto
+   * exenta por defecto). Aquí se resuelve por la MISMA cadena que el plan, con
+   * el del concepto como último recurso, para que emitir cobre con lo que el
+   * colegio de verdad puso.
+   */
+  const cacheTarifaProd = new Map<string, number | null>();
+  async function productoDeTarifa(matriculaId: number, conceptoId: number): Promise<number | null> {
+    const clave = `${matriculaId}|${conceptoId}`;
+    const visto = cacheTarifaProd.get(clave);
+    if (visto !== undefined) return visto;
+    const tarifa = await resolverTarifa(teamId, matriculaId, conceptoId);
+    const prod = tarifa?.productId ?? null;
+    cacheTarifaProd.set(clave, prod);
+    return prod;
+  }
+
+  const prodResuelto = await Promise.all(
+    filas.map((f) => productoDeTarifa(f.matriculaId, f.conceptoId)),
+  );
+  // El producto de cada cargo: el de la tarifa, o el del concepto si la tarifa
+  // no fija ninguno.
+  const prodDeFila = filas.map((f, i) => prodResuelto[i] ?? f.conceptoProductId ?? null);
+
+  // Detalles (nombre, ITBIS, tipo) de todos los productos en juego, de un tiro.
+  const idsProd = [...new Set(prodDeFila.filter((x): x is number => x != null))];
+  const detalleProd = idsProd.length
+    ? await db.select({ id: products.id, nombre: products.nombre, tasaItbis: products.tasaItbis, tipo: products.tipo })
+        .from(products)
+        .where(and(eq(products.teamId, teamId), inArray(products.id, idsProd)))
+    : [];
+  const prodMap = new Map(detalleProd.map((p) => [p.id, p]));
+
+  const opciones: OpcionCargo[] = filas.map((f, i) => {
     // El ITBIS y el tipo salen del producto; el PRECIO sale siempre del cargo
     // (su saldo), nunca de la lista de precios: lo que se cobra es la deuda.
-    const tasaItbis = f.productId && f.productTasa && TASAS_VALIDAS.includes(f.productTasa)
-      ? f.productTasa
-      : 'exento';
-    if (!f.productId) faltaProducto = true;
+    const prodId = prodDeFila[i];
+    const prod = prodId != null ? prodMap.get(prodId) : undefined;
+    const tasaItbis = prod && TASAS_VALIDAS.includes(prod.tasaItbis) ? prod.tasaItbis : 'exento';
+    if (!prodId) faltaProducto = true;
 
     const suyo = dependientePorAlumno.get(f.estudianteId) ?? null;
     const alumno = alumnos.find((a) => a.id === f.estudianteId);
@@ -504,16 +563,20 @@ export async function prefillDeCargos(
       anio: f.anio,
       fechaVencimiento: f.fechaVencimiento,
       saldoCentavos: f.saldoCentavos,
+      sinProducto: prodId == null,
       linea: {
-        productoId: f.productId ?? null,
-        nombreItem: f.productNombre ?? f.conceptoNombre ?? 'Cargo escolar',
+        productoId: prodId ?? null,
+        nombreItem: prod?.nombre ?? f.conceptoNombre ?? 'Cargo escolar',
         cantidadItem: 1,
         precioUnitarioItem: f.saldoCentavos / 100,
         tasaItbis,
-        indicadorBienoServicio: f.productTipo === 'bien' ? '1' : '2',
+        indicadorBienoServicio: prod?.tipo === 'bien' ? '1' : '2',
         // El beneficiario es el alumno de ESTE cargo, no el del clic.
         dependienteId: suyo?.id ?? null,
         dependienteNombre: suyo?.nombre ?? '',
+        // La misma forma que arma el buscador de meses del formulario, para que
+        // las dos rutas produzcan una clave idéntica y comparable.
+        cuotaClave: `${f.estudianteId}:${f.id}:${f.mes ?? 0}:${f.anio}`,
       },
     };
   });
@@ -551,23 +614,26 @@ export async function prefillDeCargos(
     }
 
     const [concepto] = await db
-      .select({
-        productId: adminEscolarConceptosPago.productId,
-        productNombre: products.nombre,
-        productTasa: products.tasaItbis,
-        productTipo: products.tipo,
-      })
+      .select({ productId: adminEscolarConceptosPago.productId })
       .from(adminEscolarConceptosPago)
-      .leftJoin(products, eq(adminEscolarConceptosPago.productId, products.id))
       .where(and(
         eq(adminEscolarConceptosPago.id, previsto.conceptoId),
         eq(adminEscolarConceptosPago.teamId, teamId),
       ))
       .limit(1);
 
-    const tasaPrevisto = concepto?.productId && concepto.productTasa
-      && TASAS_VALIDAS.includes(concepto.productTasa) ? concepto.productTasa : 'exento';
-    if (!concepto?.productId) faltaProducto = true;
+    // Igual que los cargos ya existentes: manda el producto de la tarifa (que el
+    // plan ya resolvió en `linea.productId`), con el del concepto de reserva.
+    const prevProdId = linea.productId ?? concepto?.productId ?? null;
+    const prevProd = prevProdId != null
+      ? (prodMap.get(prevProdId)
+          ?? (await db.select({ id: products.id, nombre: products.nombre, tasaItbis: products.tasaItbis, tipo: products.tipo })
+                .from(products)
+                .where(and(eq(products.id, prevProdId), eq(products.teamId, teamId)))
+                .limit(1))[0])
+      : undefined;
+    const tasaPrevisto = prevProd && TASAS_VALIDAS.includes(prevProd.tasaItbis) ? prevProd.tasaItbis : 'exento';
+    if (!prevProdId) faltaProducto = true;
 
     opciones.unshift({
       cargoId: 0,
@@ -582,15 +648,20 @@ export async function prefillDeCargos(
       anio: Number(cuota.fechaEmision.slice(0, 4)),
       fechaVencimiento: cuota.fechaVencimiento,
       saldoCentavos: cuota.montoCentavos,
+      sinProducto: prevProdId == null,
       linea: {
-        productoId: concepto?.productId ?? null,
-        nombreItem: concepto?.productNombre ?? linea.nombre,
+        productoId: prevProdId,
+        nombreItem: prevProd?.nombre ?? linea.nombre,
         cantidadItem: 1,
         precioUnitarioItem: cuota.montoCentavos / 100,
         tasaItbis: tasaPrevisto,
-        indicadorBienoServicio: concepto?.productTipo === 'bien' ? '1' : '2',
+        indicadorBienoServicio: prevProd?.tipo === 'bien' ? '1' : '2',
         dependienteId: dependiente?.id ?? null,
         dependienteNombre: dependiente?.nombre ?? '',
+        // Mes ADELANTADO: todavía no hay cargo, así que el id va en 0 y lo que
+        // identifica la línea es el alumno con su mes y año. El cargo se crea
+        // al vincular, y entonces esta clave es lo que permite emparejarlos.
+        cuotaClave: `${estudianteId}:0:${cuota.mes ?? 0}:${Number(cuota.fechaEmision.slice(0, 4))}`,
       },
     });
   }
@@ -611,7 +682,7 @@ export async function prefillDeCargos(
   });
 
   if (faltaProducto) {
-    advertencias.push('Algún concepto no tiene producto vinculado: esa línea sale con ITBIS exento.');
+    advertencias.push('Hay líneas sin producto de facturación (ni en la tarifa ni en el concepto): saldrían con ITBIS exento. Asígnales un producto en Configuración → Tarifas antes de cobrarlas.');
   }
 
   return {
