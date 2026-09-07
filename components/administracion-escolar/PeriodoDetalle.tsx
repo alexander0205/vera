@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { VerFacturaDrawer } from './VerFacturaDrawer';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -26,7 +27,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
 
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
-import { ArrowUpDown, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
+import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
@@ -520,8 +521,20 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         ? 'Su deuda ya está facturada: lo que falta es cobrarla'
         : 'No tiene cargos pendientes por facturar';
 
+  /**
+   * La factura que se está mirando en el cajón. `null` = cerrado.
+   *
+   * Se ve aquí y no saltando a `/dashboard/facturas/[id]` por el mismo motivo
+   * que crear una factura se hace en un cajón: mirar una factura del colegio
+   * empieza en el estado de cuenta de la familia, y al cambiar de pantalla esa
+   * información se pierde justo cuando hace falta. Salir a Facturación sigue
+   * estando, con su nombre: «Abrir en Facturación».
+   */
+  const [facturaEnCajon, setFacturaEnCajon] = useState<number | null>(null);
+
   return (
     <div className="space-y-4">
+      <VerFacturaDrawer documentoId={facturaEnCajon} onCerrar={() => setFacturaEnCajon(null)} />
       {/* Sin repetir «Período 2026-2027 · A»: la barra de períodos de arriba ya
           dice cuál se está mirando, con su curso y su saldo. Decirlo dos veces
           en la misma pantalla no informa, solo empuja hacia abajo lo que sí.
@@ -666,6 +679,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 onRegistrarPago={onRegistrarPago}
                 onAplicarMora={onAplicarMora}
                 onCrearFactura={(cargo) => facturarCargos([cargo.id])}
+                onVerFactura={setFacturaEnCajon}
                 onVincular={onVincular}
                 onAnular={onAnular}
                 onAnularFactura={onAnularFactura}
@@ -695,6 +709,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                   onRegistrarPago={onRegistrarPago}
                   onAplicarMora={onAplicarMora}
                   onCrearFactura={(cargo) => facturarCargos([cargo.id])}
+                  onVerFactura={setFacturaEnCajon}
                   onVincular={onVincular}
                   onAnular={onAnular}
                   onAnularFactura={onAnularFactura}
@@ -1110,7 +1125,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
  * y en gris con el badge "Previsto" para que nadie los cobre ni los cuente:
  * NO suman en pendiente, ni en el saldo del período, ni en morosidad.
  */
-function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
+function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, pagos, mesesAcademicos, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVerFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onAgregarCargoMes, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   /** Día del mes en que la recurrente factura sola. null = se factura a mano. */
   diaFacturaAuto: number | null;
   /** Responsable: los meses previstos todavía no tienen factura propia. */
@@ -1125,6 +1140,8 @@ function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, 
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
+  /** Abre la factura en el cajón, sin salir de la ficha de la familia. */
+  onVerFactura?: (documentoId: number) => void;
   onVincular: (cargo: Cargo) => void;
   onAnular: (cargo: Cargo) => void;
   onAnularFactura: (cargo: Cargo) => void;
@@ -1208,7 +1225,11 @@ function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, 
       )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-100">
-        <table className="w-full table-fixed text-sm">
+        {/* `min-w` con `table-fixed`: sin él las nueve columnas se comprimen hasta
+            montarse unas sobre otras —«RD$3,000.00RD$0.00RD$3,000.00» pegado— en
+            vez de dejar que el contenedor se desplace. El `overflow-x-auto` del
+            padre no llegaba a activarse nunca porque la tabla siempre «cabía». */}
+        <table className="w-full min-w-[860px] table-fixed text-sm">
           <ColumnasCuentas />
           <thead>
             <tr className="bg-gray-50 text-left text-xs text-gray-500">
@@ -1258,6 +1279,7 @@ function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, 
                   onRegistrarPago={onRegistrarPago}
                   onAplicarMora={onAplicarMora}
                   onCrearFactura={onCrearFactura}
+                  onVerFactura={onVerFactura}
                   onVincular={onVincular}
                   onAnular={onAnular}
                   onAnularFactura={onAnularFactura}
@@ -1344,7 +1366,7 @@ function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, 
  * Los previstos entran igual que en la otra tabla: en gris, sin importes en
  * pagado/pendiente y sin sumar en ningún total.
  */
-function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFactura, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo }: {
+function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFactura, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVerFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo }: {
   cargos: Cargo[];
   previstos: Previsto[];
   /**
@@ -1364,6 +1386,8 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
+  /** Abre la factura en el cajón, sin salir de la ficha de la familia. */
+  onVerFactura?: (documentoId: number) => void;
   onVincular: (cargo: Cargo) => void;
   onAnular: (cargo: Cargo) => void;
   onAnularFactura: (cargo: Cargo) => void;
@@ -1384,7 +1408,7 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-100 mt-3">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[800px] text-sm">
         <thead>
           <tr className="bg-gray-50 text-left text-xs text-gray-500">
             {/* Sin título: una columna de casillas no se explica con una
@@ -1457,8 +1481,11 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem onSelect={() => router.push(`/dashboard/facturas/${f.id}`)}>
+                      <DropdownMenuItem onSelect={() => onVerFactura?.(f.id)}>
                         <FileText className="h-4 w-4" />Ver factura
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => router.push(`/dashboard/facturas/${f.id}`)}>
+                        <ExternalLink className="h-4 w-4" />Abrir en Facturación
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <a href={`/api/pdf/factura/${f.codigo ?? f.id}`} target="_blank" rel="noreferrer"
@@ -1529,14 +1556,19 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                 <td className={`px-3 py-2.5 text-right ${anulado ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                   {fmtDOP(c.montoCentavos)}
                 </td>
+                {/* Misma regla que en «Cuentas por cobrar»: sin factura emitida no
+                    hay nada cobrado ni nada que cobrar. La deuda la define el
+                    documento, no el cargo. */}
                 <td className="px-3 py-2.5 text-right text-gray-700">
-                  {anulado ? <span className="text-gray-300">—</span> : fmtDOP(pagadoCargo)}
+                  {anulado || c.ecfDocumentId == null
+                    ? <span className="text-gray-300">—</span>
+                    : fmtDOP(pagadoCargo)}
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  {anulado ? (
+                  {anulado || c.ecfDocumentId == null ? (
                     <span className="text-gray-300">—</span>
                   ) : (
-                    <span className={clsSaldo(c.saldoCentavos, c.ecfDocumentId != null)}>
+                    <span className={clsSaldo(c.saldoCentavos, true)}>
                       {fmtDOP(c.saldoCentavos)}
                     </span>
                   )}
@@ -1556,6 +1588,7 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                       onRegistrarPago={onRegistrarPago}
                       onAplicarMora={onAplicarMora}
                       onCrearFactura={onCrearFactura}
+                      onVerFactura={onVerFactura}
                       onVincular={onVincular}
                       onAnular={onAnular}
                       onAnularFactura={onAnularFactura}
@@ -1693,7 +1726,7 @@ type MesRow = {
  * Los pagos del mes salen al desplegar, sin cabecera ni resumen: el abonado y
  * el pendiente ya están en la fila del mes, en sus columnas.
  */
-function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
+function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviadosPorCargo, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVerFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onPrevisto, onDetalle, aplicandoMoraFacturaId, onReenviarAviso, reenviandoCargoId, marcados, onMarcarCargo, onMarcarVarios }: {
   r: MesRow;
   diaFacturaAuto: number | null;
   tutorClientId: number | null;
@@ -1705,6 +1738,8 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
+  /** Abre la factura en el cajón, sin salir de la ficha de la familia. */
+  onVerFactura?: (documentoId: number) => void;
   onVincular: (cargo: Cargo) => void;
   onAnular: (cargo: Cargo) => void;
   onAnularFactura: (cargo: Cargo) => void;
@@ -1737,6 +1772,26 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
   const cargoUnico = unico ? r.cargosMes[0] ?? null : null;
   const previstoUnico = unico ? r.previstosMes[0] ?? null : null;
   const soloPrevistos = r.cargosMes.length === 0;
+
+  /**
+   * Sin factura no hay nada pendiente.
+   *
+   * La deuda la define la FACTURA, no el cargo. El cargo dice cuánto tocará
+   * cobrar y cuándo; el documento es lo que convierte eso en algo exigible, y
+   * es de donde salen «Pagado» y «Pendiente» — se leen de la factura, no del
+   * plan.
+   *
+   * Antes un mes devengado y sin facturar enseñaba «Pendiente RD$3,000» en
+   * rojo, igual que uno ya emitido y sin cobrar. Son dos cosas distintas: al
+   * primero no se le puede reclamar nada todavía porque el padre no ha recibido
+   * ningún documento. Y al lado, los meses «Previsto» sí ponían «—» — la misma
+   * situación contada de dos maneras en la misma tabla.
+   *
+   * Con la facturación automática encendida esto casi no se ve: el mes se
+   * factura el día que le toca y pasa a tener importes. Lo que queda en «—» es
+   * justo lo que todavía no se ha emitido.
+   */
+  const sinFacturaAun = !r.factura;
   // Solo se despliega lo que tiene algo que enseñar debajo. Un mes de un solo
   // concepto sin pagos no esconde nada, así que ni flecha ni click.
   const desplegable = cuantos > 1 || r.pagosMes.length > 0;
@@ -1821,14 +1876,14 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
           {cuantos === 0 ? <span className="text-gray-300">—</span> : fmtDOP(montoMes)}
         </td>
 
-        {/* Un mes que solo tiene previstos no lleva importes en pagado ni en
-            pendiente: todavía no es deuda, y ponerle cifras aquí lo haría sumar
-            con la vista contra el saldo del período, que no lo cuenta. */}
+        {/* Pagado y Pendiente salen de la FACTURA. Sin documento emitido no hay
+            nada que cobrar ni nada cobrado: van en «—», igual que un mes
+            previsto. Ver `sinFacturaAun`. */}
         <td className="px-3 py-3 align-top text-right text-gray-700">
-          {soloPrevistos ? <span className="text-gray-300">—</span> : fmtDOP(r.pagado)}
+          {soloPrevistos || sinFacturaAun ? <span className="text-gray-300">—</span> : fmtDOP(r.pagado)}
         </td>
         <td className="px-3 py-3 align-top text-right">
-          {soloPrevistos ? (
+          {soloPrevistos || sinFacturaAun ? (
             <span className="text-gray-300">—</span>
           ) : (
             <span className={clsSaldo(r.saldo, !!r.factura)}>
@@ -1842,12 +1897,17 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
             // pago de la familia sirve para mandarle el cobro actual; cuando la
             // recurrente emita este mes, el botón pasa a su factura acotada.
             // El icono se suma a Detalle y al menú: no reemplaza sus acciones.
-            <span className="inline-flex items-center justify-end gap-1">
-              <CopiarLinkPago clientId={tutorClientId} como="boton" soloIcono />
-              {previstoUnico && onDetalle && <BotonDetalleCuota previsto={previstoUnico} onDetalle={onDetalle} />}
-              {puedeGestionar && previstoUnico && previstoUnico.cuotaId > 0 && onPrevisto && (
-                <PrevistoActionsMenu previsto={previstoUnico} onPrevisto={onPrevisto} />
-              )}
+            /* Un solo control en la columna: los tres puntos.
+               Antes había hasta TRES botones seguidos —enlace, detalle y menú—
+               y ninguno decía qué hacía sin pasar el ratón por encima. Todo
+               vive dentro del menú, con su nombre escrito. */
+            <span className="inline-flex items-center justify-end">
+              {puedeGestionar && previstoUnico && previstoUnico.cuotaId > 0 && onPrevisto ? (
+                <PrevistoActionsMenu
+                  previsto={previstoUnico} onPrevisto={onPrevisto}
+                  onDetalle={onDetalle} tutorClientId={tutorClientId}
+                />
+              ) : <span className="text-gray-300">—</span>}
             </span>
           ) : accion ? (
             <CargoActionsMenu
@@ -1859,6 +1919,7 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
               onRegistrarPago={onRegistrarPago}
               onAplicarMora={onAplicarMora}
               onCrearFactura={onCrearFactura}
+              onVerFactura={onVerFactura}
               onVincular={onVincular}
               onAnular={onAnular}
               onAnularFactura={onAnularFactura}
@@ -1868,11 +1929,13 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
               aplicandoMora={aplicandoMoraFacturaId === accion.ecfDocumentId}
             />
           ) : previstoUnico ? (
-            <span className="inline-flex items-center justify-end gap-1">
-              {onDetalle && <BotonDetalleCuota previsto={previstoUnico} onDetalle={onDetalle} />}
-              {puedeGestionar && previstoUnico.cuotaId > 0 && onPrevisto && (
-                <PrevistoActionsMenu previsto={previstoUnico} onPrevisto={onPrevisto} />
-              )}
+            <span className="inline-flex items-center justify-end">
+              {puedeGestionar && previstoUnico.cuotaId > 0 && onPrevisto ? (
+                <PrevistoActionsMenu
+                  previsto={previstoUnico} onPrevisto={onPrevisto}
+                  onDetalle={onDetalle} tutorClientId={tutorClientId}
+                />
+              ) : <span className="text-gray-300">—</span>}
             </span>
           ) : <span className="text-gray-300">—</span>}
         </td>
@@ -1935,6 +1998,7 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
                   onRegistrarPago={onRegistrarPago}
                   onAplicarMora={onAplicarMora}
                   onCrearFactura={onCrearFactura}
+                  onVerFactura={onVerFactura}
                   onVincular={onVincular}
                   onAnular={onAnular}
                   onAnularFactura={onAnularFactura}
@@ -1969,11 +2033,13 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
           <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right">
-            <span className="inline-flex items-center justify-end gap-1">
-              {onDetalle && <BotonDetalleCuota previsto={p} onDetalle={onDetalle} />}
-              {puedeGestionar && p.cuotaId > 0 && onPrevisto && (
-                <PrevistoActionsMenu previsto={p} onPrevisto={onPrevisto} />
-              )}
+            <span className="inline-flex items-center justify-end">
+              {puedeGestionar && p.cuotaId > 0 && onPrevisto ? (
+                <PrevistoActionsMenu
+                  previsto={p} onPrevisto={onPrevisto}
+                  onDetalle={onDetalle} tutorClientId={tutorClientId}
+                />
+              ) : <span className="text-gray-300">—</span>}
             </span>
           </td>
         </tr>
@@ -1997,40 +2063,6 @@ function MesFila({ r, diaFacturaAuto, tutorClientId, abierto, onToggle, enviados
   );
 }
 
-/**
- * El botón de «qué va a pasar con este cobro».
- *
- * La tabla enseña monto y vencimiento, y con eso no se contesta lo que la
- * familia pregunta por teléfono: cuándo le llega la factura, hasta cuándo paga
- * sin recargo, de cuánto sería y si le van a avisar. Todo eso ya estaba
- * decidido, pero repartido entre Conceptos, el calendario de cuotas y la
- * política de mora del negocio.
- */
-/**
- * El botón de «qué va a pasar con este cobro».
- *
- * La tabla enseña monto y vencimiento, y con eso no se contesta lo que la
- * familia pregunta por teléfono: cuándo le llega la factura, hasta cuándo paga
- * sin recargo, de cuánto sería y si le van a avisar. Todo eso ya estaba
- * decidido, pero repartido entre Conceptos, el calendario de cuotas y la
- * política de mora del negocio.
- */
-function BotonDetalleCuota({ previsto, onDetalle }: {
-  previsto: Previsto;
-  onDetalle: (p: Previsto) => void;
-}) {
-  return (
-    <button
-      type="button"
-      title="Ver fechas, recargo y avisos"
-      aria-label={`Detalle de ${previsto.concepto}`}
-      onClick={(e) => { e.stopPropagation(); onDetalle(previsto); }}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-    >
-      <Info className="h-4 w-4" />
-    </button>
-  );
-}
 
 /**
  * Qué se puede hacer con una cuota que todavía no es deuda.
@@ -2048,9 +2080,13 @@ function BotonDetalleCuota({ previsto, onDetalle }: {
  * "pagar" directo: cobrar sin que exista el cargo dejaría un pago colgando de
  * nada. Se adelanta y se cobra, en ese orden, con el mismo menú de siempre.
  */
-function PrevistoActionsMenu({ previsto, onPrevisto }: {
+function PrevistoActionsMenu({ previsto, onPrevisto, onDetalle, tutorClientId }: {
   previsto: Previsto;
   onPrevisto: (p: Previsto, accion: 'adelantar' | 'omitir') => void;
+  /** «Qué va a pasar con este cobro»: fechas, recargo y avisos. */
+  onDetalle?: (p: Previsto) => void;
+  /** Con familia, se ofrece copiar su enlace de pago. */
+  tutorClientId?: number | null;
 }) {
   return (
     <DropdownMenu>
@@ -2067,6 +2103,16 @@ function PrevistoActionsMenu({ previsto, onPrevisto }: {
         <DropdownMenuItem onSelect={() => onPrevisto(previsto, 'adelantar')}>
           <Receipt className="h-4 w-4" />Facturar este mes
         </DropdownMenuItem>
+        {onDetalle && (
+          <DropdownMenuItem onSelect={() => onDetalle(previsto)}>
+            <Info className="h-4 w-4" />Ver fechas, recargo y avisos
+          </DropdownMenuItem>
+        )}
+        {tutorClientId && (
+          <DropdownMenuItem asChild>
+            <CopiarLinkPago clientId={tutorClientId} como="menu" />
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onSelect={() => onPrevisto(previsto, 'omitir')}
           className="text-red-600 focus:text-red-600"
@@ -2078,7 +2124,7 @@ function PrevistoActionsMenu({ previsto, onPrevisto }: {
   );
 }
 
-function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, mesTieneFactura, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onReenviarAviso, aplicandoMora, reenviando }: {
+function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, mesTieneFactura, onRegistrarPago, onAplicarMora, onCrearFactura, onVerFactura, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onReenviarAviso, aplicandoMora, reenviando }: {
   cargo: Cargo;
   puedePagos: boolean;
   puedeFacturar: boolean;
@@ -2089,6 +2135,8 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
+  /** Abre la factura en el cajón, sin salir de la ficha de la familia. */
+  onVerFactura?: (documentoId: number) => void;
   onVincular: (cargo: Cargo) => void;
   onAnular: (cargo: Cargo) => void;
   onAnularFactura: (cargo: Cargo) => void;
@@ -2164,8 +2212,15 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
             un usuario con permisos no tenía por dónde abrir la factura del mes:
             la veía en la columna pero el menú no la ofrecía. */}
         {tieneFactura && (
-          <DropdownMenuItem onSelect={() => router.push(`/dashboard/facturas/${cargo.ecfDocumentId}`)}>
+          <DropdownMenuItem onSelect={() => onVerFactura?.(cargo.ecfDocumentId!)}>
             <Receipt className="h-4 w-4" />Ver factura
+          </DropdownMenuItem>
+        )}
+        {/* Salir a Facturación es OTRA cosa que ver la factura: se va de la
+            ficha de la familia. Se queda, pero dicho con su nombre. */}
+        {tieneFactura && (
+          <DropdownMenuItem onSelect={() => router.push(`/dashboard/facturas/${cargo.ecfDocumentId}`)}>
+            <ExternalLink className="h-4 w-4" />Abrir en Facturación
           </DropdownMenuItem>
         )}
         {/* Ver el PDF e imprimirlo no necesitan salir de aquí: son dos rutas que
@@ -2562,7 +2617,7 @@ export function FacturasSueltas({ facturas }: { facturas: FacturaSuelta[] }) {
       )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-100">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[680px] text-sm">
           <thead>
             <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <th className="px-3 py-2 font-medium">Fecha</th>
