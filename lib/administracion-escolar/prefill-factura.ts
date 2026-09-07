@@ -42,6 +42,21 @@ export interface LineaPrefill {
   indicadorBienoServicio: string;
   dependienteId: number | null;
   dependienteNombre: string;
+  /**
+   * De qué cuota salió esta línea: `estudiante:cargo:mes:año`.
+   *
+   * Es lo que convierte la línea en algo que se puede volver a atar al cargo.
+   * Sin ella, la factura dice «MENSUALIDAD — Septiembre 2026» y eso solo lo
+   * entiende un humano: el sistema no sabe de qué alumno ni de qué mes, así que
+   * si nadie pulsa «Vincular» el cargo queda huérfano para siempre y la ficha
+   * enseña «Sin facturar» encima de una factura que existe.
+   *
+   * El cargo ES el mes —«la mensualidad de septiembre de Zahel»—, así que
+   * llevar su id es llevar el mes sin ambigüedad. El alumno, el mes y el año
+   * van también porque un mes ADELANTADO todavía no tiene cargo (id 0) y sin
+   * ellos dos meses previstos del mismo alumno serían indistinguibles.
+   */
+  cuotaClave: string;
 }
 
 export interface OpcionCargo {
@@ -559,6 +574,9 @@ export async function prefillDeCargos(
         // El beneficiario es el alumno de ESTE cargo, no el del clic.
         dependienteId: suyo?.id ?? null,
         dependienteNombre: suyo?.nombre ?? '',
+        // La misma forma que arma el buscador de meses del formulario, para que
+        // las dos rutas produzcan una clave idéntica y comparable.
+        cuotaClave: `${f.estudianteId}:${f.id}:${f.mes ?? 0}:${f.anio}`,
       },
     };
   });
@@ -640,6 +658,10 @@ export async function prefillDeCargos(
         indicadorBienoServicio: prevProd?.tipo === 'bien' ? '1' : '2',
         dependienteId: dependiente?.id ?? null,
         dependienteNombre: dependiente?.nombre ?? '',
+        // Mes ADELANTADO: todavía no hay cargo, así que el id va en 0 y lo que
+        // identifica la línea es el alumno con su mes y año. El cargo se crea
+        // al vincular, y entonces esta clave es lo que permite emparejarlos.
+        cuotaClave: `${estudianteId}:0:${cuota.mes ?? 0}:${Number(cuota.fechaEmision.slice(0, 4))}`,
       },
     });
   }

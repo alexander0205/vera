@@ -111,6 +111,12 @@ function lineasParaGuardar(lineas: LineaPrefill[]): string {
       indicadorBienoServicio: Number(l.indicadorBienoServicio) || 2,
       dependienteId: l.dependienteId,
       dependienteNombre: l.dependienteNombre,
+      // Aquí el vínculo ya va por `cargos.ecf_document_id`, escrito en la misma
+      // transacción que crea el documento — no se puede perder. La clave viaja
+      // igual porque quien LEE la factura después no sabe de qué transacción
+      // salió: sea automática o hecha a mano, la línea dice a qué cuota
+      // pertenece y eso se puede comprobar sin salir del documento.
+      cuotaClave: l.cuotaClave,
     };
   }));
 }

@@ -38,6 +38,7 @@ import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
 import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 import { sumaPagos } from '@/components/pagos/PagoMetodos';
+import { subirPendientes, type Pendiente } from '@/components/pagos/ComprobantesUploader';
 import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
 import { Comentarios } from './sections/Comentarios';
@@ -520,6 +521,8 @@ export default function NuevaFacturaForm({
       productoId?: number | null; nombreItem?: string; cantidadItem?: number;
       precioUnitarioItem?: number; tasaItbis?: string; indicadorBienoServicio?: string;
       dependienteId?: number | null; dependienteNombre?: string;
+      /** `estudiante:cargo:mes:año` — ver `LineaPrefill.cuotaClave`. */
+      cuotaClave?: string;
     };
     advertencias?: string[];
   };
@@ -573,6 +576,10 @@ export default function NuevaFacturaForm({
       indicadorBienoServicio: String(l.indicadorBienoServicio) === '1' ? '1' : '2',
       dependienteId:          typeof l.dependienteId === 'number' ? l.dependienteId : null,
       dependienteNombre:      String(l.dependienteNombre ?? ''),
+      // De qué cuota vino. Antes se calculaba solo en el buscador de meses y se
+      // perdía al enviar; ahora viaja hasta `lineas_json` para que la factura
+      // sepa siempre a qué cargo pertenece cada línea.
+      cuotaClave:             typeof l.cuotaClave === 'string' ? l.cuotaClave : undefined,
     };
   }
 
@@ -728,6 +735,10 @@ export default function NuevaFacturaForm({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             cuotaId: previsto.cuotaId, conceptoId: previsto.conceptoId, accion: 'adelantar',
+            // El cargo nace ya atado a esta factura. Antes hacía falta una
+            // llamada más para enlazarlo, y si esa no llegaba el mes quedaba
+            // «Sin facturar» encima de una factura que existía.
+            ecfDocumentId: documentoId,
           }),
         });
         const j = await r.json().catch(() => ({}));
@@ -826,15 +837,6 @@ export default function NuevaFacturaForm({
    * factura de una sentada.
    */
   const [paso, setPaso] = useState<1 | 2>(1);
-  /**
-   * Si el formulario va partido en pasos.
-   *
-   * Se nombra aparte de `modoColegio` porque lo que decide no es el colegio
-   * sino la FORMA: donde hay pasos, hay un «al final» al que mandar la
-   * emisión, y donde no lo hay, guardar y emitir siguen siendo el mismo gesto.
-   */
-  const enPasos = modoColegio;
-
   /** Los cargos de origen ya quedaron atados a la factura. */
   const [cargosVinculados, setCargosVinculados] = useState(false);
 
@@ -962,6 +964,16 @@ export default function NuevaFacturaForm({
   // Al editar un borrador con split, restauramos las líneas desde initialData.
   // Un gasto normalmente ya se pagó al registrarlo (saliste con el dinero), así
   // que arranca como pagado; una venta arranca sin cobro. Se puede desmarcar.
+  /**
+   * Comprobantes elegidos mientras la factura todavía no existe.
+   *
+   * Suben en `subirPendientes` justo después de crearla. Antes no se podía
+   * adjuntar nada al crear —solo al cobrar una factura ya guardada—, así que
+   * quien cobraba en el mismo acto de facturar tenía que volver después.
+   */
+  const [comprobantesPendientes, setComprobantesPendientes] = useState<Pendiente[]>([]);
+  const [avisoComprobantes, setAvisoComprobantes] = useState<string | null>(null);
+
   const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? esGasto);
   const [pagoFecha, setPagoFecha]       = useState(
     initialData?.pagoFecha ?? new Date().toISOString().slice(0, 10),
@@ -1645,19 +1657,23 @@ export default function NuevaFacturaForm({
     console.log('[factura-submit]', traza, 'submitting=', submittingRef.current, 'loading=', loading);
 
     /*
-      Sin eCF seleccionado → siempre guardar como borrador (no se emite a DGII).
       sin-ncf (factura sin comprobante) o nota sobre factura de origen sin-ncf
       (no hay e-NCF que referenciar) → solo borrador, nunca se emite a la DGII.
 
-      Y en el flujo por pasos, TAMPOCO. Guardar y mandar a la DGII eran el mismo
-      botón: quien elegía un comprobante fiscal en el paso 1 se encontraba con
-      que «Guardar factura» decía «Emitir e-CF» y el documento salía a la DGII
-      en el mismo clic con el que se registraba el pago. Ir a la DGII gasta un
-      e-NCF de la secuencia y no se deshace; tiene que ser un acto aparte, al
-      final, sobre una factura que ya existe y ya se puede leer.
+      El flujo por pasos del colegio SÍ emite, igual que «Nueva factura». Estuvo
+      forzado a borrador un tiempo, y con razón: el botón decía «Guardar
+      factura» y mandaba el documento a la DGII en el mismo clic con el que se
+      registraba el pago. Pero el fallo era el rótulo, no el sitio — ir a la
+      DGII gasta un e-NCF y no se deshace, así que lo que hace falta es que el
+      botón lo diga, no que el colegio tenga que salirse a la pantalla de
+      detalle para emitir lo que acaba de crear.
+
+      Ahora el rótulo y el efecto son el mismo: con un comprobante fiscal el
+      botón dice «Emitir e-CF» y emite; con sin-ncf dice «Guardar factura» y
+      guarda. Ver `primaryLabel` en la barra de acciones.
     */
     const modoEfectivo: 'emitir' | 'borrador' =
-      (tipoEcf === 'sin-ncf' || esPadreSinNcf || enPasos) ? 'borrador' : modo;
+      (tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'borrador' : modo;
 
     const err = modoEfectivo === 'borrador'
       ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : validarMotivoNota())
@@ -1809,6 +1825,25 @@ export default function NuevaFacturaForm({
         ecfDocumentId: typeof data.id === 'number' ? data.id : null,
         emitida: modoEfectivo === 'emitir',
       });
+      /**
+       * Los comprobantes que se eligieron ANTES de que la factura existiera.
+       *
+       * Al crear no hay `docId` al que colgarlos, así que esperaron en memoria
+       * y suben ahora, con la factura ya nacida. Va antes que nada porque el
+       * flujo puede terminar navegando a otra pantalla y desmontando esto.
+       */
+      if (data.documentoId && comprobantesPendientes.length > 0) {
+        const { fallidos } = await subirPendientes(data.documentoId, comprobantesPendientes);
+        setComprobantesPendientes([]);
+        if (fallidos > 0) {
+          // La factura ya existe: esto es un aviso, no un fallo del guardado.
+          // Se pueden adjuntar después desde el detalle.
+          setAvisoComprobantes(
+            `La factura se guardó, pero ${fallidos === 1 ? 'un comprobante no subió' : `${fallidos} comprobantes no subieron`}. Puedes adjuntarlos desde el detalle de la factura.`,
+          );
+        }
+      }
+
       // Persistir clasificación por maestros (Plan A) — metadata no fiscal.
       if (data.documentoId) {
         try {
@@ -1919,6 +1954,16 @@ export default function NuevaFacturaForm({
     const esNotaBorrador = esSinEcf && (tipoEcf === '33' || tipoEcf === '34');
     return (
       <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: { xs: 2, sm: 3 } }}>
+        {/* Algún comprobante no llegó a subir. La factura SÍ se guardó, así que
+            esto avisa sin alarmar y dice dónde terminar el trabajo. */}
+        {avisoComprobantes && (
+          <Box sx={{ maxWidth: 980, mx: 'auto', mb: 2 }}>
+            <Alert severity="warning" onClose={() => setAvisoComprobantes(null)}>
+              {avisoComprobantes}
+            </Alert>
+          </Box>
+        )}
+
         {/*
           La barra del comprobante ya emitido.
 
@@ -2584,6 +2629,8 @@ export default function NuevaFacturaForm({
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
+              comprobantesPendientes={comprobantesPendientes}
+              setComprobantesPendientes={setComprobantesPendientes}
               enPaso={modoColegio}
             />
             )}
@@ -2595,10 +2642,14 @@ export default function NuevaFacturaForm({
             loading={loading}
             loadingPreview={loadingPreview}
             primaryBtnClass={docAccent.primaryBtnClass}
+            // Misma regla en el cajón del colegio que en «Nueva factura»: el
+            // rótulo lo decide el TIPO de comprobante, no el flujo. Un e31 en
+            // el cajón hacía lo mismo que un e31 en la pantalla grande, pero
+            // el botón decía otra cosa.
             primaryLabel={esGasto ? 'Guardar gasto'
-              : (enPasos || tipoEcf === 'sin-ncf') ? 'Guardar factura'
+              : tipoEcf === 'sin-ncf' ? 'Guardar factura'
               : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
-            loadingPrimaryLabel={(esGasto || enPasos || tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
+            loadingPrimaryLabel={(esGasto || tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
             // El paso 1 no emite nada: su botón lleva al pago. Emitir vive al

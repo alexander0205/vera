@@ -36,7 +36,8 @@ import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { registrarMovimiento } from '@/lib/caja/core';
 import { enviarAlertaEmail } from '@/lib/email';
 import { labelMetodo } from '@/lib/pagos/metodos';
-import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
+import { cargosDeLasLineas, estudiantesDeLasLineas, vincularCargosDeFactura, responsableDeLosCargos, responsableDeLosEstudiantes, ponerResponsableSiFalta } from '@/lib/administracion-escolar/vincular-por-clave';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
@@ -57,6 +58,10 @@ const itemSchema = z.object({
   productoId:             z.number().int().positive().optional().nullable(),
   // Variante vendida — el descuento de stock pega a esta variante (lib/inventario/descuento.ts).
   variantId:              z.number().int().positive().optional().nullable(),
+  // De qué cuota escolar salió la línea: `estudiante:cargo:mes:año`. Metadato,
+  // no va al XML DGII. Es lo que deja reconstruir el vínculo cargo↔factura sin
+  // depender de que alguien pulse «Vincular» — ver `LineaPrefill.cuotaClave`.
+  cuotaClave:             z.string().max(64).optional().nullable(),
 });
 
 /**
@@ -76,6 +81,71 @@ const itemSchema = z.object({
  * Deriva de `items` en vez de exigir el campo porque `items` ya trae todo lo
  * que la copia necesita: pedirlo dos veces es lo que permitió que se olvidara.
  */
+/**
+ * Ata el documento recién creado a los cargos escolares que sus líneas declaran.
+ *
+ * Va aquí, dentro de la transacción del insert, y no en el navegador: el enlace
+ * era un botón («Vincular al cargo») y por eso se perdía. Ver el comentario
+ * largo en `lib/administracion-escolar/vincular-por-clave.ts`.
+ *
+ * No corta la emisión si falla — una factura buena no puede caerse porque un
+ * cargo suyo ya estuviera atado. Se anota y sigue.
+ */
+async function vincularCargosEscolares(
+  tx: never,
+  args: { teamId: number; documentoId: number; clientId: number | null; items: z.infer<typeof itemSchema>[] },
+): Promise<void> {
+  const cargoIds = cargosDeLasLineas(args.items);
+  // Los alumnos salen igual de un mes ADELANTADO, donde el cargo todavía no
+  // existe (id 0). Sin esto, esas facturas se quedaban sin dueño y ya no había
+  // forma de atarlas a nada.
+  const estudianteIds = estudiantesDeLasLineas(args.items);
+  if (cargoIds.length === 0 && estudianteIds.length === 0) return;
+  try {
+    /*
+      El dueño de una factura escolar es el RESPONSABLE DE PAGO del alumno. No
+      es una preferencia: es la definición. Por eso se saca de los cargos y no
+      de lo que traiga el formulario.
+
+      El formulario lo pierde con facilidad. El buscador de RNC ofrece el padrón
+      entero de la DGII, y elegir un RNC de ahí llena el número pero NO
+      selecciona un contacto: la factura sale con `client_id` en NULL y ya no se
+      puede atar a nada, porque el candado exige que el cliente sea el
+      responsable del alumno. Así nacieron las 20 huérfanas que hay en
+      producción, 18 de ellas ya cobradas.
+
+      Y el RNC sigue siendo libre —cambiarlo es justo la función que se pidió,
+      para facturar a nombre de la empresa del padre—. Lo que no cambia es a
+      quién pertenece el documento.
+    */
+    const responsable = cargoIds.length > 0
+      ? await responsableDeLosCargos(tx as never, { teamId: args.teamId, cargoIds })
+      : await responsableDeLosEstudiantes(tx as never, { teamId: args.teamId, estudianteIds });
+    const clientId = responsable ?? args.clientId;
+    if (responsable != null && args.clientId == null) {
+      await ponerResponsableSiFalta(tx as never, {
+        teamId: args.teamId, documentoId: args.documentoId, clientId: responsable,
+      });
+      console.warn(
+        '[ecf/emitir] doc %d salió sin cliente; se le puso el responsable de pago %d de sus cargos.',
+        args.documentoId, responsable,
+      );
+    }
+    const r = await vincularCargosDeFactura(tx as never, {
+      teamId: args.teamId, documentoId: args.documentoId,
+      clientId, cargoIds,
+    });
+    if (r.omitidos.length) {
+      console.warn(
+        '[ecf/emitir] cargos no vinculados a doc %d (ya tenían factura o no son de este responsable): %o',
+        args.documentoId, r.omitidos,
+      );
+    }
+  } catch (e) {
+    console.error('[ecf/emitir] fallo al vincular cargos del doc %d', args.documentoId, e);
+  }
+}
+
 function lineasParaGuardar(data: { lineasJson?: string; items: z.infer<typeof itemSchema>[] }): string {
   return data.lineasJson ?? JSON.stringify(data.items.map(item => ({
     productoId:         item.productoId ?? null,
@@ -89,6 +159,7 @@ function lineasParaGuardar(data: { lineasJson?: string; items: z.infer<typeof it
     subtotalConItbis:   item.precioUnitarioItem * item.cantidadItem * (1 + (item.tasaItbis ?? 0)),
     unidadMedida:       item.unidadMedidaItem,
     indicadorBienoServicio: item.indicadorBienoServicio ?? 2,
+    cuotaClave:         item.cuotaClave ?? null,
   })));
 }
 
@@ -150,11 +221,18 @@ const emitirSchema = z.object({
   pagoRecibido: z.boolean().optional(),
   pagoMetodo:   z.string().optional(),
   pagoCuenta:   z.string().optional(),
+  pagoCuentaBancoId: z.number().int().positive().nullable().optional(),
   pagoValor:    z.number().min(0).optional(),
   pagoFecha:    z.string().optional(),
   // Pago dividido (split): varios métodos en una sola operación. Cuando viene,
   // tiene prioridad sobre el pago single y se registra vía registrarPagosSplit.
-  pagos:        z.array(z.object({ metodo: z.string(), valor: z.number().min(0) })).optional(),
+  pagos:        z.array(z.object({
+    metodo: z.string(),
+    valor:  z.number().min(0),
+    /** A qué cuenta bancaria entró esta parte. Igual que en el pago simple. */
+    cuenta: z.string().max(100).optional(),
+    cuentaBancoId: z.number().int().positive().nullable().optional(),
+  })).optional(),
 
   clientId:   z.number().int().positive().optional(),
   lineasJson: z.string().optional(),
@@ -547,7 +625,7 @@ export async function POST(request: NextRequest) {
       // muerto. Las notas de crédito/débito y compras/gastos sí pueden
       // guardarse como borrador: son documentos internos.
       const ambiente = await getAmbienteTenant(teamId);
-      if (ambiente !== 'Produccion') {
+      if (!(await puedeEmitirADgii(teamId))) {
         return NextResponse.json(
           { error: mensajeAmbienteNoProduccion(ambiente), ambiente },
           { status: 403 },
@@ -950,7 +1028,7 @@ export async function POST(request: NextRequest) {
               turnoCajaId:   turnoPagoBorrador,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
-                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null })),
             });
           } catch (e) { console.error('[editar borrador registrarPagosSplit]', e); }
         } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
@@ -963,6 +1041,7 @@ export async function POST(request: NextRequest) {
               montoCentavos: Math.min(Math.round(data.pagoValor * 100), montoCts),
               metodo:        data.pagoMetodo || 'otro',
               cuenta:        data.pagoCuenta || null,
+              cuentaBancoId: data.pagoCuentaBancoId ?? null,
               fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
               createdBy:     user.id,
               turnoCajaId:   turnoPagoBorrador,
@@ -1106,6 +1185,13 @@ export async function POST(request: NextRequest) {
             stockDescontado:      esFacturaDefinitivaNueva,
             ...extraFields,
           }).returning();
+          // Atar los cargos escolares AQUÍ, dentro de la misma transacción que
+          // creó el documento. Antes esto era un botón en el navegador y por eso
+          // se perdía.
+          await vincularCargosEscolares(tx as never, {
+            teamId, documentoId: inserted.id,
+            clientId: data.clientId ?? null, items: data.items,
+          });
           return { deduped: false as const, row: inserted };
         },
         { userId: user.id, teamId },
@@ -1180,7 +1266,7 @@ export async function POST(request: NextRequest) {
               turnoCajaId:   turnoPagoBorradorNuevo,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
-                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null })),
             }).catch((e) => console.error('[emitir borrador registrarPagosSplit]', e))
           : (data.pagoRecibido && data.pagoValor && data.pagoValor > 0
               ? registrarPago({
@@ -1189,6 +1275,7 @@ export async function POST(request: NextRequest) {
                   montoCentavos: Math.min(Math.round(data.pagoValor * 100), Math.round(totales.montoTotal * 100)),
                   metodo:        data.pagoMetodo || 'otro',
                   cuenta:        data.pagoCuenta || null,
+              cuentaBancoId: data.pagoCuentaBancoId ?? null,
                   fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
                   createdBy:     user.id,
                   turnoCajaId:   turnoPagoBorradorNuevo,
@@ -1534,6 +1621,12 @@ export async function POST(request: NextRequest) {
       { userId: user.id, teamId },
     );
 
+    // Los cargos escolares se atan aquí, no con un botón en el navegador.
+    await vincularCargosEscolares(db as never, {
+      teamId, documentoId: saved.id,
+      clientId: data.clientId ?? null, items: data.items,
+    });
+
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
     // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
     // recalcula estado_pago). Si no, flujo single existente.
@@ -1550,7 +1643,7 @@ export async function POST(request: NextRequest) {
           turnoCajaId:   turnoParaPago,
           pagos: data.pagos
             .filter(p => p.valor > 0)
-            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null })),
         });
       } catch (e) { console.error('[emitir registrarPagosSplit]', e); }
     } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
@@ -1561,6 +1654,7 @@ export async function POST(request: NextRequest) {
           montoCentavos: Math.min(Math.round(data.pagoValor * 100), Math.round(totales.montoTotal * 100)),
           metodo:        data.pagoMetodo || 'otro',
           cuenta:        data.pagoCuenta || null,
+              cuentaBancoId: data.pagoCuentaBancoId ?? null,
           fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
           turnoCajaId:   turnoParaPago,
           createdBy:     user.id,
