@@ -57,14 +57,29 @@ function SelectItem({
   children,
   className,
   disabled,
+  ...rest
 }: {
   value: string;
   children?: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  /**
+   * MUI dibuja la selección clonando los hijos del Select e inyectándoles
+   * `onClick`, `data-value`, `role`, `selected`, etc. Como aquí el `MenuItem`
+   * va envuelto en este componente, hay que REENVIARLE esos props: sin ellos
+   * el `MenuItem` renderizado no lleva el `onClick` de MUI y hacer clic en una
+   * opción no guardaba nada. `rest` los captura y los pasa tal cual.
+   */
+  [key: string]: unknown;
 }) {
   return (
-    <MenuItem value={value} className={className} disabled={disabled} sx={{ fontSize: '0.875rem' }}>
+    <MenuItem
+      value={value}
+      className={className}
+      disabled={disabled}
+      sx={{ fontSize: '0.875rem' }}
+      {...(rest as Record<string, unknown>)}
+    >
       {children}
     </MenuItem>
   );
@@ -93,11 +108,20 @@ function Select({
   onValueChange,
   disabled,
   children,
+  id,
 }: {
   value?: string;
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   children?: React.ReactNode;
+  /**
+   * Id del control. Lo inyecta el `<Field>` compartido (clona su hijo con un
+   * `id`) para que su `<Label htmlFor>` apunte al control. Sin reenviarlo aquí,
+   * la etiqueta quedaba colgada: un `<Input>` sí recibe el id, pero este Select
+   * lo ignoraba, así que hacer clic en la etiqueta —«Sexo», p. ej.— no abría
+   * nada. Se pasa al MuiSelect para reponer esa asociación.
+   */
+  id?: string;
 }) {
   /**
    * Se recorre un solo nivel a propósito. Los 18 consumidores escriben el
@@ -129,6 +153,7 @@ function Select({
   return (
     <FormControl size="small" disabled={disabled} className={triggerClassName}>
       <MuiSelect
+        id={id}
         value={value ?? ''}
         onChange={(e) => onValueChange?.(String(e.target.value))}
         displayEmpty
