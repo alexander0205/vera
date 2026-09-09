@@ -29,6 +29,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { coberturaVinculo } from '@/lib/administracion-escolar/cobertura-vinculo';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -99,6 +100,8 @@ export interface Cargo {
   facturaEncf: string | null;
   facturaCodigo: string | null;
   facturaEstadoPago: string | null;
+  /** Monto total de la factura vinculada (centavos). Para mostrar «sin cubrir». */
+  facturaMontoCentavos: number | null;
   /** Estado ante la DGII (BORRADOR, EN_PROCESO, ACEPTADO…), no el de cobro. */
   facturaEstado: string | null;
 }
@@ -2550,18 +2553,37 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
         <Receipt className="h-3 w-3" />{ref}
       </Link>
     );
-    // Con factura y saldo pendiente: ir a la factura a registrar el cobro.
-    if (puedePagos && facturable) {
-      return (
-        <span className="inline-flex items-center justify-end gap-3">
-          {chip}
-          <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
-            <Wallet className="h-3 w-3" />Registrar pago
-          </button>
+    // Transparencia neutra: mostrar sin interpretar cuánto de este cargo queda
+    // sin cubrir por su factura, o si la factura está vinculada pero sin saldar.
+    const cobertura = coberturaVinculo(cargo);
+    const nota =
+      cobertura.tipo === 'sin-cubrir' ? (
+        <span className="text-[11px] text-amber-600"
+          title="La factura vinculada es menor que el cargo; esta parte queda sin cubrir. Revisar si es un descuento acordado o la factura equivocada.">
+          sin cubrir {fmtDOP(cobertura.sinCubrirCentavos)}
         </span>
-      );
-    }
-    return chip;
+      ) : cobertura.tipo === 'pendiente' ? (
+        <span className="text-[11px] text-gray-400"
+          title="Factura vinculada pero aún no saldada; el cargo sigue pendiente hasta que se pague.">
+          pendiente de saldar
+        </span>
+      ) : null;
+    // Con factura y saldo pendiente: ir a la factura a registrar el cobro.
+    const fila = puedePagos && facturable ? (
+      <span className="inline-flex items-center justify-end gap-3">
+        {chip}
+        <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
+          <Wallet className="h-3 w-3" />Registrar pago
+        </button>
+      </span>
+    ) : chip;
+    if (!nota) return fila;
+    return (
+      <span className="inline-flex flex-col items-end gap-0.5">
+        {fila}
+        {nota}
+      </span>
+    );
   }
   const acciones: React.ReactNode[] = [];
   if (puedeFacturar && facturable) {
