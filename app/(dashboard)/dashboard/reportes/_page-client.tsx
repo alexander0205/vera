@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet, Receipt, Users, HandCoins, UserCircle } from 'lucide-react';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet, Receipt, Users, HandCoins, UserCircle, FileSearch } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -113,6 +113,13 @@ const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React
     descripcion: 'Ranking de clientes por facturación en el período.',
     icon: UserCircle,
     color: 'bg-violet-50 text-violet-600',
+  },
+  {
+    href: '/dashboard/reportes/facturas-cliente',
+    titulo: 'Facturas por cliente',
+    descripcion: 'Elige un cliente y consulta solo sus facturas. Cada una se abre en su pantalla.',
+    icon: FileSearch,
+    color: 'bg-zero-50 text-zero-600',
   },
   {
     href: '/dashboard/reportes/por-usuario',
