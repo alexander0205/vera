@@ -28,6 +28,9 @@ export const MODULE_PRICE_IDS: Record<ModuleKey, string> = {
   // Administración es base — toda empresa la tiene, nunca se cobra.
   administracion: '',
   escolar:        '',
+  // Nómina: se administra a mano por ahora (modulosOverride). Cuando se
+  // comercialice como addon suelto, se le pone STRIPE_PRICE_MODULO_NOMINA.
+  nomina:         '',
 };
 
 /**

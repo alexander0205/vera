@@ -80,8 +80,15 @@ export type Permission =
   | 'modulo:administracion'
   | 'modulo:pos'
   | 'modulo:escolar'
+  | 'modulo:nomina'
   // Suscripción / billing
   | 'suscripcion:gestionar'
+  // Nómina — maestro de empleados (T1) y, en fases siguientes, corridas y pagos
+  | 'empleados:ver'
+  | 'empleados:gestionar'
+  | 'nomina:correr'      // crear/aprobar corridas de nómina (Fase 2-3)
+  | 'nomina:pagar'       // generar el archivo de dispersión y marcar pagado (Fase 4)
+  | 'nomina:configurar'  // tasas TSS, cuenta de dispersión, parámetros
   // Administración escolar
   | 'administracion-escolar:ver'
   | 'administracion-escolar:gestionar'
@@ -151,10 +158,11 @@ export const ROLES: RoleDef[] = [
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'pos:vender', 'pos:configurar', 'pos:anular', 'pos:quitar-item-pin',
-      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar', 'modulo:nomina',
       'suscripcion:gestionar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
+      'empleados:ver', 'empleados:gestionar', 'nomina:correr', 'nomina:pagar', 'nomina:configurar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
   },
@@ -178,7 +186,8 @@ export const ROLES: RoleDef[] = [
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
       'pos:vender', 'pos:configurar', 'pos:anular', 'pos:quitar-item-pin',
-      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar', 'modulo:nomina',
+      'empleados:ver', 'empleados:gestionar', 'nomina:correr', 'nomina:pagar', 'nomina:configurar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -325,6 +334,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'modulo:administracion', label: 'Acceso al módulo Administración' },
     { key: 'modulo:pos',            label: 'Acceso al módulo Punto de Venta' },
     { key: 'modulo:escolar',        label: 'Acceso al módulo Administración Escolar' },
+    { key: 'modulo:nomina',         label: 'Acceso al módulo Nómina' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },
@@ -349,6 +359,13 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'contabilidad:ver',        label: 'Ver secuencias, e-NCF, asientos y reportes contables' },
     { key: 'contabilidad:gestionar',  label: 'Crear / editar / anular asientos manuales' },
     { key: 'contabilidad:configurar', label: 'Configurar catálogo de cuentas y cuentas automáticas' },
+  ]},
+  { module: 'Nómina', icon: 'Users', permissions: [
+    { key: 'empleados:ver',       label: 'Ver empleados' },
+    { key: 'empleados:gestionar', label: 'Crear / editar empleados' },
+    { key: 'nomina:correr',       label: 'Crear y aprobar corridas de nómina' },
+    { key: 'nomina:pagar',        label: 'Generar dispersión bancaria y marcar pagos' },
+    { key: 'nomina:configurar',   label: 'Configurar tasas TSS y cuenta de dispersión' },
   ]},
 ];
 

@@ -24,6 +24,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { parseLineas } from '@/lib/reportes/shared';
 import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
+import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
 
@@ -91,6 +92,7 @@ export type MotivoSalto =
   | 'sin-cuenta-por-pagar'
   | 'sin-cuenta-gastos'
   | 'sin-cuenta-caja'
+  | 'provisiones-apagadas'
   | 'no-es-gasto';
 
 export interface ResultadoGeneracion {
@@ -900,6 +902,215 @@ export async function generarAsientoGastoDoc(
       { cuentaId: cuentaGasto, debeCents: g.montoTotal, haberCents: 0, descripcion: 'Gasto' },
       { cuentaId: cuentaHaber, debeCents: 0, haberCents: g.montoTotal, descripcion: esContado ? 'Pago del gasto' : 'Deuda por gasto' },
     ],
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+// ─── Asiento de nómina ───────────────────────────────────────────────────────
+
+/**
+ * Asiento de una corrida de nómina al aprobarla. Partida doble del devengo:
+ *
+ *   DEBE  Gasto de sueldos            (bruto)
+ *   DEBE  Gasto aportes patronales    (patronal)
+ *   HABER Retenciones por pagar       (AFP+SFS+ISR del empleado)
+ *   HABER Aportes patronales por pagar(patronal)
+ *   HABER Sueldos por pagar           (neto)
+ *
+ * Cuadra: bruto + patronal (debe) = deducciones + patronal + neto (haber),
+ * porque bruto = neto + deducciones. Cada línea usa su cuenta de nómina
+ * dedicada si el team la configuró; si no, cae a la de gastos (6101) y la de
+ * por-pagar (2101) genéricas — igual de correcto y balanceado.
+ */
+export async function generarAsientoNomina(
+  teamId: number,
+  corridaId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT descripcion,
+           total_bruto_cents       AS "bruto",
+           total_deducciones_cents AS "deducciones",
+           total_neto_cents        AS "neto",
+           total_patronal_cents    AS "patronal",
+           to_char(coalesce(fecha_pago, (periodo || '-28')::date), 'YYYY-MM-DD') AS fecha
+    FROM nomina_corridas
+    WHERE team_id = ${teamId} AND id = ${corridaId}
+  `);
+  const fila = (filas as unknown as {
+    descripcion: string; bruto: string | number; deducciones: string | number;
+    neto: string | number; patronal: string | number; fecha: string;
+  }[])[0];
+
+  if (!fila) return { creado: false, motivo: 'no-es-gasto' };
+  // Los BIGINT llegan como string desde el SQL crudo: coercionar a número o el
+  // reduce de insertarAsiento concatenaría en vez de sumar y descuadraría.
+  const c = {
+    descripcion: fila.descripcion,
+    fecha: fila.fecha,
+    bruto:       Number(fila.bruto),
+    deducciones: Number(fila.deducciones),
+    neto:        Number(fila.neto),
+    patronal:    Number(fila.patronal),
+  };
+  if (c.bruto <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
+  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+
+  // Cuentas dedicadas de nómina: cada línea usa la suya si el team la configuró;
+  // si no, cae DIRECTO a su genérica (gasto 6101 / por-pagar 2101). Así
+  // configurar una sola cuenta mueve solo esa línea, sin arrastrar a las demás.
+  const cSueldo        = cfg.cuentaNominaSueldoId ?? cuentaGasto;
+  const cAportesGasto  = cfg.cuentaNominaAportesGastoId ?? cuentaGasto;
+  const cRetenciones   = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
+  const cAportesPagar  = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
+  const cSueldosPagar  = cfg.cuentaNominaPorPagarId ?? cuentaPorPagar;
+
+  const lineas = [
+    { cuentaId: cSueldo,       debeCents: c.bruto,       haberCents: 0, descripcion: 'Sueldos del período' },
+    { cuentaId: cAportesGasto, debeCents: c.patronal,    haberCents: 0, descripcion: 'Aportes patronales TSS' },
+    { cuentaId: cRetenciones,  debeCents: 0, haberCents: c.deducciones, descripcion: 'Retenciones por pagar (AFP/SFS/ISR)' },
+    { cuentaId: cAportesPagar, debeCents: 0, haberCents: c.patronal,    descripcion: 'Aportes patronales por pagar' },
+    { cuentaId: cSueldosPagar, debeCents: 0, haberCents: c.neto,        descripcion: 'Sueldos por pagar' },
+  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: c.fecha, concepto: `Nómina · ${c.descripcion}`, origenTipo: 'nomina', origenId: corridaId },
+    lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+/**
+ * Pago de una obligación de nómina (TSS/DGII): salda el pasivo devengado.
+ *
+ *   DEBE  Retenciones por pagar   (parte del empleado: AFP/SFS emp o ISR)
+ *   DEBE  Aportes por pagar       (parte patronal)
+ *     HABER Caja / banco          según el método de pago
+ *
+ * Usa las mismas cuentas por-pagar dedicadas que el devengo (con su fallback a
+ * 2101), así que el pasivo que se abrió al aprobar se cierra en la misma cuenta.
+ */
+export async function generarAsientoPagoNominaObligacion(
+  teamId: number,
+  obligacionId: number,
+  metodo: 'efectivo' | 'transferencia' | 'cheque' = 'efectivo',
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT o.destino, o.monto_cents AS "monto",
+           o.parte_retenciones_cents AS "retenciones", o.parte_aportes_cents AS "aportes",
+           to_char(coalesce(c.fecha_pago, (c.periodo || '-28')::date), 'YYYY-MM-DD') AS fecha,
+           c.periodo
+    FROM nomina_obligaciones o
+    JOIN nomina_corridas c ON c.id = o.corrida_id AND c.team_id = o.team_id
+    WHERE o.team_id = ${teamId} AND o.id = ${obligacionId}
+  `);
+  const o = (filas as unknown as {
+    destino: string; monto: string | number; retenciones: string | number; aportes: string | number; fecha: string; periodo: string;
+  }[])[0];
+  if (!o) return { creado: false, motivo: 'no-es-gasto' };
+
+  const monto = Number(o.monto);
+  const retenciones = Number(o.retenciones);
+  const aportes = Number(o.aportes);
+  if (monto <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+  const cRetenciones = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
+  const cAportesPagar = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
+
+  const salida = (await resolverCuentaCobro(teamId, metodo as ClaveMetodo)) ??
+    (metodo === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null);
+  if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
+
+  const lineas = [
+    { cuentaId: cRetenciones,  debeCents: retenciones, haberCents: 0, descripcion: 'Retenciones pagadas al Estado' },
+    { cuentaId: cAportesPagar, debeCents: aportes,     haberCents: 0, descripcion: 'Aportes patronales pagados' },
+    { cuentaId: salida,        debeCents: 0, haberCents: monto,       descripcion: `Salida de fondos (${o.destino})` },
+  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: o.fecha, concepto: `Pago obligación ${o.destino} · Nómina ${o.periodo}`, origenTipo: 'pago_nomina', origenId: obligacionId },
+    lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+/**
+ * Asiento de PROVISIÓN de nómina (regalía/vacaciones/cesantía) al aprobar una
+ * corrida. Acumula el costo del empleador que se devengará con el tiempo:
+ *
+ *   DEBE  Gasto por provisiones     (regalía + vacaciones + cesantía)
+ *     HABER Provisiones por pagar    (el pasivo que se acumula)
+ *
+ * Solo corre si la contabilidad está activa Y el team activó `provisionarNomina`
+ * (apagado por defecto): provisionar en el libro es una decisión de política
+ * contable. Idempotente por el índice único de origen.
+ */
+export async function generarAsientoProvisionNomina(
+  teamId: number,
+  corridaId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+  if (!cfg.provisionarNomina) return { creado: false, motivo: 'provisiones-apagadas' };
+
+  const cab = await db.execute(sql`
+    SELECT descripcion, to_char(coalesce(fecha_pago, (periodo || '-28')::date), 'YYYY-MM-DD') AS fecha
+    FROM nomina_corridas WHERE team_id = ${teamId} AND id = ${corridaId}
+  `);
+  const corrida = (cab as unknown as { descripcion: string; fecha: string }[])[0];
+  if (!corrida) return { creado: false, motivo: 'no-es-gasto' };
+
+  const filas = await db.execute(sql`
+    SELECT bruto_cents AS "brutoCents" FROM nomina_lineas WHERE corrida_id = ${corridaId}
+  `);
+  const lineas = (filas as unknown as { brutoCents: string | number }[]).map((l) => ({ brutoCents: Number(l.brutoCents) }));
+  const prov = provisionesDeLineas(lineas);
+  if (prov.totalCents <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaGasto = cfg.cuentaProvisionGastoId ?? cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
+  const cuentaPorPagar = cfg.cuentaProvisionPorPagarId ?? cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+
+  const lineasAsiento = [
+    { cuentaId: cuentaGasto,    debeCents: prov.regaliaCents,    haberCents: 0, descripcion: 'Provisión regalía pascual' },
+    { cuentaId: cuentaGasto,    debeCents: prov.vacacionesCents, haberCents: 0, descripcion: 'Provisión vacaciones' },
+    { cuentaId: cuentaGasto,    debeCents: prov.cesantiaCents,   haberCents: 0, descripcion: 'Provisión cesantía' },
+    { cuentaId: cuentaPorPagar, debeCents: 0, haberCents: prov.totalCents,      descripcion: 'Provisiones por pagar' },
+  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: corrida.fecha, concepto: `Provisión nómina · ${corrida.descripcion}`, origenTipo: 'provision_nomina', origenId: corridaId },
+    lineasAsiento,
     userId,
   );
 
