@@ -29,7 +29,7 @@ import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
-import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -117,7 +117,7 @@ export async function POST(
     // no tiene la excepción de habilitación — el Set de Pruebas nunca pasa por
     // aquí, emite directo contra /api/ecf/emitir.
     const ambiente = await getAmbienteTenant(teamId);
-    if (ambiente !== 'Produccion') {
+    if (!(await puedeEmitirADgii(teamId))) {
       return NextResponse.json(
         { error: mensajeAmbienteNoProduccion(ambiente), ambiente },
         { status: 403 },

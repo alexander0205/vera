@@ -378,18 +378,39 @@ const DOC_UI: Record<DocVariant, { backHref: string; backLabel: string; noun: st
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant }) {
+export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
+  variant?: DocVariant;
+  /**
+   * Qué documento enseñar, cuando esto NO es una página.
+   *
+   * Sin él la pantalla saca el id de la ruta, que es lo correcto en
+   * `/dashboard/facturas/[id]`. Pero la ficha del alumno quiere ver la factura
+   * SIN salirse: si navega, pierde el estado de cuenta de la familia justo
+   * cuando hace falta —es el mismo motivo por el que crear una factura se hace
+   * en un cajón y no en otra pantalla.
+   */
+  docIdFijo?: number;
+  /** En un cajón, «volver» es cerrarlo. */
+  onCerrar?: () => void;
+}) {
   const params   = useParams();
   const router   = useRouter();
-  const docId    = params.id as string;
+  const docId    = docIdFijo != null ? String(docIdFijo) : (params.id as string);
+  const enCajon  = docIdFijo != null;
   const ui       = DOC_UI[variant];
   // A esta pantalla se llega desde muchos sitios —la ficha de un estudiante,
   // cuentas por cobrar, el buscador—, así que el listado es solo el respaldo.
-  const volver   = useVolver(ui.backHref);
+  const volverNav = useVolver(ui.backHref);
+  const volver    = onCerrar ?? volverNav;
 
   // Posición dentro de la lista de la que se llegó, para las flechas del
   // header. Va antes de cualquier return temprano: es un hook.
-  const navLista = useListaNavegacion(ui.backHref, Number(docId));
+  const navListaRuta = useListaNavegacion(ui.backHref, Number(docId));
+  // En el cajón no se llegó de ninguna lista, así que las flechas de
+  // anterior/siguiente no tienen a dónde ir.
+  const navLista: typeof navListaRuta = enCajon
+    ? { ...navListaRuta, anteriorId: null, siguienteId: null, posicion: 0, total: 0 }
+    : navListaRuta;
 
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
   const [loading, setLoading] = useState(true);

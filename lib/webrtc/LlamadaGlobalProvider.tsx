@@ -34,6 +34,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { soporteAplica } from '@/components/support/rutas-sin-soporte';
 import { useLlamada } from './useLlamada';
 import type { LlamadaDTO } from './senalizacion';
 
@@ -43,9 +44,19 @@ const LlamadaGlobalContext = createContext<LlamadaGlobal | null>(null);
 
 export function LlamadaGlobalProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // La consola de agente ya tiene su propio useLlamada('agent', call) — ver
-  // el comentario grande arriba del archivo para el porqué de esta exclusión.
-  const enConsolaAgente = pathname?.startsWith('/zero-tickets') ?? false;
+  /**
+   * Dónde NO se sondea.
+   *
+   * Antes esto solo esquivaba la consola de agente —que ya tiene su propio
+   * `useLlamada('agent', call)`, ver el comentario grande arriba— y se le
+   * escapaban las páginas públicas: el enlace de pago de un padre pedía
+   * `/api/zero-tickets/tickets` cada 3 segundos y cobraba un 401 cada vez,
+   * mientras la pestaña siguiera abierta.
+   *
+   * Se usa la MISMA lista que el chat y el botón de la barra: si el soporte no
+   * aplica en una ruta, tampoco hay llamada que vigilar.
+   */
+  const sinSondeo = !soporteAplica(pathname);
 
   const [call, setCall] = useState<LlamadaDTO | null>(null);
   const pollInFlightRef = useRef(false);
@@ -56,7 +67,7 @@ export function LlamadaGlobalProvider({ children }: { children: React.ReactNode 
   // del mismo usuario no rompe nada). Lo que SÍ tiene que ser único es la
   // conexión WebRTC, de ahí que viva acá y no en useTicketChat.
   useEffect(() => {
-    if (enConsolaAgente) {
+    if (sinSondeo) {
       setCall(null);
       return;
     }
@@ -82,7 +93,7 @@ export function LlamadaGlobalProvider({ children }: { children: React.ReactNode 
       cancelado = true;
       clearInterval(interval);
     };
-  }, [enConsolaAgente]);
+  }, [sinSondeo]);
 
   const llamada = useLlamada('user', call);
 

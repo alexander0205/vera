@@ -562,6 +562,12 @@ function PagoModal({
           montoDOP:      parseFloat(l.valor),
           metodo:        l.metodo,
           referencia:    l.referencia?.trim() || undefined,
+          // La cuenta se recogía en pantalla y se quedaba aquí: el endpoint la
+          // acepta desde siempre y este submit no la mandaba. Por eso en
+          // producción hay 809 transferencias y solo 9 dicen a qué banco
+          // entraron.
+          cuenta:        l.cuenta?.trim() || undefined,
+          cuentaBancoId: l.cuentaBancoId ?? undefined,
           notaCreditoId: l.notaCreditoId ?? undefined,
         }));
 
@@ -656,6 +662,7 @@ function PagoModal({
             total={totalDOP}
             yaPagado={pagadoDOP}
             disabled={guardando}
+            showCuenta
             showReferencia
             notasCredito={notasCredito}
           />

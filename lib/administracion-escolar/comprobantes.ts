@@ -27,7 +27,7 @@ import {
 import { registrarPago } from '@/lib/db/queries';
 import { sincronizarSaldosDesdeFacturas } from './queries';
 import { leerComprobante } from '@/lib/storage/comprobantes';
-import type { CargoDelComprobante } from '@/lib/db/schema';
+import type { CargoDelComprobante, MoraDelComprobante } from '@/lib/db/schema';
 
 export interface ComprobanteFila {
   id: number;
@@ -194,6 +194,7 @@ export interface PlanAplicacion {
 async function planDeAplicacion(
   teamId: number,
   cargos: CargoDelComprobante[],
+  moras: MoraDelComprobante[],
   montoCentavos: number,
 ): Promise<PlanAplicacion> {
   const idsCargo = cargos.map((x) => x.cargoId);
@@ -225,9 +226,23 @@ async function planDeAplicacion(
   const pagables   = vivos.filter((v) => v.ecfDocumentId != null && v.saldoCentavos > 0);
   const sinFactura = vivos.filter((v) => v.ecfDocumentId == null && v.saldoCentavos > 0);
 
+  /**
+   * Las notas de mora entran como facturas más, al final de la cola.
+   *
+   * Al final y no al principio a propósito: si el padre transfirió de menos
+   * —cosa normal— lo que llega tapa primero la colegiatura y solo después el
+   * recargo. Cobrar el interés antes que el capital y dejar la mensualidad
+   * debiendo es exactamente lo contrario de lo que espera una familia.
+   *
+   * No se releen sus saldos aparte: caen en la misma consulta de saldos de
+   * abajo, que ya calcula total − cobrado − notas de crédito para cualquier
+   * documento.
+   */
+  const moraIds = [...new Set(moras.map((m) => m.facturaId))];
+
   // Saldo REAL de cada factura, no el del cargo: una factura puede cubrir
   // varios cargos, y registrar la suma de los cargos la pasaría de largo.
-  const facturaIds = [...new Set(pagables.map((p) => p.ecfDocumentId!))];
+  const facturaIds = [...new Set([...pagables.map((p) => p.ecfDocumentId!), ...moraIds])];
   // `ecf_documents` no guarda el saldo: se calcula igual que en
   // sincronizarSaldosDesdeFacturas — total menos lo cobrado menos las notas de
   // crédito. Sin restar las NC, una nota que ya redujo la factura haría creer
@@ -256,7 +271,10 @@ async function planDeAplicacion(
 
   const { asignaciones, sobrante } = repartir(
     montoCentavos,
-    pagables.map((p) => ({ facturaId: p.ecfDocumentId!, saldo: saldoDe.get(p.ecfDocumentId!) ?? 0 })),
+    [
+      ...pagables.map((p) => ({ facturaId: p.ecfDocumentId!, saldo: saldoDe.get(p.ecfDocumentId!) ?? 0 })),
+      ...moraIds.map((id) => ({ facturaId: id, saldo: saldoDe.get(id) ?? 0 })),
+    ],
   );
 
   // Cómo se llama cada factura en la pantalla. Un e-NCF no le dice nada a
@@ -267,6 +285,16 @@ async function planDeAplicacion(
     const e = porFactura.get(k) ?? { encf: p.encf, codigo: p.codigo, detalle: [] };
     e.detalle.push(`${p.concepto} · ${p.nombres}`);
     porFactura.set(k, e);
+  }
+  // La mora se nombra por la factura que la causó: «Mora» a secas no dice de
+  // qué mes es, y una familia puede tener cuatro.
+  for (const m of moras) {
+    if (porFactura.has(m.facturaId)) continue;
+    porFactura.set(m.facturaId, {
+      encf: null,
+      codigo: m.codigo,
+      detalle: [m.origenCodigo ? `Mora de ${m.origenCodigo}` : 'Recargo por mora'],
+    });
   }
 
   const destinos: DestinoAplicacion[] = asignaciones.map((a) => {
@@ -311,7 +339,7 @@ export async function previsualizarAprobacion(
   if (!c) throw new ComprobanteError('Comprobante no encontrado');
 
   const monto = montoCentavos != null && montoCentavos > 0 ? montoCentavos : c.montoCentavos;
-  const plan = await planDeAplicacion(teamId, c.cargos, monto);
+  const plan = await planDeAplicacion(teamId, c.cargos, c.moras, monto);
   return { ...plan, declaradoCentavos: c.montoCentavos, referencia: c.referencia, estado: c.estado };
 }
 
@@ -367,7 +395,7 @@ export async function aprobarComprobante(
       ? ajustes.montoCentavos
       : c.montoCentavos;
 
-    const plan = await planDeAplicacion(teamId, c.cargos, monto);
+    const plan = await planDeAplicacion(teamId, c.cargos, c.moras, monto);
 
     const fecha = ajustes.fechaPago?.trim() || new Date().toISOString().slice(0, 10);
     const metodo = ajustes.metodo?.trim() || 'transferencia';

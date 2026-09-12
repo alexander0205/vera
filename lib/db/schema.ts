@@ -193,6 +193,17 @@ export const teams = pgTable('teams', {
   // Capa escolar (monedero del estudiante): exclusiva de colegios. Solo aplica con posHabilitado.
   posEscolarHabilitado:   boolean('pos_escolar_habilitado').notNull().default(false),
 
+  /**
+   * Desde qué fecha de emisión el cron factura solo las cuotas escolares.
+   * NULL = apagado, que es el estado de todos los colegios hasta que lo pidan.
+   *
+   * Es una fecha y no un booleano porque encender esto tiene un pasado: un
+   * colegio puede llevar meses con cargos devengados y sin facturar, y un
+   * simple `true` los habría facturado todos de una vez el primer día. La
+   * fecha es la línea a partir de la cual el calendario manda.
+   */
+  escolarFacturacionAutomaticaDesde: date('escolar_facturacion_automatica_desde'),
+
   // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
   plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
 
@@ -874,8 +885,19 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   notaCreditoId:   integer('nota_credito_id'),
   /** Identificador opcional: número de cheque, últimos 4 de tarjeta, etc. */
   referencia:      varchar('referencia', { length: 100 }),
-  /** Cuenta bancaria/caja a la que entró (free-text). */
+  /**
+   * Lo que se le enseñó al usuario: «Banco Popular · Corriente ····4821»,
+   * «Caja general», o los slugs viejos («bhd»). Texto libre a propósito —
+   * no todo cobro entra en una cuenta de la empresa.
+   */
   cuenta:          varchar('cuenta', { length: 100 }),
+  /**
+   * La cuenta de la empresa a la que entró, cuando se eligió una real. ESTA es
+   * la que manda para agrupar: sobrevive a que renombren la cuenta, mientras
+   * que `cuenta` guarda el nombre del día del cobro. Null en efectivo, tarjeta,
+   * «Otro» y en todo el histórico anterior a la migración 0173.
+   */
+  cuentaBancoId:   integer('cuenta_banco_id'),
   /** Fecha del pago (YYYY-MM-DD), separada de createdAt para registros backdated. */
   fechaPago:       date('fecha_pago').notNull(),
   notas:           text('notas'),
@@ -2688,6 +2710,23 @@ export interface CargoDelComprobante {
 }
 
 /**
+ * Una nota de mora que el padre estaba pagando.
+ *
+ * Va aparte de `cargos` porque no es la misma cosa: un cargo apunta a la
+ * factura donde se cobra, y una mora YA es esa factura (una ND tipo 33). Sin
+ * esto, el dinero de un padre que transfería la mora a propósito no tenía a
+ * dónde ir — la aprobación solo sabía repartir contra facturas de cargos.
+ */
+export interface MoraDelComprobante {
+  /** El id de la nota de débito. Es contra esto que se registra el cobro. */
+  facturaId: number;
+  codigo: string | null;
+  /** La factura que se venció y la causó, para reconocerla en la pantalla. */
+  origenCodigo: string | null;
+  montoCentavos: number;
+}
+
+/**
  * Alguien DICE que transfirió, y trae una foto. No mueve un peso.
  *
  * No es un pago a propósito: el cobro de verdad vive en `pagos_recibidos`,
@@ -2719,6 +2758,9 @@ export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
    * forma de saber qué creyó el padre que estaba pagando.
    */
   cargos:        jsonb('cargos').$type<CargoDelComprobante[]>().notNull().default([]),
+
+  /** Las notas de mora que también estaba pagando. Ver `MoraDelComprobante`. */
+  moras:         jsonb('moras').$type<MoraDelComprobante[]>().notNull().default([]),
 
   /** pendiente | aprobado | rechazado */
   estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),

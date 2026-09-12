@@ -29,6 +29,8 @@ const schema = z.object({
   metodo:        z.enum(METODO_PAGO_VALUES_VALIDOS),
   referencia:    z.string().max(100).optional(),
   cuenta:        z.string().max(100).optional(),
+  /** Cuenta de la empresa a la que entró; se valida que sea suya al guardar. */
+  cuentaBancoId: z.number().int().positive().nullable().optional(),
   fechaPago:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notas:         z.string().max(500).optional(),
   notaCreditoId: z.number().int().positive().optional(),
@@ -44,6 +46,8 @@ const splitLineaSchema = z.object({
   metodo:        z.enum(METODO_PAGO_VALUES_VALIDOS),
   referencia:    z.string().max(100).optional(),
   cuenta:        z.string().max(100).optional(),
+  /** Cuenta de la empresa a la que entró; se valida que sea suya al guardar. */
+  cuentaBancoId: z.number().int().positive().nullable().optional(),
   notas:         z.string().max(500).optional(),
   notaCreditoId: z.number().int().positive().optional(),
 }).refine(d => d.montoCentavos || d.montoDOP, {
@@ -110,6 +114,8 @@ export async function POST(
       metodo:        string;
       referencia?:   string | null;
       cuenta?:       string | null;
+      /** Cuenta de la empresa a la que entró; `queries` valida que sea suya. */
+      cuentaBancoId?: number | null;
       notas?:        string | null;
       notaCreditoId?: number | null;
     }>;
@@ -131,6 +137,7 @@ export async function POST(
         metodo:        p.metodo,
         referencia:    p.referencia,
         cuenta:        p.cuenta,
+        cuentaBancoId: p.cuentaBancoId ?? null,
         notas:         p.notas,
         notaCreditoId: p.notaCreditoId ?? null,
       }));
@@ -147,6 +154,7 @@ export async function POST(
         metodo:        data.metodo,
         referencia:    data.referencia,
         cuenta:        data.cuenta,
+        cuentaBancoId: data.cuentaBancoId ?? null,
         notas:         data.notas,
         notaCreditoId: data.notaCreditoId ?? null,
       }];

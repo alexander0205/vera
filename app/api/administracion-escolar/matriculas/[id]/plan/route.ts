@@ -62,6 +62,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const cuotaId = Number(body.cuotaId);
   const conceptoId = Number(body.conceptoId);
   const accion = String(body.accion ?? '');
+  /**
+   * La factura que va a cobrar este mes, si ya existe.
+   *
+   * En un mes ADELANTADO el orden es al revés que en los demás: primero se
+   * guarda la factura y después nace el cargo —a propósito, para no crear deuda
+   * por un documento que quizá nunca se guardó—. Eso deja al enlace fuera de la
+   * transacción que crea la factura, que es donde vive para todo lo demás.
+   *
+   * Recibiéndola aquí, el cargo nace YA atado. Antes hacía falta una tercera
+   * llamada desde el navegador, y si no llegaba —cerrar el cajón, un fallo de
+   * red— el mes quedaba «Sin facturar» encima de una factura que existía.
+   */
+  const ecfDocumentId = Number.isInteger(Number(body.ecfDocumentId)) && Number(body.ecfDocumentId) > 0
+    ? Number(body.ecfDocumentId)
+    : null;
   if (accion !== 'adelantar' && accion !== 'omitir') {
     return NextResponse.json({ error: 'Acción inválida' }, { status: 400 });
   }
@@ -95,6 +110,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       saldoCentavos: accion === 'omitir' ? 0 : cuota.montoCentavos,
       fechaVencimiento: cuota.fechaVencimiento,
       estado: accion === 'omitir' ? 'anulado' : 'pendiente',
+      // Nace atado. Omitir nunca lleva factura: es un mes que no se cobra.
+      ecfDocumentId: accion === 'adelantar' ? ecfDocumentId : null,
     })
     // Si el devengo ganó la carrera mientras el usuario decidía, la cuota ya es
     // un cargo y no hay nada que hacer.

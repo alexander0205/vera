@@ -177,6 +177,15 @@ export async function POST(
       montoCentavos: c.montoCentavos,
       fechaVencimiento: c.fechaVencimiento,
     })),
+    // La mora entra en el total que la página le pidió al padre, así que tiene
+    // que entrar también en lo que la aprobación puede cobrar. Sin esto el
+    // dinero de la mora se quedaría sin destino y saldría como «sin aplicar».
+    moras: link.vista.moras.map((m) => ({
+      facturaId: m.facturaId,
+      codigo: m.codigo,
+      origenCodigo: m.origenCodigo,
+      montoCentavos: m.montoCentavos,
+    })),
   }).returning({ id: adminEscolarComprobantes.id });
 
   await marcarAcceso(link.linkId);
