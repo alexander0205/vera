@@ -43,7 +43,13 @@ export async function verifyToken(input: string) {
 export async function getSession() {
   const session = (await cookies()).get('session')?.value;
   if (!session) return null;
-  return await verifyToken(session);
+  // Una cookie inválida es «sin sesión», no un error: `verifyToken` lanza con
+  // una firma que no cuadra, y quien llama espera `null`. Ver `getUser`.
+  try {
+    return await verifyToken(session);
+  } catch {
+    return null;
+  }
 }
 
 /**
