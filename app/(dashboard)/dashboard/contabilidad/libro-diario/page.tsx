@@ -7,7 +7,7 @@ import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { getConfig } from '@/lib/contabilidad/config';
 import {
-  listarAsientos, contarPendientes, verificarCuadre, cuentasConMovimientos,
+  listarAsientos, contarPendientes, cuentasConMovimientos, descuadradosDePagina,
   ORIGENES, type OrigenTipo,
 } from '@/lib/contabilidad/libro-diario';
 import { fechaValidaISO } from '@/lib/utils/format';
@@ -70,11 +70,12 @@ export default async function LibroDiarioPage({
 
   const filtros = { origenTipo, desde, hasta, cuentaId };
 
-  const [cfg, primera, pendientes, cuadre, cuentas] = await Promise.all([
+  // Sin `verificarCuadre`: recorría el libro entero en cada visita. El cuadre de
+  // lo que se ve sale de la propia página; el completo, al cerrar un ejercicio.
+  const [cfg, primera, pendientes, cuentas] = await Promise.all([
     getConfig(teamId),
     listarAsientos(teamId, { ...filtros, limit: PAGE_SIZE, offset: (pagina - 1) * PAGE_SIZE }),
     contarPendientes(teamId),
-    verificarCuadre(teamId),
     cuentasConMovimientos(teamId),
   ]);
 
@@ -147,7 +148,7 @@ export default async function LibroDiarioPage({
         total={total}
         sumaCents={sumaCents}
         pendientes={pendientes}
-        descuadrados={cuadre.asientosDescuadrados}
+        descuadrados={descuadradosDePagina(asientos)}
         activa={cfg.activa}
         puedeGenerar={puedeGenerar}
         cuentas={cuentas}

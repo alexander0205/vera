@@ -26,6 +26,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { hoyRD } from '@/lib/utils/format';
 import { balanceComprobacion } from './reportes';
+import { verificarCuadre } from './libro-diario';
 
 const CODIGO_RESULTADOS_ACUM = '3102';
 
@@ -153,6 +154,20 @@ export async function previsualizarCierre(teamId: number, ejercicio: number): Pr
     bloqueo = `No hay resultados que cerrar en ${ejercicio}.`;
   } else if ((await saldoResultadoPrevio(teamId, ejercicio)) !== 0) {
     bloqueo = `Hay un ejercicio anterior a ${ejercicio} sin cerrar. Cierra los años en orden, del más antiguo al más reciente.`;
+  } else {
+    // El libro ENTERO tiene que cuadrar para cerrar. Es el único sitio donde se
+    // recorre completo: el libro diario dejó de hacerlo en cada visita porque
+    // crecía con el histórico, y cerrar un ejercicio es raro y es justo el
+    // momento en que un descuadre haría daño — se declara con esos saldos.
+    // Va el último: solo corre cuando todo lo demás ya permite cerrar.
+    const { asientosDescuadrados } = await verificarCuadre(teamId);
+    if (asientosDescuadrados.length > 0) {
+      const [primero] = asientosDescuadrados;
+      bloqueo =
+        `Hay ${asientosDescuadrados.length} asiento(s) descuadrado(s) en el libro ` +
+        `(el primero es el #${primero.id}, «${primero.concepto}»). ` +
+        'No se puede cerrar un ejercicio sobre un libro que no cuadra.';
+    }
   }
 
   return { ejercicio, fechaCierre, saldos, resultadoCents, bloqueo, yaCerrado };
