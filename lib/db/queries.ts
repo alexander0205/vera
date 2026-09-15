@@ -18,7 +18,7 @@ import { cookies } from 'next/headers';
 import { unstable_cache } from 'next/cache';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
-import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { calcularEstadoPago, retencionesQueSaldan } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 import { pRango, pVentaValida, pNotaCredito, pVentaEstados } from '@/lib/reportes/shared';
 
@@ -507,72 +507,6 @@ export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string
     .where(where)
     .orderBy(desc(ecfDocuments.createdAt))
     .limit(limit);
-}
-
-/**
- * Listado de GASTOS (e43 menores / e47 pagos al exterior) con totales, para la
- * pantalla propia de Gastos (independiente de la caja). Compras (e41) tiene su
- * propia pantalla de "Facturas recibidas"; aquí no se mezclan.
- * Los totales excluyen anulados/rechazados; la lista los muestra igual.
- * Montos en CENTAVOS.
- */
-export async function getGastos(teamId: number, limit = 100) {
-  const TIPOS = ['43', '47'];
-  const base = and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, TIPOS));
-  const vivos = and(base, sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`);
-
-  const [docs, totRows, porCategoria] = await Promise.all([
-    db
-      .select({
-        id:            ecfDocuments.id,
-        encf:          ecfDocuments.encf,
-        tipoEcf:       ecfDocuments.tipoEcf,
-        estado:        ecfDocuments.estado,
-        estadoPago:    ecfDocuments.estadoPago,
-        proveedor:     ecfDocuments.razonSocialComprador,
-        rncProveedor:  ecfDocuments.rncComprador,
-        ncfProveedor:  ecfDocuments.ncfProveedor,
-        categoriaGasto: ecfDocuments.categoriaGasto,
-        pagoMetodo:    ecfDocuments.pagoMetodo,
-        pagoCuenta:    ecfDocuments.pagoCuenta,
-        montoTotal:    ecfDocuments.montoTotal,
-        fechaGasto:    ecfDocuments.fechaGasto,
-        fechaEmision:  ecfDocuments.fechaEmision,
-        createdAt:     ecfDocuments.createdAt,
-      })
-      .from(ecfDocuments)
-      .where(base)
-      .orderBy(desc(ecfDocuments.createdAt))
-      .limit(limit),
-    db
-      .select({
-        total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
-        count: sql<number>`count(*)`,
-      })
-      .from(ecfDocuments)
-      .where(vivos),
-    db
-      .select({
-        categoria: ecfDocuments.categoriaGasto,
-        total:     sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
-        count:     sql<number>`count(*)`,
-      })
-      .from(ecfDocuments)
-      .where(vivos)
-      .groupBy(ecfDocuments.categoriaGasto)
-      .orderBy(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0) desc`),
-  ]);
-
-  return {
-    docs,
-    totalCents: Number(totRows[0]?.total ?? 0),
-    count:      Number(totRows[0]?.count ?? 0),
-    porCategoria: porCategoria.map(c => ({
-      categoria:  c.categoria ?? 'Sin categoría',
-      totalCents: Number(c.total ?? 0),
-      count:      Number(c.count ?? 0),
-    })),
-  };
 }
 
 /**
@@ -1268,6 +1202,7 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
       montoTotal: ecfDocuments.montoTotal,
       encf:       ecfDocuments.encf,
       tipoEcf:    ecfDocuments.tipoEcf,
+      totalRetenciones: ecfDocuments.totalRetenciones,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
@@ -1282,6 +1217,7 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
     ? calcularEstadoPago({
         estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal,
         totalPagado: sum, totalNotasCredito: ncAplicado,
+        totalRetenciones: retencionesQueSaldan(doc.tipoEcf, doc.totalRetenciones),
       })
     : 'PENDIENTE';
 

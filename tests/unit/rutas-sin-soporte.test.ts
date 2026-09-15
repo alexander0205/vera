@@ -29,6 +29,12 @@ describe('soporteAplica', () => {
     }
   });
 
+  it('no en las páginas públicas del empleado (firma y horas), sí en las de nómina', () => {
+    assert.equal(soporteAplica('/firmar/token-de-firma'), false);
+    assert.equal(soporteAplica('/horas/token-de-horas'), false);
+    assert.equal(soporteAplica('/nomina/horas'), true);
+  });
+
   it('no en impresión ni en la consola de agentes', () => {
     for (const p of ['/pos-ticket/9', '/pos-reporte/3', '/zero-tickets', '/dashboard/soporte']) {
       assert.equal(soporteAplica(p), false, p);

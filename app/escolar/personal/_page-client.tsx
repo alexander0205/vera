@@ -36,6 +36,7 @@ interface Persona {
   notas: string | null;
   esProfesor: boolean;
   editable: boolean;
+  enNomina: boolean;
 }
 
 interface Respuesta {
@@ -267,6 +268,7 @@ export default function PersonalClient() {
                     </span>
                     {p.origen === 'manual' && <Badge variant="outline" className="shrink-0">A mano</Badge>}
                     {p.esProfesor && <Badge variant="secondary" className="shrink-0">Maestro</Badge>}
+                    {p.enNomina && <Badge variant="outline" className="shrink-0 border-zero-400 text-zero-700">En nómina</Badge>}
                   </button>
                 ))}
               </div>
@@ -292,6 +294,7 @@ export default function PersonalClient() {
                       {sel.estado && <Badge variant={esActivo(sel.estado) ? 'default' : 'secondary'}>{sel.estado}</Badge>}
                       <Badge variant="outline">{sel.esProfesor ? 'Maestro / Profesor' : 'Otro personal'}</Badge>
                       <Badge variant="outline">{sel.origen === 'manual' ? 'Agregado a mano' : 'De SIGERD'}</Badge>
+                      {sel.enNomina && <Badge variant="outline" className="border-zero-400 text-zero-700">En nómina</Badge>}
                     </div>
                   </div>
                   {sel.editable && (

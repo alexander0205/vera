@@ -32,7 +32,7 @@ const REPORTES: ReporteCard[] = [
   {
     id: '606',
     titulo: 'Formato 606',
-    descripcion: 'Compras de bienes y servicios a proveedores del RNC. Incluye tipos e-CF 41 (Compras) y 43 (Gastos Menores).',
+    descripcion: 'Compras y gastos registrados con el comprobante del proveedor, más tus e41, e43 y e47 emitidos. Con retenciones e ITBIS al costo.',
     icon: TrendingUp,
     iconColor: '#1d4ed8',
     iconBg: '#eff6ff',

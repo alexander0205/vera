@@ -34,6 +34,8 @@ export const RUTAS_SIN_SOPORTE = [
     soporte en su pantalla principal por un prefijo de dos letras.
   */
   '/pagar/', '/pay/', '/d/', '/f/', '/foto/',
+  // Nómina: el empleado firma su contrato y sube sus horas sin cuenta en Zero.
+  '/firmar/', '/horas/',
 ];
 
 /** ¿En esta ruta hay soporte? `null`/`undefined` (aún sin resolver) cuenta como que sí. */

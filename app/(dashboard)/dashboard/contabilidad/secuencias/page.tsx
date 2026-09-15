@@ -81,7 +81,7 @@ export default async function SecuenciasPage({
     <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto' }}>
       {/* Breadcrumb */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
-        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Comprobantes</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Secuencias</Typography>
       </Box>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
@@ -15,7 +16,6 @@ import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useVolver } from '@/lib/hooks/useVolver';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
-import ModalRegistrarCompra from '../_modal-registrar-compra';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +121,6 @@ export default function CompraDetallePage() {
   const { id } = useParams<{ id: string }>();
   const { can, isLoading: permLoading } = usePermissions();
   const volver = useVolver('/dashboard/compras');
-  const [showEntrada, setShowEntrada] = useState(false);
 
   const { data, isLoading, error } = useSWR<RecepcionEcfDto>(
     !permLoading && can('compras:ver') && id ? `/api/compras/${id}` : null,
@@ -186,24 +185,15 @@ export default function CompraDetallePage() {
           <Button
             size="small"
             variant="outlined"
-            onClick={() => setShowEntrada(true)}
+            component={Link}
+            href={`/dashboard/compras/registrar?ecf=${id}`}
             startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
             sx={{ textTransform: 'none', borderRadius: '8px' }}
           >
-            Registrar entrada
+            Registrar compra
           </Button>
         )}
       </Box>
-
-      <ModalRegistrarCompra
-        open={showEntrada}
-        onClose={() => setShowEntrada(false)}
-        onSuccess={() => {}}
-        prefill={{
-          proveedorRnc:   data.rncEmisor ?? data.rnc ?? undefined,
-          referenciaEncf: data.eNcf ?? undefined,
-        }}
-      />
 
       {/* Datos principales */}
       <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
