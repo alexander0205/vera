@@ -19,8 +19,11 @@ import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, fmtFechaHora } from '@/lib/utils/format';
-import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
+import { labelMetodo, esEfectivo, METODOS_PAGO } from '@/lib/pagos/metodos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+
+/** Origen de la venta que originó el cobro. */
+const ORIGEN_LABEL: Record<string, string> = { pos: 'Punto de venta', facturacion: 'Facturación' };
 
 interface Pago {
   id:            number;
@@ -52,6 +55,8 @@ interface Pago {
   rncComprador:  string | null;
   registradoPor: string | null;
   registradoPorEmail: string | null;
+  origen:        'pos' | 'facturacion';
+  productos:     { id: number; nombre: string; servicio: boolean }[];
 }
 
 interface Totales {
@@ -99,10 +104,19 @@ export default function PagosPage() {
   const [metodosExige, setMetodosExige] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
-  const [rango, setRango]   = useState<RangoKey>('30d');
+  // Rango dinámico: default = últimos 30 días, ajustable por el usuario.
+  const inicial = rangoFechas('30d');
+  const [desde, setDesde] = useState<string>(inicial.desde ?? '');
+  const [hasta, setHasta] = useState<string>(inicial.hasta ?? '');
+
+  function aplicarPreset(key: RangoKey) {
+    const r = rangoFechas(key);
+    setDesde(r.desde ?? '');
+    setHasta(r.hasta ?? '');
+  }
 
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    q: '', metodo: '', dgii: '', agrupar: '',
+    q: '', metodo: '', origen: '', producto: '', dgii: '', agrupar: '',
   });
   const [pagoEliminar, setPagoEliminar] = useState<Pago | null>(null);
 
@@ -119,7 +133,6 @@ export default function PagosPage() {
     setLoading(true);
     setError(null);
     try {
-      const { desde, hasta } = rangoFechas(rango);
       const params = new URLSearchParams();
       if (desde) params.set('desde', desde);
       if (hasta) params.set('hasta', hasta);
@@ -132,15 +145,31 @@ export default function PagosPage() {
     } finally {
       setLoading(false);
     }
-  }, [rango]);
+  }, [desde, hasta]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Opciones de método derivadas del dataset cargado (para que el dropdown solo
-  // muestre métodos realmente usados en el rango).
+  // Métodos: el catálogo COMPLETO que el sistema soporta (no solo los usados en el
+  // rango) + cualquier método histórico presente en la data que no esté en él.
   const metodoOptions = useMemo(() => {
-    const set = new Set(pagos.map(p => (p.metodo ?? 'otro').toLowerCase()));
-    return Array.from(set).sort().map(m => ({ value: m, label: labelMetodo(m) }));
+    const opts = METODOS_PAGO.map(m => ({ value: m.value, label: m.label }));
+    const conocidos = new Set(opts.map(o => o.value));
+    for (const p of pagos) {
+      const m = (p.metodo ?? 'otro').toLowerCase();
+      if (!conocidos.has(m)) { conocidos.add(m); opts.push({ value: m, label: labelMetodo(m) }); }
+    }
+    return opts;
+  }, [pagos]);
+
+  // Opciones de producto/servicio presentes en el rango (para el filtro).
+  const productoOptions = useMemo(() => {
+    const map = new Map<number, { nombre: string; servicio: boolean }>();
+    for (const p of pagos) for (const pr of p.productos ?? []) {
+      if (!map.has(pr.id)) map.set(pr.id, { nombre: pr.nombre, servicio: pr.servicio });
+    }
+    return [...map.entries()]
+      .map(([id, v]) => ({ value: String(id), label: v.servicio ? `${v.nombre} · servicio` : v.nombre }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [pagos]);
 
   // ── Filtrado client-side: búsqueda libre + método ──
@@ -160,10 +189,17 @@ export default function PagosPage() {
     if (filterValues.metodo) {
       rows = rows.filter(p => (p.metodo ?? 'otro').toLowerCase() === filterValues.metodo);
     }
+    if (filterValues.origen) {
+      rows = rows.filter(p => p.origen === filterValues.origen);
+    }
+    if (filterValues.producto) {
+      const id = Number(filterValues.producto);
+      rows = rows.filter(p => (p.productos ?? []).some(pr => pr.id === id));
+    }
     if (filterValues.dgii === 'enviado')    rows = rows.filter(p => p.enviadoDgii);
     else if (filterValues.dgii === 'no')    rows = rows.filter(p => !p.enviadoDgii);
     return rows;
-  }, [pagos, filterValues.q, filterValues.metodo, filterValues.dgii]);
+  }, [pagos, filterValues.q, filterValues.metodo, filterValues.origen, filterValues.producto, filterValues.dgii]);
 
   // Totales reactivos al filtro (las tarjetas reflejan lo que se ve).
   const totales: Totales = useMemo(() => {
@@ -191,8 +227,17 @@ export default function PagosPage() {
     [totales.porMetodo],
   );
 
+  // Desglose por origen (POS vs Facturación) — reactivo al filtro.
+  const porOrigen = useMemo(() => {
+    const acc: Record<'pos' | 'facturacion', { monto: number; count: number }> = {
+      pos: { monto: 0, count: 0 }, facturacion: { monto: 0, count: 0 },
+    };
+    for (const p of pagosFiltrados) { acc[p.origen].monto += p.monto; acc[p.origen].count += 1; }
+    return acc;
+  }, [pagosFiltrados]);
+
   function exportarCSV() {
-    const header = ['Fecha', 'Documento', 'NCF', 'Cliente', 'RNC', 'Método', 'DGII', 'Referencia', 'Registrado por', 'Monto'];
+    const header = ['Fecha', 'Documento', 'NCF', 'Cliente', 'RNC', 'Método', 'Origen', 'DGII', 'Referencia', 'Registrado por', 'Monto'];
     const escape = (v: string | number | null) => {
       const s = String(v ?? '');
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -204,6 +249,7 @@ export default function PagosPage() {
       p.cliente ?? 'Consumidor Final',
       p.rncComprador ?? '',
       labelMetodo(p.metodo),
+      ORIGEN_LABEL[p.origen] ?? p.origen,
       p.enviadoDgii ? 'Enviado' : 'No enviado',
       p.referencia ?? '',
       p.registradoPor ?? p.registradoPorEmail ?? '',
@@ -214,7 +260,7 @@ export default function PagosPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pagos-${rango}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `pagos-${desde || 'inicio'}_${hasta || 'hoy'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -297,6 +343,23 @@ export default function PagosPage() {
             height: 22, fontSize: '11px', fontWeight: 500, '& .MuiChip-label': { px: 0.75 },
             ...(esEfectivo(p.metodo)
               ? { bgcolor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }
+              : { bgcolor: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb' }),
+          }}
+        />
+      ),
+    },
+    {
+      id: 'origen',
+      header: 'Origen',
+      visibleAt: 'lg',
+      render: p => (
+        <Chip
+          label={ORIGEN_LABEL[p.origen] ?? p.origen}
+          size="small"
+          sx={{
+            height: 22, fontSize: '11px', fontWeight: 500, '& .MuiChip-label': { px: 0.75 },
+            ...(p.origen === 'pos'
+              ? { bgcolor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }
               : { bgcolor: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb' }),
           }}
         />
@@ -427,22 +490,35 @@ export default function PagosPage() {
         </Box>
       </Box>
 
-      {/* Selector de rango (server-side) */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75 }}>
-        {RANGOS.map(r => (
-          <Button
-            key={r.key}
-            onClick={() => setRango(r.key)}
-            sx={{
-              textTransform: 'none', px: 1.5, py: 0.75, minWidth: 0, fontSize: '0.75rem', fontWeight: 500, borderRadius: '8px', border: '1px solid',
-              ...(rango === r.key
-                ? { bgcolor: '#3658e1', color: '#ffffff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4', borderColor: '#2a45c4' } }
-                : { bgcolor: '#ffffff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#ffffff' } }),
-            }}
-          >
-            {r.label}
-          </Button>
-        ))}
+      {/* Rango de fechas: atajos + selector custom (default: últimos 30 días) */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+        {RANGOS.map(r => {
+          const f = rangoFechas(r.key);
+          const activo = (f.desde ?? '') === desde && (f.hasta ?? '') === hasta;
+          return (
+            <Button
+              key={r.key}
+              onClick={() => aplicarPreset(r.key)}
+              sx={{
+                textTransform: 'none', px: 1.5, py: 0.75, minWidth: 0, fontSize: '0.75rem', fontWeight: 500, borderRadius: '8px', border: '1px solid',
+                ...(activo
+                  ? { bgcolor: '#3658e1', color: '#ffffff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4', borderColor: '#2a45c4' } }
+                  : { bgcolor: '#ffffff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#ffffff' } }),
+              }}
+            >
+              {r.label}
+            </Button>
+          );
+        })}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: { sm: 0.5 } }}>
+          <Box component="input" type="date" value={desde} max={hasta || undefined}
+            onChange={e => setDesde(e.target.value)}
+            sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
+          <Box component="span" sx={{ color: '#9ca3af' }}>—</Box>
+          <Box component="input" type="date" value={hasta} min={desde || undefined}
+            onChange={e => setHasta(e.target.value)}
+            sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
+        </Box>
       </Box>
 
       {/* Stats */}
@@ -487,6 +563,38 @@ export default function PagosPage() {
         </Box>
       )}
 
+      {/* Desglose por origen (POS vs Facturación) */}
+      {totales.count > 0 && (
+        <Box sx={{ bgcolor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9ca3af', mb: 1.5 }}>
+            <TrendingUp style={{ width: 16, height: 16 }} />
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 500 }}>Por origen de la venta</Typography>
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+            {(['pos', 'facturacion'] as const).map(k => {
+              const info = porOrigen[k];
+              const pct = totales.monto > 0 ? (info.monto / totales.monto) * 100 : 0;
+              return (
+                <Box key={k}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', mb: 0.25 }}>
+                    <Box component="span" sx={{ color: '#374151', fontWeight: 500 }}>
+                      {ORIGEN_LABEL[k]}
+                      <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}> · {info.count} pago{info.count !== 1 ? 's' : ''}</Box>
+                    </Box>
+                    <Box component="span" sx={{ color: '#111827', fontWeight: 600 }}>{fmtDOP(info.monto)} <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>({pct.toFixed(0)}%)</Box></Box>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={pct}
+                    sx={{ height: 6, borderRadius: '9999px', bgcolor: '#f3f4f6', '& .MuiLinearProgress-bar': { borderRadius: '9999px', bgcolor: k === 'pos' ? '#1d4ed8' : '#6b7280' } }}
+                  />
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      )}
+
       {/* Tabla */}
       <DataTable<Pago>
         data={pagosFiltrados}
@@ -501,6 +609,23 @@ export default function PagosPage() {
             label: 'Método',
             placeholder: 'Todos los métodos',
             options: metodoOptions,
+          },
+          {
+            type: 'select',
+            id: 'origen',
+            label: 'Origen',
+            placeholder: 'Todos los orígenes',
+            options: [
+              { value: 'pos',         label: 'Punto de venta' },
+              { value: 'facturacion', label: 'Facturación' },
+            ],
+          },
+          {
+            type: 'select',
+            id: 'producto',
+            label: 'Producto',
+            placeholder: 'Todos los productos',
+            options: productoOptions,
           },
           {
             type: 'select',
@@ -550,7 +675,7 @@ export default function PagosPage() {
         emptyState={{
           icon: Wallet,
           title: 'Sin pagos registrados',
-          hint: (filterValues.q || filterValues.metodo || filterValues.dgii)
+          hint: (filterValues.q || filterValues.metodo || filterValues.origen || filterValues.producto || filterValues.dgii)
             ? 'Ningún pago coincide con los filtros.'
             : 'No hay pagos en el rango seleccionado. Registra cobros desde Cuentas por cobrar o al emitir facturas.',
         }}

@@ -50,7 +50,8 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
-      { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
+      // «Pagos recibidos» (/dashboard/pagos) vive ahora en Reportes (tarjeta en el
+      // índice), no aquí: es un reporte de consulta, no un paso de emisión.
       // Cobro por internet: oculto mientras no haya credenciales de producción
       // de la pasarela. Ver lib/config/pagos-online.ts.
       ...(PAGOS_ONLINE_ENABLED ? [

@@ -73,6 +73,13 @@ const REPORTES: ReporteCard[] = [
 
 const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React.ElementType; color: string }[] = [
   {
+    href: '/dashboard/pagos',
+    titulo: 'Pagos recibidos',
+    descripcion: 'Detalle de cobros por rango de fechas, con filtros por método, origen (POS/facturación) y producto. Desglose y export.',
+    icon: Wallet,
+    color: 'bg-emerald-50 text-emerald-600',
+  },
+  {
     href: '/dashboard/reportes/panel',
     titulo: 'Panel financiero',
     descripcion: 'KPIs del período: ingresos, ITBIS, cartera y aceptación DGII en una vista.',
