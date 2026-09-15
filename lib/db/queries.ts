@@ -1015,6 +1015,26 @@ export async function getCuentasPorCobrar(
  *
  * Retorna: filas + totales (monto total, conteo) + desglose por método.
  */
+/** Producto/servicio (dedup) de la factura de un pago, para el filtro por producto. */
+function productosDeLineas(lineasJson: string | null): { id: number; nombre: string; servicio: boolean }[] {
+  if (!lineasJson) return [];
+  let arr: unknown;
+  try { arr = JSON.parse(lineasJson); } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  const map = new Map<number, { id: number; nombre: string; servicio: boolean }>();
+  for (const raw of arr) {
+    const l = raw as Record<string, unknown>;
+    const id = Number(l.productoId);
+    if (!Number.isInteger(id) || id <= 0 || map.has(id)) continue;
+    map.set(id, {
+      id,
+      nombre: String(l.nombreItem ?? l.nombre ?? 'Ítem'),
+      servicio: String(l.indicadorBienoServicio ?? '').trim() === '2',
+    });
+  }
+  return [...map.values()];
+}
+
 export async function getPagosListado(
   teamId: number,
   opts: { desde?: string; hasta?: string; metodo?: string; limit?: number; offset?: number } = {},
@@ -1065,6 +1085,11 @@ export async function getPagosListado(
       clientId:     ecfDocuments.clientId,
       cliente:      ecfDocuments.razonSocialComprador,
       rncComprador: ecfDocuments.rncComprador,
+      // Origen de la venta: `tipo_orden` con valor (mostrador/para-llevar…) = POS;
+      // NULL = emitida desde Facturación. `lineas_json` para el filtro por
+      // producto/servicio (se procesa aquí y NO se envía al cliente).
+      tipoOrden:    ecfDocuments.tipoOrden,
+      lineasJson:   ecfDocuments.lineasJson,
       // Usuario que registró el pago.
       registradoPor: users.name,
       registradoPorEmail: users.email,
@@ -1091,16 +1116,23 @@ export async function getPagosListado(
   }
 
   const pagos = rows.map(r => {
+    // `lineas_json` se procesa aquí (productos del pago) y no se envía crudo: una
+    // sola factura ya pesa más que toda la página.
+    const { lineasJson, tipoOrden, ...rest } = r;
     // Enviado a DGII: la DGII devuelve trackId al recibir el e-CF, o el doc
     // quedó en un estado de envío. Excluye sin-ncf/históricas/borradores.
     const enviadoDgii =
       r.docTrackId != null ||
       ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(r.docEstado ?? '');
     return {
-      ...r,
+      ...rest,
       monto: Number(r.montoCentavos),
       enviadoDgii,
       pagosDelDoc: r.docId != null ? (pagosPorDoc.get(r.docId) ?? 1) : 1,
+      // Origen para el filtro POS/Facturación.
+      origen: (tipoOrden ? 'pos' : 'facturacion') as 'pos' | 'facturacion',
+      // Productos/servicios de la factura (dedup) para el filtro por producto.
+      productos: productosDeLineas(lineasJson),
     };
   });
 
