@@ -220,7 +220,17 @@ export const getTeamRoleForUser = cache(async (): Promise<string | null> => {
 export const getTeamIdForUser = cache(async (): Promise<number | null> => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie?.value) return null;
-  const sessionData = await verifyToken(sessionCookie.value);
+  // Mismo caso que en `getUser`: una cookie firmada con otro secreto, o
+  // manipulada, hace LANZAR a `verifyToken`. `getUser` ya lo atajaba y esta no,
+  // y como `requirePermission` pide las dos a la vez con `Promise.all`, bastaba
+  // esta para que TODA ruta protegida respondiera 500 sin cuerpo en vez de 401.
+  // El proxy no la limpia en `/api`: su matcher excluye esas rutas.
+  let sessionData: Awaited<ReturnType<typeof verifyToken>> | null = null;
+  try {
+    sessionData = await verifyToken(sessionCookie.value);
+  } catch {
+    return null;
+  }
   if (!sessionData?.user?.id) return null;
 
   // Platform admin → puede activar cualquier team sin membership check

@@ -20,6 +20,17 @@ import {
   type NaturalezaCuenta,
 } from './catalogo-base';
 
+/**
+ * Con qué se habla con la base: `db` normalmente, o una transacción.
+ *
+ * Existe para la importación desde Excel. Un catálogo se importa entero o no se
+ * importa —medio catálogo con los padres creados y las hijas no es peor que
+ * nada—, así que todo corre en una transacción. Y tiene que pasar por
+ * EXACTAMENTE las mismas reglas que el formulario: por eso estas funciones
+ * aceptan el ejecutor en vez de duplicarse en una versión «para importar».
+ */
+export type Ejecutor = Pick<typeof db, 'execute'>;
+
 const TIPOS: TipoCuenta[] = ['activo', 'pasivo', 'patrimonio', 'ingreso', 'costo', 'gasto'];
 const NATURALEZAS: NaturalezaCuenta[] = ['deudora', 'acreedora'];
 
@@ -54,8 +65,9 @@ export class CuentaError extends Error {
 export async function listarCuentas(
   teamId: number,
   opts: { incluirInactivas?: boolean } = {},
+  ex: Ejecutor = db,
 ): Promise<Cuenta[]> {
-  const rows = await db.execute(sql`
+  const rows = await ex.execute(sql`
     SELECT id, codigo, nombre, tipo, naturaleza,
            cuenta_padre_id AS "cuentaPadreId",
            imputable, activa, es_base AS "esBase"
@@ -106,8 +118,8 @@ export async function listarCuentasArbol(
   return raices;
 }
 
-async function getCuenta(teamId: number, id: number): Promise<Cuenta | null> {
-  const rows = await db.execute(sql`
+async function getCuenta(teamId: number, id: number, ex: Ejecutor = db): Promise<Cuenta | null> {
+  const rows = await ex.execute(sql`
     SELECT id, codigo, nombre, tipo, naturaleza,
            cuenta_padre_id AS "cuentaPadreId",
            imputable, activa, es_base AS "esBase"
@@ -129,13 +141,13 @@ async function getCuenta(teamId: number, id: number): Promise<Cuenta | null> {
  * El `to_regclass` es la forma barata de preguntarle a Postgres si una tabla
  * existe sin que la consulta reviente con `42P01`.
  */
-export async function tieneMovimientos(teamId: number, cuentaId: number): Promise<boolean> {
-  const [{ existe }] = await db.execute<{ existe: boolean }>(sql`
+export async function tieneMovimientos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
+  const [{ existe }] = await ex.execute<{ existe: boolean }>(sql`
     SELECT to_regclass('public.contabilidad_asiento_lineas') IS NOT NULL AS existe
   `);
   if (!existe) return false;
 
-  const [{ total }] = await db.execute<{ total: number }>(sql`
+  const [{ total }] = await ex.execute<{ total: number }>(sql`
     SELECT count(*)::int AS total
     FROM contabilidad_asiento_lineas
     WHERE team_id = ${teamId} AND cuenta_id = ${cuentaId}
@@ -143,8 +155,8 @@ export async function tieneMovimientos(teamId: number, cuentaId: number): Promis
   return total > 0;
 }
 
-async function tieneHijas(teamId: number, cuentaId: number): Promise<boolean> {
-  const [{ total }] = await db.execute<{ total: number }>(sql`
+async function tieneHijas(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
+  const [{ total }] = await ex.execute<{ total: number }>(sql`
     SELECT count(*)::int AS total
     FROM contabilidad_cuentas
     WHERE team_id = ${teamId} AND cuenta_padre_id = ${cuentaId}
@@ -159,8 +171,8 @@ async function tieneHijas(teamId: number, cuentaId: number): Promise<boolean> {
  * (A → B → A) hay que buscarlo subiendo por la cadena de padres. Sin esto, el
  * armado del árbol entraría en recursión infinita.
  */
-async function creariaCiclo(teamId: number, cuentaId: number, padreId: number): Promise<boolean> {
-  const [{ ciclo }] = await db.execute<{ ciclo: boolean }>(sql`
+async function creariaCiclo(teamId: number, cuentaId: number, padreId: number, ex: Ejecutor = db): Promise<boolean> {
+  const [{ ciclo }] = await ex.execute<{ ciclo: boolean }>(sql`
     WITH RECURSIVE cadena AS (
       SELECT id, cuenta_padre_id
       FROM contabilidad_cuentas
@@ -195,8 +207,8 @@ function validarCampos(input: { codigo?: string; nombre?: string; tipo?: string;
 }
 
 /** Valida que el padre exista, sea del team y no sea imputable. */
-async function validarPadre(teamId: number, padreId: number): Promise<void> {
-  const padre = await getCuenta(teamId, padreId);
+async function validarPadre(teamId: number, padreId: number, ex: Ejecutor = db): Promise<void> {
+  const padre = await getCuenta(teamId, padreId, ex);
   if (!padre) throw new CuentaError('La cuenta padre no existe.', 404);
   if (padre.imputable) {
     throw new CuentaError(
@@ -223,6 +235,7 @@ export async function crearCuenta(
   teamId: number,
   input: CrearCuentaInput,
   userId: number,
+  ex: Ejecutor = db,
 ): Promise<Cuenta> {
   validarCampos(input);
 
@@ -232,10 +245,10 @@ export async function crearCuenta(
   const imputable = input.imputable ?? true;
 
   if (input.cuentaPadreId != null) {
-    await validarPadre(teamId, input.cuentaPadreId);
+    await validarPadre(teamId, input.cuentaPadreId, ex);
   }
 
-  const rows = await db.execute(sql`
+  const rows = await ex.execute(sql`
     INSERT INTO contabilidad_cuentas
       (team_id, codigo, nombre, tipo, naturaleza, cuenta_padre_id,
        imputable, activa, es_base, created_by, updated_by)
@@ -270,13 +283,14 @@ export async function editarCuenta(
   id: number,
   input: EditarCuentaInput,
   userId: number,
+  ex: Ejecutor = db,
 ): Promise<Cuenta> {
   validarCampos(input);
 
-  const actual = await getCuenta(teamId, id);
+  const actual = await getCuenta(teamId, id, ex);
   if (!actual) throw new CuentaError('La cuenta no existe.', 404);
 
-  const conMovimientos = await tieneMovimientos(teamId, id);
+  const conMovimientos = await tieneMovimientos(teamId, id, ex);
 
   // El código es el identificador con el que trabaja el contador y por el que se
   // referencian los reportes históricos. Con movimientos encima, cambiarlo
@@ -311,7 +325,7 @@ export async function editarCuenta(
   // Volverla imputable teniendo hijas rompe la otra mitad de la regla: una
   // cuenta no puede a la vez agrupar y recibir asientos, porque su saldo sería
   // la suma de sus hijas MÁS lo suyo propio y no cuadraría con ninguna.
-  if (input.imputable === true && !actual.imputable && await tieneHijas(teamId, id)) {
+  if (input.imputable === true && !actual.imputable && await tieneHijas(teamId, id, ex)) {
     throw new CuentaError(
       `"${actual.codigo} ${actual.nombre}" tiene cuentas hijas, así que no puede aceptar movimientos directos. ` +
       'Los asientos van en las hijas.',
@@ -323,8 +337,8 @@ export async function editarCuenta(
     if (input.cuentaPadreId === id) {
       throw new CuentaError('Una cuenta no puede ser su propia cuenta padre.');
     }
-    await validarPadre(teamId, input.cuentaPadreId);
-    if (await creariaCiclo(teamId, id, input.cuentaPadreId)) {
+    await validarPadre(teamId, input.cuentaPadreId, ex);
+    if (await creariaCiclo(teamId, id, input.cuentaPadreId, ex)) {
       throw new CuentaError(
         'Esa cuenta padre es descendiente de esta, así que el catálogo quedaría en círculo.',
         409,
@@ -334,7 +348,7 @@ export async function editarCuenta(
 
   // Desactivar una cuenta con hijas activas las dejaría descolgadas del árbol.
   if (input.activa === false && actual.activa) {
-    const [{ total }] = await db.execute<{ total: number }>(sql`
+    const [{ total }] = await ex.execute<{ total: number }>(sql`
       SELECT count(*)::int AS total
       FROM contabilidad_cuentas
       WHERE team_id = ${teamId} AND cuenta_padre_id = ${id} AND activa
@@ -362,7 +376,7 @@ export async function editarCuenta(
 
   sets.push(sql`updated_by = ${userId}`, sql`updated_at = now()`);
 
-  const rows = await db.execute(sql`
+  const rows = await ex.execute(sql`
     UPDATE contabilidad_cuentas
     SET ${sql.join(sets, sql`, `)}
     WHERE team_id = ${teamId} AND id = ${id}

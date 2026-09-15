@@ -392,6 +392,9 @@ export interface AsientoResumen {
   origenId:   number;
   totalCents: number;
   lineas:     number;
+  /** Suma de sus apuntes. Si no coinciden, el asiento está descuadrado. */
+  debeCents:  number;
+  haberCents: number;
 }
 
 export interface LineaDetalle {
@@ -460,16 +463,31 @@ export async function listarAsientos(
   const { limit = 50, offset = 0 } = opts;
   const where = condicionesLibro(teamId, opts);
 
+  // Primero se corta la página y DESPUÉS se suman sus apuntes. El orden importa:
+  // así las sumas se calculan para los 50 asientos que se ven, entrando por
+  // `contabilidad_asiento_lineas_asiento_idx`, y no crecen con el histórico.
   const filas = await db.execute(sql`
-    SELECT a.id, to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto,
-           a.origen_tipo AS "origenTipo", a.origen_id AS "origenId",
-           a.total_cents AS "totalCents",
-           (SELECT count(*)::int FROM contabilidad_asiento_lineas l
-             WHERE l.asiento_id = a.id) AS lineas
-    FROM contabilidad_asientos a
-    WHERE ${where}
-    ORDER BY a.fecha DESC, a.id DESC
-    LIMIT ${limit} OFFSET ${offset}
+    SELECT p.id, to_char(p.fecha, 'YYYY-MM-DD') AS fecha, p.concepto,
+           p.origen_tipo AS "origenTipo", p.origen_id AS "origenId",
+           p.total_cents AS "totalCents",
+           COALESCE(l.lineas, 0) AS lineas,
+           COALESCE(l.debe, 0)   AS "debeCents",
+           COALESCE(l.haber, 0)  AS "haberCents"
+    FROM (
+      SELECT a.id, a.fecha, a.concepto, a.origen_tipo, a.origen_id, a.total_cents
+      FROM contabilidad_asientos a
+      WHERE ${where}
+      ORDER BY a.fecha DESC, a.id DESC
+      LIMIT ${limit} OFFSET ${offset}
+    ) p
+    LEFT JOIN LATERAL (
+      SELECT count(*)::int AS lineas,
+             sum(debe_cents)::bigint  AS debe,
+             sum(haber_cents)::bigint AS haber
+      FROM contabilidad_asiento_lineas l
+      WHERE l.asiento_id = p.id
+    ) l ON true
+    ORDER BY p.fecha DESC, p.id DESC
   `);
 
   // El total y la suma salen del mismo WHERE, así que cubren **todo lo
@@ -485,9 +503,35 @@ export async function listarAsientos(
     ...a,
     totalCents: aNumero(a.totalCents),
     lineas:     aNumero(a.lineas),
+    debeCents:  aNumero(a.debeCents),
+    haberCents: aNumero(a.haberCents),
   }));
 
   return { asientos, total: aNumero(agg.total), sumaCents: aNumero(agg.suma) };
+}
+
+/**
+ * Los asientos descuadrados entre los que se están mostrando.
+ *
+ * Sustituye a llamar `verificarCuadre` en cada carga del libro, que agrupaba
+ * TODAS las líneas de TODOS los asientos del equipo en cada visita —y cada
+ * asiento guardado termina en esta pantalla—. Medido con 100.000 asientos:
+ * 248 ms solo esa consulta, creciendo en línea recta.
+ *
+ * Revisar solo la página no deja el libro sin guardián: los tres caminos que
+ * escriben apuntes (`insertarAsiento`, el cierre y la depreciación) ya impiden
+ * guardar un asiento que no cuadre, así que esto solo puede saltar por una
+ * edición hecha por fuera de la aplicación. El recorrido COMPLETO sigue
+ * existiendo y corre donde sí importa y no le cuesta a nadie cada día: antes de
+ * cerrar un ejercicio (`previsualizarCierre`). Un libro que no cuadra no se
+ * cierra.
+ */
+export function descuadradosDePagina(
+  asientos: AsientoResumen[],
+): { id: number; concepto: string; debe: number; haber: number }[] {
+  return asientos
+    .filter((a) => a.debeCents !== a.haberCents)
+    .map((a) => ({ id: a.id, concepto: a.concepto, debe: a.debeCents, haber: a.haberCents }));
 }
 
 /**
@@ -546,11 +590,19 @@ export async function asientosParaExportar(
 export async function cuentasConMovimientos(
   teamId: number,
 ): Promise<{ id: number; codigo: string; nombre: string }[]> {
+  // Se parte de las CUENTAS (decenas) y se pregunta a cada una si tiene algún
+  // apunte, en vez de leer todos los apuntes para quedarse con sus cuentas
+  // distintas. Mismo resultado; la versión anterior leía el histórico entero en
+  // cada carga del libro (169 ms con 100.000 asientos) y esta hace una sonda
+  // por cuenta sobre `contabilidad_asiento_lineas_cuenta_idx`.
   const filas = await db.execute(sql`
-    SELECT DISTINCT c.id, c.codigo, c.nombre
-    FROM contabilidad_asiento_lineas l
-    JOIN contabilidad_cuentas c ON c.id = l.cuenta_id
-    WHERE l.team_id = ${teamId}
+    SELECT c.id, c.codigo, c.nombre
+    FROM contabilidad_cuentas c
+    WHERE c.team_id = ${teamId}
+      AND EXISTS (
+        SELECT 1 FROM contabilidad_asiento_lineas l
+        WHERE l.team_id = ${teamId} AND l.cuenta_id = c.id
+      )
     ORDER BY c.codigo
   `);
   return filas as unknown as { id: number; codigo: string; nombre: string }[];

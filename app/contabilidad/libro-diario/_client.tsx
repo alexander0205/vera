@@ -242,11 +242,11 @@ export function LibroDiarioClient({
       {descuadrados.length > 0 && (
         <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
           <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
-            {descuadrados.length} asiento(s) descuadrado(s)
+            {descuadrados.length} asiento(s) descuadrado(s) en esta página
           </AlertTitle>
           <Typography sx={{ fontSize: '0.75rem' }}>
             Esto no debería poder pasar. Repórtalo antes de usar estos números
-            para declarar.
+            para declarar. El libro completo se revisa al cerrar el ejercicio.
           </Typography>
           <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
             {descuadrados.slice(0, 5).map((d) => (

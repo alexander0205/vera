@@ -27,6 +27,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { sigerdImportaciones, sigerdPersonal } from '@/lib/db/schema';
+import { invalidarSigerd } from '@/lib/cache/escolar';
 import type { DumpCentro } from '@/lib/sigerd/descargar';
 import { descargarTodo } from '@/lib/sigerd/descargar';
 import type { SigerdClient } from '@/lib/sigerd/client';
@@ -192,6 +193,11 @@ export async function obtenerInformacion(
 
     // 3) proyección + snapshot en una transacción
     await guardarMirror(teamId, importacionId, ctx.idRegional, ctx.idDistrito, dump);
+
+    // 4) El plan del asistente (`/api/sigerd/plan`) se sirve de caché por
+    //    etiqueta y solo el cruce la invalidaba. Sin esto, una descarga recién
+    //    terminada seguía viéndose como «Todavía no hay nada descargado».
+    invalidarSigerd(teamId);
 
     return {
       estado: 'completado',

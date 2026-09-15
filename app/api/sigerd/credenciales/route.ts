@@ -25,6 +25,9 @@ export async function GET() {
     // `usuario` sí sale: es una cédula que el portal enseña en su propia
     // pantalla, y sin ella el colegio no sabe con qué cuenta quedó conectado.
     usuario: c?.usuario ?? null,
+    // El código del centro sale siempre de la sesión; el nombre, solo si la cuenta
+    // tiene varios perfiles. Sin el código no habría nada que enseñar en ese caso.
+    idCentro: c?.idCentro ?? null,
     centroNombre: c?.centroNombre ?? null,
     verificadoEn: c?.verificadoEn ?? null,
     ultimoError: c?.ultimoError ?? null,
