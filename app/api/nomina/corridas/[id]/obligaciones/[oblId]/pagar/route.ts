@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { nominaCorridas, nominaObligaciones } from '@/lib/db/schema';
 import { generarAsientoPagoNominaObligacion } from '@/lib/contabilidad/asientos';
 import { refrescarEstadoCorrida } from '@/lib/nomina/obligaciones-db';
+import { asegurarDevengoCorrida } from '@/lib/nomina/contabilidad-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const metodo: Metodo = METODOS.includes(body?.metodo) ? body.metodo : 'efectivo';
 
   // Asiento de pago (opcional: si la contabilidad está apagada, se salda igual
-  // sin asiento). No rompe el pago si falla.
+  // sin asiento). El devengo va antes: si la corrida se aprobó con la contabilidad
+  // apagada, el pago saldaría un pasivo que nunca se abrió.
+  await asegurarDevengoCorrida(auth.teamId, id, auth.user.id);
   const asiento = await generarAsientoPagoNominaObligacion(auth.teamId, oblId, metodo, auth.user.id);
 
   await db
@@ -58,6 +61,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .set({
       pagada: true,
       pagadaEn: new Date(),
+      // Se guarda el método para poder asentar el pago después si hacía falta.
+      metodoPago: metodo,
       ...(asiento.creado ? { asientoId: asiento.asientoId } : {}),
     })
     .where(eq(nominaObligaciones.id, oblId));

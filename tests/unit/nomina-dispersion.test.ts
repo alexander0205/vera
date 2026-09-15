@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generarArchivoDispersion, type BeneficiarioDispersion } from '@/lib/nomina/dispersion';
+import { generarArchivoDispersion, esTipoCuentaBanco, type BeneficiarioDispersion } from '@/lib/nomina/dispersion';
 import { FORMATOS_BANCO } from '@/lib/nomina/formatos-banco';
 
 const ben = (id: number, neto: number, banco: string | null, cuenta: string | null, tipo = 'ahorros'): BeneficiarioDispersion => ({
@@ -76,5 +76,29 @@ describe('generarArchivoDispersion — presets por banco', () => {
       { periodo: '2026-07', referencia: 'r', formatoKey: 'inexistente' },
     );
     expect(a.formato).toBe('generico');
+  });
+});
+
+describe('generarArchivoDispersion — tipo de cuenta obligatorio', () => {
+  it('quien no tiene tipo de cuenta queda fuera con su motivo, en vez de salir con la columna vacía', () => {
+    const a = generarArchivoDispersion(
+      [ben(1, 100_000, 'Popular', '111'), ben(2, 200_000, 'Popular', '222', ''), ben(3, 300_000, null, null)],
+      { periodo: '2026-09', referencia: 'r', formatoKey: 'banreservas' },
+    );
+    expect(a.totalBeneficiarios).toBe(1);
+    expect(a.totalCents).toBe(100_000);
+    expect(a.contenido.trim().split('\r\n')).toHaveLength(1);
+    expect(a.incompletos).toEqual([
+      { empleadoId: 2, nombre: 'Emp 2', motivo: 'Falta el tipo de cuenta (ahorros o corriente)' },
+      { empleadoId: 3, nombre: 'Emp 3', motivo: 'Sin cuenta de banco' },
+    ]);
+  });
+
+  it('esTipoCuentaBanco acepta solo ahorros y corriente, sin importar mayúsculas', () => {
+    expect(esTipoCuentaBanco('ahorros')).toBe(true);
+    expect(esTipoCuentaBanco(' Corriente ')).toBe(true);
+    expect(esTipoCuentaBanco('')).toBe(false);
+    expect(esTipoCuentaBanco(null)).toBe(false);
+    expect(esTipoCuentaBanco('nomina')).toBe(false);
   });
 });

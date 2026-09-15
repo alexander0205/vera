@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
-import { nominaCorridas, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
+import { empleados, nominaCorridas, nominaHoras, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
+import { frecuenciaDeTipo, normalizarTipoCorrida } from '@/lib/nomina/corrida';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .where(eq(nominaObligaciones.corridaId, id))
     .orderBy(asc(nominaObligaciones.destino));
 
-  return NextResponse.json({ corrida, lineas, obligaciones });
+  // Horas de quien cobra por hora que siguen pendientes en estas fechas: la
+  // corrida solo paga las aprobadas, así que se avisa antes de aprobarla.
+  const tipo = normalizarTipoCorrida(corrida.tipo);
+  const [{ pendientes }] = tipo
+    ? await db
+        .select({ pendientes: sql<number>`count(*)::int` })
+        .from(nominaHoras)
+        .innerJoin(empleados, eq(empleados.id, nominaHoras.empleadoId))
+        .where(and(
+          eq(nominaHoras.teamId, auth.teamId),
+          eq(nominaHoras.estado, 'pendiente'),
+          eq(empleados.frecuenciaPago, frecuenciaDeTipo(tipo)),
+          gte(nominaHoras.fecha, corrida.fechaInicio),
+          lte(nominaHoras.fecha, corrida.fechaFin),
+        ))
+    : [{ pendientes: 0 }];
+
+  return NextResponse.json({ corrida, lineas, obligaciones, horasPendientes: pendientes });
 }
 
 /**

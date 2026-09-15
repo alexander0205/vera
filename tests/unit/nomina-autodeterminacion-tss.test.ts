@@ -44,3 +44,30 @@ describe('generarAutodeterminacionTSS', () => {
     expect(filas.length).toBe(2); // cabecera + totales
   });
 });
+
+describe('generarAutodeterminacionTSS con piso y dependientes', () => {
+  it('reporta el salario cotizable, no el bruto, cuando se cotizó sobre el mínimo', () => {
+    const a = generarAutodeterminacionTSS(
+      [linea({ brutoCents: 1_500_000, salarioCotizableCents: 1_842_120 })],
+      { periodo: '2026-09' },
+    );
+    expect(a.totales.salarioCents).toBe(1_842_120);
+    expect(a.contenido.split('\r\n')[1]).toContain('18421.20');
+  });
+
+  it('una línea vieja sin salario cotizable usa el bruto', () => {
+    const a = generarAutodeterminacionTSS([linea({ salarioCotizableCents: null })], { periodo: '2026-08' });
+    expect(a.totales.salarioCents).toBe(5_000_000);
+  });
+
+  it('la cápita de dependientes suma al total a pagar a la TSS y tiene su columna', () => {
+    const a = generarAutodeterminacionTSS([linea({ dependientesAdicionalesCents: 191_978 })], { periodo: '2026-09' });
+    const t = a.totales;
+    expect(t.dependientesAdicionalesCents).toBe(191_978);
+    expect(t.totalTSSCents).toBe(t.afpTotalCents + t.sfsTotalCents + t.srlPatronalCents + t.infotepPatronalCents + 191_978);
+    const [cabecera, fila] = a.contenido.split('\r\n');
+    const col = cabecera.split(',').indexOf('Dependientes adicionales');
+    expect(col).toBeGreaterThan(-1);
+    expect(fila.split(',')[col]).toBe('1919.78');
+  });
+});

@@ -14,11 +14,18 @@ import {
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
-import { CalendarClock, Loader2, Plus, ChevronRight, CalendarDays } from 'lucide-react';
+import {
+  frecuenciaDeTipo, LABEL_TIPO_CORRIDA, periodoDeCorrida, TIPOS_CORRIDA, type TipoCorrida,
+} from '@/lib/nomina/corrida';
+import { lunesDeLaSemana, rangoLegible } from '@/lib/nomina/periodos';
+import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { CalendarClock, Loader2, Plus, ChevronRight, CalendarDays, Info } from 'lucide-react';
 
 interface Corrida {
   id: number;
   periodo: string;
+  fechaInicio: string;
+  fechaFin: string;
   descripcion: string;
   tipo: string;
   fechaPago: string | null;
@@ -39,10 +46,13 @@ const BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 
   pagada:   { label: 'Pagada',   variant: 'secondary' },
 };
 
-function periodoActual(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+const formInicial = () => ({
+  tipo: 'mensual' as TipoCorrida,
+  periodo: hoyRD().slice(0, 7),
+  fechaInicio: lunesDeLaSemana(hoyRD()),
+  descripcion: '',
+  fechaPago: '',
+});
 
 export default function CorridasClient() {
   const router = useRouter();
@@ -52,9 +62,18 @@ export default function CorridasClient() {
 
   const [abierto, setAbierto] = useState(false);
   const [creando, setCreando] = useState(false);
-  const [form, setForm] = useState({ periodo: periodoActual(), tipo: 'mensual', descripcion: '', fechaPago: '' });
+  const [form, setForm] = useState(formInicial);
 
   const corridas = data?.corridas ?? [];
+
+  // Lo que va a pagar la corrida, calculado igual que en el servidor.
+  const periodoForm = periodoDeCorrida(form.tipo, { periodo: form.periodo, fechaInicio: form.fechaInicio });
+  const frecuencia = frecuenciaDeTipo(form.tipo);
+  const { data: dEmpleados } = useSWR<{ empleados?: { estado: string; frecuenciaPago: string }[] }>(
+    abierto ? '/api/nomina/empleados' : null, fetcher,
+  );
+  const conEsaFrecuencia = (dEmpleados?.empleados ?? [])
+    .filter((e) => e.estado === 'activo' && e.frecuenciaPago === frecuencia).length;
 
   async function crear() {
     setCreando(true);
@@ -68,6 +87,7 @@ export default function CorridasClient() {
       if (!res.ok) throw new Error(j.error ?? 'No se pudo crear la corrida');
       toast.success('Corrida creada');
       setAbierto(false);
+      setForm(formInicial());
       mutate();
       if (j.corrida?.id) router.push(`/nomina/corridas/${j.corrida.id}`);
     } catch (err) {
@@ -85,7 +105,7 @@ export default function CorridasClient() {
             <CalendarClock className="h-6 w-6 text-zero-600" /> Corridas de nómina
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cada corrida calcula la nómina de un período sobre los empleados activos.
+            Cada corrida paga unas fechas a los empleados de su frecuencia, por los días que trabajaron en ellas.
           </p>
         </div>
         {puedeCorrer && (
@@ -123,7 +143,8 @@ export default function CorridasClient() {
                       <Badge variant={b.variant}>{b.label}</Badge>
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      Período {c.periodo} · {c.tipo}
+                      {rangoLegible({ inicio: c.fechaInicio, fin: c.fechaFin }, { corto: true })} · {LABEL_TIPO_CORRIDA[c.tipo] ?? c.tipo}
+                      {c.fechaPago && ` · pago ${fmtFechaCorta(c.fechaPago)}`}
                     </div>
                   </div>
                   <div className="hidden text-right sm:block">
@@ -143,36 +164,58 @@ export default function CorridasClient() {
           <DialogHeader>
             <DialogTitle>Nueva corrida</DialogTitle>
             <DialogDescription>
-              Se calculará la nómina del período para todos los empleados activos. Queda en borrador hasta que la apruebes.
+              Calcula la nómina de unas fechas para los empleados que cobran con esa frecuencia. Queda en borrador hasta que la apruebes.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Período</Label>
-                <Input type="month" value={form.periodo} onChange={(e) => setForm((f) => ({ ...f, periodo: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Frecuencia</Label>
-                <NativeSelect value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}>
-                  <option value="mensual">Mensual</option>
-                  <option value="quincenal">Quincenal</option>
-                  <option value="semanal">Semanal</option>
+                <Label htmlFor="corrida-tipo" className="text-xs text-muted-foreground">Tipo de corrida</Label>
+                <NativeSelect id="corrida-tipo" value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as TipoCorrida }))}>
+                  {TIPOS_CORRIDA.map((t) => <option key={t} value={t}>{LABEL_TIPO_CORRIDA[t]}</option>)}
                 </NativeSelect>
               </div>
+              {form.tipo === 'semanal' ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="corrida-inicio" className="text-xs text-muted-foreground">Semana que empieza el</Label>
+                  <Input id="corrida-inicio" type="date" value={form.fechaInicio} onChange={(e) => setForm((f) => ({ ...f, fechaInicio: e.target.value }))} />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="corrida-mes" className="text-xs text-muted-foreground">Mes</Label>
+                  <Input id="corrida-mes" type="month" value={form.periodo} onChange={(e) => setForm((f) => ({ ...f, periodo: e.target.value }))} />
+                </div>
+              )}
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Fecha de pago</Label>
-                <Input type="date" value={form.fechaPago} onChange={(e) => setForm((f) => ({ ...f, fechaPago: e.target.value }))} />
+                <Label htmlFor="corrida-pago" className="text-xs text-muted-foreground">Fecha de pago</Label>
+                <Input id="corrida-pago" type="date" value={form.fechaPago} onChange={(e) => setForm((f) => ({ ...f, fechaPago: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Descripción</Label>
-                <Input value={form.descripcion} placeholder={`Nómina ${form.periodo}`} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} />
+                <Label htmlFor="corrida-descripcion" className="text-xs text-muted-foreground">Descripción</Label>
+                <Input
+                  id="corrida-descripcion"
+                  value={form.descripcion}
+                  placeholder={periodoForm ? `Nómina ${LABEL_TIPO_CORRIDA[form.tipo].toLowerCase()} · ${rangoLegible(periodoForm, { corto: true })}` : 'Nómina'}
+                  onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+                />
               </div>
             </div>
+            <p className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm" data-testid="resumen-corrida">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-zero-600" />
+              {periodoForm ? (
+                <span>
+                  Paga del <strong>{rangoLegible(periodoForm)}</strong> a los empleados con pago {frecuencia}
+                  {dEmpleados?.empleados && ` (${conEsaFrecuencia} activo${conEsaFrecuencia === 1 ? '' : 's'})`}.
+                  Quien entró o salió en esas fechas cobra solo sus días.
+                </span>
+              ) : (
+                <span>{form.tipo === 'semanal' ? 'Elige el primer día de la semana.' : 'Elige el mes.'}</span>
+              )}
+            </p>
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAbierto(false)} disabled={creando}>Cancelar</Button>
-            <Button onClick={crear} disabled={creando} className="gap-1.5">
+            <Button onClick={crear} disabled={creando || !periodoForm} className="gap-1.5">
               {creando && <Loader2 className="h-4 w-4 animate-spin" />}
               Calcular corrida
             </Button>

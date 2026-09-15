@@ -50,7 +50,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const url = new URL(req.url);
   const archivo = generarArchivoDispersion(filas, {
-    periodo: corrida.periodo,
+    // El nombre del archivo lleva el primer día: un mes puede tener varias semanales.
+    periodo: corrida.fechaInicio,
     referencia: `Nomina ${corrida.periodo}`,
     formatoKey: url.searchParams.get('formato') ?? undefined,
   });

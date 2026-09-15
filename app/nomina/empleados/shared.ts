@@ -1,3 +1,5 @@
+import { HORARIO_LUNES_A_SABADO, type HorarioSemanal } from '@/lib/nomina/jornada';
+
 // Tipos, etiquetas y helpers puros del maestro de empleados. Viven aquí (sin
 // JSX) para que tanto la lista (`_page-client`) como el asistente (`wizard`) los
 // compartan sin import circular.
@@ -32,6 +34,12 @@ export interface Empleado {
   turno: string | null;
   vacacionesDias: number | null;
   diasLibres: string | null;
+  horarioSemanal: HorarioSemanal | null;
+  dispensaSalarioMinimo: boolean;
+  /** Solo quien cobra por hora. */
+  tarifaHoraCents: number | null;
+  /** Cuándo se generó su enlace de horas (el token no se guarda legible). */
+  horasTokenCreado: string | null;
   fechaFinContrato: string | null;
   objetoContrato: string | null;
   origen: string;
@@ -87,6 +95,9 @@ export function formVacio() {
     telefono: '', email: '', notas: '',
     jornada: 'tiempo_completo', turno: 'diurno', vacacionesDias: '', diasLibres: '', fechaFinContrato: '', objetoContrato: '',
     estado: 'activo', fechaSalida: '',
+    dispensaSalarioMinimo: false,
+    tarifaHora: '',
+    horarioSemanal: { ...HORARIO_LUNES_A_SABADO } as HorarioSemanal | null,
   };
 }
 export type FormState = ReturnType<typeof formVacio>;
@@ -103,5 +114,8 @@ export function empleadoAForm(e: Empleado): FormState {
     jornada: e.jornada ?? '', turno: e.turno ?? '',
     vacacionesDias: e.vacacionesDias != null ? String(e.vacacionesDias) : '', diasLibres: e.diasLibres ?? '', fechaFinContrato: e.fechaFinContrato ?? '', objetoContrato: e.objetoContrato ?? '',
     estado: e.estado, fechaSalida: e.fechaSalida ?? '',
+    dispensaSalarioMinimo: e.dispensaSalarioMinimo ?? false,
+    tarifaHora: e.tarifaHoraCents ? String(e.tarifaHoraCents / 100) : '',
+    horarioSemanal: e.horarioSemanal ?? null,
   };
 }

@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
-  calcularNominaEmpleado, prorratearDesglose, pedazoPeriodo, type DesgloseNomina,
+  calcularNominaEmpleado, repartirDesglose, pedazoPeriodo, type DesgloseNomina,
 } from '@/lib/nomina/calculo';
-import { construirCorrida, prorationDeTipo } from '@/lib/nomina/corrida';
+import { construirCorrida, periodoDeCorrida, normalizarTipoCorrida } from '@/lib/nomina/corrida';
 import { tasasDelAnio } from '@/lib/config/nomina-tasas';
 
 const tasas = tasasDelAnio(2026);
 
 /** Los 10 campos en centavos que deben repartirse sin perder un centavo. */
 const CAMPOS: (keyof DesgloseNomina)[] = [
-  'brutoCents', 'afpEmpleadoCents', 'sfsEmpleadoCents', 'isrCents', 'otrasDeduccionesCents',
+  'brutoCents', 'salarioCotizableCents', 'afpEmpleadoCents', 'sfsEmpleadoCents', 'isrCents',
+  'dependientesAdicionalesCents', 'otrasDeduccionesCents',
   'totalDeduccionesCents', 'afpPatronalCents', 'sfsPatronalCents', 'srlPatronalCents',
   'infotepPatronalCents', 'totalPatronalCents', 'netoCents', 'baseIsrMensualCents',
 ];
@@ -34,10 +35,13 @@ describe('pedazoPeriodo', () => {
   });
 });
 
-describe('prorratearDesglose', () => {
-  const mensual = calcularNominaEmpleado({ salarioMensualCents: 5_000_000, tasas });
-  const q1 = prorratearDesglose(mensual, 1, 2);
-  const q2 = prorratearDesglose(mensual, 2, 2);
+describe('repartirDesglose', () => {
+  // Con un dependiente adicional impar para que la cápita también se reparta.
+  const mensual = calcularNominaEmpleado({
+    salarioMensualCents: 5_000_000, tasas, dependientesAdicionales: 1, capitaDependienteCents: 191_979,
+  });
+  const q1 = repartirDesglose(mensual, 0, 1, 2);
+  const q2 = repartirDesglose(mensual, 1, 1, 2);
 
   it('cada quincena suma exactamente el mes en todos los campos', () => {
     for (const c of CAMPOS) {
@@ -55,7 +59,7 @@ describe('prorratearDesglose', () => {
   it('los totales de la quincena siguen cuadrando internamente', () => {
     for (const q of [q1, q2]) {
       expect(q.totalDeduccionesCents).toBe(
-        q.afpEmpleadoCents + q.sfsEmpleadoCents + q.isrCents + q.otrasDeduccionesCents,
+        q.afpEmpleadoCents + q.sfsEmpleadoCents + q.isrCents + q.dependientesAdicionalesCents + q.otrasDeduccionesCents,
       );
       expect(q.totalPatronalCents).toBe(
         q.afpPatronalCents + q.sfsPatronalCents + q.srlPatronalCents + q.infotepPatronalCents,
@@ -64,35 +68,57 @@ describe('prorratearDesglose', () => {
     }
   });
 
-  it('mensual (deTotal=1) no cambia el desglose', () => {
-    expect(prorratearDesglose(mensual, 1, 1)).toEqual(mensual);
+  it('el pedazo entero no cambia el desglose', () => {
+    expect(repartirDesglose(mensual, 0, 1, 1)).toEqual(mensual);
+    expect(repartirDesglose(mensual, 0, 5, 5)).toEqual(mensual);
+  });
+
+  it('pesos desiguales: tres pedazos de 11, 4 y 15 suman el mes al centavo', () => {
+    const a = repartirDesglose(mensual, 0, 11, 30);
+    const b = repartirDesglose(mensual, 11, 4, 30);
+    const c = repartirDesglose(mensual, 15, 15, 30);
+    for (const campo of CAMPOS) expect(a[campo] + b[campo] + c[campo]).toBe(mensual[campo]);
+    expect(a.netoCents).toBe(a.brutoCents - a.totalDeduccionesCents);
+  });
+
+  it('la cantidad de dependientes no se reparte: cada quincena dice cuántos cobra', () => {
+    expect(q1.dependientesAdicionales).toBe(1);
+    expect(q2.dependientesAdicionales).toBe(1);
+    expect(q1.dependientesAdicionalesCents + q2.dependientesAdicionalesCents).toBe(191_979);
   });
 });
 
-describe('prorationDeTipo', () => {
-  it('mapea cada tipo a su reparto', () => {
-    expect(prorationDeTipo('mensual')).toEqual({ indice: 1, deTotal: 1 });
-    expect(prorationDeTipo('quincenal')).toEqual({ indice: 1, deTotal: 2 });
-    expect(prorationDeTipo('quincenal-1')).toEqual({ indice: 1, deTotal: 2 });
-    expect(prorationDeTipo('quincenal-2')).toEqual({ indice: 2, deTotal: 2 });
-    expect(prorationDeTipo('semanal')).toEqual({ indice: 1, deTotal: 4 });
-  });
-});
-
-describe('construirCorrida con proración', () => {
+describe('construirCorrida por quincenas', () => {
   const empleados = [
     { id: 1, nombres: 'Ana', apellidos: 'X', cedula: null, cargo: null, salarioBaseCents: 5_000_000, estado: 'activo' },
     { id: 2, nombres: 'Bob', apellidos: 'Y', cedula: null, cargo: null, salarioBaseCents: 3_000_000, estado: 'activo' },
   ];
 
   it('la quincenal-1 + quincenal-2 suman la mensual en los totales', () => {
-    const mensual = construirCorrida(empleados, tasas); // default mensual
-    const q1 = construirCorrida(empleados, tasas, prorationDeTipo('quincenal-1'));
-    const q2 = construirCorrida(empleados, tasas, prorationDeTipo('quincenal-2'));
+    const mensual = construirCorrida(empleados, tasas, periodoDeCorrida('mensual', { periodo: '2026-11' })!);
+    const q1 = construirCorrida(empleados, tasas, periodoDeCorrida('quincenal-1', { periodo: '2026-11' })!);
+    const q2 = construirCorrida(empleados, tasas, periodoDeCorrida('quincenal-2', { periodo: '2026-11' })!);
 
     expect(q1.totales.totalNetoCents + q2.totales.totalNetoCents).toBe(mensual.totales.totalNetoCents);
     expect(q1.totales.totalBrutoCents + q2.totales.totalBrutoCents).toBe(mensual.totales.totalBrutoCents);
     expect(q1.totales.totalDeduccionesCents + q2.totales.totalDeduccionesCents).toBe(mensual.totales.totalDeduccionesCents);
     expect(q1.totales.totalPatronalCents + q2.totales.totalPatronalCents).toBe(mensual.totales.totalPatronalCents);
+    expect(q1.lineas[0].brutoCents).toBe(2_500_000);
+  });
+});
+
+describe('normalizarTipoCorrida', () => {
+  it('acepta los cuatro tipos y convierte «quincenal» a secas en la primera quincena', () => {
+    expect(normalizarTipoCorrida('mensual')).toBe('mensual');
+    expect(normalizarTipoCorrida('QUINCENAL-2')).toBe('quincenal-2');
+    expect(normalizarTipoCorrida('semanal')).toBe('semanal');
+    expect(normalizarTipoCorrida('quincenal')).toBe('quincenal-1');
+  });
+
+  it('rechaza lo que todavía no tiene cálculo propio en vez de pagarlo como un mes', () => {
+    expect(normalizarTipoCorrida('regalia')).toBeNull();
+    expect(normalizarTipoCorrida('liquidacion')).toBeNull();
+    expect(normalizarTipoCorrida('')).toBeNull();
+    expect(normalizarTipoCorrida(undefined)).toBeNull();
   });
 });

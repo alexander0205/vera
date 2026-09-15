@@ -12,9 +12,17 @@ import {
   Loader2, Wallet, Landmark, FileText, Download, Upload, X, Trash2,
 } from 'lucide-react';
 import {
-  Empleado, FormState, fetcher, formVacio, empleadoAForm, tam,
+  Empleado, FormState, fetcher, formVacio, empleadoAForm, tam, pesos,
   LABEL_CONTRATO, LABEL_FRECUENCIA, LABEL_JORNADA, LABEL_TURNO, LABEL_TIPO_DOC,
 } from './shared';
+import { ResumenPago, type AjustesResumen } from './resumen-pago';
+import { LABEL_TAMANO_EMPRESA, type TamanoEmpresa } from '@/lib/config/nomina-tasas';
+import { pesosACentavos } from '@/lib/nomina/montos';
+import { semanaDeHorario } from '@/lib/nomina/horas';
+import {
+  avisosHorario, DIAS_SEMANA, diasLibresDe, HORARIO_LUNES_A_SABADO, HORARIO_LUNES_A_VIERNES, horasSemana, LABEL_DIA,
+  type DiaSemana, type HorarioSemanal,
+} from '@/lib/nomina/jornada';
 
 /** Pasos base (edición). */
 const PASOS_BASE = [
@@ -63,6 +71,46 @@ export function EmpleadoWizard({
 
   const set = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  /**
+   * Cambia el horario y, si los días de descanso venían del horario (o estaban
+   * vacíos), los recalcula; lo que alguien escribió a mano no se pisa.
+   */
+  function cambiarHorario(nuevo: HorarioSemanal) {
+    setForm((f) => {
+      const anteriorAuto = f.horarioSemanal ? diasLibresDe(f.horarioSemanal) : '';
+      const diasLibres = !f.diasLibres.trim() || f.diasLibres === anteriorAuto ? diasLibresDe(nuevo) : f.diasLibres;
+      return { ...f, horarioSemanal: nuevo, diasLibres };
+    });
+  }
+  const cambiarDia = (dia: DiaSemana, valor: string) => {
+    const base = form.horarioSemanal ?? { ...HORARIO_LUNES_A_VIERNES, lun: 0, mar: 0, mie: 0, jue: 0, vie: 0 };
+    const n = Math.min(24, Math.max(0, Math.round((Number(valor.replace(',', '.')) || 0) * 2) / 2));
+    cambiarHorario({ ...base, [dia]: n });
+  };
+
+  // El salario tal como se va a guardar: null si lo escrito no es un monto.
+  const salarioCents = form.salarioBase.trim() ? pesosACentavos(form.salarioBase) : 0;
+  const salarioInvalido = salarioCents === null;
+  // Quien cobra por hora no tiene salario fijo: se pide su tarifa y el resumen
+  // estima el mes con su horario, clasificado igual que en la corrida.
+  const porHoras = form.jornada === 'por_horas';
+  const tarifaCents = form.tarifaHora.trim() ? pesosACentavos(form.tarifaHora) : 0;
+  const tarifaInvalida = tarifaCents === null;
+  const semanaEstimada = porHoras && tarifaCents && form.horarioSemanal ? semanaDeHorario(form.horarioSemanal, tarifaCents) : null;
+  const mensualCents = porHoras
+    ? (semanaEstimada ? Math.round((semanaEstimada.brutoCents * 52) / 12) : 0)
+    : salarioCents;
+  const diasVacaciones = /^\d+$/.test(form.vacacionesDias.trim()) ? Number(form.vacacionesDias) : null;
+
+  // Piso del mínimo, SRL y cápita de la empresa, y los dependientes que ya tiene
+  // el empleado: sin ellos el resumen no cuadraría con lo que calcula la corrida.
+  const { data: ajustes } = useSWR<AjustesResumen & { tamanoEmpresa: TamanoEmpresa | null }>('/api/nomina/ajustes', fetcher);
+  const { data: dDependientes } = useSWR<{ resumen?: { adicionalesVigentes: number } }>(
+    editando ? `/api/nomina/empleados/${editando.id}/dependientes` : null, fetcher,
+  );
+  const piso = ajustes?.pisoCotizableCents ?? null;
+  const bajoMinimo = piso !== null && mensualCents !== null && mensualCents > 0 && mensualCents < piso;
+
   /** Ensambla la vista previa del contrato con los datos tecleados (paso Revisión). */
   async function cargarRevision() {
     if (contratoModo !== 'plantilla') { setRevisionPreview(null); return; }
@@ -95,6 +143,23 @@ export function EmpleadoWizard({
     if (!form.nombres.trim() || !form.apellidos.trim()) {
       toast.error('Nombres y apellidos son obligatorios');
       setPaso(0);
+      return;
+    }
+    if (porHoras && !tarifaCents) {
+      toast.error(tarifaInvalida
+        ? 'La tarifa no es un monto válido: escribe solo el número, por ejemplo 250.00'
+        : 'Escribe la tarifa por hora: sin ella la nómina no tiene con qué pagarle');
+      setPaso(2);
+      return;
+    }
+    if (!porHoras && salarioInvalido) {
+      toast.error('El salario no es un monto válido: escribe solo el número, por ejemplo 35,000.00');
+      setPaso(2);
+      return;
+    }
+    if (form.bancoCuenta.trim() && !form.bancoTipoCuenta) {
+      toast.error('Elige el tipo de cuenta (ahorros o corriente): sin él, el banco rechaza la línea del pago');
+      setPaso(2);
       return;
     }
     if (!editando && contratoModo === 'subido' && !contratoArchivo) {
@@ -238,7 +303,55 @@ export function EmpleadoWizard({
                 {Object.entries(LABEL_TURNO).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </NativeSelect>
             </Campo>
+            <div className="space-y-2 rounded-lg border p-3 sm:col-span-2" data-testid="horario-semanal">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium">Horario de la semana</div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button type="button" variant="outline" size="sm" onClick={() => cambiarHorario({ ...HORARIO_LUNES_A_SABADO })}>
+                    L a V 8 h + sábado 4 h
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => cambiarHorario({ ...HORARIO_LUNES_A_VIERNES })}>
+                    L a V 8 h
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                {DIAS_SEMANA.map((d) => (
+                  <label key={d} className="space-y-1 text-center">
+                    <span className="block text-xs text-muted-foreground">{LABEL_DIA[d].slice(0, 3)}</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={24}
+                      step={0.5}
+                      value={form.horarioSemanal ? String(form.horarioSemanal[d]) : ''}
+                      placeholder="0"
+                      aria-label={`Horas del ${LABEL_DIA[d].toLowerCase()}`}
+                      onChange={(e) => cambiarDia(d, e.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
+              {form.horarioSemanal ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    {horasSemana(form.horarioSemanal)} horas a la semana · descansa {diasLibresDe(form.horarioSemanal).toLowerCase() || 'ningún día'}
+                  </p>
+                  {avisosHorario(form.horarioSemanal).map((a) => (
+                    <p key={a} className="text-xs text-amber-700">{a}</p>
+                  ))}
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Sin horario cargado: elige uno típico o escribe las horas de cada día.</p>
+              )}
+            </div>
             <Campo label="Fecha de ingreso"><Input type="date" value={form.fechaIngreso} onChange={(e) => set('fechaIngreso')(e.target.value)} /></Campo>
+            {editando && (
+              <Campo label="Fecha de salida (último día trabajado)">
+                <Input type="date" value={form.fechaSalida} min={form.fechaIngreso || undefined} onChange={(e) => set('fechaSalida')(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Vacía si sigue trabajando. La nómina le paga hasta ese día.</p>
+              </Campo>
+            )}
             {form.tipoContrato === 'temporal' && (
               <Campo label="Fecha de finalización"><Input type="date" value={form.fechaFinContrato} onChange={(e) => set('fechaFinContrato')(e.target.value)} /></Campo>
             )}
@@ -257,18 +370,68 @@ export function EmpleadoWizard({
           <div className="space-y-4">
             <div className="rounded-lg border p-3">
               <div className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Wallet className="h-4 w-4" /> Salario</div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Campo label="Salario base (RD$)">
-                  <Input value={form.salarioBase} onChange={(e) => set('salarioBase')(e.target.value)} inputMode="decimal" placeholder="0.00" />
-                </Campo>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {porHoras ? (
+                  <Campo label="Tarifa por hora (RD$)">
+                    <Input value={form.tarifaHora} onChange={(e) => set('tarifaHora')(e.target.value)} inputMode="decimal" placeholder="250.00" />
+                    {tarifaInvalida ? (
+                      <p className="text-xs text-red-600">Escribe solo el monto, por ejemplo 250.00</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Cobra las horas aprobadas: las sube por su enlace o las registra la empresa.</p>
+                    )}
+                  </Campo>
+                ) : (
+                  <Campo label="Salario mensual (RD$)">
+                    <Input value={form.salarioBase} onChange={(e) => set('salarioBase')(e.target.value)} inputMode="decimal" placeholder="35,000.00" />
+                    {salarioInvalido && (
+                      <p className="text-xs text-red-600">Escribe solo el monto, por ejemplo 35,000.00</p>
+                    )}
+                  </Campo>
+                )}
                 <Campo label="Frecuencia de pago">
                   <NativeSelect value={form.frecuenciaPago} onChange={(e) => set('frecuenciaPago')(e.target.value)}>
                     {Object.entries(LABEL_FRECUENCIA).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </NativeSelect>
                 </Campo>
-                <Campo label="AFP"><Input value={form.afp} onChange={(e) => set('afp')(e.target.value)} /></Campo>
-                <Campo label="ARS"><Input value={form.ars} onChange={(e) => set('ars')(e.target.value)} /></Campo>
+                <Campo label="AFP (administradora)"><Input value={form.afp} onChange={(e) => set('afp')(e.target.value)} placeholder="Ej. AFP Popular" /></Campo>
+                <Campo label="ARS (aseguradora)"><Input value={form.ars} onChange={(e) => set('ars')(e.target.value)} placeholder="Ej. ARS Humano" /></Campo>
               </div>
+              {bajoMinimo && ajustes?.tamanoEmpresa && (
+                <div className="mt-3 space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p>
+                    Está por debajo del salario mínimo de {LABEL_TAMANO_EMPRESA[ajustes.tamanoEmpresa].toLowerCase()} ({pesos(piso!)}).
+                    La TSS cobra sobre el mínimo aunque gane menos, salvo que la empresa tenga dispensa del CNSS
+                    (Res. 471-02), por ejemplo para quien trabaja a tiempo parcial.
+                  </p>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={form.dispensaSalarioMinimo}
+                      onChange={(e) => setForm((f) => ({ ...f, dispensaSalarioMinimo: e.target.checked }))}
+                      className="h-4 w-4 cursor-pointer accent-zero-600"
+                    />
+                    Tiene dispensa: cotiza sobre su salario real
+                  </label>
+                </div>
+              )}
+              {porHoras && tarifaCents !== null && tarifaCents > 0 && !semanaEstimada && (
+                <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
+                  Carga su horario en «Puesto y jornada» para estimar cuánto cobraría al mes.
+                </p>
+              )}
+              {mensualCents !== null && mensualCents > 0 && (
+                <ResumenPago
+                  salarioMensualCents={mensualCents}
+                  porHoras={semanaEstimada}
+                  frecuencia={form.frecuenciaPago}
+                  diasVacaciones={diasVacaciones}
+                  ajustes={ajustes}
+                  dispensa={form.dispensaSalarioMinimo}
+                  dependientesAdicionales={dDependientes?.resumen?.adicionalesVigentes ?? 0}
+                  fechaIngreso={form.fechaIngreso || null}
+                  horarioSemanal={form.horarioSemanal}
+                />
+              )}
             </div>
             <div className="rounded-lg border p-3">
               <div className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Landmark className="h-4 w-4" /> Cuenta para el pago</div>
@@ -277,7 +440,7 @@ export function EmpleadoWizard({
                 <Campo label="No. de cuenta"><Input value={form.bancoCuenta} onChange={(e) => set('bancoCuenta')(e.target.value)} inputMode="numeric" /></Campo>
                 <Campo label="Tipo de cuenta">
                   <NativeSelect value={form.bancoTipoCuenta} onChange={(e) => set('bancoTipoCuenta')(e.target.value)}>
-                    <option value="">—</option>
+                    <option value="">Elige…</option>
                     <option value="ahorros">Ahorros</option>
                     <option value="corriente">Corriente</option>
                   </NativeSelect>

@@ -24,15 +24,24 @@ export interface VolanteNominaData {
     cedula?: string | null;
     cargo?:  string | null;
   };
-  periodoTexto: string;   // "Julio 2026"
+  periodoTexto: string;   // "1 al 15 de julio de 2026"
   descripcion:  string;   // "Nómina 2026-07"
   fechaPago?:   string | null;
+
+  /** Días que se le pagaron del período; solo se enseñan si no fue completo. */
+  diasPagados?: number | null;
+  diasPeriodo?: number | null;
+  /** Quien cobra por hora: «44 h a RD$250.00: 40 ordinarias, 4 extra al 35 %». */
+  horasTexto?: string | null;
 
   // Montos en DOP (pesos)
   bruto:            number;
   afpEmpleado:      number;
   sfsEmpleado:      number;
   isr:              number;
+  /** Cápita de dependientes adicionales del SFS y cuántos son. */
+  dependientesAdicionales:         number;
+  dependientesAdicionalesCantidad: number;
   otrasDeducciones: number;
   totalDeducciones: number;
   neto:             number;
@@ -143,7 +152,13 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
         {/* Devengado */}
         <Text style={S.seccionTitulo}>Ingresos</Text>
         <View style={S.fila}>
-          <Text style={S.filaLabel}>Salario del período</Text>
+          <Text style={S.filaLabel}>
+            {data.horasTexto
+              ? `Pago por horas (${data.horasTexto})`
+              : `Salario del período${data.diasPagados != null && data.diasPeriodo != null && data.diasPagados < data.diasPeriodo
+                ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
+                : ''}`}
+          </Text>
           <Text style={S.filaMonto}>{fmt(data.bruto)}</Text>
         </View>
         <View style={S.filaTotal}>
@@ -165,6 +180,14 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
           <Text style={S.filaLabel}>ISR (retención)</Text>
           <Text style={S.filaMonto}>-{fmt(data.isr)}</Text>
         </View>
+        {data.dependientesAdicionales > 0 ? (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>
+              Dependientes adicionales SFS ({data.dependientesAdicionalesCantidad})
+            </Text>
+            <Text style={S.filaMonto}>-{fmt(data.dependientesAdicionales)}</Text>
+          </View>
+        ) : null}
         {data.otrasDeducciones > 0 ? (
           <View style={S.fila}>
             <Text style={S.filaLabel}>Otras deducciones</Text>

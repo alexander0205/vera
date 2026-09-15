@@ -13,7 +13,7 @@ const TEAM = 9;
     if (!compra.creado || !compra.asientoId) throw new Error(`Asiento compra: ${JSON.stringify(compra)}`);
     asientoCompra = compra.asientoId;
     const pago = await registrarPagoProveedor({ teamId:TEAM, compraId, montoCents:40000, metodo:'efectivo', fechaPago:new Date().toISOString().slice(0,10), userId:4 });
-    if (!pago.asiento.creado || !pago.asiento.asientoId) throw new Error(`Asiento pago: ${JSON.stringify(pago)}`);
+    if (!pago.asiento?.creado || !pago.asiento.asientoId) throw new Error(`Asiento pago: ${JSON.stringify(pago)}`);
     asientoPago = pago.asiento.asientoId;
     const estado = (await db.execute(sql`SELECT estado_pago,monto_total-(SELECT coalesce(sum(monto_cents),0) FROM pagos_proveedores WHERE compra_id=${compraId}) AS saldo FROM compras_locales WHERE id=${compraId}`)) as unknown as {estado_pago:string;saldo:number}[];
     if (estado[0].estado_pago !== 'PARCIAL' || Number(estado[0].saldo) !== 60000) throw new Error(`Saldo: ${JSON.stringify(estado[0])}`);

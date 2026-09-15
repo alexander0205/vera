@@ -13,6 +13,8 @@ export type DestinoObligacion = 'TSS' | 'DGII';
 export interface LineaObligacion {
   afpEmpleadoCents: number;
   sfsEmpleadoCents: number;
+  /** Cápita de dependientes adicionales: se retiene al empleado y va a la TSS. */
+  dependientesAdicionalesCents?: number;
   isrCents: number;
   afpPatronalCents: number;
   sfsPatronalCents: number;
@@ -40,7 +42,7 @@ export function obligacionesDeLineas(lineas: LineaObligacion[]): Obligacion[] {
   let dgiiRet = 0; // ISR
 
   for (const l of lineas) {
-    tssRet += l.afpEmpleadoCents + l.sfsEmpleadoCents;
+    tssRet += l.afpEmpleadoCents + l.sfsEmpleadoCents + (l.dependientesAdicionalesCents ?? 0);
     tssApo += l.afpPatronalCents + l.sfsPatronalCents + l.srlPatronalCents + l.infotepPatronalCents;
     dgiiRet += l.isrCents;
   }

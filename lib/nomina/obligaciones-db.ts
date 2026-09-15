@@ -18,6 +18,7 @@ export async function crearObligacionesCorrida(teamId: number, corridaId: number
     .select({
       afpEmpleadoCents: nominaLineas.afpEmpleadoCents,
       sfsEmpleadoCents: nominaLineas.sfsEmpleadoCents,
+      dependientesAdicionalesCents: nominaLineas.dependientesAdicionalesCents,
       isrCents: nominaLineas.isrCents,
       afpPatronalCents: nominaLineas.afpPatronalCents,
       sfsPatronalCents: nominaLineas.sfsPatronalCents,

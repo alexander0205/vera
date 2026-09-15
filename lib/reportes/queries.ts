@@ -338,7 +338,7 @@ export async function getAgingCxC(teamId: number): Promise<AgingResumen> {
 export interface ItbisResumen {
   baseCents: number;
   itbisDebitoCents: number;   // ITBIS facturado (ventas)
-  itbisCreditoCents: number;  // ITBIS de compras recibidas (606)
+  itbisCreditoCents: number;  // ITBIS que se adelanta de las compras (606)
   aPagarCents: number;        // débito − crédito
 }
 
@@ -355,14 +355,25 @@ export async function getItbisResumen(teamId: number, desde: Date, hasta: Date):
       itbis: sql<number>`coalesce(sum(${ecfDocuments.totalItbis}), 0)`,
     }).from(ecfDocuments).where(and(pRango(teamId, desde, hasta), pNotaCredito, pVentaEstados)),
 
-    // Crédito fiscal: ITBIS de e-CF recibidos (compras) en el período.
+    // Crédito fiscal: el ITBIS que se adelanta de las compras y gastos
+    // registrados, más el de los e-CF recibidos que todavía no se registraron
+    // (sin contarlos dos veces: se cruzan por el NCF).
     db.execute(sql`
-      SELECT coalesce(sum(total_itbis), 0)::bigint AS itbis
-      FROM ecf_documents_recibidos
-      WHERE team_id = ${teamId}
-        AND fecha_recepcion::date >= ${d0}
-        AND fecha_recepcion::date <= ${d1}
-        AND estado_acuse = 'RECIBIDO'
+      SELECT (
+        coalesce((SELECT sum(greatest(0, c.itbis_cents - c.itbis_al_costo_cents))
+          FROM compras_locales c
+          WHERE c.team_id = ${teamId} AND c.estado = 'registrada'
+            AND c.fecha >= ${d0} AND c.fecha <= ${d1}), 0)
+        +
+        coalesce((SELECT sum(r.total_itbis)
+          FROM ecf_documents_recibidos r
+          WHERE r.team_id = ${teamId}
+            AND r.fecha_recepcion::date >= ${d0}
+            AND r.fecha_recepcion::date <= ${d1}
+            AND r.estado_acuse = 'RECIBIDO'
+            AND NOT EXISTS (SELECT 1 FROM compras_locales c
+              WHERE c.team_id = r.team_id AND c.referencia_encf = r.encf AND c.estado = 'registrada')), 0)
+      )::bigint AS itbis
     `),
   ]);
 

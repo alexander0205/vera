@@ -9,7 +9,8 @@
  * columnas, en qué orden, con qué separador y códigos. El formato exacto de
  * cada banco no es público —viene en su instructivo— así que los presets por
  * banco son plantillas base a confirmar; el genérico CSV siempre funciona. Un
- * empleado sin cuenta no se puede dispersar: sale en `incompletos`.
+ * empleado sin cuenta o sin tipo de cuenta no se puede dispersar: sale en
+ * `incompletos` con el motivo.
  */
 
 import {
@@ -37,7 +38,7 @@ export interface ArchivoDispersion {
   /** Cuántos beneficiarios entraron y cuánto suman, en centavos. */
   totalBeneficiarios: number;
   totalCents: number;
-  /** Empleados excluidos por no tener cuenta de banco (nombre + motivo). */
+  /** Empleados excluidos por no tener la cuenta completa (nombre + motivo). */
   incompletos: { empleadoId: number; nombre: string; motivo: string }[];
   /** Aviso de verificación del formato elegido (presets por banco). */
   nota?: string;
@@ -53,9 +54,26 @@ function escapar(v: string, delim: string): string {
   return v;
 }
 
-/** ¿El beneficiario tiene lo mínimo para dispersar (banco + cuenta)? */
-function dispersable(b: BeneficiarioDispersion): boolean {
-  return Boolean(b.bancoNombre?.trim()) && Boolean(b.bancoCuenta?.trim());
+/** Los tipos de cuenta que entienden los formatos de banco. */
+export const TIPOS_CUENTA_BANCO = ['ahorros', 'corriente'] as const;
+
+/** ¿Es un tipo de cuenta que los formatos saben escribir? */
+export function esTipoCuentaBanco(v: unknown): boolean {
+  return (TIPOS_CUENTA_BANCO as readonly string[]).includes(String(v ?? '').trim().toLowerCase());
+}
+
+/**
+ * Por qué un beneficiario NO puede entrar al archivo, o null si puede.
+ *
+ * El tipo de cuenta es obligatorio y no un adorno: los cuatro formatos lo
+ * escriben en su columna (AH/CT, 1/2, AHO/COR) y un vacío ahí es una línea que
+ * el banco rechaza. Antes solo se exigían banco y cuenta, y quien no tenía tipo
+ * salía en el archivo con la columna en blanco sin que nadie se enterara.
+ */
+function motivoNoDispersable(b: BeneficiarioDispersion): string | null {
+  if (!b.bancoNombre?.trim() || !b.bancoCuenta?.trim()) return 'Sin cuenta de banco';
+  if (!esTipoCuentaBanco(b.bancoTipoCuenta)) return 'Falta el tipo de cuenta (ahorros o corriente)';
+  return null;
 }
 
 /** Valor de una columna para un beneficiario, según el formato. */
@@ -84,10 +102,11 @@ export function generarArchivoDispersion(
   opts: { periodo: string; referencia: string; formatoKey?: string },
 ): ArchivoDispersion {
   const f = getFormatoBanco(opts.formatoKey);
-  const incluidos = beneficiarios.filter(dispersable);
-  const incompletos = beneficiarios
-    .filter((b) => !dispersable(b))
-    .map((b) => ({ empleadoId: b.empleadoId, nombre: b.nombre, motivo: 'Sin cuenta de banco' }));
+  const incluidos = beneficiarios.filter((b) => motivoNoDispersable(b) === null);
+  const incompletos = beneficiarios.flatMap((b) => {
+    const motivo = motivoNoDispersable(b);
+    return motivo ? [{ empleadoId: b.empleadoId, nombre: b.nombre, motivo }] : [];
+  });
 
   const filas = incluidos.map((b) =>
     f.columnas

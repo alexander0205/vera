@@ -27,7 +27,7 @@ import { Command } from 'cmdk';
 import {
   Search, FileText, Users, Package, Hash, Plus, LayoutDashboard,
   Settings, BarChart3, CreditCard, Shield, Activity, X, GraduationCap,
-  Store, Receipt, Contact, ClipboardList, Wallet, Building2, UserCog,
+  Store, Receipt, Contact, ClipboardList, Wallet, Building2, UserCog, BookOpen, Scale,
 } from 'lucide-react';
 
 // MUI imports
@@ -84,6 +84,16 @@ const STATIC_ITEMS: ItemEstatico[] = [
   { grupo: 'Páginas', modulo: 'escolar', label: 'Responsables', href: '/escolar/responsables', icon: Contact },
   { grupo: 'Páginas', modulo: 'escolar', label: 'Pagos del colegio', href: '/escolar/pagos', icon: Wallet },
   { grupo: 'Acciones', modulo: 'escolar', label: 'Nuevo estudiante', href: '/escolar/estudiantes/nuevo', icon: Plus },
+  // Contabilidad
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Panorama contable', href: '/contabilidad', icon: BookOpen },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Libro diario', href: '/contabilidad/libro-diario', icon: BookOpen },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Catálogo de cuentas', href: '/contabilidad/cuentas', icon: Hash },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Mayor general', href: '/contabilidad/mayor', icon: BarChart3 },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Balance de comprobación', href: '/contabilidad/balance', icon: Scale },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Estado de resultados', href: '/contabilidad/estado-resultados', icon: BarChart3 },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Balance general', href: '/contabilidad/balance-general', icon: Scale },
+  { grupo: 'Páginas', modulo: 'contabilidad', label: 'Configuración contable', href: '/contabilidad/configuracion', icon: Settings },
+  { grupo: 'Acciones', modulo: 'contabilidad', label: 'Nuevo asiento manual', href: '/contabilidad/nuevo-asiento', icon: Plus },
   // Administración
   { grupo: 'Páginas', modulo: 'administracion', label: 'Mi empresa', href: '/cuenta/empresa', icon: Building2 },
   { grupo: 'Páginas', modulo: 'administracion', label: 'Usuarios', href: '/cuenta/usuarios', icon: UserCog },
@@ -107,6 +117,7 @@ function moduloDeRuta(pathname: string): ModuleKey {
   if (pathname.startsWith('/escolar')) return 'escolar';
   if (pathname.startsWith('/pos')) return 'pos';
   if (pathname.startsWith('/cuenta')) return 'administracion';
+  if (pathname.startsWith('/contabilidad')) return 'contabilidad';
   return 'facturacion';
 }
 
@@ -117,6 +128,7 @@ const PLACEHOLDER: Record<ModuleKey, string> = {
   escolar:        'Buscar estudiantes, familias, facturas…',
   administracion: 'Buscar usuarios, clientes, facturas…',
   nomina:         'Buscar empleados, corridas de nómina…',
+  contabilidad:   'Buscar libro diario, reportes, facturas…',
 };
 
 const MIN_CARACTERES = 2;

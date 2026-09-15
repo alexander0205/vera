@@ -14,9 +14,11 @@ export async function listarCuentasPorPagar(teamId: number, opts: { search?:stri
     WITH cartera AS (
       SELECT c.id, c.proveedor_nombre AS "proveedorNombre", c.proveedor_rnc AS "proveedorRnc",
         c.referencia_encf AS "referenciaEncf", to_char(c.fecha,'YYYY-MM-DD') AS fecha,
-        to_char(c.fecha_vencimiento,'YYYY-MM-DD') AS "fechaVencimiento", c.monto_total AS "montoTotal",
+        to_char(c.fecha_vencimiento,'YYYY-MM-DD') AS "fechaVencimiento",
+        -- Lo que se le debe al proveedor es el neto: lo retenido se le paga a la DGII.
+        (c.monto_total - c.itbis_retenido_cents - c.isr_retenido_cents) AS "montoTotal",
         c.estado_pago AS "estadoPago", coalesce((SELECT sum(p.monto_cents) FROM pagos_proveedores p WHERE p.compra_id=c.id),0) AS pagado
-      FROM compras_locales c WHERE c.team_id=${teamId} AND c.forma_pago='credito'
+      FROM compras_locales c WHERE c.team_id=${teamId} AND c.forma_pago='credito' AND c.estado='registrada'
     ) SELECT *, greatest(0, "montoTotal"-pagado) AS saldo,
       ("fechaVencimiento" IS NOT NULL AND "fechaVencimiento"::date < (now() AT TIME ZONE 'America/Santo_Domingo')::date) AS vencida,
       greatest(0, (now() AT TIME ZONE 'America/Santo_Domingo')::date - "fechaVencimiento"::date) AS "diasVencido"
@@ -47,9 +49,10 @@ export class PagoProveedorError extends Error {}
 export async function registrarPagoProveedor(input: { teamId:number; compraId:number; montoCents:number; metodo:string; fechaPago:string; referencia?:string|null; notas?:string|null; userId:number }) {
   if (!Number.isSafeInteger(input.montoCents) || input.montoCents <= 0) throw new PagoProveedorError('Monto de pago inválido.');
   const pago = await db.transaction(async tx => {
-    const compras = await tx.execute(sql`SELECT monto_total FROM compras_locales WHERE id=${input.compraId} AND team_id=${input.teamId} AND forma_pago='credito' FOR UPDATE`);
-    const compra = (compras as unknown as { monto_total:number }[])[0];
+    const compras = await tx.execute(sql`SELECT monto_total - itbis_retenido_cents - isr_retenido_cents AS monto_total, estado FROM compras_locales WHERE id=${input.compraId} AND team_id=${input.teamId} AND forma_pago='credito' FOR UPDATE`);
+    const compra = (compras as unknown as { monto_total:number; estado:string }[])[0];
     if (!compra) throw new PagoProveedorError('Compra a crédito no encontrada.');
+    if (compra.estado === 'anulada') throw new PagoProveedorError('La compra está anulada.');
     const sums = await tx.execute(sql`SELECT coalesce(sum(monto_cents),0) AS pagado FROM pagos_proveedores WHERE compra_id=${input.compraId} AND team_id=${input.teamId}`);
     const saldo = Number((sums as unknown as { pagado:number }[])[0].pagado);
     if (input.montoCents > Number(compra.monto_total) - saldo) throw new PagoProveedorError('El pago excede saldo pendiente.');
@@ -57,9 +60,17 @@ export async function registrarPagoProveedor(input: { teamId:number; compraId:nu
       VALUES (${input.teamId},${input.compraId},${input.montoCents},${input.metodo},${input.fechaPago},${input.referencia??null},${input.notas??null},${input.userId}) RETURNING id`);
     const id = (filas as unknown as {id:number}[])[0].id;
     const restante = Number(compra.monto_total) - saldo - input.montoCents;
-    await tx.execute(sql`UPDATE compras_locales SET estado_pago=${restante===0?'PAGADA':'PARCIAL'} WHERE id=${input.compraId}`);
+    // Cuando queda saldada, la fecha del último pago es la «fecha de pago» del 606.
+    await tx.execute(sql`UPDATE compras_locales SET estado_pago=${restante===0?'PAGADA':'PARCIAL'}, fecha_pago=${restante===0?input.fechaPago:null} WHERE id=${input.compraId}`);
     return { id, saldoNuevo: restante };
   });
-  const asiento = await generarAsientoPagoProveedor(input.teamId, pago.id, input.userId);
+  // El pago ya quedó guardado: si el asiento falla no se le dice al usuario que
+  // el pago no entró. El barrido lo vuelve a intentar.
+  let asiento: Awaited<ReturnType<typeof generarAsientoPagoProveedor>> | null = null;
+  try {
+    asiento = await generarAsientoPagoProveedor(input.teamId, pago.id, input.userId);
+  } catch (e) {
+    console.error(`[cxp] pago ${pago.id} guardado sin asiento`, e);
+  }
   return { ...pago, asiento };
 }

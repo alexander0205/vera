@@ -12,12 +12,13 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaCorridas, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
 import { tasasDelAnio } from '@/lib/config/nomina-tasas';
-import { construirCorrida } from '@/lib/nomina/corrida';
+import { construirCorrida, periodoDeCorrida } from '@/lib/nomina/corrida';
 import { obligacionesDeLineas } from '@/lib/nomina/obligaciones';
 
 const TAG = 'demo-nomina-escenarios-2026-09';
 const RUN_LABEL = 'Nómina demostración · Septiembre 2026';
 const PERIOD = '2026-09';
+const PERIODO_CORRIDA = periodoDeCorrida('mensual', { periodo: PERIOD })!;
 
 const teamId = Number(process.env.SEED_TEAM);
 const limpiarSolo = process.argv.includes('--limpiar');
@@ -126,11 +127,14 @@ async function main() {
         estado: 'activo',
       })),
       tasasDelAnio(2026),
+      PERIODO_CORRIDA,
     );
 
     const [corrida] = await tx.insert(nominaCorridas).values({
       teamId,
       periodo: PERIOD,
+      fechaInicio: PERIODO_CORRIDA.inicio,
+      fechaFin: PERIODO_CORRIDA.fin,
       tipo: 'mensual',
       descripcion: RUN_LABEL,
       fechaPago: '2026-09-15',

@@ -16,7 +16,7 @@
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { FileText, Store, GraduationCap, Building2, Users } from 'lucide-react';
+import { FileText, Store, GraduationCap, Building2, Users, BookOpen } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { MODULE_LABELS, moduleUrl, type ModuleKey } from '@/lib/config/modules';
 import { anunciarCambioDeModulo } from '@/components/loader-llegada';
@@ -27,6 +27,7 @@ const ICONS: Record<ModuleKey, typeof FileText> = {
   pos:            Store,
   escolar:        GraduationCap,
   nomina:         Users,
+  contabilidad:   BookOpen,
 };
 
 export function RailModulos({ current }: { current: ModuleKey | null }) {

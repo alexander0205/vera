@@ -48,7 +48,13 @@ export async function PUT(req: Request) {
   const auth = await requireModuleAndPermission('nomina', 'nomina:configurar');
   if (!auth.ok) return auth.response;
 
-  const body = await req.json().catch(() => ({}));
+  // Un cuerpo que no se puede leer se rechaza. Antes caía a `{}` y guardaba todo
+  // en falso: una petición cortada a medias (pestaña cerrada mientras guardaba)
+  // apagaba la programación automática sin que nadie lo pidiera.
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
+  }
   const valores = {
     activa: Boolean(body.activa),
     mensualActiva: Boolean(body.mensualActiva),

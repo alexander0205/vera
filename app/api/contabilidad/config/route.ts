@@ -25,6 +25,7 @@ import {
 import {
   getEstadoConfiguracion, setContabilidadActiva, ConfigIncompletaError,
 } from '@/lib/contabilidad/validacion';
+import { aplicarConfiguracionRecomendada } from '@/lib/contabilidad/recomendada';
 
 async function autorizar(permiso: 'contabilidad:ver' | 'contabilidad:configurar') {
   const user = await getUser();
@@ -123,8 +124,21 @@ export async function PATCH(req: NextRequest) {
           provisionarNomina:          typeof b.provisionarNomina === 'boolean' ? b.provisionarNomina : undefined,
           cuentaProvisionGastoId:     numeroONulo(b.cuentaProvisionGastoId),
           cuentaProvisionPorPagarId:  numeroONulo(b.cuentaProvisionPorPagarId),
+          cuentaNominaIsrPagarId:     numeroONulo(b.cuentaNominaIsrPagarId),
+          cuentaNominaInfotepPagarId: numeroONulo(b.cuentaNominaInfotepPagarId),
+          cuentaProvRegaliaGastoId:    numeroONulo(b.cuentaProvRegaliaGastoId),
+          cuentaProvRegaliaPagarId:    numeroONulo(b.cuentaProvRegaliaPagarId),
+          cuentaProvVacacionesGastoId: numeroONulo(b.cuentaProvVacacionesGastoId),
+          cuentaProvVacacionesPagarId: numeroONulo(b.cuentaProvVacacionesPagarId),
+          cuentaProvCesantiaGastoId:   numeroONulo(b.cuentaProvCesantiaGastoId),
+          cuentaProvCesantiaPagarId:   numeroONulo(b.cuentaProvCesantiaPagarId),
         }, user.id);
         return NextResponse.json({ config });
+      }
+
+      case 'recomendada': {
+        const resultado = await aplicarConfiguracionRecomendada(teamId, user.id);
+        return NextResponse.json({ ok: true, ...resultado });
       }
 
       case 'metodo': {
@@ -172,7 +186,7 @@ export async function PATCH(req: NextRequest) {
 
       default:
         return NextResponse.json(
-          { error: 'Sección desconocida. Debe ser: general, itbis-compras, compras-activos, nomina, metodo, ingreso o activar.' },
+          { error: 'Sección desconocida. Debe ser: general, itbis-compras, compras-activos, nomina, recomendada, metodo, ingreso o activar.' },
           { status: 400 },
         );
     }

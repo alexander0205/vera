@@ -44,3 +44,12 @@ describe('obligacionesDeLineas', () => {
     expect(suma).toBe(esperado);
   });
 });
+
+describe('obligacionesDeLineas con dependientes adicionales', () => {
+  it('la cápita retenida va a la TSS con las retenciones del empleado', () => {
+    const [tss, dgii] = obligacionesDeLineas([linea({ dependientesAdicionalesCents: 191_978 })]);
+    expect(tss.parteRetencionesCents).toBe(100_450 + 106_400 + 191_978);
+    expect(tss.montoCents).toBe(tss.parteRetencionesCents + tss.parteAportesCents);
+    expect(dgii.montoCents).toBe(50_000);
+  });
+});

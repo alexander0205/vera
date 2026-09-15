@@ -60,16 +60,38 @@ export function PlantillaWizard({
     }
   }
 
+  /**
+   * Qué le falta al paso `i` para poder seguir, o null si está completo.
+   *
+   * Se valida al SALIR de cada paso y no solo al guardar: antes se recorrían los
+   * ocho pasos y el botón final devolvía al paso 2 por el lugar de trabajo, que
+   * no estaba marcado como obligatorio; y el horario decía «(opcional)».
+   */
+  function faltaEnPaso(i: number): string | null {
+    if (i === 0 && !nombre.trim()) return 'Ponle un nombre a la plantilla';
+    if (i === 1 && !config.lugarTrabajo.trim()) return 'Indica el lugar de trabajo: el contrato RD lo exige';
+    if (i === 2 && (!config.incluirJornada || !config.jornadaTexto.trim())) {
+      return 'Indica el horario de trabajo: el contrato RD lo exige';
+    }
+    return null;
+  }
+
   function irAlPaso(i: number) {
     if (i < 0 || i >= PASOS.length) return;
+    // Hacia adelante no se salta un paso incompleto; hacia atrás, libre.
+    for (let k = paso; k < i; k++) {
+      const falta = faltaEnPaso(k);
+      if (falta) { toast.error(falta); setPaso(k); return; }
+    }
     setPaso(i);
     if (i === PASOS.length - 1) cargarPreview();
   }
 
   async function guardar() {
-    if (!nombre.trim()) { toast.error('Ponle un nombre a la plantilla'); setPaso(0); return; }
-    if (!config.lugarTrabajo.trim()) { toast.error('Indica el lugar de trabajo para el contrato RD'); setPaso(1); return; }
-    if (!config.incluirJornada || !config.jornadaTexto.trim()) { toast.error('Indica el horario de trabajo para el contrato RD'); setPaso(2); return; }
+    for (let k = 0; k < 3; k++) {
+      const falta = faltaEnPaso(k);
+      if (falta) { toast.error(falta); setPaso(k); return; }
+    }
     setGuardando(true);
     try {
       const res = await fetch('/api/nomina/contratos/plantillas', {
@@ -111,7 +133,7 @@ export function PlantillaWizard({
         {paso === 0 && (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Nombre de la plantilla</Label>
+              <Label className="text-xs text-muted-foreground">Nombre de la plantilla *</Label>
               <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Contrato por tiempo indefinido" />
             </div>
             <Nota>
@@ -125,7 +147,7 @@ export function PlantillaWizard({
         {paso === 1 && (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Lugar de trabajo</Label>
+              <Label className="text-xs text-muted-foreground">Lugar de trabajo *</Label>
               <Input value={config.lugarTrabajo} onChange={(e) => set('lugarTrabajo', e.target.value)} placeholder="Ej. las oficinas de la empresa en Santiago" />
             </div>
             <Toggle checked={config.incluirFunciones} onChange={(v) => set('incluirFunciones', v)}
@@ -147,7 +169,7 @@ export function PlantillaWizard({
               label="Incluir cláusula de jornada" hint="Usa la jornada, el turno y el día de descanso de la ficha del empleado." />
             {config.incluirJornada && (
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Detalle de horario (opcional)</Label>
+                <Label className="text-xs text-muted-foreground">Horario de trabajo *</Label>
                 <Input value={config.jornadaTexto} onChange={(e) => set('jornadaTexto', e.target.value)} placeholder="Ej. de 8:00 a.m. a 5:00 p.m." />
               </div>
             )}
@@ -212,7 +234,7 @@ export function PlantillaWizard({
         {paso === 7 && (
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Nombre de la plantilla</Label>
+              <Label className="text-xs text-muted-foreground">Nombre de la plantilla *</Label>
               <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Contrato por tiempo indefinido" />
             </div>
             <Label className="text-xs text-muted-foreground">Vista previa (con datos de ejemplo)</Label>

@@ -20,6 +20,10 @@ export interface LineaTSS {
   nombre: string;
   cedula: string | null;
   brutoCents: number;
+  /** Base cotizable usada (bruto o piso del mínimo). Ausente = el bruto. */
+  salarioCotizableCents?: number | null;
+  /** Cápita de dependientes adicionales retenida al empleado. */
+  dependientesAdicionalesCents?: number;
   afpEmpleadoCents: number;
   sfsEmpleadoCents: number;
   afpPatronalCents: number;
@@ -32,6 +36,7 @@ export interface TotalesTSS {
   salarioCents: number;
   afpEmpleadoCents: number;
   sfsEmpleadoCents: number;
+  dependientesAdicionalesCents: number;
   afpPatronalCents: number;
   sfsPatronalCents: number;
   srlPatronalCents: number;
@@ -40,7 +45,7 @@ export interface TotalesTSS {
   afpTotalCents: number;
   /** SFS total (empleado + patronal) — el seguro de salud. */
   sfsTotalCents: number;
-  /** Todo lo que se paga a la TSS: AFP + SFS + SRL + INFOTEP. */
+  /** Todo lo que se paga a la TSS: AFP + SFS + SRL + INFOTEP + cápita de dependientes. */
   totalTSSCents: number;
 }
 
@@ -64,7 +69,7 @@ function escapar(v: string): string {
 
 const COLUMNAS = [
   'Cedula', 'Nombre', 'Salario cotizable',
-  'AFP empleado', 'SFS empleado',
+  'AFP empleado', 'SFS empleado', 'Dependientes adicionales',
   'AFP patronal', 'SFS patronal', 'SRL', 'INFOTEP',
   'Total empleado', 'Total patronal', 'Total TSS',
 ] as const;
@@ -75,7 +80,7 @@ const NOTA =
 
 function ceros(): TotalesTSS {
   return {
-    salarioCents: 0, afpEmpleadoCents: 0, sfsEmpleadoCents: 0,
+    salarioCents: 0, afpEmpleadoCents: 0, sfsEmpleadoCents: 0, dependientesAdicionalesCents: 0,
     afpPatronalCents: 0, sfsPatronalCents: 0, srlPatronalCents: 0, infotepPatronalCents: 0,
     afpTotalCents: 0, sfsTotalCents: 0, totalTSSCents: 0,
   };
@@ -93,10 +98,13 @@ export function generarAutodeterminacionTSS(
   const totales = ceros();
 
   const filas = lineas.map((l) => {
-    const totalEmpleado = l.afpEmpleadoCents + l.sfsEmpleadoCents;
+    const dependientes = l.dependientesAdicionalesCents ?? 0;
+    const salario = l.salarioCotizableCents ?? l.brutoCents;
+    const totalEmpleado = l.afpEmpleadoCents + l.sfsEmpleadoCents + dependientes;
     const totalPatronal = l.afpPatronalCents + l.sfsPatronalCents + l.srlPatronalCents + l.infotepPatronalCents;
 
-    totales.salarioCents += l.brutoCents;
+    totales.salarioCents += salario;
+    totales.dependientesAdicionalesCents += dependientes;
     totales.afpEmpleadoCents += l.afpEmpleadoCents;
     totales.sfsEmpleadoCents += l.sfsEmpleadoCents;
     totales.afpPatronalCents += l.afpPatronalCents;
@@ -105,8 +113,8 @@ export function generarAutodeterminacionTSS(
     totales.infotepPatronalCents += l.infotepPatronalCents;
 
     return [
-      l.cedula ?? '', l.nombre, pesos(l.brutoCents),
-      pesos(l.afpEmpleadoCents), pesos(l.sfsEmpleadoCents),
+      l.cedula ?? '', l.nombre, pesos(salario),
+      pesos(l.afpEmpleadoCents), pesos(l.sfsEmpleadoCents), pesos(dependientes),
       pesos(l.afpPatronalCents), pesos(l.sfsPatronalCents), pesos(l.srlPatronalCents), pesos(l.infotepPatronalCents),
       pesos(totalEmpleado), pesos(totalPatronal), pesos(totalEmpleado + totalPatronal),
     ].map((v) => escapar(String(v))).join(DELIM);
@@ -115,15 +123,16 @@ export function generarAutodeterminacionTSS(
   totales.afpTotalCents = totales.afpEmpleadoCents + totales.afpPatronalCents;
   totales.sfsTotalCents = totales.sfsEmpleadoCents + totales.sfsPatronalCents;
   totales.totalTSSCents =
-    totales.afpTotalCents + totales.sfsTotalCents + totales.srlPatronalCents + totales.infotepPatronalCents;
+    totales.afpTotalCents + totales.sfsTotalCents + totales.srlPatronalCents + totales.infotepPatronalCents
+    + totales.dependientesAdicionalesCents;
 
-  const totalEmpleadoGlobal = totales.afpEmpleadoCents + totales.sfsEmpleadoCents;
+  const totalEmpleadoGlobal = totales.afpEmpleadoCents + totales.sfsEmpleadoCents + totales.dependientesAdicionalesCents;
   const totalPatronalGlobal =
     totales.afpPatronalCents + totales.sfsPatronalCents + totales.srlPatronalCents + totales.infotepPatronalCents;
 
   const filaTotales = [
     '', 'TOTALES', pesos(totales.salarioCents),
-    pesos(totales.afpEmpleadoCents), pesos(totales.sfsEmpleadoCents),
+    pesos(totales.afpEmpleadoCents), pesos(totales.sfsEmpleadoCents), pesos(totales.dependientesAdicionalesCents),
     pesos(totales.afpPatronalCents), pesos(totales.sfsPatronalCents), pesos(totales.srlPatronalCents), pesos(totales.infotepPatronalCents),
     pesos(totalEmpleadoGlobal), pesos(totalPatronalGlobal), pesos(totales.totalTSSCents),
   ].map((v) => escapar(String(v))).join(DELIM);

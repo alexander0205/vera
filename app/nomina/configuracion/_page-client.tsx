@@ -6,8 +6,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { toast } from '@/lib/toast';
-import { CalendarClock, Loader2, Info } from 'lucide-react';
+import { CalendarClock, Loader2, Info, Settings, ShieldCheck } from 'lucide-react';
+import {
+  LABEL_TAMANO_EMPRESA, TAMANOS_EMPRESA,
+  type SalarioMinimoSector, type TamanoEmpresa,
+} from '@/lib/config/nomina-tasas';
+import { fmtFechaCorta } from '@/lib/utils/format';
 
 interface Programacion {
   activa: boolean;
@@ -19,7 +25,29 @@ interface Programacion {
   anticipacionDias: number;
 }
 
+interface Ajustes {
+  tamanoEmpresa: TamanoEmpresa | null;
+  srlTasa: number | null;
+  srlTasaAnio: number;
+  srlMin: number;
+  srlMax: number;
+  capita: { perCapitaCents: number; fonamatCents: number; totalCents: number; resolucion: string; vigenteDesde: string };
+  salariosMinimos: SalarioMinimoSector | null;
+}
+
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const RD = new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', minimumFractionDigits: 2 });
+const pesos = (c: number) => RD.format(c / 100);
+/** Fracción → texto de porcentaje con dos decimales: 0.0115 → «1.15». */
+const aPorcentaje = (f: number) => (f * 100).toFixed(2);
+
+/** Guía de la Ley 187-17 para elegir el tamaño (también cuentan las ventas anuales). */
+const TRABAJADORES_TAMANO: Record<TamanoEmpresa, string> = {
+  micro: 'de 1 a 10 trabajadores',
+  pequena: 'de 11 a 50',
+  mediana: 'de 51 a 150',
+  grande: 'más de 150',
+};
 
 /** Interruptor simple sobre un checkbox nativo (no hay componente Switch). */
 function Toggle({ checked, onChange, label, hint }: {
@@ -61,26 +89,59 @@ export default function ConfiguracionClient() {
   const { data, isLoading, mutate } = useSWR<{ programacion: Programacion }>('/api/nomina/programacion', fetcher);
   const [cfg, setCfg] = useState<Programacion | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const { data: ajustes, mutate: mutateAjustes } = useSWR<Ajustes>('/api/nomina/ajustes', fetcher);
+  const [tamano, setTamano] = useState<TamanoEmpresa | ''>('');
+  const [srlPct, setSrlPct] = useState('');
 
   useEffect(() => {
     if (data?.programacion) setCfg(data.programacion);
   }, [data]);
+
+  useEffect(() => {
+    if (!ajustes) return;
+    setTamano(ajustes.tamanoEmpresa ?? '');
+    setSrlPct(ajustes.srlTasa !== null ? aPorcentaje(ajustes.srlTasa) : '');
+  }, [ajustes]);
+
+  // La SRL se escribe en porcentaje; vacía = la del año (el mínimo del rango).
+  const srlNumero = srlPct.trim() === '' ? null : Number(srlPct.replace(',', '.'));
+  const srlInvalida = ajustes !== undefined && srlNumero !== null && (
+    !Number.isFinite(srlNumero) || srlNumero < ajustes.srlMin * 100 - 1e-9 || srlNumero > ajustes.srlMax * 100 + 1e-9
+  );
 
   const set = <K extends keyof Programacion>(k: K, v: Programacion[K]) =>
     setCfg((c) => (c ? { ...c, [k]: v } : c));
 
   async function guardar() {
     if (!cfg) return;
+    if (srlInvalida) {
+      toast.error(`La tasa SRL va de ${aPorcentaje(ajustes!.srlMin)} % a ${aPorcentaje(ajustes!.srlMax)} %`);
+      return;
+    }
     setGuardando(true);
     try {
+      // Primero la seguridad social: si la rechaza, no se guarda nada a medias.
+      const resAjustes = await fetch('/api/nomina/ajustes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tamanoEmpresa: tamano || null,
+          srlTasa: srlNumero === null ? null : Number((srlNumero / 100).toFixed(4)),
+        }),
+      });
+      if (!resAjustes.ok) {
+        const j = await resAjustes.json().catch(() => ({}));
+        throw new Error(j.error ?? 'No se pudo guardar la seguridad social');
+      }
       const res = await fetch('/api/nomina/programacion', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfg),
       });
-      if (!res.ok) throw new Error('No se pudo guardar');
-      toast.success('Programación guardada');
+      if (!res.ok) throw new Error('No se pudo guardar la programación');
+      toast.success('Configuración guardada');
       mutate();
+      mutateAjustes();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -100,12 +161,85 @@ export default function ConfiguracionClient() {
     <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <CalendarClock className="h-6 w-6 text-zero-600" /> Programación automática
+          <Settings className="h-6 w-6 text-zero-600" /> Configuración de nómina
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fija los días de pago y el sistema crea la corrida sola, en borrador, para que la revises y apruebes.
+          La seguridad social de la empresa y los días en que se genera la nómina.
         </p>
       </div>
+
+      <h2 className="mb-2 flex items-center gap-2 text-base font-semibold">
+        <ShieldCheck className="h-4 w-4 text-zero-600" /> Seguridad social
+      </h2>
+      <Card className="mb-8">
+        <CardContent className="space-y-5 p-5">
+          <div className="space-y-2">
+            <Label htmlFor="tamano-empresa" className="text-sm font-medium">Tamaño de la empresa</Label>
+            <NativeSelect id="tamano-empresa" value={tamano} onChange={(e) => setTamano(e.target.value as TamanoEmpresa | '')}>
+              <option value="">Sin configurar</option>
+              {TAMANOS_EMPRESA.map((t) => (
+                <option key={t} value={t}>
+                  {`${LABEL_TAMANO_EMPRESA[t]} (${TRABAJADORES_TAMANO[t]})${ajustes?.salariosMinimos ? ` · mínimo ${pesos(ajustes.salariosMinimos.montosCents[t])}` : ''}`}
+                </option>
+              ))}
+            </NativeSelect>
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                El salario mínimo de su sector es la base más baja sobre la que se cotiza a la TSS: quien gane menos cotiza
+                sobre el mínimo, salvo dispensa.
+                {ajustes?.salariosMinimos && ` Res. ${ajustes.salariosMinimos.resolucion}, vigente desde el ${fmtFechaCorta(ajustes.salariosMinimos.vigenteDesde)}.`}
+                {' '}Hoteles, zonas francas y demás sectores con tarifa propia: déjalo sin configurar.
+              </span>
+            </p>
+          </div>
+
+          <div className="border-t" />
+
+          <div className="space-y-2">
+            <Label htmlFor="srl-tasa" className="text-sm font-medium">Tasa del Seguro de Riesgos Laborales (%)</Label>
+            <Input
+              id="srl-tasa"
+              value={srlPct}
+              onChange={(e) => setSrlPct(e.target.value)}
+              inputMode="decimal"
+              placeholder={ajustes ? aPorcentaje(ajustes.srlTasaAnio) : '1.10'}
+              className="w-28"
+            />
+            {srlInvalida && ajustes && (
+              <p className="text-xs text-red-600">Va de {aPorcentaje(ajustes.srlMin)} a {aPorcentaje(ajustes.srlMax)}.</p>
+            )}
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                1 % fijo más 0.10 a 0.30 % según el riesgo de la actividad. Es la que aparece en la notificación de pago de la
+                TSS. Vacía, se usa {ajustes ? aPorcentaje(ajustes.srlTasaAnio) : '1.10'} %.
+              </span>
+            </p>
+          </div>
+
+          {ajustes && (
+            <>
+              <div className="border-t" />
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Dependientes adicionales</div>
+                <p className="text-xs text-muted-foreground">
+                  {pesos(ajustes.capita.totalCents)} al mes por cada uno ({pesos(ajustes.capita.perCapitaCents)} per cápita
+                  + {pesos(ajustes.capita.fonamatCents)} de FONAMAT), Res. {ajustes.capita.resolucion}. Lo paga el
+                  empleado y se descuenta en la nómina; se registran en la ficha de cada empleado.
+                </p>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
+        <CalendarClock className="h-4 w-4 text-zero-600" /> Programación automática
+      </h2>
+      <p className="mb-2 text-sm text-muted-foreground">
+        Fija los días de pago y el sistema crea la corrida sola, en borrador, para que la revises y apruebes.
+      </p>
 
       <Card className="mb-4">
         <CardContent className="space-y-4 p-5">

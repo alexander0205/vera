@@ -11,6 +11,7 @@
  * responsabilidad de quien llama (la ruta o el guard de permisos).
  */
 import { renderToBuffer } from '@react-pdf/renderer';
+import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { and, eq, ne, sql } from 'drizzle-orm';
@@ -30,6 +31,7 @@ import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { CotizacionPDF, type CotizacionPDFData } from '@/lib/pdf/CotizacionPDF';
 import { VolanteNominaPDF, type VolanteNominaData } from '@/lib/pdf/VolanteNominaPDF';
+import { rangoLegible } from '@/lib/nomina/periodos';
 import { ContratoPDF } from '@/lib/pdf/ContratoPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
@@ -509,14 +511,17 @@ export async function generarCotizacionPdf(opts: {
 
 // ─── Volante de pago de nómina ────────────────────────────────────────────────
 
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+/** «1 al 15 de julio de 2026» con mayúscula inicial, para el encabezado del volante. */
+/** «44 h a RD$250.00: 40 ordinarias, 4 extra al 35 %», para quien cobra por hora. */
+function textoHorasVolante(h: ResumenHoras): string {
+  const tarifa = new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(h.tarifaHoraCents / 100);
+  const partes = partesDeHoras(h);
+  return `${totalHorasTexto(h)} h a ${tarifa}${partes.length ? `: ${partes.join(', ')}` : ''}`;
+}
 
-/** "2026-07" → "Julio 2026". */
-function periodoLegible(periodo: string): string {
-  const [a, m] = periodo.split('-');
-  const idx = Number(m) - 1;
-  return idx >= 0 && idx < 12 ? `${MESES[idx]} ${a}` : periodo;
+function periodoDeVolante(inicio: string, fin: string): string {
+  const texto = rangoLegible({ inicio, fin });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 export type VolanteNominaResult = { buffer: Buffer; filename: string };
@@ -559,13 +564,18 @@ export async function generarVolanteNominaPdf(opts: {
       colorPrimario:   team.colorPrimario ?? undefined,
     },
     empleado: { nombre: linea.nombre, cedula: linea.cedula, cargo: linea.cargo },
-    periodoTexto: periodoLegible(corrida.periodo),
+    periodoTexto: periodoDeVolante(corrida.fechaInicio, corrida.fechaFin),
+    diasPagados:  linea.diasPagados,
+    diasPeriodo:  linea.diasPeriodo,
+    horasTexto:   linea.horasDetalle ? textoHorasVolante(linea.horasDetalle) : null,
     descripcion:  corrida.descripcion,
     fechaPago:    corrida.fechaPago ?? null,
     bruto:            c(linea.brutoCents),
     afpEmpleado:      c(linea.afpEmpleadoCents),
     sfsEmpleado:      c(linea.sfsEmpleadoCents),
     isr:              c(linea.isrCents),
+    dependientesAdicionales:         c(linea.dependientesAdicionalesCents),
+    dependientesAdicionalesCantidad: linea.dependientesAdicionales,
     otrasDeducciones: c(linea.otrasDeduccionesCents),
     totalDeducciones: c(linea.totalDeduccionesCents),
     neto:             c(linea.netoCents),
@@ -574,7 +584,7 @@ export async function generarVolanteNominaPdf(opts: {
 
   const buffer = await renderToBuffer(createElement(VolanteNominaPDF, { data }) as any);
   const slug = linea.nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return { buffer, filename: `volante-${slug || 'empleado'}-${corrida.periodo}.pdf` };
+  return { buffer, filename: `volante-${slug || 'empleado'}-${corrida.fechaInicio}.pdf` };
 }
 
 // ─── Contrato de empleado ─────────────────────────────────────────────────────

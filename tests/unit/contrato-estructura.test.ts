@@ -36,3 +36,19 @@ describe('modelo estructurado de contrato RD', () => {
     expect(validarContratoEstructuradoRD(config, { ...empleado, tipoContrato: 'por_obra' }, empresa)).toContain('obra o servicio determinado');
   });
 });
+
+describe('texto libre dentro del contrato', () => {
+  it('no duplica el punto cuando quien escribe la plantilla ya lo puso', () => {
+    const conPuntos = {
+      ...config,
+      incluirFunciones: true,
+      funciones: 'Impartir docencia y acompañar a los padres.',
+      lugarTrabajo: 'el plantel de Santo Domingo Este.',
+      jornadaTexto: 'de 7:30 a.m. a 3:30 p.m.',
+    };
+    const cuerpo = ensamblarContrato(conPuntos, empleado, empresa, '2026-09-12');
+    expect(cuerpo).not.toContain('..');
+    expect(cuerpo).toContain('acompañar a los padres.');
+    expect(cuerpo).toContain('3:30 p.m.');
+  });
+});

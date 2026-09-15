@@ -31,6 +31,8 @@ export const MODULE_PRICE_IDS: Record<ModuleKey, string> = {
   // Nómina: se administra a mano por ahora (modulosOverride). Cuando se
   // comercialice como addon suelto, se le pone STRIPE_PRICE_MODULO_NOMINA.
   nomina:         '',
+  // Contabilidad es base: viene en todos los planes, nunca se cobra aparte.
+  contabilidad:   '',
 };
 
 /**

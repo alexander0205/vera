@@ -3,15 +3,16 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { nominaProgramacion } from '@/lib/db/schema';
 import { corridasDelDia } from '@/lib/nomina/programacion';
+import { normalizarTipoCorrida } from '@/lib/nomina/corrida';
 import { generarCorrida } from '@/lib/nomina/generar-corrida';
 import { hoyRD } from '@/lib/utils/format';
 
 /**
  * Cron diario de nómina automática. Por cada empresa con la programación
  * activa, mira si HOY (fecha RD) es un día de pago y, si lo es, crea la corrida
- * de esa frecuencia EN BORRADOR. Idempotente: el índice único (team, periodo,
- * tipo) de nomina_corridas impide crear dos veces la misma, así que reintentar
- * el cron el mismo día no duplica nada.
+ * de esa frecuencia EN BORRADOR. Idempotente: `generarCorrida` no crea otra
+ * corrida de la misma frecuencia sobre las mismas fechas, así que reintentar el
+ * cron el mismo día no duplica nada.
  *
  * Protegido con CRON_SECRET, igual que los demás crons. Un fallo en una empresa
  * no aborta el resto: se anota y se sigue.
@@ -36,15 +37,18 @@ export async function GET(req: NextRequest) {
   for (const cfg of programaciones) {
     const debidas = corridasDelDia(cfg, hoy);
     for (const c of debidas) {
+      const tipo = normalizarTipoCorrida(c.tipo);
+      if (!tipo) continue;
       try {
+        // El tipo decide a quién paga: la mensual a quien cobra mensual y las
+        // quincenas a quien cobra por quincenas.
         const r = await generarCorrida({
           teamId: cfg.teamId,
           periodo: c.periodo,
-          tipo: c.tipo,
+          tipo,
           descripcion: c.descripcion,
           fechaPago: c.fechaPago, // fecha REAL de pago (hoy + anticipación)
           userId: null, // creada por el sistema
-          frecuencias: [c.frecuenciaEmpleado],
         });
         resultados.push(
           r.creada

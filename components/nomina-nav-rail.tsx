@@ -12,7 +12,7 @@
 import { RailArmazon } from '@/components/rail/RailArmazon';
 import { RailSecciones } from '@/components/rail/RailSecciones';
 import type { RailSeccion } from '@/components/rail/tipos';
-import { Users, CalendarClock, Wallet, Settings, LayoutDashboard, FileText } from 'lucide-react';
+import { Users, CalendarClock, Wallet, Settings, LayoutDashboard, FileText, Clock } from 'lucide-react';
 
 type SeccionNomina = RailSeccion & { oculto?: boolean };
 
@@ -20,6 +20,8 @@ const SECCIONES: SeccionNomina[] = [
   { tipo: 'item', id: 'nomina-panorama',   href: '/nomina',            label: 'Panorama',   icon: LayoutDashboard, oculto: true },
   { tipo: 'item', id: 'nomina-empleados',  href: '/nomina/empleados',  label: 'Empleados',  icon: Users },
   { tipo: 'item', id: 'nomina-corridas',   href: '/nomina/corridas',   label: 'Corridas',   icon: CalendarClock },
+  // Las horas de quien cobra por hora: se aprueban aquí antes de la corrida.
+  { tipo: 'item', id: 'nomina-horas',      href: '/nomina/horas',      label: 'Horas',      icon: Clock },
   { tipo: 'item', id: 'nomina-contratos',  href: '/nomina/contratos',  label: 'Contratos',  icon: FileText },
   // Fase 4: archivo de dispersión bancaria y registro del pago.
   { tipo: 'item', id: 'nomina-pagos',      href: '/nomina/pagos',      label: 'Pagos',      icon: Wallet, oculto: true },

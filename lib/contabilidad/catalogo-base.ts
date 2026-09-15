@@ -99,6 +99,21 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // dinero que la empresa le debe a él. Tratarlo como menor cuenta por cobrar
   // dejaría la cartera en negativo.
   { codigo: '2104', nombre: 'Saldos a favor de clientes',  tipo: 'pasivo', imputable: true },
+  // Nómina. Lo que se le debe a cada quien se separa porque se paga a entidades
+  // distintas: el neto al empleado, la TSS, la DGII y el INFOTEP (que cobra la TSS).
+  { codigo: '2105', nombre: 'Sueldos por pagar',                 tipo: 'pasivo', imputable: true },
+  { codigo: '2106', nombre: 'Retenciones TSS por pagar',         tipo: 'pasivo', imputable: true },
+  { codigo: '2107', nombre: 'Aportes patronales TSS por pagar',  tipo: 'pasivo', imputable: true },
+  { codigo: '2108', nombre: 'ISR de asalariados por pagar',      tipo: 'pasivo', imputable: true },
+  { codigo: '2109', nombre: 'INFOTEP por pagar',                 tipo: 'pasivo', imputable: true },
+  // El pasivo laboral que se va acumulando con las provisiones, uno por derecho.
+  { codigo: '2110', nombre: 'Provisión de regalía pascual',      tipo: 'pasivo', imputable: true },
+  { codigo: '2111', nombre: 'Provisión de vacaciones',           tipo: 'pasivo', imputable: true },
+  { codigo: '2112', nombre: 'Provisión de cesantía',             tipo: 'pasivo', imputable: true },
+  // Lo que se le retiene a un proveedor al pagarle no es de la empresa: se le
+  // debe a la DGII. El ITBIS va en el IT-1 y el ISR en el IR-17, por eso van aparte.
+  { codigo: '2113', nombre: 'ITBIS retenido a terceros por pagar', tipo: 'pasivo', imputable: true },
+  { codigo: '2114', nombre: 'ISR retenido a terceros por pagar',   tipo: 'pasivo', imputable: true },
 
   // ─── 3 Patrimonio ───────────────────────────────────────────────────────
   { codigo: '3',    nombre: 'Patrimonio',                  tipo: 'patrimonio', imputable: false },
@@ -141,6 +156,23 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // El desgaste mensual de los activos fijos (Nivel 4.2). Su contrapartida es
   // 1202, no la caja: la depreciación no saca dinero, solo reconoce el gasto.
   { codigo: '6103', nombre: 'Gasto por depreciación',      tipo: 'gasto', imputable: true },
+  // Nómina: el costo de la gente, separado de los gastos generales.
+  { codigo: '6104', nombre: 'Sueldos y salarios',             tipo: 'gasto', imputable: true },
+  { codigo: '6105', nombre: 'Aportes patronales TSS e INFOTEP', tipo: 'gasto', imputable: true },
+  { codigo: '6106', nombre: 'Regalía pascual',                tipo: 'gasto', imputable: true },
+  { codigo: '6107', nombre: 'Vacaciones',                     tipo: 'gasto', imputable: true },
+  { codigo: '6108', nombre: 'Cesantía y prestaciones',        tipo: 'gasto', imputable: true },
+  // Los gastos que registran Compras y Gastos, por categoría (lib/compras/categorias).
+  { codigo: '6109', nombre: 'Alquileres',                         tipo: 'gasto', imputable: true },
+  { codigo: '6110', nombre: 'Honorarios y servicios profesionales', tipo: 'gasto', imputable: true },
+  { codigo: '6111', nombre: 'Servicios públicos y comunicaciones', tipo: 'gasto', imputable: true },
+  { codigo: '6112', nombre: 'Reparaciones y mantenimiento',       tipo: 'gasto', imputable: true },
+  { codigo: '6113', nombre: 'Combustible y transporte',           tipo: 'gasto', imputable: true },
+  { codigo: '6114', nombre: 'Materiales y suministros',           tipo: 'gasto', imputable: true },
+  { codigo: '6115', nombre: 'Seguros',                            tipo: 'gasto', imputable: true },
+  { codigo: '6116', nombre: 'Gastos de representación',           tipo: 'gasto', imputable: true },
+  { codigo: '6117', nombre: 'Gastos financieros y comisiones bancarias', tipo: 'gasto', imputable: true },
+  { codigo: '6118', nombre: 'Publicidad y mercadeo',              tipo: 'gasto', imputable: true },
 ];
 
 /**
@@ -248,4 +280,19 @@ export const CODIGO = {
   activoFijo:         '1201',
   depreciacionAcum:   '1202',
   gastoDepreciacion:  '6103',
+  sueldosPorPagar:    '2105',
+  retencionesTss:     '2106',
+  aportesTssPorPagar: '2107',
+  isrAsalariados:     '2108',
+  infotepPorPagar:    '2109',
+  provisionRegalia:   '2110',
+  provisionVacaciones:'2111',
+  provisionCesantia:  '2112',
+  itbisRetenidoTerceros: '2113',
+  isrRetenidoTerceros:   '2114',
+  sueldosSalarios:    '6104',
+  aportesPatronales:  '6105',
+  gastoRegalia:       '6106',
+  gastoVacaciones:    '6107',
+  gastoCesantia:      '6108',
 } as const;

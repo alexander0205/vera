@@ -27,6 +27,13 @@ import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
 import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
+import { categoriaCompra, CUENTA_CATEGORIA_GASTO_VIEJA } from '@/lib/compras/categorias';
+import { retencionesDeJson } from '@/lib/compras/formato606';
+import { partidasAsientoCompra, type BaseCuenta } from '@/lib/compras/asiento-compra';
+import {
+  lineasDevengoNomina, lineasPagoObligacion, lineasPagoSueldos, lineasProvisionNomina,
+  type CuentasNomina, type SumasCorrida,
+} from './nomina-asientos';
 
 /** Estados de un documento que representan una venta emitida y viva. */
 const ESTADOS_VENTA = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
@@ -93,7 +100,9 @@ export type MotivoSalto =
   | 'sin-cuenta-gastos'
   | 'sin-cuenta-caja'
   | 'provisiones-apagadas'
-  | 'no-es-gasto';
+  | 'no-es-gasto'
+  | 'compra-anulada'
+  | 'sin-cuenta-retenciones-por-pagar';
 
 export interface ResultadoGeneracion {
   creado:  boolean;
@@ -703,14 +712,17 @@ const cuentaPorCodigo = cache(async function cuentaPorCodigo(teamId: number, cod
 });
 
 /**
- * Asiento de una compra local (entrada de inventario). Nivel 3.2.
+ * Asiento de una compra o gasto registrado con el comprobante del proveedor.
  *
- *   Debe  Inventario            monto de la compra
- *     Haber  Cuentas por pagar    la deuda con el proveedor
+ * Cada línea va a su cuenta: los productos al inventario y los conceptos a la
+ * cuenta de su categoría (lib/compras/categorias). El ITBIS que se puede
+ * adelantar va a 1104 y el que no, al costo de las líneas; lo retenido al
+ * proveedor queda como pasivo con la DGII (2113 ITBIS, 2114 ISR); y el neto va a
+ * cuentas por pagar si es a crédito o a la caja o banco del método si es de
+ * contado. Las partidas se arman en `lib/compras/asiento-compra.ts`.
  *
- * Nivel 4.3: la compra guarda total + ITBIS. Empresas gravadas separan el
- * crédito fiscal (1104); las exentas conservan el total en Inventario. El haber
- * sigue en CxP hasta que Nivel 4.1 añada compras al contado y pagos proveedores.
+ * Las compras de antes de la migración 0180 no tienen tipo 606 y guardaban el
+ * ITBIS a mano: siguen la regla vieja (se adelanta solo en régimen gravado).
  */
 export async function generarAsientoCompra(
   teamId: number,
@@ -721,54 +733,154 @@ export async function generarAsientoCompra(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT id, monto_total AS "montoTotal", itbis_cents AS "itbisCents", forma_pago AS "formaPago", metodo_pago AS "metodoPago",
+    SELECT id, clase, estado, monto_total AS "montoTotal", itbis_cents AS "itbisCents",
+           forma_pago AS "formaPago", metodo_pago AS "metodoPago",
            to_char(fecha, 'YYYY-MM-DD') AS fecha,
-           proveedor_nombre AS "proveedorNombre"
+           proveedor_nombre AS "proveedorNombre", referencia_encf AS ncf,
+           tipo_bienes_606 AS "tipoBienes606",
+           itbis_al_costo_cents AS "itbisAlCostoCents", itbis_retenido_cents AS "itbisRetenidoCents",
+           isr_retenido_cents AS "isrRetenidoCents", isc_cents AS "iscCents",
+           otros_impuestos_cents AS "otrosImpuestosCents", propina_cents AS "propinaCents"
     FROM compras_locales
     WHERE team_id = ${teamId} AND id = ${compraId}
   `);
-  const compra = (filas as unknown as {
-    id: number; montoTotal: number; itbisCents: number; formaPago: string; metodoPago: string; fecha: string; proveedorNombre: string | null;
-  }[])[0];
+  const num = (v: unknown) => Number(v ?? 0);
+  const c = (filas as unknown as Record<string, unknown>[])[0];
+  if (!c) return { creado: false, motivo: 'no-es-gasto' };
+  if (c.estado === 'anulada') return { creado: false, motivo: 'compra-anulada' };
+  const montoTotal = num(c.montoTotal);
+  if (montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
 
-  if (!compra) return { creado: false, motivo: 'no-es-gasto' };
-  if (compra.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
+  const items = (await db.execute(sql`
+    SELECT producto_id AS "productoId", categoria, descripcion, cantidad, costo_unitario AS "costoUnitario",
+           (SELECT nombre FROM products p WHERE p.id = i.producto_id) AS "productoNombre"
+    FROM compras_locales_items i
+    WHERE compra_id = ${compraId}
+    ORDER BY id
+  `)) as unknown as { productoId: number | null; categoria: string | null; descripcion: string | null; cantidad: number; costoUnitario: number; productoNombre: string | null }[];
 
-  const cuentaInv = cfg.cuentaInventarioId ?? await cuentaPorCodigo(teamId, '1105');
-  if (!cuentaInv) return { creado: false, motivo: 'sin-cuenta-inventario' };
-  const distribucion = distribuirCompra(compra.montoTotal, compra.itbisCents, cfg.regimenItbis);
-  const cuentaItbisAdelantado = distribucion.itbisAdelantadoCents > 0
-    ? await cuentaPorCodigo(teamId, '1104')
-    : null;
-  if (distribucion.itbisAdelantadoCents > 0 && !cuentaItbisAdelantado) {
-    return { creado: false, motivo: 'sin-cuenta-itbis-adelantado' };
+  const itbis = num(c.itbisCents);
+  const isc = num(c.iscCents);
+  const otros = num(c.otrosImpuestosCents);
+  const propina = num(c.propinaCents);
+  const legacy = c.tipoBienes606 == null;
+  const itbisAlCosto = legacy
+    ? itbis - distribuirCompra(montoTotal, itbis, cfg.regimenItbis).itbisAdelantadoCents
+    : num(c.itbisAlCostoCents);
+
+  // Cuenta de cada línea.
+  const bases: BaseCuenta[] = [];
+  let cuentaInv: number | null = null;
+  for (const it of items) {
+    const baseCents = Math.round(Number(it.cantidad) * Number(it.costoUnitario));
+    if (it.productoId) {
+      cuentaInv = cuentaInv ?? cfg.cuentaInventarioId ?? await cuentaPorCodigo(teamId, '1105');
+      if (!cuentaInv) return { creado: false, motivo: 'sin-cuenta-inventario' };
+      bases.push({ cuentaId: cuentaInv, baseCents, descripcion: it.productoNombre ?? 'Entrada de inventario' });
+    } else {
+      const cat = categoriaCompra(it.categoria);
+      const cuenta = (cat ? await cuentaPorCodigo(teamId, cat.cuentaCodigo) : null)
+        ?? cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+      if (!cuenta) return { creado: false, motivo: 'sin-cuenta-gastos' };
+      bases.push({ cuentaId: cuenta, baseCents, descripcion: cat?.label ?? it.descripcion ?? 'Gasto' });
+    }
   }
-  const esContado = compra.formaPago === 'contado';
-  const cuentaHaber = esContado
-    ? (await resolverCuentaCobro(teamId, compra.metodoPago as ClaveMetodo)) ??
-      (compra.metodoPago === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null)
-    : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
-  if (!cuentaHaber) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
+  // El total del comprobante manda: si las líneas no llegan a la base (redondeo
+  // o datos viejos), la diferencia va a la línea más grande y el asiento cuadra.
+  const baseDoc = montoTotal - itbis - isc - otros - propina;
+  const sumaBases = bases.reduce((s, b) => s + b.baseCents, 0);
+  if (bases.length === 0) return { creado: false, motivo: 'sin-monto' };
+  if (sumaBases !== baseDoc) {
+    const mayor = bases.reduce((m, b, i) => (b.baseCents > bases[m].baseCents ? i : m), 0);
+    bases[mayor] = { ...bases[mayor], baseCents: bases[mayor].baseCents + (baseDoc - sumaBases) };
+  }
 
-  const concepto = `Compra #${compra.id}${compra.proveedorNombre ? ` · ${compra.proveedorNombre}` : ''}`;
+  const esContado = c.formaPago === 'contado';
+  const contrapartida = esContado
+    ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'))
+    : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!contrapartida) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
+
+  const itbisRetenido = num(c.itbisRetenidoCents);
+  const isrRetenido = num(c.isrRetenidoCents);
+  const partidas = partidasAsientoCompra({
+    bases,
+    itbisFacturadoCents: itbis,
+    itbisAlCostoCents: itbisAlCosto,
+    iscCents: isc,
+    otrosImpuestosCents: otros,
+    propinaCents: propina,
+    itbisRetenidoCents: itbisRetenido,
+    isrRetenidoCents: isrRetenido,
+    esContado,
+    cuentas: {
+      itbisAdelantado: itbis > itbisAlCosto ? await cuentaPorCodigo(teamId, '1104') : null,
+      itbisRetenido: itbisRetenido > 0 ? (await cuentaPorCodigo(teamId, '2113')) ?? await cuentaPorCodigo(teamId, '2103') : null,
+      isrRetenido: isrRetenido > 0 ? (await cuentaPorCodigo(teamId, '2114')) ?? await cuentaPorCodigo(teamId, '2103') : null,
+      contrapartida,
+    },
+  });
+  if (!Array.isArray(partidas)) return { creado: false, motivo: partidas.motivo };
+
+  const etiqueta = c.clase === 'gasto' ? 'Gasto' : 'Compra';
+  const concepto = [`${etiqueta} #${c.id}`, c.proveedorNombre, c.ncf].filter(Boolean).join(' · ').slice(0, 255);
   const asientoId = await insertarAsiento(
     teamId,
-    { fecha: compra.fecha, concepto, origenTipo: 'compra', origenId: compra.id },
-    [
-      { cuentaId: cuentaInv, debeCents: distribucion.inventarioCents, haberCents: 0, descripcion: 'Entrada de inventario' },
-      ...(distribucion.itbisAdelantadoCents > 0 ? [{
-        cuentaId: cuentaItbisAdelantado!, debeCents: distribucion.itbisAdelantadoCents, haberCents: 0,
-        descripcion: 'ITBIS adelantado (crédito fiscal)',
-      }] : []),
-      { cuentaId: cuentaHaber, debeCents: 0, haberCents: compra.montoTotal,
-        descripcion: esContado ? 'Pago al contado' : 'Deuda con proveedor' },
-    ],
+    { fecha: String(c.fecha), concepto, origenTipo: 'compra', origenId: Number(c.id) },
+    partidas,
     userId,
   );
 
   return asientoId === null
     ? { creado: false, motivo: 'ya-tiene-asiento' }
     : { creado: true, asientoId };
+}
+
+/**
+ * Reverso de una compra anulada: las mismas partidas del asiento original con
+ * el debe y el haber cambiados, fechado el día de la anulación. El original no
+ * se toca: el libro conserva la historia.
+ */
+export async function generarAsientoCompraAnulada(
+  teamId: number,
+  compraId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT c.id, c.estado, c.clase, c.referencia_encf AS ncf,
+           to_char(coalesce(c.anulada_en, now()) AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha,
+           a.id AS "asientoId"
+    FROM compras_locales c
+    LEFT JOIN contabilidad_asientos a ON a.team_id = c.team_id AND a.origen_tipo = 'compra' AND a.origen_id = c.id
+    WHERE c.team_id = ${teamId} AND c.id = ${compraId}
+  `);
+  const c = (filas as unknown as { id: number; estado: string; clase: string; ncf: string | null; fecha: string; asientoId: number | null }[])[0];
+  if (!c || c.estado !== 'anulada') return { creado: false, motivo: 'no-esta-anulado' };
+  if (!c.asientoId) return { creado: false, motivo: 'sin-asiento-que-reversar' };
+
+  const lineas = (await db.execute(sql`
+    SELECT cuenta_id AS "cuentaId", debe_cents AS "debeCents", haber_cents AS "haberCents", descripcion
+    FROM contabilidad_asiento_lineas
+    WHERE asiento_id = ${c.asientoId} AND team_id = ${teamId}
+    ORDER BY orden
+  `)) as unknown as { cuentaId: number; debeCents: unknown; haberCents: unknown; descripcion: string | null }[];
+
+  const concepto = [`Anulación de ${c.clase === 'gasto' ? 'gasto' : 'compra'} #${c.id}`, c.ncf].filter(Boolean).join(' · ');
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: c.fecha, concepto, origenTipo: 'compra_anulada', origenId: c.id },
+    lineas.map((l) => ({
+      cuentaId: l.cuentaId,
+      debeCents: Number(l.haberCents ?? 0),
+      haberCents: Number(l.debeCents ?? 0),
+      descripcion: `Reverso: ${l.descripcion ?? ''}`.slice(0, 200),
+    })),
+    userId,
+  );
+  return asientoId === null ? { creado: false, motivo: 'ya-tiene-asiento' } : { creado: true, asientoId };
 }
 
 /** Pago a proveedor: Debe 2101 CxP / Haber caja o banco según método. */
@@ -781,7 +893,9 @@ export async function generarAsientoPagoProveedor(teamId: number, pagoId: number
     FROM pagos_proveedores p JOIN compras_locales c ON c.id = p.compra_id AND c.team_id = p.team_id
     WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
   `);
-  const pago = (filas as unknown as { id: number; montoCents: number; metodo: string; fecha: string; proveedorNombre: string | null }[])[0];
+  const fila = (filas as unknown as { id: number; montoCents: unknown; metodo: string; fecha: string; proveedorNombre: string | null }[])[0];
+  // monto_cents es BIGINT: el driver lo devuelve como texto y sumarlo concatenaba.
+  const pago = fila ? { ...fila, montoCents: Number(fila.montoCents ?? 0) } : null;
   if (!pago || pago.montoCents <= 0) return { creado: false, motivo: 'sin-monto' };
   const cxp = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   const salida = (await resolverCuentaCobro(teamId, pago.metodo as ClaveMetodo)) ??
@@ -852,14 +966,15 @@ export async function generarAsientoGastoCaja(
 }
 
 /**
- * Asiento de un GASTO documental (e43/e47) que NO pasó por caja. Cuando la caja
- * está habilitada, el gasto genera un movimiento y su asiento sale por
- * `generarAsientoGastoCaja`; este cubre el caso SIN caja, para que un negocio
- * sin el módulo igual tenga el rastro contable. El barrido solo lo invoca para
- * documentos sin movimiento de caja vinculado (evita doble asiento).
- * Debe cuenta de gastos / Haber caja (contado) o cuentas por pagar (crédito).
- * El monto total se lleva a gasto (los gastos menores no separan crédito de
- * ITBIS); refinar el ITBIS adelantado queda para después.
+ * Asiento de un comprobante que emite la propia empresa por lo que compra:
+ * gastos menores (e43), pagos al exterior (e47) y compras a informales (e41).
+ * Cuando la caja está habilitada, el gasto genera un movimiento y su asiento
+ * sale por `generarAsientoGastoCaja`; este cubre el caso SIN caja. El barrido
+ * solo lo invoca para documentos sin movimiento de caja vinculado.
+ *
+ *   Debe  cuenta de la categoría (o 6101)   el total: su ITBIS no se adelanta
+ *   Haber ITBIS / ISR retenido por pagar     lo retenido (2113 / 2114)
+ *   Haber caja o cuentas por pagar           el neto
  */
 export async function generarAsientoGastoDoc(
   teamId: number,
@@ -870,7 +985,8 @@ export async function generarAsientoGastoDoc(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT d.id, d.monto_total AS "montoTotal", d.tipo_pago AS "tipoPago",
+    SELECT d.id, d.tipo_ecf AS "tipoEcf", d.monto_total AS "montoTotal", d.total_itbis AS "totalItbis",
+           d.tipo_pago AS "tipoPago", d.categoria_gasto AS categoria, d.retenciones,
            to_char(coalesce(d.fecha_gasto, d.fecha_emision, d.created_at) AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha,
            d.razon_social_comprador AS "proveedor",
            (SELECT pr.metodo FROM pagos_recibidos pr WHERE pr.ecf_document_id = d.id ORDER BY pr.id LIMIT 1) AS "metodoPago"
@@ -878,13 +994,17 @@ export async function generarAsientoGastoDoc(
     WHERE d.team_id = ${teamId} AND d.id = ${docId}
   `);
   const g = (filas as unknown as {
-    id: number; montoTotal: number; tipoPago: number | null; fecha: string; proveedor: string | null; metodoPago: string | null;
+    id: number; tipoEcf: string; montoTotal: number; totalItbis: number | null; tipoPago: number | null; categoria: string | null;
+    retenciones: string | null; fecha: string; proveedor: string | null; metodoPago: string | null;
   }[])[0];
 
   if (!g) return { creado: false, motivo: 'no-es-gasto' };
-  if (g.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
+  const montoTotal = Number(g.montoTotal ?? 0);
+  if (montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
 
-  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  const codigo = CUENTA_CATEGORIA_GASTO_VIEJA[g.categoria ?? ''];
+  const cuentaGasto = (codigo ? await cuentaPorCodigo(teamId, codigo) : null)
+    ?? cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
   if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
 
   const esContado = (g.tipoPago ?? 1) === 1;
@@ -894,14 +1014,34 @@ export async function generarAsientoGastoDoc(
     : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   if (!cuentaHaber) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
 
-  const concepto = `Gasto ${g.id}${g.proveedor ? ` · ${g.proveedor.slice(0, 60)}` : ''}`;
+  const itbis = Math.min(Number(g.totalItbis ?? 0), montoTotal);
+  const ret = retencionesDeJson(g.retenciones);
+  const partidas = partidasAsientoCompra({
+    bases: [{ cuentaId: cuentaGasto, baseCents: montoTotal - itbis, descripcion: g.categoria ?? 'Gasto' }],
+    itbisFacturadoCents: itbis,
+    // Estos comprobantes no adelantan ITBIS: todo va al gasto.
+    itbisAlCostoCents: itbis,
+    iscCents: 0,
+    otrosImpuestosCents: 0,
+    propinaCents: 0,
+    itbisRetenidoCents: ret.itbisCents,
+    isrRetenidoCents: ret.isrCents,
+    esContado,
+    cuentas: {
+      itbisAdelantado: null,
+      itbisRetenido: ret.itbisCents > 0 ? (await cuentaPorCodigo(teamId, '2113')) ?? await cuentaPorCodigo(teamId, '2103') : null,
+      isrRetenido: ret.isrCents > 0 ? (await cuentaPorCodigo(teamId, '2114')) ?? await cuentaPorCodigo(teamId, '2103') : null,
+      contrapartida: cuentaHaber,
+    },
+  });
+  if (!Array.isArray(partidas)) return { creado: false, motivo: partidas.motivo };
+
+  const etiqueta = g.tipoEcf === '41' ? 'Compra a informal' : g.tipoEcf === '47' ? 'Pago al exterior' : 'Gasto';
+  const concepto = `${etiqueta} ${g.id}${g.proveedor ? ` · ${g.proveedor.slice(0, 60)}` : ''}`;
   const asientoId = await insertarAsiento(
     teamId,
     { fecha: g.fecha, concepto, origenTipo: 'gasto_doc', origenId: g.id },
-    [
-      { cuentaId: cuentaGasto, debeCents: g.montoTotal, haberCents: 0, descripcion: 'Gasto' },
-      { cuentaId: cuentaHaber, debeCents: 0, haberCents: g.montoTotal, descripcion: esContado ? 'Pago del gasto' : 'Deuda por gasto' },
-    ],
+    partidas,
     userId,
   );
 
@@ -910,21 +1050,49 @@ export async function generarAsientoGastoDoc(
     : { creado: true, asientoId };
 }
 
-// ─── Asiento de nómina ───────────────────────────────────────────────────────
+// ─── Asientos de nómina ──────────────────────────────────────────────────────
 
 /**
- * Asiento de una corrida de nómina al aprobarla. Partida doble del devengo:
- *
- *   DEBE  Gasto de sueldos            (bruto)
- *   DEBE  Gasto aportes patronales    (patronal)
- *   HABER Retenciones por pagar       (AFP+SFS+ISR del empleado)
- *   HABER Aportes patronales por pagar(patronal)
- *   HABER Sueldos por pagar           (neto)
- *
- * Cuadra: bruto + patronal (debe) = deducciones + patronal + neto (haber),
- * porque bruto = neto + deducciones. Cada línea usa su cuenta de nómina
- * dedicada si el team la configuró; si no, cae a la de gastos (6101) y la de
- * por-pagar (2101) genéricas — igual de correcto y balanceado.
+ * Cuenta por la que sale el dinero de un pago de nómina. La del método de cobro
+ * configurado si existe; si no, la del catálogo base: efectivo a 1101 Caja,
+ * transferencia y cheque a 1102 Bancos.
+ */
+async function cuentaSalidaFondos(teamId: number, metodo: string): Promise<number | null> {
+  const configurada = await resolverCuentaCobro(teamId, metodo as ClaveMetodo);
+  if (configurada) return configurada;
+  return cuentaPorCodigo(teamId, metodo === 'efectivo' ? '1101' : '1102');
+}
+
+/**
+ * Las cuentas de nómina de un team. Cada una usa la dedicada si está
+ * configurada; si no, cae a su hermana más cercana y al final a la de gastos
+ * (6101) o la de por pagar (2101) generales: el asiento cuadra igual.
+ */
+async function cuentasNomina(teamId: number): Promise<CuentasNomina | { motivo: MotivoSalto }> {
+  const cfg = await getConfig(teamId);
+  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { motivo: 'sin-cuenta-gastos' };
+  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPorPagar) return { motivo: 'sin-cuenta-por-pagar' };
+
+  const retencionTss = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
+  const aportesTss = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
+  return {
+    gastoSueldos: cfg.cuentaNominaSueldoId ?? cuentaGasto,
+    gastoAportes: cfg.cuentaNominaAportesGastoId ?? cuentaGasto,
+    retencionTss,
+    isr: cfg.cuentaNominaIsrPagarId ?? retencionTss,
+    otrasDeducciones: cuentaPorPagar,
+    aportesTss,
+    infotep: cfg.cuentaNominaInfotepPagarId ?? aportesTss,
+    sueldosPorPagar: cfg.cuentaNominaPorPagarId ?? cuentaPorPagar,
+  };
+}
+
+/**
+ * Asiento de una corrida de nómina al aprobarla: el devengo. Las cuentas y la
+ * partida están en `lineasDevengoNomina`; los montos se suman de las líneas de la
+ * corrida para poder separar TSS, ISR e INFOTEP.
  */
 export async function generarAsientoNomina(
   teamId: number,
@@ -935,59 +1103,43 @@ export async function generarAsientoNomina(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT descripcion,
-           total_bruto_cents       AS "bruto",
-           total_deducciones_cents AS "deducciones",
-           total_neto_cents        AS "neto",
-           total_patronal_cents    AS "patronal",
-           to_char(coalesce(fecha_pago, (periodo || '-28')::date), 'YYYY-MM-DD') AS fecha
-    FROM nomina_corridas
-    WHERE team_id = ${teamId} AND id = ${corridaId}
+    SELECT c.descripcion,
+           to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
+           coalesce(sum(l.bruto_cents), 0)   AS bruto,
+           coalesce(sum(l.neto_cents), 0)    AS neto,
+           coalesce(sum(l.afp_empleado_cents + l.sfs_empleado_cents + l.dependientes_adicionales_cents), 0) AS "retencionTss",
+           coalesce(sum(l.isr_cents), 0)     AS isr,
+           coalesce(sum(l.otras_deducciones_cents), 0) AS otras,
+           coalesce(sum(l.afp_patronal_cents + l.sfs_patronal_cents + l.srl_patronal_cents), 0) AS "aportesTss",
+           coalesce(sum(l.infotep_patronal_cents), 0) AS infotep
+    FROM nomina_corridas c
+    LEFT JOIN nomina_lineas l ON l.corrida_id = c.id
+    WHERE c.team_id = ${teamId} AND c.id = ${corridaId}
+    GROUP BY c.id
   `);
-  const fila = (filas as unknown as {
-    descripcion: string; bruto: string | number; deducciones: string | number;
-    neto: string | number; patronal: string | number; fecha: string;
-  }[])[0];
+  const f = (filas as unknown as Record<string, string | number>[])[0];
+  if (!f) return { creado: false, motivo: 'no-es-gasto' };
 
-  if (!fila) return { creado: false, motivo: 'no-es-gasto' };
-  // Los BIGINT llegan como string desde el SQL crudo: coercionar a número o el
-  // reduce de insertarAsiento concatenaría en vez de sumar y descuadraría.
-  const c = {
-    descripcion: fila.descripcion,
-    fecha: fila.fecha,
-    bruto:       Number(fila.bruto),
-    deducciones: Number(fila.deducciones),
-    neto:        Number(fila.neto),
-    patronal:    Number(fila.patronal),
+  // Los BIGINT llegan como string desde el SQL crudo: sin Number() las sumas se
+  // concatenan y el asiento no cuadra.
+  const sumas: SumasCorrida = {
+    brutoCents: Number(f.bruto),
+    netoCents: Number(f.neto),
+    retencionTssCents: Number(f.retencionTss),
+    isrCents: Number(f.isr),
+    otrasDeduccionesCents: Number(f.otras),
+    aportesTssCents: Number(f.aportesTss),
+    infotepCents: Number(f.infotep),
   };
-  if (c.bruto <= 0) return { creado: false, motivo: 'sin-monto' };
+  if (sumas.brutoCents <= 0) return { creado: false, motivo: 'sin-monto' };
 
-  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
-  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
-  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
-  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
-
-  // Cuentas dedicadas de nómina: cada línea usa la suya si el team la configuró;
-  // si no, cae DIRECTO a su genérica (gasto 6101 / por-pagar 2101). Así
-  // configurar una sola cuenta mueve solo esa línea, sin arrastrar a las demás.
-  const cSueldo        = cfg.cuentaNominaSueldoId ?? cuentaGasto;
-  const cAportesGasto  = cfg.cuentaNominaAportesGastoId ?? cuentaGasto;
-  const cRetenciones   = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
-  const cAportesPagar  = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
-  const cSueldosPagar  = cfg.cuentaNominaPorPagarId ?? cuentaPorPagar;
-
-  const lineas = [
-    { cuentaId: cSueldo,       debeCents: c.bruto,       haberCents: 0, descripcion: 'Sueldos del período' },
-    { cuentaId: cAportesGasto, debeCents: c.patronal,    haberCents: 0, descripcion: 'Aportes patronales TSS' },
-    { cuentaId: cRetenciones,  debeCents: 0, haberCents: c.deducciones, descripcion: 'Retenciones por pagar (AFP/SFS/ISR)' },
-    { cuentaId: cAportesPagar, debeCents: 0, haberCents: c.patronal,    descripcion: 'Aportes patronales por pagar' },
-    { cuentaId: cSueldosPagar, debeCents: 0, haberCents: c.neto,        descripcion: 'Sueldos por pagar' },
-  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+  const cuentas = await cuentasNomina(teamId);
+  if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
 
   const asientoId = await insertarAsiento(
     teamId,
-    { fecha: c.fecha, concepto: `Nómina · ${c.descripcion}`, origenTipo: 'nomina', origenId: corridaId },
-    lineas,
+    { fecha: String(f.fecha), concepto: `Nómina · ${f.descripcion}`, origenTipo: 'nomina', origenId: corridaId },
+    lineasDevengoNomina(sumas, cuentas),
     userId,
   );
 
@@ -997,14 +1149,9 @@ export async function generarAsientoNomina(
 }
 
 /**
- * Pago de una obligación de nómina (TSS/DGII): salda el pasivo devengado.
- *
- *   DEBE  Retenciones por pagar   (parte del empleado: AFP/SFS emp o ISR)
- *   DEBE  Aportes por pagar       (parte patronal)
- *     HABER Caja / banco          según el método de pago
- *
- * Usa las mismas cuentas por-pagar dedicadas que el devengo (con su fallback a
- * 2101), así que el pasivo que se abrió al aprobar se cierra en la misma cuenta.
+ * Pago de una obligación de nómina (TSS/DGII): salda el pasivo devengado en las
+ * mismas cuentas del devengo. El INFOTEP va dentro de lo que se paga a la TSS,
+ * así que se separa con lo que sumen las líneas de la corrida.
  */
 export async function generarAsientoPagoNominaObligacion(
   teamId: number,
@@ -1018,40 +1165,37 @@ export async function generarAsientoPagoNominaObligacion(
   const filas = await db.execute(sql`
     SELECT o.destino, o.monto_cents AS "monto",
            o.parte_retenciones_cents AS "retenciones", o.parte_aportes_cents AS "aportes",
-           to_char(coalesce(c.fecha_pago, (c.periodo || '-28')::date), 'YYYY-MM-DD') AS fecha,
-           c.periodo
+           to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
+           c.descripcion,
+           (SELECT coalesce(sum(l.infotep_patronal_cents), 0) FROM nomina_lineas l WHERE l.corrida_id = c.id) AS infotep
     FROM nomina_obligaciones o
     JOIN nomina_corridas c ON c.id = o.corrida_id AND c.team_id = o.team_id
     WHERE o.team_id = ${teamId} AND o.id = ${obligacionId}
   `);
   const o = (filas as unknown as {
-    destino: string; monto: string | number; retenciones: string | number; aportes: string | number; fecha: string; periodo: string;
+    destino: string; monto: string | number; retenciones: string | number; aportes: string | number;
+    fecha: string; descripcion: string; infotep: string | number;
   }[])[0];
   if (!o) return { creado: false, motivo: 'no-es-gasto' };
-
   const monto = Number(o.monto);
-  const retenciones = Number(o.retenciones);
-  const aportes = Number(o.aportes);
   if (monto <= 0) return { creado: false, motivo: 'sin-monto' };
 
-  const cuentaPorPagar = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
-  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
-  const cRetenciones = cfg.cuentaNominaRetencionesId ?? cuentaPorPagar;
-  const cAportesPagar = cfg.cuentaNominaAportesPagarId ?? cuentaPorPagar;
-
-  const salida = (await resolverCuentaCobro(teamId, metodo as ClaveMetodo)) ??
-    (metodo === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null);
+  const cuentas = await cuentasNomina(teamId);
+  if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
+  const salida = await cuentaSalidaFondos(teamId, metodo);
   if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
 
-  const lineas = [
-    { cuentaId: cRetenciones,  debeCents: retenciones, haberCents: 0, descripcion: 'Retenciones pagadas al Estado' },
-    { cuentaId: cAportesPagar, debeCents: aportes,     haberCents: 0, descripcion: 'Aportes patronales pagados' },
-    { cuentaId: salida,        debeCents: 0, haberCents: monto,       descripcion: `Salida de fondos (${o.destino})` },
-  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+  const lineas = lineasPagoObligacion({
+    destino: o.destino === 'DGII' ? 'DGII' : 'TSS',
+    montoCents: monto,
+    retencionesCents: Number(o.retenciones),
+    aportesCents: Number(o.aportes),
+    infotepCents: o.destino === 'DGII' ? 0 : Number(o.infotep),
+  }, { ...cuentas, salida });
 
   const asientoId = await insertarAsiento(
     teamId,
-    { fecha: o.fecha, concepto: `Pago obligación ${o.destino} · Nómina ${o.periodo}`, origenTipo: 'pago_nomina', origenId: obligacionId },
+    { fecha: o.fecha, concepto: `Pago ${o.destino} · ${o.descripcion}`, origenTipo: 'pago_nomina', origenId: obligacionId },
     lineas,
     userId,
   );
@@ -1062,15 +1206,56 @@ export async function generarAsientoPagoNominaObligacion(
 }
 
 /**
- * Asiento de PROVISIÓN de nómina (regalía/vacaciones/cesantía) al aprobar una
- * corrida. Acumula el costo del empleador que se devengará con el tiempo:
- *
- *   DEBE  Gasto por provisiones     (regalía + vacaciones + cesantía)
- *     HABER Provisiones por pagar    (el pasivo que se acumula)
- *
- * Solo corre si la contabilidad está activa Y el team activó `provisionarNomina`
- * (apagado por defecto): provisionar en el libro es una decisión de política
- * contable. Idempotente por el índice único de origen.
+ * Pago del neto a los empleados (un «marcar pagados»): salda «sueldos por pagar»
+ * contra caja o banco según el método del pago.
+ */
+export async function generarAsientoPagoSueldos(
+  teamId: number,
+  pagoId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT p.monto_cents AS monto, p.metodo, p.lineas,
+           to_char(p.fecha, 'YYYY-MM-DD') AS fecha, c.descripcion
+    FROM nomina_pagos p
+    JOIN nomina_corridas c ON c.id = p.corrida_id AND c.team_id = p.team_id
+    WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
+  `);
+  const p = (filas as unknown as { monto: string | number; metodo: string; lineas: number; fecha: string; descripcion: string }[])[0];
+  if (!p) return { creado: false, motivo: 'no-es-gasto' };
+  const monto = Number(p.monto);
+  if (monto <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentas = await cuentasNomina(teamId);
+  if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
+  const salida = await cuentaSalidaFondos(teamId, p.metodo);
+  if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    {
+      fecha: p.fecha,
+      concepto: `Pago de sueldos · ${p.descripcion} (${p.lineas} empleado${p.lineas === 1 ? '' : 's'})`,
+      origenTipo: 'pago_sueldos',
+      origenId: pagoId,
+    },
+    lineasPagoSueldos(monto, { sueldosPorPagar: cuentas.sueldosPorPagar, salida }),
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+/**
+ * Asiento de PROVISIÓN de nómina al aprobar una corrida: regalía, vacaciones y
+ * cesantía, cada una con su gasto y su pasivo. Solo corre si la contabilidad
+ * está activa Y el team encendió `provisionarNomina` (política contable, apagada
+ * por defecto). Idempotente por el índice único de origen.
  */
 export async function generarAsientoProvisionNomina(
   teamId: number,
@@ -1082,35 +1267,48 @@ export async function generarAsientoProvisionNomina(
   if (!cfg.provisionarNomina) return { creado: false, motivo: 'provisiones-apagadas' };
 
   const cab = await db.execute(sql`
-    SELECT descripcion, to_char(coalesce(fecha_pago, (periodo || '-28')::date), 'YYYY-MM-DD') AS fecha
+    SELECT descripcion, to_char(coalesce(fecha_pago, fecha_fin), 'YYYY-MM-DD') AS fecha
     FROM nomina_corridas WHERE team_id = ${teamId} AND id = ${corridaId}
   `);
   const corrida = (cab as unknown as { descripcion: string; fecha: string }[])[0];
   if (!corrida) return { creado: false, motivo: 'no-es-gasto' };
 
   const filas = await db.execute(sql`
-    SELECT bruto_cents AS "brutoCents" FROM nomina_lineas WHERE corrida_id = ${corridaId}
+    SELECT bruto_cents AS "brutoCents",
+           provision_regalia_cents    AS "provisionRegaliaCents",
+           provision_vacaciones_cents AS "provisionVacacionesCents",
+           provision_cesantia_cents   AS "provisionCesantiaCents"
+    FROM nomina_lineas WHERE corrida_id = ${corridaId}
   `);
-  const lineas = (filas as unknown as { brutoCents: string | number }[]).map((l) => ({ brutoCents: Number(l.brutoCents) }));
+  const num = (v: string | number | null) => (v === null ? null : Number(v));
+  const lineas = (filas as unknown as {
+    brutoCents: string | number; provisionRegaliaCents: string | number | null;
+    provisionVacacionesCents: string | number | null; provisionCesantiaCents: string | number | null;
+  }[]).map((l) => ({
+    brutoCents: Number(l.brutoCents),
+    provisionRegaliaCents: num(l.provisionRegaliaCents),
+    provisionVacacionesCents: num(l.provisionVacacionesCents),
+    provisionCesantiaCents: num(l.provisionCesantiaCents),
+  }));
   const prov = provisionesDeLineas(lineas);
   if (prov.totalCents <= 0) return { creado: false, motivo: 'sin-monto' };
 
   const cuentaGasto = cfg.cuentaProvisionGastoId ?? cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
   if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
-  const cuentaPorPagar = cfg.cuentaProvisionPorPagarId ?? cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
-  if (!cuentaPorPagar) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
-
-  const lineasAsiento = [
-    { cuentaId: cuentaGasto,    debeCents: prov.regaliaCents,    haberCents: 0, descripcion: 'Provisión regalía pascual' },
-    { cuentaId: cuentaGasto,    debeCents: prov.vacacionesCents, haberCents: 0, descripcion: 'Provisión vacaciones' },
-    { cuentaId: cuentaGasto,    debeCents: prov.cesantiaCents,   haberCents: 0, descripcion: 'Provisión cesantía' },
-    { cuentaId: cuentaPorPagar, debeCents: 0, haberCents: prov.totalCents,      descripcion: 'Provisiones por pagar' },
-  ].filter((l) => l.debeCents > 0 || l.haberCents > 0);
+  const cuentaPasivo = cfg.cuentaProvisionPorPagarId ?? cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaPasivo) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
 
   const asientoId = await insertarAsiento(
     teamId,
     { fecha: corrida.fecha, concepto: `Provisión nómina · ${corrida.descripcion}`, origenTipo: 'provision_nomina', origenId: corridaId },
-    lineasAsiento,
+    lineasProvisionNomina(prov, {
+      regaliaGasto: cfg.cuentaProvRegaliaGastoId ?? cuentaGasto,
+      regaliaPasivo: cfg.cuentaProvRegaliaPagarId ?? cuentaPasivo,
+      vacacionesGasto: cfg.cuentaProvVacacionesGastoId ?? cuentaGasto,
+      vacacionesPasivo: cfg.cuentaProvVacacionesPagarId ?? cuentaPasivo,
+      cesantiaGasto: cfg.cuentaProvCesantiaGastoId ?? cuentaGasto,
+      cesantiaPasivo: cfg.cuentaProvCesantiaPagarId ?? cuentaPasivo,
+    }),
     userId,
   );
 

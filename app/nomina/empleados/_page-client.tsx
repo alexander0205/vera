@@ -7,19 +7,22 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
+import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   Users, Search, Loader2, IdCard, Phone, Briefcase,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText,
+  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, HeartPulse, Clock, Copy,
 } from 'lucide-react';
 import {
   Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA,
 } from './shared';
+
+/** Cobra por hora: jornada por horas y tarifa cargada. */
+const cobraPorHora = (e: Empleado) => e.jornada === 'por_horas' && (e.tarifaHoraCents ?? 0) > 0;
 
 export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar?: boolean }) {
   const router = useRouter();
@@ -29,7 +32,12 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
 
   const [busca, setBusca] = useState('');
   const [aEliminar, setAEliminar] = useState<Empleado | null>(null);
+  const [fechaBaja, setFechaBaja] = useState('');
+  const [dandoDeBaja, setDandoDeBaja] = useState(false);
   const [importAbierto, setImportAbierto] = useState(false);
+  const [enlaceDe, setEnlaceDe] = useState<Empleado | null>(null);
+  const [enlaceUrl, setEnlaceUrl] = useState<string | null>(null);
+  const [generandoEnlace, setGenerandoEnlace] = useState(false);
 
   const empleados = data?.empleados ?? [];
   const filtrados = useMemo(() => {
@@ -43,8 +51,9 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   }, [empleados, busca]);
 
   const activos = empleados.filter((e) => esActivo(e.estado)).length;
+  // Quien cobra por hora no tiene salario fijo: no suma a la masa salarial.
   const masaSalarial = empleados
-    .filter((e) => esActivo(e.estado))
+    .filter((e) => esActivo(e.estado) && !cobraPorHora(e))
     .reduce((sum, e) => sum + (e.salarioBaseCents ?? 0), 0);
 
   // Alta, edición y contrato viven en su propia página (no modal): cerrar por
@@ -52,18 +61,59 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const irNuevo = () => router.push('/nomina/empleados/nuevo');
   const irEditar = (id: number) => router.push(`/nomina/empleados/${id}/editar`);
   const irContrato = (id: number) => router.push(`/nomina/empleados/${id}/contrato`);
+  const irDependientes = (id: number) => router.push(`/nomina/empleados/${id}/dependientes`);
 
-  async function eliminar() {
-    if (!aEliminar) return;
+  function pedirEnlace(e: Empleado) {
+    setEnlaceUrl(null);
+    setEnlaceDe(e);
+  }
+
+  /** El token solo existe en esta respuesta: generar otro deja sin efecto el anterior. */
+  async function generarEnlace() {
+    if (!enlaceDe || generandoEnlace) return;
+    setGenerandoEnlace(true);
     try {
-      const res = await fetch(`/api/nomina/empleados/${aEliminar.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('No se pudo dar de baja');
-      toast.success('Empleado dado de baja');
+      const res = await fetch(`/api/nomina/empleados/${enlaceDe.id}/horas-enlace`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo generar el enlace');
+      setEnlaceUrl(j.url);
       mutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
+      setGenerandoEnlace(false);
+    }
+  }
+
+  async function copiarEnlace() {
+    if (!enlaceUrl) return;
+    try {
+      await navigator.clipboard.writeText(enlaceUrl);
+      toast.success('Enlace copiado');
+    } catch {
+      toast.error('No se pudo copiar: selecciónalo y cópialo a mano');
+    }
+  }
+
+  function pedirBaja(e: Empleado) {
+    setFechaBaja(hoyRD());
+    setAEliminar(e);
+  }
+
+  async function eliminar() {
+    if (!aEliminar || dandoDeBaja) return;
+    setDandoDeBaja(true);
+    try {
+      const res = await fetch(`/api/nomina/empleados/${aEliminar.id}?fechaSalida=${encodeURIComponent(fechaBaja)}`, { method: 'DELETE' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo dar de baja');
+      toast.success(`Dado de baja: último día ${fmtFechaCorta(fechaBaja)}`);
       setAEliminar(null);
+      mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      setDandoDeBaja(false);
     }
   }
 
@@ -116,7 +166,8 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
           placeholder="Buscar por nombre, cédula o cargo…"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="pl-9"
+          // En línea: el relleno de MUI le gana a la clase pl-9 y la lupa tapaba el texto.
+          style={{ paddingLeft: '2.25rem' }}
         />
       </div>
 
@@ -155,23 +206,45 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                     {e.cargo && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{e.cargo}</span>}
                     {e.cedula && <span className="flex items-center gap-1"><IdCard className="h-3 w-3" />{e.cedula}</span>}
                     {e.telefono && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{e.telefono}</span>}
+                    {e.fechaSalida && (
+                      <span className={e.fechaSalida >= hoyRD() ? 'text-amber-700' : ''}>
+                        {e.fechaSalida >= hoyRD() ? 'Sale' : 'Salió'} el {fmtFechaCorta(e.fechaSalida)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="hidden text-right sm:block">
-                  <div className="font-medium">{pesos(e.salarioBaseCents)}</div>
-                  <div className="text-xs text-muted-foreground">{LABEL_FRECUENCIA[e.frecuenciaPago] ?? e.frecuenciaPago}</div>
+                  {cobraPorHora(e) ? (
+                    <>
+                      <div className="font-medium">{pesos(e.tarifaHoraCents ?? 0)} / hora</div>
+                      <div className="text-xs text-muted-foreground">Por horas · {LABEL_FRECUENCIA[e.frecuenciaPago] ?? e.frecuenciaPago}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-medium">{pesos(e.salarioBaseCents)}</div>
+                      <div className="text-xs text-muted-foreground">{LABEL_FRECUENCIA[e.frecuenciaPago] ?? e.frecuenciaPago}</div>
+                    </>
+                  )}
                 </div>
                 <div className="flex flex-shrink-0 gap-1">
                   <Button variant="ghost" size="icon" onClick={() => irContrato(e.id)} aria-label="Contrato" title="Contrato">
                     <FileText className="h-4 w-4" />
                   </Button>
+                  <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes" title="Dependientes del seguro de salud">
+                    <HeartPulse className="h-4 w-4" />
+                  </Button>
+                  {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
+                    <Button variant="ghost" size="icon" onClick={() => pedirEnlace(e)} aria-label="Enlace de horas" title="Enlace para que registre sus horas">
+                      <Clock className="h-4 w-4" />
+                    </Button>
+                  )}
                   {puedeGestionar && (
                     <>
                       <Button variant="ghost" size="icon" onClick={() => irEditar(e.id)} aria-label="Editar">
                         <Pencil className="h-4 w-4" />
                       </Button>
                       {esActivo(e.estado) && (
-                        <Button variant="ghost" size="icon" onClick={() => setAEliminar(e)} aria-label="Dar de baja">
+                        <Button variant="ghost" size="icon" onClick={() => pedirBaja(e)} aria-label="Dar de baja">
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       )}
@@ -192,15 +265,77 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
         />
       )}
 
-      <ConfirmDialog
-        open={!!aEliminar}
-        onOpenChange={(o) => !o && setAEliminar(null)}
-        title="Dar de baja al empleado"
-        description={aEliminar ? `${nombreCompleto(aEliminar)} pasará a inactivo y no entrará en nóminas nuevas. Su historia se conserva.` : ''}
-        confirmLabel="Dar de baja"
-        onConfirm={eliminar}
-        destructive
-      />
+      <Dialog open={!!enlaceDe} onOpenChange={(o) => { if (!o && !generandoEnlace) { setEnlaceDe(null); setEnlaceUrl(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enlace para registrar horas</DialogTitle>
+            <DialogDescription>
+              {enlaceDe ? nombreCompleto(enlaceDe) : ''} lo abre en su celular, sin cuenta en Zero, y sube las horas de cada
+              día. Llegan pendientes a Nómina › Horas y la corrida paga solo las aprobadas.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-2">
+            {enlaceUrl ? (
+              <>
+                <div className="flex gap-2">
+                  <Input readOnly value={enlaceUrl} aria-label="Enlace de horas" onFocus={(ev) => ev.target.select()} />
+                  <Button variant="outline" onClick={copiarEnlace} className="shrink-0 gap-1.5"><Copy className="h-4 w-4" /> Copiar</Button>
+                </div>
+                <p className="text-xs text-amber-700">Cópialo y envíaselo ahora: por seguridad no se vuelve a mostrar.</p>
+              </>
+            ) : enlaceDe?.horasTokenCreado ? (
+              <p className="text-sm text-amber-700">
+                Ya tiene un enlace desde el {fmtFechaCorta(enlaceDe.horasTokenCreado.slice(0, 10))}. Generar uno nuevo deja sin
+                efecto el anterior.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Todavía no tiene enlace.</p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            {enlaceUrl ? (
+              <Button onClick={() => { setEnlaceDe(null); setEnlaceUrl(null); }}>Listo</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setEnlaceDe(null)} disabled={generandoEnlace}>Cancelar</Button>
+                <Button onClick={generarEnlace} disabled={generandoEnlace} className="gap-1.5">
+                  {generandoEnlace && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {enlaceDe?.horasTokenCreado ? 'Generar enlace nuevo' : 'Generar enlace'}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!aEliminar} onOpenChange={(o) => { if (!o && !dandoDeBaja) setAEliminar(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dar de baja al empleado</DialogTitle>
+            <DialogDescription>
+              {aEliminar ? nombreCompleto(aEliminar) : ''} pasa a inactivo. La nómina de ese período le paga hasta su último
+              día trabajado y las siguientes ya no lo incluyen. Su historia se conserva.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-1.5">
+            <label htmlFor="fecha-baja" className="text-xs text-muted-foreground">Último día trabajado</label>
+            <Input
+              id="fecha-baja"
+              type="date"
+              value={fechaBaja}
+              min={aEliminar?.fechaIngreso ?? undefined}
+              onChange={(ev) => setFechaBaja(ev.target.value)}
+            />
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAEliminar(null)} disabled={dandoDeBaja}>Cancelar</Button>
+            <Button variant="destructive" onClick={eliminar} disabled={dandoDeBaja || !fechaBaja} className="gap-1.5">
+              {dandoDeBaja && <Loader2 className="h-4 w-4 animate-spin" />}
+              Dar de baja
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

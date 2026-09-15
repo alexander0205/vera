@@ -90,7 +90,7 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
         body: JSON.stringify({ plantillaId: pid }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error([j.error ?? 'No se pudo generar la vista previa', ...(Array.isArray(j.faltantes) ? j.faltantes : [])].join(': '));
+      if (!res.ok) throw new Error(mensajeConFaltantes(j, 'No se pudo generar la vista previa'));
       setPreview({ titulo: j.titulo, cuerpo: j.cuerpo });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -118,7 +118,7 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
         body: JSON.stringify({ plantillaId: pid }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error([j.error ?? 'No se pudo generar', ...(Array.isArray(j.faltantes) ? j.faltantes : [])].join(': '));
+      if (!res.ok) throw new Error(mensajeConFaltantes(j, 'No se pudo generar'));
       toast.success('Contrato generado');
       setPreview(null);
       mutate();
@@ -288,6 +288,16 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
                           <Button variant="ghost" size="sm" className="h-7 shrink-0 text-xs" onClick={() => copiar(enlace)}>Copiar</Button>
                         </div>
                       )}
+                      {enlace && (
+                        <p className="ml-6 text-xs text-muted-foreground">
+                          Por seguridad, el enlace solo se muestra ahora. Si lo pierdes, usa «Regenerar enlace»: el anterior deja de funcionar.
+                        </p>
+                      )}
+                      {!enlace && c.estado === 'enviado' && puedeGestionar && (
+                        <p className="ml-6 text-xs text-muted-foreground">
+                          Ya se envió a firmar. Si necesitas copiar el enlace otra vez, regéneralo: el anterior deja de funcionar.
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -313,4 +323,10 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
       />
     </div>
   );
+}
+
+/** «Faltan datos…: cédula, dirección…» — la lista separada por comas, no por dos puntos. */
+function mensajeConFaltantes(j: { error?: string; faltantes?: unknown }, porDefecto: string): string {
+  const base = j.error ?? porDefecto;
+  return Array.isArray(j.faltantes) && j.faltantes.length > 0 ? `${base}: ${j.faltantes.join(', ')}` : base;
 }

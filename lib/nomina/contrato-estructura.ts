@@ -148,6 +148,16 @@ export function validarContratoEstructuradoRD(
   return faltantes;
 }
 
+/**
+ * Texto libre sin su puntuación final, para que la frase que lo envuelve ponga
+ * la suya. Quien escribe «acompañar a los padres.» en la plantilla no debe ver
+ * «acompañar a los padres..» impreso en un contrato. «3:30 p.m.» queda bien:
+ * se le quita un punto y la frase se lo devuelve.
+ */
+function sinPuntoFinal(s: string | null | undefined): string {
+  return (s ?? '').trim().replace(/[\s.;:,]+$/u, '');
+}
+
 const ORDINALES = [
   'PRIMERO', 'SEGUNDO', 'TERCERO', 'CUARTO', 'QUINTO', 'SEXTO', 'SÉPTIMO', 'OCTAVO',
   'NOVENO', 'DÉCIMO', 'DÉCIMO PRIMERO', 'DÉCIMO SEGUNDO', 'DÉCIMO TERCERO', 'DÉCIMO CUARTO',
@@ -171,17 +181,17 @@ export function ensamblarContrato(
   if (empleado.tipoContrato === 'temporal') {
     clausulas.push(`Este contrato se celebra por cierto tiempo, desde el ${v.fecha_ingreso} hasta el ${fechaLarga(empleado.fechaFinContrato)}, conforme a la naturaleza temporal del servicio pactado.`);
   } else if (empleado.tipoContrato === 'por_obra') {
-    clausulas.push(`Este contrato se celebra para la obra o servicio determinado siguiente: ${empleado.objetoContrato?.trim()}. Concluye al terminar dicha obra o servicio, conforme al Código de Trabajo de la República Dominicana.`);
+    clausulas.push(`Este contrato se celebra para la obra o servicio determinado siguiente: ${sinPuntoFinal(empleado.objetoContrato)}. Concluye al terminar dicha obra o servicio, conforme al Código de Trabajo de la República Dominicana.`);
   } else {
     clausulas.push('Este contrato se celebra por tiempo indefinido, conforme al Código de Trabajo de la República Dominicana.');
   }
 
   // Puesto y funciones (siempre)
   let puesto = `EL/LA TRABAJADOR(A) prestará sus servicios a EL EMPLEADOR desempeñando el cargo de ${v.cargo}, a partir del ${v.fecha_ingreso}`;
-  if (config.lugarTrabajo.trim()) puesto += `, en ${config.lugarTrabajo.trim()}`;
+  if (config.lugarTrabajo.trim()) puesto += `, en ${sinPuntoFinal(config.lugarTrabajo)}`;
   puesto += '.';
   if (config.incluirFunciones && config.funciones.trim()) {
-    puesto += ` Sus funciones principales serán: ${config.funciones.trim()}.`;
+    puesto += ` Sus funciones principales serán: ${sinPuntoFinal(config.funciones)}.`;
   }
   clausulas.push(puesto);
 
@@ -191,15 +201,15 @@ export function ensamblarContrato(
     if (empleado.jornada) partes.push(`a ${LABEL_JORNADA[empleado.jornada] ?? empleado.jornada}`);
     if (empleado.turno) partes.push(`en turno ${LABEL_TURNO[empleado.turno] ?? empleado.turno}`);
     let j = partes.length ? `La jornada de trabajo será ${partes.join(', ')}` : 'La jornada de trabajo se regirá por el Código de Trabajo';
-    if (empleado.diasLibres?.trim()) j += `, con descanso semanal el ${empleado.diasLibres.trim()}`;
+    if (empleado.diasLibres?.trim()) j += `, con descanso semanal el ${sinPuntoFinal(empleado.diasLibres)}`;
     j += '.';
-    if (config.jornadaTexto.trim()) j += ` Horario: ${config.jornadaTexto.trim()}.`;
+    if (config.jornadaTexto.trim()) j += ` Horario: ${sinPuntoFinal(config.jornadaTexto)}.`;
     clausulas.push(j);
   }
 
   // Compensación (siempre)
   let comp = `EL EMPLEADOR pagará a EL/LA TRABAJADOR(A) un salario de ${v.salario} (${v.salario_letras}), con frecuencia de pago ${v.frecuencia}, mediante ${LABEL_FORMA_PAGO[config.formaPago]}, sujeto únicamente a las deducciones y retenciones legalmente aplicables, incluyendo AFP, SFS e ISR cuando correspondan.`;
-  if (config.incluirBonos && config.bonos.trim()) comp += ` Adicionalmente: ${config.bonos.trim()}.`;
+  if (config.incluirBonos && config.bonos.trim()) comp += ` Adicionalmente: ${sinPuntoFinal(config.bonos)}.`;
   clausulas.push(comp);
 
   // Vacaciones

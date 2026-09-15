@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
   jsonb,
+  numeric,
   primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -236,6 +237,14 @@ export const teams = pgTable('teams', {
   // cada vez. Es una plantilla, no una atadura: el texto queda en el documento
   // y ahí se puede editar. Cambiarlo aquí NO reescribe lo ya emitido.
   terminosCondicionesDefault: text('terminos_condiciones_default'),
+
+  // ── Nómina: seguridad social de la empresa ────────────────────────────────
+  // El tamaño de empresa define el salario mínimo del sector, que es el PISO de la
+  // base para cotizar a la TSS. Null = sin configurar: no se aplica piso.
+  nominaTamanoEmpresa: varchar('nomina_tamano_empresa', { length: 10 }),
+  // Tasa del Seguro de Riesgos Laborales asignada a la empresa (0.0110–0.0130).
+  // Null = la de las tasas del año, que es el mínimo (1.10 %).
+  nominaSrlTasa: numeric('nomina_srl_tasa', { precision: 6, scale: 4 }),
 });
 
 export const teamMembers = pgTable('team_members', {
@@ -1512,23 +1521,58 @@ export const comprasLocales = pgTable('compras_locales', {
   referenciaEncf:   varchar('referencia_encf',  { length: 40 }),
   notas:            text('notas'),
   /** ITBIS incluido en montoTotal; 4.3 lo separa solo para régimen gravado. */
-  itbisCents:       integer('itbis_cents').notNull().default(0),
-  montoTotal:       integer('monto_total').notNull().default(0),
+  itbisCents:       bigint('itbis_cents', { mode: 'number' }).notNull().default(0),
+  montoTotal:       bigint('monto_total', { mode: 'number' }).notNull().default(0),
   formaPago:        varchar('forma_pago', { length: 10 }).notNull().default('credito'),
   metodoPago:       varchar('metodo_pago', { length: 30 }).notNull().default('efectivo'),
   fechaVencimiento: date('fecha_vencimiento'),
   estadoPago:       varchar('estado_pago', { length: 12 }).notNull().default('PENDIENTE'),
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
+
+  // ── Comprobante, 606 y retenciones (migración 0180) ──
+  // `referenciaEncf` es el NCF del proveedor (B01…, E31…) o el propio (E41/E43/E47).
+  /** 'compra' | 'gasto': en qué pantalla se lista. */
+  clase:               varchar('clase', { length: 10 }).notNull().default('compra'),
+  /** juridica | fisica | informal | rst | exterior: decide las retenciones. */
+  tipoProveedor:       varchar('tipo_proveedor', { length: 10 }),
+  ncfModificado:       varchar('ncf_modificado', { length: 19 }),
+  /** Campo 3 del 606 (01–11). */
+  tipoBienes606:       varchar('tipo_bienes_606', { length: 2 }),
+  montoServiciosCents: bigint('monto_servicios_cents', { mode: 'number' }).notNull().default(0),
+  montoBienesCents:    bigint('monto_bienes_cents', { mode: 'number' }).notNull().default(0),
+  itbisAlCostoCents:   bigint('itbis_al_costo_cents', { mode: 'number' }).notNull().default(0),
+  itbisRetenidoCents:  bigint('itbis_retenido_cents', { mode: 'number' }).notNull().default(0),
+  /** Campo 17 del 606 (1–8). */
+  isrTipoRetencion:    smallint('isr_tipo_retencion'),
+  isrRetenidoCents:    bigint('isr_retenido_cents', { mode: 'number' }).notNull().default(0),
+  iscCents:            bigint('isc_cents', { mode: 'number' }).notNull().default(0),
+  otrosImpuestosCents: bigint('otros_impuestos_cents', { mode: 'number' }).notNull().default(0),
+  propinaCents:        bigint('propina_cents', { mode: 'number' }).notNull().default(0),
+  /** Cuándo quedó pagada: el 606 la exige cuando hay retenciones. */
+  fechaPago:           date('fecha_pago'),
+  /** registrada | anulada */
+  estado:              varchar('estado', { length: 12 }).notNull().default('registrada'),
+  anuladaEn:           timestamp('anulada_en'),
+  anuladaPor:          integer('anulada_por').references(() => users.id),
+  motivoAnulacion:     varchar('motivo_anulacion', { length: 300 }),
 });
 
 export const comprasLocalesItems = pgTable('compras_locales_items', {
   id:            serial('id').primaryKey(),
   compraId:      integer('compra_id').notNull().references(() => comprasLocales.id),
-  productoId:    integer('producto_id').notNull().references(() => products.id),
+  /** Producto del inventario; null en un concepto de gasto. */
+  productoId:    integer('producto_id').references(() => products.id),
   almacenId:     integer('almacen_id').references(() => almacenes.id),
   cantidad:      integer('cantidad').notNull(),
   costoUnitario: integer('costo_unitario').notNull().default(0),
+  /** Concepto de gasto: qué se compró y su categoría (lib/compras/categorias). */
+  descripcion:   varchar('descripcion', { length: 255 }),
+  categoria:     varchar('categoria', { length: 30 }),
+  esServicio:    boolean('es_servicio').notNull().default(false),
+  /** '0.18' | '0.16' | '0' | 'exento' */
+  itbisTasa:     varchar('itbis_tasa', { length: 6 }).notNull().default('0'),
+  itbisCents:    bigint('itbis_cents', { mode: 'number' }).notNull().default(0),
 });
 
 export type CompraLocal     = typeof comprasLocales.$inferSelect;
@@ -1538,7 +1582,7 @@ export const pagosProveedores = pgTable('pagos_proveedores', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id').notNull().references(() => teams.id),
   compraId: integer('compra_id').notNull().references(() => comprasLocales.id),
-  montoCents: integer('monto_cents').notNull(),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
   metodo: varchar('metodo', { length: 30 }).notNull(),
   fechaPago: date('fecha_pago').notNull(),
   referencia: varchar('referencia', { length: 100 }),
@@ -3249,6 +3293,17 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaProvisionGastoId:    integer('cuenta_provision_gasto_id').references(() => contabilidadCuentas.id),
   /** Provisiones por pagar (Haber, pasivo que se acumula). Fallback: por pagar → 2101. */
   cuentaProvisionPorPagarId: integer('cuenta_provision_por_pagar_id').references(() => contabilidadCuentas.id),
+  /** Nómina — ISR de asalariados por pagar a la DGII (Haber). Fallback: retenciones. */
+  cuentaNominaIsrPagarId:     integer('cuenta_nomina_isr_pagar_id').references(() => contabilidadCuentas.id),
+  /** Nómina — INFOTEP por pagar (Haber). Fallback: aportes patronales por pagar. */
+  cuentaNominaInfotepPagarId: integer('cuenta_nomina_infotep_pagar_id').references(() => contabilidadCuentas.id),
+  /** Provisiones por concepto: gasto (Debe) y pasivo (Haber). Fallback: las de provisiones generales. */
+  cuentaProvRegaliaGastoId:    integer('cuenta_prov_regalia_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaProvRegaliaPagarId:    integer('cuenta_prov_regalia_pagar_id').references(() => contabilidadCuentas.id),
+  cuentaProvVacacionesGastoId: integer('cuenta_prov_vacaciones_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaProvVacacionesPagarId: integer('cuenta_prov_vacaciones_pagar_id').references(() => contabilidadCuentas.id),
+  cuentaProvCesantiaGastoId:   integer('cuenta_prov_cesantia_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaProvCesantiaPagarId:   integer('cuenta_prov_cesantia_pagar_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.3 — exento capitaliza ITBIS; gravado registra crédito fiscal 1104. */
   regimenItbis: varchar('regimen_itbis', { length: 10 }).notNull().default('exento'),
   updatedBy: integer('updated_by').references(() => users.id),
@@ -3792,6 +3847,18 @@ export const empleados = pgTable('empleados', {
   vacacionesDias:  integer('vacaciones_dias'),
   /** Descanso semanal, texto libre (ej. "Domingo"). */
   diasLibres:      varchar('dias_libres', { length: 40 }),
+  /** Tarifa de quien cobra por hora (jornada 'por_horas'), en centavos. */
+  tarifaHoraCents: bigint('tarifa_hora_cents', { mode: 'number' }),
+  /** SHA-256 del token del enlace para subir horas; el token solo se enseña al crearlo. */
+  horasTokenHash:  varchar('horas_token_hash', { length: 64 }),
+  horasTokenCreado: timestamp('horas_token_creado'),
+  /** Horas por día de la semana ({ lun, mar, …, dom }). Null = sin horario cargado. */
+  horarioSemanal:  jsonb('horario_semanal').$type<Record<'lun' | 'mar' | 'mie' | 'jue' | 'vie' | 'sab' | 'dom', number>>(),
+  /**
+   * Dispensa de salario mínimo (Res. CNSS 471-02). Sin ella, la base para cotizar
+   * a la TSS no baja del salario mínimo del sector aunque gane menos.
+   */
+  dispensaSalarioMinimo: boolean('dispensa_salario_minimo').notNull().default(false),
   /** Fecha fin para contratos temporales. */
   fechaFinContrato: date('fecha_fin_contrato'),
   /** Obra o servicio concreto para contratos por obra. */
@@ -3846,6 +3913,34 @@ export const empleadoDocumentos = pgTable('empleado_documentos', {
   uniqueIndex('empleado_documentos_sha_uniq').on(t.empleadoId, t.sha256),
 ]);
 
+/**
+ * Dependientes del empleado en el Seguro Familiar de Salud. `tipo` es lo que está
+ * REGISTRADO —directo en la ARS, adicional en el SUIR— porque eso es lo que factura
+ * la TSS; la regla por edad vive en lib/nomina/dependientes.ts y solo avisa.
+ * `hasta` null = vigente.
+ */
+export const empleadoDependientes = pgTable('empleado_dependientes', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  empleadoId:      integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  nombre:          varchar('nombre', { length: 200 }).notNull(),
+  cedula:          varchar('cedula', { length: 20 }),
+  /** 'conyuge' | 'hijo' | 'hijastro' | 'padre_madre' | 'suegro_suegra'. */
+  parentesco:      varchar('parentesco', { length: 20 }).notNull(),
+  fechaNacimiento: date('fecha_nacimiento'),
+  estudiante:      boolean('estudiante').notNull().default(false),
+  /** 'directo' | 'adicional'. */
+  tipo:            varchar('tipo', { length: 10 }).notNull(),
+  desde:           date('desde').notNull(),
+  hasta:           date('hasta'),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_dependientes_empleado_idx').on(t.empleadoId),
+  index('empleado_dependientes_team_idx').on(t.teamId),
+]);
+
 export type EmpleadoDocumento    = typeof empleadoDocumentos.$inferSelect;
 export type NewEmpleadoDocumento = typeof empleadoDocumentos.$inferInsert;
 
@@ -3857,10 +3952,13 @@ export type NewEmpleadoDocumento = typeof empleadoDocumentos.$inferInsert;
 export const nominaCorridas = pgTable('nomina_corridas', {
   id:          serial('id').primaryKey(),
   teamId:      integer('team_id').notNull().references(() => teams.id),
-  /** Período contable de la nómina, formato 'YYYY-MM'. */
+  /** Mes contable de la nómina, formato 'YYYY-MM' (el del último día que paga). */
   periodo:     varchar('periodo', { length: 7 }).notNull(),
+  /** Fechas que paga la corrida, inclusivas: del 1 al 15, la semana del 2 al 8… */
+  fechaInicio: date('fecha_inicio').notNull(),
+  fechaFin:    date('fecha_fin').notNull(),
   descripcion: varchar('descripcion', { length: 160 }).notNull(),
-  /** 'mensual' | 'quincenal' | 'semanal' — la frecuencia de esta corrida. */
+  /** 'mensual' | 'quincenal-1' | 'quincenal-2' | 'semanal' (ver TIPOS_CORRIDA). */
   tipo:        varchar('tipo', { length: 20 }).notNull().default('mensual'),
   fechaPago:   date('fecha_pago'),
   /** 'borrador' | 'aprobada' | 'pagada'. */
@@ -3879,7 +3977,8 @@ export const nominaCorridas = pgTable('nomina_corridas', {
   pagadaEn:    timestamp('pagada_en'),
 }, (t) => [
   index('nomina_corridas_team_idx').on(t.teamId),
-  uniqueIndex('nomina_corridas_periodo_uniq').on(t.teamId, t.periodo, t.tipo),
+  uniqueIndex('nomina_corridas_inicio_uniq').on(t.teamId, t.tipo, t.fechaInicio),
+  index('nomina_corridas_team_rango_idx').on(t.teamId, t.fechaInicio, t.fechaFin),
 ]);
 
 /**
@@ -3909,6 +4008,25 @@ export const nominaLineas = pgTable('nomina_lineas', {
   infotepPatronalCents:  bigint('infotep_patronal_cents', { mode: 'number' }).notNull(),
   totalPatronalCents:    bigint('total_patronal_cents', { mode: 'number' }).notNull(),
   netoCents:             bigint('neto_cents', { mode: 'number' }).notNull(),
+  /** Base cotizable TSS usada: el bruto o el piso del salario mínimo. Null en corridas viejas = bruto. */
+  salarioCotizableCents: bigint('salario_cotizable_cents', { mode: 'number' }),
+  /** Dependientes adicionales del SFS cobrados en esta línea, y su cápita total. */
+  dependientesAdicionales:      integer('dependientes_adicionales').notNull().default(0),
+  dependientesAdicionalesCents: bigint('dependientes_adicionales_cents', { mode: 'number' }).notNull().default(0),
+  /** Días del período que se le pagaron y días del período. Null en corridas viejas. */
+  diasPagados: integer('dias_pagados'),
+  diasPeriodo: integer('dias_periodo'),
+  /** Pago en que se le pagó (nomina_pagos). Null mientras está pendiente o en corridas viejas. */
+  pagoId:      integer('pago_id'),
+  /** Provisión del período según su antigüedad. Null en corridas viejas (estimación lineal). */
+  provisionRegaliaCents:    bigint('provision_regalia_cents', { mode: 'number' }),
+  provisionVacacionesCents: bigint('provision_vacaciones_cents', { mode: 'number' }),
+  provisionCesantiaCents:   bigint('provision_cesantia_cents', { mode: 'number' }),
+  /** Quien cobra por hora: cómo se clasificaron sus horas aprobadas. */
+  horasDetalle: jsonb('horas_detalle').$type<{
+    horas: number; ordinarias: number; extra35: number; extra100: number;
+    nocturnas: number; feriado: number; dias: number; tarifaHoraCents: number; brutoCents: number;
+  }>(),
   /** Pago al empleado: se marca por línea (pago parcial). Lo no pagado queda pendiente. */
   pagada:      boolean('pagada').notNull().default(false),
   pagadaEn:    timestamp('pagada_en'),
@@ -3937,10 +4055,60 @@ export const nominaObligaciones = pgTable('nomina_obligaciones', {
   pagadaEn:    timestamp('pagada_en'),
   /** Asiento de pago que salda el pasivo. Null mientras está pendiente. */
   asientoId:   integer('asiento_id').references(() => contabilidadAsientos.id),
+  /** 'efectivo' | 'transferencia' | 'cheque': para asentar el pago después si hacía falta. */
+  metodoPago:  varchar('metodo_pago', { length: 20 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('nomina_obligaciones_corrida_destino_uniq').on(t.corridaId, t.destino),
   index('nomina_obligaciones_team_idx').on(t.teamId),
+]);
+
+/**
+ * Horas trabajadas de quien cobra por hora. Las sube el empleado por su enlace
+ * (pendiente) o la empresa directamente (aprobada); una por empleado y día. La
+ * corrida paga las aprobadas de sus fechas.
+ */
+export const nominaHoras = pgTable('nomina_horas', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  empleadoId:     integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  fecha:          date('fecha').notNull(),
+  horas:          numeric('horas', { precision: 5, scale: 2 }).notNull(),
+  horasNocturnas: numeric('horas_nocturnas', { precision: 5, scale: 2 }).notNull().default('0'),
+  feriado:        boolean('feriado').notNull().default(false),
+  nota:           varchar('nota', { length: 300 }),
+  /** 'pendiente' | 'aprobada' | 'rechazada'. */
+  estado:         varchar('estado', { length: 12 }).notNull().default('pendiente'),
+  /** 'empleado' | 'empresa'. */
+  origen:         varchar('origen', { length: 10 }).notNull().default('empleado'),
+  motivoRechazo:  varchar('motivo_rechazo', { length: 300 }),
+  revisadoPor:    integer('revisado_por').references(() => users.id),
+  revisadoEn:     timestamp('revisado_en'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_horas_empleado_fecha_uniq').on(t.empleadoId, t.fecha),
+  index('nomina_horas_team_estado_idx').on(t.teamId, t.estado, t.fecha),
+]);
+
+/**
+ * Un pago a empleados de una corrida: lo que se marca pagado de una vez, con su
+ * fecha y método. Lleva el asiento que salda «sueldos por pagar».
+ */
+export const nominaPagos = pgTable('nomina_pagos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  corridaId:  integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  fecha:      date('fecha').notNull(),
+  /** 'efectivo' | 'transferencia' | 'cheque'. */
+  metodo:     varchar('metodo', { length: 20 }).notNull(),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  lineas:     integer('lineas').notNull().default(0),
+  asientoId:  integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_pagos_corrida_idx').on(t.teamId, t.corridaId),
 ]);
 
 export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
