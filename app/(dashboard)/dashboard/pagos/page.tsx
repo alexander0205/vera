@@ -65,52 +65,15 @@ interface Totales {
   porMetodo: Record<string, { monto: number; count: number }>;
 }
 
-// ─── Rango de fechas: presets server-side ──────────────────────────────────────
+// ─── Rango de fechas ──────────────────────────────────────────────────────────
 
-type RangoKey = 'hoy' | '7d' | '30d' | 'mes' | 'todo';
-
-function rangoFechas(key: RangoKey): { desde?: string; hasta?: string } {
-  const hoy = new Date();
+/** Rango por defecto: últimos 30 días (Fecha desde = hoy − 30, Fecha hasta = hoy). */
+function rango30dDefault(): { desde: string; hasta: string } {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  if (key === 'todo') return {};
-  if (key === 'hoy') return { desde: iso(hoy), hasta: iso(hoy) };
-  if (key === 'mes') {
-    const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    return { desde: iso(primero), hasta: iso(hoy) };
-  }
-  const dias = key === '7d' ? 7 : 30;
-  const d = new Date(hoy);
-  d.setDate(d.getDate() - (dias - 1));
-  return { desde: iso(d), hasta: iso(hoy) };
-}
-
-const RANGOS: { key: RangoKey; label: string }[] = [
-  { key: 'hoy',  label: 'Hoy' },
-  { key: '7d',   label: '7 días' },
-  { key: '30d',  label: '30 días' },
-  { key: 'mes',  label: 'Este mes' },
-  { key: 'todo', label: 'Todo' },
-];
-
-/** Límites (YYYY-MM-DD) de un mes 'YYYY-MM' — primer y último día. */
-function boundsMes(mes: string): { desde: string; hasta: string } {
-  const [y, m] = mes.split('-').map(Number);
-  const ultimo = new Date(y, m, 0).getDate();
-  return { desde: `${mes}-01`, hasta: `${mes}-${String(ultimo).padStart(2, '0')}` };
-}
-
-/** Mes actual como 'YYYY-MM'. */
-function mesActualStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-/** El mes (YYYY-MM) si el rango es exactamente un mes calendario; si no, ''. */
-function mesDeRango(desde: string, hasta: string): string {
-  if (!desde || !hasta) return '';
-  const b = desde.slice(0, 7);
-  const bounds = boundsMes(b);
-  return bounds.desde === desde && bounds.hasta === hasta ? b : '';
+  const hoy = new Date();
+  const desde = new Date(hoy);
+  desde.setDate(desde.getDate() - 30);
+  return { desde: iso(desde), hasta: iso(hoy) };
 }
 
 // ─── Página ─────────────────────────────────────────────────────────────────
@@ -125,20 +88,13 @@ export default function PagosPage() {
   const [metodosExige, setMetodosExige] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
-  // Rango dinámico. Control principal = selector de MES (default: mes actual);
-  // los atajos (Hoy/7d/30d/Todo) siguen disponibles para otros rangos.
-  const mesInicial = boundsMes(mesActualStr());
-  const [desde, setDesde] = useState<string>(mesInicial.desde);
-  const [hasta, setHasta] = useState<string>(mesInicial.hasta);
-
-  function aplicarPreset(key: RangoKey) {
-    const r = rangoFechas(key);
-    setDesde(r.desde ?? '');
-    setHasta(r.hasta ?? '');
-  }
+  // Rango de fechas manual (Fecha desde / Fecha hasta). Default: últimos 30 días.
+  const rangoInicial = rango30dDefault();
+  const [desde, setDesde] = useState<string>(rangoInicial.desde);
+  const [hasta, setHasta] = useState<string>(rangoInicial.hasta);
 
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    q: '', metodo: '', origen: '', producto: '', dgii: '', agrupar: '',
+    q: '', metodo: '', origen: '', tipoVenta: '', dgii: '', agrupar: '',
   });
   const [pagoEliminar, setPagoEliminar] = useState<Pago | null>(null);
 
@@ -183,17 +139,6 @@ export default function PagosPage() {
     return opts;
   }, [pagos]);
 
-  // Opciones de producto/servicio presentes en el rango (para el filtro).
-  const productoOptions = useMemo(() => {
-    const map = new Map<number, { nombre: string; servicio: boolean }>();
-    for (const p of pagos) for (const pr of p.productos ?? []) {
-      if (!map.has(pr.id)) map.set(pr.id, { nombre: pr.nombre, servicio: pr.servicio });
-    }
-    return [...map.entries()]
-      .map(([id, v]) => ({ value: String(id), label: v.servicio ? `${v.nombre} · servicio` : v.nombre }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [pagos]);
-
   // ── Filtrado client-side: búsqueda libre + método ──
   const agrupar = filterValues.agrupar;
   const pagosFiltrados = useMemo(() => {
@@ -214,14 +159,16 @@ export default function PagosPage() {
     if (filterValues.origen) {
       rows = rows.filter(p => p.origen === filterValues.origen);
     }
-    if (filterValues.producto) {
-      const id = Number(filterValues.producto);
-      rows = rows.filter(p => (p.productos ?? []).some(pr => pr.id === id));
+    if (filterValues.tipoVenta) {
+      // Diferencia venta de Producto vs Servicio (no un artículo individual):
+      // basta con que el cobro incluya al menos una línea de esa categoría.
+      const esServicio = filterValues.tipoVenta === 'servicio';
+      rows = rows.filter(p => (p.productos ?? []).some(pr => pr.servicio === esServicio));
     }
     if (filterValues.dgii === 'enviado')    rows = rows.filter(p => p.enviadoDgii);
     else if (filterValues.dgii === 'no')    rows = rows.filter(p => !p.enviadoDgii);
     return rows;
-  }, [pagos, filterValues.q, filterValues.metodo, filterValues.origen, filterValues.producto, filterValues.dgii]);
+  }, [pagos, filterValues.q, filterValues.metodo, filterValues.origen, filterValues.tipoVenta, filterValues.dgii]);
 
   // Totales reactivos al filtro (las tarjetas reflejan lo que se ve).
   const totales: Totales = useMemo(() => {
@@ -512,49 +459,16 @@ export default function PagosPage() {
         </Box>
       </Box>
 
-      {/* Rango de fechas: atajos + selector custom (default: últimos 30 días) */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-        {RANGOS.map(r => {
-          const f = rangoFechas(r.key);
-          const activo = (f.desde ?? '') === desde && (f.hasta ?? '') === hasta;
-          return (
-            <Button
-              key={r.key}
-              onClick={() => aplicarPreset(r.key)}
-              sx={{
-                textTransform: 'none', px: 1.5, py: 0.75, minWidth: 0, fontSize: '0.75rem', fontWeight: 500, borderRadius: '8px', border: '1px solid',
-                ...(activo
-                  ? { bgcolor: '#3658e1', color: '#ffffff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4', borderColor: '#2a45c4' } }
-                  : { bgcolor: '#ffffff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#ffffff' } }),
-              }}
-            >
-              {r.label}
-            </Button>
-          );
-        })}
-        {/* Selector de MES (intuitivo): muestra el mes y se cambia. */}
-        <Box
-          component="input"
-          type="month"
-          value={mesDeRango(desde, hasta)}
-          onChange={e => {
-            if (!e.target.value) return;
-            const b = boundsMes(e.target.value);
-            setDesde(b.desde);
-            setHasta(b.hasta);
-          }}
-          sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit', ml: { sm: 0.5 } }}
-        />
-        {/* Rango a medida: de cierta fecha hasta cierta fecha. */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Box component="input" type="date" value={desde} max={hasta || undefined}
-            onChange={e => setDesde(e.target.value)}
-            sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
-          <Box component="span" sx={{ color: '#9ca3af' }}>—</Box>
-          <Box component="input" type="date" value={hasta} min={desde || undefined}
-            onChange={e => setHasta(e.target.value)}
-            sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
-        </Box>
+      {/* Rango de fechas manual (default: últimos 30 días) */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75 }}>
+        <Box component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>Fecha desde</Box>
+        <Box component="input" type="date" value={desde} max={hasta || undefined}
+          onChange={e => setDesde(e.target.value)}
+          sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
+        <Box component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', ml: { sm: 0.5 } }}>Fecha hasta</Box>
+        <Box component="input" type="date" value={hasta} min={desde || undefined}
+          onChange={e => setHasta(e.target.value)}
+          sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
       </Box>
 
       {/* Stats */}
@@ -658,10 +572,13 @@ export default function PagosPage() {
           },
           {
             type: 'select',
-            id: 'producto',
-            label: 'Producto',
-            placeholder: 'Todos los productos',
-            options: productoOptions,
+            id: 'tipoVenta',
+            label: 'Tipo de venta',
+            placeholder: 'Productos y servicios',
+            options: [
+              { value: 'producto', label: 'Producto' },
+              { value: 'servicio', label: 'Servicio' },
+            ],
           },
           {
             type: 'select',
@@ -711,7 +628,7 @@ export default function PagosPage() {
         emptyState={{
           icon: Wallet,
           title: 'Sin pagos registrados',
-          hint: (filterValues.q || filterValues.metodo || filterValues.origen || filterValues.producto || filterValues.dgii)
+          hint: (filterValues.q || filterValues.metodo || filterValues.origen || filterValues.tipoVenta || filterValues.dgii)
             ? 'Ningún pago coincide con los filtros.'
             : 'No hay pagos en el rango seleccionado. Registra cobros desde Cuentas por cobrar o al emitir facturas.',
         }}
