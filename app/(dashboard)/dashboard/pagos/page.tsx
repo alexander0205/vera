@@ -92,6 +92,27 @@ const RANGOS: { key: RangoKey; label: string }[] = [
   { key: 'todo', label: 'Todo' },
 ];
 
+/** Límites (YYYY-MM-DD) de un mes 'YYYY-MM' — primer y último día. */
+function boundsMes(mes: string): { desde: string; hasta: string } {
+  const [y, m] = mes.split('-').map(Number);
+  const ultimo = new Date(y, m, 0).getDate();
+  return { desde: `${mes}-01`, hasta: `${mes}-${String(ultimo).padStart(2, '0')}` };
+}
+
+/** Mes actual como 'YYYY-MM'. */
+function mesActualStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** El mes (YYYY-MM) si el rango es exactamente un mes calendario; si no, ''. */
+function mesDeRango(desde: string, hasta: string): string {
+  if (!desde || !hasta) return '';
+  const b = desde.slice(0, 7);
+  const bounds = boundsMes(b);
+  return bounds.desde === desde && bounds.hasta === hasta ? b : '';
+}
+
 // ─── Página ─────────────────────────────────────────────────────────────────
 
 export default function PagosPage() {
@@ -104,10 +125,11 @@ export default function PagosPage() {
   const [metodosExige, setMetodosExige] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
-  // Rango dinámico: default = últimos 30 días, ajustable por el usuario.
-  const inicial = rangoFechas('30d');
-  const [desde, setDesde] = useState<string>(inicial.desde ?? '');
-  const [hasta, setHasta] = useState<string>(inicial.hasta ?? '');
+  // Rango dinámico. Control principal = selector de MES (default: mes actual);
+  // los atajos (Hoy/7d/30d/Todo) siguen disponibles para otros rangos.
+  const mesInicial = boundsMes(mesActualStr());
+  const [desde, setDesde] = useState<string>(mesInicial.desde);
+  const [hasta, setHasta] = useState<string>(mesInicial.hasta);
 
   function aplicarPreset(key: RangoKey) {
     const r = rangoFechas(key);
@@ -510,7 +532,21 @@ export default function PagosPage() {
             </Button>
           );
         })}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: { sm: 0.5 } }}>
+        {/* Selector de MES (intuitivo): muestra el mes y se cambia. */}
+        <Box
+          component="input"
+          type="month"
+          value={mesDeRango(desde, hasta)}
+          onChange={e => {
+            if (!e.target.value) return;
+            const b = boundsMes(e.target.value);
+            setDesde(b.desde);
+            setHasta(b.hasta);
+          }}
+          sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit', ml: { sm: 0.5 } }}
+        />
+        {/* Rango a medida: de cierta fecha hasta cierta fecha. */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <Box component="input" type="date" value={desde} max={hasta || undefined}
             onChange={e => setDesde(e.target.value)}
             sx={{ border: '1px solid #d1d5db', borderRadius: '8px', px: 1, py: 0.75, fontSize: '0.75rem', color: '#374151', fontFamily: 'inherit' }} />
