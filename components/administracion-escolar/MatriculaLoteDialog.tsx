@@ -312,8 +312,12 @@ export function MatriculaLoteDialog({ open, onClose, onSaved }: Props) {
                     {revision.resumen.invalido > 0 && <Tarjeta n={revision.resumen.invalido} label="No válidos" tono="gris" />}
                   </div>
                   <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
-                    A cada alumno que se matricule se le crean <b>{revision.cargoCount}</b> cargo(s) ya vigentes
-                    por <b>{fmtRD(revision.cargoTotalCentavos)}</b>. Las mensualidades futuras se generan cada mes.
+                    {revision.cargoCount === 0 ? (
+                      <>Al matricular no se crea ningún cargo: las cuotas se generan cuando llega su fecha.</>
+                    ) : (
+                      <>A cada alumno que se matricule se le crean <b>{revision.cargoCount}</b> cargo(s) ya vigentes
+                      por <b>{fmtRD(revision.cargoTotalCentavos)}</b>. Las demás cuotas se generan cuando llega su fecha.</>
+                    )}
                   </div>
                   <TablaResultados filas={revision.resultados} />
                 </>

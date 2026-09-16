@@ -3,7 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes } from '@/lib/db/schema';
 import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
 import { armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
-import { cuotasVigentes, finDeMes } from '@/lib/administracion-escolar/devengar';
+import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 import { crearMatriculaConCargos } from '@/lib/administracion-escolar/matricula-alta';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
@@ -75,10 +75,12 @@ export async function POST(req: NextRequest) {
   const plan = ctx ? await armarPlanDeCobro(teamId, ctx, inscripcion) : [];
 
   // Lo que va a deber cada alumno del grupo: el mismo total para todos, porque
-  // comparten sección y fecha. Se enseña en la revisión.
-  const cuotas = cuotasVigentes(plan, pedidos, finDeMes(inscripcion));
-  const cargoTotalCentavos = cuotas.reduce((s, { cuota }) => s + cuota.montoCentavos, 0);
-  const cargoCount = cuotas.length;
+  // comparten sección y fecha. Se enseña en la revisión, y sale de la misma
+  // regla con la que `crearMatriculaConCargos` crea los cargos: lo que se
+  // confirma es lo que queda.
+  const { ahora } = cuotasAlMatricular(plan, pedidos, inscripcion);
+  const cargoTotalCentavos = sumaCentavos(ahora);
+  const cargoCount = ahora.length;
 
   // Solo estudiantes de ESTE colegio y activos. Un id que no vuelva de aquí no
   // es de este team (o está inactivo): se marca inválido y no se toca.

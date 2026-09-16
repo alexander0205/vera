@@ -14,7 +14,7 @@
 
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarMatriculas, adminEscolarCargos } from '@/lib/db/schema';
-import { cuotasVigentes } from './devengar';
+import { cuotasAlMatricular } from './cuotas-al-matricular';
 import type { LineaPlan } from './plan-cobro';
 
 export interface AltaMatriculaParams {
@@ -84,9 +84,11 @@ export async function crearMatriculaConCargos(
     // resto cuando llega su mes.
     // Hasta la fecha de inscripción, no hasta fin de su mes: si el alumno entra
     // el día 2 y la mensualidad se emite el 30, esa cuota todavía no le toca —
-    // la crea el devengo cuando llegue su día. (Alineado con v2.)
-    const hasta = params.inscripcionEfectiva;
-    const filas = cuotasVigentes(plan, params.conceptos, hasta).map(({ linea, cuota }) => ({
+    // la crea el devengo cuando llegue su día. El corte vive en
+    // `cuotasAlMatricular` para que el formulario y la revisión del lote
+    // enseñen exactamente lo que se crea aquí.
+    const { ahora } = cuotasAlMatricular(plan, params.conceptos, params.inscripcionEfectiva);
+    const filas = ahora.map(({ linea, cuota }) => ({
       teamId:        params.teamId,
       estudianteId:  params.estudianteId,
       matriculaId:   matricula.id,
