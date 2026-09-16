@@ -30,10 +30,21 @@ export interface EstadoObtener {
   completadoEn: string | null;
 }
 
-const ANIOS = [
-  { value: '24', label: '2025-2026' },
-  { value: '23', label: '2024-2025' },
+/**
+ * Años de reserva, SOLO para cuando el portal no contesta.
+ *
+ * Eran la lista entera, escrita a mano. El problema: las etiquetas son una
+ * suposición sobre qué año significa cada id de SIGERD, y la pantalla enseñaba
+ * la nuestra en vez de la suya — el colegio elegía «2025-2026» sin manera de
+ * saber que el portal llama a ese id de otra forma. Ahora se piden a
+ * `/api/sigerd/anios` y esto queda como red para no dejar el desplegable vacío.
+ */
+const ANIOS_RESERVA = [
+  { value: '24', label: 'Año académico 24' },
+  { value: '23', label: 'Año académico 23' },
 ];
+
+interface AniosResp { anios?: { id: number; nombre: string }[] }
 
 /**
  * Un solo botón. Trae TODO el centro de SIGERD y lo guarda en nuestras tablas.
@@ -49,7 +60,22 @@ export function ObtenerSigerd({ onCompletado }: {
   /** Tras guardar la información: el asistente recarga su plan aquí. */
   onCompletado?: () => void;
 } = {}) {
-  const [anio, setAnio] = useState('24');
+  /**
+   * Los años que ofrece EL PORTAL para este centro, con SU nombre. Si no
+   * contesta —sin credenciales, SIGERD caído— se usan los de reserva y se dice.
+   */
+  const { data: aniosResp, error: errorAnios } = useSWR<AniosResp>('/api/sigerd/anios', traerEstadoSigerd, {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+  });
+  const delPortal = (aniosResp?.anios ?? []).map((a) => ({ value: String(a.id), label: a.nombre }));
+  const anios = delPortal.length > 0 ? delPortal : ANIOS_RESERVA;
+  const sonDeReserva = delPortal.length === 0;
+
+  // Vacío hasta que se sepan los años: el portal manda cuál es el primero, y
+  // fijar '24' a mano era justo lo que hacía elegir un año equivocado.
+  const [anio, setAnio] = useState('');
+  const elegido = anio || anios[0]?.value || '';
   const [lanzando, setLanzando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -77,7 +103,7 @@ export function ObtenerSigerd({ onCompletado }: {
       const r = await fetch('/api/sigerd/obtener', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anoAcademico: Number(anio) }),
+        body: JSON.stringify({ anoAcademico: Number(elegido) }),
       });
       const d = await r.json();
 
@@ -112,12 +138,12 @@ export function ObtenerSigerd({ onCompletado }: {
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={anio} onValueChange={setAnio} disabled={corriendo}>
+        <Select value={elegido} onValueChange={setAnio} disabled={corriendo}>
           <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ANIOS.map((a) => (
+            {anios.map((a) => (
               <SelectItem key={a.value} value={a.value}>
                 {a.label}
               </SelectItem>
@@ -130,6 +156,14 @@ export function ObtenerSigerd({ onCompletado }: {
           {corriendo ? 'Sincronizando…' : 'Obtener información'}
         </Button>
       </div>
+
+      {sonDeReserva && aniosResp !== undefined && (
+        <p className="text-xs text-amber-700">
+          No se pudo leer del portal la lista de años académicos
+          {errorAnios ? '' : ' (¿credenciales sin probar?)'}: se muestran los conocidos por su
+          número. Comprueba en SIGERD cuál corresponde antes de descargar.
+        </p>
+      )}
 
       {corriendo && (
         <p className="text-sm text-muted-foreground">

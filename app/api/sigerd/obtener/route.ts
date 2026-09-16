@@ -18,7 +18,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const ANIO_DEFECTO = 24;
-const ANIOS_VALIDOS = new Set([23, 24]);
 
 /** Estado de la última obtención del colegio (para la UI). */
 export async function GET() {
@@ -48,8 +47,11 @@ export async function POST(req: NextRequest) {
   } catch {
     body = {};
   }
+  // Qué años existen lo dice SIGERD (`/api/sigerd/anios`), no una lista nuestra:
+  // la que había aquí solo aceptaba 23 y 24, así que un centro cuyo portal
+  // ofreciera otro año se topaba con «Año académico inválido».
   const anoAcademico = Number(body.anoAcademico) || ANIO_DEFECTO;
-  if (!ANIOS_VALIDOS.has(anoAcademico)) {
+  if (!Number.isInteger(anoAcademico) || anoAcademico <= 0) {
     return NextResponse.json({ error: 'Año académico inválido.', codigo: 'parametro-invalido' }, { status: 400 });
   }
 

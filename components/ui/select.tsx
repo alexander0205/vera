@@ -57,14 +57,29 @@ function SelectItem({
   children,
   className,
   disabled,
+  ...inyectado
 }: {
   value: string;
   children?: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  /**
+   * Lo que MUI le mete al hijo al clonarlo: `onClick`, `role`, `selected`,
+   * `data-value`, `tabIndex`… Como aquí el `MenuItem` va DENTRO de este
+   * envoltorio, MUI clona el envoltorio, no el `MenuItem`; sin reenviarlos, la
+   * opción renderizada se quedaba sin el `onClick` de MUI y **hacer clic no
+   * seleccionaba nada**. Pasaba en las 10 pantallas que usan este Select.
+   */
+  [key: string]: unknown;
 }) {
   return (
-    <MenuItem value={value} className={className} disabled={disabled} sx={{ fontSize: '0.875rem' }}>
+    <MenuItem
+      value={value}
+      className={className}
+      disabled={disabled}
+      sx={{ fontSize: '0.875rem' }}
+      {...(inyectado as Record<string, unknown>)}
+    >
       {children}
     </MenuItem>
   );
