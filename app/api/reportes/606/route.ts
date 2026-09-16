@@ -1,190 +1,137 @@
 /**
- * Formato 606 — Compras de Bienes y Servicios
- * Norma General 07-18 — DGII República Dominicana
+ * Formato 606 — Compras de bienes y servicios (Norma General 07-2018, DGII).
  *
- * Tipos e-CF incluidos: 41 (Compras), 43 (Gastos Menores)
- * Archivo: DGII_F_606_{RNC}_{AAAAMM}.TXT
+ * Reúne dos fuentes del período:
  *
- * Header  : 606|RNC|AAAAMM|NumRegistros
- * Detalle : 23 campos por pipe — sin fila de encabezado de columnas
- *   1  RNC/Cédula proveedor
- *   2  Tipo ID (1=RNC, 2=Cédula)
- *   3  Tipo Bienes/Servicios (02=trabajos,suministros,servicios)
- *   4  NCF
- *   5  NCF Modificado (notas deb/cred)
- *   6  Fecha Comprobante (AAAAMMDD)
- *   7  Fecha Pago (AAAAMMDD)
- *   8  Monto Servicios (sin ITBIS)
- *   9  Monto Bienes (sin ITBIS)
- *   10 Total Facturado (8+9)
- *   11 ITBIS Facturado
- *   12 ITBIS Retenido
- *   13 ITBIS Proporcionalidad
- *   14 ITBIS al Costo
- *   15 ITBIS por Adelantar (11-14)
- *   16 ITBIS Percibido (no habilitado)
- *   17 Tipo Retención ISR
- *   18 Monto Retención Renta
- *   19 ISR Percibido (no habilitado)
- *   20 ISC
- *   21 Otros Impuestos
- *   22 Propina Legal
- *   23 Forma de Pago (1=Efectivo,2=Cheque/Trans,3=Tarjeta,4=Crédito)
+ *   1. Los comprobantes de proveedores registrados en Compras y Gastos
+ *      (compras_locales, no anulados), con su tipo de bienes, montos de
+ *      servicios y bienes, ITBIS al costo y retenciones. Los de consumo (B02/E32)
+ *      no se reportan.
+ *   2. Los comprobantes que emite la propia empresa: compras a informales (e41),
+ *      gastos menores (e43, con el RNC de la empresa y sin adelanto de ITBIS) y
+ *      pagos al exterior (e47), solo si ya se emitieron a la DGII.
+ *
+ * Las líneas se arman en lib/compras/fiscal.ts (lineaFormato606) y el archivo en
+ * lib/compras/formato606.ts. Archivo: DGII_F_606_{RNC}_{AAAAMM}.TXT, CRLF.
  */
 import { NextRequest } from 'next/server';
-import { getTeamIdForUser, getTeamProfile } from '@/lib/db/queries';
+import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments } from '@/lib/db/schema';
-import { and, eq, gte, lt, inArray, getTableColumns } from 'drizzle-orm';
+import { getTeamIdForUser, getTeamProfile } from '@/lib/db/queries';
+import { analizarNcf, formaPago606, type CompraPara606 } from '@/lib/compras/fiscal';
+import { TIPO606_CATEGORIA_GASTO_VIEJA } from '@/lib/compras/categorias';
+import { construirFormato606, retencionesDeJson } from '@/lib/compras/formato606';
+import { rangoDelMes } from '@/lib/nomina/periodos';
 
-/**
- * Todas las columnas del documento menos las que pesan.
- *
- * Este reporte recorre meses enteros de facturas y solo necesita importes,
- * fechas y NCF, pero traía además el XML original, el firmado y el JSON de
- * líneas de cada una. Se excluyen por nombre en vez de enumerar lo que se usa,
- * para que añadir un campo al reporte no obligue a tocar esto.
- */
-const { xmlOriginal: _xo, xmlFirmado: _xf, lineasJson: _lj, ...columnasLigeras } =
-  getTableColumns(ecfDocuments);
-
-
-const TIPOS_606 = ['41', '43'];
-
-function fmtFecha(d: Date | null | undefined): string {
-  if (!d) return '';
-  return d.toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function fmtAmt(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
-
-function tipoId(rnc: string | null | undefined): string {
-  const c = (rnc ?? '').replace(/\D/g, '');
-  return c.length === 11 ? '2' : '1';
-}
-
-// Forma de Pago: 1=Efectivo, 2=Cheque/Trans/Dep, 3=Tarjeta, 4=Compra a crédito,
-//   5=Permuta, 6=Notas de crédito, 7=Mixto
-function codFormaPago(metodo: string | null | undefined): string {
-  switch (metodo) {
-    case 'efectivo':        return '1';
-    case 'cheque':
-    case 'transferencia':   return '2';
-    case 'tarjeta':         return '3';
-    case 'credito':         return '4';
-    case 'permuta':         return '5';
-    case 'nota_credito':    return '6';
-    case 'mixto':           return '7';
-    default:                return '4'; // crédito por defecto
-  }
-}
+const n = (v: unknown) => Number(v ?? 0);
 
 export async function GET(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return new Response('No autorizado', { status: 401 });
 
-  const sp   = req.nextUrl.searchParams;
+  const sp = req.nextUrl.searchParams;
   const anio = sp.get('anio') ?? String(new Date().getFullYear());
-  const mes  = (sp.get('mes') ?? String(new Date().getMonth() + 1)).padStart(2, '0');
+  const mes = (sp.get('mes') ?? String(new Date().getMonth() + 1)).padStart(2, '0');
+  if (!/^\d{4}$/.test(anio) || !/^(0[1-9]|1[0-2])$/.test(mes)) return new Response('Período inválido', { status: 400 });
+  const { inicio, fin } = rangoDelMes(`${anio}-${mes}`);
 
-  const desde = new Date(`${anio}-${mes}-01T00:00:00`);
-  const hasta = new Date(desde);
-  hasta.setMonth(hasta.getMonth() + 1);
-
-  const [team, docs] = await Promise.all([
+  const [team, registradas, emitidas] = await Promise.all([
     getTeamProfile(teamId),
-    db.select(columnasLigeras).from(ecfDocuments).where(
-      and(
-        eq(ecfDocuments.teamId, teamId),
-        inArray(ecfDocuments.tipoEcf, TIPOS_606),
-        gte(ecfDocuments.fechaEmision, desde),
-        lt(ecfDocuments.fechaEmision, hasta),
-      )
-    ),
+    db.execute(sql`
+      SELECT proveedor_rnc, referencia_encf, ncf_modificado, tipo_bienes_606,
+             to_char(fecha, 'YYYY-MM-DD') AS fecha, to_char(fecha_pago, 'YYYY-MM-DD') AS fecha_pago,
+             monto_total, itbis_cents, monto_servicios_cents, monto_bienes_cents, itbis_al_costo_cents,
+             itbis_retenido_cents, isr_tipo_retencion, isr_retenido_cents, isc_cents, otros_impuestos_cents,
+             propina_cents, forma_pago, metodo_pago
+      FROM compras_locales
+      WHERE team_id = ${teamId} AND estado = 'registrada' AND referencia_encf IS NOT NULL
+        AND fecha BETWEEN ${inicio} AND ${fin}
+      ORDER BY fecha, id
+    `),
+    db.execute(sql`
+      SELECT encf, tipo_ecf, rnc_comprador, ncf_modificado, categoria_gasto, retenciones,
+             monto_total, total_itbis, tipo_pago, pago_metodo, pago_fecha,
+             to_char(coalesce(fecha_gasto, (fecha_emision AT TIME ZONE 'America/Santo_Domingo')::date), 'YYYY-MM-DD') AS fecha
+      FROM ecf_documents
+      WHERE team_id = ${teamId} AND tipo_ecf IN ('41', '43', '47')
+        AND estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
+        AND coalesce(fecha_gasto, (fecha_emision AT TIME ZONE 'America/Santo_Domingo')::date) BETWEEN ${inicio} AND ${fin}
+      ORDER BY fecha, id
+    `),
   ]);
 
-  // 606 solo incluye e-CF emitidos a la DGII (excluye BORRADOR, RECHAZADO,
-  // ANULADO). Los anulados van en el 608.
-  const EMITIDOS = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
-  const compras = docs.filter(d => EMITIDOS.includes(d.estado));
+  const compras: CompraPara606[] = [];
 
-  const teamRnc = (team?.rnc ?? '').replace(/\D/g, '');
-  const periodo = `${anio}${mes}`;
-  const filename = `DGII_F_606_${teamRnc}_${periodo}.TXT`;
-
-  const lines: string[] = [];
-
-  // ─── Header DGII ──────────────────────────────────────────────────────────
-  lines.push(`606|${teamRnc}|${periodo}|${compras.length}`);
-
-  // ─── Detalle ──────────────────────────────────────────────────────────────
-  for (const d of compras) {
-    const rncProv = (d.rncComprador ?? '').replace(/\D/g, '');
-    const tId     = tipoId(d.rncComprador);
-
-    // Campo 3: tipo de bienes/servicios comprados (02 = más común para servicios)
-    const tipoBienes = '02';
-
-    const ncf    = d.encf ?? '';
-    const ncfMod = d.ncfModificado ?? '';
-
-    const fechaComp = fmtFecha(d.fechaEmision);
-    const fechaPago = d.pagoFecha ? d.pagoFecha.replace(/-/g, '') : '';
-
-    // Montos — DGII pide separado: servicios vs bienes
-    // Por defecto ponemos todo en servicios (campo 8), bienes = 0
-    const montoBase = Math.max(0, d.montoTotal - d.totalItbis);
-
-    // ISR — parsear desde retenciones JSON
-    let tipoISR  = '0';
-    let montoISR = '0.00';
-    try {
-      const rets = JSON.parse(d.retenciones ?? '[]') as Array<{ tipo: string; monto: number }>;
-      const isrRet = rets.find(r =>
-        ['ISR', 'RENTA', 'HONORARIOS'].includes((r.tipo ?? '').toUpperCase())
-      );
-      if (isrRet && isrRet.monto > 0) {
-        tipoISR  = '2'; // 2 = Honorarios por servicios (código más común)
-        montoISR = fmtAmt(isrRet.monto);
-      }
-    } catch { /* retenciones malformadas */ }
-
-    lines.push([
-      rncProv,            // 1  RNC proveedor
-      tId,                // 2  Tipo ID
-      tipoBienes,         // 3  Tipo bienes/servicios
-      ncf,                // 4  NCF
-      ncfMod,             // 5  NCF modificado
-      fechaComp,          // 6  Fecha comprobante AAAAMMDD
-      fechaPago,          // 7  Fecha pago AAAAMMDD
-      fmtAmt(montoBase),  // 8  Monto servicios
-      '0.00',             // 9  Monto bienes
-      fmtAmt(montoBase),  // 10 Total facturado
-      fmtAmt(d.totalItbis), // 11 ITBIS facturado
-      '0.00',             // 12 ITBIS retenido al proveedor
-      '',                 // 13 ITBIS proporcionalidad (Art. 349) — si no aplica: vacío
-      '',                 // 14 ITBIS al costo — si no aplica: vacío
-      fmtAmt(d.totalItbis), // 15 ITBIS por adelantar (=ITBIS facturado cuando 14=0)
-      '',                 // 16 ITBIS percibido — no habilitado por DGII
-      tipoISR,            // 17 Tipo retención ISR
-      montoISR,           // 18 Monto retención renta
-      '',                 // 19 ISR percibido — no habilitado
-      '',                 // 20 ISC
-      '',                 // 21 Otros impuestos
-      '0.00',             // 22 Propina legal
-      codFormaPago(d.pagoMetodo), // 23 Forma de pago
-    ].join('|'));
+  for (const r of registradas as unknown as Record<string, unknown>[]) {
+    const info = analizarNcf(r.referencia_encf as string);
+    if (!info.valido || !info.reporta606) continue;
+    const itbis = n(r.itbis_cents);
+    const servicios = n(r.monto_servicios_cents);
+    const bienes = n(r.monto_bienes_cents);
+    // Compras de antes del registro fiscal: sin desglose, todo es bienes.
+    const sinDesglose = servicios === 0 && bienes === 0;
+    compras.push({
+      rncProveedor: (r.proveedor_rnc as string | null) ?? null,
+      ncf: info.ncf,
+      ncfModificado: (r.ncf_modificado as string | null) ?? null,
+      tipoBienes: (r.tipo_bienes_606 as string | null) ?? '09',
+      fechaComprobante: String(r.fecha),
+      fechaPago: (r.fecha_pago as string | null) ?? null,
+      montoServiciosCents: servicios,
+      montoBienesCents: sinDesglose ? Math.max(0, n(r.monto_total) - itbis) : bienes,
+      itbisFacturadoCents: itbis,
+      itbisRetenidoCents: n(r.itbis_retenido_cents),
+      itbisProporcionalidadCents: 0,
+      itbisAlCostoCents: n(r.itbis_al_costo_cents),
+      isrTipo: r.isr_tipo_retencion == null ? null : n(r.isr_tipo_retencion),
+      isrRetenidoCents: n(r.isr_retenido_cents),
+      iscCents: n(r.isc_cents),
+      otrosImpuestosCents: n(r.otros_impuestos_cents),
+      propinaCents: n(r.propina_cents),
+      formaPago: formaPago606(String(r.forma_pago), String(r.metodo_pago)),
+    });
   }
 
-  // CRLF obligatorio según Norma 07-18
-  const content = lines.join('\r\n');
+  for (const d of emitidas as unknown as Record<string, unknown>[]) {
+    const info = analizarNcf(d.encf as string);
+    if (!info.valido) continue;
+    const itbis = n(d.total_itbis);
+    // Las líneas guardadas no dicen si son bien o servicio: estos comprobantes
+    // (informales, gastos menores, exterior) se reportan como servicios.
+    const servicios = Math.max(0, n(d.monto_total) - itbis);
+    const bienes = 0;
+    const ret = retencionesDeJson(d.retenciones as string | null);
+    const pagoFecha = (d.pago_fecha as string | null) ?? null;
+    compras.push({
+      rncProveedor: (d.rnc_comprador as string | null) ?? null,
+      ncf: info.ncf,
+      ncfModificado: (d.ncf_modificado as string | null) ?? null,
+      tipoBienes: TIPO606_CATEGORIA_GASTO_VIEJA[String(d.categoria_gasto ?? '')] ?? '02',
+      fechaComprobante: String(d.fecha),
+      fechaPago: pagoFecha ? pagoFecha.slice(0, 10) : null,
+      montoServiciosCents: servicios,
+      montoBienesCents: bienes,
+      itbisFacturadoCents: itbis,
+      itbisRetenidoCents: ret.itbisCents,
+      itbisProporcionalidadCents: 0,
+      // Gastos menores y pagos al exterior no adelantan ITBIS.
+      itbisAlCostoCents: info.daCreditoItbis ? 0 : itbis,
+      isrTipo: ret.isrCents > 0 ? (info.tipoBase === '17' ? 3 : 2) : null,
+      isrRetenidoCents: ret.isrCents,
+      iscCents: 0,
+      otrosImpuestosCents: 0,
+      propinaCents: 0,
+      formaPago: n(d.tipo_pago) === 2 ? '4' : formaPago606('contado', (d.pago_metodo as string | null) ?? 'efectivo'),
+    });
+  }
 
-  return new Response(content, {
+  compras.sort((a, b) => a.fechaComprobante.localeCompare(b.fechaComprobante));
+  const archivo = construirFormato606({ rncEmpresa: team?.rnc ?? '', periodo: `${anio}${mes}`, compras });
+
+  return new Response(archivo.contenido, {
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': `attachment; filename="${archivo.nombreArchivo}"`,
     },
   });
 }

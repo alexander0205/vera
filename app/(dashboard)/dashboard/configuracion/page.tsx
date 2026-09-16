@@ -215,6 +215,8 @@ export default function ConfiguracionPage() {
   const [nombreComercial, setNombreComercial]   = useState('');
   const [rnc, setRnc]                           = useState('');
   const [direccion, setDireccion]               = useState('');
+  const [nombreRepresentante, setNombreRepresentante] = useState('');
+  const [cedulaRepresentante, setCedulaRepresentante] = useState('');
   const [telefono, setTelefono]                 = useState('');
   const [sitioWeb, setSitioWeb]                 = useState('');
   const [emailFacturacion, setEmailFacturacion] = useState('');
@@ -261,6 +263,8 @@ export default function ConfiguracionPage() {
         setNombreComercial(d.nombreComercial ?? '');
         setRnc(d.rnc ?? '');
         setDireccion(d.direccion ?? '');
+        setNombreRepresentante(d.nombreRepresentante ?? '');
+        setCedulaRepresentante(d.cedulaRepresentante ?? '');
         setTelefono(formatTelefonoDO(d.telefono ?? ''));
         setSitioWeb(d.sitioWeb ?? '');
         setEmailFacturacion(d.emailFacturacion ?? '');
@@ -310,6 +314,7 @@ export default function ConfiguracionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           razonSocial, nombreComercial, rnc, direccion,
+          nombreRepresentante, cedulaRepresentante,
           provincia, municipio,
           telefono, sitioWeb, emailFacturacion, colorPrimario,
           logo, firma,
@@ -431,6 +436,17 @@ export default function ConfiguracionPage() {
             <Label>Dirección</Label>
             <Input value={direccion} onChange={e => setDireccion(e.target.value)}
               placeholder="Calle y número" disabled={!canManage} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Representante legal</Label>
+            <Input value={nombreRepresentante} onChange={e => setNombreRepresentante(e.target.value)}
+              placeholder="Nombre de quien firma por la empresa" disabled={!canManage} />
+            <p className="text-xs text-muted-foreground">Se usa en los contratos laborales (Ley 16-92).</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cédula del representante</Label>
+            <Input value={cedulaRepresentante} onChange={e => setCedulaRepresentante(e.target.value)}
+              inputMode="numeric" placeholder="00000000000" disabled={!canManage} />
           </div>
           {/* Provincia / Municipio en cascada */}
           <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>

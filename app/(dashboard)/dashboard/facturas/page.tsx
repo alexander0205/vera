@@ -12,7 +12,7 @@ import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { guardarListaNavegacion } from '@/lib/hooks/useListaNavegacion';
-import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
+import { calcularEstadoPago, retencionesQueSaldan } from '@/lib/facturas/estado-pago-calc';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ interface Doc {
   estadoPago: string;
   rncComprador: string | null;
   razonSocialComprador: string | null; emailComprador: string | null;
-  montoTotal: number; totalItbis: number;
+  montoTotal: number; totalItbis: number; totalRetenciones?: number | null;
   tipoPago: number | null;
   fechaEmision: string;
   fechaLimitePago: string | null;
@@ -320,10 +320,12 @@ export default function FacturasPage() {
       // detalle "Pagada") si algún path no la recalculaba.
       render: doc => {
         const pagado  = doc.pagado ?? 0;
+        const retenido = retencionesQueSaldan(doc.tipoEcf, doc.totalRetenciones);
         const ep      = calcularEstadoPago({
           estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal, totalPagado: pagado,
+          totalRetenciones: retenido,
         });
-        const saldo   = doc.montoTotal - pagado;
+        const saldo   = doc.montoTotal - retenido - pagado;
         const esCred  = doc.tipoPago === 2;
         const dias    = diasVencido(doc.fechaLimitePago);
         // Cualquier nota de débito viva sobre esta factura —mora automática o

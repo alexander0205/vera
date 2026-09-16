@@ -32,7 +32,7 @@ const REPORTES: ReporteCard[] = [
   {
     id: '606',
     titulo: 'Formato 606',
-    descripcion: 'Compras de bienes y servicios a proveedores del RNC. Incluye tipos e-CF 41 (Compras) y 43 (Gastos Menores).',
+    descripcion: 'Compras y gastos registrados con el comprobante del proveedor, más tus e41, e43 y e47 emitidos. Con retenciones e ITBIS al costo.',
     icon: TrendingUp,
     iconColor: '#1d4ed8',
     iconBg: '#eff6ff',
@@ -72,6 +72,13 @@ const REPORTES: ReporteCard[] = [
 ];
 
 const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React.ElementType; color: string }[] = [
+  {
+    href: '/dashboard/pagos',
+    titulo: 'Pagos recibidos',
+    descripcion: 'Detalle de cobros por rango de fechas, con filtros por método, origen (POS/facturación) y producto. Desglose y export.',
+    icon: Wallet,
+    color: 'bg-emerald-50 text-emerald-600',
+  },
   {
     href: '/dashboard/reportes/panel',
     titulo: 'Panel financiero',

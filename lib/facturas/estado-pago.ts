@@ -17,10 +17,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
-import { calcularEstadoPago, type EstadoPago } from '@/lib/facturas/estado-pago-calc';
+import { calcularEstadoPago, retencionesQueSaldan, type EstadoPago } from '@/lib/facturas/estado-pago-calc';
 
 // Re-export para mantener compat con los imports existentes (queries.ts, etc.).
-export { calcularEstadoPago, type EstadoPago };
+export { calcularEstadoPago, retencionesQueSaldan, type EstadoPago };
 
 /**
  * Recalcula y persiste el estado_pago de un documento.
@@ -35,6 +35,7 @@ export async function recalcularEstadoPago(ecfDocumentId: number): Promise<Estad
       teamId:     ecfDocuments.teamId,
       encf:       ecfDocuments.encf,
       tipoEcf:    ecfDocuments.tipoEcf,
+      totalRetenciones: ecfDocuments.totalRetenciones,
     })
     .from(ecfDocuments)
     .where(eq(ecfDocuments.id, ecfDocumentId))
@@ -61,6 +62,7 @@ export async function recalcularEstadoPago(ecfDocumentId: number): Promise<Estad
     montoTotal:        doc.montoTotal,
     totalPagado:       Number(total ?? 0),
     totalNotasCredito: ncAplicado,
+    totalRetenciones:  retencionesQueSaldan(doc.tipoEcf, doc.totalRetenciones),
   });
 
   await db.update(ecfDocuments)

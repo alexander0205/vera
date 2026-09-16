@@ -847,6 +847,16 @@ export default function NuevaFacturaForm({
   // ── Items (useReducer) ─────────────────────────────────────────────────────
   const [items, dispatchItems] = useItemsState(itemsIniciales);
 
+  // Gastos menores (43) y pagos al exterior (47) no llevan ITBIS: la DGII los
+  // recibe exentos y el selector de la línea solo ofrece «Exento». El cambio de
+  // tipo ya los forzaba, pero al abrir la pantalla con `?tipo=`, al agregar una
+  // línea o al cargar un borrador la línea traía el 18 % por defecto: el selector
+  // salía en blanco y el gasto se guardaba inflado con ese ITBIS.
+  useEffect(() => {
+    if (!esGasto || regla?.permiteItbis !== false) return;
+    if (items.some((i) => i.tasaItbis !== 'exento')) dispatchItems({ type: 'FORCE_EXENTO' });
+  }, [esGasto, regla, items]);
+
   // Las líneas SIN producto (manuales/en blanco) salen exentas por defecto: un
   // colegio no cobra ITBIS en un renglón suelto que escribió a mano. Las que
   // traen producto conservan la tasa que resolvió la tarifa —R1—: si el colegio

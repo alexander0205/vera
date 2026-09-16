@@ -7,6 +7,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import Link from 'next/link';
 
 const CATEGORIAS_GASTO = [
   'Materiales y suministros',
@@ -47,7 +48,14 @@ export function GastoDatosSection({
           Datos del gasto
         </Typography>
         <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280', mt: 0.25 }}>
-          Registra una compra o salida real de empresa. Para reponer inventario, usa Compras registradas.
+          {tipoEcf === '47'
+            ? 'Un servicio de un proveedor fuera del país: el comprobante lo emites tú, con la retención de ISR.'
+            : 'Gastos del personal sin comprobante (taxis, parqueos, peajes, consumibles): el comprobante lo emites tú y su ITBIS no se adelanta.'}
+        </Typography>
+        <Typography sx={{ fontSize: '0.8125rem', color: '#92400e', mt: 0.75 }} data-testid="aviso-gasto-con-ncf">
+          ¿El proveedor te dio NCF (B01, E31…)? No va aquí:{' '}
+          <Link href="/dashboard/gastos/registrar" style={{ color: '#3658e1', fontWeight: 600 }}>regístralo como factura de proveedor</Link>
+          {' '}para que cuente en el 606 y adelante el ITBIS.
         </Typography>
       </Box>
 
@@ -65,8 +73,8 @@ export function GastoDatosSection({
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
         />
         <TextField
-          fullWidth size="small" label="NCF / No. documento"
-          placeholder="B0100000001"
+          fullWidth size="small" label="No. de recibo o referencia"
+          placeholder="Recibo, ticket o factura"
           value={ncfProveedor} onChange={(e) => setNcfProveedor(e.target.value.toUpperCase())}
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
         />

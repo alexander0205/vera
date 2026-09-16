@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { and, asc, eq } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { teamHasModule } from '@/lib/auth/modules';
 import { db } from '@/lib/db/drizzle';
-import { escolarPersonal, sigerdPersonal } from '@/lib/db/schema';
+import { empleados, escolarPersonal, sigerdPersonal } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,9 @@ type PersonaUI = {
   notas: string | null;
   esProfesor: boolean;
   editable: boolean;
+  /** true si esta persona ya se importó como empleado de nómina. Solo se llena
+   *  cuando el team tiene el módulo nómina; si no, queda false y no se muestra. */
+  enNomina: boolean;
 };
 
 /**
@@ -98,6 +102,7 @@ export async function GET() {
       notas: null,
       esProfesor: esProfesor(p.cargo),
       editable: false,
+      enNomina: false,
     })),
     ...manual.map((p): PersonaUI => ({
       key: `manual:${p.id}`,
@@ -118,8 +123,22 @@ export async function GET() {
       notas: p.notas,
       esProfesor: esProfesor(p.cargo, p.tipo),
       editable: true,
+      enNomina: false,
     })),
   ];
+
+  // Reflejo de nómina (opcional, unidireccional): si el team tiene el módulo
+  // nómina, marca quién ya es empleado. El enlace vive solo en `empleados`
+  // (origen='escolar', origen_ref = la misma clave 'sigerd:<id>'/'manual:<id>');
+  // aquí solo se LEE. Sin el módulo, no hay consulta y `enNomina` queda false.
+  if (await teamHasModule(auth.teamId, 'nomina')) {
+    const enNomina = await db
+      .select({ origenRef: empleados.origenRef })
+      .from(empleados)
+      .where(and(eq(empleados.teamId, auth.teamId), eq(empleados.origen, 'escolar')));
+    const refs = new Set(enNomina.map((e) => e.origenRef).filter((r): r is string => !!r));
+    for (const p of personal) if (refs.has(p.key)) p.enNomina = true;
+  }
 
   personal.sort((a, b) =>
     (a.apellidos ?? '').localeCompare(b.apellidos ?? '', 'es') ||
