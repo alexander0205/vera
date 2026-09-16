@@ -85,6 +85,16 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: '/pricing', destination: '/dashboard/suscripcion', permanent: true },
+      // Contabilidad salió de Facturación a su propio módulo. Los enlaces y
+      // marcadores viejos siguen llegando a la misma pantalla (con su query).
+      // Temporal mientras se asienta el cambio: una 308 queda en la caché del
+      // navegador y no se puede deshacer.
+      { source: '/dashboard/contabilidad', destination: '/contabilidad', permanent: false },
+      {
+        source: '/dashboard/contabilidad/:seccion(cuentas|libro-diario|nuevo-asiento|mayor|balance|estado-resultados|balance-general|activos-fijos|cuentas-por-pagar|cierre-ejercicio|configuracion)/:resto*',
+        destination: '/contabilidad/:seccion/:resto*',
+        permanent: false,
+      },
     ];
   },
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser

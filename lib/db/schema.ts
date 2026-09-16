@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   uuid,
   jsonb,
+  numeric,
   primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -236,6 +237,14 @@ export const teams = pgTable('teams', {
   // cada vez. Es una plantilla, no una atadura: el texto queda en el documento
   // y ahí se puede editar. Cambiarlo aquí NO reescribe lo ya emitido.
   terminosCondicionesDefault: text('terminos_condiciones_default'),
+
+  // ── Nómina: seguridad social de la empresa ────────────────────────────────
+  // El tamaño de empresa define el salario mínimo del sector, que es el PISO de la
+  // base para cotizar a la TSS. Null = sin configurar: no se aplica piso.
+  nominaTamanoEmpresa: varchar('nomina_tamano_empresa', { length: 10 }),
+  // Tasa del Seguro de Riesgos Laborales asignada a la empresa (0.0110–0.0130).
+  // Null = la de las tasas del año, que es el mínimo (1.10 %).
+  nominaSrlTasa: numeric('nomina_srl_tasa', { precision: 6, scale: 4 }),
 });
 
 export const teamMembers = pgTable('team_members', {
@@ -1512,23 +1521,58 @@ export const comprasLocales = pgTable('compras_locales', {
   referenciaEncf:   varchar('referencia_encf',  { length: 40 }),
   notas:            text('notas'),
   /** ITBIS incluido en montoTotal; 4.3 lo separa solo para régimen gravado. */
-  itbisCents:       integer('itbis_cents').notNull().default(0),
-  montoTotal:       integer('monto_total').notNull().default(0),
+  itbisCents:       bigint('itbis_cents', { mode: 'number' }).notNull().default(0),
+  montoTotal:       bigint('monto_total', { mode: 'number' }).notNull().default(0),
   formaPago:        varchar('forma_pago', { length: 10 }).notNull().default('credito'),
   metodoPago:       varchar('metodo_pago', { length: 30 }).notNull().default('efectivo'),
   fechaVencimiento: date('fecha_vencimiento'),
   estadoPago:       varchar('estado_pago', { length: 12 }).notNull().default('PENDIENTE'),
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
+
+  // ── Comprobante, 606 y retenciones (migración 0180) ──
+  // `referenciaEncf` es el NCF del proveedor (B01…, E31…) o el propio (E41/E43/E47).
+  /** 'compra' | 'gasto': en qué pantalla se lista. */
+  clase:               varchar('clase', { length: 10 }).notNull().default('compra'),
+  /** juridica | fisica | informal | rst | exterior: decide las retenciones. */
+  tipoProveedor:       varchar('tipo_proveedor', { length: 10 }),
+  ncfModificado:       varchar('ncf_modificado', { length: 19 }),
+  /** Campo 3 del 606 (01–11). */
+  tipoBienes606:       varchar('tipo_bienes_606', { length: 2 }),
+  montoServiciosCents: bigint('monto_servicios_cents', { mode: 'number' }).notNull().default(0),
+  montoBienesCents:    bigint('monto_bienes_cents', { mode: 'number' }).notNull().default(0),
+  itbisAlCostoCents:   bigint('itbis_al_costo_cents', { mode: 'number' }).notNull().default(0),
+  itbisRetenidoCents:  bigint('itbis_retenido_cents', { mode: 'number' }).notNull().default(0),
+  /** Campo 17 del 606 (1–8). */
+  isrTipoRetencion:    smallint('isr_tipo_retencion'),
+  isrRetenidoCents:    bigint('isr_retenido_cents', { mode: 'number' }).notNull().default(0),
+  iscCents:            bigint('isc_cents', { mode: 'number' }).notNull().default(0),
+  otrosImpuestosCents: bigint('otros_impuestos_cents', { mode: 'number' }).notNull().default(0),
+  propinaCents:        bigint('propina_cents', { mode: 'number' }).notNull().default(0),
+  /** Cuándo quedó pagada: el 606 la exige cuando hay retenciones. */
+  fechaPago:           date('fecha_pago'),
+  /** registrada | anulada */
+  estado:              varchar('estado', { length: 12 }).notNull().default('registrada'),
+  anuladaEn:           timestamp('anulada_en'),
+  anuladaPor:          integer('anulada_por').references(() => users.id),
+  motivoAnulacion:     varchar('motivo_anulacion', { length: 300 }),
 });
 
 export const comprasLocalesItems = pgTable('compras_locales_items', {
   id:            serial('id').primaryKey(),
   compraId:      integer('compra_id').notNull().references(() => comprasLocales.id),
-  productoId:    integer('producto_id').notNull().references(() => products.id),
+  /** Producto del inventario; null en un concepto de gasto. */
+  productoId:    integer('producto_id').references(() => products.id),
   almacenId:     integer('almacen_id').references(() => almacenes.id),
   cantidad:      integer('cantidad').notNull(),
   costoUnitario: integer('costo_unitario').notNull().default(0),
+  /** Concepto de gasto: qué se compró y su categoría (lib/compras/categorias). */
+  descripcion:   varchar('descripcion', { length: 255 }),
+  categoria:     varchar('categoria', { length: 30 }),
+  esServicio:    boolean('es_servicio').notNull().default(false),
+  /** '0.18' | '0.16' | '0' | 'exento' */
+  itbisTasa:     varchar('itbis_tasa', { length: 6 }).notNull().default('0'),
+  itbisCents:    bigint('itbis_cents', { mode: 'number' }).notNull().default(0),
 });
 
 export type CompraLocal     = typeof comprasLocales.$inferSelect;
@@ -1538,7 +1582,7 @@ export const pagosProveedores = pgTable('pagos_proveedores', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id').notNull().references(() => teams.id),
   compraId: integer('compra_id').notNull().references(() => comprasLocales.id),
-  montoCents: integer('monto_cents').notNull(),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
   metodo: varchar('metodo', { length: 30 }).notNull(),
   fechaPago: date('fecha_pago').notNull(),
   referencia: varchar('referencia', { length: 100 }),
@@ -3230,6 +3274,36 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaDeprecAcumId:  integer('cuenta_deprec_acum_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.2 — gasto por depreciación (Debe mensual). Default 6103. */
   cuentaGastoDeprecId: integer('cuenta_gasto_deprec_id').references(() => contabilidadCuentas.id),
+  // ── Nómina: cuentas dedicadas del asiento de la corrida. Cada una cae al
+  //    genérico (gastos 6101 / por pagar 2101) si se deja sin configurar, así
+  //    que el asiento sigue igual de válido sin tocarlas.
+  /** Gasto de sueldos (Debe, bruto). Fallback: cuentaGastosId → 6101. */
+  cuentaNominaSueldoId:      integer('cuenta_nomina_sueldo_id').references(() => contabilidadCuentas.id),
+  /** Gasto de aportes patronales TSS (Debe). Fallback: sueldo → gastos → 6101. */
+  cuentaNominaAportesGastoId: integer('cuenta_nomina_aportes_gasto_id').references(() => contabilidadCuentas.id),
+  /** Retenciones al empleado por pagar AFP/SFS/ISR (Haber). Fallback: por pagar → 2101. */
+  cuentaNominaRetencionesId: integer('cuenta_nomina_retenciones_id').references(() => contabilidadCuentas.id),
+  /** Aportes patronales por pagar a la TSS (Haber). Fallback: retenciones → por pagar → 2101. */
+  cuentaNominaAportesPagarId: integer('cuenta_nomina_aportes_pagar_id').references(() => contabilidadCuentas.id),
+  /** Sueldos netos por pagar al empleado (Haber). Fallback: por pagar → 2101. */
+  cuentaNominaPorPagarId:    integer('cuenta_nomina_por_pagar_id').references(() => contabilidadCuentas.id),
+  /** Provisiones de nómina (regalía/vacaciones/cesantía): si se asientan cada mes. Off por defecto. */
+  provisionarNomina:         boolean('provisionar_nomina').notNull().default(false),
+  /** Gasto por provisiones (Debe mensual). Fallback: gastos → 6101. */
+  cuentaProvisionGastoId:    integer('cuenta_provision_gasto_id').references(() => contabilidadCuentas.id),
+  /** Provisiones por pagar (Haber, pasivo que se acumula). Fallback: por pagar → 2101. */
+  cuentaProvisionPorPagarId: integer('cuenta_provision_por_pagar_id').references(() => contabilidadCuentas.id),
+  /** Nómina — ISR de asalariados por pagar a la DGII (Haber). Fallback: retenciones. */
+  cuentaNominaIsrPagarId:     integer('cuenta_nomina_isr_pagar_id').references(() => contabilidadCuentas.id),
+  /** Nómina — INFOTEP por pagar (Haber). Fallback: aportes patronales por pagar. */
+  cuentaNominaInfotepPagarId: integer('cuenta_nomina_infotep_pagar_id').references(() => contabilidadCuentas.id),
+  /** Provisiones por concepto: gasto (Debe) y pasivo (Haber). Fallback: las de provisiones generales. */
+  cuentaProvRegaliaGastoId:    integer('cuenta_prov_regalia_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaProvRegaliaPagarId:    integer('cuenta_prov_regalia_pagar_id').references(() => contabilidadCuentas.id),
+  cuentaProvVacacionesGastoId: integer('cuenta_prov_vacaciones_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaProvVacacionesPagarId: integer('cuenta_prov_vacaciones_pagar_id').references(() => contabilidadCuentas.id),
+  cuentaProvCesantiaGastoId:   integer('cuenta_prov_cesantia_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaProvCesantiaPagarId:   integer('cuenta_prov_cesantia_pagar_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.3 — exento capitaliza ITBIS; gravado registra crédito fiscal 1104. */
   regimenItbis: varchar('regimen_itbis', { length: 10 }).notNull().default('exento'),
   updatedBy: integer('updated_by').references(() => users.id),
@@ -3714,3 +3788,447 @@ export const fotosSesiones = pgTable('fotos_sesiones', {
 export type Foto        = typeof fotos.$inferSelect;
 export type NewFoto     = typeof fotos.$inferInsert;
 export type FotoSesion  = typeof fotosSesiones.$inferSelect;
+
+// ─── Nómina — Maestro de empleados (T1) ──────────────────────────────────────
+// Directorio de empleados del negocio. Es la base del módulo de nómina: sobre
+// estas filas corren las corridas (nomina_corridas/nomina_lineas) en fases
+// siguientes. No se contamina con vocabulario de otros verticales — es del
+// dominio laboral, tabla propia (misma regla que activos fijos vs inventario).
+//
+// La cédula se guarda pelada (solo dígitos). Cuando el selector de tipo de
+// documento compartido (PR #63, lib/documento/identidad.ts) llegue a v2, este
+// form lo adopta como los demás; hasta entonces es un input plano. Los campos
+// de banco existen desde ya porque la Fase 4 ("reciben pago") genera el archivo
+// de dispersión bancaria a partir de ellos.
+export const empleados = pgTable('empleados', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  cedula:          varchar('cedula', { length: 20 }),
+  nombres:         varchar('nombres', { length: 160 }).notNull(),
+  apellidos:       varchar('apellidos', { length: 160 }).notNull(),
+  cargo:           varchar('cargo', { length: 120 }),
+  /** 'indefinido' | 'temporal' | 'por_obra' | 'pasantia'. Libre por ahora. */
+  tipoContrato:    varchar('tipo_contrato', { length: 30 }).notNull().default('indefinido'),
+  /** Salario base del período de pago, en centavos (RD$). */
+  salarioBaseCents: bigint('salario_base_cents', { mode: 'number' }).notNull().default(0),
+  /** 'mensual' | 'quincenal' | 'semanal'. Cómo se paga y sobre qué se prorratea. */
+  frecuenciaPago:  varchar('frecuencia_pago', { length: 20 }).notNull().default('mensual'),
+  fechaIngreso:    date('fecha_ingreso'),
+  /** Baja: deja de entrar en corridas nuevas, conserva su historia. */
+  fechaSalida:     date('fecha_salida'),
+  estado:          varchar('estado', { length: 20 }).notNull().default('activo'),
+  // ── Afiliación a la Seguridad Social (TSS) — hoy texto libre; se normaliza
+  //    a catálogo cuando el motor de cálculo lo necesite (Fase 2). ──
+  afp:             varchar('afp', { length: 80 }),
+  ars:             varchar('ars', { length: 80 }),
+  // ── Datos para el archivo de dispersión bancaria (Fase 4) ──
+  bancoNombre:     varchar('banco_nombre', { length: 80 }),
+  bancoCuenta:     varchar('banco_cuenta', { length: 40 }),
+  /** 'ahorros' | 'corriente'. */
+  bancoTipoCuenta: varchar('banco_tipo_cuenta', { length: 20 }),
+  // ── Datos personales ──
+  sexo:            varchar('sexo', { length: 20 }),
+  fechaNacimiento: date('fecha_nacimiento'),
+  nacionalidad:    varchar('nacionalidad', { length: 60 }),
+  estadoCivil:     varchar('estado_civil', { length: 30 }),
+  /** Domicilio/residencia declarado; requerido al emitir contrato estructurado. */
+  direccion:       varchar('direccion', { length: 255 }),
+  /** País de trabajo/residencia. El asistente de alta lo captura (estilo Deel). */
+  pais:            varchar('pais', { length: 60 }),
+  telefono:        varchar('telefono', { length: 30 }),
+  email:           varchar('email', { length: 160 }),
+  notas:           text('notas'),
+  // ── Condiciones laborales (asistente de alta) ──
+  /** 'tiempo_completo' | 'medio_tiempo' | 'por_horas'. */
+  jornada:         varchar('jornada', { length: 20 }),
+  /** 'diurno' | 'nocturno' | 'mixto' | 'rotativo'. */
+  turno:           varchar('turno', { length: 20 }),
+  /** Días de vacaciones al año (Ley 16-92: 14 al año, 18 tras 5 años). */
+  vacacionesDias:  integer('vacaciones_dias'),
+  /** Descanso semanal, texto libre (ej. "Domingo"). */
+  diasLibres:      varchar('dias_libres', { length: 40 }),
+  /** Tarifa de quien cobra por hora (jornada 'por_horas'), en centavos. */
+  tarifaHoraCents: bigint('tarifa_hora_cents', { mode: 'number' }),
+  /** SHA-256 del token del enlace para subir horas; el token solo se enseña al crearlo. */
+  horasTokenHash:  varchar('horas_token_hash', { length: 64 }),
+  horasTokenCreado: timestamp('horas_token_creado'),
+  /** Horas por día de la semana ({ lun, mar, …, dom }). Null = sin horario cargado. */
+  horarioSemanal:  jsonb('horario_semanal').$type<Record<'lun' | 'mar' | 'mie' | 'jue' | 'vie' | 'sab' | 'dom', number>>(),
+  /**
+   * Dispensa de salario mínimo (Res. CNSS 471-02). Sin ella, la base para cotizar
+   * a la TSS no baja del salario mínimo del sector aunque gane menos.
+   */
+  dispensaSalarioMinimo: boolean('dispensa_salario_minimo').notNull().default(false),
+  /** Fecha fin para contratos temporales. */
+  fechaFinContrato: date('fecha_fin_contrato'),
+  /** Obra o servicio concreto para contratos por obra. */
+  objetoContrato:  text('objeto_contrato'),
+  // ── Procedencia — enlace SUAVE (sin FK) a otro módulo ──
+  // 'manual' = alta directa en nómina; 'escolar' = importado de Personal del
+  // colegio. Es un soft-ref a propósito (misma familia que fotos.entidad/id):
+  // el vertical escolar puede no existir, y borrar una fila de personal no debe
+  // romper al empleado. El puntero vive SOLO aquí (schema unidireccional, regla
+  // no-contaminar-genéricas): escolar nunca sabe de nómina en su esquema; su
+  // pantalla solo LEE nómina en runtime si el módulo está activo.
+  origen:          varchar('origen', { length: 20 }).notNull().default('manual'),
+  /** Clave de la persona escolar origen: 'sigerd:<id>' | 'manual:<id>'. Null si origen='manual'. */
+  origenRef:       varchar('origen_ref', { length: 40 }),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleados_team_idx').on(t.teamId),
+  index('empleados_team_estado_idx').on(t.teamId, t.estado),
+  index('empleados_team_origen_idx').on(t.teamId, t.origen),
+]);
+
+export type Empleado    = typeof empleados.$inferSelect;
+export type NewEmpleado = typeof empleados.$inferInsert;
+
+// ─── Nómina — Documentos del empleado ────────────────────────────────────────
+// Adjuntos de la ficha del empleado: verificación de antecedentes, cédula
+// escaneada, título, etc. Reaprovecha el andamiaje de comprobantes/archivos
+// escolares: S3 privado (storage='s3', s3Key) o fallback base64 en la propia
+// fila (storage='db', contenido). El tipo se detecta por magic bytes; la llave
+// lleva un UUID, nunca el id de la fila. Ver documentos-archivo.ts.
+export const empleadoDocumentos = pgTable('empleado_documentos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  empleadoId:    integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  /** 'antecedentes' | 'cedula' | 'titulo' | 'otro'. Texto libre por ahora. */
+  tipo:          varchar('tipo', { length: 40 }).notNull().default('antecedentes'),
+  archivoNombre: varchar('archivo_nombre', { length: 255 }),
+  mime:          varchar('mime', { length: 100 }).notNull(),
+  tamanoBytes:   integer('tamano_bytes').notNull(),
+  sha256:        char('sha256', { length: 64 }).notNull(),
+  /** 's3' | 'db'. */
+  storage:       varchar('storage', { length: 4 }).notNull(),
+  s3Key:         text('s3_key'),
+  contenido:     text('contenido'),
+  subidoPor:     integer('subido_por').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_documentos_empleado_idx').on(t.empleadoId),
+  index('empleado_documentos_team_idx').on(t.teamId),
+  uniqueIndex('empleado_documentos_sha_uniq').on(t.empleadoId, t.sha256),
+]);
+
+/**
+ * Dependientes del empleado en el Seguro Familiar de Salud. `tipo` es lo que está
+ * REGISTRADO —directo en la ARS, adicional en el SUIR— porque eso es lo que factura
+ * la TSS; la regla por edad vive en lib/nomina/dependientes.ts y solo avisa.
+ * `hasta` null = vigente.
+ */
+export const empleadoDependientes = pgTable('empleado_dependientes', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  empleadoId:      integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  nombre:          varchar('nombre', { length: 200 }).notNull(),
+  cedula:          varchar('cedula', { length: 20 }),
+  /** 'conyuge' | 'hijo' | 'hijastro' | 'padre_madre' | 'suegro_suegra'. */
+  parentesco:      varchar('parentesco', { length: 20 }).notNull(),
+  fechaNacimiento: date('fecha_nacimiento'),
+  estudiante:      boolean('estudiante').notNull().default(false),
+  /** 'directo' | 'adicional'. */
+  tipo:            varchar('tipo', { length: 10 }).notNull(),
+  desde:           date('desde').notNull(),
+  hasta:           date('hasta'),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_dependientes_empleado_idx').on(t.empleadoId),
+  index('empleado_dependientes_team_idx').on(t.teamId),
+]);
+
+export type EmpleadoDocumento    = typeof empleadoDocumentos.$inferSelect;
+export type NewEmpleadoDocumento = typeof empleadoDocumentos.$inferInsert;
+
+// ─── Nómina — Corridas (Fase 3) ──────────────────────────────────────────────
+// Una corrida es una nómina de un período: toma los empleados activos, corre el
+// motor (lib/nomina/calculo.ts) sobre cada uno y guarda el desglose. Los
+// totales se guardan denormalizados para no recalcular al listar. El asiento
+// contable se ata al aprobar (origenTipo='nomina', el motor contable ya existe).
+export const nominaCorridas = pgTable('nomina_corridas', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  /** Mes contable de la nómina, formato 'YYYY-MM' (el del último día que paga). */
+  periodo:     varchar('periodo', { length: 7 }).notNull(),
+  /** Fechas que paga la corrida, inclusivas: del 1 al 15, la semana del 2 al 8… */
+  fechaInicio: date('fecha_inicio').notNull(),
+  fechaFin:    date('fecha_fin').notNull(),
+  descripcion: varchar('descripcion', { length: 160 }).notNull(),
+  /** 'mensual' | 'quincenal-1' | 'quincenal-2' | 'semanal' (ver TIPOS_CORRIDA). */
+  tipo:        varchar('tipo', { length: 20 }).notNull().default('mensual'),
+  fechaPago:   date('fecha_pago'),
+  /** 'borrador' | 'aprobada' | 'pagada'. */
+  estado:      varchar('estado', { length: 20 }).notNull().default('borrador'),
+  /** Año de las tasas TSS/ISR con que se calculó (snapshot de la ley usada). */
+  anioTasas:   integer('anio_tasas').notNull(),
+  totalBrutoCents:       bigint('total_bruto_cents', { mode: 'number' }).notNull().default(0),
+  totalDeduccionesCents: bigint('total_deducciones_cents', { mode: 'number' }).notNull().default(0),
+  totalNetoCents:        bigint('total_neto_cents', { mode: 'number' }).notNull().default(0),
+  totalPatronalCents:    bigint('total_patronal_cents', { mode: 'number' }).notNull().default(0),
+  /** Asiento contable generado al aprobar. Null mientras es borrador. */
+  asientoId:   integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdBy:   integer('created_by').references(() => users.id),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  aprobadaEn:  timestamp('aprobada_en'),
+  pagadaEn:    timestamp('pagada_en'),
+}, (t) => [
+  index('nomina_corridas_team_idx').on(t.teamId),
+  uniqueIndex('nomina_corridas_inicio_uniq').on(t.teamId, t.tipo, t.fechaInicio),
+  index('nomina_corridas_team_rango_idx').on(t.teamId, t.fechaInicio, t.fechaFin),
+]);
+
+/**
+ * Línea de una corrida = un empleado calculado. Guarda el desglose completo y
+ * un snapshot del nombre/cédula/cargo: si el empleado se edita o se da de baja
+ * después, la nómina histórica no cambia.
+ */
+export const nominaLineas = pgTable('nomina_lineas', {
+  id:          serial('id').primaryKey(),
+  corridaId:   integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  empleadoId:  integer('empleado_id').notNull().references(() => empleados.id),
+  // Snapshot al momento de la corrida
+  nombre:      varchar('nombre', { length: 320 }).notNull(),
+  cedula:      varchar('cedula', { length: 20 }),
+  cargo:       varchar('cargo', { length: 120 }),
+  // Desglose (centavos), espejo de DesgloseNomina
+  brutoCents:            bigint('bruto_cents', { mode: 'number' }).notNull(),
+  afpEmpleadoCents:      bigint('afp_empleado_cents', { mode: 'number' }).notNull(),
+  sfsEmpleadoCents:      bigint('sfs_empleado_cents', { mode: 'number' }).notNull(),
+  isrCents:              bigint('isr_cents', { mode: 'number' }).notNull(),
+  otrasDeduccionesCents: bigint('otras_deducciones_cents', { mode: 'number' }).notNull().default(0),
+  totalDeduccionesCents: bigint('total_deducciones_cents', { mode: 'number' }).notNull(),
+  afpPatronalCents:      bigint('afp_patronal_cents', { mode: 'number' }).notNull(),
+  sfsPatronalCents:      bigint('sfs_patronal_cents', { mode: 'number' }).notNull(),
+  srlPatronalCents:      bigint('srl_patronal_cents', { mode: 'number' }).notNull(),
+  infotepPatronalCents:  bigint('infotep_patronal_cents', { mode: 'number' }).notNull(),
+  totalPatronalCents:    bigint('total_patronal_cents', { mode: 'number' }).notNull(),
+  netoCents:             bigint('neto_cents', { mode: 'number' }).notNull(),
+  /** Base cotizable TSS usada: el bruto o el piso del salario mínimo. Null en corridas viejas = bruto. */
+  salarioCotizableCents: bigint('salario_cotizable_cents', { mode: 'number' }),
+  /** Dependientes adicionales del SFS cobrados en esta línea, y su cápita total. */
+  dependientesAdicionales:      integer('dependientes_adicionales').notNull().default(0),
+  dependientesAdicionalesCents: bigint('dependientes_adicionales_cents', { mode: 'number' }).notNull().default(0),
+  /** Días del período que se le pagaron y días del período. Null en corridas viejas. */
+  diasPagados: integer('dias_pagados'),
+  diasPeriodo: integer('dias_periodo'),
+  /** Pago en que se le pagó (nomina_pagos). Null mientras está pendiente o en corridas viejas. */
+  pagoId:      integer('pago_id'),
+  /** Provisión del período según su antigüedad. Null en corridas viejas (estimación lineal). */
+  provisionRegaliaCents:    bigint('provision_regalia_cents', { mode: 'number' }),
+  provisionVacacionesCents: bigint('provision_vacaciones_cents', { mode: 'number' }),
+  provisionCesantiaCents:   bigint('provision_cesantia_cents', { mode: 'number' }),
+  /** Quien cobra por hora: cómo se clasificaron sus horas aprobadas. */
+  horasDetalle: jsonb('horas_detalle').$type<{
+    horas: number; ordinarias: number; extra35: number; extra100: number;
+    nocturnas: number; feriado: number; dias: number; tarifaHoraCents: number; brutoCents: number;
+  }>(),
+  /** Pago al empleado: se marca por línea (pago parcial). Lo no pagado queda pendiente. */
+  pagada:      boolean('pagada').notNull().default(false),
+  pagadaEn:    timestamp('pagada_en'),
+}, (t) => [
+  index('nomina_lineas_corrida_idx').on(t.corridaId),
+  index('nomina_lineas_team_idx').on(t.teamId),
+]);
+
+/**
+ * Obligación al Estado que nace de una corrida aprobada. Se paga aparte del
+ * sueldo del empleado y después; queda pendiente hasta saldarse. Un destino por
+ * corrida: 'TSS' (AFP+SFS+SRL+INFOTEP) y 'DGII' (ISR retenido).
+ */
+export const nominaObligaciones = pgTable('nomina_obligaciones', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  corridaId:   integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  /** 'TSS' | 'DGII'. */
+  destino:     varchar('destino', { length: 10 }).notNull(),
+  montoCents:  bigint('monto_cents', { mode: 'number' }).notNull(),
+  /** Parte retenida al empleado (AFP/SFS empleado, o ISR): salda "retenciones por pagar". */
+  parteRetencionesCents: bigint('parte_retenciones_cents', { mode: 'number' }).notNull().default(0),
+  /** Parte patronal (AFP/SFS patronal, SRL, INFOTEP): salda "aportes por pagar". */
+  parteAportesCents:     bigint('parte_aportes_cents', { mode: 'number' }).notNull().default(0),
+  pagada:      boolean('pagada').notNull().default(false),
+  pagadaEn:    timestamp('pagada_en'),
+  /** Asiento de pago que salda el pasivo. Null mientras está pendiente. */
+  asientoId:   integer('asiento_id').references(() => contabilidadAsientos.id),
+  /** 'efectivo' | 'transferencia' | 'cheque': para asentar el pago después si hacía falta. */
+  metodoPago:  varchar('metodo_pago', { length: 20 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_obligaciones_corrida_destino_uniq').on(t.corridaId, t.destino),
+  index('nomina_obligaciones_team_idx').on(t.teamId),
+]);
+
+/**
+ * Horas trabajadas de quien cobra por hora. Las sube el empleado por su enlace
+ * (pendiente) o la empresa directamente (aprobada); una por empleado y día. La
+ * corrida paga las aprobadas de sus fechas.
+ */
+export const nominaHoras = pgTable('nomina_horas', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  empleadoId:     integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  fecha:          date('fecha').notNull(),
+  horas:          numeric('horas', { precision: 5, scale: 2 }).notNull(),
+  horasNocturnas: numeric('horas_nocturnas', { precision: 5, scale: 2 }).notNull().default('0'),
+  feriado:        boolean('feriado').notNull().default(false),
+  nota:           varchar('nota', { length: 300 }),
+  /** 'pendiente' | 'aprobada' | 'rechazada'. */
+  estado:         varchar('estado', { length: 12 }).notNull().default('pendiente'),
+  /** 'empleado' | 'empresa'. */
+  origen:         varchar('origen', { length: 10 }).notNull().default('empleado'),
+  motivoRechazo:  varchar('motivo_rechazo', { length: 300 }),
+  revisadoPor:    integer('revisado_por').references(() => users.id),
+  revisadoEn:     timestamp('revisado_en'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_horas_empleado_fecha_uniq').on(t.empleadoId, t.fecha),
+  index('nomina_horas_team_estado_idx').on(t.teamId, t.estado, t.fecha),
+]);
+
+/**
+ * Un pago a empleados de una corrida: lo que se marca pagado de una vez, con su
+ * fecha y método. Lleva el asiento que salda «sueldos por pagar».
+ */
+export const nominaPagos = pgTable('nomina_pagos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  corridaId:  integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  fecha:      date('fecha').notNull(),
+  /** 'efectivo' | 'transferencia' | 'cheque'. */
+  metodo:     varchar('metodo', { length: 20 }).notNull(),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  lineas:     integer('lineas').notNull().default(0),
+  asientoId:  integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_pagos_corrida_idx').on(t.teamId, t.corridaId),
+]);
+
+export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
+export type NewNominaCorrida = typeof nominaCorridas.$inferInsert;
+export type NominaObligacion    = typeof nominaObligaciones.$inferSelect;
+export type NewNominaObligacion = typeof nominaObligaciones.$inferInsert;
+export type NominaLinea      = typeof nominaLineas.$inferSelect;
+export type NewNominaLinea   = typeof nominaLineas.$inferInsert;
+
+// ─── Nómina — Programación automática (corridas por cron) ─────────────────────
+// Config POR EMPRESA de los días de pago. Un cron diario mira esta fila y, si
+// hoy es un día de pago, crea la corrida de esa frecuencia EN BORRADOR (alguien
+// la aprueba y paga). Espejo de `facturas_recurrentes`, pero la idempotencia no
+// necesita una fecha "próxima": el índice único (team, periodo, tipo) de
+// nomina_corridas ya impide crear dos veces la misma. Por eso aquí solo viven
+// los días configurados, no un puntero de estado.
+//
+// Granularidad por-empresa por ahora (acordado): la corrida mensual incluye a
+// los empleados con frecuencia_pago='mensual'; la quincenal, a los 'quincenal'.
+// Un futuro override por-empleado se cuelga de aquí sin romper esto.
+export const nominaProgramacion = pgTable('nomina_programacion', {
+  id:       serial('id').primaryKey(),
+  teamId:   integer('team_id').notNull().references(() => teams.id),
+  /** Interruptor maestro: apagado, el cron ni mira esta empresa. */
+  activa:   boolean('activa').notNull().default(false),
+  // ── Mensual: un día de pago (1..31; ≥ fin de mes se ajusta al último día). ──
+  mensualActiva: boolean('mensual_activa').notNull().default(true),
+  mensualDia:    integer('mensual_dia').notNull().default(30),
+  // ── Quincenal: dos días de pago. tipo de corrida 'quincenal-1'/'quincenal-2'
+  //    para no chocar con el único (team, periodo, tipo). ──
+  quincenalActiva: boolean('quincenal_activa').notNull().default(false),
+  quincenalDia1:   integer('quincenal_dia1').notNull().default(15),
+  quincenalDia2:   integer('quincenal_dia2').notNull().default(30),
+  /** Días de antelación: la corrida nace (día de pago − anticipación). */
+  anticipacionDias: integer('anticipacion_dias').notNull().default(5),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_programacion_team_uniq').on(t.teamId),
+]);
+
+export type NominaProgramacion    = typeof nominaProgramacion.$inferSelect;
+export type NewNominaProgramacion = typeof nominaProgramacion.$inferInsert;
+
+// ─── Nómina — Contratos (plantillas + emitidos) ──────────────────────────────
+// Estilo Deel: la empresa tiene plantillas de contrato PREGRABADAS con
+// marcadores `{{clave}}`; al dar de alta/gestionar un empleado se genera su
+// contrato autollenado con sus datos. La firma electrónica es fase 2 — por
+// ahora se llena y se produce el PDF.
+export const nominaContratoPlantillas = pgTable('nomina_contrato_plantillas', {
+  id:       serial('id').primaryKey(),
+  teamId:   integer('team_id').notNull().references(() => teams.id),
+  nombre:   varchar('nombre', { length: 160 }).notNull(),
+  /**
+   * Plantillas viejas: texto con marcadores `{{nombre}}`… (lib/nomina/contratos.ts).
+   * Plantillas estructuradas (estilo Deel): null; el contrato se ensambla de `config`.
+   */
+  cuerpo:   text('cuerpo'),
+  /** Config estructurada por pasos (cláusulas + parámetros). Ver contrato-estructura.ts. */
+  config:   jsonb('config'),
+  activa:   boolean('activa').notNull().default(true),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_contrato_plantillas_team_idx').on(t.teamId),
+]);
+
+// Un contrato EMITIDO = snapshot del cuerpo ya lleno para un empleado. Guarda el
+// texto resuelto (no una referencia viva) para que editar la plantilla después
+// no altere contratos ya generados. `estado` deja lugar a la firma (fase 2).
+export const nominaContratos = pgTable('nomina_contratos', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  empleadoId:  integer('empleado_id').notNull().references(() => empleados.id),
+  /** Plantilla de origen (traza). Null si se borró la plantilla. */
+  plantillaId: integer('plantilla_id').references(() => nominaContratoPlantillas.id, { onDelete: 'set null' }),
+  titulo:      varchar('titulo', { length: 200 }).notNull(),
+  /** Cuerpo YA LLENO (snapshot). Null en contratos subidos (no tienen texto). */
+  cuerpo:      text('cuerpo'),
+  /** 'generado' | 'enviado' | 'firmado'. */
+  estado:      varchar('estado', { length: 20 }).notNull().default('generado'),
+  // ── Origen del contrato ──
+  // 'plataforma' = generado desde plantilla (se firma en línea); 'subido' = la
+  // empresa cargó un contrato propio ya firmado (camino offline), archivado
+  // abajo. El subido nace en estado 'firmado' y no pide firma.
+  origen:      varchar('origen', { length: 20 }).notNull().default('plataforma'),
+  // Binario del contrato subido (S3 privado o base64 en la fila). Null si el
+  // contrato es de plataforma.
+  archivoNombre:      varchar('archivo_nombre', { length: 255 }),
+  archivoMime:        varchar('archivo_mime', { length: 100 }),
+  archivoTamanoBytes: integer('archivo_tamano_bytes'),
+  archivoSha256:      char('archivo_sha256', { length: 64 }),
+  /** 's3' | 'db'. */
+  archivoStorage:     varchar('archivo_storage', { length: 4 }),
+  archivoS3Key:       text('archivo_s3_key'),
+  archivoContenido:   text('archivo_contenido'),
+  // ── Firma electrónica (fase 2) ──
+  // Se envía por un enlace público con token de 256 bits; en la base vive solo
+  // el SHA-256 (un volcado no deja firmar por nadie). El empleado firma en
+  // pantalla; se guarda la imagen de la firma + un sello de integridad
+  // (hash del cuerpo + firmante + fecha) + IP, como bitácora simple.
+  tokenHash:      char('token_hash', { length: 64 }),
+  enviadoEn:      timestamp('enviado_en'),
+  firmadoEn:      timestamp('firmado_en'),
+  firmanteNombre: varchar('firmante_nombre', { length: 200 }),
+  /** Imagen de la firma: 'data:image/png;base64,…'. */
+  firmaRef:       text('firma_ref'),
+  /** Sello de integridad: sha256(cuerpo | firmante | fecha). Tamper-evidence. */
+  firmaHash:      char('firma_hash', { length: 64 }),
+  firmaIp:        varchar('firma_ip', { length: 64 }),
+  createdBy:   integer('created_by').references(() => users.id),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_contratos_empleado_idx').on(t.empleadoId),
+  index('nomina_contratos_team_idx').on(t.teamId),
+  uniqueIndex('nomina_contratos_token_uniq').on(t.tokenHash),
+]);
+
+export type NominaContratoPlantilla    = typeof nominaContratoPlantillas.$inferSelect;
+export type NewNominaContratoPlantilla = typeof nominaContratoPlantillas.$inferInsert;
+export type NominaContrato    = typeof nominaContratos.$inferSelect;
+export type NewNominaContrato = typeof nominaContratos.$inferInsert;

@@ -1,152 +1,101 @@
 /**
- * POST /api/compras/local  — Registra compra manual + movimientos ENTRADA
- * GET  /api/compras/local  — Lista compras locales del equipo
+ * GET  /api/compras/local?clase=compra|gasto&desde=&hasta= — compras y gastos registrados
+ * POST /api/compras/local                                  — registra un comprobante de proveedor
+ *
+ * El registro vive en lib/compras/registrar.ts: valida el NCF y las
+ * retenciones, mueve el inventario y genera el asiento.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/lib/db/drizzle';
-import { comprasLocales, comprasLocalesItems, teamMembers, products } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and, desc } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
-import { registrarEntradas } from '@/lib/inventario/entrada';
+import { requirePermission, type AuthErr, type AuthOk } from '@/lib/auth/api-guard';
+import { registrarCompra, CompraError } from '@/lib/compras/registrar';
+import { listarCompras } from '@/lib/compras/consultas';
+import { METODOS_PAGO_COMPRA, TASAS_ITBIS, TIPOS_PROVEEDOR } from '@/lib/compras/fiscal';
+import { esFechaYMD } from '@/lib/nomina/periodos';
 
-const itemSchema = z.object({
-  productoId:    z.number().int().positive(),
-  cantidad:      z.number().int().positive(),
-  costoUnitario: z.number().min(0).default(0),
-  almacenId:     z.number().int().positive().optional().nullable(),
+const centavos = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+
+const lineaSchema = z.object({
+  productoId: z.number().int().positive().nullable().optional(),
+  almacenId: z.number().int().positive().nullable().optional(),
+  descripcion: z.string().max(255).nullable().optional(),
+  categoria: z.string().max(30).nullable().optional(),
+  cantidad: z.number().int().positive(),
+  costoUnitarioCents: centavos,
+  itbisTasa: z.enum(TASAS_ITBIS),
 });
 
 const compraSchema = z.object({
-  proveedorRnc:    z.string().max(20).optional().nullable(),
-  proveedorNombre: z.string().max(255).optional().nullable(),
-  fecha:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  referenciaEncf:  z.string().max(40).optional().nullable(),
-  notas:           z.string().max(1000).optional().nullable(),
-  almacenId:       z.number().int().positive().optional().nullable(),
-  formaPago:       z.enum(['contado', 'credito']).default('credito'),
-  metodoPago:      z.enum(['efectivo', 'transferencia', 'tarjeta', 'cheque', 'deposito', 'otro']).default('efectivo'),
-  fechaVencimiento:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  /** Pesos DOP; se persiste en centavos junto con el total de la compra. */
-  itbis:           z.number().finite().min(0).default(0),
-  items:           z.array(itemSchema).min(1, 'Debe incluir al menos un ítem'),
+  clase: z.enum(['compra', 'gasto']).default('compra'),
+  proveedorRnc: z.string().max(20).nullable().optional(),
+  proveedorNombre: z.string().max(255).nullable().optional(),
+  tipoProveedor: z.enum(TIPOS_PROVEEDOR).default('juridica'),
+  ncf: z.string().max(19),
+  ncfModificado: z.string().max(19).nullable().optional(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  tipoBienes606: z.string().max(2).nullable().optional(),
+  lineas: z.array(lineaSchema).min(1, 'Agrega al menos una línea').max(200),
+  itbisAlCostoCents: centavos.nullable().optional(),
+  itbisRetenidoCents: centavos.default(0),
+  isrTipoRetencion: z.number().int().min(1).max(8).nullable().optional(),
+  isrRetenidoCents: centavos.default(0),
+  iscCents: centavos.default(0),
+  otrosImpuestosCents: centavos.default(0),
+  propinaCents: centavos.default(0),
+  formaPago: z.enum(['contado', 'credito']),
+  metodoPago: z.enum(METODOS_PAGO_COMPRA).default('efectivo'),
+  fechaPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  almacenId: z.number().int().positive().nullable().optional(),
+  notas: z.string().max(1000).nullable().optional(),
+  permitirNcfRepetido: z.boolean().optional(),
 });
 
-export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
-
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-  if (!userCan(user.platformRole, m?.role, 'productos:gestionar')) {
-    return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
-  }
-
-  const body = await req.json();
-  const parsed = compraSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const { proveedorRnc, proveedorNombre, fecha, referenciaEncf, notas, almacenId, itbis, formaPago, metodoPago, fechaVencimiento, items } = parsed.data;
-
-  // Verificar que todos los productos pertenecen al team y son tipo bien
-  const prods = await db
-    .select({ id: products.id, tipo: products.tipo })
-    .from(products)
-    .where(eq(products.teamId, teamId));
-
-  const prodMap = new Map(prods.map(p => [p.id, p]));
-  const invalidos = items.filter(i => {
-    const p = prodMap.get(i.productoId);
-    return !p || p.tipo !== 'bien';
-  });
-  if (invalidos.length > 0) {
-    return NextResponse.json(
-      { error: 'Solo se pueden registrar entradas para productos tipo bien del equipo.' },
-      { status: 422 },
-    );
-  }
-
-  const baseCents = items.reduce((s, i) => s + Math.round(i.costoUnitario * 100) * i.cantidad, 0);
-  const itbisCents = Math.round(itbis * 100);
-  const montoTotal = baseCents + itbisCents;
-
-  const [compra] = await db.transaction(async (tx) => {
-    const [c] = await tx.insert(comprasLocales).values({
-      teamId,
-      proveedorRnc:    proveedorRnc    || null,
-      proveedorNombre: proveedorNombre || null,
-      fecha:           fecha ?? new Date().toISOString().slice(0, 10),
-      referenciaEncf:  referenciaEncf  || null,
-      notas:           notas           || null,
-      itbisCents,
-      montoTotal,
-      formaPago,
-      metodoPago,
-      fechaVencimiento: formaPago === 'credito' ? fechaVencimiento ?? null : null,
-      estadoPago: formaPago === 'contado' ? 'PAGADA' : 'PENDIENTE',
-      createdBy: user.id,
-    }).returning();
-
-    await tx.insert(comprasLocalesItems).values(
-      items.map(i => ({
-        compraId:      c.id,
-        productoId:    i.productoId,
-        almacenId:     i.almacenId ?? almacenId ?? null,
-        cantidad:      i.cantidad,
-        costoUnitario: Math.round(i.costoUnitario * 100),
-      })),
-    );
-
-    return [c];
-  });
-
-  // Movimientos ENTRADA — fire-and-forget
-  const motivo = `Compra #${compra.id}${referenciaEncf ? ` — e-NCF ${referenciaEncf}` : ''}`;
-  registrarEntradas(
-    teamId,
-    user.id,
-    compra.id,
-    motivo,
-    items.map(i => ({
-      productoId: i.productoId,
-      cantidad:   i.cantidad,
-      almacenId:  i.almacenId ?? almacenId ?? null,
-    })),
-  ).catch((e) => console.error('[compras/local] entradas failed', e));
-
-  return NextResponse.json({ ok: true, compra }, { status: 201 });
+/** Compras exige gestionar productos; un gasto también lo puede registrar quien crea facturas. */
+async function autorizar(clase: 'compra' | 'gasto', escritura: boolean): Promise<AuthOk | AuthErr> {
+  const productos = await requirePermission(escritura ? 'productos:gestionar' : 'productos:ver', { escritura });
+  if (productos.ok || clase === 'compra') return productos;
+  return requirePermission(escritura ? 'facturas:crear' : 'facturas:ver', { escritura });
 }
 
-export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
-
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-  if (!userCan(user.platformRole, m?.role, 'productos:ver')) {
-    return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
+  const parsed = compraSchema.safeParse(body);
+  if (!parsed.success) {
+    const primero = parsed.error.issues[0];
+    return NextResponse.json({ error: primero?.message ?? 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
   }
+  const auth = await autorizar(parsed.data.clase, true);
+  if (!auth.ok) return auth.response;
 
-  const rows = await db
-    .select()
-    .from(comprasLocales)
-    .where(eq(comprasLocales.teamId, teamId))
-    .orderBy(desc(comprasLocales.createdAt))
-    .limit(100);
+  try {
+    const r = await registrarCompra(auth.teamId, auth.user.id, {
+      ...parsed.data,
+      proveedorRnc: parsed.data.proveedorRnc ?? null,
+      proveedorNombre: parsed.data.proveedorNombre ?? null,
+    });
+    return NextResponse.json({ ok: true, ...r }, { status: 201 });
+  } catch (e) {
+    if (e instanceof CompraError) {
+      return NextResponse.json({ error: e.message, codigo: e.codigo, compraId: e.compraId }, { status: e.status });
+    }
+    console.error('[compras/local] registro falló', e);
+    return NextResponse.json({ error: 'No se pudo registrar' }, { status: 500 });
+  }
+}
 
-  return NextResponse.json({ compras: rows });
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  const clase = sp.get('clase') === 'gasto' ? 'gasto' : sp.get('clase') === 'compra' ? 'compra' : undefined;
+  const auth = await autorizar(clase ?? 'compra', false);
+  if (!auth.ok) return auth.response;
+  const desde = sp.get('desde');
+  const hasta = sp.get('hasta');
+  const compras = await listarCompras(auth.teamId, {
+    clase,
+    desde: esFechaYMD(desde) ? desde : undefined,
+    hasta: esFechaYMD(hasta) ? hasta : undefined,
+  });
+  return NextResponse.json({ compras });
 }

@@ -20,11 +20,23 @@ import { getConfig } from './config';
 import {
   generarAsientoFactura, generarAsientoPago,
   generarAsientoNotaCredito, generarAsientoAnulacion,
-  generarAsientoCompra, generarAsientoGastoCaja, generarAsientoPagoProveedor,
+  generarAsientoCompra, generarAsientoCompraAnulada, generarAsientoGastoCaja, generarAsientoPagoProveedor,
   generarAsientoGastoDoc,
+  generarAsientoNomina, generarAsientoProvisionNomina,
+  generarAsientoPagoNominaObligacion, generarAsientoPagoSueldos,
   VENTA_ASENTABLE_SQL,
   type MotivoSalto,
 } from './asientos';
+
+/**
+ * Comprobantes propios de gasto que se asientan: los e43/e47 (también en
+ * borrador, que es su registro operativo) y los e41 ya emitidos. Mismo
+ * predicado en el barrido y en el conteo.
+ */
+const GASTO_DOC_ASENTABLE_SQL = sql`(
+  (d.tipo_ecf IN ('43', '47') AND d.estado NOT IN ('ANULADO', 'RECHAZADO'))
+  OR (d.tipo_ecf = '41' AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'))
+)`;
 
 /** Cuántos orígenes procesa un barrido. Evita que el primer uso tarde minutos. */
 const TOPE_POR_BARRIDO = 200;
@@ -177,12 +189,27 @@ export async function generarAsientosPendientes(
       ON a.team_id = c.team_id AND a.origen_tipo = 'compra' AND a.origen_id = c.id
     WHERE c.team_id = ${teamId}
       AND a.id IS NULL
+      AND c.estado = 'registrada'
       AND c.monto_total > 0
     ORDER BY c.fecha, c.id
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
   await procesar(compras, 'compra', (id) => generarAsientoCompra(teamId, id, userId));
+
+  // Compras anuladas que ya tenían asiento: su reverso.
+  const comprasAnuladas = await db.execute(sql`
+    SELECT c.id
+    FROM compras_locales c
+    JOIN contabilidad_asientos orig
+      ON orig.team_id = c.team_id AND orig.origen_tipo = 'compra' AND orig.origen_id = c.id
+    LEFT JOIN contabilidad_asientos rev
+      ON rev.team_id = c.team_id AND rev.origen_tipo = 'compra_anulada' AND rev.origen_id = c.id
+    WHERE c.team_id = ${teamId} AND c.estado = 'anulada' AND rev.id IS NULL
+    ORDER BY c.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+  await procesar(comprasAnuladas, 'compra_anulada', (id) => generarAsientoCompraAnulada(teamId, id, userId));
 
   const pagosProveedores = await db.execute(sql`
     SELECT p.id FROM pagos_proveedores p
@@ -218,8 +245,7 @@ export async function generarAsientosPendientes(
       ON a.team_id = d.team_id AND a.origen_tipo = 'gasto_doc' AND a.origen_id = d.id
     WHERE d.team_id = ${teamId}
       AND a.id IS NULL
-      AND d.tipo_ecf IN ('43', '47')
-      AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+      AND ${GASTO_DOC_ASENTABLE_SQL}
       AND d.monto_total > 0
       AND NOT EXISTS (
         SELECT 1 FROM caja_movimientos m
@@ -231,10 +257,115 @@ export async function generarAsientosPendientes(
 
   await procesar(gastosDoc, 'gasto_doc', (id) => generarAsientoGastoDoc(teamId, id, userId));
 
-  resumen.hayMas = [docs, notas, pagos, anulados, compras, pagosProveedores, gastos, gastosDoc]
+  // ── Nómina ────────────────────────────────────────────────────────────────
+  // Corridas aprobadas con la contabilidad apagada nunca pasaban al libro:
+  // encenderla después no las recogía. El devengo va primero porque los pagos
+  // de sueldos y de obligaciones lo saldan.
+  const corridas = await db.execute(sql`
+    SELECT c.id
+    FROM nomina_corridas c
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = c.team_id AND a.origen_tipo = 'nomina' AND a.origen_id = c.id
+    WHERE c.team_id = ${teamId} AND a.id IS NULL
+      AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0
+    ORDER BY c.fecha_fin, c.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+  await procesar(corridas, 'nomina', async (id) => {
+    const r = await generarAsientoNomina(teamId, id, userId);
+    if (r.creado) await db.execute(sql`UPDATE nomina_corridas SET asiento_id = ${r.asientoId} WHERE team_id = ${teamId} AND id = ${id}`);
+    return r;
+  });
+
+  const provisiones = cfg.provisionarNomina
+    ? await db.execute(sql`
+        SELECT c.id
+        FROM nomina_corridas c
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = c.team_id AND a.origen_tipo = 'provision_nomina' AND a.origen_id = c.id
+        WHERE c.team_id = ${teamId} AND a.id IS NULL
+          AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0
+        ORDER BY c.fecha_fin, c.id
+        LIMIT ${TOPE_POR_BARRIDO}
+      `)
+    : [];
+  await procesar(provisiones, 'provision_nomina', (id) => generarAsientoProvisionNomina(teamId, id, userId));
+
+  // Empleados marcados pagados antes de que existieran los pagos: se agrupan en
+  // un pago por corrida para poder asentarlos.
+  await agruparPagosSueltos(teamId);
+  const pagosSueldos = await db.execute(sql`
+    SELECT p.id
+    FROM nomina_pagos p
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = p.team_id AND a.origen_tipo = 'pago_sueldos' AND a.origen_id = p.id
+    WHERE p.team_id = ${teamId} AND a.id IS NULL
+    ORDER BY p.fecha, p.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+  await procesar(pagosSueldos, 'pago_sueldos', async (id) => {
+    const r = await generarAsientoPagoSueldos(teamId, id, userId);
+    if (r.creado) await db.execute(sql`UPDATE nomina_pagos SET asiento_id = ${r.asientoId} WHERE team_id = ${teamId} AND id = ${id}`);
+    return r;
+  });
+
+  const obligaciones = await db.execute(sql`
+    SELECT o.id, coalesce(o.metodo_pago, 'transferencia') AS metodo
+    FROM nomina_obligaciones o
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = o.team_id AND a.origen_tipo = 'pago_nomina' AND a.origen_id = o.id
+    WHERE o.team_id = ${teamId} AND a.id IS NULL AND o.pagada AND o.monto_cents > 0
+    ORDER BY o.pagada_en, o.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+  const metodoObligacion = new Map((obligaciones as unknown as { id: number; metodo: string }[]).map((o) => [o.id, o.metodo]));
+  await procesar(obligaciones, 'pago_nomina', async (id) => {
+    const metodo = (metodoObligacion.get(id) ?? 'transferencia') as 'efectivo' | 'transferencia' | 'cheque';
+    const r = await generarAsientoPagoNominaObligacion(teamId, id, metodo, userId);
+    if (r.creado) await db.execute(sql`UPDATE nomina_obligaciones SET asiento_id = ${r.asientoId} WHERE team_id = ${teamId} AND id = ${id}`);
+    return r;
+  });
+
+  resumen.hayMas = [docs, notas, pagos, anulados, compras, comprasAnuladas, pagosProveedores, gastos, gastosDoc,
+    corridas, provisiones, pagosSueldos, obligaciones]
     .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
 
   return resumen;
+}
+
+/**
+ * Los empleados marcados pagados antes de que existieran los pagos de nómina no
+ * tienen a qué colgarles el asiento: se agrupan en un pago por corrida, con la
+ * fecha del último que se marcó y transferencia como método (el camino normal de
+ * la dispersión). Con candado por team: dos barridos a la vez no duplican pagos.
+ */
+async function agruparPagosSueltos(teamId: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('nomina_pagos'), ${teamId})`);
+    await tx.execute(sql`
+      WITH grupos AS (
+        SELECT l.corrida_id,
+               count(*)::int AS lineas,
+               sum(l.neto_cents) AS monto,
+               (max(l.pagada_en) AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santo_Domingo')::date AS fecha
+        FROM nomina_lineas l
+        JOIN nomina_corridas c ON c.id = l.corrida_id AND c.team_id = l.team_id
+        WHERE l.team_id = ${teamId} AND l.pagada AND l.pago_id IS NULL
+          AND c.estado IN ('aprobada', 'pagada')
+        GROUP BY l.corrida_id
+        HAVING sum(l.neto_cents) > 0
+      ), nuevos AS (
+        INSERT INTO nomina_pagos (team_id, corrida_id, fecha, metodo, monto_cents, lineas)
+        SELECT ${teamId}, g.corrida_id, coalesce(g.fecha, current_date), 'transferencia', g.monto, g.lineas
+        FROM grupos g
+        RETURNING id, corrida_id
+      )
+      UPDATE nomina_lineas l
+         SET pago_id = n.id
+        FROM nuevos n
+       WHERE l.corrida_id = n.corrida_id AND l.team_id = ${teamId} AND l.pagada AND l.pago_id IS NULL
+    `);
+  });
 }
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────
@@ -261,6 +392,9 @@ export interface AsientoResumen {
   origenId:   number;
   totalCents: number;
   lineas:     number;
+  /** Suma de sus apuntes. Si no coinciden, el asiento está descuadrado. */
+  debeCents:  number;
+  haberCents: number;
 }
 
 export interface LineaDetalle {
@@ -274,7 +408,10 @@ export interface LineaDetalle {
 
 /** Los orígenes que admite el CHECK de `contabilidad_asientos`, y que el libro
  *  diario deja filtrar. */
-export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'gasto_doc', 'depreciacion', 'pago_proveedor', 'cierre'] as const;
+export const ORIGENES = [
+  'factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'gasto_doc', 'depreciacion',
+  'pago_proveedor', 'cierre', 'nomina', 'provision_nomina', 'pago_sueldos', 'pago_nomina', 'compra_anulada',
+] as const;
 export type OrigenTipo = (typeof ORIGENES)[number];
 
 export interface FiltrosLibro {
@@ -326,16 +463,31 @@ export async function listarAsientos(
   const { limit = 50, offset = 0 } = opts;
   const where = condicionesLibro(teamId, opts);
 
+  // Primero se corta la página y DESPUÉS se suman sus apuntes. El orden importa:
+  // así las sumas se calculan para los 50 asientos que se ven, entrando por
+  // `contabilidad_asiento_lineas_asiento_idx`, y no crecen con el histórico.
   const filas = await db.execute(sql`
-    SELECT a.id, to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto,
-           a.origen_tipo AS "origenTipo", a.origen_id AS "origenId",
-           a.total_cents AS "totalCents",
-           (SELECT count(*)::int FROM contabilidad_asiento_lineas l
-             WHERE l.asiento_id = a.id) AS lineas
-    FROM contabilidad_asientos a
-    WHERE ${where}
-    ORDER BY a.fecha DESC, a.id DESC
-    LIMIT ${limit} OFFSET ${offset}
+    SELECT p.id, to_char(p.fecha, 'YYYY-MM-DD') AS fecha, p.concepto,
+           p.origen_tipo AS "origenTipo", p.origen_id AS "origenId",
+           p.total_cents AS "totalCents",
+           COALESCE(l.lineas, 0) AS lineas,
+           COALESCE(l.debe, 0)   AS "debeCents",
+           COALESCE(l.haber, 0)  AS "haberCents"
+    FROM (
+      SELECT a.id, a.fecha, a.concepto, a.origen_tipo, a.origen_id, a.total_cents
+      FROM contabilidad_asientos a
+      WHERE ${where}
+      ORDER BY a.fecha DESC, a.id DESC
+      LIMIT ${limit} OFFSET ${offset}
+    ) p
+    LEFT JOIN LATERAL (
+      SELECT count(*)::int AS lineas,
+             sum(debe_cents)::bigint  AS debe,
+             sum(haber_cents)::bigint AS haber
+      FROM contabilidad_asiento_lineas l
+      WHERE l.asiento_id = p.id
+    ) l ON true
+    ORDER BY p.fecha DESC, p.id DESC
   `);
 
   // El total y la suma salen del mismo WHERE, así que cubren **todo lo
@@ -351,9 +503,35 @@ export async function listarAsientos(
     ...a,
     totalCents: aNumero(a.totalCents),
     lineas:     aNumero(a.lineas),
+    debeCents:  aNumero(a.debeCents),
+    haberCents: aNumero(a.haberCents),
   }));
 
   return { asientos, total: aNumero(agg.total), sumaCents: aNumero(agg.suma) };
+}
+
+/**
+ * Los asientos descuadrados entre los que se están mostrando.
+ *
+ * Sustituye a llamar `verificarCuadre` en cada carga del libro, que agrupaba
+ * TODAS las líneas de TODOS los asientos del equipo en cada visita —y cada
+ * asiento guardado termina en esta pantalla—. Medido con 100.000 asientos:
+ * 248 ms solo esa consulta, creciendo en línea recta.
+ *
+ * Revisar solo la página no deja el libro sin guardián: los tres caminos que
+ * escriben apuntes (`insertarAsiento`, el cierre y la depreciación) ya impiden
+ * guardar un asiento que no cuadre, así que esto solo puede saltar por una
+ * edición hecha por fuera de la aplicación. El recorrido COMPLETO sigue
+ * existiendo y corre donde sí importa y no le cuesta a nadie cada día: antes de
+ * cerrar un ejercicio (`previsualizarCierre`). Un libro que no cuadra no se
+ * cierra.
+ */
+export function descuadradosDePagina(
+  asientos: AsientoResumen[],
+): { id: number; concepto: string; debe: number; haber: number }[] {
+  return asientos
+    .filter((a) => a.debeCents !== a.haberCents)
+    .map((a) => ({ id: a.id, concepto: a.concepto, debe: a.debeCents, haber: a.haberCents }));
 }
 
 /**
@@ -412,11 +590,19 @@ export async function asientosParaExportar(
 export async function cuentasConMovimientos(
   teamId: number,
 ): Promise<{ id: number; codigo: string; nombre: string }[]> {
+  // Se parte de las CUENTAS (decenas) y se pregunta a cada una si tiene algún
+  // apunte, en vez de leer todos los apuntes para quedarse con sus cuentas
+  // distintas. Mismo resultado; la versión anterior leía el histórico entero en
+  // cada carga del libro (169 ms con 100.000 asientos) y esta hace una sonda
+  // por cuenta sobre `contabilidad_asiento_lineas_cuenta_idx`.
   const filas = await db.execute(sql`
-    SELECT DISTINCT c.id, c.codigo, c.nombre
-    FROM contabilidad_asiento_lineas l
-    JOIN contabilidad_cuentas c ON c.id = l.cuenta_id
-    WHERE l.team_id = ${teamId}
+    SELECT c.id, c.codigo, c.nombre
+    FROM contabilidad_cuentas c
+    WHERE c.team_id = ${teamId}
+      AND EXISTS (
+        SELECT 1 FROM contabilidad_asiento_lineas l
+        WHERE l.team_id = ${teamId} AND l.cuenta_id = c.id
+      )
     ORDER BY c.codigo
   `);
   return filas as unknown as { id: number; codigo: string; nombre: string }[];
@@ -453,9 +639,28 @@ export async function getLineasAsiento(
  * no están en esa lista— y con compras, gastos de caja y pagos a proveedores,
  * que el barrido asienta y aquí no se contaban.
  */
-export async function contarPendientes(teamId: number): Promise<number> {
-  const [{ total }] = await db.execute<{ total: number }>(sql`
-    SELECT (
+export interface PendientesPorOrigen {
+  ventas: number;
+  notas: number;
+  cobros: number;
+  anulaciones: number;
+  compras: number;
+  compras_anuladas: number;
+  pagos_proveedor: number;
+  gastos_caja: number;
+  gastos_doc: number;
+  nomina_devengo: number;
+  nomina_provision: number;
+  /** Empleados marcados pagados cuyo pago todavía no se agrupó (uno por corrida). */
+  nomina_pagados_sin_pago: number;
+  nomina_pagos_sueldos: number;
+  nomina_obligaciones: number;
+}
+
+export async function contarPendientesPorOrigen(teamId: number): Promise<PendientesPorOrigen> {
+  const cfg = await getConfig(teamId);
+  const [fila] = await db.execute<Record<keyof PendientesPorOrigen, number>>(sql`
+    SELECT
       -- Ventas: e-CF fiscales, notas de débito por mora y ventas internas
       -- sin-ncf. Mismo predicado que el barrido, vía VENTA_ASENTABLE_SQL.
       (SELECT count(*) FROM ecf_documents d
@@ -463,8 +668,7 @@ export async function contarPendientes(teamId: number): Promise<number> {
           ON a.team_id = d.team_id AND a.origen_tipo = 'factura' AND a.origen_id = d.id
         WHERE d.team_id = ${teamId} AND a.id IS NULL
           AND ${VENTA_ASENTABLE_SQL}
-          AND d.monto_total > 0)
-      +
+          AND d.monto_total > 0)::int AS ventas,
       -- Notas de crédito con efecto monetario
       (SELECT count(*) FROM ecf_documents d
         LEFT JOIN contabilidad_asientos a
@@ -473,15 +677,13 @@ export async function contarPendientes(teamId: number): Promise<number> {
           AND d.tipo_ecf = '34'
           AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
           AND d.monto_total > 0
-          AND d.codigo_modificacion IS DISTINCT FROM 2)
-      +
+          AND d.codigo_modificacion IS DISTINCT FROM 2)::int AS notas,
       -- Cobros, incluidos los que aplican un saldo a favor
       (SELECT count(*) FROM pagos_recibidos p
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = p.team_id AND a.origen_tipo = 'pago' AND a.origen_id = p.id
         WHERE p.team_id = ${teamId} AND a.id IS NULL
-          AND p.monto_centavos > 0)
-      +
+          AND p.monto_centavos > 0)::int AS cobros,
       -- Anulaciones de documentos que ya estaban asentados
       (SELECT count(*) FROM ecf_documents d
         JOIN contabilidad_asientos orig
@@ -489,42 +691,80 @@ export async function contarPendientes(teamId: number): Promise<number> {
          AND orig.origen_tipo IN ('factura', 'nota')
         LEFT JOIN contabilidad_asientos rev
           ON rev.team_id = d.team_id AND rev.origen_tipo = 'anulacion' AND rev.origen_id = d.id
-        WHERE d.team_id = ${teamId} AND d.estado = 'ANULADO' AND rev.id IS NULL)
-      +
+        WHERE d.team_id = ${teamId} AND d.estado = 'ANULADO' AND rev.id IS NULL)::int AS anulaciones,
       -- Compras locales
       (SELECT count(*) FROM compras_locales c
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = c.team_id AND a.origen_tipo = 'compra' AND a.origen_id = c.id
-        WHERE c.team_id = ${teamId} AND a.id IS NULL AND c.monto_total > 0)
-      +
+        WHERE c.team_id = ${teamId} AND a.id IS NULL AND c.estado = 'registrada' AND c.monto_total > 0)::int AS compras,
+      -- Compras anuladas con asiento y sin su reverso
+      (SELECT count(*) FROM compras_locales c
+        JOIN contabilidad_asientos orig
+          ON orig.team_id = c.team_id AND orig.origen_tipo = 'compra' AND orig.origen_id = c.id
+        LEFT JOIN contabilidad_asientos rev
+          ON rev.team_id = c.team_id AND rev.origen_tipo = 'compra_anulada' AND rev.origen_id = c.id
+        WHERE c.team_id = ${teamId} AND c.estado = 'anulada' AND rev.id IS NULL)::int AS compras_anuladas,
       -- Pagos a proveedores
       (SELECT count(*) FROM pagos_proveedores p
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = p.team_id AND a.origen_tipo = 'pago_proveedor' AND a.origen_id = p.id
-        WHERE p.team_id = ${teamId} AND a.id IS NULL)
-      +
+        WHERE p.team_id = ${teamId} AND a.id IS NULL)::int AS pagos_proveedor,
       -- Gastos pagados por caja
       (SELECT count(*) FROM caja_movimientos m
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = m.team_id AND a.origen_tipo = 'gasto_caja' AND a.origen_id = m.id
         WHERE m.team_id = ${teamId} AND a.id IS NULL
-          AND m.tipo = 'GASTO' AND m.monto_centavos > 0)
-      +
+          AND m.tipo = 'GASTO' AND m.monto_centavos > 0)::int AS gastos_caja,
       -- Gastos documentales (e43/e47) sin caja vinculada
       (SELECT count(*) FROM ecf_documents d
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = d.team_id AND a.origen_tipo = 'gasto_doc' AND a.origen_id = d.id
         WHERE d.team_id = ${teamId} AND a.id IS NULL
-          AND d.tipo_ecf IN ('43', '47')
-          AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+          AND ${GASTO_DOC_ASENTABLE_SQL}
           AND d.monto_total > 0
           AND NOT EXISTS (
             SELECT 1 FROM caja_movimientos m
             WHERE m.team_id = d.team_id AND m.ecf_document_id = d.id AND m.tipo = 'GASTO'
-          ))
-    )::int AS total
+          ))::int AS gastos_doc,
+      -- Nómina: devengo de corridas aprobadas
+      (SELECT count(*) FROM nomina_corridas c
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = c.team_id AND a.origen_tipo = 'nomina' AND a.origen_id = c.id
+        WHERE c.team_id = ${teamId} AND a.id IS NULL
+          AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0)::int AS nomina_devengo,
+      -- Nómina: provisiones, solo si se provisiona
+      (SELECT count(*) FROM nomina_corridas c
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = c.team_id AND a.origen_tipo = 'provision_nomina' AND a.origen_id = c.id
+        WHERE c.team_id = ${teamId} AND a.id IS NULL AND ${cfg.provisionarNomina}
+          AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0)::int AS nomina_provision,
+      -- Nómina: empleados pagados que todavía no tienen su pago registrado (uno por corrida)
+      (SELECT count(*) FROM (
+        SELECT l.corrida_id FROM nomina_lineas l
+        JOIN nomina_corridas c ON c.id = l.corrida_id AND c.team_id = l.team_id
+        WHERE l.team_id = ${teamId} AND l.pagada AND l.pago_id IS NULL
+          AND c.estado IN ('aprobada', 'pagada')
+        GROUP BY l.corrida_id
+        HAVING sum(l.neto_cents) > 0) g)::int AS nomina_pagados_sin_pago,
+      -- Nómina: pagos de sueldos sin asiento
+      (SELECT count(*) FROM nomina_pagos p
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = p.team_id AND a.origen_tipo = 'pago_sueldos' AND a.origen_id = p.id
+        WHERE p.team_id = ${teamId} AND a.id IS NULL)::int AS nomina_pagos_sueldos,
+      -- Nómina: obligaciones TSS/DGII pagadas sin asiento
+      (SELECT count(*) FROM nomina_obligaciones o
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = o.team_id AND a.origen_tipo = 'pago_nomina' AND a.origen_id = o.id
+        WHERE o.team_id = ${teamId} AND a.id IS NULL AND o.pagada AND o.monto_cents > 0)::int AS nomina_obligaciones
   `);
-  return total;
+  return Object.fromEntries(
+    Object.entries(fila).map(([k, v]) => [k, aNumero(v)]),
+  ) as unknown as PendientesPorOrigen;
+}
+
+export async function contarPendientes(teamId: number): Promise<number> {
+  const porOrigen = await contarPendientesPorOrigen(teamId);
+  return Object.values(porOrigen).reduce((s, n) => s + n, 0);
 }
 
 /**

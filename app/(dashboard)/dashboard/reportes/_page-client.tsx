@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet, Receipt, Users, HandCoins, UserCircle } from 'lucide-react';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet, Receipt, Users, HandCoins, UserCircle, FileSearch } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -32,7 +32,7 @@ const REPORTES: ReporteCard[] = [
   {
     id: '606',
     titulo: 'Formato 606',
-    descripcion: 'Compras de bienes y servicios a proveedores del RNC. Incluye tipos e-CF 41 (Compras) y 43 (Gastos Menores).',
+    descripcion: 'Compras y gastos registrados con el comprobante del proveedor, más tus e41, e43 y e47 emitidos. Con retenciones e ITBIS al costo.',
     icon: TrendingUp,
     iconColor: '#1d4ed8',
     iconBg: '#eff6ff',
@@ -72,6 +72,13 @@ const REPORTES: ReporteCard[] = [
 ];
 
 const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React.ElementType; color: string }[] = [
+  {
+    href: '/dashboard/pagos',
+    titulo: 'Pagos recibidos',
+    descripcion: 'Detalle de cobros por rango de fechas, con filtros por método, origen (POS/facturación) y producto. Desglose y export.',
+    icon: Wallet,
+    color: 'bg-emerald-50 text-emerald-600',
+  },
   {
     href: '/dashboard/reportes/panel',
     titulo: 'Panel financiero',
@@ -113,6 +120,13 @@ const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React
     descripcion: 'Ranking de clientes por facturación en el período.',
     icon: UserCircle,
     color: 'bg-violet-50 text-violet-600',
+  },
+  {
+    href: '/dashboard/reportes/facturas-cliente',
+    titulo: 'Facturas por cliente',
+    descripcion: 'Elige un cliente y consulta solo sus facturas. Cada una se abre en su pantalla.',
+    icon: FileSearch,
+    color: 'bg-zero-50 text-zero-600',
   },
   {
     href: '/dashboard/reportes/por-usuario',

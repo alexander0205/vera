@@ -514,6 +514,17 @@ export const ADDONS: AddonDef[] = [
     incluidoEn: ['colegio'],
     descripcion: 'Caja registradora, turnos e inventario por almacén.',
   },
+  {
+    // Nómina se vende suelto sobre cualquier plan. No viene incluido en ninguna
+    // familia (incluidoEn: []): un colegio y un negocio lo contratan igual.
+    key: 'nomina',
+    modulo: 'nomina',
+    name: 'Nómina',
+    price: 12,
+    priceEnvKey: 'STRIPE_PRICE_MODULO_NOMINA',
+    incluidoEn: [],
+    descripcion: 'Empleados, corridas de nómina (TSS/ISR) y pago al personal.',
+  },
 ];
 
 /** Adicionales que TIENE SENTIDO ofrecerle a este plan (los no incluidos ya). */

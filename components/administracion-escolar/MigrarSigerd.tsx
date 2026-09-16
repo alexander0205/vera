@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { EstadoFila, PlanMigracion } from '@/lib/sigerd/plan-migracion';
+import { ObtenerSigerd } from '@/components/administracion-escolar/ObtenerSigerd';
 
 /**
  * Asistente para traer a nuestro sistema lo que SIGERD ya nos dio.
@@ -34,6 +35,7 @@ const traer = (u: string) => fetch(u).then((r) => r.json());
 interface EstadoCredenciales {
   configurado: boolean;
   usuario: string | null;
+  idCentro: number | null;
   centroNombre: string | null;
   verificadoEn: string | null;
   ultimoError: string | null;
@@ -95,7 +97,7 @@ export function MigrarSigerd() {
   const [paso, setPaso] = useState<Paso>('conectar');
   const { data: cred, mutate: recargarCred } =
     useSWR<EstadoCredenciales>('/api/sigerd/credenciales', traer);
-  const { data: planResp, isLoading: cargandoPlan } =
+  const { data: planResp, isLoading: cargandoPlan, mutate: recargarPlan } =
     useSWR<{ hayDatos: boolean; plan?: PlanMigracion }>('/api/sigerd/plan', traer);
 
   const plan = planResp?.plan ?? null;
@@ -114,7 +116,13 @@ export function MigrarSigerd() {
       <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-white p-2">
         {PASOS.map((p, i) => {
           const activo = p.id === paso;
-          const hecho = i < idx;
+          // «Conectar» solo va hecho si el portal ACEPTÓ las credenciales. Antes
+          // bastaba con haber pasado de largo (`i < idx`) y salía ✓ con unas
+          // credenciales que nadie había probado nunca —en producción, las de
+          // las tres empresas que las tenían—.
+          const conectarPendiente = p.id === 'conectar' && !cred?.verificadoEn;
+          const hecho = p.id === 'conectar' ? !!cred?.verificadoEn : i < idx;
+          const avisar = conectarPendiente && !activo && !!cred?.configurado;
           return (
             <button key={p.id} type="button" onClick={() => setPaso(p.id)}
               className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
@@ -123,9 +131,13 @@ export function MigrarSigerd() {
                   : 'text-gray-500 hover:bg-gray-50'
               }`}>
               <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                activo ? 'bg-white/20' : hecho ? 'bg-zero-100 text-zero-700' : 'bg-gray-100 text-gray-500'
-              }`}>
-                {hecho ? <Check className="h-3 w-3" /> : i + 1}
+                activo ? 'bg-white/20'
+                  : hecho ? 'bg-zero-100 text-zero-700'
+                  : avisar ? 'bg-amber-100 text-amber-700'
+                  : 'bg-gray-100 text-gray-500'
+              }`}
+                title={avisar ? 'Credenciales guardadas, pero todavía sin probar contra el portal' : undefined}>
+                {hecho ? <Check className="h-3 w-3" /> : avisar ? <AlertTriangle className="h-3 w-3" /> : i + 1}
               </span>
               {p.titulo}
             </button>
@@ -141,7 +153,9 @@ export function MigrarSigerd() {
         </p>
       )}
 
-      {paso !== 'conectar' && !cargandoPlan && !plan && <SinDatos />}
+      {paso !== 'conectar' && !cargandoPlan && !plan && (
+        <SinDatos cred={cred} onConectar={() => setPaso('conectar')} onCompletado={() => void recargarPlan()} />
+      )}
 
       {plan && paso === 'plan' && <PasoPlan plan={plan} onSeguir={() => setPaso('estructura')} />}
       {plan && paso === 'estructura' && <PasoEstructura plan={plan} onSeguir={() => setPaso('estudiantes')} />}
@@ -166,7 +180,26 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
   const [usuario, setUsuario] = useState('');
   const [clave, setClave] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [probando, setProbando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Prueba lo guardado contra el portal. El resultado —aceptadas y de qué
+   * centro, o por qué no— lo anota el servidor en la ficha, así que basta con
+   * recargarla: la caja y el ✓ del paso se actualizan solos.
+   */
+  async function probar() {
+    setProbando(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/sigerd/credenciales/probar', { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) setError(j.error ?? 'El portal no aceptó las credenciales.');
+      onCambio();
+    } catch {
+      setError('No se pudo hablar con el portal. Vuelve a intentarlo en unos minutos.');
+    } finally { setProbando(false); }
+  }
 
   async function guardar() {
     setGuardando(true);
@@ -197,29 +230,54 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
       <div>
         <h2 className="text-base font-semibold text-gray-900">Credenciales de SIGERD</h2>
         <p className="mt-0.5 text-sm text-gray-500">
-          Hacen falta para que la descarga larga pueda reconectarse sola: son ~25 minutos
-          y la sesión del portal dura menos.
+          Con ellas Zero entra solo al portal cuando hace falta traer datos: no tienes
+          que conectarte a mano cada vez.
         </p>
       </div>
 
       {cred?.configurado ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <Lock className="h-4 w-4 shrink-0 text-emerald-700" />
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="font-medium text-emerald-900">Guardadas y cifradas</p>
-            <p className="text-emerald-800">
-              Usuario {cred.usuario}
-              {cred.centroNombre ? ` · ${cred.centroNombre}` : ''}
-              {cred.verificadoEn
-                ? ` · verificadas el ${new Date(cred.verificadoEn).toLocaleDateString('es-DO')}`
-                : ' · todavía sin probar contra el portal'}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void olvidar()} disabled={guardando}
-            className="shrink-0 text-destructive hover:text-destructive">
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Olvidar
-          </Button>
-        </div>
+        (() => {
+          const verificadas = !!cred.verificadoEn;
+          const centro = cred.centroNombre
+            ?? (cred.idCentro ? `centro ${cred.idCentro} en SIGERD` : null);
+          return (
+            <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 ${
+              verificadas ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'
+            }`}>
+              {verificadas
+                ? <Lock className="h-4 w-4 shrink-0 text-emerald-700" />
+                : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />}
+              <div className="min-w-0 flex-1 text-sm">
+                <p className={`font-medium ${verificadas ? 'text-emerald-900' : 'text-amber-900'}`}>
+                  {verificadas ? 'Conectadas con el portal' : 'Guardadas, pero todavía sin probar'}
+                </p>
+                <p className={verificadas ? 'text-emerald-800' : 'text-amber-800'}>
+                  Usuario {cred.usuario}
+                  {centro ? ` · ${centro}` : ''}
+                  {verificadas
+                    ? ` · el portal las aceptó el ${new Date(cred.verificadoEn!).toLocaleDateString('es-DO')}`
+                    : ' · pruébalas antes de traer datos'}
+                </p>
+                {/* El último rechazo, dicho con las palabras del portal. */}
+                {!verificadas && cred.ultimoError && (
+                  <p className="mt-1 text-xs text-red-700">Último intento: {cred.ultimoError}</p>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button variant={verificadas ? 'outline' : 'default'} size="sm"
+                  onClick={() => void probar()} disabled={probando || guardando}
+                  className={verificadas ? '' : 'bg-zero-600 hover:bg-zero-700'}>
+                  {probando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  {probando ? 'Probando con el portal…' : verificadas ? 'Probar de nuevo' : 'Probar conexión'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void olvidar()} disabled={guardando || probando}
+                  className="text-destructive hover:text-destructive">
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Olvidar
+                </Button>
+              </div>
+            </div>
+          );
+        })()
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -271,15 +329,43 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
   );
 }
 
-function SinDatos() {
+/**
+ * Lo que se enseña en los pasos siguientes mientras no hay nada descargado.
+ *
+ * Antes era un callejón: «Corre primero Obtener información en la pantalla de
+ * SIGERD», con el colegio YA en una pestaña llamada SIGERD y la pantalla del
+ * botón (`/escolar/sigerd`) sin enlace en ningún menú. Ahora el botón está aquí.
+ */
+function SinDatos({ cred, onConectar, onCompletado }: {
+  cred: EstadoCredenciales | undefined;
+  onConectar: () => void;
+  onCompletado: () => void;
+}) {
   return (
-    <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
-      <Database className="mx-auto h-8 w-8 text-gray-300" />
-      <p className="mt-3 text-sm font-medium text-gray-900">Todavía no hay nada descargado</p>
-      <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">
-        Corre primero «Obtener información» en la pantalla de SIGERD. Esto solo cruza a tu
-        sistema lo que el portal ya nos dio; no vuelve a pedírselo.
-      </p>
+    <div className="space-y-4 rounded-xl border border-dashed border-gray-300 bg-white p-6">
+      <div className="text-center">
+        <Database className="mx-auto h-8 w-8 text-gray-300" />
+        <p className="mt-3 text-sm font-medium text-gray-900">Todavía no hay nada descargado</p>
+        <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">
+          Primero se trae la información de tu centro desde SIGERD. Después, en los pasos
+          siguientes, eliges qué entra a tu sistema.
+        </p>
+      </div>
+
+      {cred?.configurado ? (
+        <div className="mx-auto max-w-xl">
+          <ObtenerSigerd onCompletado={onCompletado} />
+        </div>
+      ) : (
+        // Sin credenciales el servidor no tiene con qué entrar al portal: se dice
+        // aquí y se lleva al paso donde se arregla, en vez de dejar pulsar un botón
+        // que va a fallar.
+        <div className="text-center">
+          <Button onClick={onConectar} className="bg-zero-600 hover:bg-zero-700">
+            <KeyRound className="mr-1.5 h-4 w-4" /> Guardar credenciales de SIGERD
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

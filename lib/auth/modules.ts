@@ -38,6 +38,10 @@ const MODULE_PERMISSION: Record<ModuleKey, Permission> = {
   administracion: 'modulo:administracion',
   pos: 'modulo:pos',
   escolar: 'modulo:escolar',
+  nomina: 'modulo:nomina',
+  // Sin permiso propio de módulo: entra quien ya podía ver la contabilidad
+  // cuando vivía dentro de Facturación, y los roles guardados no cambian.
+  contabilidad: 'contabilidad:ver',
 };
 
 /**

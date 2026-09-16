@@ -18,7 +18,7 @@ import { cookies } from 'next/headers';
 import { unstable_cache } from 'next/cache';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
-import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { calcularEstadoPago, retencionesQueSaldan } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 import { pRango, pVentaValida, pNotaCredito, pVentaEstados } from '@/lib/reportes/shared';
 
@@ -220,7 +220,17 @@ export const getTeamRoleForUser = cache(async (): Promise<string | null> => {
 export const getTeamIdForUser = cache(async (): Promise<number | null> => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie?.value) return null;
-  const sessionData = await verifyToken(sessionCookie.value);
+  // Mismo caso que en `getUser`: una cookie firmada con otro secreto, o
+  // manipulada, hace LANZAR a `verifyToken`. `getUser` ya lo atajaba y esta no,
+  // y como `requirePermission` pide las dos a la vez con `Promise.all`, bastaba
+  // esta para que TODA ruta protegida respondiera 500 sin cuerpo en vez de 401.
+  // El proxy no la limpia en `/api`: su matcher excluye esas rutas.
+  let sessionData: Awaited<ReturnType<typeof verifyToken>> | null = null;
+  try {
+    sessionData = await verifyToken(sessionCookie.value);
+  } catch {
+    return null;
+  }
   if (!sessionData?.user?.id) return null;
 
   // Platform admin → puede activar cualquier team sin membership check
@@ -497,72 +507,6 @@ export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string
     .where(where)
     .orderBy(desc(ecfDocuments.createdAt))
     .limit(limit);
-}
-
-/**
- * Listado de GASTOS (e43 menores / e47 pagos al exterior) con totales, para la
- * pantalla propia de Gastos (independiente de la caja). Compras (e41) tiene su
- * propia pantalla de "Facturas recibidas"; aquí no se mezclan.
- * Los totales excluyen anulados/rechazados; la lista los muestra igual.
- * Montos en CENTAVOS.
- */
-export async function getGastos(teamId: number, limit = 100) {
-  const TIPOS = ['43', '47'];
-  const base = and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, TIPOS));
-  const vivos = and(base, sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`);
-
-  const [docs, totRows, porCategoria] = await Promise.all([
-    db
-      .select({
-        id:            ecfDocuments.id,
-        encf:          ecfDocuments.encf,
-        tipoEcf:       ecfDocuments.tipoEcf,
-        estado:        ecfDocuments.estado,
-        estadoPago:    ecfDocuments.estadoPago,
-        proveedor:     ecfDocuments.razonSocialComprador,
-        rncProveedor:  ecfDocuments.rncComprador,
-        ncfProveedor:  ecfDocuments.ncfProveedor,
-        categoriaGasto: ecfDocuments.categoriaGasto,
-        pagoMetodo:    ecfDocuments.pagoMetodo,
-        pagoCuenta:    ecfDocuments.pagoCuenta,
-        montoTotal:    ecfDocuments.montoTotal,
-        fechaGasto:    ecfDocuments.fechaGasto,
-        fechaEmision:  ecfDocuments.fechaEmision,
-        createdAt:     ecfDocuments.createdAt,
-      })
-      .from(ecfDocuments)
-      .where(base)
-      .orderBy(desc(ecfDocuments.createdAt))
-      .limit(limit),
-    db
-      .select({
-        total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
-        count: sql<number>`count(*)`,
-      })
-      .from(ecfDocuments)
-      .where(vivos),
-    db
-      .select({
-        categoria: ecfDocuments.categoriaGasto,
-        total:     sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
-        count:     sql<number>`count(*)`,
-      })
-      .from(ecfDocuments)
-      .where(vivos)
-      .groupBy(ecfDocuments.categoriaGasto)
-      .orderBy(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0) desc`),
-  ]);
-
-  return {
-    docs,
-    totalCents: Number(totRows[0]?.total ?? 0),
-    count:      Number(totRows[0]?.count ?? 0),
-    porCategoria: porCategoria.map(c => ({
-      categoria:  c.categoria ?? 'Sin categoría',
-      totalCents: Number(c.total ?? 0),
-      count:      Number(c.count ?? 0),
-    })),
-  };
 }
 
 /**
@@ -1071,6 +1015,26 @@ export async function getCuentasPorCobrar(
  *
  * Retorna: filas + totales (monto total, conteo) + desglose por método.
  */
+/** Producto/servicio (dedup) de la factura de un pago, para el filtro por producto. */
+function productosDeLineas(lineasJson: string | null): { id: number; nombre: string; servicio: boolean }[] {
+  if (!lineasJson) return [];
+  let arr: unknown;
+  try { arr = JSON.parse(lineasJson); } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  const map = new Map<number, { id: number; nombre: string; servicio: boolean }>();
+  for (const raw of arr) {
+    const l = raw as Record<string, unknown>;
+    const id = Number(l.productoId);
+    if (!Number.isInteger(id) || id <= 0 || map.has(id)) continue;
+    map.set(id, {
+      id,
+      nombre: String(l.nombreItem ?? l.nombre ?? 'Ítem'),
+      servicio: String(l.indicadorBienoServicio ?? '').trim() === '2',
+    });
+  }
+  return [...map.values()];
+}
+
 export async function getPagosListado(
   teamId: number,
   opts: { desde?: string; hasta?: string; metodo?: string; limit?: number; offset?: number } = {},
@@ -1121,6 +1085,11 @@ export async function getPagosListado(
       clientId:     ecfDocuments.clientId,
       cliente:      ecfDocuments.razonSocialComprador,
       rncComprador: ecfDocuments.rncComprador,
+      // Origen de la venta: `tipo_orden` con valor (mostrador/para-llevar…) = POS;
+      // NULL = emitida desde Facturación. `lineas_json` para el filtro por
+      // producto/servicio (se procesa aquí y NO se envía al cliente).
+      tipoOrden:    ecfDocuments.tipoOrden,
+      lineasJson:   ecfDocuments.lineasJson,
       // Usuario que registró el pago.
       registradoPor: users.name,
       registradoPorEmail: users.email,
@@ -1147,16 +1116,23 @@ export async function getPagosListado(
   }
 
   const pagos = rows.map(r => {
+    // `lineas_json` se procesa aquí (productos del pago) y no se envía crudo: una
+    // sola factura ya pesa más que toda la página.
+    const { lineasJson, tipoOrden, ...rest } = r;
     // Enviado a DGII: la DGII devuelve trackId al recibir el e-CF, o el doc
     // quedó en un estado de envío. Excluye sin-ncf/históricas/borradores.
     const enviadoDgii =
       r.docTrackId != null ||
       ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(r.docEstado ?? '');
     return {
-      ...r,
+      ...rest,
       monto: Number(r.montoCentavos),
       enviadoDgii,
       pagosDelDoc: r.docId != null ? (pagosPorDoc.get(r.docId) ?? 1) : 1,
+      // Origen para el filtro POS/Facturación.
+      origen: (tipoOrden ? 'pos' : 'facturacion') as 'pos' | 'facturacion',
+      // Productos/servicios de la factura (dedup) para el filtro por producto.
+      productos: productosDeLineas(lineasJson),
     };
   });
 
@@ -1226,6 +1202,7 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
       montoTotal: ecfDocuments.montoTotal,
       encf:       ecfDocuments.encf,
       tipoEcf:    ecfDocuments.tipoEcf,
+      totalRetenciones: ecfDocuments.totalRetenciones,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
@@ -1240,6 +1217,7 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
     ? calcularEstadoPago({
         estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal,
         totalPagado: sum, totalNotasCredito: ncAplicado,
+        totalRetenciones: retencionesQueSaldan(doc.tipoEcf, doc.totalRetenciones),
       })
     : 'PENDIENTE';
 

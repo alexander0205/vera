@@ -69,7 +69,10 @@ export type AuditAction =
   // cuesta dinero (el SMS), así que se traza igual que un envío de verdad.
   | 'ESCOLAR_AVISO_PRUEBA'
   // WhatsApp (crm-escolar)
-  | 'WHATSAPP_CONECTAR';
+  | 'WHATSAPP_CONECTAR'
+  // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
+  // clasifica todo lo que viene después. Se traza quién y cuánto.
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO';
 
 export interface AuditParams {
   teamId:    number;

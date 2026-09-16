@@ -1,5 +1,7 @@
 // Tipos compartidos del formulario de Nueva Factura.
 
+import { tasasRetencion, CAMBIO_RETENCIONES_LEY_30_26 } from '@/lib/compras/fiscal';
+
 export interface Cliente {
   id:          number;
   razonSocial: string;
@@ -210,14 +212,22 @@ export const TASA_ITBIS = [
   { value: 'exento', label: 'Exento' },
 ];
 
+// Tasas de ISR vigentes: las mismas que sugiere el registro de compras
+// (lib/compras/fiscal.ts). Desde el 1-jul-2026 la Ley 30-26 subió honorarios y
+// alquileres de personas físicas al 15 % y los servicios técnicos al 3 %.
+const TASAS_ISR = tasasRetencion(CAMBIO_RETENCIONES_LEY_30_26);
+const pct = (tasa: number) => Math.round(tasa * 100);
+
 export const RETENCIONES_PREDEFINIDAS = [
   // ITBIS
   { id: 'itbis_30',  nombre: 'Retención ITBIS',         porcentaje: 30,  tipo: 'itbis' as const, descripcion: 'Retención 30% del ITBIS (Estado y entidades públicas)' },
   { id: 'itbis_75',  nombre: 'Retención ITBIS',         porcentaje: 75,  tipo: 'itbis' as const, descripcion: 'Retención 75% del ITBIS (Grandes Contribuyentes designados)' },
   { id: 'itbis_100', nombre: 'Retención ITBIS',         porcentaje: 100, tipo: 'itbis' as const, descripcion: 'Retención 100% del ITBIS' },
   // ISR
-  { id: 'isr_alq',   nombre: 'Alquileres',              porcentaje: 10,  tipo: 'isr'   as const, descripcion: 'ISR sobre alquileres pagados a personas físicas (10%)' },
-  { id: 'isr_hon',   nombre: 'Honorarios por servicios', porcentaje: 10, tipo: 'isr'   as const, descripcion: 'ISR honorarios profesionales y servicios (10%)' },
+  { id: 'isr_alq',   nombre: 'Alquileres',              porcentaje: pct(TASAS_ISR.alquilerPF),   tipo: 'isr' as const, descripcion: `ISR sobre alquileres pagados a personas físicas (${pct(TASAS_ISR.alquilerPF)}%)` },
+  { id: 'isr_hon',   nombre: 'Honorarios por servicios', porcentaje: pct(TASAS_ISR.honorariosPF), tipo: 'isr' as const, descripcion: `ISR honorarios profesionales de personas físicas (${pct(TASAS_ISR.honorariosPF)}%)` },
+  { id: 'isr_tec',   nombre: 'Servicios técnicos',      porcentaje: pct(TASAS_ISR.tecnicosPF),   tipo: 'isr' as const, descripcion: `ISR servicios técnicos y mano de obra de personas físicas (${pct(TASAS_ISR.tecnicosPF)}%)` },
+  { id: 'isr_ext',   nombre: 'Pagos al exterior',       porcentaje: pct(TASAS_ISR.exterior),     tipo: 'isr' as const, descripcion: `ISR sobre rentas pagadas a no residentes (${pct(TASAS_ISR.exterior)}%)` },
   { id: 'isr_otras', nombre: 'Otras rentas',            porcentaje: 10,  tipo: 'isr'   as const, descripcion: 'ISR otras rentas (10%)' },
   { id: 'isr_div',   nombre: 'Dividendos',              porcentaje: 10,  tipo: 'isr'   as const, descripcion: 'ISR retención dividendos (10%)' },
 ];

@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
         emailComprador:       ecfDocuments.emailComprador,
         montoTotal:           ecfDocuments.montoTotal,
         totalItbis:           ecfDocuments.totalItbis,
+        totalRetenciones:     ecfDocuments.totalRetenciones,
         tipoPago:             ecfDocuments.tipoPago,
         fechaEmision:         ecfDocuments.fechaEmision,
         fechaLimitePago:      ecfDocuments.fechaLimitePago,

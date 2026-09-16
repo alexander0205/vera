@@ -9,7 +9,7 @@ import {
   Settings, Plus,
   TrendingDown, BarChart3, CreditCard,
   Search, AlertCircle, Zap,
-  ShoppingCart, Wallet, BookOpen,
+  ShoppingCart, Wallet, FileSearch,
   LifeBuoy,
   } from 'lucide-react';
 import { ModuleHeader } from '@/components/module-header';
@@ -50,7 +50,8 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
-      { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
+      // «Pagos recibidos» (/dashboard/pagos) vive ahora en Reportes (tarjeta en el
+      // índice), no aquí: es un reporte de consulta, no un paso de emisión.
       // Cobro por internet: oculto mientras no haya credenciales de producción
       // de la pasarela. Ver lib/config/pagos-online.ts.
       ...(PAGOS_ONLINE_ENABLED ? [
@@ -85,23 +86,16 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/gastos',       label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
     ],
   },
+  // El libro, los reportes y la configuración contable se mudaron al módulo
+  // Contabilidad (/contabilidad). Aquí quedan los libros de comprobantes, que
+  // son de la DGII y se usan facturando; sus rutas no cambiaron.
   {
-    id: 'contabilidad',
-    label: 'Contabilidad',
-    icon: BookOpen,
+    id: 'comprobantes',
+    label: 'Comprobantes',
+    // No el libro abierto: ese es el icono del módulo Contabilidad.
+    icon: FileSearch,
     children: [
-      { href: '/dashboard/contabilidad/cuentas',      label: 'Catálogo de cuentas' },
-      { href: '/dashboard/contabilidad/libro-diario', label: 'Libro diario' },
-      { href: '/dashboard/contabilidad/nuevo-asiento', label: 'Nuevo asiento manual' },
-      { href: '/dashboard/contabilidad/mayor',        label: 'Mayor general' },
-      { href: '/dashboard/contabilidad/balance',      label: 'Balance de comprobación' },
-      { href: '/dashboard/contabilidad/estado-resultados', label: 'Estado de resultados' },
-      { href: '/dashboard/contabilidad/balance-general', label: 'Balance general' },
-      { href: '/dashboard/contabilidad/activos-fijos', label: 'Activos fijos' },
-      { href: '/dashboard/contabilidad/cuentas-por-pagar', label: 'Cuentas por pagar' },
-      { href: '/dashboard/contabilidad/cierre-ejercicio', label: 'Cierre de ejercicio' },
-      { href: '/dashboard/contabilidad/configuracion', label: 'Configuración contable' },
-      { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
+      { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias de comprobantes' },
       { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
     ],
   },
@@ -180,19 +174,9 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
 
-  // Contabilidad — el grupo llegó de main sin gate: cualquiera con dashboard
-  // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
-  '/dashboard/contabilidad/cuentas':      'contabilidad:ver',
-  '/dashboard/contabilidad/libro-diario':  'contabilidad:ver',
-  '/dashboard/contabilidad/nuevo-asiento': 'contabilidad:gestionar',
-  '/dashboard/contabilidad/mayor':         'contabilidad:ver',
-  '/dashboard/contabilidad/balance':       'contabilidad:ver',
-  '/dashboard/contabilidad/estado-resultados': 'contabilidad:ver',
-  '/dashboard/contabilidad/balance-general': 'contabilidad:ver',
-  '/dashboard/contabilidad/activos-fijos': 'contabilidad:ver',
-  '/dashboard/contabilidad/cuentas-por-pagar': 'contabilidad:ver',
-  '/dashboard/contabilidad/cierre-ejercicio': 'contabilidad:ver',
-  '/dashboard/contabilidad/configuracion': 'contabilidad:ver',
+  // Comprobantes — llegaron de main sin gate: cualquiera con dashboard veía
+  // secuencias y consulta de e-NCF. Se gatean junto con el motor contable. El
+  // resto de la contabilidad vive en su módulo, con su propio layout.
   '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
   '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',
 
@@ -363,7 +347,7 @@ function SidebarContent({
   empujarItem('contactos');
   for (const g of groupsVisibles) {
     seccionesBase.push({ tipo: 'grupo', ...g });
-    if (g.id === 'contabilidad') empujarItem('reportes');
+    if (g.id === 'comprobantes') empujarItem('reportes');
   }
   // Sin permiso de contabilidad no hay de qué colgarlo; cierra la lista.
   if (!seccionesBase.some(s => s.id === 'reportes')) empujarItem('reportes');

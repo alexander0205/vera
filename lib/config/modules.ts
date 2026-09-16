@@ -6,7 +6,7 @@
  * componentes cliente (module-switcher, hooks).
  */
 
-export const MODULES = ['facturacion', 'administracion', 'pos', 'escolar'] as const;
+export const MODULES = ['facturacion', 'administracion', 'pos', 'escolar', 'nomina', 'contabilidad'] as const;
 export type ModuleKey = (typeof MODULES)[number];
 
 /**
@@ -14,8 +14,13 @@ export type ModuleKey = (typeof MODULES)[number];
  * facturación es el producto, y administración es donde el dueño gestiona su
  * propia empresa, usuarios y roles. El panel admin los muestra activos y no
  * permite desmarcarlos; el resto de módulos sí se encienden uno a uno.
+ *
+ * Contabilidad es base porque ya venía en todos los planes dentro de
+ * Facturación: salió a su propio espacio para que quien solo factura no se
+ * tope con el libro diario, no para empezar a cobrarla. Quién entra lo decide
+ * el rol (`contabilidad:ver`).
  */
-export const MODULES_BASE = ['facturacion', 'administracion'] as const satisfies readonly ModuleKey[];
+export const MODULES_BASE = ['facturacion', 'administracion', 'contabilidad'] as const satisfies readonly ModuleKey[];
 
 /** ¿Es un módulo base (siempre activo, no desactivable)? */
 export function isBaseModule(mod: ModuleKey): boolean {
@@ -31,6 +36,8 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   administracion: 'Administración',
   pos: 'Punto de Venta',
   escolar: 'Gobernanza de Colegios',
+  nomina: 'Nómina',
+  contabilidad: 'Contabilidad',
 };
 
 /**
@@ -43,6 +50,12 @@ export const MODULE_DEPENDENCIES: Record<ModuleKey, readonly ModuleKey[]> = {
   administracion: [],
   pos: [],
   escolar: ['facturacion'],
+  // Nómina se sostiene sola: los pagos al personal se resuelven con archivo de
+  // dispersión bancaria, no dependen de facturación como el cobro escolar.
+  nomina: [],
+  // Contabilidad lee lo que registran los demás, pero no necesita a ninguno
+  // para abrir: una empresa puede llevar solo asientos manuales.
+  contabilidad: [],
 };
 
 /** Expande una lista de módulos con sus dependencias (activar escolar activa facturación). */
@@ -65,6 +78,8 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   administracion: 'Mi empresa, usuarios y roles',
   pos: 'Terminal de venta, turnos de caja e inventario en piso',
   escolar: 'Estudiantes, matrículas, cargos y pagos del colegio',
+  nomina: 'Empleados, corridas de nómina y pagos al personal',
+  contabilidad: 'Catálogo de cuentas, libro diario y estados financieros',
 };
 
 /** Icono lucide-react de cada módulo (para switcher y cards). */
@@ -73,6 +88,8 @@ export const MODULE_ICONS: Record<ModuleKey, string> = {
   administracion: 'Building2',
   pos: 'Store',
   escolar: 'GraduationCap',
+  nomina: 'Users',
+  contabilidad: 'BookOpen',
 };
 
 /** Ruta interna raíz de cada módulo (rewrites del proxy apuntan aquí). */
@@ -81,6 +98,8 @@ export const MODULE_HOME: Record<ModuleKey, string> = {
   administracion: '/cuenta',
   pos: '/pos',
   escolar: '/escolar',
+  nomina: '/nomina',
+  contabilidad: '/contabilidad',
 };
 
 /**

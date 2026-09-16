@@ -20,7 +20,7 @@ import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import {
-  listarAsientos, contarPendientes, generarAsientosPendientes, verificarCuadre,
+  listarAsientos, contarPendientes, generarAsientosPendientes, descuadradosDePagina,
   ORIGENES, type OrigenTipo,
 } from '@/lib/contabilidad/libro-diario';
 import { fechaValidaISO } from '@/lib/utils/format';
@@ -69,15 +69,16 @@ export async function GET(req: NextRequest) {
   const cuentaRaw = Number(searchParams.get('cuentaId'));
   const cuentaId = Number.isInteger(cuentaRaw) && cuentaRaw > 0 ? cuentaRaw : undefined;
 
-  const [{ asientos, total, sumaCents }, pendientes, cuadre] = await Promise.all([
+  const [{ asientos, total, sumaCents }, pendientes] = await Promise.all([
     listarAsientos(teamId, { limit, offset, origenTipo, desde, hasta, cuentaId }),
     contarPendientes(teamId),
-    verificarCuadre(teamId),
   ]);
 
+  // Misma forma de respuesta que antes, pero de la página pedida: el recorrido
+  // del libro entero ya no corre en cada consulta. Ver `descuadradosDePagina`.
   return NextResponse.json({
     asientos, total, sumaCents, pendientes,
-    descuadrados: cuadre.asientosDescuadrados,
+    descuadrados: descuadradosDePagina(asientos),
   });
 }
 

@@ -91,6 +91,26 @@ export async function getEstadoConfiguracion(teamId: number): Promise<EstadoConf
     }
   }
 
+  // Formas de cobro apuntadas a una cuenta que no es de activo (quedaron así
+  // antes de que la configuración lo impidiera): sus asientos mueven capital,
+  // ingresos o pasivos en vez de caja o bancos.
+  const malApuntados = await db.execute(sql`
+    SELECT m.clave, c.codigo, c.nombre
+    FROM contabilidad_config_metodos_pago m
+    JOIN contabilidad_cuentas c ON c.id = m.cuenta_id
+    WHERE m.team_id = ${teamId} AND c.tipo <> 'activo'
+    ORDER BY m.clave
+  `);
+  for (const m of malApuntados as unknown as { clave: ClaveMetodo; codigo: string; nombre: string }[]) {
+    if (!(m.clave in CLAVE_METODO_LABEL)) continue;
+    huecos.push({
+      clave: `metodo-cuenta-${m.clave}`,
+      que: `${CLAVE_METODO_LABEL[m.clave]} entra a ${m.codigo} ${m.nombre}`,
+      porque: 'El dinero cobrado tiene que ir a caja, bancos o cobros por liquidar; esa cuenta no es de activo y cada cobro la descuadra.',
+      seccion: 'metodos',
+    });
+  }
+
   const metodosSinCuenta = await getMetodosUsadosSinCuenta(teamId);
   for (const clave of metodosSinCuenta) {
     huecos.push({
