@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
+import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 
 /**
  * Lo que va a deber el alumno al matricularlo, con lo que no aplique
@@ -25,12 +26,6 @@ interface LineaPlan {
   conceptoId: number; nombre: string; tipo: string;
   admiteBeca: boolean; montoCentavos: number; origen: string;
   cuotas: CuotaPlan[]; totalCentavos: number; omitidas: number;
-}
-
-/** Último día del mes de una fecha ISO: hasta ahí se cobra al matricular. */
-function finDeMes(fecha: string): string {
-  const [anio, mes] = fecha.split('-').map(Number);
-  return new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
 }
 
 const fmtRD = (centavos: number) =>
@@ -102,19 +97,16 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
   useEffect(() => { onCambio([...marcados]); }, [marcados, onCambio]);
 
   const resumenPlan = useMemo(() => {
-    const corte = finDeMes(desde);
-    let ahora = 0, ahoraCargos = 0, despues = 0, despuesCargos = 0;
-    for (const l of plan) {
-      if (!marcados.has(l.conceptoId)) continue;
-      for (const c of l.cuotas) {
-        if (c.omitida) continue;
-        // Se compara la EMISIÓN, igual que el devengo: lo que se le carga hoy
-        // es lo que ya se le habría facturado, no lo que ya se le venció.
-        if (c.fechaEmision <= corte) { ahora += c.montoCentavos; ahoraCargos++; }
-        else { despues += c.montoCentavos; despuesCargos++; }
-      }
-    }
-    return { ahora, ahoraCargos, despues, despuesCargos, total: ahora + despues };
+    // La misma regla con la que se crean los cargos al guardar: lo que se ve
+    // aquí es lo que queda. Se compara la EMISIÓN, igual que el devengo.
+    const { ahora, despues } = cuotasAlMatricular(plan, marcados, desde);
+    const ahoraCentavos = sumaCentavos(ahora);
+    const despuesCentavos = sumaCentavos(despues);
+    return {
+      ahora: ahoraCentavos, ahoraCargos: ahora.length,
+      despues: despuesCentavos, despuesCargos: despues.length,
+      total: ahoraCentavos + despuesCentavos,
+    };
   }, [plan, marcados, desde]);
 
   if (!cursoId) return null;
@@ -194,7 +186,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
                     {resumenPlan.ahoraCargos === 0
                       ? 'No se genera ningún cargo todavía.'
                       : `Se generan ${resumenPlan.ahoraCargos} cargo(s) pendientes. No se cobra nada ahora.`}
-                    {resumenPlan.despues > 0 && ' Las demás cuotas se generan al llegar su mes.'}
+                    {resumenPlan.despues > 0 && ' Las demás cuotas se generan cuando llega su fecha.'}
                   </p>
                 </>
               )}

@@ -14,6 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { MatriculaDialog } from '@/components/administracion-escolar/MatriculaDialog';
+import { MatriculaLoteDialog } from '@/components/administracion-escolar/MatriculaLoteDialog';
 import { MatriculaFicha, EstadoMatriculaBadge } from '@/components/administracion-escolar/MatriculaFicha';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { CalendarDays, ClipboardList, GraduationCap, Loader2, Plus, Search, Users } from 'lucide-react';
@@ -95,6 +96,7 @@ export default function MatriculasClient() {
   const [stats, setStats] = useState({ total: 0, activas: 0, cursos: 0 });
 
   const [showForm, setShowForm]     = useState(false);
+  const [showLote, setShowLote]     = useState(false);
   /** La matrícula que se está editando; `null` mientras se crea una nueva. */
   const [editando, setEditando]     = useState<Matricula | null>(null);
   const [porBorrar, setPorBorrar]   = useState<Matricula | null>(null);
@@ -227,9 +229,14 @@ export default function MatriculasClient() {
           <p className="text-sm text-gray-500 mt-1">Quién está inscrito en qué curso, y qué debe de ese período</p>
         </div>
         {puedeGestionar && (
-          <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNueva} disabled={loading || sinCatalogos}>
-            <Plus className="h-4 w-4 mr-2" />Nueva matrícula
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowLote(true)} disabled={loading || sinCatalogos}>
+              <Users className="h-4 w-4 mr-2" />Matricular en lote
+            </Button>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNueva} disabled={loading || sinCatalogos}>
+              <Plus className="h-4 w-4 mr-2" />Nueva matrícula
+            </Button>
+          </div>
         )}
       </div>
 
@@ -407,6 +414,15 @@ export default function MatriculasClient() {
         estudianteFijoNombre={editando ? `${editando.estudiante ?? ''} ${editando.estudianteApellidos ?? ''}`.trim() : null}
         onClose={() => { setShowForm(false); setEditando(null); }}
         onSaved={() => { setShowForm(false); setEditando(null); void cargarMatriculas(); }}
+      />
+
+      {/* Matricular a varios alumnos de la misma sección de una pasada. No se
+          cierra al confirmar: enseña el resultado —quién entró, quién chocaba—
+          antes de cerrarse. */}
+      <MatriculaLoteDialog
+        open={showLote}
+        onClose={() => setShowLote(false)}
+        onSaved={() => { void cargarMatriculas(); }}
       />
 
       {/* Borrar es para deshacer un error de dedo. Si la matrícula ya movió
