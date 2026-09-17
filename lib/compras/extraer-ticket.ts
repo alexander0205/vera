@@ -99,6 +99,19 @@ export function normalizarExtraccion(crudo: unknown): ResultadoExtraccion {
   const total = aCentavos(r.totalCents);
   if (total == null) avisos.push('No se detectó el total; escríbelo a mano.');
 
+  // El año es lo que peor lee la IA en una foto de celular: 2026 sale como
+  // 2020 o 2024. Si el año difiere del actual por más de uno, es casi seguro un
+  // misread — se avisa para que el revisor lo mire (no se bloquea: una compra
+  // de fin de año registrada en enero es legítima, por eso el margen de ±1).
+  const fecha = normalizarFecha(r.fecha);
+  if (fecha) {
+    const anio = Number(fecha.slice(0, 4));
+    const anioActual = new Date().getFullYear();
+    if (Math.abs(anio - anioActual) > 1) {
+      avisos.push(`La fecha parece mal leída (año ${anio}); verifícala.`);
+    }
+  }
+
   const lineas = (r.lineas ?? [])
     .map((l) => ({
       descripcion: (l.descripcion ?? '').trim(),
@@ -112,7 +125,7 @@ export function normalizarExtraccion(crudo: unknown): ResultadoExtraccion {
       proveedorNombre: r.proveedorNombre?.trim() || null,
       proveedorRnc: rnc?.limpio || null,
       ncf: r.ncf?.trim() || null,
-      fecha: normalizarFecha(r.fecha),
+      fecha,
       subtotalCents: aCentavos(r.subtotalCents),
       itbisCents: aCentavos(r.itbisCents),
       totalCents: total,

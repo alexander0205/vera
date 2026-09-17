@@ -56,6 +56,19 @@ describe('normalizarExtraccion', () => {
     expect(r.datos.fecha).toBe('2026-09-15');
   });
 
+  it('avisa cuando el año de la fecha está lejos del actual (misread de foto)', () => {
+    const anioViejo = new Date().getFullYear() - 6; // ej. 2026 -> 2020
+    const r = normalizarExtraccion({ fecha: `${anioViejo}-09-18`, ncf: null, totalCents: 100, lineas: [] });
+    expect(r.datos.fecha).toBe(`${anioViejo}-09-18`); // no se corrige, solo se avisa
+    expect(r.avisos.some((a) => /fecha parece mal le/i.test(a))).toBe(true);
+  });
+
+  it('no avisa cuando el año está dentro de ±1 del actual', () => {
+    const anio = new Date().getFullYear();
+    const r = normalizarExtraccion({ fecha: `${anio}-09-18`, ncf: null, totalCents: 100, lineas: [] });
+    expect(r.avisos.some((a) => /fecha parece mal le/i.test(a))).toBe(false);
+  });
+
   it('avisa cuando falta el total y cuando el RNC es inválido', () => {
     const r = normalizarExtraccion({ proveedorRnc: '123', totalCents: null, ncf: null, lineas: [] });
     expect(r.datos.totalCents).toBeNull();
