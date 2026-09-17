@@ -19,6 +19,8 @@ import { rangoDelMes } from '@/lib/nomina/periodos';
 import { analizarNcf } from '@/lib/compras/fiscal';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
 import type { FilaCompra } from '@/lib/compras/consultas';
+import CapturaEnlaceBoton from './_captura-enlace-boton';
+import CapturasTab from './_capturas-tab';
 
 const ESTADO_CHIP: Record<string, { label: string; bgcolor: string; color: string; border: string }> = {
   ACEPTADO:             { label: 'Aceptado',    bgcolor: '#ecfdf5', color: '#065f46', border: '#6ee7b7' },
@@ -163,7 +165,7 @@ export default function ComprasPage() {
 
   const hoy = hoyRD();
   const [mes, setMes] = useState(hoy.slice(0, 7));
-  const [tab, setTab] = useState<'registradas' | 'recibidas'>('registradas');
+  const [tab, setTab] = useState<'registradas' | 'recibidas' | 'capturas'>('registradas');
   const rango = mes ? rangoDelMes(mes) : null;
 
   const { data: recibidas, isLoading: cargandoRecibidas } = useSWR<ComprasResponse>(
@@ -205,6 +207,7 @@ export default function ComprasPage() {
         </Box>
         {canRegistrar && (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <CapturaEnlaceBoton />
             <Button component={Link} href="/dashboard/compras/nueva" variant="outlined" size="small" startIcon={<UserRound style={{ width: 16, height: 16 }} />}
               title="Para personas sin RNC que no pueden darte comprobante: lo emites tú (e41)">
               Compra a informal (e41)
@@ -219,6 +222,7 @@ export default function ComprasPage() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)}>
         {canVerRegistradas && <Tab value="registradas" label="Compras registradas" />}
         {canVerRecibidas && <Tab value="recibidas" label="e-CF recibidos" />}
+        {canRegistrar && <Tab value="capturas" label="Capturas" />}
       </Tabs>
 
       {tab === 'registradas' && canVerRegistradas && (
@@ -249,6 +253,8 @@ export default function ComprasPage() {
           />
         </>
       )}
+
+      {tab === 'capturas' && canRegistrar && <CapturasTab />}
 
       {tab === 'recibidas' && canVerRecibidas && (
         <>

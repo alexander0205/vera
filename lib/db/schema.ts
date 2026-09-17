@@ -1591,6 +1591,67 @@ export const pagosProveedores = pgTable('pagos_proveedores', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('pagos_proveedores_team_compra_idx').on(t.teamId, t.compraId)]);
 
+// ─── Captura de compras por foto con IA (migración 0181) ─────────────────────
+
+/**
+ * El enlace permanente del negocio para registrar compras con la cámara.
+ * Uno por equipo. «Regenerar» reemplaza el token en la misma fila: el viejo
+ * deja de resolver al instante.
+ */
+export const comprasCapturaLinks = pgTable('compras_captura_links', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  /** Va en la URL. Única credencial de la página: largo y aleatorio. */
+  token:         varchar('token', { length: 48 }).notNull().unique(),
+  /** abierto | revocado */
+  estado:        varchar('estado', { length: 20 }).notNull().default('abierto'),
+  ultimoAcceso:  timestamp('ultimo_acceso'),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [uniqueIndex('compras_captura_links_team_uq').on(t.teamId)]);
+
+/** Lo que QR/IA sacó de la foto. Es un borrador: nada de esto entra a libros
+ *  hasta que alguien con sesión lo registra. */
+export interface CapturaExtraida {
+  proveedorNombre: string | null;
+  proveedorRnc: string | null;
+  ncf: string | null;
+  /** YYYY-MM-DD */
+  fecha: string | null;
+  subtotalCents: number | null;
+  itbisCents: number | null;
+  totalCents: number | null;
+  lineas: { descripcion: string; cantidad: number; costoUnitarioCents: number }[];
+}
+
+/** Cada foto enviada por el enlace, como borrador pendiente de revisar. */
+export const comprasCapturas = pgTable('compras_capturas', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  linkId:        integer('link_id').notNull().references(() => comprasCapturaLinks.id, { onDelete: 'cascade' }),
+  /** `s3:<key>` o `data:image/...;base64,...` (fallback sin S3). */
+  fotoRef:       text('foto_ref').notNull(),
+  /** qr | ia */
+  origen:        varchar('origen', { length: 10 }).notNull(),
+  /** pendiente | registrada | descartada */
+  estado:        varchar('estado', { length: 12 }).notNull().default('pendiente'),
+  extraido:      jsonb('extraido').$type<CapturaExtraida | null>(),
+  /** Desnormalizados para listar y detectar duplicados sin abrir el JSON. */
+  proveedorRnc:  varchar('proveedor_rnc', { length: 20 }),
+  ncf:           varchar('ncf', { length: 19 }),
+  totalCents:    bigint('total_cents', { mode: 'number' }),
+  /** La compra que salió de esta captura, si se registró. */
+  compraId:      integer('compra_id').references(() => comprasLocales.id, { onDelete: 'set null' }),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [
+  index('compras_capturas_team_estado_idx').on(t.teamId, t.estado),
+  index('compras_capturas_dedup_idx').on(t.teamId, t.proveedorRnc, t.ncf),
+]);
+
+export type ComprasCapturaLink = typeof comprasCapturaLinks.$inferSelect;
+export type ComprasCaptura     = typeof comprasCapturas.$inferSelect;
+
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 
 export const listasPrecios = pgTable('listas_precios', {
