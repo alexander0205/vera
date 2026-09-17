@@ -120,14 +120,34 @@ export function normalizarExtraccion(crudo: unknown): ResultadoExtraccion {
     }))
     .filter((l) => l.descripcion || l.costoUnitarioCents > 0);
 
+  const subtotal = aCentavos(r.subtotalCents);
+  const itbis = aCentavos(r.itbisCents);
+
+  // Chequeos de aritmética: un dígito mal leído en un monto casi nunca cuadra
+  // con el resto. Se avisa, no se corrige. Todos en una sola dirección para no
+  // dar falsos positivos con lo legítimo (propina/ISC hacen total > sub+itbis,
+  // y eso NO se marca; ítems exentos bajan el ITBIS, y eso tampoco).
+  if (subtotal != null && itbis != null && total != null && subtotal + itbis > total + 100) {
+    avisos.push('Subtotal + ITBIS supera el total: revisa los montos.');
+  }
+  if (subtotal != null && subtotal > 0 && itbis != null && itbis > subtotal * 0.20) {
+    avisos.push('El ITBIS parece alto para el subtotal; verifícalo.');
+  }
+  if (lineas.length > 0 && subtotal != null && subtotal > 0) {
+    const sumaLineas = lineas.reduce((s, l) => s + l.cantidad * l.costoUnitarioCents, 0);
+    if (Math.abs(sumaLineas - subtotal) > Math.max(500, subtotal * 0.05)) {
+      avisos.push('Las líneas no suman el subtotal; verifícalas.');
+    }
+  }
+
   return {
     datos: {
       proveedorNombre: r.proveedorNombre?.trim() || null,
       proveedorRnc: rnc?.limpio || null,
       ncf: r.ncf?.trim() || null,
       fecha,
-      subtotalCents: aCentavos(r.subtotalCents),
-      itbisCents: aCentavos(r.itbisCents),
+      subtotalCents: subtotal,
+      itbisCents: itbis,
       totalCents: total,
       lineas,
     },

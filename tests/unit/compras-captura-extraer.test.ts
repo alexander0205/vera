@@ -37,7 +37,7 @@ describe('normalizarExtraccion', () => {
       subtotalCents: 85000,
       itbisCents: 15300,
       totalCents: 100300,
-      lineas: [{ descripcion: 'Alcohol', cantidad: 1, costoUnitarioCents: 35000 }],
+      lineas: [{ descripcion: 'Alcohol', cantidad: 1, costoUnitarioCents: 85000 }],
     });
     expect(r.datos.proveedorNombre).toBe('Farmacia Carol');
     expect(r.datos.proveedorRnc).toBe('101023031');
@@ -67,6 +67,39 @@ describe('normalizarExtraccion', () => {
     const anio = new Date().getFullYear();
     const r = normalizarExtraccion({ fecha: `${anio}-09-18`, ncf: null, totalCents: 100, lineas: [] });
     expect(r.avisos.some((a) => /fecha parece mal le/i.test(a))).toBe(false);
+  });
+
+  const anioOk = () => `${new Date().getFullYear()}-09-18`;
+
+  it('avisa si subtotal + ITBIS supera el total (monto mal leído)', () => {
+    const r = normalizarExtraccion({ fecha: anioOk(), ncf: null, subtotalCents: 100000, itbisCents: 18000, totalCents: 100000, lineas: [] });
+    expect(r.avisos.some((a) => /supera el total/i.test(a))).toBe(true);
+  });
+
+  it('NO avisa cuando el total es mayor por propina/ISC (legítimo)', () => {
+    const r = normalizarExtraccion({ fecha: anioOk(), ncf: null, subtotalCents: 100000, itbisCents: 18000, totalCents: 130000, lineas: [] });
+    expect(r.avisos.some((a) => /supera el total/i.test(a))).toBe(false);
+  });
+
+  it('avisa si el ITBIS es desproporcionado al subtotal', () => {
+    const r = normalizarExtraccion({ fecha: anioOk(), ncf: null, subtotalCents: 100000, itbisCents: 30000, totalCents: 130000, lineas: [] });
+    expect(r.avisos.some((a) => /ITBIS parece alto/i.test(a))).toBe(true);
+  });
+
+  it('avisa si las líneas no suman el subtotal', () => {
+    const r = normalizarExtraccion({
+      fecha: anioOk(), ncf: null, subtotalCents: 100000, itbisCents: 18000, totalCents: 118000,
+      lineas: [{ descripcion: 'X', cantidad: 1, costoUnitarioCents: 50000 }],
+    });
+    expect(r.avisos.some((a) => /líneas no suman/i.test(a))).toBe(true);
+  });
+
+  it('NO avisa cuando líneas y subtotal cuadran', () => {
+    const r = normalizarExtraccion({
+      fecha: anioOk(), ncf: null, subtotalCents: 100000, itbisCents: 18000, totalCents: 118000,
+      lineas: [{ descripcion: 'X', cantidad: 2, costoUnitarioCents: 50000 }],
+    });
+    expect(r.avisos).toHaveLength(0);
   });
 
   it('avisa cuando falta el total y cuando el RNC es inválido', () => {

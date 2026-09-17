@@ -77,8 +77,11 @@ export async function POST(
   if (!resultado) {
     origen = 'ia';
     try {
-      const jpg = await procesarImagen(buffer);
-      resultado = await extraerConIa(jpg.toString('base64'), 'image/jpeg');
+      // Al modelo va una imagen GRANDE (1600px): a 800px —lo que se guarda para
+      // mostrar— el texto chico (NCF, fecha) se pierde y la IA lo adivina mal.
+      // Leer y mostrar usan resoluciones distintas a propósito.
+      const jpgOcr = await procesarImagen(buffer, { lado: 1600, calidad: 85 });
+      resultado = await extraerConIa(jpgOcr.toString('base64'), 'image/jpeg');
     } catch (e) {
       if (e instanceof GeminiError) {
         const status = e.codigo === 'limite' ? 429 : e.codigo === 'timeout' ? 504 : 502;
