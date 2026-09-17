@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission, type AuthErr, type AuthOk } from '@/lib/auth/api-guard';
 import { registrarCompra, CompraError } from '@/lib/compras/registrar';
+import { marcarCapturaRegistrada } from '@/lib/compras/captura-link';
 import { listarCompras } from '@/lib/compras/consultas';
 import { METODOS_PAGO_COMPRA, TASAS_ITBIS, TIPOS_PROVEEDOR } from '@/lib/compras/fiscal';
 import { esFechaYMD } from '@/lib/nomina/periodos';
@@ -50,6 +51,8 @@ const compraSchema = z.object({
   almacenId: z.number().int().positive().nullable().optional(),
   notas: z.string().max(1000).nullable().optional(),
   permitirNcfRepetido: z.boolean().optional(),
+  /** La captura de foto de la que salió este registro, para marcarla registrada. */
+  capturaId: z.number().int().positive().nullable().optional(),
 });
 
 /** Compras exige gestionar productos; un gasto también lo puede registrar quien crea facturas. */
@@ -75,6 +78,15 @@ export async function POST(req: NextRequest) {
       proveedorRnc: parsed.data.proveedorRnc ?? null,
       proveedorNombre: parsed.data.proveedorNombre ?? null,
     });
+    // Sacar la captura de la cola: quedó hecha compra. Acotado por team; no
+    // rompe el registro si falla (la compra ya está).
+    if (parsed.data.capturaId) {
+      try {
+        await marcarCapturaRegistrada(auth.teamId, parsed.data.capturaId, r.compraId);
+      } catch (e) {
+        console.error('[compras/local] no se pudo marcar la captura', e);
+      }
+    }
     return NextResponse.json({ ok: true, ...r }, { status: 201 });
   } catch (e) {
     if (e instanceof CompraError) {

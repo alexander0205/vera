@@ -40,6 +40,8 @@ export interface ContextoRegistro {
     lineas: LineaEcfRecibido[];
   } | null;
   avisoEcf: string | null;
+  /** La captura de foto que se está registrando, si el formulario vino de una. */
+  capturaId?: number | null;
 }
 
 interface Producto { id: number; nombre: string; referencia: string | null; tipo: string; tasaItbis: string; costo: number; stockActual: number }
@@ -306,6 +308,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           almacenId: almacenId ? Number(almacenId) : null,
           notas: notas.trim() || null,
           permitirNcfRepetido,
+          capturaId: contexto.capturaId ?? null,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -351,7 +354,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {contexto.avisoEcf}
         </div>
       )}
-      {ini && (
+      {ini && !contexto.capturaId && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800" data-testid="aviso-ecf-recibido">
           <Info className="mt-0.5 h-4 w-4 shrink-0" /> Datos tomados del e-CF recibido. Revisa la categoría de cada línea y las retenciones.
         </div>
