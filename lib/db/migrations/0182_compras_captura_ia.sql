@@ -9,8 +9,8 @@
 --
 -- Aditiva e idempotente: se corre a mano con psql.
 --
--- NOTA MERGE: el número 0181 también lo usa la rama fix/sigerd-candado-idcentro.
--- Si esa entra antes a v2, renumerar este a 0182 (ambos son idempotentes).
+-- NOTA MERGE: roles-adicionales tomó la 0181 (subió primero). Este es 0182.
+-- La 0181 de fix/sigerd-candado-idcentro deberá renumerar a 0183 cuando suba.
 
 -- ─── El enlace permanente del negocio ────────────────────────────────────────
 -- Uno por equipo (unique team_id). «Regenerar» = reemplazar el token en la misma
