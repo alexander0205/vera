@@ -13,6 +13,7 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Camera, Copy, RefreshCw, Check } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface LinkResp { token: string | null; estado: string; url: string | null }
 
@@ -24,6 +25,7 @@ export default function CapturaEnlaceBoton() {
   const [link, setLink] = useState<LinkResp | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [confirmar, setConfirmar] = useState<'regenerar' | 'revocar' | null>(null);
 
   async function pintarQr(url: string | null) {
     if (!url) { setQr(null); return; }
@@ -45,8 +47,6 @@ export default function CapturaEnlaceBoton() {
   }
 
   async function accion(accion: 'regenerar' | 'revocar') {
-    if (accion === 'regenerar' && !confirm('El enlace actual dejará de funcionar y se creará uno nuevo. ¿Continuar?')) return;
-    if (accion === 'revocar' && !confirm('El enlace se desactivará. Nadie podrá enviar fotos hasta que lo regeneres. ¿Continuar?')) return;
     setCargando(true);
     try {
       const res = await fetch('/api/compras/captura-link', {
@@ -60,6 +60,7 @@ export default function CapturaEnlaceBoton() {
       toast.error('No se pudo actualizar el enlace');
     } finally {
       setCargando(false);
+      setConfirmar(null);
     }
   }
 
@@ -113,13 +114,26 @@ export default function CapturaEnlaceBoton() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
           {activo ? (
-            <Button onClick={() => accion('revocar')} size="small" color="error" disabled={cargando}>Desactivar</Button>
+            <Button onClick={() => setConfirmar('revocar')} size="small" color="error" disabled={cargando}>Desactivar</Button>
           ) : <span />}
-          <Button onClick={() => accion('regenerar')} size="small" disabled={cargando} startIcon={<RefreshCw style={{ width: 14, height: 14 }} />}>
+          <Button onClick={() => setConfirmar('regenerar')} size="small" disabled={cargando} startIcon={<RefreshCw style={{ width: 14, height: 14 }} />}>
             {activo ? 'Regenerar' : 'Regenerar enlace'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmar !== null}
+        onOpenChange={(o) => { if (!o) setConfirmar(null); }}
+        title={confirmar === 'revocar' ? '¿Desactivar el enlace?' : '¿Regenerar el enlace?'}
+        description={confirmar === 'revocar'
+          ? 'Nadie podrá enviar fotos hasta que lo vuelvas a generar. El QR impreso dejará de funcionar.'
+          : 'El enlace actual (y su QR impreso) dejará de funcionar y se creará uno nuevo.'}
+        confirmLabel={confirmar === 'revocar' ? 'Desactivar' : 'Regenerar'}
+        destructive
+        loading={cargando}
+        onConfirm={() => { if (confirmar) accion(confirmar); }}
+      />
     </>
   );
 }

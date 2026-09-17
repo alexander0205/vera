@@ -11,6 +11,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Camera, Trash2 } from 'lucide-react';
 import { fmtDOP } from '@/lib/utils/format';
 import { toast } from '@/lib/toast';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface Captura {
   id: number;
@@ -29,10 +30,10 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 export default function CapturasTab() {
   const { data, isLoading, mutate } = useSWR<{ capturas?: Captura[] }>('/api/compras/capturas', fetcher, { revalidateOnFocus: false });
   const [ocupado, setOcupado] = useState<number | null>(null);
+  const [aDescartar, setADescartar] = useState<number | null>(null);
   const capturas = data?.capturas ?? [];
 
   async function descartar(id: number) {
-    if (!confirm('¿Descartar esta captura? No se registrará.')) return;
     setOcupado(id);
     try {
       const res = await fetch(`/api/compras/capturas/${id}`, {
@@ -40,6 +41,7 @@ export default function CapturasTab() {
       });
       if (!res.ok) throw new Error();
       toast.success('Captura descartada');
+      setADescartar(null);
       mutate();
     } catch {
       toast.error('No se pudo descartar');
@@ -95,12 +97,23 @@ export default function CapturasTab() {
             <Button component={Link} href={`/dashboard/compras/registrar?captura=${c.id}`} size="small" variant="contained">
               Registrar
             </Button>
-            <Button onClick={() => descartar(c.id)} size="small" color="error" disabled={ocupado === c.id} sx={{ minWidth: 36, px: 1 }}>
+            <Button onClick={() => setADescartar(c.id)} size="small" color="error" disabled={ocupado === c.id} sx={{ minWidth: 36, px: 1 }}>
               <Trash2 style={{ width: 16, height: 16 }} />
             </Button>
           </Box>
         </Box>
       ))}
+
+      <ConfirmDialog
+        open={aDescartar !== null}
+        onOpenChange={(o) => { if (!o) setADescartar(null); }}
+        title="¿Descartar esta captura?"
+        description="No se registrará como compra. Podrás volver a enviar la foto por el enlace si hace falta."
+        confirmLabel="Descartar"
+        destructive
+        loading={ocupado !== null}
+        onConfirm={() => { if (aDescartar !== null) descartar(aDescartar); }}
+      />
     </Box>
   );
 }
