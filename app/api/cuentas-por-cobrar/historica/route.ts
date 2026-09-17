@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
 
-    if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear')) {
+    if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'cuentas-por-cobrar:ver')) {
       return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
     }
 

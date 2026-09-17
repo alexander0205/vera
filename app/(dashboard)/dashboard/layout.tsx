@@ -141,7 +141,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/reportes':              'reportes:ver',
   '/dashboard/facturas':              'facturas:ver',
   '/dashboard/facturas/nueva':        'facturas:crear',
-  '/dashboard/cuentas-por-cobrar':    'facturas:ver',
+  '/dashboard/cuentas-por-cobrar':    'cuentas-por-cobrar:ver',
   '/dashboard/pagos':                 'pagos:ver',
   '/dashboard/pagos/links':           'pagos:ver',
   '/dashboard/pagos/pasarelas':       'configuracion:ver',

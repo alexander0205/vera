@@ -7,6 +7,7 @@ import {
   Check, Pencil, AlertTriangle, KeyRound,
   FileText, Users, Package, FileSpreadsheet, ShoppingCart, BarChart3,
   Wallet, Settings, CreditCard,
+  Coins, Calculator, Banknote, Store, GraduationCap, BookOpen,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -47,6 +48,7 @@ const ICONS: Record<string, React.ElementType> = {
   Crown, Shield, User, Eye, UserCog,
   FileText, Users, Package, FileSpreadsheet, ShoppingCart, BarChart3,
   Wallet, Settings, CreditCard,
+  Coins, Calculator, Banknote, Store, GraduationCap, BookOpen,
 };
 function Icon({ name, style }: { name: string | null; style?: React.CSSProperties }) {
   const C = (name && ICONS[name]) || UserCog;

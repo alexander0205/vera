@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docI
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:ver')) {
+  if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'cuentas-por-cobrar:ver')) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
   }
 
