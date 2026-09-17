@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { comprasCapturas } from '@/lib/db/schema';
-import { resolverLinkPublico, marcarAcceso } from '@/lib/compras/captura-link';
+import { resolverLinkPublico, marcarAcceso, nombreProveedorConocido } from '@/lib/compras/captura-link';
 import { validarImagen, procesarImagen, subirFoto } from '@/lib/fotos/storage';
 import { parsearQrDgii, extraerConIa, type ResultadoExtraccion } from '@/lib/compras/extraer-ticket';
 import { GeminiError } from '@/lib/ia/gemini-vision';
@@ -92,11 +92,22 @@ export async function POST(
     }
   }
 
+  const d = resultado.datos;
+
+  // Proveedor repetido: si tenemos RNC pero no un nombre usable, lo tomamos del
+  // historial del negocio (última compra con ese RNC). Solo ayuda con
+  // recurrentes; en uno nuevo no hay de dónde y se queda como vino.
+  if (!d.proveedorNombre && d.proveedorRnc) {
+    const conocido = await nombreProveedorConocido(link.teamId, d.proveedorRnc);
+    if (conocido) {
+      d.proveedorNombre = conocido;
+      resultado.avisos.push('El nombre del proveedor se tomó de una compra anterior con ese RNC.');
+    }
+  }
+
   // Guardar la foto ANTES de insertar: si el almacenamiento falla, no queda una
   // fila apuntando a una imagen que no existe.
   const fotoRef = await subirFoto(buffer, `compras-captura/team_${link.teamId}/${Date.now()}`);
-
-  const d = resultado.datos;
   const [fila] = await db.insert(comprasCapturas).values({
     teamId: link.teamId,
     linkId: link.linkId,

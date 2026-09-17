@@ -20,9 +20,9 @@
 
 import 'server-only';
 import { randomBytes } from 'crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { comprasCapturaLinks, comprasCapturas, teams } from '@/lib/db/schema';
+import { comprasCapturaLinks, comprasCapturas, comprasLocales, teams } from '@/lib/db/schema';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 /** 32 bytes en base64url. Es la única credencial de la página. */
@@ -134,6 +134,29 @@ export async function marcarAcceso(linkId: number): Promise<void> {
     .update(comprasCapturaLinks)
     .set({ ultimoAcceso: new Date() })
     .where(eq(comprasCapturaLinks.id, linkId));
+}
+
+/**
+ * El nombre con que este negocio guardó antes a un proveedor con ESTE RNC.
+ *
+ * Sirve para rellenar el nombre cuando la IA/QR leyó el RNC pero no un nombre
+ * usable. Solo ayuda con proveedores repetidos —de la primera compra no hay
+ * historial— y siempre acotado al team del enlace: es el propio historial del
+ * negocio, nada ajeno. Devuelve null si el RNC no se ha visto.
+ */
+export async function nombreProveedorConocido(teamId: number, rnc: string): Promise<string | null> {
+  if (!rnc) return null;
+  const [ya] = await db
+    .select({ nombre: comprasLocales.proveedorNombre })
+    .from(comprasLocales)
+    .where(and(
+      eq(comprasLocales.teamId, teamId),
+      eq(comprasLocales.proveedorRnc, rnc),
+      isNotNull(comprasLocales.proveedorNombre),
+    ))
+    .orderBy(desc(comprasLocales.id))
+    .limit(1);
+  return ya?.nombre ?? null;
 }
 
 /** Saca una captura de la cola porque se convirtió en compra. */
