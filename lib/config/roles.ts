@@ -43,6 +43,11 @@ export type Permission =
   // al cobrar. El admin la activa asignándolo a un rol (Equipo → Permisos).
   | 'pagos:alerta-metodo'
   | 'pagos:adjunto-eliminar'
+  // Cuentas por cobrar (cartera) — característica que se prende/apaga por rol.
+  // Gatea el módulo de cartera: ver la antigüedad y exportarla (ver), y
+  // registrar pagos, promesas, recordatorios y gestión de cobro (gestionar).
+  | 'cuentas-por-cobrar:ver'
+  | 'cuentas-por-cobrar:gestionar'
   // Clientes
   | 'clientes:ver'
   | 'clientes:gestionar'
@@ -102,10 +107,12 @@ export type Permission =
 
 export type RoleKey =
   | 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar'
-  | 'cuentas-por-cobrar' | 'contabilidad' | 'nomina' | 'compras';
+  | 'contabilidad' | 'nomina' | 'compras';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
 // OJO: la clave 'contabilidad' (no 'contador') es a propósito — 'contador' es una
 // clave legacy que LEGACY_ROLE_MAP remapea a 'user'.
+// Cuentas por cobrar NO es un rol: es una característica (permiso
+// 'cuentas-por-cobrar:*') que se prende/apaga al editar cualquier rol.
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
 
@@ -152,6 +159,7 @@ export const ROLES: RoleDef[] = [
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
       'pagos:ver', 'pagos:adjunto-eliminar',
+      'cuentas-por-cobrar:ver', 'cuentas-por-cobrar:gestionar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -178,6 +186,7 @@ export const ROLES: RoleDef[] = [
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
       'pagos:ver', 'pagos:adjunto-eliminar',
+      'cuentas-por-cobrar:ver', 'cuentas-por-cobrar:gestionar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -203,6 +212,7 @@ export const ROLES: RoleDef[] = [
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
       // facturas:editar y facturas:anular NO incluidos — debe pedirle al admin
+      'cuentas-por-cobrar:ver', 'cuentas-por-cobrar:gestionar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -226,6 +236,7 @@ export const ROLES: RoleDef[] = [
     invitable:   true,
     permissions: [
       'facturas:ver', 'facturas:exportar',
+      'cuentas-por-cobrar:ver',
       'clientes:ver',
       'productos:ver',
       'cotizaciones:ver',
@@ -270,23 +281,6 @@ export const ROLES: RoleDef[] = [
       'modulo:escolar', 'modulo:administracion',
     ],
     ui: { color: 'text-indigo-600 bg-indigo-50 border-indigo-200', icon: 'GraduationCap' },
-  },
-  {
-    key:         'cuentas-por-cobrar',
-    label:       'Cuentas por cobrar',
-    description: 'Cartera y cobros: ve la cartera, registra pagos, gestiona promesas y recordatorios, y el reporte de antigüedad. No configura ni gestiona el equipo.',
-    invitable:   true,
-    permissions: [
-      // El módulo de cartera se lee con facturas:ver y registrar el cobro
-      // exige facturas:crear (así lo gatea /api/cuentas-por-cobrar/**). Eso
-      // también le permite crear facturas — es lo esperado para un cobrador.
-      'facturas:ver', 'facturas:crear', 'facturas:exportar',
-      'pagos:ver',
-      'clientes:ver',
-      'reportes:ver',
-      'modulo:facturacion', 'modulo:administracion',
-    ],
-    ui: { color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'Coins' },
   },
   {
     key:         'contabilidad',
@@ -364,6 +358,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },
     { key: 'pagos:alerta-metodo', label: 'Alerta double-check de método de pago' },
     { key: 'pagos:adjunto-eliminar', label: 'Eliminar comprobantes de pago' },
+  ]},
+  { module: 'Cuentas por cobrar', icon: 'Coins', permissions: [
+    { key: 'cuentas-por-cobrar:ver',       label: 'Ver la cartera y la antigüedad de saldos' },
+    { key: 'cuentas-por-cobrar:gestionar', label: 'Registrar pagos, promesas y recordatorios de cobro' },
   ]},
   { module: 'Clientes', icon: 'Users', permissions: [
     { key: 'clientes:ver',       label: 'Ver clientes' },

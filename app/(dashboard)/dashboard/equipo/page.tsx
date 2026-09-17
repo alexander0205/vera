@@ -23,7 +23,7 @@ import {
   Users, UserPlus, Mail, Trash2, Shield,
   Crown, BookOpen, ShoppingBag, User, Clock, Copy, CheckCheck,
   AlertTriangle, Eye, UserCog,
-  Coins, Calculator, Banknote, ShoppingCart, Store, GraduationCap,
+  Calculator, Banknote, ShoppingCart, Store, GraduationCap,
 } from 'lucide-react';
 import { ROLES as ROLE_DEFS } from '@/lib/config/roles';
 
@@ -70,7 +70,7 @@ interface TeamData {
 
 const ROLE_ICON_MAP: Record<string, React.ElementType> = {
   Crown, Shield, BookOpen, ShoppingBag, User, Eye, UserCog,
-  Coins, Calculator, Banknote, ShoppingCart, Store, GraduationCap,
+  Calculator, Banknote, ShoppingCart, Store, GraduationCap,
 };
 
 // Config estática de los roles de sistema (fallback si aún no llegan los del team).

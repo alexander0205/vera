@@ -40,7 +40,7 @@ function cubetaDe(vencida: boolean, dias: number): string {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission('facturas:exportar');
+  const auth = await requirePermission('cuentas-por-cobrar:ver');
   if (!auth.ok) return auth.response;
   const teamId = auth.teamId;
 
