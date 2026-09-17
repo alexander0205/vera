@@ -100,8 +100,12 @@ export type Permission =
   | 'contabilidad:gestionar'  // crear/editar/anular asientos manuales
   | 'contabilidad:configurar';// catálogo de cuentas y cuentas automáticas
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar';
+export type RoleKey =
+  | 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar'
+  | 'cuentas-por-cobrar' | 'contabilidad' | 'nomina' | 'compras';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
+// OJO: la clave 'contabilidad' (no 'contador') es a propósito — 'contador' es una
+// clave legacy que LEGACY_ROLE_MAP remapea a 'user'.
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
 
@@ -266,6 +270,68 @@ export const ROLES: RoleDef[] = [
       'modulo:escolar', 'modulo:administracion',
     ],
     ui: { color: 'text-indigo-600 bg-indigo-50 border-indigo-200', icon: 'GraduationCap' },
+  },
+  {
+    key:         'cuentas-por-cobrar',
+    label:       'Cuentas por cobrar',
+    description: 'Cartera y cobros: ve la cartera, registra pagos, gestiona promesas y recordatorios, y el reporte de antigüedad. No configura ni gestiona el equipo.',
+    invitable:   true,
+    permissions: [
+      // El módulo de cartera se lee con facturas:ver y registrar el cobro
+      // exige facturas:crear (así lo gatea /api/cuentas-por-cobrar/**). Eso
+      // también le permite crear facturas — es lo esperado para un cobrador.
+      'facturas:ver', 'facturas:crear', 'facturas:exportar',
+      'pagos:ver',
+      'clientes:ver',
+      'reportes:ver',
+      'modulo:facturacion', 'modulo:administracion',
+    ],
+    ui: { color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'Coins' },
+  },
+  {
+    key:         'contabilidad',
+    label:       'Contador',
+    description: 'Motor contable y fiscal: catálogo de cuentas, asientos, secuencias y e-NCF, con lectura de facturas, compras, pagos y reportes. No factura ni entra al POS.',
+    invitable:   true,
+    permissions: [
+      'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
+      'facturas:ver', 'facturas:exportar',
+      'compras:ver',
+      'pagos:ver',
+      'reportes:ver',
+      'clientes:ver',
+      'productos:ver',
+      'configuracion:ver',
+      'modulo:facturacion', 'modulo:administracion',
+    ],
+    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Calculator' },
+  },
+  {
+    key:         'nomina',
+    label:       'Nómina',
+    description: 'Solo Nómina: empleados, corridas, dispersión y parámetros TSS/ISR. No factura ni entra al POS.',
+    invitable:   true,
+    permissions: [
+      'empleados:ver', 'empleados:gestionar',
+      'nomina:correr', 'nomina:pagar', 'nomina:configurar',
+      'reportes:ver',
+      'modulo:nomina', 'modulo:administracion',
+    ],
+    ui: { color: 'text-rose-600 bg-rose-50 border-rose-200', icon: 'Banknote' },
+  },
+  {
+    key:         'compras',
+    label:       'Compras',
+    description: 'Encargado de compras y gastos: ve compras, gestiona el catálogo de productos y consulta reportes. No factura ni entra al POS.',
+    invitable:   true,
+    permissions: [
+      'compras:ver',
+      'productos:ver', 'productos:gestionar',
+      'clientes:ver',
+      'reportes:ver',
+      'modulo:facturacion', 'modulo:administracion',
+    ],
+    ui: { color: 'text-orange-600 bg-orange-50 border-orange-200', icon: 'ShoppingCart' },
   },
 ];
 
