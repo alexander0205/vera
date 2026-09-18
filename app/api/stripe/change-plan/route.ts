@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getPlanByPriceId, planBajoCotizacion } from '@/lib/config/plans';
+import { planDeLaSuscripcion } from '@/lib/payments/plan-de-suscripcion';
 import { validarCambioDePlan } from '@/lib/suscripcion/cambio-plan';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -117,7 +118,11 @@ export async function POST(req: NextRequest) {
     expand: ['items.data.price'],
   });
 
-  const currentItem   = subscription.items.data[0];
+  // El item del PLAN, no el primero: si el primero es un adicional (el Punto
+  // de Venta), cambiarle el precio dejaba el plan viejo cobrándose junto al
+  // nuevo. Ver plan-de-suscripcion.ts.
+  const { item: itemDelPlan } = await planDeLaSuscripcion(subscription);
+  const currentItem   = itemDelPlan ?? subscription.items.data[0];
   const currentPrice  = currentItem?.price;
   const currentAmount = currentPrice?.unit_amount ?? 0;
 
