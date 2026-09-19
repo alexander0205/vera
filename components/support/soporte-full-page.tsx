@@ -59,6 +59,8 @@ export function SoportePaginaCompleta() {
   async function responderInvitacion(accept: boolean) {
     if (!call) return;
     await responderLlamada(call.id, accept);
+    // Ver el mismo paso en ticket-widget: conectar sin esperar al sondeo.
+    llamada.refrescar();
   }
 
   function scrollToBottom() {
