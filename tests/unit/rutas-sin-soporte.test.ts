@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { soporteAplica } from '@/components/support/rutas-sin-soporte';
+import { soporteAplica, vigilaLlamadas } from '@/components/support/rutas-sin-soporte';
 
 /**
  * El widget de soporte vive en el layout raíz, así que se monta en TODAS las
@@ -36,9 +36,18 @@ describe('soporteAplica', () => {
   });
 
   it('no en impresión ni en la consola de agentes', () => {
-    for (const p of ['/pos-ticket/9', '/pos-reporte/3', '/zero-tickets', '/dashboard/soporte']) {
+    for (const p of ['/pos-ticket/9', '/pos-reporte/3', '/caja/imprimir/258', '/zero-tickets', '/dashboard/soporte']) {
       assert.equal(soporteAplica(p), false, p);
     }
+  });
+
+  /**
+   * La hoja de cuadre (`/caja/imprimir/[id]`) se había quedado fuera de la
+   * lista; la pantalla de caja del dashboard, en cambio, sí lleva soporte.
+   */
+  it('la hoja de cuadre no se lleva por delante la caja del dashboard', () => {
+    assert.equal(soporteAplica('/dashboard/caja'), true);
+    assert.equal(soporteAplica('/dashboard/caja/historial'), true);
   });
 
   /**
@@ -56,5 +65,23 @@ describe('soporteAplica', () => {
   it('sin ruta todavía, el soporte aplica', () => {
     assert.equal(soporteAplica(null), true);
     assert.equal(soporteAplica(undefined), true);
+  });
+});
+
+describe('vigilaLlamadas', () => {
+  /**
+   * La página de soporte no lleva ni panel flotante ni botón porque ella misma
+   * es el chat — pero es justo donde más sentido tiene ver una llamada.
+   */
+  it('sí en la página de soporte, aunque ahí no vaya el panel flotante', () => {
+    assert.equal(vigilaLlamadas('/dashboard/soporte'), true);
+  });
+
+  it('sí donde hay soporte, no en impresión, públicas ni consola de agentes', () => {
+    assert.equal(vigilaLlamadas('/dashboard/facturas/nueva'), true);
+    assert.equal(vigilaLlamadas(null), true);
+    for (const p of ['/caja/imprimir/258', '/pos-ticket/9', '/zero-tickets', '/pagar/abc', '/firmar/tok']) {
+      assert.equal(vigilaLlamadas(p), false, p);
+    }
   });
 });

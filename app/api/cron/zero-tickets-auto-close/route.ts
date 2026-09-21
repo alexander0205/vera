@@ -10,6 +10,14 @@ const INACTIVIDAD_MINUTOS = 30;
 // Este endpoint es invocado por el cron de Vercel (vercel.json → crons[]).
 // Protegido con el mismo patrón que los demás crons del proyecto:
 // Authorization: Bearer ${CRON_SECRET}
+//
+// Corre cada 10 min SOLO de 07:00 a 19:59 hora dominicana (`11-23` en UTC).
+// Cada pasada despierta a Neon, que después tarda 5 min en volver a dormirse:
+// corriendo toda la noche lo tenía despierto la mitad de cada hora sin nadie
+// usando el sistema (medido 2026-09-18: arrancaba a las xx:x0:08 y se dormía
+// 5.4 min después, así hasta la mañana). Un ticket que se queda quieto de
+// noche se cierra en la primera pasada de las 07:00; los sondeos del cliente
+// no dependen de eso (ver `esConversacionViva` en lib/sondeo/intervalos.ts).
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

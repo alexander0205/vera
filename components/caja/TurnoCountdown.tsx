@@ -17,13 +17,18 @@
  *    un número movido por la TZ — ver lib/caja/core.ts:getMinutosAbierto. Un
  *    delta local (Date.now() - fetchedAt) sí es seguro: no depende de la TZ.
  *  - Al servidor se le pregunta cada pocos minutos, por si el turno se cerró en
- *    otra pestaña.
+ *    otra pestaña — pero solo con alguien delante (lib/sondeo/presencia.ts).
+ *    Cada pregunta es una consulta a Neon: una pestaña olvidada preguntando
+ *    cada 2 minutos basta para que el compute no se suspenda en toda la noche.
+ *    Al volver se pregunta enseguida, y el reloj local sigue contando mientras
+ *    tanto, así que los avisos no se pierden.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Clock, Lock } from 'lucide-react';
 import { calcularEstadoLimite, hitosCruzados, mensajeHito } from '@/lib/caja/limite';
+import { usePresencia } from '@/lib/sondeo/presencia';
 
 interface TurnoActivo {
   id: number;
@@ -41,6 +46,7 @@ interface Respuesta {
 
 const POLL_MS = 2 * 60_000;  // refetch del turno (cierre en otra pestaña)
 const TICK_MS = 30_000;      // recálculo local del contador
+const REFETCH_MIN_MS = 30_000; // al volver a la pestaña, no repreguntar si la respuesta es de hace nada
 
 function storageKey(turnoId: number) {
   return `caja-avisos-turno-${turnoId}`;
@@ -68,19 +74,24 @@ export function TurnoCountdown({ className }: { className?: string }) {
   const [fetchedAt, setFetchedAt] = useState(0);
   const [, forceTick] = useState(0);
   const avisadosRef = useRef<Set<number> | null>(null);
+  const presente = usePresencia();
+  const ultimaCargaRef = useRef(0);
 
-  // Traer turno + config, y refrescar cada POLL_MS.
+  // Traer turno + config, y refrescar cada POLL_MS mientras haya alguien.
   useEffect(() => {
+    if (!presente) return;
     let vivo = true;
-    const cargar = () =>
+    const cargar = () => {
+      ultimaCargaRef.current = Date.now();
       fetch('/api/caja/turno-activo')
         .then(r => (r.ok ? r.json() : null))
         .then(d => { if (vivo && d) { setData(d); setFetchedAt(Date.now()); } })
         .catch(() => { /* offline: el contador se congela, no rompe la página */ });
-    cargar();
+    };
+    const primera = setTimeout(cargar, Math.max(0, ultimaCargaRef.current + REFETCH_MIN_MS - Date.now()));
     const t = setInterval(cargar, POLL_MS);
-    return () => { vivo = false; clearInterval(t); };
-  }, []);
+    return () => { vivo = false; clearTimeout(primera); clearInterval(t); };
+  }, [presente]);
 
   // Reloj local — solo avanza el contador entre fetches.
   useEffect(() => {

@@ -32,13 +32,20 @@
  * y la llamada cortándose sola después de compartir pantalla.
  */
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { soporteAplica } from '@/components/support/rutas-sin-soporte';
+import { vigilaLlamadas } from '@/components/support/rutas-sin-soporte';
+import { crearSondeo, type Sondeo } from '@/lib/sondeo/sondeo';
+import { intervaloLlamadas } from '@/lib/sondeo/intervalos';
+import { estaPresente, suscribirPresencia } from '@/lib/sondeo/presencia';
 import { useLlamada } from './useLlamada';
 import type { LlamadaDTO } from './senalizacion';
 
-type LlamadaGlobal = ReturnType<typeof useLlamada> & { call: LlamadaDTO | null };
+type LlamadaGlobal = ReturnType<typeof useLlamada> & {
+  call: LlamadaDTO | null;
+  /** Pregunta ya, sin esperar al próximo turno (p. ej. recién aceptada la llamada). */
+  refrescar: () => void;
+};
 
 const LlamadaGlobalContext = createContext<LlamadaGlobal | null>(null);
 
@@ -53,52 +60,106 @@ export function LlamadaGlobalProvider({ children }: { children: React.ReactNode 
    * `/api/zero-tickets/tickets` cada 3 segundos y cobraba un 401 cada vez,
    * mientras la pestaña siguiera abierta.
    *
-   * Se usa la MISMA lista que el chat y el botón de la barra: si el soporte no
-   * aplica en una ruta, tampoco hay llamada que vigilar.
+   * Se usa la MISMA lista que el chat y el botón de la barra, salvo
+   * `/dashboard/soporte`: ver `vigilaLlamadas`.
    */
-  const sinSondeo = !soporteAplica(pathname);
+  const sinSondeo = !vigilaLlamadas(pathname);
 
   const [call, setCall] = useState<LlamadaDTO | null>(null);
-  const pollInFlightRef = useRef(false);
+  const sondeoRef = useRef<Sondeo | null>(null);
+  /**
+   * El servidor contestó 4xx: sin sesión (la pantalla de entrar, una sesión
+   * vencida con la página aún abierta) o sin empresa. Se deja de preguntar
+   * hasta que algo pueda haberlo cambiado: una navegación (entrar redirige) o
+   * volver a la pestaña. Antes se cobraba un 401 cada 3 s mientras la pestaña
+   * siguiera abierta: el 2026-09-17 fueron 2,468, 1,083 de ellos desde la
+   * página pública de precios (www.zero.com.do/precios) y 698 de una sola
+   * pestaña con la sesión vencida.
+   */
+  const sinSesionRef = useRef(false);
 
-  // Poll liviano, solo para el estado de la llamada — la lista de mensajes
+  // Sondeo liviano, solo para el estado de la llamada — la lista de mensajes
   // del ticket la sigue trayendo cada vista con su propio useTicketChat
   // (eso no necesita ser único, mostrar el chat dos veces en dos pestañas
   // del mismo usuario no rompe nada). Lo que SÍ tiene que ser único es la
   // conexión WebRTC, de ahí que viva acá y no en useTicketChat.
+  //
+  // El ritmo lo decide `intervaloLlamadas` con lo que acaba de leer y con si
+  // hay alguien delante: de 3 s fijos en cada pestaña abierta a 15 s con
+  // alguien mirando, y nada con la pestaña escondida salvo que haya una
+  // conversación o una llamada en marcha.
   useEffect(() => {
     if (sinSondeo) {
       setCall(null);
       return;
     }
-    let cancelado = false;
-    async function poll() {
-      if (pollInFlightRef.current) return;
-      pollInFlightRef.current = true;
-      try {
-        const res = await fetch('/api/zero-tickets/tickets');
-        if (res.ok && !cancelado) {
-          const data = await res.json();
-          setCall(data.call ?? null);
+    let conversacionViva = false;
+    let llamadaEnCurso = false;
+    sinSesionRef.current = false;
+
+    const sondeo = crearSondeo({
+      async consultar(senal) {
+        const res = await fetch('/api/zero-tickets/tickets/llamada', { signal: senal });
+        if (senal.aborted) return;
+        if (!res.ok) {
+          // 5xx: tropiezo pasajero, se reintenta al ritmo de siempre.
+          if (res.status < 500) {
+            sinSesionRef.current = true;
+            llamadaEnCurso = false;
+            setCall(null);
+          }
+          return;
         }
-      } catch {
-        // Red caída — el próximo tick reintenta solo.
-      } finally {
-        pollInFlightRef.current = false;
+        const data = (await res.json()) as { call: LlamadaDTO | null; conversacionViva: boolean };
+        if (senal.aborted) return;
+        sinSesionRef.current = false;
+        conversacionViva = Boolean(data.conversacionViva);
+        llamadaEnCurso = Boolean(data.call);
+        setCall(data.call ?? null);
+      },
+      intervalo: () => intervaloLlamadas({
+        presente: estaPresente(),
+        conversacionViva,
+        llamadaEnCurso,
+        sinSesion: sinSesionRef.current,
+      }),
+    });
+    sondeoRef.current = sondeo;
+    sondeo.refrescar();
+
+    // Al volver alguien se pregunta en el acto: una invitación dura 60 s y no
+    // hay que esperar al próximo turno para verla. Al irse, se recalcula (y
+    // casi siempre se pausa).
+    const quitar = suscribirPresencia(() => {
+      if (estaPresente()) {
+        sinSesionRef.current = false;
+        sondeo.refrescar();
+      } else {
+        sondeo.reprogramar();
       }
-    }
-    poll();
-    const interval = setInterval(poll, 3000);
+    });
+
     return () => {
-      cancelado = true;
-      clearInterval(interval);
+      quitar();
+      sondeo.detener();
+      sondeoRef.current = null;
     };
   }, [sinSondeo]);
+
+  // Tras un 401 el sondeo queda quieto; entrar navega, y ahí se vuelve a
+  // preguntar. Con sesión no hace nada: navegar no cambia si te llaman.
+  useEffect(() => {
+    if (!sinSesionRef.current) return;
+    sinSesionRef.current = false;
+    sondeoRef.current?.refrescar();
+  }, [pathname]);
+
+  const refrescar = useCallback(() => sondeoRef.current?.refrescar(), []);
 
   const llamada = useLlamada('user', call);
 
   return (
-    <LlamadaGlobalContext.Provider value={{ ...llamada, call }}>
+    <LlamadaGlobalContext.Provider value={{ ...llamada, call, refrescar }}>
       {children}
     </LlamadaGlobalContext.Provider>
   );
