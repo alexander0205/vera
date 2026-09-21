@@ -1,79 +1,110 @@
 name: CI
 
-# DESACTIVADO (2026-08-03). Solo corre a mano desde la pestaña Actions.
+# Reactivado (2026-09-21). Estuvo apagado desde 2026-08-03 porque el paso `Build`
+# no definía las 9 variables que exige `lib/env.ts` y `next build` reventaba al
+# cargar next.config.ts, antes de compilar una sola línea. Un check que siempre
+# falla no avisa de nada y tapa los que sí importan.
 #
-# Por qué: llevaba semanas en rojo en todos los PR y en todos los merges a main,
-# hasta el punto de que ya nadie lo miraba. Un check que siempre falla no avisa
-# de nada y tapa los que sí importan.
+# Ramas: `v2` es integración y `master` es producción. Se trabaja en ramas que
+# salen de `v2`, y `v2` se promueve a `master` con un PR.
 #
-# Qué lo rompió: `lib/env.ts` exige 9 variables y el paso `Build` de abajo solo
-# define 7. Faltan PROVIDER_RNC, PROVIDER_RAZON_SOCIAL, ECF_API_URL y
-# ECF_API_KEY, así que `next build` revienta al cargar next.config.ts, antes de
-# compilar una sola línea. No es un error del código.
-#
-# Cómo revivirlo: agregar esas 4 al bloque `env:` del paso `Build` con valores
-# placeholder (el build no llama a la DGII, solo valida que existan), y devolver
-# los triggers de abajo:
-#
-#   on:
-#     push:
-#       branches: [main, develop]
-#     pull_request:
-#       branches: [main]
-#
-# Mientras tanto el build real que cuenta es el de Vercel, que sí corre en cada
-# PR y en cada push a main.
+# Los jobs `Tipos y pruebas` y `Build` deben marcarse como required check en la
+# protección de `v2` y de `master`.
 on:
+  push:
+    branches: [v2, master]
+  pull_request:
+    branches: [v2, master]
   workflow_dispatch:
 
+# Un push nuevo al mismo PR cancela la corrida anterior; en v2/master no se
+# cancela nada para que cada commit conserve su resultado.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
-  build:
-    name: Build & Type Check
+  check:
+    name: Tipos y pruebas
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          node-version: '20'
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Type check
         run: pnpm exec tsc --noEmit
-        env:
-          NEXT_PUBLIC_APP_URL: http://localhost:3000
 
+      # Vitest solo de lógica pura, sin DB ni red. Los e2e de Playwright quedan
+      # fuera: necesitan un servidor levantado.
+      - name: Unit tests
+        run: pnpm test:unit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache de Next.js
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      # El build no llama a la DGII ni a Stripe ni a la base: solo valida que las
+      # variables existan. Todo es placeholder; ECF_API_URL apunta a un dominio
+      # que no resuelve para que nada real reciba tráfico por error.
       - name: Build
         run: pnpm build
         env:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           AUTH_SECRET: ci-secret-for-build
-          POSTGRES_URL: postgresql://emitedo:emitedo123@localhost:5432/emitedo
+          POSTGRES_URL: postgresql://ci:ci@localhost:5432/ci
           STRIPE_SECRET_KEY: sk_test_placeholder
           STRIPE_WEBHOOK_SECRET: whsec_placeholder
           STRIPE_PRICE_FREE: price_placeholder
           STRIPE_PRICE_PRO: price_placeholder
           RESEND_API_KEY: re_placeholder
           CRON_SECRET: ci-cron-secret
+          PROVIDER_RNC: '000000000'
+          PROVIDER_RAZON_SOCIAL: CI Placeholder SRL
+          ECF_API_URL: http://ecf-api.invalid
+          ECF_API_KEY: ci-placeholder
