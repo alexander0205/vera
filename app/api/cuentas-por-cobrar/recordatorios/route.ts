@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
   // Escribirle a un cliente es una acción hacia afuera: se exige el mismo
   // permiso que para facturar, no el de solo lectura.
-  if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear')) {
+  if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'cuentas-por-cobrar:gestionar')) {
     return NextResponse.json({ error: 'Sin permiso para enviar recordatorios' }, { status: 403 });
   }
 

@@ -56,7 +56,7 @@ const bodySchema = z.discriminatedUnion('accion', [
 ]);
 
 /** Resuelve team + permiso + que el documento sea de ese team. */
-async function contexto(docIdStr: string, permiso: 'facturas:ver' | 'facturas:crear') {
+async function contexto(docIdStr: string, permiso: 'cuentas-por-cobrar:ver' | 'cuentas-por-cobrar:gestionar') {
   const user = await getUser();
   if (!user) return { error: NextResponse.json({ error: 'No autorizado' }, { status: 401 }) };
 
@@ -90,7 +90,7 @@ async function contexto(docIdStr: string, permiso: 'facturas:ver' | 'facturas:cr
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ docId: string }> }) {
   const { docId: raw } = await params;
-  const ctx = await contexto(raw, 'facturas:ver');
+  const ctx = await contexto(raw, 'cuentas-por-cobrar:ver');
   if ('error' in ctx) return ctx.error;
 
   // Las promesas vencidas se resuelven aquí, al abrir la cuenta, no por cron.
@@ -113,7 +113,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ docId: string }> }) {
   const { docId: raw } = await params;
-  const ctx = await contexto(raw, 'facturas:crear');
+  const ctx = await contexto(raw, 'cuentas-por-cobrar:gestionar');
   if ('error' in ctx) return ctx.error;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

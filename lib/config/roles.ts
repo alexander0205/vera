@@ -43,6 +43,11 @@ export type Permission =
   // al cobrar. El admin la activa asignándolo a un rol (Equipo → Permisos).
   | 'pagos:alerta-metodo'
   | 'pagos:adjunto-eliminar'
+  // Cuentas por cobrar (cartera) — característica que se prende/apaga por rol.
+  // Gatea el módulo de cartera: ver la antigüedad y exportarla (ver), y
+  // registrar pagos, promesas, recordatorios y gestión de cobro (gestionar).
+  | 'cuentas-por-cobrar:ver'
+  | 'cuentas-por-cobrar:gestionar'
   // Clientes
   | 'clientes:ver'
   | 'clientes:gestionar'
@@ -100,8 +105,14 @@ export type Permission =
   | 'contabilidad:gestionar'  // crear/editar/anular asientos manuales
   | 'contabilidad:configurar';// catálogo de cuentas y cuentas automáticas
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar';
+export type RoleKey =
+  | 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar'
+  | 'contabilidad' | 'nomina' | 'compras';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
+// OJO: la clave 'contabilidad' (no 'contador') es a propósito — 'contador' es una
+// clave legacy que LEGACY_ROLE_MAP remapea a 'user'.
+// Cuentas por cobrar NO es un rol: es una característica (permiso
+// 'cuentas-por-cobrar:*') que se prende/apaga al editar cualquier rol.
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
 
@@ -148,6 +159,7 @@ export const ROLES: RoleDef[] = [
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
       'pagos:ver', 'pagos:adjunto-eliminar',
+      'cuentas-por-cobrar:ver', 'cuentas-por-cobrar:gestionar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -174,6 +186,7 @@ export const ROLES: RoleDef[] = [
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
       'pagos:ver', 'pagos:adjunto-eliminar',
+      'cuentas-por-cobrar:ver', 'cuentas-por-cobrar:gestionar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -199,6 +212,7 @@ export const ROLES: RoleDef[] = [
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
       // facturas:editar y facturas:anular NO incluidos — debe pedirle al admin
+      'cuentas-por-cobrar:ver', 'cuentas-por-cobrar:gestionar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -222,6 +236,7 @@ export const ROLES: RoleDef[] = [
     invitable:   true,
     permissions: [
       'facturas:ver', 'facturas:exportar',
+      'cuentas-por-cobrar:ver',
       'clientes:ver',
       'productos:ver',
       'cotizaciones:ver',
@@ -267,6 +282,51 @@ export const ROLES: RoleDef[] = [
     ],
     ui: { color: 'text-indigo-600 bg-indigo-50 border-indigo-200', icon: 'GraduationCap' },
   },
+  {
+    key:         'contabilidad',
+    label:       'Contador',
+    description: 'Motor contable y fiscal: catálogo de cuentas, asientos, secuencias y e-NCF, con lectura de facturas, compras, pagos y reportes. No factura ni entra al POS.',
+    invitable:   true,
+    permissions: [
+      'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
+      'facturas:ver', 'facturas:exportar',
+      'compras:ver',
+      'pagos:ver',
+      'reportes:ver',
+      'clientes:ver',
+      'productos:ver',
+      'configuracion:ver',
+      'modulo:facturacion', 'modulo:administracion',
+    ],
+    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Calculator' },
+  },
+  {
+    key:         'nomina',
+    label:       'Nómina',
+    description: 'Solo Nómina: empleados, corridas, dispersión y parámetros TSS/ISR. No factura ni entra al POS.',
+    invitable:   true,
+    permissions: [
+      'empleados:ver', 'empleados:gestionar',
+      'nomina:correr', 'nomina:pagar', 'nomina:configurar',
+      'reportes:ver',
+      'modulo:nomina', 'modulo:administracion',
+    ],
+    ui: { color: 'text-rose-600 bg-rose-50 border-rose-200', icon: 'Banknote' },
+  },
+  {
+    key:         'compras',
+    label:       'Compras',
+    description: 'Encargado de compras y gastos: ve compras, gestiona el catálogo de productos y consulta reportes. No factura ni entra al POS.',
+    invitable:   true,
+    permissions: [
+      'compras:ver',
+      'productos:ver', 'productos:gestionar',
+      'clientes:ver',
+      'reportes:ver',
+      'modulo:facturacion', 'modulo:administracion',
+    ],
+    ui: { color: 'text-orange-600 bg-orange-50 border-orange-200', icon: 'ShoppingCart' },
+  },
 ];
 
 // ─── Catálogo de permisos (para la UI de la matriz) ─────────────────────────
@@ -298,6 +358,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },
     { key: 'pagos:alerta-metodo', label: 'Alerta double-check de método de pago' },
     { key: 'pagos:adjunto-eliminar', label: 'Eliminar comprobantes de pago' },
+  ]},
+  { module: 'Cuentas por cobrar', icon: 'Coins', permissions: [
+    { key: 'cuentas-por-cobrar:ver',       label: 'Ver la cartera y la antigüedad de saldos' },
+    { key: 'cuentas-por-cobrar:gestionar', label: 'Registrar pagos, promesas y recordatorios de cobro' },
   ]},
   { module: 'Clientes', icon: 'Users', permissions: [
     { key: 'clientes:ver',       label: 'Ver clientes' },
