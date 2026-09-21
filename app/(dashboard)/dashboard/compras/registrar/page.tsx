@@ -5,10 +5,11 @@ import { contextoRegistro } from './_datos';
 import RegistrarCompraClient from './_registrar-client';
 
 /** Registrar el comprobante de un proveedor: inventario y lo que se compra para vender. */
-export default async function RegistrarCompraPage({ searchParams }: { searchParams: Promise<{ ecf?: string }> }) {
+export default async function RegistrarCompraPage({ searchParams }: { searchParams: Promise<{ ecf?: string; captura?: string }> }) {
   await requirePermission('productos:gestionar');
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/dashboard');
-  const { ecf } = await searchParams;
-  return <RegistrarCompraClient contexto={await contextoRegistro(teamId, 'compra', ecf ?? null)} />;
+  const { ecf, captura } = await searchParams;
+  const capturaId = captura && /^\d+$/.test(captura) ? Number(captura) : null;
+  return <RegistrarCompraClient contexto={await contextoRegistro(teamId, 'compra', ecf ?? null, capturaId)} />;
 }
