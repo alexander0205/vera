@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarCargos, adminEscolarEstudiantes, adminEscolarEstudianteTutores, adminEscolarTutores, ecfDocuments } from '@/lib/db/schema';
+import { adminEscolarCargos, adminEscolarEstudiantes, adminEscolarEstudianteTutores, adminEscolarTutores, dependientes, ecfDocuments } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { validarFacturaDeTutor } from '@/lib/administracion-escolar/vinculo-factura-guard';
 import { eq, and } from 'drizzle-orm';
@@ -34,13 +34,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'ecfDocumentId requerido' }, { status: 400 });
   }
 
-  // La factura debe existir y ser del team.
+  // La factura debe existir y ser del team. El pagador efectivo es el cliente
+  // del header (`ecf_documents.client_id`), pero en las facturas escolares de
+  // este colegio el header suele venir NULL y el pagador real vive en el
+  // `dependiente` de la factura. Se cae al cliente del dependiente para que el
+  // guard reconozca al tutor que la pagó.
   const [factura] = await db
-    .select({ id: ecfDocuments.id, clientId: ecfDocuments.clientId })
+    .select({
+      id: ecfDocuments.id,
+      clientId: ecfDocuments.clientId,
+      dependienteClientId: dependientes.clientId,
+    })
     .from(ecfDocuments)
+    .leftJoin(dependientes, eq(ecfDocuments.dependienteId, dependientes.id))
     .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
     .limit(1);
   if (!factura) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+  const facturaClientId = factura.clientId ?? factura.dependienteClientId;
 
   try {
     const result = await db.transaction(async (tx) => {
@@ -83,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         ));
 
       const guard = validarFacturaDeTutor({
-        facturaClientId: factura.clientId,
+        facturaClientId,
         responsableClientId: estudiante?.responsableClientId,
         tutorClientIds: tutores.map((t) => t.clientId),
       });
