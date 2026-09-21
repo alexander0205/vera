@@ -804,6 +804,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
         <VincularFacturaDialog
           cargoId={cargoVincularFactura.id}
           cargoLabel={`${cargoVincularFactura.concepto ?? 'Cargo'}${cargoVincularFactura.mes ? ` ${MESES[cargoVincularFactura.mes]}` : ''}`}
+          cargoSaldoCentavos={cargoVincularFactura.saldoCentavos}
           clienteId={responsable?.clientId ?? null}
           open={!!cargoVincularFactura}
           onClose={() => setCargoVincularFactura(null)}

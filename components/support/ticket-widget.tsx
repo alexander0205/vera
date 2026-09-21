@@ -80,6 +80,9 @@ export function TicketWidget() {
   async function responderInvitacion(accept: boolean) {
     if (!call) return;
     await responderLlamada(call.id, accept);
+    // La llamada pasa a 'activa' en el servidor; preguntar ya en vez de
+    // esperar al próximo turno del sondeo para empezar a conectar.
+    llamada.refrescar();
     if (accept) setOpen(true);
   }
 
