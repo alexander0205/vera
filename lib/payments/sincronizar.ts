@@ -26,7 +26,8 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { stripe } from '@/lib/payments/stripe';
 import { syncModulesFromSubscription } from '@/lib/payments/modulos';
-import { getPlanByPriceId, FREE_PLAN } from '@/lib/config/plans';
+import { FREE_PLAN } from '@/lib/config/plans';
+import { planDeLaSuscripcion, productoDelItem } from '@/lib/payments/plan-de-suscripcion';
 
 export type ResultadoSync =
   | { aplicado: false; motivo: 'team-no-existe' | 'acceso-admin' | 'sin-customer' }
@@ -118,17 +119,22 @@ export async function sincronizarConStripe(teamId: number): Promise<ResultadoSyn
     return { aplicado: true, status: null, plan: null };
   }
 
-  const priceId = sub.items.data[0]?.price?.id ?? '';
   const vigente = sigueVigente(sub.status);
 
   // past_due y paused CONSERVAN el plan: son «arregla el pago», no «no tienes
   // nada», y la ventana de solo-lectura necesita seguir enseñando cuál era.
-  const planName = vigente ? getPlanByPriceId(priceId).key : FREE_PLAN.key;
+  // El plan se busca en TODOS los items y también por producto: ver
+  // plan-de-suscripcion.ts — el primer item puede ser un adicional, y el
+  // precio puede ser uno especial del producto del plan.
+  const { plan, item } = vigente
+    ? await planDeLaSuscripcion(sub)
+    : { plan: FREE_PLAN, item: null };
+  const planName = plan.key;
 
   await db.update(teams)
     .set({
       stripeSubscriptionId: sub.id,
-      stripeProductId: vigente ? ((sub.items.data[0]?.price?.product as string) ?? null) : null,
+      stripeProductId: vigente ? productoDelItem(item ?? sub.items.data[0]) : null,
       planName,
       subscriptionStatus: sub.status,
       updatedAt: new Date(),

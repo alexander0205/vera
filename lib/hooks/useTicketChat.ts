@@ -6,14 +6,19 @@
  * existe para tener espacio real donde meter la videollamada más adelante,
  * cosa que 340x500px de widget flotante no permite.
  *
- * Polling cada 1.5s mientras hay alguien mirando (elegido en vez de
- * WebSockets para v1 — ver docs/superpowers/plans/2026-08-14-zero-tickets.md).
- * Historial vive en la DB, se recupera al montar.
+ * Polling mientras hay alguien mirando el chat (elegido en vez de WebSockets
+ * para v1 — ver docs/superpowers/plans/2026-08-14-zero-tickets.md): 1.5s
+ * mientras hay movimiento, más lento si no pasa nada, y nada con el chat
+ * cerrado o la pestaña escondida (ver `intervaloChat`). Historial vive en la
+ * DB, se recupera al montar.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { domToBlob } from 'modern-screenshot';
 import type { LlamadaDTO } from '@/lib/webrtc/senalizacion';
+import { crearSondeo, type Sondeo } from '@/lib/sondeo/sondeo';
+import { esConversacionViva, intervaloChat } from '@/lib/sondeo/intervalos';
+import { estaPresente, pestanaVisible, suscribirPresencia } from '@/lib/sondeo/presencia';
 
 export interface Attachment {
   id: number;
@@ -73,10 +78,26 @@ export function useTicketChat(active: boolean) {
   const [ratingComment, setRatingComment] = useState('');
   const [ratingLoading, setRatingLoading] = useState(false);
   const ticketIdRef = useRef<number | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sondeoRef = useRef<Sondeo | null>(null);
   const pollInFlightRef = useRef(false);
   const lastTypingSentRef = useRef(0);
   const prevStatusRef = useRef<string | null>(null);
+  // Lo que decide el ritmo del sondeo (ver `intervaloChat`): cuándo cambió
+  // algo por última vez —un mensaje, el estado, el «escribiendo…», una tecla
+  // propia— y si la conversación sigue viva.
+  const ultimoCambioRef = useRef(Date.now());
+  const firmaRef = useRef('');
+  const conversacionVivaRef = useRef(false);
+  // 4xx: sesión vencida o sin empresa. Mismo criterio que el sondeo de
+  // llamadas: se deja de preguntar hasta que la persona vuelva a la pestaña.
+  const sinSesionRef = useRef(false);
+  const precargadoRef = useRef(false);
+
+  /** Algo se movió: volver al ritmo rápido ya, sin esperar el turno lento en curso. */
+  function marcarCambio() {
+    ultimoCambioRef.current = Date.now();
+    sondeoRef.current?.reprogramar();
+  }
 
   async function poll() {
     // Con la DB lenta (Neon remoto, ver conversación en el chat de soporte),
@@ -93,8 +114,27 @@ export function useTicketChat(active: boolean) {
     const timeout = setTimeout(() => abort.abort(), 20000);
     try {
       const res = await fetch('/api/zero-tickets/tickets', { signal: abort.signal });
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (res.status < 500) sinSesionRef.current = true;
+        return;
+      }
+      sinSesionRef.current = false;
       const data = await res.json();
+      const ultimo: TicketMessage | undefined = data.messages?.[data.messages.length - 1];
+      const firma = [
+        data.ticket?.id, data.ticket?.status, data.ticket?.onHold, data.ticket?.agentTyping,
+        data.ticket?.lastReadByAgentAt, data.messages?.length, ultimo?.id,
+        data.call?.id, data.call?.status, data.espera?.enCola,
+      ].join('|');
+      if (firma !== firmaRef.current) {
+        firmaRef.current = firma;
+        ultimoCambioRef.current = Date.now();
+      }
+      conversacionVivaRef.current = esConversacionViva(
+        data.ticket?.status,
+        data.ticket ? Date.parse(data.ticket.lastMessageAt) : null,
+        Date.now(),
+      );
       if (data.ticket) {
         ticketIdRef.current = data.ticket.id;
         setMessages(data.messages);
@@ -127,17 +167,46 @@ export function useTicketChat(active: boolean) {
     }
   }
 
-  // Antes esto se apagaba del todo con `!active` (widget minimizado) —
-  // pero entonces nunca se enteraba de una llamada entrante mientras estaba
-  // cerrado, sin forma de mostrar el badge del ícono flotante. Ahora sigue
-  // polleando siempre, solo que mucho más lento cuando no está activo
-  // (10s en vez de 1.5s) — alcanza para el badge sin pagar el costo de un
-  // poll de chat completo cada 1.5s con la ventana cerrada.
+  // Con el chat cerrado se pregunta UNA vez, al montar, para que al abrirlo
+  // la conversación ya esté ahí; después nada. Hasta ahora seguía cada 10s
+  // con el panel cerrado para enterarse de las llamadas entrantes, pero eso
+  // ya lo hace el LlamadaGlobalProvider por su cuenta (el botón de la barra
+  // lee su `call`, no el de acá): eran dos sondeos por pestaña trayendo la
+  // conversación entera, y uno de ellos para nadie.
+  //
+  // Abierto, el ritmo lo pone `intervaloChat`; volver a la pestaña trae lo
+  // nuevo en el acto.
   useEffect(() => {
-    poll();
-    pollRef.current = setInterval(poll, active ? 1500 : 10000);
+    ultimoCambioRef.current = Date.now();
+    const sondeo = crearSondeo({
+      consultar: () => poll(),
+      intervalo: () => (sinSesionRef.current ? null : intervaloChat({
+        abierto: active,
+        visible: pestanaVisible(),
+        presente: estaPresente(),
+        conversacionViva: conversacionVivaRef.current,
+        msDesdeUltimoCambio: Date.now() - ultimoCambioRef.current,
+      })),
+    });
+    sondeoRef.current = sondeo;
+    // Al abrir, lo nuevo ya; al montar cerrado, la precarga. Al cerrar, nada.
+    if (active || !precargadoRef.current) {
+      precargadoRef.current = true;
+      sondeo.refrescar();
+    }
+    const quitar = suscribirPresencia(() => {
+      if (!active) return;
+      if (estaPresente()) {
+        sinSesionRef.current = false;
+        sondeo.refrescar();
+      } else {
+        sondeo.reprogramar();
+      }
+    });
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      quitar();
+      sondeo.detener();
+      sondeoRef.current = null;
     };
   }, [active]);
 
@@ -174,6 +243,8 @@ export function useTicketChat(active: boolean) {
 
   function onInputChange(value: string) {
     setInput(value);
+    // Quien escribe está esperando respuesta: el sondeo vuelve a su ritmo rápido.
+    marcarCambio();
     const now = Date.now();
     if (now - lastTypingSentRef.current > 2000) {
       lastTypingSentRef.current = now;
@@ -184,6 +255,7 @@ export function useTicketChat(active: boolean) {
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
+    marcarCambio();
     setInput('');
     setBusyStage('enviando');
     const tempId = --tempIdCounter;
