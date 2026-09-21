@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarCargos, adminEscolarMatriculas } from '@/lib/db/schema';
+import { adminEscolarCargos, adminEscolarMatriculas, adminEscolarPeriodos } from '@/lib/db/schema';
 import { contextoDeSeccion } from './tarifas';
 import { armarPlanDeCobro, type LineaPlan } from './plan-cobro';
 
@@ -165,6 +165,21 @@ export async function devengarPeriodo(
 
   if (matriculas.length === 0) return { matriculas: 0, cargosCreados: 0, diagnostico: [] };
 
+  // Ancla de la matrícula sin fecha de inscripción. `fechaInscripcion` admite
+  // null por diseño (el colegio no siempre tiene la fecha oficial), pero el plan
+  // de cobro necesita una fecha desde la cual contar las cuotas vigentes. Antes
+  // caía a `hasta` —la fecha en que corre el devengo—, y eso hacía que la cuota
+  // del mes en curso pareciera «emitida antes de que entrara» en cuanto el
+  // devengo corría un día después de la emisión: la mensualidad se omitía en
+  // silencio y no se cobraba nunca. El inicio del período es el ancla estable:
+  // un alumno sin fecha se toma como inscrito desde que empezó el año.
+  const [periodo] = await db
+    .select({ fechaInicio: adminEscolarPeriodos.fechaInicio })
+    .from(adminEscolarPeriodos)
+    .where(and(eq(adminEscolarPeriodos.teamId, teamId), eq(adminEscolarPeriodos.id, periodoId)))
+    .limit(1);
+  const anclaInscripcion = periodo?.fechaInicio ?? hasta;
+
   /**
    * Un solo devengo a la vez por (colegio, período).
    *
@@ -207,7 +222,7 @@ export async function devengarPeriodo(
 
     // El plan se arma desde la inscripción del alumno, no desde hoy: así lo
     // que ya estaba vencido cuando entró sigue sin cobrársele.
-    const desde = m.fechaInscripcion ?? hasta;
+    const desde = m.fechaInscripcion ?? anclaInscripcion;
     const plan = await armarPlanDeCobro(teamId, ctx, String(desde));
 
     // Se devenga lo que se marcó al matricular, y nada más. Antes esto miraba
