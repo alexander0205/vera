@@ -12,7 +12,14 @@
 const LADO_MAX = 1600;
 const CALIDAD   = 0.8;
 
-export async function comprimirImagen(file: File): Promise<File> {
+/**
+ * `ladoMax`/`calidad` se suben para las facturas de proveedor: ahí se tiene que
+ * poder leer el QR del e-CF y la letra pequeña, no solo un monto.
+ */
+export async function comprimirImagen(
+  file: File,
+  { ladoMax = LADO_MAX, calidad = CALIDAD }: { ladoMax?: number; calidad?: number } = {},
+): Promise<File> {
   if (!file.type.startsWith('image/')) return file;
 
   let bitmap: ImageBitmap;
@@ -23,7 +30,7 @@ export async function comprimirImagen(file: File): Promise<File> {
     return file;
   }
 
-  const escala = Math.min(1, LADO_MAX / Math.max(bitmap.width, bitmap.height));
+  const escala = Math.min(1, ladoMax / Math.max(bitmap.width, bitmap.height));
   // Ya es chica y liviana: reencodearla solo perdería calidad sin ganar nada.
   if (escala === 1 && file.size < 400_000) {
     bitmap.close();
@@ -46,7 +53,7 @@ export async function comprimirImagen(file: File): Promise<File> {
   bitmap.close();
 
   const blob = await new Promise<Blob | null>(res =>
-    canvas.toBlob(res, 'image/jpeg', CALIDAD),
+    canvas.toBlob(res, 'image/jpeg', calidad),
   );
   if (!blob || blob.size >= file.size) return file;
 

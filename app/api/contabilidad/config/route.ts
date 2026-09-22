@@ -1,7 +1,8 @@
 /**
  * GET   /api/contabilidad/config  — configuración completa + qué falta
  * PATCH /api/contabilidad/config  — guardar cuentas generales, un método, un
- *                                   override de ingreso, o encender/apagar
+ *                                   override de ingreso, la cuenta de una
+ *                                   categoría de gasto, o encender/apagar
  *
  * El PATCH despacha por `seccion` para no multiplicar rutas por algo que
  * siempre es "guardar un pedazo de la misma configuración".
@@ -17,9 +18,10 @@ import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import {
-  getConfig, getMetodosConfigurados, getOverridesIngreso,
+  getConfig, getMetodosConfigurados, getOverridesIngreso, cuentasDeGasto,
   guardarConfig, guardarMetodo, borrarMetodo,
   guardarOverrideIngreso, borrarOverrideIngreso,
+  guardarCuentaGasto, borrarCuentaGasto,
   ConfigError, type ClaveMetodo,
 } from '@/lib/contabilidad/config';
 import {
@@ -52,14 +54,15 @@ export async function GET() {
   if ('error' in auth) return auth.error;
   const { teamId } = auth;
 
-  const [config, metodos, overrides, estado] = await Promise.all([
+  const [config, metodos, overrides, cuentasGasto, estado] = await Promise.all([
     getConfig(teamId),
     getMetodosConfigurados(teamId),
     getOverridesIngreso(teamId),
+    cuentasDeGasto(teamId),
     getEstadoConfiguracion(teamId),
   ]);
 
-  return NextResponse.json({ config, metodos, overrides, estado });
+  return NextResponse.json({ config, metodos, overrides, cuentasGasto, estado });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -176,6 +179,22 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      case 'gasto-categoria': {
+        if (typeof b.categoria !== 'string') {
+          return NextResponse.json({ error: 'Falta la categoría de gasto.' }, { status: 400 });
+        }
+        // cuentaId nulo = volver a la cuenta que le toca por su categoría.
+        if (b.cuentaId === null) {
+          await borrarCuentaGasto(teamId, b.categoria);
+          return NextResponse.json({ ok: true });
+        }
+        if (typeof b.cuentaId !== 'number') {
+          return NextResponse.json({ error: 'Falta la cuenta.' }, { status: 400 });
+        }
+        await guardarCuentaGasto(teamId, b.categoria, b.cuentaId, user.id);
+        return NextResponse.json({ ok: true });
+      }
+
       case 'activar': {
         if (typeof b.activa !== 'boolean') {
           return NextResponse.json({ error: 'Falta el valor.' }, { status: 400 });
@@ -186,7 +205,7 @@ export async function PATCH(req: NextRequest) {
 
       default:
         return NextResponse.json(
-          { error: 'Sección desconocida. Debe ser: general, itbis-compras, compras-activos, nomina, recomendada, metodo, ingreso o activar.' },
+          { error: 'Sección desconocida. Debe ser: general, itbis-compras, compras-activos, nomina, recomendada, metodo, ingreso, gasto-categoria o activar.' },
           { status: 400 },
         );
     }

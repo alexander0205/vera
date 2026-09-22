@@ -1573,6 +1573,11 @@ export const comprasLocalesItems = pgTable('compras_locales_items', {
   /** '0.18' | '0.16' | '0' | 'exento' */
   itbisTasa:     varchar('itbis_tasa', { length: 6 }).notNull().default('0'),
   itbisCents:    bigint('itbis_cents', { mode: 'number' }).notNull().default(0),
+  /**
+   * La cuenta elegida al registrar este comprobante (migración 0182). NULL = la
+   * que la empresa configuró para la categoría, o la del código de la categoría.
+   */
+  cuentaId:      integer('cuenta_id'),
 });
 
 export type CompraLocal     = typeof comprasLocales.$inferSelect;
@@ -3337,6 +3342,20 @@ export const contabilidadConfigMetodosPago = pgTable('contabilidad_config_metodo
  *
  * Resolución: producto → categoría → tipo del producto → ingresos general.
  */
+/**
+ * A qué cuenta va cada categoría de gasto en esta empresa (migración 0182). Sin
+ * fila, manda el código de `lib/compras/categorias`.
+ */
+export const contabilidadConfigGastos = pgTable('contabilidad_config_gastos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** La clave de CATEGORIAS_COMPRA: 'materiales', 'honorarios', 'alquiler'… */
+  categoria: varchar('categoria', { length: 30 }).notNull(),
+  cuentaId:  integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const contabilidadConfigIngresos = pgTable('contabilidad_config_ingresos', {
   id:      serial('id').primaryKey(),
   teamId:  integer('team_id').notNull().references(() => teams.id),
@@ -4232,3 +4251,71 @@ export type NominaContratoPlantilla    = typeof nominaContratoPlantillas.$inferS
 export type NewNominaContratoPlantilla = typeof nominaContratoPlantillas.$inferInsert;
 export type NominaContrato    = typeof nominaContratos.$inferSelect;
 export type NewNominaContrato = typeof nominaContratos.$inferInsert;
+
+// ─── Fotos de facturas de proveedor (migración 0181) ────────────────────────
+
+/**
+ * El enlace público con que se fotografían facturas de proveedor. Uno vivo por
+ * empresa, sin vencimiento: se comparte por WhatsApp y se regenera (revocando
+ * el anterior) si llega a quien no debía. Solo se guarda el SHA-256 del token.
+ */
+export const capturaFacturasEnlaces = pgTable('captura_facturas_enlaces', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  tokenHash:   char('token_hash', { length: 64 }).notNull(),
+  /** `iv:authTag:cifrado` (AES-256-GCM): para volver a enseñar el enlace. */
+  tokenCifrado: text('token_cifrado'),
+  creadoPor:   integer('creado_por').references(() => users.id),
+  creadoEn:    timestamp('creado_en').notNull().defaultNow(),
+  ultimoUsoEn: timestamp('ultimo_uso_en'),
+  revocadoEn:  timestamp('revocado_en'),
+}, (t) => [
+  uniqueIndex('captura_facturas_enlaces_token_uq').on(t.tokenHash),
+  uniqueIndex('captura_facturas_enlaces_vivo_uq').on(t.teamId).where(sql`revocado_en IS NULL`),
+]);
+
+/**
+ * Una factura fotografiada. Entra `procesando`, pasa a `por_revisar` cuando se
+ * leyó (o no se pudo) y termina `registrada` —con su compra— o `descartada`.
+ * Nada llega al 606 ni a la contabilidad sin que alguien la registre.
+ */
+export const capturaFacturas = pgTable('captura_facturas', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  enlaceId:    integer('enlace_id').references(() => capturaFacturasEnlaces.id),
+  estado:      varchar('estado', { length: 20 }).notNull().default('procesando'),
+  subidoPor:   varchar('subido_por', { length: 120 }),
+  nota:        text('nota'),
+  /** qr (timbre del e-CF) | ia | manual. */
+  metodo:      varchar('metodo', { length: 10 }),
+  datos:       jsonb('datos'),
+  error:       text('error'),
+  compraId:    integer('compra_id').references(() => comprasLocales.id),
+  creadoEn:    timestamp('creado_en').notNull().defaultNow(),
+  procesadoEn: timestamp('procesado_en'),
+  revisadoPor: integer('revisado_por').references(() => users.id),
+  revisadoEn:  timestamp('revisado_en'),
+}, (t) => [
+  index('captura_facturas_team_estado_idx').on(t.teamId, t.estado, t.creadoEn),
+]);
+
+/** Las fotos (o el PDF) de una factura capturada. */
+export const capturaFacturasArchivos = pgTable('captura_facturas_archivos', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  capturaId:   integer('captura_id').notNull().references(() => capturaFacturas.id, { onDelete: 'cascade' }),
+  orden:       smallint('orden').notNull().default(0),
+  mime:        varchar('mime', { length: 100 }).notNull(),
+  tamanoBytes: integer('tamano_bytes').notNull(),
+  sha256:      char('sha256', { length: 64 }).notNull(),
+  /** 's3' → el binario está en s3Key. 'db' → en `contenido` (base64). */
+  storage:     varchar('storage', { length: 10 }).notNull(),
+  s3Key:       text('s3_key'),
+  contenido:   text('contenido'),
+  creadoEn:    timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('captura_facturas_archivos_captura_idx').on(t.capturaId, t.orden),
+  index('captura_facturas_archivos_sha_idx').on(t.teamId, t.sha256),
+]);
+
+export type CapturaFactura = typeof capturaFacturas.$inferSelect;

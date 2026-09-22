@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import useSWR from 'swr';
+import useSWR, { mutate as mutarSWR } from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,19 +27,35 @@ export interface ContextoRegistro {
   clase: 'compra' | 'gasto';
   regimenItbis: string;
   almacenes: { id: number; nombre: string }[];
+  /** Cuentas del catálogo entre las que se puede mover un gasto (gasto, costo, activo). */
+  cuentasGasto: { id: number; codigo: string; nombre: string }[];
+  /** A qué cuenta va cada categoría en esta empresa, y de dónde sale esa cuenta. */
+  cuentaPorCategoria: Record<string, { cuenta: { id: number; codigo: string; nombre: string }; origen: 'linea' | 'configurada' | 'catalogo' | 'general' } | null>;
   rncEmpresa: string | null;
   hoy: string;
   inicial: {
     proveedorRnc: string | null;
     proveedorNombre: string | null;
+    /** Lo que leyó la IA; sin ella se deduce del RNC. */
+    tipoProveedor?: TipoProveedor | null;
     ncf: string | null;
     fecha: string | null;
     formaPago: 'contado' | 'credito';
+    metodoPago?: string | null;
     fechaVencimiento: string | null;
     montoTotalCents: number | null;
-    lineas: LineaEcfRecibido[];
+    iscCents?: number | null;
+    otrosImpuestosCents?: number | null;
+    propinaCents?: number | null;
+    itbisRetenidoCents?: number | null;
+    isrRetenidoCents?: number | null;
+    lineas: (LineaEcfRecibido & { categoria?: string | null; productoId?: number | null })[];
   } | null;
   avisoEcf: string | null;
+  /** La factura fotografiada de la que sale el borrador. */
+  captura: { id: number; metodo: 'qr' | 'ia' | 'manual' | null; subidoPor: string | null; archivos: { id: number; mime: string }[] } | null;
+  /** Lo que hay que comparar con la foto antes de registrar. */
+  avisosCaptura: string[];
 }
 
 interface Producto { id: number; nombre: string; referencia: string | null; tipo: string; tasaItbis: string; costo: number; stockActual: number }
@@ -53,6 +69,8 @@ interface Linea {
   cantidad: string;
   costo: string;
   itbisTasa: TasaItbis;
+  /** Cuenta elegida a mano para esta línea; vacío = la de su categoría. */
+  cuentaId: string;
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -92,7 +110,7 @@ const MOTIVO_SIN_ASIENTO: Record<string, string> = {
 let siguienteKey = 1;
 const lineaVacia = (tipo: Linea['tipo']): Linea => ({
   key: siguienteKey++, tipo, productoId: '', descripcion: '', categoria: tipo === 'concepto' ? 'otros' : '',
-  cantidad: '1', costo: '', itbisTasa: '0.18',
+  cantidad: '1', costo: '', itbisTasa: '0.18', cuentaId: '',
 });
 
 /**
@@ -114,7 +132,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const [proveedorRnc, setProveedorRnc] = useState(ini?.proveedorRnc ?? '');
   const [proveedorNombre, setProveedorNombre] = useState(ini?.proveedorNombre ?? '');
   const idInicial = analizarIdentificacion(ini?.proveedorRnc);
-  const [tipoProveedor, setTipoProveedor] = useState<TipoProveedor>(idInicial.persona === 'fisica' ? 'fisica' : 'juridica');
+  const [tipoProveedor, setTipoProveedor] = useState<TipoProveedor>(
+    ini?.tipoProveedor ?? (idInicial.persona === 'fisica' ? 'fisica' : 'juridica'));
   const [ncf, setNcf] = useState(ini?.ncf ?? '');
   const [ncfModificado, setNcfModificado] = useState('');
   const [fecha, setFecha] = useState(ini?.fecha ?? contexto.hoy);
@@ -124,9 +143,13 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const [lineas, setLineas] = useState<Linea[]>(() => {
     if (ini?.lineas.length) {
       return ini.lineas.map((l) => ({
-        key: siguienteKey++, tipo: 'concepto' as const, productoId: '', descripcion: l.descripcion,
-        categoria: l.esServicio ? 'otros' : 'materiales', cantidad: String(l.cantidad),
-        costo: (l.costoUnitarioCents / 100).toFixed(2), itbisTasa: l.itbisTasa,
+        key: siguienteKey++,
+        // En una compra, la línea que la lectura enlazó con un producto del
+        // inventario entra como producto: al registrar suma existencia.
+        tipo: (!esGasto && l.productoId ? 'producto' : 'concepto') as Linea['tipo'],
+        productoId: !esGasto && l.productoId ? String(l.productoId) : '', descripcion: l.descripcion,
+        categoria: l.categoria ?? (l.esServicio ? 'otros' : 'materiales'), cantidad: String(l.cantidad),
+        costo: (l.costoUnitarioCents / 100).toFixed(2), itbisTasa: l.itbisTasa, cuentaId: '',
       }));
     }
     return [lineaVacia(esGasto ? 'concepto' : 'producto')];
@@ -136,18 +159,20 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   // ── Impuestos y retenciones ──
   const [alCostoManual, setAlCostoManual] = useState(false);
   const [itbisAlCosto, setItbisAlCosto] = useState('');
-  const [isc, setIsc] = useState('');
-  const [otros, setOtros] = useState('');
-  const [propina, setPropina] = useState('');
+  const enPesos = (cents: number | null | undefined) => (cents ? (cents / 100).toFixed(2) : '');
+  const [isc, setIsc] = useState(enPesos(ini?.iscCents));
+  const [otros, setOtros] = useState(enPesos(ini?.otrosImpuestosCents));
+  const [propina, setPropina] = useState(enPesos(ini?.propinaCents));
   const [conceptoManual, setConceptoManual] = useState<ConceptoRetencion | ''>('');
-  const [retencionManual, setRetencionManual] = useState(false);
-  const [itbisRetenido, setItbisRetenido] = useState('');
-  const [isrRetenido, setIsrRetenido] = useState('');
+  // Las retenciones que la propia factura detalla mandan sobre las sugeridas.
+  const [retencionManual, setRetencionManual] = useState(Boolean(ini?.itbisRetenidoCents || ini?.isrRetenidoCents));
+  const [itbisRetenido, setItbisRetenido] = useState(enPesos(ini?.itbisRetenidoCents));
+  const [isrRetenido, setIsrRetenido] = useState(enPesos(ini?.isrRetenidoCents));
   const [isrTipo, setIsrTipo] = useState('');
 
   // ── Pago ──
   const [formaPago, setFormaPago] = useState<'contado' | 'credito'>(ini?.formaPago ?? 'contado');
-  const [metodoPago, setMetodoPago] = useState('transferencia');
+  const [metodoPago, setMetodoPago] = useState(ini?.metodoPago ?? 'transferencia');
   const [fechaPago, setFechaPago] = useState(contexto.hoy);
   const [fechaVencimiento, setFechaVencimiento] = useState(ini?.fechaVencimiento ?? '');
   const [notas, setNotas] = useState('');
@@ -291,6 +316,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
             cantidad: x.calc.cantidad,
             costoUnitarioCents: x.calc.costoUnitarioCents,
             itbisTasa: x.l.itbisTasa,
+            cuentaId: x.l.tipo === 'concepto' && x.l.cuentaId ? Number(x.l.cuentaId) : null,
           })),
           itbisAlCostoCents: alCostoManual ? alCostoCents : null,
           itbisRetenidoCents,
@@ -306,6 +332,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           almacenId: almacenId ? Number(almacenId) : null,
           notas: notas.trim() || null,
           permitirNcfRepetido,
+          capturaId: contexto.captura?.id ?? null,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -318,7 +345,16 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
       const contable = a?.creado ? ` · asiento #${a.asientoId}` : a?.motivo && MOTIVO_SIN_ASIENTO[a.motivo] ? ` · sin asiento: ${MOTIVO_SIN_ASIENTO[a.motivo]}` : '';
       toast.success(`${esGasto ? 'Gasto' : 'Compra'} #${j.compraId} registrado${esGasto ? '' : 'a'}${contable}`);
       for (const aviso of (j.avisos ?? []) as string[]) toast.info(aviso);
-      router.push(`/dashboard/compras/local/${j.compraId}`);
+      // Desde la bandeja se vuelve a la bandeja: suele haber más facturas en fila.
+      // Con `refresh`, porque Next reutilizaría la página de Gastos que ya tenía
+      // y la factura recién registrada seguiría saliendo como pendiente.
+      if (contexto.captura) {
+        await mutarSWR('/api/gastos/capturas?estado=pendientes');
+        router.push(volverA);
+        router.refresh();
+      } else {
+        router.push(`/dashboard/compras/local/${j.compraId}`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -331,10 +367,39 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
     valor: String(p.id), etiqueta: p.nombre, detalle: [p.referencia, `existencia ${p.stockActual}`].filter(Boolean).join(' · '),
   }));
   const hayProductos = lineas.some((l) => l.tipo === 'producto');
+  // Las líneas se acomodan al ancho de SU tarjeta (container query), no al de la
+  // pantalla: con la foto al lado la tarjeta es angosta aunque la pantalla sea ancha.
+  //   · desde 768 px, una fila por línea, como tabla;
+  //   · de 520 a 767, dos: la descripción arriba y debajo categoría y números;
+  //   · por debajo (teléfono), tres, con cada número rotulado.
+  // En la tabla, descripción y categoría se reparten el espacio (las categorías
+  // llegan a 38 letras; «Materiales y suministros» pide 182 px) y lo demás lleva lo
+  // justo. La suma de los mínimos (702 en gasto, 766 en compra) cabe en 768.
+  const columnasLineas = `@min-[520px]:grid-cols-[minmax(0,1fr)_40px_84px_76px_88px] ${esGasto
+    ? '@min-[768px]:grid-cols-[minmax(150px,1fr)_minmax(182px,1.15fr)_40px_84px_76px_96px_28px]'
+    : '@min-[768px]:grid-cols-[84px_minmax(120px,1fr)_minmax(182px,1.15fr)_40px_84px_76px_96px_28px]'}`;
+  const campoTabla = { paddingTop: 7, paddingBottom: 7, paddingLeft: 8, paddingRight: 8, fontSize: 13 } as const;
+  const selectorTabla = { height: 34, fontSize: 13, paddingLeft: 8, paddingRight: 4 } as const;
+  const rotuloTelefono = 'mb-1 block truncate text-[11px] text-muted-foreground @min-[520px]:hidden';
+  // Un renglón por categoría al pie: qué hace ese grupo de líneas y a qué cuenta
+  // va. La cuenta se puede cambiar ahí mismo para este comprobante; el valor
+  // vacío significa «la que la empresa tiene puesta para esta categoría».
+  const resumenCategorias = (() => {
+    const grupos = new Map<string, { clave: string; label: string; detalle: string; lineas: number; cuentaId: string }>();
+    for (const x of lineasCalc) {
+      const clave = x.l.tipo === 'producto' ? 'inventario' : x.cat?.clave ?? 'sin';
+      const actual = grupos.get(clave) ?? (x.l.tipo === 'producto'
+        ? { clave, label: 'Productos del inventario', detalle: 'suman existencia y actualizan el costo promedio · cuenta 1105 · 606: 09', lineas: 0, cuentaId: '' }
+        : { clave, label: x.cat?.label ?? 'Sin categoría', detalle: x.cat ? `${x.cat.ejemplo} · 606: ${x.cat.tipo606}` : 'elige la categoría', lineas: 0, cuentaId: x.l.cuentaId });
+      actual.lineas += 1;
+      grupos.set(clave, actual);
+    }
+    return [...grupos.values()];
+  })();
   const Icono = esGasto ? Receipt : ShoppingCart;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <Link href={volverA} className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> {esGasto ? 'Gastos' : 'Compras'}
       </Link>
@@ -351,7 +416,20 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {contexto.avisoEcf}
         </div>
       )}
-      {ini && (
+      {contexto.captura ? (
+        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900" data-testid="aviso-captura">
+          <p className="flex items-start gap-2 font-medium">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            {contexto.captura.metodo === 'qr' ? 'Datos leídos del QR del e-CF.' : contexto.captura.metodo === 'ia' ? 'Datos leídos de la foto con IA.' : 'Factura fotografiada.'}
+            {' '}Compáralos con la foto antes de registrar.
+          </p>
+          {contexto.avisosCaptura.length > 0 && (
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-9 text-amber-800" data-testid="avisos-captura">
+              {contexto.avisosCaptura.map((a) => <li key={a}>{a}</li>)}
+            </ul>
+          )}
+        </div>
+      ) : ini && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800" data-testid="aviso-ecf-recibido">
           <Info className="mt-0.5 h-4 w-4 shrink-0" /> Datos tomados del e-CF recibido. Revisa la categoría de cada línea y las retenciones.
         </div>
@@ -428,6 +506,16 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
             <CardContent className="space-y-3 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-base font-semibold">2 · Qué se compró</h2>
+                {lineas.filter((l) => l.tipo === 'concepto').length > 1 && (
+                  <NativeSelect aria-label="Poner todas en una categoría" value="" style={{ width: 'auto', height: 32 }}
+                    onChange={(e) => {
+                      const categoria = e.target.value;
+                      if (categoria) setLineas((ls) => ls.map((l) => (l.tipo === 'concepto' ? { ...l, categoria, cuentaId: '' } : l)));
+                    }}>
+                    <option value="">Poner todas en…</option>
+                    {CATEGORIAS_COMPRA.map((c) => <option key={c.clave} value={c.clave}>{c.label}</option>)}
+                  </NativeSelect>
+                )}
                 {hayProductos && contexto.almacenes.length > 0 && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground">Entra al almacén</span>
@@ -437,54 +525,117 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </div>
                 )}
               </div>
-              <div className="space-y-3">
+              {/* Una factura de supermercado trae diez o veinte renglones: en tarjetas
+                  altas no se podía leer. Los envoltorios de cada línea pasan a
+                  `display: contents` cuando hay espacio, así los mismos campos sirven
+                  para las tres disposiciones y ninguno sale repetido. La ayuda de cada
+                  categoría va una vez al pie, no en cada fila. */}
+              <div className="@container">
+                <div className={`hidden ${columnasLineas} items-end gap-2 border-b pb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground @min-[520px]:grid`}>
+                  {!esGasto && <span className="hidden @min-[768px]:block">Tipo</span>}
+                  <span className="@min-[768px]:hidden">Descripción y categoría</span>
+                  <span className="hidden @min-[768px]:block">Descripción</span>
+                  <span className="hidden @min-[768px]:block">Categoría</span>
+                  <span className="text-right">Cant.</span>
+                  <span className="text-right">Costo sin ITBIS</span>
+                  <span>ITBIS</span>
+                  <span className="text-right">Total</span>
+                  <span className="hidden @min-[768px]:block" />
+                </div>
                 {lineasCalc.map((x, i) => (
-                  <div key={x.l.key} className="rounded-lg border p-3" data-testid={`linea-${i + 1}`}>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-[130px_minmax(0,1fr)_minmax(0,210px)]">
-                      {!esGasto ? (
-                        <NativeSelect aria-label={`Tipo de la línea ${i + 1}`} value={x.l.tipo}
-                          onChange={(e) => setLinea(x.l.key, { tipo: e.target.value as Linea['tipo'], productoId: '', categoria: e.target.value === 'concepto' ? 'otros' : '' })}>
+                  <div key={x.l.key} data-testid={`linea-${i + 1}`}
+                    className={`flex flex-col gap-2 border-b py-2.5 last:border-b-0 @min-[520px]:grid ${columnasLineas} @min-[520px]:items-center @min-[768px]:py-1.5`}>
+                    <div className={`grid ${esGasto ? 'grid-cols-[minmax(0,1fr)_28px]' : 'grid-cols-[84px_minmax(0,1fr)_28px]'} items-center gap-2 @min-[520px]:col-span-full @min-[768px]:contents`}>
+                      {!esGasto && (
+                        <NativeSelect aria-label={`Tipo de la línea ${i + 1}`} value={x.l.tipo} style={selectorTabla}
+                          onChange={(e) => setLinea(x.l.key, { tipo: e.target.value as Linea['tipo'], productoId: '', cuentaId: '', categoria: e.target.value === 'concepto' ? 'otros' : '' })}>
                           <option value="producto">Producto</option>
-                          <option value="concepto">Gasto o servicio</option>
+                          <option value="concepto">Gasto</option>
                         </NativeSelect>
-                      ) : <span className="hidden md:block" />}
+                      )}
                       {x.l.tipo === 'producto' ? (
-                        <div className="md:col-span-2">
+                        <div className="min-w-0 @min-[768px]:col-span-2">
                           <BuscadorSelect id={`producto-${i + 1}`} value={x.l.productoId} onChange={(v) => elegirProducto(x.l.key, v)}
                             opciones={opcionesProductos} placeholder={productos.length ? 'Busca el producto…' : 'No hay productos de inventario'} />
                         </div>
                       ) : (
-                        <>
-                          <Input aria-label={`Descripción de la línea ${i + 1}`} value={x.l.descripcion} onChange={(e) => setLinea(x.l.key, { descripcion: e.target.value })} placeholder="Qué se compró" />
-                          <NativeSelect aria-label={`Categoría de la línea ${i + 1}`} value={x.l.categoria} onChange={(e) => setLinea(x.l.key, { categoria: e.target.value })}>
-                            {CATEGORIAS_COMPRA.map((c) => <option key={c.clave} value={c.clave}>{c.label}</option>)}
-                          </NativeSelect>
-                        </>
+                        <Input aria-label={`Descripción de la línea ${i + 1}`} value={x.l.descripcion} onChange={(e) => setLinea(x.l.key, { descripcion: e.target.value })}
+                          placeholder="Qué se compró" title={x.l.descripcion} style={campoTabla} />
                       )}
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[90px_140px_110px_minmax(0,1fr)_40px] sm:items-center">
-                      <Input aria-label={`Cantidad de la línea ${i + 1}`} value={x.l.cantidad} onChange={(e) => setLinea(x.l.key, { cantidad: e.target.value })} inputMode="numeric" placeholder="Cant." />
-                      <Input aria-label={`Costo unitario de la línea ${i + 1}`} value={x.l.costo} onChange={(e) => setLinea(x.l.key, { costo: e.target.value })} inputMode="decimal" placeholder="Costo sin ITBIS" />
-                      <NativeSelect aria-label={`ITBIS de la línea ${i + 1}`} value={x.l.itbisTasa} onChange={(e) => setLinea(x.l.key, { itbisTasa: e.target.value as TasaItbis })}>
-                        {(Object.keys(TASA_LABEL) as TasaItbis[]).map((t) => <option key={t} value={t}>ITBIS {TASA_LABEL[t]}</option>)}
-                      </NativeSelect>
-                      <div className="text-right text-sm tabular-nums">
-                        <span className="font-medium">{pesos(totales.lineas[i].baseCents)}</span>
-                        {totales.lineas[i].itbisCents > 0 && <span className="text-muted-foreground"> + {pesos(totales.lineas[i].itbisCents)} ITBIS</span>}
-                      </div>
-                      <Button variant="ghost" size="icon" aria-label={`Quitar la línea ${i + 1}`} disabled={lineas.length === 1}
+                      <Button variant="ghost" size="icon" aria-label={`Quitar la línea ${i + 1}`} disabled={lineas.length === 1} className="@min-[768px]:order-last"
                         onClick={() => setLineas((ls) => ls.filter((l) => l.key !== x.l.key))}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {x.l.tipo === 'producto'
-                        ? 'Suma existencia y actualiza el costo promedio · cuenta 1105 Inventario · 606: 09'
-                        : x.cat ? `${x.cat.ejemplo} · cuenta ${x.cat.cuentaCodigo} · 606: ${x.cat.tipo606}` : ''}
-                    </p>
+                    {x.l.tipo !== 'producto' ? (
+                      <NativeSelect aria-label={`Categoría de la línea ${i + 1}`} value={x.l.categoria} style={selectorTabla}
+                        title={x.cat ? `${x.cat.label} · ${x.cat.ejemplo} · cuenta ${x.cat.cuentaCodigo} · 606: ${x.cat.tipo606}` : undefined}
+                        onChange={(e) => setLinea(x.l.key, { categoria: e.target.value, cuentaId: '' })}>
+                        {CATEGORIAS_COMPRA.map((c) => <option key={c.clave} value={c.clave}>{c.label}</option>)}
+                      </NativeSelect>
+                    ) : (
+                      // En dos renglones el producto no lleva categoría: el hueco la sustituye
+                      // para que los números caigan bajo su columna.
+                      <span aria-hidden className="hidden @min-[520px]:block @min-[768px]:hidden" />
+                    )}
+                    <div className="grid grid-cols-[44px_minmax(0,1fr)_76px_88px] items-start gap-2 @min-[520px]:contents">
+                      <div>
+                        <span className={rotuloTelefono} aria-hidden>Cant.</span>
+                        <Input aria-label={`Cantidad de la línea ${i + 1}`} value={x.l.cantidad} onChange={(e) => setLinea(x.l.key, { cantidad: e.target.value })}
+                          inputMode="numeric" placeholder="Cant." style={{ ...campoTabla, textAlign: 'right' }} />
+                      </div>
+                      <div>
+                        <span className={rotuloTelefono} aria-hidden>Costo s/ITBIS</span>
+                        <Input aria-label={`Costo unitario de la línea ${i + 1}`} value={x.l.costo} onChange={(e) => setLinea(x.l.key, { costo: e.target.value })}
+                          inputMode="decimal" placeholder="0.00" style={{ ...campoTabla, textAlign: 'right' }} />
+                      </div>
+                      <div>
+                        <span className={rotuloTelefono} aria-hidden>ITBIS</span>
+                        <NativeSelect aria-label={`ITBIS de la línea ${i + 1}`} value={x.l.itbisTasa} style={selectorTabla}
+                          onChange={(e) => setLinea(x.l.key, { itbisTasa: e.target.value as TasaItbis })}>
+                          {(Object.keys(TASA_LABEL) as TasaItbis[]).map((t) => <option key={t} value={t}>{TASA_LABEL[t]}</option>)}
+                        </NativeSelect>
+                      </div>
+                      <div className="text-right text-sm tabular-nums leading-tight">
+                        <span className={rotuloTelefono} aria-hidden>Total</span>
+                        <div className="font-medium">{pesos(totales.lineas[i].baseCents + totales.lineas[i].itbisCents)}</div>
+                        {totales.lineas[i].itbisCents > 0 && <div className="text-[11px] text-muted-foreground">ITBIS {pesos(totales.lineas[i].itbisCents)}</div>}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
+
+              {/* Qué hace cada grupo de líneas, una sola vez, y su cuenta contable */}
+              <div className="space-y-1 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="leyenda-lineas">
+                {resumenCategorias.map((g) => {
+                  const porDefecto = contexto.cuentaPorCategoria[g.clave] ?? null;
+                  return (
+                    <div key={g.clave} className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <span className="font-medium text-foreground">{g.label}</span>
+                      <span>({g.lineas} {g.lineas === 1 ? 'línea' : 'líneas'}) · {g.detalle}</span>
+                      {g.clave !== 'inventario' && g.clave !== 'sin' && contexto.cuentasGasto.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          · va a
+                          <NativeSelect aria-label={`Cuenta contable de ${g.label}`} data-testid={`cuenta-${g.clave}`} value={g.cuentaId}
+                            style={{ width: 'auto', height: 26, fontSize: 12, paddingLeft: 6, paddingRight: 2 }}
+                            onChange={(e) => setLineas((ls) => ls.map((l) => (
+                              l.tipo === 'concepto' && l.categoria === g.clave ? { ...l, cuentaId: e.target.value } : l
+                            )))}>
+                            <option value="">
+                              {porDefecto ? `${porDefecto.cuenta.codigo} ${porDefecto.cuenta.nombre}` : 'sin cuenta en el catálogo'}
+                            </option>
+                            {contexto.cuentasGasto.filter((c) => c.id !== porDefecto?.cuenta.id).map((c) => (
+                              <option key={c.id} value={c.id}>{c.codigo} {c.nombre}</option>
+                            ))}
+                          </NativeSelect>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <Button variant="outline" size="sm" onClick={() => setLineas((ls) => [...ls, lineaVacia(esGasto ? 'concepto' : 'producto')])} className="gap-1.5">
                 <Plus className="h-4 w-4" /> Agregar línea
               </Button>
@@ -620,7 +771,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
         </div>
 
         {/* Resumen */}
-        <aside className="lg:sticky lg:top-4 lg:self-start">
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {contexto.captura && <FotosCaptura captura={contexto.captura} />}
           <Card>
             <CardContent className="space-y-2 p-5 text-sm" data-testid="resumen-compra">
               <h2 className="mb-1 text-base font-semibold">Resumen</h2>
@@ -678,5 +830,29 @@ function Fila({ k, v, fuerte, tenue }: { k: string; v: string; fuerte?: boolean;
       <span>{k}</span>
       <span className="tabular-nums">{v}</span>
     </div>
+  );
+}
+
+/** Las fotos de la factura al lado del formulario: se registra mirándolas. */
+function FotosCaptura({ captura }: { captura: NonNullable<ContextoRegistro['captura']> }) {
+  const url = (archivoId: number) => `/api/gastos/capturas/${captura.id}/archivos/${archivoId}`;
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-3" data-testid="fotos-captura">
+        <p className="px-1 text-xs font-medium text-muted-foreground">
+          Factura fotografiada{captura.subidoPor ? ` · la envió ${captura.subidoPor}` : ''}
+        </p>
+        {captura.archivos.map((a, i) => a.mime === 'application/pdf' ? (
+          <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" className="block rounded-md border p-3 text-sm text-zero-700 underline">
+            Ver PDF {captura.archivos.length > 1 ? i + 1 : ''}
+          </a>
+        ) : (
+          <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" title="Abrir en grande">
+            {/* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */}
+            <img src={url(a.id)} alt={`Foto ${i + 1} de la factura`} className="max-h-[70vh] w-full rounded-md border object-contain" />
+          </a>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
