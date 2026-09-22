@@ -23,6 +23,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
 jobs:
   linaje:
     name: Buscar último deploy exitoso
@@ -108,11 +112,13 @@ jobs:
 
       - name: Avisar si este deploy trae migraciones
         if: needs.migraciones.outputs.hay_migraciones == 'true'
+        env:
+          ARCHIVOS: ${{ needs.migraciones.outputs.archivos }}
         run: |
           {
             echo "### ⚠️ Este deploy incluye cambios de base de datos"
             echo '```'
-            echo "${{ needs.migraciones.outputs.archivos }}"
+            echo "$ARCHIVOS"
             echo '```'
             echo ""
             echo "Corrió bajo el Environment \`produccion-con-migracion\`, que pide aprobación manual."
