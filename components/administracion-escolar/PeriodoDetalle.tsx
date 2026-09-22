@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { VerFacturaDrawer } from './VerFacturaDrawer';
+import { VincularPlanExistente } from './VincularPlanExistente';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -651,6 +652,12 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
 
         {vista === 'mensualidades' && (
           <>
+            {/* Colegio migrado con planes recurrentes previos: si el alumno ya
+                tiene un plan suelto en Facturación, ofrecer VINCULARLO en vez de
+                crear otro. Se auto-oculta si no hay plan que sugerir. */}
+            {puedeGestionar && grupo.facturaRecurrenteId == null && grupo.matriculaId && (
+              <VincularPlanExistente matriculaId={grupo.matriculaId} onVinculado={() => router.refresh()} />
+            )}
             {/* Motivo visible: sin plan recurrente, la mensualidad se DEVENGA
                 como deuda pero nunca se emite su factura sola. Antes solo se veía
                 «Sin facturar» sin decir por qué, y el colegio esperaba la factura
