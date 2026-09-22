@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
 jobs:
   rollback:
     name: Revertir
@@ -23,7 +27,9 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Revertir al deploy indicado
-        run: vercel rollback "${{ github.event.inputs.deployment_url }}" --token="${{ secrets.VERCEL_TOKEN }}" --yes
         env:
+          DEPLOYMENT_URL: ${{ github.event.inputs.deployment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel rollback "$DEPLOYMENT_URL" --token="$VERCEL_TOKEN" --yes
