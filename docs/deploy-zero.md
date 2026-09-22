@@ -82,5 +82,16 @@ Ver la sección "Configuración manual previa" del plan que creó este flujo:
 - Environments de GitHub: `Production` (sin revisores) y
   `production-migration-required` (con revisores obligatorios).
 - Secrets en ambos: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
-- Vercel: Production Branch = `master`, con un Ignored Build Step que saltea
-  el auto-deploy de Vercel en `master` (el deploy real lo hace GitHub Actions).
+- Vercel: **no hace falta cambiar el Production Branch del dashboard** — el
+  CLI deploya con `--prod` explícito, que promueve a producción sin importar
+  qué rama tenga marcada Vercel. Opcional: un Ignored Build Step que saltee
+  el build de *preview* que Vercel generaría solo en cada push a `master`
+  (ahorra minutos de build, no afecta la corrección del flujo):
+  ```bash
+  if [ "$VERCEL_GIT_COMMIT_REF" == "master" ]; then
+    echo "Este build lo hace GitHub Actions, no Vercel."
+    exit 0
+  else
+    exit 1
+  fi
+  ```
