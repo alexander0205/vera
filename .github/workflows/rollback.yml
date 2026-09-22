@@ -21,7 +21,7 @@ jobs:
   rollback:
     name: Revertir
     runs-on: ubuntu-latest
-    environment: produccion
+    environment: Production
     steps:
       - name: Instalar Vercel CLI
         run: npm install --global vercel@latest

@@ -28,7 +28,7 @@ Actions con un token de proyecto.
 Si el rango mergeado trae algún archivo nuevo o modificado bajo
 `lib/db/migrations/` (fuera de `meta/`), el job `deploy` de ese run queda
 **pausado esperando aprobación** — corre bajo el Environment de GitHub
-`produccion-con-migracion`, que tiene revisores obligatorios.
+`production-migration-required`, que tiene revisores obligatorios.
 
 Qué hacer:
 
@@ -46,8 +46,8 @@ Qué hacer:
 3. Confirmar que la migración corrió limpia (el script imprime `OK — migración
    aplicada`; si hay más de un `.sql` en la lista, correrlos todos, en orden).
 4. Volver al run de `Deploy` en GitHub y **aprobar** el Environment
-   `produccion-con-migracion`: botón "Review deployments" → tildar
-   `produccion-con-migracion` → **Approve and deploy**. El job `deploy`
+   `production-migration-required`: botón "Review deployments" → tildar
+   `production-migration-required` → **Approve and deploy**. El job `deploy`
    continúa solo desde ahí.
 
 Si la migración falla o hay dudas, **no aprobar** — el deploy nunca sale
@@ -79,8 +79,8 @@ migración inversa con el mismo `scripts/correr-migracion.ts`.
 Ver la sección "Configuración manual previa" del plan que creó este flujo:
 `docs/superpowers/plans/2026-09-22-deploy-zero-cicd.md`. Resumen:
 
-- Environments de GitHub: `produccion` (sin revisores) y
-  `produccion-con-migracion` (con revisores obligatorios).
+- Environments de GitHub: `Production` (sin revisores) y
+  `production-migration-required` (con revisores obligatorios).
 - Secrets en ambos: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 - Vercel: Production Branch = `master`, con un Ignored Build Step que saltea
   el auto-deploy de Vercel en `master` (el deploy real lo hace GitHub Actions).

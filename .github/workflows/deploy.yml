@@ -7,10 +7,11 @@ name: Deploy a producción
 # Flujo (ticket Trello "Configurar CI/CD Zero Emite"):
 #   1. Busca el último deploy exitoso anterior (para comparar).
 #   2. Si el rango trae cambios en lib/db/migrations/, el job `deploy` corre
-#      bajo el Environment `produccion-con-migracion` (revisores obligatorios
-#      configurados en GitHub) — alguien debe correr la migración a mano
-#      primero (ver docs/deploy-zero.md) y recién ahí aprobar. Sin cambios de
-#      DB, corre bajo `produccion`, sin revisores, automático.
+#      bajo el Environment `production-migration-required` (revisores
+#      obligatorios configurados en GitHub) — alguien debe correr la
+#      migración a mano primero (ver docs/deploy-zero.md) y recién ahí
+#      aprobar. Sin cambios de DB, corre bajo `Production`, sin revisores,
+#      automático.
 #   3. El deploy lo hace GitHub Actions con el CLI de Vercel — nadie del
 #      equipo necesita acceso a Vercel para publicar.
 on:
@@ -103,7 +104,7 @@ jobs:
     name: Deploy a Vercel
     needs: migraciones
     runs-on: ubuntu-latest
-    environment: ${{ needs.migraciones.outputs.hay_migraciones == 'true' && 'produccion-con-migracion' || 'produccion' }}
+    environment: ${{ needs.migraciones.outputs.hay_migraciones == 'true' && 'production-migration-required' || 'Production' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -121,7 +122,7 @@ jobs:
             echo "$ARCHIVOS"
             echo '```'
             echo ""
-            echo "Corrió bajo el Environment \`produccion-con-migracion\`, que pide aprobación manual."
+            echo "Corrió bajo el Environment \`production-migration-required\`, que pide aprobación manual."
             echo "Antes de aprobar: correr la migración a mano. Ver [docs/deploy-zero.md](../../docs/deploy-zero.md#migraciones-de-base-de-datos)."
           } >> "$GITHUB_STEP_SUMMARY"
 
