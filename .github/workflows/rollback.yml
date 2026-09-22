@@ -1,0 +1,29 @@
+name: Rollback a producción
+
+# Manual, a propósito — un rollback no debería poder dispararse solo.
+# Pide la URL de un deploy anterior bueno (la que imprimió el job "Deploy" de
+# deploy.yml, visible en su Job Summary o en el dashboard de Vercel).
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: 'URL del deploy bueno anterior, ej. https://zero-abc123.vercel.app'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Revertir
+    runs-on: ubuntu-latest
+    environment: produccion
+    steps:
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Revertir al deploy indicado
+        run: vercel rollback "${{ github.event.inputs.deployment_url }}" --token="${{ secrets.VERCEL_TOKEN }}" --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
