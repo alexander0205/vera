@@ -6,6 +6,13 @@ en orden: **CI** (tipos, pruebas unitarias, build de verificación —
 Nadie del equipo necesita acceso directo a Vercel: el deploy lo hace GitHub
 Actions con un token de proyecto.
 
+> **Nota de secuencia:** este runbook asume que `.github/workflows/ci.yml`
+> ya dispara solo en push/PR a `master` (rama `ci/reactivar-ci`, aparte de
+> esta). Hasta que esa rama esté mergeada, `CI` sigue siendo manual
+> (`workflow_dispatch`) y por lo tanto `Deploy` tampoco arranca solo —
+> hay que dispararlo a mano desde la pestaña Actions. Una vez mergeada esa
+> rama, esta nota deja de aplicar y se puede borrar.
+
 ## Flujo normal (sin migraciones)
 
 1. Se mergea un PR a `master`.
@@ -39,7 +46,8 @@ Qué hacer:
 3. Confirmar que la migración corrió limpia (el script imprime `OK — migración
    aplicada`; si hay más de un `.sql` en la lista, correrlos todos, en orden).
 4. Volver al run de `Deploy` en GitHub y **aprobar** el Environment
-   `produccion-con-migracion` (botón "Review deployments"). El job `deploy`
+   `produccion-con-migracion`: botón "Review deployments" → tildar
+   `produccion-con-migracion` → **Approve and deploy**. El job `deploy`
    continúa solo desde ahí.
 
 Si la migración falla o hay dudas, **no aprobar** — el deploy nunca sale
