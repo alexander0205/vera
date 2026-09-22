@@ -87,6 +87,23 @@ revierte inventario y genera el reverso del asiento; no se anula lo ya pagado.
 | 1104 ITBIS adelantado | 2114 ISR retenido a terceros por pagar |
 | | 2101 Cuentas por pagar o caja/banco del método — el neto |
 
+**Qué cuenta usa un gasto** (`lib/contabilidad/cuenta-gasto.ts`, migración 0182).
+De más específica a más general:
+
+1. la que se eligió **al registrar ese comprobante**, en el selector que hay al
+   pie de las líneas, junto a cada categoría (se guarda en
+   `compras_locales_items.cuenta_id`);
+2. la que la empresa fijó para esa categoría en Contabilidad → Configuración →
+   «Gastos por categoría» (`contabilidad_config_gastos`);
+3. la del código que la categoría trae en `lib/compras/categorias.ts` (6114 para
+   materiales, 6110 para honorarios…), que es como funcionaba antes;
+4. la cuenta general de gastos de la configuración y, si tampoco está, la 6101.
+
+Solo entran cuentas imputables y activas: una de agrupación no recibe asientos y
+una desactivada dejaría el asiento sin cuadrar, así que la que no esté usable se
+salta y manda la siguiente. Esto arregla un fallo silencioso: quien dividía la
+6114 en subcuentas veía sus gastos caer en la cuenta general sin enterarse.
+
 Cuentas por pagar muestra y cobra el **neto** (lo retenido se le paga a la
 DGII) y al saldarse fija la fecha de pago del 606. El panorama contable lista
 «Compras y gastos registrados» y «Anulaciones de compras».

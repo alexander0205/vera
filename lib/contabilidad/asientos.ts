@@ -23,7 +23,8 @@ import { cache } from 'react';
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { parseLineas } from '@/lib/reportes/shared';
-import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
+import { getConfig, resolverCuentaCobro, claveContableDePago, getCuentasGasto, catalogoImputable } from './config';
+import { elegirCuentaGasto } from './cuenta-gasto';
 import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
@@ -753,11 +754,12 @@ export async function generarAsientoCompra(
 
   const items = (await db.execute(sql`
     SELECT producto_id AS "productoId", categoria, descripcion, cantidad, costo_unitario AS "costoUnitario",
+           cuenta_id AS "cuentaId",
            (SELECT nombre FROM products p WHERE p.id = i.producto_id) AS "productoNombre"
     FROM compras_locales_items i
     WHERE compra_id = ${compraId}
     ORDER BY id
-  `)) as unknown as { productoId: number | null; categoria: string | null; descripcion: string | null; cantidad: number; costoUnitario: number; productoNombre: string | null }[];
+  `)) as unknown as { productoId: number | null; categoria: string | null; descripcion: string | null; cantidad: number; costoUnitario: number; cuentaId: number | null; productoNombre: string | null }[];
 
   const itbis = num(c.itbisCents);
   const isc = num(c.iscCents);
@@ -768,7 +770,10 @@ export async function generarAsientoCompra(
     ? itbis - distribuirCompra(montoTotal, itbis, cfg.regimenItbis).itbisAdelantadoCents
     : num(c.itbisAlCostoCents);
 
-  // Cuenta de cada línea.
+  // Cuenta de cada línea. En los conceptos manda la que se eligió al registrar;
+  // si no, la que la empresa configuró para esa categoría (ver `cuenta-gasto`).
+  const [configuradas, catalogo] = await Promise.all([getCuentasGasto(teamId), catalogoImputable(teamId)]);
+  const cuentasPorCategoria = new Map(configuradas.map((c) => [c.categoria, c.cuentaId]));
   const bases: BaseCuenta[] = [];
   let cuentaInv: number | null = null;
   for (const it of items) {
@@ -779,10 +784,12 @@ export async function generarAsientoCompra(
       bases.push({ cuentaId: cuentaInv, baseCents, descripcion: it.productoNombre ?? 'Entrada de inventario' });
     } else {
       const cat = categoriaCompra(it.categoria);
-      const cuenta = (cat ? await cuentaPorCodigo(teamId, cat.cuentaCodigo) : null)
-        ?? cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
-      if (!cuenta) return { creado: false, motivo: 'sin-cuenta-gastos' };
-      bases.push({ cuentaId: cuenta, baseCents, descripcion: cat?.label ?? it.descripcion ?? 'Gasto' });
+      const elegida = elegirCuentaGasto({
+        categoria: it.categoria, cuentaLineaId: it.cuentaId,
+        configuradas: cuentasPorCategoria, general: cfg.cuentaGastosId, ...catalogo,
+      });
+      if (!elegida) return { creado: false, motivo: 'sin-cuenta-gastos' };
+      bases.push({ cuentaId: elegida.cuenta.id, baseCents, descripcion: cat?.label ?? it.descripcion ?? 'Gasto' });
     }
   }
   // El total del comprobante manda: si las líneas no llegan a la base (redondeo

@@ -16,6 +16,7 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import type { Cuenta } from '@/lib/contabilidad/cuentas';
+import { CATEGORIAS_COMPRA } from '@/lib/compras/categorias';
 // Valores desde `metodos` (sin dependencias de base) y tipos desde `config`.
 // Importar valores de `config` aquí rompe el bundle del cliente: arrastra
 // `postgres` y falla con "Can't resolve 'fs'".
@@ -97,12 +98,14 @@ const METODOS_CONFIGURABLES = (Object.keys(CLAVE_METODO_LABEL) as ClaveMetodo[])
 
 
 export function ConfigClient({
-  configInicial, metodosIniciales, overridesIniciales, estadoInicial,
+  configInicial, metodosIniciales, overridesIniciales, cuentasGastoIniciales, estadoInicial,
   cuentas, categorias, productos, puedeConfigurar,
 }: {
   configInicial:      ConfigContable;
   metodosIniciales:   MetodoConfigurado[];
   overridesIniciales: OverrideIngreso[];
+  /** A qué cuenta va hoy cada categoría de gasto y de dónde sale esa cuenta. */
+  cuentasGastoIniciales: Record<string, { cuenta: { id: number; codigo: string; nombre: string }; origen: string } | null>;
   estadoInicial:      EstadoConfiguracion;
   cuentas:            Cuenta[];
   categorias:         { id: number; nombre: string }[];
@@ -625,6 +628,68 @@ export function ConfigClient({
             Agregar excepción
           </Button>
         ))}
+      </Box>
+
+      {/* ─── 4. Gastos por categoría ────────────────────────────────────── */}
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Gastos por categoría
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            Cada gasto va a la cuenta de su categoría. Cámbiala solo si tu catálogo
+            usa otra —por ejemplo, si dividiste una cuenta en subcuentas—. Quien
+            registre el comprobante puede elegir otra cuenta para ese gasto.
+          </Typography>
+        </Box>
+
+        <Box sx={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Categoría</TableCell>
+                <TableCell>Cuenta</TableCell>
+                <TableCell>Va a</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {CATEGORIAS_COMPRA.map((cat) => {
+                const actual = cuentasGastoIniciales[cat.clave] ?? null;
+                const elegida = actual?.origen === 'configurada' ? String(actual.cuenta.id) : '';
+                return (
+                  <TableRow key={cat.clave}>
+                    <TableCell sx={{ maxWidth: 260 }}>
+                      <Typography sx={{ fontSize: '0.8125rem', color: '#111827' }}>{cat.label}</Typography>
+                      <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>{cat.ejemplo}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ minWidth: 240 }}>
+                      <TextField
+                        select size="small" fullWidth value={elegida}
+                        disabled={!puedeConfigurar || guardando}
+                        slotProps={{ htmlInput: { 'aria-label': `Cuenta de ${cat.label}` } }}
+                        onChange={(e) => enviar({
+                          seccion: 'gasto-categoria',
+                          categoria: cat.clave,
+                          cuentaId: e.target.value ? Number(e.target.value) : null,
+                        })}
+                      >
+                        <MenuItem value="">Por defecto (cuenta {cat.cuentaCodigo})</MenuItem>
+                        {cuentas.map((c) => (
+                          <MenuItem key={c.id} value={c.id}>{c.codigo} — {c.nombre}</MenuItem>
+                        ))}
+                      </TextField>
+                    </TableCell>
+                    <TableCell sx={{ color: '#4b5563', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                      {actual
+                        ? <><Box component="span" sx={{ fontFamily: 'monospace' }}>{actual.cuenta.codigo}</Box> {actual.cuenta.nombre}</>
+                        : <Box component="span" sx={{ color: '#b45309' }}>sin cuenta en el catálogo</Box>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Box>
       </Box>
     </Box>
   );

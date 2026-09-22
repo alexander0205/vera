@@ -42,6 +42,8 @@ export const RUTAS_SIN_SOPORTE = [
   '/pagar/', '/pay/', '/d/', '/f/', '/foto/',
   // Nómina: el empleado firma su contrato y sube sus horas sin cuenta en Zero.
   '/firmar/', '/horas/',
+  // Quien fotografía una factura de proveedor con el enlace de la empresa.
+  '/subir-factura/',
 ];
 
 /** ¿En esta ruta hay soporte? `null`/`undefined` (aún sin resolver) cuenta como que sí. */
