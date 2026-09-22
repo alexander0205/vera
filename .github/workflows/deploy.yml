@@ -1,6 +1,6 @@
 name: Deploy a producción
 
-# Corre después de que "CI" termina en verde sobre master. Nunca dispara
+# Corre después de que "CI" termina en verde sobre v2. Nunca dispara
 # directo en push: así el deploy nunca sale de un commit que no pasó
 # tipos/pruebas/build (ver .github/workflows/ci.yml).
 #
@@ -17,7 +17,7 @@ name: Deploy a producción
 on:
   workflow_run:
     workflows: ["CI"]
-    branches: [master]
+    branches: [v2]
     types: [completed]
 
 permissions:
@@ -45,7 +45,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'deploy.yml',
-              branch: 'master',
+              branch: 'v2',
               status: 'success',
               per_page: 1,
             });

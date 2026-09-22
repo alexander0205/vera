@@ -1,13 +1,13 @@
 # Deploy a producción (Zero / EmiteDO)
 
-Producción vive en la rama `master`. Todo merge aprobado a `master` dispara,
+Producción vive en la rama `v2`. Todo merge aprobado a `v2` dispara,
 en orden: **CI** (tipos, pruebas unitarias, build de verificación —
 `.github/workflows/ci.yml`) y, si pasa, **Deploy** (`.github/workflows/deploy.yml`).
 Nadie del equipo necesita acceso directo a Vercel: el deploy lo hace GitHub
 Actions con un token de proyecto.
 
 > **Nota de secuencia:** este runbook asume que `.github/workflows/ci.yml`
-> ya dispara solo en push/PR a `master` (rama `ci/reactivar-ci`, aparte de
+> ya dispara solo en push/PR a `v2` (rama `ci/reactivar-ci`, aparte de
 > esta). Hasta que esa rama esté mergeada, `CI` sigue siendo manual
 > (`workflow_dispatch`) y por lo tanto `Deploy` tampoco arranca solo —
 > hay que dispararlo a mano desde la pestaña Actions. Una vez mergeada esa
@@ -15,7 +15,7 @@ Actions con un token de proyecto.
 
 ## Flujo normal (sin migraciones)
 
-1. Se mergea un PR a `master`.
+1. Se mergea un PR a `v2`.
 2. `CI` corre tipos + `test:unit` + build. Si falla, ahí termina — no hay deploy.
 3. Si `CI` pasa, `Deploy` arranca solo. Compara los archivos tocados desde el
    último deploy exitoso: si ninguno está bajo `lib/db/migrations/`, el job
@@ -52,7 +52,7 @@ Qué hacer:
 
 Si la migración falla o hay dudas, **no aprobar** — el deploy nunca sale
 mientras el Environment esperando revisión no se apruebe, y eso no bloquea
-nada más (los siguientes merges a `master` sí siguen corriendo `CI`, pero cada
+nada más (los siguientes merges a `v2` sí siguen corriendo `CI`, pero cada
 uno abre su propio run de `Deploy` en la misma cola).
 
 ## Si algo sale mal
@@ -67,7 +67,7 @@ que el nuevo termina de construirse y publicarse. No hay nada que revertir.
    para mirar la lista, no para actuar ahí).
 2. Actions → **Rollback a producción** → Run workflow → pegar esa URL.
 3. Eso promueve ese deploy anterior a producción al instante, sin rebuild.
-4. Corregir el problema en una rama nueva, PR normal a `master`, deploy normal.
+4. Corregir el problema en una rama nueva, PR normal a `v2`, deploy normal.
 
 **Si el problema es de datos (una migración salió mal):** el rollback de
 Vercel revierte el código, no la base — una migración que ya corrió sigue
@@ -76,19 +76,16 @@ migración inversa con el mismo `scripts/correr-migracion.ts`.
 
 ## Configuración (Environments, secrets, Vercel)
 
-Ver la sección "Configuración manual previa" del plan que creó este flujo:
-`docs/superpowers/plans/2026-09-22-deploy-zero-cicd.md`. Resumen:
-
 - Environments de GitHub: `Production` (sin revisores) y
   `production-migration-required` (con revisores obligatorios).
 - Secrets en ambos: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 - Vercel: **no hace falta cambiar el Production Branch del dashboard** — el
   CLI deploya con `--prod` explícito, que promueve a producción sin importar
   qué rama tenga marcada Vercel. Opcional: un Ignored Build Step que saltee
-  el build de *preview* que Vercel generaría solo en cada push a `master`
+  el build de *preview* que Vercel generaría solo en cada push a `v2`
   (ahorra minutos de build, no afecta la corrección del flujo):
   ```bash
-  if [ "$VERCEL_GIT_COMMIT_REF" == "master" ]; then
+  if [ "$VERCEL_GIT_COMMIT_REF" == "v2" ]; then
     echo "Este build lo hace GitHub Actions, no Vercel."
     exit 0
   else
