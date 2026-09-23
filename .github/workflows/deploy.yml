@@ -1,0 +1,170 @@
+name: Deploy a producción
+
+# Corre después de que "CI" termina en verde sobre v2. Nunca dispara
+# directo en push: así el deploy nunca sale de un commit que no pasó
+# tipos/pruebas/build (ver .github/workflows/ci.yml).
+#
+# Flujo (ticket Trello "Configurar CI/CD Zero Emite"):
+#   1. Busca el último deploy exitoso anterior (para comparar).
+#   2. Si el rango trae cambios en lib/db/migrations/, el job `deploy` corre
+#      bajo el Environment `production-migration-required` (revisores
+#      obligatorios configurados en GitHub) — alguien debe correr la
+#      migración a mano primero (ver docs/deploy-zero.md) y recién ahí
+#      aprobar. Sin cambios de DB, corre bajo `Production`, sin revisores,
+#      automático.
+#   3. El deploy lo hace GitHub Actions con el CLI de Vercel — nadie del
+#      equipo necesita acceso a Vercel para publicar.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [v2]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
+jobs:
+  linaje:
+    name: Buscar último deploy exitoso
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      base_sha: ${{ steps.buscar.outputs.base_sha }}
+    steps:
+      - name: Buscar el run exitoso anterior de este mismo workflow
+        id: buscar
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              branch: 'v2',
+              status: 'success',
+              per_page: 1,
+            });
+            const base = runs.data.workflow_runs[0]?.head_sha ?? '';
+            core.setOutput('base_sha', base);
+            console.log(base
+              ? `Comparando contra el último deploy exitoso: ${base}`
+              : 'No hay deploy exitoso previo registrado — se trata como si hubiera migraciones, por seguridad.');
+
+  migraciones:
+    name: Detectar migraciones pendientes
+    needs: linaje
+    runs-on: ubuntu-latest
+    outputs:
+      hay_migraciones: ${{ steps.detectar.outputs.hay_migraciones }}
+      archivos: ${{ steps.detectar.outputs.archivos }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Correr scripts/ci/detectar-migraciones.sh
+        id: detectar
+        run: |
+          BASE="${{ needs.linaje.outputs.base_sha }}"
+          HEAD="${{ github.event.workflow_run.head_sha }}"
+
+          if [ -z "$BASE" ]; then
+            echo "hay_migraciones=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "archivos<<EOF_ARCHIVOS"
+              echo "(primer deploy registrado — sin base para comparar, se fuerza la revisión)"
+              echo "EOF_ARCHIVOS"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          RESULTADO=$(scripts/ci/detectar-migraciones.sh "$BASE" "$HEAD")
+          ESTADO=$(echo "$RESULTADO" | head -1)
+          ARCHIVOS=$(echo "$RESULTADO" | tail -n +2)
+
+          if [ "$ESTADO" = "hay-migraciones" ]; then
+            echo "hay_migraciones=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay_migraciones=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "archivos<<EOF_ARCHIVOS"
+            echo "$ARCHIVOS"
+            echo "EOF_ARCHIVOS"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy a Vercel
+    needs: migraciones
+    runs-on: ubuntu-latest
+    environment: ${{ needs.migraciones.outputs.hay_migraciones == 'true' && 'production-migration-required' || 'Production' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Avisar si este deploy trae migraciones
+        if: needs.migraciones.outputs.hay_migraciones == 'true'
+        env:
+          ARCHIVOS: ${{ needs.migraciones.outputs.archivos }}
+        run: |
+          {
+            echo "### ⚠️ Este deploy incluye cambios de base de datos"
+            echo '```'
+            echo "$ARCHIVOS"
+            echo '```'
+            echo ""
+            echo "Corrió bajo el Environment \`production-migration-required\`, que pide aprobación manual."
+            echo "Antes de aprobar: correr la migración a mano. Ver [docs/deploy-zero.md](../../docs/deploy-zero.md#migraciones-de-base-de-datos)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Traer configuración de producción de Vercel
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build de producción
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### ✅ Deploy publicado"
+            echo "$URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Si algo falló, cómo revertir
+        if: failure()
+        run: |
+          {
+            echo "### ❌ El deploy falló"
+            echo "Si falló ANTES del paso Deploy, producción sigue en el deploy anterior — no hay nada que revertir."
+            echo "Si falló DESPUÉS de que Deploy imprimió una URL, revertir con el workflow **Rollback a producción** (pestaña Actions → Rollback a producción → Run workflow), pasando esa URL o la del deploy bueno anterior."
+            echo "Ver [docs/deploy-zero.md](../../docs/deploy-zero.md#si-algo-sale-mal)."
+          } >> "$GITHUB_STEP_SUMMARY"
