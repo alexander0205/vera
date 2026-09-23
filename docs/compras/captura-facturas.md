@@ -15,7 +15,7 @@ La factura cae en **«Facturas por revisar»**, arriba en Gastos, ya leída:
    es la URL de consulta de la DGII y trae RNC del emisor y del comprador,
    e-NCF, fecha y total exactos. Se busca en la foto a varias escalas
    (`qr.ts`, jsQR + sharp). No trae el ITBIS.
-2. **IA** (`ia.ts`, `google/gemini-2.5-flash-lite` con `anthropic/claude-haiku-4.5` de respaldo). Llena **todo lo que el
+2. **IA** (`ia.ts`, `google/gemini-2.5-flash-lite` con `google/gemini-2.5-flash` de respaldo). Llena **todo lo que el
    registro necesita**: nombre y RNC del proveedor, tipo de proveedor, NCF,
    fecha, subtotal, ITBIS, ISC, otros impuestos, propina, retenciones si la
    factura las detalla, total, líneas con su ITBIS, forma y método de pago, y la
@@ -34,7 +34,8 @@ La factura cae en **«Facturas por revisar»**, arriba en Gastos, ya leída:
    | Modelo | Entrada | Salida | Por factura | Nota |
    |---|---|---|---|---|
    | `anthropic/claude-sonnet-5` | 2.00 | 10.00 | ~US$0.010 | el más fino |
-   | **`anthropic/claude-haiku-4.5`** (el respaldo) | 1.00 | 5.00 | ~US$0.005 | entra si el primero falla |
+   | **`google/gemini-2.5-flash`** (el respaldo) | 0.30 | 2.50 | ~US$0.002 | entra si el primero falla |
+   | `anthropic/claude-haiku-4.5` | 1.00 | 5.00 | ~US$0.005 | **el plan gratuito del gateway no lo deja**: 403 |
    | **`google/gemini-2.5-flash-lite`** (el que va) | 0.10 | 0.40 | ~US$0.0005 | 10× más barato, muy bueno en OCR |
    | `openai/gpt-5-nano` | 0.05 | 0.40 | ~US$0.0003 | |
    | `alibaba/qwen3.7-flash` | 0.03 | 0.13 | ~US$0.0001 | el más barato con visión |

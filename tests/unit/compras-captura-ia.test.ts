@@ -32,10 +32,12 @@ describe('qué modelo lee la factura', () => {
     expect(ia.modeloCaptura()).toBe('google/gemini-2.5-flash-lite');
   });
 
-  it('con solo la llave de Anthropic entra el respaldo, que sí es suyo', async () => {
+  it('con solo la llave de Anthropic hay que pedirle un modelo suyo', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-de-prueba';
-    const ia = await cargar();
-    const m = ia.modeloCaptura();
+    // Por defecto los dos modelos son de Google y solo salen por el gateway.
+    expect((await cargar()).iaDisponible()).toBe(false);
+    process.env.CAPTURA_IA_MODELO_RESPALDO = 'anthropic/claude-haiku-4.5';
+    const m = (await cargar()).modeloCaptura();
     expect(typeof m === 'object' && m && 'modelId' in m ? m.modelId : m).toBe('claude-haiku-4.5');
   });
 

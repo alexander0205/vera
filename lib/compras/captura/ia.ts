@@ -22,23 +22,28 @@ import { esquemaLecturaIa, type LecturaIa } from './datos';
 /**
  * Leer una factura es OCR con formato fijo: no hace falta el modelo más caro.
  * Va Gemini Flash-Lite, que cuesta una décima parte que Haiku (US$0.0005 por
- * factura) y es de lo mejor leyendo documentos fotografiados, con **Haiku de
- * respaldo**: los modelos pequeños a veces no devuelven el JSON con la forma
- * pedida, y una factura no se puede quedar sin leer por eso. Si el primero
+ * factura) y es de lo mejor leyendo documentos fotografiados, con **Gemini 2.5
+ * Flash de respaldo**: los modelos pequeños a veces no devuelven el JSON con la
+ * forma pedida, y una factura no se puede quedar sin leer por eso. Si el primero
  * falla, se reintenta UNA vez con el segundo.
+ *
+ * El respaldo era Haiku, pero el plan gratuito de AI Gateway no da acceso a los
+ * modelos de Anthropic: devuelven 403 y el reintento moría igual. Con créditos
+ * pagados, Haiku vuelve poniendo `CAPTURA_IA_MODELO_RESPALDO`.
  *
  * Los dos se cambian sin tocar código con `CAPTURA_IA_MODELO` y
  * `CAPTURA_IA_MODELO_RESPALDO`.
  */
 const MODELO = process.env.CAPTURA_IA_MODELO || 'google/gemini-2.5-flash-lite';
-const RESPALDO = process.env.CAPTURA_IA_MODELO_RESPALDO || 'anthropic/claude-haiku-4.5';
+const RESPALDO = process.env.CAPTURA_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash';
 
 const porGateway = () => Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
 
 function comoModelo(id: string): LanguageModel | null {
   if (!id) return null;
   if (porGateway()) return id;
-  // Sin gateway solo se puede llamar a Anthropic, con su llave.
+  // Sin gateway solo se puede llamar a Anthropic, con su llave: para ese camino
+  // hay que pedir un modelo suyo en CAPTURA_IA_MODELO o en el respaldo.
   if (process.env.ANTHROPIC_API_KEY && id.startsWith('anthropic/')) return anthropic(id.slice('anthropic/'.length));
   return null;
 }
