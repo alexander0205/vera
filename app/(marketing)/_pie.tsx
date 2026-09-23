@@ -14,24 +14,31 @@
 import Link from 'next/link';
 import { CONTACTO, Contenedor } from './_piezas';
 
+/**
+ * Las cinco líneas de «Producto» —facturación, punto de venta, administración,
+ * contabilidad, colegio— apuntaban las cinco a `/#modulos`: el mismo destino
+ * escrito cinco veces, y desde la propia portada ni siquiera bajaba, devolvía
+ * arriba. Ahora cada enlace lleva a un sitio distinto y que existe. El precio
+ * por línea vive en `/precios`, que enseña una línea a la vez con su selector:
+ * no hay ancla por producto a la que apuntar.
+ */
 const COLUMNAS = [
   {
     titulo: 'Navegación',
     enlaces: [
       { texto: 'Inicio', href: '/' },
-      { texto: 'Planes', href: '/precios' },
+      { texto: 'Precios', href: '/precios' },
       { texto: 'Contacto', href: '/contacto' },
       { texto: 'Iniciar sesión', href: '/sign-in' },
     ],
   },
   {
-    titulo: 'Producto',
+    titulo: 'Plataforma',
     enlaces: [
-      { texto: 'Facturación electrónica', href: '/#modulos' },
-      { texto: 'Punto de venta', href: '/#modulos' },
-      { texto: 'Administración', href: '/#modulos' },
-      { texto: 'Contabilidad', href: '/#modulos' },
-      { texto: 'Colegio', href: '/#modulos' },
+      { texto: 'Módulos del colegio', href: '/#modulos' },
+      { texto: 'Cómo funciona', href: '/#como-funciona' },
+      { texto: 'Otras industrias', href: '/#industrias' },
+      { texto: 'Planes', href: '/#planes' },
     ],
   },
 ] as const;
@@ -57,11 +64,18 @@ export function PieMarketing() {
             <div key={col.titulo}>
               <p className="text-[12.5px] font-semibold text-white">{col.titulo}</p>
               <div className="mt-4 flex flex-col gap-2.5">
-                {col.enlaces.map(l => (
+                {/* Los que llevan ancla van en `a` y no en `Link`: estando ya
+                    en la portada, el Link de Next cambia la URL pero deja la
+                    página arriba del todo, así que el enlace parecía roto. */}
+                {col.enlaces.map(l => (l.href.includes('#') ? (
+                  <a key={l.texto} href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">
+                    {l.texto}
+                  </a>
+                ) : (
                   <Link key={l.texto} href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">
                     {l.texto}
                   </Link>
-                ))}
+                )))}
               </div>
             </div>
           ))}
