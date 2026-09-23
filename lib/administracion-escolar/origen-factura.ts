@@ -120,3 +120,33 @@ export async function esResponsableEscolar(
     throw e;
   }
 }
+
+/**
+ * El contacto que paga una factura: el de la cabecera y, si no lo trae, el del
+ * alumno nombrado en ella.
+ *
+ * Mismo respaldo que `saldar-con-factura`, más el caso que ese no cubre: el
+ * alumno puede venir solo dentro de las líneas (`dependienteId` por renglón).
+ * Sin esto, el puente a Gobernanza no salía nunca en esas facturas.
+ */
+export async function clientePagadorDeFactura(
+  teamId: number,
+  docId: number,
+): Promise<number | null> {
+  const filas = await db.execute(sql`
+    SELECT COALESCE(d.client_id, dep.client_id, dep_linea.client_id) AS cliente
+    FROM ecf_documents d
+    LEFT JOIN dependientes dep ON dep.id = d.dependiente_id AND dep.team_id = ${teamId}
+    -- El alumno puede venir solo dentro de las líneas (dependienteId por renglón).
+    LEFT JOIN LATERAL (
+      SELECT dl.client_id
+      FROM jsonb_array_elements(COALESCE(d.lineas_json::jsonb, '[]'::jsonb)) AS l
+      JOIN dependientes dl ON dl.team_id = ${teamId} AND dl.id = (l->>'dependienteId')::int
+      WHERE l->>'dependienteId' ~ '^[0-9]+$'
+      LIMIT 1
+    ) dep_linea ON true
+    WHERE d.id = ${docId} AND d.team_id = ${teamId}
+    LIMIT 1
+  `) as unknown as { cliente: number | null }[];
+  return filas[0]?.cliente ?? null;
+}
