@@ -33,11 +33,12 @@ const COLUMNAS = [
     ],
   },
   {
-    titulo: 'Plataforma',
+    titulo: 'Productos',
     enlaces: [
-      { texto: 'Módulos', href: '/#modulos' },
-      { texto: 'El recorrido del dinero', href: '/#recorrido' },
-      { texto: 'Para quién es', href: '/#industrias' },
+      { texto: 'Zero ERP', href: '/productos/erp' },
+      { texto: 'Punto de venta', href: '/productos/punto-de-venta' },
+      { texto: 'Nómina', href: '/productos/nomina' },
+      { texto: 'Zero CRM', href: '/productos/crm' },
       { texto: 'Colegios', href: '/colegios' },
     ],
   },

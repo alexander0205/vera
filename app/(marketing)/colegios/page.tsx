@@ -4,26 +4,32 @@
  * colegio dejó de ser el titular del sitio y pasó a ser la industria con
  * página propia, que es lo que de verdad es.
  *
- * Toda cifra del negocio —desde cuánto empieza un plan, cuántos estudiantes
- * cubre el tramo más alto— se lee de `lib/config/plans.ts`, que es el catálogo
- * por el que se cobra, y se respeta su bandera: las líneas «bajo cotización»
- * NO publican precio aquí.
+ * Toda cifra —los cuatro tramos, cuántos estudiantes cubre el más alto— se lee
+ * de `lib/config/plans.ts`, que es el catálogo por el que se cobra, y respeta su
+ * bandera: una línea «bajo cotización» no publica precio aquí tampoco.
  */
 
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
-import {
-  familiaBajoCotizacion, planesDeFamilia,
-} from '@/lib/config/plans';
+import { familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
 import {
   Antetitulo, BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo, Titulo,
 } from '../_bloques';
 import { CONTACTO, Contenedor, Flecha, Iconos } from '../_piezas';
+import { ResumenDePrecios } from '../_precios-resumen';
 
 export const metadata: Metadata = {
-  title: 'Colegios',
+  title: 'Software para colegios en República Dominicana — cobros, portal de padres y facturación',
+  alternates: { canonical: '/colegios' },
+  keywords: ['software para colegios República Dominicana', 'sistema de cobros escolar', 'portal de padres', 'facturación de mensualidades', 'gestión escolar'],
+  openGraph: {
+    type: 'website',
+    images: [{ url: '/home/capturas/demo-colegio.png', width: 1440, height: 900, alt: 'Zero para colegios' }],
+    title: 'Zero para colegios: mensualidades, mora y portal de padres',
+    description: 'La mora se aplica sola, el aviso sale antes de vencer y cada mensualidad se factura con su comprobante fiscal.',
+  },
   description:
     'Mensualidades, cobranza, portal de padres, contabilidad y nómina docente en un solo sistema. La gobernanza completa de tu colegio, con implementación incluida.',
 };
@@ -37,18 +43,29 @@ function desdeDe(familia: 'colegio' | 'ecf'): number | null {
   return precios.length > 0 ? Math.min(...precios) : null;
 }
 
-const DESDE_COLEGIO = desdeDe('colegio');
 const DESDE_NEGOCIO = desdeDe('ecf');
 /** El tramo escolar más alto: es la promesa de techo del módulo de colegios. */
 const TOPE_ESTUDIANTES = Math.max(...planesDeFamilia('colegio').map(p => p.limits.estudiantes));
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
 
+/**
+ * Los módulos que un colegio enciende con Zero. Los OCHO.
+ *
+ * Eran cuatro —matrícula, cobra, administra, comunica— y se quedaba corto: el
+ * tramo de colegio trae la facturación e-CF, el punto de venta de la cafetería,
+ * la contabilidad, la nómina del personal y el inventario, además de lo
+ * escolar. Enseñar cuatro hacía parecer que el resto se compra aparte.
+ */
 const HERO_PILARES = [
   { nombre: 'Matrícula', icono: Iconos.colegio },
-  { nombre: 'Cobra', icono: Iconos.tarjeta },
-  { nombre: 'Administra', icono: Iconos.contabilidad },
-  { nombre: 'Comunica', icono: Iconos.correo },
+  { nombre: 'Cobros', icono: Iconos.tarjeta },
+  { nombre: 'Facturación', icono: Iconos.factura },
+  { nombre: 'Avisos', icono: Iconos.correo },
+  { nombre: 'Contabilidad', icono: Iconos.contabilidad },
+  { nombre: 'Nómina', icono: Iconos.usuarios },
+  { nombre: 'Cafetería', icono: Iconos.pos },
+  { nombre: 'Inventario', icono: Iconos.cuadros },
 ] as const;
 
 /** Colegios que ya usan Zero. Los logos están publicados con su permiso. */
@@ -106,14 +123,19 @@ export default function ColegiosPage() {
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-[linear-gradient(180deg,#f4f8ff_0%,#edf3ff_42%,#ffffff_100%)]">
         <Contenedor className="relative pt-14 sm:pt-[60px]">
-          <div className="relative z-[2] px-0 text-center lg:px-[clamp(0px,9vw,118px)]">
-            {/* Los cuatro pilares flotando alrededor del titular. En móvil no
-                caben sin pisar el texto: ahí van en fila, debajo. */}
+          <div className="relative z-[2] px-0 text-center lg:min-h-[430px] lg:px-[clamp(0px,11vw,150px)]">
+            {/* Los ocho módulos flotando alrededor del titular, cuatro por
+                lado. En móvil no caben sin pisar el texto: ahí van en rejilla,
+                debajo. */}
             <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] hidden lg:block">
-              <Pilar pilar={HERO_PILARES[0]} className="left-0 top-[26px]" />
-              <Pilar pilar={HERO_PILARES[1]} className="bottom-0 left-[38px]" />
-              <Pilar pilar={HERO_PILARES[2]} className="right-0 top-[18px]" />
-              <Pilar pilar={HERO_PILARES[3]} className="bottom-1 right-[34px]" />
+              <Pilar pilar={HERO_PILARES[0]} className="left-0 top-[-6px]" />
+              <Pilar pilar={HERO_PILARES[1]} className="left-[26px] top-[104px]" />
+              <Pilar pilar={HERO_PILARES[2]} className="left-[26px] top-[214px]" />
+              <Pilar pilar={HERO_PILARES[3]} className="left-0 top-[324px]" />
+              <Pilar pilar={HERO_PILARES[4]} className="right-0 top-[-6px]" />
+              <Pilar pilar={HERO_PILARES[5]} className="right-[26px] top-[104px]" />
+              <Pilar pilar={HERO_PILARES[6]} className="right-[26px] top-[214px]" />
+              <Pilar pilar={HERO_PILARES[7]} className="right-0 top-[324px]" />
             </div>
 
             <h1 className="relative z-[2] m-0 mx-auto max-w-[880px] font-[family-name:var(--font-display)] text-[clamp(2.25rem,6.2vw,3.875rem)] font-semibold leading-[1.04] tracking-[-.045em] text-balance text-[#102a72] lg:mt-9">
@@ -139,15 +161,17 @@ export default function ColegiosPage() {
             </ul>
           </div>
 
-          {/* La pantalla del sistema, con dos recortes del día a día encima. */}
+          {/* La pantalla del colegio de DEMOSTRACIÓN. La anterior era la ficha
+              real de una estudiante, con el nombre de su responsable y su
+              cédula dentro. */}
           <div className="relative mt-10 sm:mt-[52px]">
             <div className="relative mx-auto max-w-[940px]">
               <div className="rounded-t-2xl bg-[#1b2333] p-3 pb-0 shadow-[0_50px_90px_-40px_rgba(16,42,114,.55)]">
                 <Image
-                  src="/home/capturas/zero-colegio.png"
-                  alt="Panel de gobernanza escolar de Zero con cartera, cobros y matrícula"
-                  width={1722}
-                  height={860}
+                  src="/home/capturas/demo-colegio.png"
+                  alt="Panorama del colegio en Zero: estudiantes, cartera y cobros del período"
+                  width={1440}
+                  height={900}
                   priority
                   className="block w-full rounded-t-lg"
                 />
@@ -162,7 +186,6 @@ export default function ColegiosPage() {
                 <p className="m-0 mt-0.5 font-[family-name:var(--font-display)] text-[21px] font-semibold tracking-[-.04em] text-[#102a72]">RD$8,500.00</p>
                 <p className="m-0 mt-1.5 text-[11.5px] text-[#5c6373]">Familia Díaz · 4to B · hoy, 10:24</p>
               </figure>
-
             </div>
           </div>
         </Contenedor>
@@ -332,29 +355,22 @@ export default function ColegiosPage() {
       {/* ── Planes ─────────────────────────────────────────────────────────── */}
       <section id="planes" className="scroll-mt-20">
         <Contenedor className="pt-16 sm:pt-[82px]">
-          <div className="flex flex-wrap items-center justify-between gap-8 rounded-3xl border border-[#e7edfb] bg-[#f5f8ff] p-7 sm:p-11">
-            <div className="min-w-0 flex-[1_1_380px]">
-              <Antetitulo>Planes de colegios</Antetitulo>
-              {DESDE_COLEGIO === null ? (
-                <p className="m-0 mt-3.5 font-[family-name:var(--font-display)] text-[clamp(1.5rem,3vw,1.875rem)] font-semibold tracking-[-.04em] text-[#102a72]">
-                  El tramo se acuerda con la dirección.
-                </p>
-              ) : (
-                <p className="m-0 mt-3.5 flex flex-wrap items-baseline gap-2">
-                  <span className="text-[15px] text-[#5c6373]">Desde</span>
-                  <span className="font-[family-name:var(--font-display)] text-[46px] font-semibold tracking-[-.048em] text-[#102a72]">US${DESDE_COLEGIO}</span>
-                  <span className="text-[15px] text-[#8a90a0]">/mes</span>
-                </p>
-              )}
-              <p className="m-0 mt-3 max-w-[470px] text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
-                Por institución, según cantidad de estudiantes —hasta {TOPE_ESTUDIANTES.toLocaleString('es-DO')} en el tramo más alto—. Implementación y entrenamiento incluidos.
-                {DESDE_NEGOCIO !== null && ` Los negocios tienen sus propios planes desde US$${DESDE_NEGOCIO}/mes.`}
-              </p>
+          {/* Los cuatro tramos con su cifra, no un «desde». Un director
+              compara contra la mensualidad que él cobra, y para eso necesita el
+              tramo que le toca por matrícula, no el más barato. */}
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.5fr)] lg:gap-12">
+            <div className="min-w-0">
+              <Encabezado
+                antetitulo="Planes de colegios"
+                titulo="El tramo depende de cuántos estudiantes tienes."
+                detalle={`Se cobra por institución, no por usuario —hasta ${TOPE_ESTUDIANTES.toLocaleString('es-DO')} estudiantes en el tramo más alto—, con implementación y entrenamiento incluidos.${DESDE_NEGOCIO !== null ? ` Los negocios tienen sus propios planes desde US$${DESDE_NEGOCIO}/mes.` : ''}`}
+              />
+              <div className="mt-6 flex flex-wrap gap-3">
+                <BotonPrimario href="/contacto">Hablar con ventas</BotonPrimario>
+                <BotonSecundario href="/precios">Comparar planes</BotonSecundario>
+              </div>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-3">
-              <BotonPrimario href="/precios">Ver precios</BotonPrimario>
-              <BotonSecundario href="/contacto">Hablar con ventas</BotonSecundario>
-            </div>
+            <ResumenDePrecios lineas={['erp-colegio']} />
           </div>
         </Contenedor>
       </section>
@@ -431,8 +447,8 @@ function Pilar({
   const Icono = pilar.icono;
   return (
     <div className={`absolute flex flex-col items-center gap-2.5 ${className}`}>
-      <span className="grid size-[74px] place-items-center rounded-full border border-[#e4eaf8] bg-white text-zero-600 shadow-[0_20px_34px_-18px_rgba(16,42,114,.38)]">
-        <Icono className="size-[26px]" />
+      <span className="grid size-[64px] place-items-center rounded-full border border-[#e4eaf8] bg-white text-zero-600 shadow-[0_20px_34px_-18px_rgba(16,42,114,.38)]">
+        <Icono className="size-[23px]" />
       </span>
       <span className="text-[11.5px] font-semibold text-[#3b4252]">{pilar.nombre}</span>
     </div>
