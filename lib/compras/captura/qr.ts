@@ -1,6 +1,29 @@
 import 'server-only';
-import sharp, { type Metadata, type Region } from 'sharp';
+import type { Metadata, Region } from 'sharp';
 import jsQR from 'jsqr';
+
+/**
+ * sharp se carga cuando se va a usar, no al importar el módulo.
+ *
+ * Trae un binario nativo (libvips) que hay que copiar a mano al paquete de cada
+ * función —ver `outputFileTracingIncludes` en next.config—. Con el import
+ * arriba, olvidarse de una ruta no deja «sin QR»: tumba la ruta ENTERA con un
+ * 500 al cargarla, que es lo que pasó en producción el 2026-09-23 con el enlace
+ * para subir facturas. Cargándolo aquí, si el binario falta se pierde la lectura
+ * del QR —la IA sigue leyendo la factura— y el teléfono puede subirla igual.
+ */
+type Sharp = typeof import('sharp')['default'];
+let sharpCargado: Sharp | null | undefined;
+async function cargarSharp() {
+  if (sharpCargado !== undefined) return sharpCargado;
+  try {
+    sharpCargado = (await import('sharp')).default;
+  } catch (e) {
+    console.error('[captura-factura] sharp no está disponible: la foto se lee solo con IA', e);
+    sharpCargado = null;
+  }
+  return sharpCargado;
+}
 
 /**
  * Busca un QR en la foto de una factura. Devuelve su texto o null.
@@ -12,6 +35,8 @@ import jsQR from 'jsqr';
  * primero que lee.
  */
 export async function leerQr(buffer: Buffer): Promise<string | null> {
+  const sharp = await cargarSharp();
+  if (!sharp) return null;
   let meta: Metadata;
   try {
     meta = await sharp(buffer).rotate().metadata();

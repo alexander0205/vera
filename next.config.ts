@@ -116,6 +116,18 @@ const nextConfig: NextConfig = {
   // que cada paquete tiene hacia los otros, y Vercel rechaza el despliegue con
   // "invalid deployment package … files in symlinked directories".
   outputFileTracingIncludes: {
+    // La captura de facturas lee el QR con sharp (lib/compras/captura/qr.ts).
+    // Sin estas dos entradas la función se despliega sin libvips y la ruta
+    // devuelve 500 nada más cargarla: el enlace del teléfono decía «este enlace
+    // no es válido» con el enlace vivo (2026-09-23).
+    '/api/subir-factura/[token]': [
+      './node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**',
+      './node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**',
+    ],
+    '/api/gastos/capturas/[id]': [
+      './node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**',
+      './node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**',
+    ],
     '/api/pagos/adjuntos': [
       './node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**',
       './node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**',
