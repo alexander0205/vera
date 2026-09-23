@@ -1,18 +1,20 @@
 # Deploy a producción (Zero / EmiteDO)
 
-Producción vive en la rama `v2`. Todo merge aprobado a `v2` dispara
-**Deploy** (`.github/workflows/deploy.yml`), un solo workflow con tres jobs
-en cadena: **Validar** → **Detectar migraciones pendientes** → **Deploy a
-Vercel**. Nadie del equipo necesita acceso directo a Vercel: el deploy lo
-hace GitHub Actions con un token de proyecto.
+Producción vive en la rama `master`. `v2` es integración — ahí se juntan
+las ramas de feature, se prueba, y de ahí se promueve a `master` con un PR.
+Todo merge aprobado a `master` dispara **Deploy**
+(`.github/workflows/deploy.yml`), un solo workflow con tres jobs en cadena:
+**Validar** → **Detectar migraciones pendientes** → **Deploy a Vercel**.
+Nadie del equipo necesita acceso directo a Vercel: el deploy lo hace GitHub
+Actions con un token de proyecto.
 
-`.github/workflows/ci.yml` es un workflow aparte que solo gatea PRs (tipos,
-pruebas, build) antes de mergear — `deploy.yml` no depende de él, revalida
-todo de cero sobre el commit que efectivamente llega a `v2`.
+`.github/workflows/ci.yml` es un workflow aparte que gatea PRs (tipos,
+pruebas, build) contra `v2` y `master` — `deploy.yml` no depende de él,
+revalida todo de cero sobre el commit que efectivamente llega a `master`.
 
 ## Flujo normal (sin migraciones)
 
-1. Se mergea un PR a `v2`.
+1. Se mergea un PR a `master` (normalmente, una promoción desde `v2`).
 2. `Validar` corre tipos + `test:unit` + build. Si falla, ahí termina — no
    hay deploy.
 3. `Detectar migraciones pendientes` compara los archivos tocados desde el
@@ -50,8 +52,8 @@ Qué hacer:
 
 Si la migración falla o hay dudas, **no aprobar** — el deploy nunca sale
 mientras el Environment esperando revisión no se apruebe, y eso no bloquea
-nada más (los siguientes merges a `v2` abren su propio run de `Deploy`, en
-la misma cola).
+nada más (los siguientes merges a `master` abren su propio run de `Deploy`,
+en la misma cola).
 
 ## Si algo sale mal
 
@@ -65,7 +67,7 @@ que el nuevo termina de construirse y publicarse. No hay nada que revertir.
    para mirar la lista, no para actuar ahí).
 2. Actions → **Rollback a producción** → Run workflow → pegar esa URL.
 3. Eso promueve ese deploy anterior a producción al instante, sin rebuild.
-4. Corregir el problema en una rama nueva, PR normal a `v2`, deploy normal.
+4. Corregir el problema en una rama nueva, PR normal a `master`, deploy normal.
 
 **Si el problema es de datos (una migración salió mal):** el rollback de
 Vercel revierte el código, no la base — una migración que ya corrió sigue
@@ -80,10 +82,10 @@ migración inversa con el mismo `scripts/correr-migracion.ts`.
 - Vercel: **no hace falta cambiar el Production Branch del dashboard** — el
   CLI deploya con `--prod` explícito, que promueve a producción sin importar
   qué rama tenga marcada Vercel. Opcional: un Ignored Build Step que saltee
-  el build de *preview* que Vercel generaría solo en cada push a `v2`
+  el build de *preview* que Vercel generaría solo en cada push a `master`
   (ahorra minutos de build, no afecta la corrección del flujo):
   ```bash
-  if [ "$VERCEL_GIT_COMMIT_REF" == "v2" ]; then
+  if [ "$VERCEL_GIT_COMMIT_REF" == "master" ]; then
     echo "Este build lo hace GitHub Actions, no Vercel."
     exit 0
   else
