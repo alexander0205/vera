@@ -19,6 +19,7 @@ import { CONTACTO, Contenedor, IconoWhatsApp } from './_piezas';
 
 const ENLACES = [
   { href: '/', texto: 'Inicio' },
+  { href: '/colegios', texto: 'Colegios' },
   { href: '/precios', texto: 'Precios' },
   { href: '/contacto', texto: 'Contacto' },
 ] as const;

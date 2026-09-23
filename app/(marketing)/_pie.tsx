@@ -35,10 +35,10 @@ const COLUMNAS = [
   {
     titulo: 'Plataforma',
     enlaces: [
-      { texto: 'Módulos del colegio', href: '/#modulos' },
-      { texto: 'Cómo funciona', href: '/#como-funciona' },
-      { texto: 'Otras industrias', href: '/#industrias' },
-      { texto: 'Planes', href: '/#planes' },
+      { texto: 'Módulos', href: '/#modulos' },
+      { texto: 'El recorrido del dinero', href: '/#recorrido' },
+      { texto: 'Para quién es', href: '/#industrias' },
+      { texto: 'Colegios', href: '/colegios' },
     ],
   },
 ] as const;
