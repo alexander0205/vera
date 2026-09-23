@@ -164,6 +164,14 @@ jobs:
             echo "Antes de aprobar: correr la migración a mano. Ver [docs/deploy-zero.md](../../docs/deploy-zero.md#migraciones-de-base-de-datos)."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # `vercel build` detecta pnpm-lock.yaml y corre `pnpm install` él solo.
+      # Sin este step, pnpm no existe en el runner y revienta con
+      # "spawn pnpm ENOENT" — pasó en el primer deploy real (run #1).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
