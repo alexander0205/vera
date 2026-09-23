@@ -96,6 +96,12 @@ async function consultar(
  * Gobernanza, aunque la factura concreta no cubra cargos escolares (facturas
  * sueltas emitidas antes de la migración, p. ej.). Misma regla que arriba:
  * vive del lado escolar y tolera que el módulo no esté aprovisionado.
+ *
+ * El responsable de pago es `estudiantes.facturar_a_client_id` —el CONTACTO que
+ * paga—, que es exactamente la clave de la ficha `/escolar/responsables/{id}` a
+ * la que lleva el botón. NO se mira `admin_escolar_tutores`: esa casilla
+ * quedó muerta al separarse tutor y pagador (en prod la tabla está vacía),
+ * así que mirándola el botón no salía nunca aunque el alumno tuviera pagador.
  */
 export async function esResponsableEscolar(
   teamId: number,
@@ -104,8 +110,8 @@ export async function esResponsableEscolar(
   if (clientId == null) return false;
   try {
     const filas = await db.execute(sql`
-      SELECT 1 FROM admin_escolar_tutores
-      WHERE team_id = ${teamId} AND client_id = ${clientId}
+      SELECT 1 FROM admin_escolar_estudiantes
+      WHERE team_id = ${teamId} AND facturar_a_client_id = ${clientId}
       LIMIT 1
     `) as unknown as unknown[];
     return filas.length > 0;
