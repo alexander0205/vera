@@ -20,6 +20,7 @@ const RUTAS = [
   { ruta: '/productos/crm', prioridad: 0.9 },
   { ruta: '/productos/punto-de-venta', prioridad: 0.8 },
   { ruta: '/productos/nomina', prioridad: 0.8 },
+  { ruta: '/productos/contabilidad', prioridad: 0.8 },
   { ruta: '/colegios', prioridad: 0.8 },
   { ruta: '/precios', prioridad: 0.9 },
   { ruta: '/contacto', prioridad: 0.6 },

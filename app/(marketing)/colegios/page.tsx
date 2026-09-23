@@ -18,6 +18,7 @@ import {
   Antetitulo, BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo, Titulo,
 } from '../_bloques';
 import { CONTACTO, Contenedor, Flecha, Iconos } from '../_piezas';
+import { CicloDeCobro } from './_ciclo';
 import { ResumenDePrecios } from '../_precios-resumen';
 
 export const metadata: Metadata = {
@@ -348,6 +349,23 @@ export default function ColegiosPage() {
                 </li>
               ))}
             </ul>
+          </div>
+        </Contenedor>
+      </section>
+
+      {/* ── El ciclo de cobro, con sus dos finales ─────────────────────────── */}
+      {/* Todo el mundo dice «cobranza automática». Aquí se camina el mes y se
+          enseña qué pasa cuando la familia se atrasa, que es donde el colegio
+          pierde el dinero: en la mora que nadie aplicó. */}
+      <section id="ciclo" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.5fr)] lg:gap-12">
+            <Encabezado
+              antetitulo="El mes, por dentro"
+              titulo="Qué pasa entre que se emite la mensualidad y entra el dinero."
+              detalle="Elige el final: la familia que paga a tiempo y la que se atrasa. En los dos casos el colegio no persigue a nadie a mano."
+            />
+            <CicloDeCobro />
           </div>
         </Contenedor>
       </section>

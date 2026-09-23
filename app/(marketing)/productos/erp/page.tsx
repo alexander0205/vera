@@ -20,7 +20,9 @@ import type { Metadata } from 'next';
 import { familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
 import { DatosDeProducto } from '../../_datos-estructurados';
-import { Iconos } from '../../_piezas';
+import { Contenedor, Iconos } from '../../_piezas';
+import { Antetitulo, Titulo } from '../../_bloques';
+import { RecorridoDelDinero } from './_recorrido';
 import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
   type PuntoDeProducto,
@@ -95,6 +97,29 @@ export default function ErpPage() {
         alt="Panel de Zero con los ingresos del mes, las secuencias disponibles y la cartera"
       />
 
+      {/* ── El recorrido, caminable ───────────────────────────────────────── */}
+      {/* La portada lo cuenta en tarjetas quietas. Aquí se camina: cada paso
+          dice qué hace el usuario y qué escribe el sistema por su cuenta, que
+          es la diferencia entre un facturador y un ERP. */}
+      <section id="recorrido" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.62fr)_minmax(0,1.7fr)] lg:gap-12">
+            <div className="min-w-0">
+              <Antetitulo>El recorrido del dinero</Antetitulo>
+              <Titulo className="mt-3.5">Una venta, de la cotización a la declaración.</Titulo>
+              <p className="m-0 mt-3.5 text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
+                Seis pasos, y en cada uno el sistema escribe solo lo que hoy alguien copia a mano:
+                el comprobante, el movimiento de inventario, el asiento contable y el reporte.
+              </p>
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+                Toca un paso para quedarte en él.
+              </p>
+            </div>
+            <RecorridoDelDinero />
+          </div>
+        </Contenedor>
+      </section>
+
       <SeccionProducto
         id="facturacion"
         antetitulo="Facturación electrónica"
@@ -128,7 +153,7 @@ export default function ErpPage() {
         id="contabilidad"
         antetitulo="Contabilidad"
         titulo="Cada operación deja su asiento, sin que nadie lo escriba."
-        detalle="Va incluida en todos los planes. La competencia la cobra aparte o no la tiene."
+        detalle="Va incluida en todos los planes: la competencia la cobra aparte o no la tiene. Tiene su propia página, con el asiento armándose en vivo."
         puntos={CONTABILIDAD}
         columnas={2}
         captura="/home/capturas/demo-contabilidad.png"

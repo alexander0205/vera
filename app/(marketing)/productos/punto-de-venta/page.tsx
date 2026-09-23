@@ -13,7 +13,9 @@ import type { Metadata } from 'next';
 import { ADDONS, addonBajoCotizacion } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
 import { DatosDeProducto } from '../../_datos-estructurados';
-import { Iconos } from '../../_piezas';
+import { Contenedor, Iconos } from '../../_piezas';
+import { Antetitulo, Titulo } from '../../_bloques';
+import { CajaDemo } from './_caja';
 import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
   type PuntoDeProducto,
@@ -67,6 +69,31 @@ export default function PuntoDeVentaPage() {
         captura="/home/capturas/demo-pos.png"
         alt="Pantalla de caja de Zero con el catálogo y el cobro en curso"
       />
+
+      {/* ── La caja, tocándola ────────────────────────────────────────────── */}
+      {/* El argumento de esta página no es la pantalla bonita: es que cobrar,
+          facturar ante la DGII y descontar del almacén son el MISMO acto. Eso
+          no se explica, se enseña: se toca un producto, se cobra y salen los
+          cuatro efectos. */}
+      <section id="pruebala" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.62fr)_minmax(0,1.6fr)] lg:gap-12">
+            <div className="min-w-0">
+              <Antetitulo>Pruébala</Antetitulo>
+              <Titulo className="mt-3.5">Toca, cobra y mira qué pasó.</Titulo>
+              <p className="m-0 mt-3.5 text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
+                Arma una venta como la armaría tu cajero. Al cobrar no sale un «gracias»: sale lo que
+                el sistema hace en ese mismo segundo —el comprobante fiscal, el inventario que baja,
+                el asiento contable y el ticket—.
+              </p>
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+                Nada de eso es un paso aparte que alguien tenga que acordarse de dar.
+              </p>
+            </div>
+            <CajaDemo />
+          </div>
+        </Contenedor>
+      </section>
 
       <SeccionProducto
         id="caja"

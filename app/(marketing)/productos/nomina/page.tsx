@@ -15,7 +15,9 @@ import type { Metadata } from 'next';
 import { ADDONS, addonBajoCotizacion } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
 import { DatosDeProducto } from '../../_datos-estructurados';
-import { Iconos } from '../../_piezas';
+import { Contenedor, Iconos } from '../../_piezas';
+import { Antetitulo, Titulo } from '../../_bloques';
+import { CalculadoraNomina } from './_calculadora';
 import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
   type PuntoDeProducto,
@@ -65,6 +67,32 @@ export default function NominaPage() {
           ? `+US$${PRECIO_NOMINA} al mes sobre cualquier plan · Incluida en los planes de colegio`
           : 'Se suma a cualquier plan · Incluida en los planes de colegio'}
       />
+
+      {/* ── La calculadora ────────────────────────────────────────────────── */}
+      {/* Es el ancla de la página: un dueño entiende su nómina cuando ve las
+          dos mitades juntas —lo que se le descuenta al empleado y lo que le
+          cuesta a él por encima del sueldo—, y esa segunda casi nadie la tiene
+          en la cabeza. Corre con el MOTOR del sistema, no con una fórmula
+          escrita para la web. */}
+      <section id="calculadora" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.5fr)] lg:gap-12">
+            <div className="min-w-0">
+              <Antetitulo>Cuéntalo tú</Antetitulo>
+              <Titulo className="mt-3.5">¿Cuánto cuesta de verdad un empleado?</Titulo>
+              <p className="m-0 mt-3.5 text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
+                Mueve el sueldo y mira las dos mitades: lo que se le descuenta —AFP, SFS e ISR— y lo
+                que la empresa paga por encima, que es la parte que nadie tiene en la cabeza cuando
+                ofrece un salario.
+              </p>
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+                Los números salen del mismo motor que corre tu nómina adentro.
+              </p>
+            </div>
+            <CalculadoraNomina />
+          </div>
+        </Contenedor>
+      </section>
 
       <SeccionProducto
         id="corrida"

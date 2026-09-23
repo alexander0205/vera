@@ -38,6 +38,7 @@ const COLUMNAS = [
       { texto: 'Zero ERP', href: '/productos/erp' },
       { texto: 'Punto de venta', href: '/productos/punto-de-venta' },
       { texto: 'Nómina', href: '/productos/nomina' },
+      { texto: 'Contabilidad', href: '/productos/contabilidad' },
       { texto: 'Zero CRM', href: '/productos/crm' },
       { texto: 'Colegios', href: '/colegios' },
     ],

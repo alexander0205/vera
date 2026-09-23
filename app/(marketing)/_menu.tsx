@@ -34,7 +34,7 @@ export type EntradaMenu = {
 export const MODULOS: EntradaMenu[] = [
   { href: '/productos/erp#facturacion', titulo: 'Facturación electrónica', detalle: 'Los diez tipos de e-CF ante la DGII, con su PDF al cliente.', icono: Iconos.factura },
   { href: '/productos/erp#cobros', titulo: 'Cobros y cuentas por cobrar', detalle: 'Quién te debe, cuánto y desde cuándo, con links de pago.', icono: Iconos.tarjeta },
-  { href: '/productos/erp#contabilidad', titulo: 'Contabilidad', detalle: 'Asientos automáticos, estados financieros y los 606 y 607 armados.', icono: Iconos.contabilidad },
+  { href: '/productos/contabilidad', titulo: 'Contabilidad', detalle: 'Asientos automáticos, estados financieros y los 606, 607 y 608 armados.', icono: Iconos.contabilidad },
   { href: '/productos/erp#inventario', titulo: 'Inventario, compras y gastos', detalle: 'Stock por almacén, costo real y la factura del proveedor desde una foto.', icono: Iconos.cuadros },
   { href: '/productos/punto-de-venta', titulo: 'Punto de venta y restaurante', detalle: 'Caja con turnos, mesas y cuadre al cierre.', icono: Iconos.pos },
   { href: '/productos/nomina', titulo: 'Nómina', detalle: 'TSS, ISR, regalía y vacaciones, con su asiento contable.', icono: Iconos.usuarios },
