@@ -5,23 +5,22 @@ name: CI
 # cargar next.config.ts, antes de compilar una sola línea. Un check que siempre
 # falla no avisa de nada y tapa los que sí importan.
 #
-# Ramas: `v2` es integración y `master` es producción. Se trabaja en ramas que
-# salen de `v2`, y `v2` se promueve a `master` con un PR.
+# `v2` es la rama de producción. Este workflow gatea PRs antes de mergear —
+# solo pull_request, sin push. Un push a v2 ya corre su propia validación
+# (job "Validar") dentro de .github/workflows/deploy.yml; duplicarla acá
+# significaba dos runs por cada merge, haciendo la misma tarea dos veces.
 #
-# Los jobs `Tipos y pruebas` y `Build` deben marcarse como required check en la
-# protección de `v2` y de `master`.
+# El job `Tipos y pruebas` debe marcarse como required check en la
+# protección de `v2`.
 on:
-  push:
-    branches: [v2, master]
   pull_request:
-    branches: [v2, master]
+    branches: [v2]
   workflow_dispatch:
 
-# Un push nuevo al mismo PR cancela la corrida anterior; en v2/master no se
-# cancela nada para que cada commit conserve su resultado.
+# Un push nuevo al mismo PR cancela la corrida anterior.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
