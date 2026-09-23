@@ -7,7 +7,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { listarCuentas } from '@/lib/contabilidad/cuentas';
 import {
-  getConfig, getMetodosConfigurados, getOverridesIngreso,
+  getConfig, getMetodosConfigurados, getOverridesIngreso, cuentasDeGasto,
 } from '@/lib/contabilidad/config';
 import { getEstadoConfiguracion } from '@/lib/contabilidad/validacion';
 import { ConfigClient } from './_client';
@@ -41,10 +41,11 @@ export default async function ConfiguracionContablePage() {
     teamId, user.platformRole, member?.role, 'contabilidad:configurar',
   );
 
-  const [config, metodos, overrides, estado, cuentas, cats, prods] = await Promise.all([
+  const [config, metodos, overrides, cuentasGasto, estado, cuentas, cats, prods] = await Promise.all([
     getConfig(teamId),
     getMetodosConfigurados(teamId),
     getOverridesIngreso(teamId),
+    cuentasDeGasto(teamId),
     getEstadoConfiguracion(teamId),
     // Solo las imputables: apuntar la configuración a una cuenta de agrupación
     // produciría asientos sobre una cuenta que no los recibe.
@@ -87,6 +88,7 @@ export default async function ConfiguracionContablePage() {
           configInicial={config}
           metodosIniciales={metodos}
           overridesIniciales={overrides}
+          cuentasGastoIniciales={cuentasGasto}
           estadoInicial={estado}
           cuentas={cuentas}
           categorias={cats}

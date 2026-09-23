@@ -28,6 +28,9 @@ import { listarCompras, listarGastosEcf } from '@/lib/compras/consultas';
 import { analizarNcf } from '@/lib/compras/fiscal';
 import { NuevoGasto } from './_nuevo-gasto';
 import { SelectorMes } from './_selector-mes';
+import { EnlaceFotos } from './_enlace-fotos';
+import { BandejaCapturas } from './_bandeja-capturas';
+import { listarCapturas } from '@/lib/compras/captura/consultas';
 
 const METODO_LABEL: Record<string, string> = {
   efectivo: 'efectivo', transferencia: 'transferencia', tarjeta: 'tarjeta',
@@ -103,9 +106,10 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
   const mes = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : hoy.slice(0, 7);
   const { inicio, fin } = rangoDelMes(mes);
 
-  const [registrados, emitidos] = await Promise.all([
+  const [registrados, emitidos, porRevisar] = await Promise.all([
     listarCompras(teamId, { clase: 'gasto', desde: inicio, hasta: fin }),
     listarGastosEcf(teamId, inicio, fin),
+    listarCapturas(teamId, ['procesando', 'por_revisar']),
   ]);
 
   const filas: Fila[] = [
@@ -148,11 +152,14 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
             Todo lo que sale de la empresa que no es inventario: facturas de proveedores, gastos menores y pagos al exterior.
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <SelectorMes mes={mes} hoy={hoy} />
+          <EnlaceFotos />
           <NuevoGasto />
         </Box>
       </Box>
+
+      <BandejaCapturas inicial={porRevisar} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }} data-testid="resumen-gastos">
         <Tarjeta titulo="Gastado en el mes" valor={fmtDOP(total)} sub={`${vivas.length} gasto${vivas.length === 1 ? '' : 's'}`} destacado />

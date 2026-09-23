@@ -13,6 +13,7 @@ import { registrarCompra, CompraError } from '@/lib/compras/registrar';
 import { listarCompras } from '@/lib/compras/consultas';
 import { METODOS_PAGO_COMPRA, TASAS_ITBIS, TIPOS_PROVEEDOR } from '@/lib/compras/fiscal';
 import { esFechaYMD } from '@/lib/nomina/periodos';
+import { marcarRegistrada } from '@/lib/compras/captura/consultas';
 
 const centavos = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
@@ -24,6 +25,8 @@ const lineaSchema = z.object({
   cantidad: z.number().int().positive(),
   costoUnitarioCents: centavos,
   itbisTasa: z.enum(TASAS_ITBIS),
+  /** Cuenta del catálogo elegida a mano; null = la que le toca a la categoría. */
+  cuentaId: z.number().int().positive().nullable().optional(),
 });
 
 const compraSchema = z.object({
@@ -50,6 +53,8 @@ const compraSchema = z.object({
   almacenId: z.number().int().positive().nullable().optional(),
   notas: z.string().max(1000).nullable().optional(),
   permitirNcfRepetido: z.boolean().optional(),
+  /** La factura fotografiada de la que sale este registro: queda «registrada». */
+  capturaId: z.number().int().positive().nullable().optional(),
 });
 
 /** Compras exige gestionar productos; un gasto también lo puede registrar quien crea facturas. */
@@ -70,11 +75,18 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
+    const { capturaId, ...datos } = parsed.data;
     const r = await registrarCompra(auth.teamId, auth.user.id, {
-      ...parsed.data,
-      proveedorRnc: parsed.data.proveedorRnc ?? null,
-      proveedorNombre: parsed.data.proveedorNombre ?? null,
+      ...datos,
+      proveedorRnc: datos.proveedorRnc ?? null,
+      proveedorNombre: datos.proveedorNombre ?? null,
     });
+    if (capturaId) {
+      // La compra ya está guardada: si la bandeja no se actualiza, no se deshace
+      // el registro — la factura seguirá «por revisar» y se puede descartar.
+      await marcarRegistrada(auth.teamId, capturaId, r.compraId, auth.user.id)
+        .catch((e) => console.error('[compras/local] no se marcó la captura', capturaId, e));
+    }
     return NextResponse.json({ ok: true, ...r }, { status: 201 });
   } catch (e) {
     if (e instanceof CompraError) {

@@ -11,7 +11,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { comprasLocales, comprasLocalesItems, ecfDocuments, products } from '@/lib/db/schema';
-import { getConfig } from '@/lib/contabilidad/config';
+import { getConfig, catalogoImputable } from '@/lib/contabilidad/config';
 import { generarAsientoCompra, generarAsientoCompraAnulada, type ResultadoGeneracion } from '@/lib/contabilidad/asientos';
 import { registrarEntradas, revertirEntradas } from '@/lib/inventario/entrada';
 import { esFechaYMD } from '@/lib/nomina/periodos';
@@ -39,6 +39,8 @@ export interface LineaRegistro {
   cantidad: number;
   costoUnitarioCents: number;
   itbisTasa: TasaItbis;
+  /** Cuenta del catálogo elegida para esta línea; null = la de su categoría. */
+  cuentaId?: number | null;
 }
 
 export interface RegistroCompra {
@@ -147,6 +149,9 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
         .where(and(eq(products.teamId, teamId), inArray(products.id, idsProductos)))
     : [];
   const prodMap = new Map(prods.map((p) => [p.id, p]));
+  // Solo se consulta el catálogo si alguien eligió cuenta a mano.
+  const eligenCuenta = r.lineas.some((l) => l.cuentaId);
+  const catalogo = eligenCuenta ? await catalogoImputable(teamId) : null;
   const lineas = r.lineas.map((l, i) => {
     const n = i + 1;
     if (!Number.isSafeInteger(l.cantidad) || l.cantidad <= 0) throw new CompraError(`Línea ${n}: la cantidad debe ser un entero mayor que cero`);
@@ -155,13 +160,18 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
     if (l.productoId) {
       const p = prodMap.get(l.productoId);
       if (!p || p.tipo !== 'bien') throw new CompraError(`Línea ${n}: el producto no existe o no es un bien de inventario`);
-      return { ...l, productoId: p.id, descripcion: null, categoria: null, esServicio: false, tipo606: '09' as const };
+      // La mercancía va al inventario: su cuenta no se elige por línea.
+      return { ...l, productoId: p.id, descripcion: null, categoria: null, esServicio: false, cuentaId: null, tipo606: '09' as const };
     }
     const cat = categoriaCompra(l.categoria);
     const descripcion = l.descripcion?.trim();
     if (!descripcion) throw new CompraError(`Línea ${n}: escribe qué se compró`);
     if (!cat) throw new CompraError(`Línea ${n}: elige la categoría`);
-    return { ...l, productoId: null, almacenId: null, descripcion: descripcion.slice(0, 255), categoria: cat.clave, esServicio: cat.esServicio, tipo606: cat.tipo606 };
+    const cuentaId = l.cuentaId ?? null;
+    if (cuentaId && !catalogo?.imputables.has(cuentaId)) {
+      throw new CompraError(`Línea ${n}: esa cuenta no existe en el catálogo, no acepta movimientos o está desactivada`);
+    }
+    return { ...l, productoId: null, almacenId: null, descripcion: descripcion.slice(0, 255), categoria: cat.clave, esServicio: cat.esServicio, cuentaId, tipo606: cat.tipo606 };
   });
 
   // ── Montos ──
@@ -237,6 +247,7 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
       esServicio: l.esServicio,
       itbisTasa: l.itbisTasa,
       itbisCents: t.lineas[i].itbisCents,
+      cuentaId: l.cuentaId,
     })));
     return c.id;
   });

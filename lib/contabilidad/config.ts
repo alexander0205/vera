@@ -19,6 +19,8 @@ import {
   type ClaveMetodo,
 } from './metodos';
 import type { RegimenItbis } from './compras';
+import { categoriaCompra, CATEGORIAS_COMPRA } from '@/lib/compras/categorias';
+import { elegirCuentaGasto, type CuentaCatalogo, type CuentaGastoElegida } from './cuenta-gasto';
 
 // Las claves y etiquetas viven en `./metodos` porque la pantalla de
 // configuración es un componente de cliente y no puede importar este archivo:
@@ -457,6 +459,89 @@ export async function borrarOverrideIngreso(teamId: number, id: number): Promise
     DELETE FROM contabilidad_config_ingresos
     WHERE team_id = ${teamId} AND id = ${id}
   `);
+}
+
+// ─── Gastos: la cuenta de cada categoría ─────────────────────────────────────
+
+export interface CuentaGastoConfigurada {
+  /** Clave de CATEGORIAS_COMPRA. */
+  categoria:    string;
+  cuentaId:     number;
+  cuentaCodigo: string;
+  cuentaNombre: string;
+}
+
+export const getCuentasGasto = cache(async function getCuentasGasto(teamId: number): Promise<CuentaGastoConfigurada[]> {
+  const rows = await db.execute(sql`
+    SELECT g.categoria, g.cuenta_id AS "cuentaId",
+           c.codigo AS "cuentaCodigo", c.nombre AS "cuentaNombre"
+    FROM contabilidad_config_gastos g
+    JOIN contabilidad_cuentas c ON c.id = g.cuenta_id
+    WHERE g.team_id = ${teamId}
+    ORDER BY g.categoria
+  `);
+  return rows as unknown as CuentaGastoConfigurada[];
+});
+
+/** Fija la cuenta de una categoría de gasto. */
+export async function guardarCuentaGasto(
+  teamId: number, categoria: string, cuentaId: number, userId: number,
+): Promise<void> {
+  if (!categoriaCompra(categoria)) throw new ConfigError('Esa categoría de gasto no existe.', 404);
+  await validarCuenta(teamId, cuentaId);
+  await db.execute(sql`
+    INSERT INTO contabilidad_config_gastos (team_id, categoria, cuenta_id, updated_by, updated_at)
+    VALUES (${teamId}, ${categoria}, ${cuentaId}, ${userId}, now())
+    ON CONFLICT (team_id, categoria) DO UPDATE
+      SET cuenta_id = ${cuentaId}, updated_by = ${userId}, updated_at = now()
+  `);
+}
+
+/** Devuelve la categoría a la cuenta que le toca por su código. */
+export async function borrarCuentaGasto(teamId: number, categoria: string): Promise<void> {
+  await db.execute(sql`
+    DELETE FROM contabilidad_config_gastos
+    WHERE team_id = ${teamId} AND categoria = ${categoria}
+  `);
+}
+
+/**
+ * Las cuentas de la empresa que aceptan movimientos, por id y por código. Es el
+ * filtro que hace que una cuenta de agrupación o desactivada no llegue nunca a
+ * un asiento (ver `elegirCuentaGasto`).
+ */
+export const catalogoImputable = cache(async function catalogoImputable(teamId: number): Promise<{
+  imputables: Map<number, CuentaCatalogo>;
+  porCodigo:  Map<string, CuentaCatalogo>;
+}> {
+  const rows = await db.execute(sql`
+    SELECT id, codigo, nombre FROM contabilidad_cuentas
+    WHERE team_id = ${teamId} AND imputable AND activa
+    ORDER BY codigo
+  `) as unknown as CuentaCatalogo[];
+  return {
+    imputables: new Map(rows.map((c) => [c.id, c])),
+    porCodigo:  new Map(rows.map((c) => [c.codigo, c])),
+  };
+});
+
+/**
+ * A qué cuenta va hoy cada categoría de gasto, con el porqué. Lo usan la
+ * pantalla de configuración, el formulario de registro y el asiento, para que
+ * los tres digan lo mismo.
+ */
+export async function cuentasDeGasto(teamId: number): Promise<Record<string, CuentaGastoElegida | null>> {
+  const [cfg, configuradas, catalogo] = await Promise.all([
+    getConfig(teamId), getCuentasGasto(teamId), catalogoImputable(teamId),
+  ]);
+  const mapa = new Map(configuradas.map((c) => [c.categoria, c.cuentaId]));
+  const salida: Record<string, CuentaGastoElegida | null> = {};
+  for (const categoria of CATEGORIAS_COMPRA.map((c) => c.clave)) {
+    salida[categoria] = elegirCuentaGasto({
+      categoria, configuradas: mapa, general: cfg.cuentaGastosId, ...catalogo,
+    });
+  }
+  return salida;
 }
 
 // ─── Resolución ──────────────────────────────────────────────────────────────
