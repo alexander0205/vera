@@ -403,20 +403,58 @@ export async function dashboardDelPeriodo(
       ORDER BY pendiente DESC, devengado DESC
     `),
 
-    // ── 7. Por grado. El grado sale de la MATRÍCULA del cargo y no del alumno:
-    //    quien repite pasó por dos grados, y su deuda vieja pertenece al de
-    //    entonces. `alumnos` se cuenta aparte —matrículas activas— porque un
-    //    grado puede tener alumnos sin ningún cargo todavía y aun así tiene que
-    //    aparecer en la tabla.
+    // ── 7. Por grado. Refleja la deuda REAL del alumno de ese grado, no solo la
+    //    tarifa configurada para el grado (pedido Darian 2026-09-23): un alumno
+    //    de preprimario que debe inscripción, un poloche o un desayuno —cosas que
+    //    se facturan directo en Facturación y no tienen concepto por grado— tiene
+    //    que salir en su grado igual.
+    //
+    //    Dos fuentes se suman: (a) los cargos de la matrícula —el grado sale de la
+    //    MATRÍCULA, no del alumno: quien repite pasó por dos grados y su deuda
+    //    vieja es del de entonces—; (b) las facturas directas de la familia
+    //    (`directosCte`), repartidas por partes iguales entre los alumnos activos
+    //    del responsable y llevadas al grado de cada alumno. El reparto evita el
+    //    doble conteo cuando el responsable tiene varios hijos: una factura de
+    //    familia con hijos en dos grados aporta la mitad a cada uno, en vez de
+    //    entera a los dos. `alumnos` se cuenta aparte —matrículas activas— porque
+    //    un grado puede tener alumnos sin cargo todavía y aun así debe aparecer.
     db.execute(sql`
+      WITH ${directosCte},
+      resp_dir AS (
+        SELECT client_id,
+               SUM(monto_total)::numeric                    AS fac,
+               SUM(pagado)::numeric                          AS cob,
+               SUM(GREATEST(monto_total - pagado, 0))::numeric AS sal
+        FROM directos GROUP BY client_id
+      ),
+      est_activo AS (
+        SELECT e.facturar_a_client_id AS cli, cu.grado_id
+        FROM admin_escolar_matriculas m
+        JOIN admin_escolar_estudiantes e ON e.id = m.estudiante_id AND e.team_id = ${teamId}
+        JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
+        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
+          AND e.facturar_a_client_id IS NOT NULL
+      ),
+      dir_por_grado AS (
+        SELECT ea.grado_id,
+               SUM(rd.fac / cnt.n) AS fac,
+               SUM(rd.cob / cnt.n) AS cob,
+               SUM(rd.sal / cnt.n) AS sal
+        FROM est_activo ea
+        JOIN resp_dir rd ON rd.client_id = ea.cli
+        JOIN (SELECT cli, COUNT(*)::numeric n FROM est_activo GROUP BY cli) cnt ON cnt.cli = ea.cli
+        GROUP BY ea.grado_id
+      )
       SELECT g.id, g.nombre AS grado, s.nombre AS servicio, s.tanda,
              (SELECT COUNT(*)::int FROM admin_escolar_matriculas mm
                JOIN admin_escolar_cursos cc ON cc.id = mm.curso_id
               WHERE mm.team_id = ${teamId} AND mm.periodo_id = ${periodoId}
                 AND mm.estado = 'activa' AND cc.grado_id = g.id)             AS alumnos,
-             COALESCE(SUM(c.monto_centavos), 0)::bigint                      AS devengado,
-             COALESCE(SUM(c.monto_centavos - c.saldo_centavos), 0)::bigint   AS cobrado,
-             COALESCE(SUM(c.saldo_centavos), 0)::bigint                      AS pendiente
+             -- dg está a una fila por grado: MAX toma ese valor constante sin que
+             -- el join de cargos (varias filas) lo multiplique.
+             (COALESCE(SUM(c.monto_centavos), 0) + COALESCE(round(MAX(dg.fac)), 0))::bigint                    AS devengado,
+             (COALESCE(SUM(c.monto_centavos - c.saldo_centavos), 0) + COALESCE(round(MAX(dg.cob)), 0))::bigint AS cobrado,
+             (COALESCE(SUM(c.saldo_centavos), 0) + COALESCE(round(MAX(dg.sal)), 0))::bigint                    AS pendiente
       FROM admin_escolar_grados g
       JOIN admin_escolar_servicios s ON s.id = g.servicio_id
       LEFT JOIN admin_escolar_matriculas m ON m.team_id = ${teamId}
@@ -424,6 +462,7 @@ export async function dashboardDelPeriodo(
         AND m.curso_id IN (SELECT id FROM admin_escolar_cursos WHERE grado_id = g.id)
       LEFT JOIN admin_escolar_cargos c ON c.matricula_id = m.id
         AND c.team_id = ${teamId} AND c.periodo_id = ${periodoId} AND c.${NO_ANULADO}
+      LEFT JOIN dir_por_grado dg ON dg.grado_id = g.id
       WHERE g.team_id = ${teamId} AND s.periodo_id = ${periodoId}
       GROUP BY g.id, g.nombre, g.orden, s.nombre, s.tanda, s.orden
       ORDER BY s.orden, g.orden, g.nombre

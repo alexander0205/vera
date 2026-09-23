@@ -324,7 +324,7 @@ export default function DashboardEscolarClient() {
           )}
         </Panel>
 
-        <Panel titulo="Por grado" sub="Dónde se concentra la deuda, con los alumnos activos al lado.">
+        <Panel titulo="Por grado" sub="Toda la deuda real del alumno de cada grado —cargos y facturas directas—, con los alumnos activos al lado.">
           {d.grados.length === 0 ? (
             <Vacio>Este año todavía no tiene estructura académica.</Vacio>
           ) : (
