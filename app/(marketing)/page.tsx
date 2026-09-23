@@ -1,382 +1,374 @@
 /**
- * Portada del sitio público.
+ * Portada del sitio público — Zero como el control financiero del negocio.
  *
- * Todo lo que sea una cifra del negocio —cuántos planes hay, desde cuánto
- * empieza, si alguno viene sin tope de comprobantes— se lee de
- * `lib/config/plans.ts`, que es el catálogo por el que se cobra. Escribirlas a
- * mano aquí sería prometer en la portada un precio que el checkout ya no tiene.
+ * La portada entraba por el colegio y dejaba fuera a todo el que no lo es. El
+ * colegio se mudó a `/colegios`, que es lo que siempre fue —una industria con
+ * página propia—, y aquí entra la promesa que sirve para cualquier negocio:
+ * se registra UNA vez y cae solo en la factura, el inventario, la cartera, la
+ * caja y la contabilidad.
+ *
+ * Dos reglas de esta página:
+ *
+ *  - Los módulos que se anuncian son los que existen (`lib/config/modules.ts`):
+ *    facturación, administración, punto de venta, contabilidad, nómina y
+ *    escolar. El CRM de Zero es otra aplicación y se nombra como tal, no como
+ *    un módulo de estos planes.
+ *  - Ninguna cifra del negocio se escribe a mano: sale de `lib/config/plans.ts`
+ *    y respeta su bandera «bajo cotización», que hoy tapa el precio.
  */
 
+import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
-import { PLANS, ADDONS, addonBajoCotizacion, familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
 import { LazoZero } from '@/lib/marca/isotipo';
+import { familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
+import { CONTACTO, Contenedor, Flecha, Iconos } from './_piezas';
 import {
-  Contenedor, Flecha, Iconos, LazoDeFondo, LlamadoFinal,
-} from './_piezas';
-import { ComparativaIndustrias } from './_industrias';
+  Antetitulo, BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo, Titulo,
+} from './_bloques';
 
-// ─── Cifras derivadas del catálogo ───────────────────────────────────────────
+export const metadata: Metadata = {
+  title: { absolute: 'Zero — El control financiero de tu negocio' },
+  description:
+    'Facturación e-CF ante la DGII, cobros, inventario, punto de venta, contabilidad y nómina en un solo sistema. Se registra una vez y cae en todos lados.',
+};
 
-/**
- * El «desde US$N» de la portada, o `null` cuando no hay ninguno que publicar.
- *
- * Se calculaba SIN los tramos de colegio, que en el sitio público no llevan
- * precio (ver `precios/page.tsx`); ahora la familia de facturación tampoco
- * publica el suyo (`precioBajoCotizacion`), así que no queda cifra de la que
- * sacar un mínimo. Se deja calculado y no borrado a propósito: el día que una
- * línea vuelva a publicar precio, la portada lo recupera sola en vez de
- * quedarse con la frase genérica para siempre.
- */
-const PRECIO_MINIMO: number | null = (() => {
-  const publicables = PLANS.filter(p => !familiaBajoCotizacion(p.familia) && p.familia !== 'colegio');
-  return publicables.length > 0 ? Math.min(...publicables.map(p => p.price)) : null;
-})();
-const CANTIDAD_PLANES = PLANS.length;
-const HAY_SIN_TOPE = PLANS.some(p => p.limits.docs === -1);
-/** `null` = el adicional se cotiza con el plan y no se anuncia por su cuenta. */
-const PRECIO_POS: number | null = addonBajoCotizacion('pos', 'ecf')
-  ? null
-  : ADDONS.find(a => a.key === 'pos')?.price ?? 0;
-/** El tramo escolar más alto: es la promesa de techo del módulo de colegios. */
-const TOPE_ESTUDIANTES = Math.max(...planesDeFamilia('colegio').map(p => p.limits.estudiantes));
+// ─── Cifras del catálogo ──────────────────────────────────────────────────────
 
+/** El «desde US$N» de una línea, o null si esa línea no publica precio. */
+function desdeDe(familia: 'colegio' | 'ecf'): number | null {
+  if (familiaBajoCotizacion(familia)) return null;
+  const precios = planesDeFamilia(familia).map(p => p.price).filter(p => p > 0);
+  return precios.length > 0 ? Math.min(...precios) : null;
+}
+
+const DESDE_NEGOCIO = desdeDe('ecf');
+
+// ─── Contenido ────────────────────────────────────────────────────────────────
+
+/** Lo que dice el dueño del negocio antes de conocernos. */
+const FRASES = [
+  'Tengo cuatro programas y ninguno habla con el otro.',
+  'La nómina me la hace alguien afuera, en una hoja de cálculo.',
+  'Vendo y después descubro que ese producto ya no estaba.',
+  'Mando las facturas por correo, una por una.',
+  'No sé quién me debe sin ponerme a sumar.',
+  'El 606 y el 607 los armo a mano cada mes.',
+] as const;
+
+/** El recorrido del dinero: una venta, de principio a fin, sin cambiar de programa. */
+const RECORRIDO = [
+  { paso: 'Cotización', detalle: 'Se envía por correo y se convierte en factura con un clic.' },
+  { paso: 'Factura e-CF', detalle: 'Firmada, enviada y validada ante la DGII desde Zero.' },
+  { paso: 'PDF al cliente', detalle: 'Sale solo por correo, a nombre de tu empresa.' },
+  { paso: 'Link de pago', detalle: 'El cliente paga con tarjeta y ves en qué va cada enlace.' },
+  { paso: 'Cobro registrado', detalle: 'Con su comprobante adjunto y su método de pago.' },
+  { paso: 'Asiento contable', detalle: 'Entra solo a la contabilidad. Nadie lo escribe.' },
+] as const;
+
+const ASIENTOS = 'Factura · Cobro · Nota de crédito · Anulación · Compra · Gasto · Depreciación · Nómina · Pago de nómina';
+
+/** Los módulos que existen hoy en el sistema. Ver lib/config/modules.ts. */
 const MODULOS = [
-  {
-    nombre: 'Facturación',
-    detalle: 'e-CF ante la DGII en segundos, con notas de crédito y débito.',
-    icono: Iconos.factura,
-  },
-  {
-    nombre: 'Punto de venta',
-    detalle: PRECIO_POS === null
-      ? 'Caja con turnos y cuadre al cierre. Se agrega sobre cualquier plan de facturación.'
-      : `Caja con turnos y cuadre al cierre. Se agrega por US$${PRECIO_POS} al mes.`,
-    icono: Iconos.pos,
-  },
-  {
-    nombre: 'Administración',
-    detalle: 'Clientes, productos, inventario, compras y gastos.',
-    icono: Iconos.administracion,
-  },
-  {
-    nombre: 'Contabilidad',
-    detalle: 'Libro diario, balances y reportes 606 y 607 incluidos.',
-    icono: Iconos.contabilidad,
-  },
-  {
-    nombre: 'Colegio',
-    detalle: `Matrículas, cuotas, portal de padres y recordatorios. Hasta ${TOPE_ESTUDIANTES} estudiantes.`,
-    icono: Iconos.colegio,
-  },
-  {
-    nombre: 'Reportes',
-    detalle: 'Tableros en vivo que cruzan facturación, cobros y matrícula.',
-    icono: Iconos.reportes,
-  },
-];
+  { titulo: 'Facturación electrónica', detalle: 'Los diez tipos de e-CF ante la DGII, con su PDF al cliente.', icono: Iconos.factura },
+  { titulo: 'Cobros y cuentas por cobrar', detalle: 'Quién te debe, cuánto y desde cuándo, con links de pago.', icono: Iconos.tarjeta },
+  { titulo: 'Contabilidad', detalle: 'Asientos automáticos, estados financieros y los 606 y 607 armados.', icono: Iconos.contabilidad },
+  { titulo: 'Inventario, compras y gastos', detalle: 'Stock por almacén, costo real y la factura del proveedor desde una foto.', icono: Iconos.cuadros },
+  { titulo: 'Punto de venta y restaurante', detalle: 'Caja con turnos, mesas y cuadre al cierre.', icono: Iconos.pos },
+  { titulo: 'Nómina', detalle: 'TSS, ISR, regalía y vacaciones, con su asiento contable.', icono: Iconos.usuarios },
+] as const;
 
-const CAMBIOS = [
-  {
-    titulo: 'Aumenta los ingresos',
-    detalle: 'Menos mora con recordatorios automáticos y visibilidad real de cada peso que entra.',
-    icono: Iconos.crecer,
-  },
-  {
-    titulo: 'Simplifica la operación',
-    detalle: 'Una sola carga de datos: la venta cae en inventario, facturación y contabilidad.',
-    icono: Iconos.engranaje,
-  },
-  {
-    titulo: 'Decide con datos',
-    detalle: 'Tableros en vivo que cruzan facturación, cobros y matrícula.',
-    icono: Iconos.reportes,
-  },
-  {
-    titulo: 'Escala sin techo',
-    detalle: 'De un usuario a ocho, con facturas sin tope en los planes altos.',
-    icono: Iconos.escudo,
-  },
-];
+const INDUSTRIAS = [
+  { titulo: 'Restaurantes y cafeterías', detalle: 'La comanda va en papel y la factura se hace después.', foto: '/home/fotos/30-restaurante.png', href: '/precios' },
+  { titulo: 'Tiendas, colmados y comercios', detalle: 'Vendes rápido y el inventario se queda atrás.', foto: '/home/fotos/31-colmado.png', href: '/precios' },
+  { titulo: 'Distribuidoras y mayoristas', detalle: 'Vendes a crédito y cobrar se vuelve otro trabajo.', foto: '/home/fotos/32-distribuidora.png', href: '/precios' },
+  { titulo: 'Servicios y agencias', detalle: 'Igualas mensuales que se facturan a mano y cobros que se olvidan.', foto: '/home/fotos/33-agencia.png', href: '/precios' },
+  { titulo: 'Contadores y firmas', detalle: 'Llevas varias empresas, cada una en un sistema distinto.', foto: '/home/fotos/35-contadora-abierto.png', href: '/precios' },
+  { titulo: 'Colegios', detalle: 'Mensualidades, portal de padres y cobranza que corre sola.', foto: '/home/fotos/12-familia.png', href: '/colegios' },
+] as const;
 
-const ORIGENES = [
-  {
-    titulo: 'Vienes de otro sistema',
-    detalle: 'Exportamos de tu software actual y mapeamos cada campo al de Zero, sin perder histórico.',
-    icono: Iconos.base,
-    fondo: 'bg-[#edf1fe]',
-    color: 'text-[#2a48c4]',
-  },
-  {
-    titulo: 'Todo está en Excel',
-    detalle: 'Nos mandas tus hojas como estén. Las limpiamos, cuadramos saldos y las subimos por ti.',
-    icono: Iconos.hoja,
-    fondo: 'bg-[#e8f6ee]',
-    color: 'text-[#15803d]',
-  },
-  {
-    titulo: 'Todo está en papel',
-    detalle: 'Nos pasas tus carpetas o fotos y digitamos estudiantes, clientes y saldos uno por uno.',
-    icono: Iconos.papel,
-    fondo: 'bg-[#eaeefb]',
-    color: 'text-[#102a72]',
-  },
-];
+/** Clientes que ya operan sobre Zero. Los logos se publican con su permiso. */
+const CLIENTES = [
+  { nombre: 'Colegio Andrés Bello', logo: '/home/logos/andres-bello.jpg' },
+  { nombre: 'CETHA', logo: '/home/logos/cetha.png' },
+  { nombre: 'CETI Yomalia', logo: '/home/logos/ceti-yomalia.png' },
+  { nombre: 'Amisadai', logo: '/home/logos/amisadai.png' },
+  { nombre: 'Yisrael Kids School', logo: '/home/logos/yisrael-kids-school.png' },
+  { nombre: 'Mi Casita II', logo: '/home/logos/mi-casita-ii.jpg' },
+] as const;
 
-export default function PortadaMarketing() {
+// ─── Portada ──────────────────────────────────────────────────────────────────
+
+export default function PortadaPage() {
   return (
     <>
-      {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      {/* SIN `overflow-hidden`: el lazo de fondo mide más que esta sección, y
-          recortarlo aquí le dejaba un corte recto justo encima de las tarjetas
-          —una línea dura donde la textura debía desvanecerse—. El desborde
-          horizontal ya lo tapa el `overflow-x-hidden` del layout, que es donde
-          corresponde: en la página, no en una sección. */}
-      <section className="relative bg-white">
-        {/* La portada lo lleva más grande y más tenue que las otras dos: es la
-            única pantalla donde el lazo compite con un titular de 5rem. */}
-        <LazoDeFondo arriba={330} ancho="140vw" anchoMinimo={1600} opacidad={0.035} />
-        <Contenedor className="relative pt-14 sm:pt-[74px]">
-          <div className="mx-auto max-w-[900px] text-center">
-            <h1 className="m-0 font-[family-name:var(--font-display)] text-[clamp(2.75rem,9vw,6rem)] font-bold leading-[.96] tracking-[-.035em] text-balance">
-              <span className="block text-[#102a72]">Desde Zero</span>
-              <span className="mt-1.5 flex items-center justify-center gap-3 text-zero-600 sm:gap-5">
-                hasta el
-                <LazoZero alto={44} titulo="infinito" className="sm:hidden" />
-                <LazoZero alto={70} titulo="infinito" className="hidden sm:block" />
-              </span>
+      {/* ── Hero ───────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-[linear-gradient(180deg,#f4f8ff_0%,#edf3ff_42%,#ffffff_100%)]">
+        <Contenedor className="relative pt-14 sm:pt-[60px]">
+          <div className="text-center">
+            <h1 className="m-0 mx-auto max-w-[900px] font-[family-name:var(--font-display)] text-[clamp(2.25rem,6vw,3.75rem)] font-semibold leading-[1.05] tracking-[-.045em] text-balance text-[#102a72]">
+              El control financiero de tu negocio, de punta a punta.
             </h1>
-
-            <div className="mx-auto mt-7 h-[3px] w-16 rounded-full bg-zero-600" />
-
-            <p className="mx-auto mt-6 max-w-[660px] text-pretty text-base leading-relaxed text-[#3b4252] sm:text-lg">
-              Empiezas con una factura y terminas con toda tu operación en un solo lugar:{' '}
-              <strong className="font-semibold text-[#102a72]">
-                facturación, punto de venta, administración, contabilidad y colegios
-              </strong>.
+            <p className="mx-auto mt-5 max-w-[640px] text-pretty text-[17px] leading-[1.6] text-[#4a5164] sm:text-lg">
+              Zero no es un sistema de facturación. Se registra una vez y cae donde tiene que caer: en la factura, el inventario, la cartera, la caja y la contabilidad. Al mismo tiempo.
             </p>
-            <p className="mx-auto mt-3.5 max-w-[600px] text-pretty text-[15px] leading-relaxed text-gray-500">
-              Una sola carga de datos. Cada venta cae directo en tu inventario, tu facturación y tu
-              contabilidad.{' '}
-              {PRECIO_MINIMO === null
-                ? 'Sin instalación y sin contrato mínimo: el precio lo armamos con tu operación.'
-                : `Desde US$${PRECIO_MINIMO} al mes, sin instalación y sin contrato mínimo.`}
-            </p>
-
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              {/* Sin número de días: ya no hay uno solo. Son 15 en facturación
-                  y 30 en colegios, y la portada no sabe todavía quién está
-                  mirando. Poner «15» aquí le quitaría la mitad a un colegio, y
-                  poner «30» prometería de más a un comercio. El detalle vive en
-                  la página de precios, que sí distingue por línea.
-
-                  La acción principal es ENTRAR, no pedir una cita. Hay prueba
-                  autoservicio: quien llega aquí puede estar facturando hoy sin
-                  hablar con nadie, y mandarlo a un formulario de demo era pedirle
-                  que esperara por algo que no necesita esperar. La demo sigue
-                  existiendo abajo, para quien la quiera. */}
-              <Link
-                href="/sign-up"
-                className="flex h-[52px] items-center rounded-[13px] bg-zero-600 px-7 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white shadow-[0_14px_30px_-10px_rgba(54,88,225,.8)] transition hover:bg-zero-700"
-              >
-                Empieza gratis
-              </Link>
-              <Link
-                href="/precios"
-                className="flex h-[52px] items-center gap-2.5 rounded-[13px] border-[1.5px] border-[#dce1f0] bg-white px-6 font-[family-name:var(--font-display)] text-[15px] font-semibold text-[#102a72] transition hover:border-zero-600 hover:text-zero-600"
-              >
-                Ver planes y precios
-                <Flecha />
-              </Link>
+              <BotonPrimario href="/sign-up">Empieza gratis</BotonPrimario>
+              <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
             </div>
-
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
-              {[
-                // Sin cifra que publicar, el hueco lo ocupa lo que sí es
-                // verdad y además vende: que no hay que instalar nada. Dejarlo
-                // en «Desde US$» a secas sería un precio a medio decir.
-                PRECIO_MINIMO === null
-                  ? { valor: 'Sin instalación', etiqueta: 'ni contrato mínimo' }
-                  : { valor: `Desde US$${PRECIO_MINIMO}`, etiqueta: 'al mes, sin instalación' },
-                { valor: 'e-CF', etiqueta: 'certificado ante la DGII' },
-                { valor: '606 · 607', etiqueta: 'reportes incluidos' },
-              ].map((m, i) => (
-                <div key={m.valor} className="flex items-center gap-7">
-                  {i > 0 && <span aria-hidden className="hidden h-8 w-px bg-[#dde1ec] sm:block" />}
-                  <div>
-                    <div className="font-[family-name:var(--font-display)] text-[22px] font-semibold tracking-[-.7px] text-zero-600">
-                      {m.valor}
-                    </div>
-                    <div className="mt-0.5 text-xs text-gray-500">{m.etiqueta}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Contenedor>
-
-        <Contenedor className="mt-12">
-          <div className="grid grid-cols-1 divide-y divide-[#e9ebf3] rounded-2xl border border-[#e9ebf3] bg-[#fafbfe] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            {[
-              {
-                valor: `${CANTIDAD_PLANES} planes`,
-                etiqueta: PRECIO_MINIMO === null ? 'con precio a tu medida' : `desde US$${PRECIO_MINIMO} al mes`,
-                icono: Iconos.dinero,
-              },
-              { valor: 'e-CF', etiqueta: 'emisión en segundos', icono: Iconos.reloj },
-              // El «sin tope» se dibuja, no se escribe: el lazo ES el infinito
-              // de la marca, y en una cifra suelta dice más que dos palabras.
-              ...(HAY_SIN_TOPE
-                ? [{ valor: 'Sin tope', etiqueta: 'facturas en planes altos', icono: Iconos.crecer, sinTope: true }]
-                : []),
-            ].map(k => (
-              <div key={k.valor} className="flex items-center gap-3.5 px-6 py-6">
-                <span className="grid size-[38px] shrink-0 place-items-center rounded-[11px] bg-[#edf1fe] text-zero-600">
-                  <k.icono tamano={19} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-[family-name:var(--font-display)] text-[22px] font-semibold tracking-[-.7px] text-zero-600">
-                    {'sinTope' in k ? <LazoZero alto={20} titulo={k.valor} color="currentColor" /> : k.valor}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-gray-500">{k.etiqueta}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </Contenedor>
-      </section>
-
-      {/* ── Módulos ───────────────────────────────────────────────────────── */}
-      <section id="modulos" className="relative mt-16 overflow-hidden bg-zero-600 py-16 sm:mt-[72px]">
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-12 opacity-[.07]">
-          <LazoZero alto={180} color="#ffffff" />
-        </div>
-        <Contenedor className="relative">
-          <div className="mx-auto max-w-[640px] text-center">
-            <h2 className="m-0 font-[family-name:var(--font-display)] text-[clamp(1.6rem,4vw,2.06rem)] font-semibold tracking-[-1px] text-white">
-              Todo lo que necesitas. Una plataforma.
-            </h2>
-            <p className="mt-3.5 text-[14.5px] leading-relaxed text-white/[.78]">
-              Zero conecta la administración y la operación diaria, para que ahorres tiempo,
-              reduzcas costos y crezcas con confianza.
+            <p className="mt-4 text-[13px] text-[#8a90a0]">
+              Certificados ante la DGII · Sin instalación · Sin contrato mínimo
             </p>
           </div>
 
-          <div className="mt-11 grid grid-cols-1 gap-7 sm:grid-cols-2 lg:grid-cols-3">
-            {MODULOS.map(m => (
-              <div key={m.nombre} className="min-w-0 border-l border-white/20 px-6 py-1 sm:border-l lg:[&:nth-child(3n+1)]:border-l-0">
-                <span className="block text-white">
-                  <m.icono tamano={24} />
+          <div className="relative mt-10 sm:mt-[52px]">
+            <div className="relative mx-auto max-w-[940px]">
+              <div className="rounded-t-2xl bg-[#1b2333] p-3 pb-0 shadow-[0_50px_90px_-40px_rgba(16,42,114,.55)]">
+                <Image
+                  src="/home/capturas/zero-facturacion.png"
+                  alt="Factura electrónica emitida en Zero, con su e-NCF y el estado de la DGII"
+                  width={1722}
+                  height={860}
+                  priority
+                  className="block w-full rounded-t-lg"
+                />
+              </div>
+              <div className="mx-auto h-[15px] max-w-[1010px] rounded-b-xl bg-[linear-gradient(180deg,#d8dee9,#aeb6c6)] shadow-[0_14px_24px_-14px_rgba(16,42,114,.45)]" />
+
+              {/* Dos momentos del producto, no dos promesas: lo que pasa solo
+                  cuando emites y cuando cobras. */}
+              <figure className="absolute left-[clamp(-78px,-4vw,0px)] top-[36%] hidden w-[min(252px,30%)] rounded-2xl border border-[#e7ecf7] bg-white p-4 shadow-[0_26px_50px_-24px_rgba(16,42,114,.45)] md:block">
+                <span className="grid size-[30px] place-items-center rounded-full bg-[#e6f7ee] text-[#12925a]">
+                  <Iconos.escudo className="size-4" />
                 </span>
-                <div className="mt-3.5 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white">
-                  {m.nombre}
-                </div>
-                <div className="mt-1.5 text-pretty text-[12.5px] leading-relaxed text-white/[.72]">
-                  {m.detalle}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Contenedor>
-      </section>
+                <figcaption className="mt-3 text-[11.5px] text-[#8a90a0]">Aceptado por la DGII</figcaption>
+                <p className="m-0 mt-0.5 font-[family-name:var(--font-display)] text-[17px] font-semibold tracking-[-.03em] text-[#102a72]">e-CF enviado al cliente</p>
+                <p className="m-0 mt-1.5 text-[11.5px] text-[#5c6373]">Con su PDF, a nombre de tu empresa.</p>
+              </figure>
 
-      {/* ── Industrias ────────────────────────────────────────────────────── */}
-      <section id="industrias">
-        <Contenedor className="pt-16 sm:pt-20">
-          <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[.68fr_1.32fr] lg:gap-11">
-            <div className="lg:pt-11">
-              <div className="text-[11px] font-semibold uppercase tracking-[.9px] text-zero-600">
-                Hecho para tu sector
-              </div>
-              <h2 className="mt-4 font-[family-name:var(--font-display)] text-[clamp(1.6rem,4vw,2.06rem)] font-semibold leading-tight tracking-[-1.1px]">
-                Una plataforma.<br />Cada industria.
-              </h2>
-              <p className="mt-4 text-pretty text-sm leading-relaxed text-[#5c6373]">
-                Zero se adapta a tu forma de trabajar. Elige tu sector y mira cómo se compara con
-                las herramientas que ya usas.
-              </p>
-              <Link href="/precios" className="mt-5 inline-flex items-center gap-2 text-[13.5px] font-semibold text-zero-600 hover:text-[#102a72]">
-                Ver planes y precios
-                <Flecha />
-              </Link>
+              <figure className="absolute right-[clamp(-72px,-4vw,0px)] top-[14%] hidden w-[min(238px,29%)] rounded-2xl border border-[#e7ecf7] bg-white p-4 shadow-[0_26px_50px_-24px_rgba(16,42,114,.45)] md:block">
+                <span className="grid size-[30px] place-items-center rounded-[9px] bg-[#edf1fe] text-zero-600">
+                  <Iconos.contabilidad className="size-4" />
+                </span>
+                <figcaption className="mt-3 text-[11.5px] text-[#8a90a0]">Al registrar el cobro</figcaption>
+                <p className="m-0 mt-0.5 font-[family-name:var(--font-display)] text-[17px] font-semibold tracking-[-.03em] text-[#102a72]">Asiento contable creado</p>
+                <p className="m-0 mt-1.5 text-[11.5px] text-[#5c6373]">Nadie lo escribe a mano.</p>
+              </figure>
             </div>
-
-            <ComparativaIndustrias />
           </div>
         </Contenedor>
       </section>
 
-      {/* ── Qué cambia ────────────────────────────────────────────────────── */}
-      <section>
-        <Contenedor className="pt-16 sm:pt-[74px]">
-          <h2 className="m-0 text-center font-[family-name:var(--font-display)] text-[clamp(1.4rem,3.5vw,1.7rem)] font-semibold tracking-[-.9px]">
-            Lo que cambia cuando operas sobre Zero
+      {/* ── Quién ya lo usa ────────────────────────────────────────────────── */}
+      <section className="border-y border-[#eff1f7] bg-white">
+        <Contenedor className="py-12 sm:py-14">
+          <h2 className="m-0 text-center font-[family-name:var(--font-display)] text-[20px] font-semibold tracking-[-.03em] text-balance text-[#102a72]">
+            Empresas y colegios dominicanos ya operan sobre Zero
           </h2>
-          <div className="mt-7 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-            {CAMBIOS.map(s => (
-              <div key={s.titulo} className="flex flex-col rounded-2xl border border-[#e9ebf3] bg-white p-5">
-                <span className="grid size-9 place-items-center rounded-[10px] bg-[#edf1fe] text-zero-600">
-                  <s.icono tamano={19} />
-                </span>
-                <span className="mt-3.5 block font-[family-name:var(--font-display)] text-[14.5px] font-semibold">
-                  {s.titulo}
-                </span>
-                <span className="mt-1.5 block text-pretty text-[12.5px] leading-relaxed text-gray-500">
-                  {s.detalle}
-                </span>
-              </div>
+          <ul className="mt-9 flex flex-wrap items-center justify-center gap-x-10 gap-y-8 sm:gap-x-[56px]">
+            {CLIENTES.map(c => (
+              <li key={c.nombre}>
+                <Image
+                  src={c.logo}
+                  alt={c.nombre}
+                  width={210}
+                  height={62}
+                  className="h-10 w-auto max-w-[170px] object-contain opacity-70 grayscale transition hover:opacity-100 hover:grayscale-0 sm:h-[54px] sm:max-w-[190px]"
+                />
+              </li>
             ))}
+          </ul>
+        </Contenedor>
+      </section>
+
+      {/* ── El problema, en palabras del dueño ─────────────────────────────── */}
+      <section id="problema" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,2fr)] lg:gap-12">
+            <Encabezado
+              antetitulo="Antes de Zero"
+              titulo="¿Cuáles de estas frases dijiste este mes?"
+              detalle="Si son dos o más, el problema no es la factura: es que el dinero de tu negocio está repartido en pedazos que no se hablan."
+            />
+            <ul className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 sm:grid-cols-2">
+              {FRASES.map(f => (
+                <li
+                  key={f}
+                  className="min-w-0 rounded-2xl border border-[#e9ebf3] bg-white px-5 py-4 text-pretty text-[14px] leading-[1.55] text-[#3b4252]"
+                >
+                  «{f}»
+                </li>
+              ))}
+            </ul>
           </div>
         </Contenedor>
       </section>
 
-      {/* ── Migración ─────────────────────────────────────────────────────── */}
-      <section id="soporte">
-        <Contenedor className="pt-16 sm:pt-[72px]">
-          <div className="rounded-2xl border border-[#e7ebfa] bg-[#fafbfe] p-6 sm:p-8">
-            <div className="grid grid-cols-1 items-center gap-9 lg:grid-cols-[.8fr_1.2fr]">
-              <div>
-                <span className="inline-flex h-[26px] items-center rounded-full bg-[#edf1fe] px-3 text-[11px] font-semibold uppercase tracking-[.5px] text-[#2a48c4]">
-                  Acompañamiento incluido
-                </span>
-                <h2 className="mt-3.5 text-pretty font-[family-name:var(--font-display)] text-[clamp(1.4rem,3.5vw,1.7rem)] font-semibold leading-tight tracking-[-1px]">
-                  Soporte personalizado para tu migración
-                </h2>
-                <p className="mt-3 text-pretty text-sm leading-relaxed text-[#5c6373]">
-                  No importa de dónde vengas: de otro sistema, de hojas de Excel o de carpetas en
-                  papel. Un especialista se sienta contigo, ordena tu información y la deja cargada
-                  y cuadrada en Zero antes de que empieces a operar.
+      {/* ── El recorrido del dinero ────────────────────────────────────────── */}
+      <section id="recorrido" className="scroll-mt-20">
+        <Contenedor className="mt-16">
+          <div className="rounded-3xl border border-[#e7edfb] bg-[#f5f8ff] p-7 sm:p-11">
+            <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,2fr)] lg:gap-12">
+              <Encabezado
+                antetitulo="El recorrido del dinero"
+                titulo="Una venta, de principio a fin, sin cambiar de programa."
+                detalle="Cada paso alimenta al siguiente. Nadie vuelve a digitar lo mismo en otro sitio."
+                enlace={{ texto: 'Ver los planes', href: '/precios' }}
+              />
+              <div className="min-w-0">
+                <ol className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 sm:grid-cols-2 xl:grid-cols-3">
+                  {RECORRIDO.map((r, i) => (
+                    <li key={r.paso} className="min-w-0 rounded-[15px] border border-[#e7edfb] bg-white p-5">
+                      <span className="font-[family-name:var(--font-display)] text-[13px] font-semibold tabular-nums text-zero-600">
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <h3 className="m-0 mt-2 font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">{r.paso}</h3>
+                      <p className="m-0 mt-1.5 text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">{r.detalle}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className="m-0 mt-5 text-pretty text-[13px] leading-[1.6] text-[#5c6373]">
+                  <span className="font-semibold text-[#102a72]">Cada operación deja su asiento:</span> {ASIENTOS}.
                 </p>
-                <Link href="/contacto" className="mt-5 inline-flex items-center gap-2 text-[13.5px] font-semibold text-zero-600 hover:text-[#102a72]">
-                  Cuéntanos cómo tienes tus datos hoy
-                  <Flecha />
-                </Link>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {ORIGENES.map(o => (
-                  <div key={o.titulo} className="rounded-[13px] border border-[#e9ebf3] bg-white p-4">
-                    <span className={`grid size-8 place-items-center rounded-[10px] ${o.fondo} ${o.color}`}>
-                      <o.icono tamano={16} />
-                    </span>
-                    <div className="mt-3 text-pretty text-[12.5px] font-semibold">{o.titulo}</div>
-                    <div className="mt-1 text-pretty text-[11.5px] leading-relaxed text-gray-500">{o.detalle}</div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
         </Contenedor>
       </section>
 
-      {/* ── Cierre ────────────────────────────────────────────────────────── */}
-      <section id="demo">
-        <Contenedor className="py-16 sm:py-[74px]">
-          <LlamadoFinal
-            titulo="¿Listos para operar sobre Zero?"
-            detalle="Agenda una demo personalizada y vemos tu operación módulo por módulo."
-            accion="Solicitar demo"
-            href="/contacto"
-          />
+      {/* ── Módulos ────────────────────────────────────────────────────────── */}
+      <section id="modulos" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,2fr)] lg:gap-12">
+            <Encabezado
+              antetitulo="Lo que hay adentro"
+              titulo="Seis módulos. Una sola base de datos."
+              detalle="Se arma con los módulos que tu operación usa, y todos escriben sobre los mismos datos."
+              enlace={{ texto: 'Ver qué incluye cada plan', href: '/precios' }}
+            />
+            <div className="min-w-0">
+              <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
+                {MODULOS.map(m => (
+                  <TarjetaModulo key={m.titulo} icono={m.icono} titulo={m.titulo} detalle={m.detalle} />
+                ))}
+              </ul>
+              {/* El CRM es de Zero, pero es otra aplicación: se nombra aquí para
+                  que nadie lo busque dentro del sistema ni lo crea incluido. */}
+              <p className="m-0 mt-4 text-pretty text-[13px] leading-[1.6] text-[#5c6373]">
+                Zero también tiene su <span className="font-semibold text-[#102a72]">CRM con WhatsApp</span>, para atender y dar seguimiento a lo que llega por mensaje. Va por su cuenta, fuera de estos planes.
+              </p>
+            </div>
+          </div>
+        </Contenedor>
+      </section>
+
+      {/* ── Para quién es ──────────────────────────────────────────────────── */}
+      <section id="industrias" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,2fr)] lg:gap-12">
+            <Encabezado
+              antetitulo="Para quién es"
+              titulo="Para negocios que venden, cobran y pagan gente todos los días."
+              detalle="El mismo sistema, armado distinto según lo que hagas."
+            />
+            <ul className="m-0 grid list-none grid-cols-2 gap-3 p-0 lg:grid-cols-3">
+              {INDUSTRIAS.map(i => (
+                <li key={i.titulo} className="min-w-0">
+                  <Link
+                    href={i.href}
+                    className="block h-full overflow-hidden rounded-2xl border border-[#e9ebf3] bg-white transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]"
+                  >
+                    <Image
+                      src={i.foto}
+                      alt=""
+                      width={800}
+                      height={600}
+                      className="block aspect-[4/3] w-full bg-[#eef2fb] object-cover object-[50%_40%]"
+                    />
+                    <span className="block p-4 pb-[18px]">
+                      <span className="block font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">{i.titulo}</span>
+                      <span className="mt-1.5 block text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">{i.detalle}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Contenedor>
+      </section>
+
+      {/* ── Planes ─────────────────────────────────────────────────────────── */}
+      <section id="planes" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <div className="flex flex-wrap items-center justify-between gap-8 rounded-3xl border border-[#e7edfb] bg-[#f5f8ff] p-7 sm:p-11">
+            <div className="min-w-0 flex-[1_1_380px]">
+              <Antetitulo>Planes</Antetitulo>
+              {DESDE_NEGOCIO === null ? (
+                <Titulo className="mt-3.5">Todos los planes traen el sistema completo.</Titulo>
+              ) : (
+                <p className="m-0 mt-3.5 flex flex-wrap items-baseline gap-2">
+                  <span className="text-[15px] text-[#5c6373]">Desde</span>
+                  <span className="font-[family-name:var(--font-display)] text-[46px] font-semibold tracking-[-.048em] text-[#102a72]">US${DESDE_NEGOCIO}</span>
+                  <span className="text-[15px] text-[#8a90a0]">/mes</span>
+                </p>
+              )}
+              <p className="m-0 mt-3 max-w-[470px] text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
+                Lo único que cambia es cuánto facturas y cuántas personas lo usan. Implementación y acompañamiento incluidos.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-3">
+              <BotonPrimario href="/precios">Ver precios</BotonPrimario>
+              <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
+            </div>
+          </div>
+        </Contenedor>
+      </section>
+
+      {/* ── Llamado final ──────────────────────────────────────────────────── */}
+      <section>
+        <Contenedor className="pb-4 pt-16 sm:pt-[82px]">
+          <div className="relative overflow-hidden rounded-3xl bg-[#0b1a46] p-7 sm:p-12">
+            <div aria-hidden className="pointer-events-none absolute -bottom-20 -right-14 opacity-[.07]">
+              <LazoZero alto={290} color="#ffffff" />
+            </div>
+            <div className="relative grid items-center gap-10 lg:grid-cols-[minmax(280px,1.3fr)_minmax(240px,.85fr)]">
+              <div className="min-w-0">
+                <p className="m-0 text-[11px] font-semibold uppercase tracking-[.2em] text-white/55">Es momento de avanzar</p>
+                <h2 className="m-0 mt-3.5 font-[family-name:var(--font-display)] text-[clamp(1.75rem,3.4vw,2.125rem)] font-semibold leading-[1.1] tracking-[-.045em] text-balance text-white">
+                  Empieza desde Zero.
+                </h2>
+                <p className="m-0 mt-3.5 max-w-[400px] text-pretty text-[14.5px] leading-[1.65] text-white/70">
+                  Abre tu cuenta y emite hoy, o cuéntanos cómo trabajas y te decimos con qué módulos empezar.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center gap-5">
+                  <Link
+                    href="/sign-up"
+                    className="flex h-12 items-center gap-2.5 rounded-xl bg-zero-600 px-6 font-[family-name:var(--font-display)] text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-zero-500"
+                  >
+                    Empieza gratis
+                    <Flecha tamano={14} />
+                  </Link>
+                  <a
+                    href={CONTACTO.whatsappHref}
+                    className="border-b border-white/40 pb-0.5 text-[13.5px] font-semibold text-white transition hover:border-white"
+                  >
+                    O escríbenos por WhatsApp
+                  </a>
+                </div>
+              </div>
+
+              <div className="min-w-0 rounded-2xl bg-white p-5">
+                <p className="m-0 font-[family-name:var(--font-display)] text-[15px] font-semibold tracking-[-.02em] text-[#102a72]">Te montamos el sistema.</p>
+                <p className="m-0 mt-1.5 text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">
+                  Un equipo dominicano carga tus productos, clientes y saldos, y deja la habilitación de la DGII lista.
+                </p>
+                <div className="mt-4 grid gap-1.5 text-[12.5px] text-[#5c6373]">
+                  <a href={`mailto:${CONTACTO.ventas}`} className="transition hover:text-zero-600">{CONTACTO.ventas}</a>
+                  <a href={CONTACTO.telefonoHref} className="tabular-nums transition hover:text-zero-600">{CONTACTO.telefono}</a>
+                </div>
+              </div>
+            </div>
+          </div>
         </Contenedor>
       </section>
     </>
