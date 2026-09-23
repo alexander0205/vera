@@ -1,23 +1,21 @@
 # Deploy a producción (Zero / EmiteDO)
 
-Producción vive en la rama `v2`. Todo merge aprobado a `v2` dispara,
-en orden: **CI** (tipos, pruebas unitarias, build de verificación —
-`.github/workflows/ci.yml`) y, si pasa, **Deploy** (`.github/workflows/deploy.yml`).
-Nadie del equipo necesita acceso directo a Vercel: el deploy lo hace GitHub
-Actions con un token de proyecto.
+Producción vive en la rama `v2`. Todo merge aprobado a `v2` dispara
+**Deploy** (`.github/workflows/deploy.yml`), un solo workflow con tres jobs
+en cadena: **Validar** → **Detectar migraciones pendientes** → **Deploy a
+Vercel**. Nadie del equipo necesita acceso directo a Vercel: el deploy lo
+hace GitHub Actions con un token de proyecto.
 
-> **Nota de secuencia:** este runbook asume que `.github/workflows/ci.yml`
-> ya dispara solo en push/PR a `v2` (rama `ci/reactivar-ci`, aparte de
-> esta). Hasta que esa rama esté mergeada, `CI` sigue siendo manual
-> (`workflow_dispatch`) y por lo tanto `Deploy` tampoco arranca solo —
-> hay que dispararlo a mano desde la pestaña Actions. Una vez mergeada esa
-> rama, esta nota deja de aplicar y se puede borrar.
+`.github/workflows/ci.yml` es un workflow aparte que solo gatea PRs (tipos,
+pruebas, build) antes de mergear — `deploy.yml` no depende de él, revalida
+todo de cero sobre el commit que efectivamente llega a `v2`.
 
 ## Flujo normal (sin migraciones)
 
 1. Se mergea un PR a `v2`.
-2. `CI` corre tipos + `test:unit` + build. Si falla, ahí termina — no hay deploy.
-3. Si `CI` pasa, `Deploy` arranca solo. Compara los archivos tocados desde el
+2. `Validar` corre tipos + `test:unit` + build. Si falla, ahí termina — no
+   hay deploy.
+3. `Detectar migraciones pendientes` compara los archivos tocados desde el
    último deploy exitoso: si ninguno está bajo `lib/db/migrations/`, el job
    `deploy` corre automático, sin pedir aprobación.
 4. `vercel pull` + `vercel build --prod` + `vercel deploy --prebuilt --prod`
@@ -52,8 +50,8 @@ Qué hacer:
 
 Si la migración falla o hay dudas, **no aprobar** — el deploy nunca sale
 mientras el Environment esperando revisión no se apruebe, y eso no bloquea
-nada más (los siguientes merges a `v2` sí siguen corriendo `CI`, pero cada
-uno abre su propio run de `Deploy` en la misma cola).
+nada más (los siguientes merges a `v2` abren su propio run de `Deploy`, en
+la misma cola).
 
 ## Si algo sale mal
 
