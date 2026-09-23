@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, getCuentasPorCobrar } from '@/lib/db/queries';
 import { getDetalleCuenta } from '@/lib/cobranza/detalle';
-import { getOrigenEscolarDeFactura, esResponsableEscolar } from '@/lib/administracion-escolar/origen-factura';
+import { getOrigenEscolarDeFactura, esResponsableEscolar, clientePagadorDeFactura } from '@/lib/administracion-escolar/origen-factura';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -54,10 +54,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docI
   // salir (pedido Darian 2026-09-23: "el botón solo cuando tengas gobernanza
   // activada"). Sin el módulo no se corren siquiera las consultas escolares.
   const escolarActivo = await teamHasModule(teamId, 'escolar');
+  // El pagador no siempre está en la cabecera de la factura: en las escolares
+  // suele venir a Consumidor Final con el alumno nombrado, y el padre se conoce
+  // por el dependiente. Se resuelve igual que en `saldar-con-factura`.
+  const clienteEscolarId = escolarActivo
+    ? (cuenta?.clientId ?? await clientePagadorDeFactura(teamId, id))
+    : null;
   const [detalle, origenEscolar, responsableEscolar] = await Promise.all([
     getDetalleCuenta(teamId, id),
     escolarActivo ? getOrigenEscolarDeFactura(teamId, id) : Promise.resolve([]),
-    escolarActivo ? esResponsableEscolar(teamId, cuenta?.clientId ?? null) : Promise.resolve(false),
+    escolarActivo ? esResponsableEscolar(teamId, clienteEscolarId) : Promise.resolve(false),
   ]);
-  return NextResponse.json({ cuenta, ...detalle, origenEscolar, responsableEscolar });
+  return NextResponse.json({ cuenta, ...detalle, origenEscolar, responsableEscolar, clienteEscolarId });
 }

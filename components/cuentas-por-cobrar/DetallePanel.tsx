@@ -38,6 +38,7 @@ export function DetallePanel({
   const [detalle, setDetalle] = useState<DetalleCuenta | null>(null);
   const [origenEscolar, setOrigenEscolar] = useState<OrigenEscolarFactura[]>([]);
   const [responsableEscolar, setResponsableEscolar] = useState(false);
+  const [clienteEscolarId, setClienteEscolarId] = useState<number | null>(null);
   const [actual, setActual]   = useState<Cuenta>(cuenta);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -57,6 +58,7 @@ export function DetallePanel({
         setDetalle(j);
         setOrigenEscolar(j.origenEscolar ?? []);
         setResponsableEscolar(j.responsableEscolar === true);
+        setClienteEscolarId(typeof j.clienteEscolarId === 'number' ? j.clienteEscolarId : null);
         if (j.cuenta) setActual(j.cuenta);
       })
       .catch(e => { if (vivo) setError(e instanceof Error ? e.message : 'Error'); })
@@ -64,7 +66,10 @@ export function DetallePanel({
     return () => { vivo = false; };
   }, [cuenta.id]);
 
-  const irAGobernanza = actual.clientId != null && (responsableEscolar || origenEscolar.length > 0);
+  // La factura escolar sin cliente en la cabecera lleva al padre por el alumno:
+  // el servidor ya resolvió cuál es, y es el que abre su ficha en Gobernanza.
+  const clienteGobernanza = clienteEscolarId ?? actual.clientId;
+  const irAGobernanza = clienteGobernanza != null && (responsableEscolar || origenEscolar.length > 0);
 
   return (
     <Drawer
@@ -232,7 +237,7 @@ export function DetallePanel({
             no a la factura — esa sigue a un clic en el código de la cabecera. */}
         <Button
           component={Link} nativeButton={false}
-          href={irAGobernanza ? `/escolar/responsables/${actual.clientId}` : `/dashboard/facturas/${actual.id}`}
+          href={irAGobernanza ? `/escolar/responsables/${clienteGobernanza}` : `/dashboard/facturas/${actual.id}`}
           variant="outlined" color="inherit"
           sx={{ color: '#374151', borderColor: '#d1d5db', whiteSpace: 'nowrap', flexShrink: 0 }}
         >

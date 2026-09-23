@@ -276,13 +276,33 @@ export async function dashboardDelPeriodo(
         AND es.facturar_a_client_id IS NOT NULL
     ),
     directos AS (
-      SELECT d.id, d.client_id, d.monto_total,
+      -- El pagador de una factura escolar no siempre está en la cabecera: el
+      -- colegio factura muchas veces a Consumidor Final nombrando al ALUMNO, y
+      -- ahí el padre se conoce por el dependiente. Mirando solo el client_id esas
+      -- facturas no cruzaban con ninguna familia y desaparecían del panorama
+      -- (en Andrés Bello, 164 de 550 del año escolar). Se toma el mismo respaldo
+      -- que usa el guard de vincular factura: cabecera y, si no, el cliente del
+      -- dependiente. Una venta de POS a Consumidor Final no trae dependiente, así
+      -- que sigue fuera.
+      SELECT d.id, COALESCE(d.client_id, dep.client_id, dep_linea.client_id) AS client_id, d.monto_total,
              -- varchar(10): ''::date lanza, y varchar < date no existe.
              NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_pago,
              COALESCE((SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
                         WHERE p.ecf_document_id = d.id), 0) AS pagado
       FROM ecf_documents d
-      JOIN familias f ON f.client_id = d.client_id
+      LEFT JOIN dependientes dep ON dep.id = d.dependiente_id AND dep.team_id = ${teamId}
+      -- El alumno puede venir en la cabecera o SOLO dentro de las líneas: el
+      -- facturador escolar escribe dependienteId por renglón. Se toma el primero
+      -- que resuelva a un contacto.
+      LEFT JOIN LATERAL (
+        SELECT dl.client_id
+        FROM jsonb_array_elements(COALESCE(d.lineas_json::jsonb, '[]'::jsonb)) AS l
+        JOIN dependientes dl ON dl.team_id = ${teamId}
+                            AND dl.id = (l->>'dependienteId')::int
+        WHERE l->>'dependienteId' ~ '^[0-9]+$'
+        LIMIT 1
+      ) dep_linea ON true
+      JOIN familias f ON f.client_id = COALESCE(d.client_id, dep.client_id, dep_linea.client_id)
       WHERE d.team_id = ${teamId}
         -- Mismo universo que la cartera de Facturación (getCuentasPorCobrar):
         -- fuera anuladas/rechazadas, NC (34), compras (41/43/47) y las ND de
