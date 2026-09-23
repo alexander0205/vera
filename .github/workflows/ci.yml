@@ -5,16 +5,18 @@ name: CI
 # cargar next.config.ts, antes de compilar una sola línea. Un check que siempre
 # falla no avisa de nada y tapa los que sí importan.
 #
-# `v2` es la rama de producción. Este workflow gatea PRs antes de mergear —
-# solo pull_request, sin push. Un push a v2 ya corre su propia validación
-# (job "Validar") dentro de .github/workflows/deploy.yml; duplicarla acá
-# significaba dos runs por cada merge, haciendo la misma tarea dos veces.
+# `master` es la rama de producción, `v2` es integración. Este workflow
+# gatea PRs antes de mergear — solo pull_request, sin push. Un push a
+# master ya corre su propia validación (job "Validar") dentro de
+# .github/workflows/deploy.yml; duplicarla acá significaba dos runs por
+# cada merge, haciendo la misma tarea dos veces.
 #
 # El job `Tipos y pruebas` debe marcarse como required check en la
-# protección de `v2`.
+# protección de `v2` y de `master` (PRs de feature branches contra v2, y
+# la promoción de v2 a master).
 on:
   pull_request:
-    branches: [v2]
+    branches: [v2, master]
   workflow_dispatch:
 
 # Un push nuevo al mismo PR cancela la corrida anterior.
