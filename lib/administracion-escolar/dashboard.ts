@@ -224,6 +224,7 @@ export async function dashboardDelPeriodo(
   const [
     cartera, tramos, mes, caja, serie, conceptos, grados,
     deudores, metodos, sinFacturar, porDevengar, matricula,
+    factCartera, factCaja,
   ] = await Promise.all([
     // ── 1. El resumen. `familias` cuenta CONTACTOS responsables de pago —dos
     //    hermanos del mismo padre son una familia, no dos— y cae al alumno
@@ -517,6 +518,108 @@ export async function dashboardDelPeriodo(
       FROM admin_escolar_matriculas m
       WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId}
     `),
+
+    // ── 13. Facturación directa de las familias del colegio.
+    //
+    //     El panorama nace del motor escolar (cargos), pero un colegio factura
+    //     mucho DIRECTO en Facturación —inscripción, colegiatura suelta— sin que
+    //     eso pase por un cargo. Esa plata (facturada, cobrada y pendiente) es
+    //     real y debe verse aquí. Se toman las facturas del AÑO ESCOLAR (por
+    //     fecha de emisión) cuyo cliente es responsable de pago de un alumno
+    //     MATRICULADO —así entra la familia y NO la cafetería ni el POS a
+    //     Consumidor Final— y que NO tienen ya un cargo escolar detrás (esas ya
+    //     las cuenta el motor; contarlas otra vez duplicaría).
+    db.execute(sql`
+      WITH familias AS (
+        SELECT DISTINCT es.facturar_a_client_id AS client_id
+        FROM admin_escolar_matriculas m
+        JOIN admin_escolar_estudiantes es ON es.id = m.estudiante_id AND es.team_id = ${teamId}
+        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
+          AND es.facturar_a_client_id IS NOT NULL
+      ),
+      fact AS (
+        SELECT d.id, d.client_id, d.monto_total,
+               -- varchar(10): ''::date lanza, y varchar < date no existe.
+               NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_pago,
+               COALESCE((SELECT SUM(p.monto_centavos) FROM pagos_recibidos p WHERE p.ecf_document_id = d.id), 0) AS pagado
+        FROM ecf_documents d
+        JOIN familias f ON f.client_id = d.client_id
+        WHERE d.team_id = ${teamId}
+          -- Mismo universo que la cartera de Facturación (getCuentasPorCobrar):
+          -- fuera anuladas/rechazadas, NC (34), compras (41/43/47) y las ND de
+          -- mora, que se agrupan en su factura padre.
+          AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+          AND d.tipo_ecf NOT IN ('34', '41', '43', '47')
+          AND d.mora_origen_id IS NULL
+          AND d.fecha_emision >= ${periodo.fecha_inicio ?? '0001-01-01'}::date
+          AND d.fecha_emision <  (${periodo.fecha_fin ?? '9999-12-30'}::date + 1)
+          AND NOT EXISTS (
+            SELECT 1 FROM admin_escolar_cargos c
+             WHERE c.ecf_document_id = d.id AND c.team_id = ${teamId} AND c.${NO_ANULADO}
+          )
+      )
+      SELECT
+        COALESCE(SUM(monto_total), 0)::bigint                         AS facturado,
+        COALESCE(SUM(pagado), 0)::bigint                              AS cobrado,
+        COALESCE(SUM(GREATEST(monto_total - pagado, 0)), 0)::bigint   AS pendiente,
+        COALESCE(SUM(GREATEST(monto_total - pagado, 0)) FILTER (
+          WHERE fecha_limite_pago IS NOT NULL AND fecha_limite_pago < ${hoy}::date
+        ), 0)::bigint                                                 AS vencido,
+        COUNT(*)::int                                                 AS docs,
+        COUNT(DISTINCT client_id) FILTER (WHERE monto_total - pagado > 0)::int AS familias,
+        -- Antigüedad de este mismo saldo, con los tramos de la 2 — sin esto las
+        -- barras suman menos que la cartera pendiente de arriba.
+        (SELECT COALESCE(json_agg(json_build_object('tramo', t.tramo, 'saldo', t.saldo)), '[]'::json)
+           FROM (
+             SELECT ${caseTramos(sql`(${hoy}::date - fecha_limite_pago)`)} AS tramo,
+                    SUM(monto_total - pagado)::bigint AS saldo
+             FROM fact
+             WHERE monto_total - pagado > 0
+             GROUP BY 1
+           ) t)                                                       AS tramos
+      FROM fact
+    `),
+
+    // ── 14. Lo que esas facturas directas cobraron en el mes (para la caja).
+    //     Mismo universo que la 13; se cuenta el pago entero (la factura es de la
+    //     familia), y como excluye las facturas con cargo, no cruza con la 4.
+    db.execute(sql`
+      WITH familias AS (
+        SELECT DISTINCT es.facturar_a_client_id AS client_id
+        FROM admin_escolar_matriculas m
+        JOIN admin_escolar_estudiantes es ON es.id = m.estudiante_id AND es.team_id = ${teamId}
+        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
+          AND es.facturar_a_client_id IS NOT NULL
+      ),
+      docs AS (
+        SELECT d.id
+        FROM ecf_documents d
+        JOIN familias f ON f.client_id = d.client_id
+        WHERE d.team_id = ${teamId}
+          -- Mismo universo que la cartera de Facturación (getCuentasPorCobrar):
+          -- fuera anuladas/rechazadas, NC (34), compras (41/43/47) y las ND de
+          -- mora, que se agrupan en su factura padre.
+          AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+          AND d.tipo_ecf NOT IN ('34', '41', '43', '47')
+          AND d.mora_origen_id IS NULL
+          AND d.fecha_emision >= ${periodo.fecha_inicio ?? '0001-01-01'}::date
+          AND d.fecha_emision <  (${periodo.fecha_fin ?? '9999-12-30'}::date + 1)
+          AND NOT EXISTS (
+            SELECT 1 FROM admin_escolar_cargos c
+             WHERE c.ecf_document_id = d.id AND c.team_id = ${teamId} AND c.${NO_ANULADO}
+          )
+      )
+      SELECT
+        COALESCE(SUM(p.monto_centavos) FILTER (
+          WHERE p.fecha_pago >= ${mesInicio}::date AND p.fecha_pago < ${mesSiguiente}::date
+        ), 0)::bigint AS este_mes,
+        COALESCE(SUM(p.monto_centavos) FILTER (
+          WHERE p.fecha_pago >= ${mesAnterior}::date AND p.fecha_pago < ${mesInicio}::date
+        ), 0)::bigint AS mes_anterior
+      FROM pagos_recibidos p
+      JOIN docs ON docs.id = p.ecf_document_id
+      WHERE p.team_id = ${teamId}
+    `),
   ]);
 
   const c0 = (cartera as unknown as Record<string, unknown>[])[0] ?? {};
@@ -525,11 +628,21 @@ export async function dashboardDelPeriodo(
   const s0 = (sinFacturar as unknown as Record<string, unknown>[])[0] ?? {};
   const d0 = (porDevengar as unknown as Record<string, unknown>[])[0] ?? {};
   const t0 = (matricula as unknown as Record<string, unknown>[])[0] ?? {};
+  // Facturación directa de las familias (13 y 14): se SUMA al motor escolar, no
+  // lo reemplaza. Así la cartera y la caja del panorama reflejan también lo
+  // facturado/cobrado/pendiente que vive solo en Facturación.
+  const fc0 = (factCartera as unknown as Record<string, unknown>[])[0] ?? {};
+  const fk0 = (factCaja as unknown as Record<string, unknown>[])[0] ?? {};
 
   const porTramo = Object.fromEntries(TRAMOS.map((t) => [t.key, 0])) as Record<TramoKey, number>;
   for (const f of tramos as unknown as { tramo: TramoKey | null; saldo: string }[]) {
     // `tramo` puede venir null en un cargo sin vencimiento: el `CASE` no tiene
     // rama para NULL. Es deuda que no vence, que es exactamente «por vencer».
+    porTramo[f.tramo ?? 'porVencer'] += n(f.saldo);
+  }
+  // Las facturas directas (13) entran igual: sin fecha límite = por vencer.
+  const tramosFact = typeof fc0.tramos === 'string' ? JSON.parse(fc0.tramos) : fc0.tramos;
+  for (const f of (tramosFact ?? []) as { tramo: TramoKey | null; saldo: number | string }[]) {
     porTramo[f.tramo ?? 'porVencer'] += n(f.saldo);
   }
 
@@ -538,12 +651,12 @@ export async function dashboardDelPeriodo(
     periodo: periodo.nombre,
     hoy,
     cartera: {
-      devengadoCentavos: n(c0.devengado),
-      cobradoCentavos:   n(c0.cobrado),
-      pendienteCentavos: n(c0.pendiente),
-      vencidoCentavos:   n(c0.vencido),
-      cargos:            n(c0.cargos),
-      familiasConDeuda:  n(c0.familias),
+      devengadoCentavos: n(c0.devengado) + n(fc0.facturado),
+      cobradoCentavos:   n(c0.cobrado)   + n(fc0.cobrado),
+      pendienteCentavos: n(c0.pendiente) + n(fc0.pendiente),
+      vencidoCentavos:   n(c0.vencido)   + n(fc0.vencido),
+      cargos:            n(c0.cargos)    + n(fc0.docs),
+      familiasConDeuda:  n(c0.familias)  + n(fc0.familias),
     },
     tramos: porTramo,
     mes: {
@@ -552,8 +665,8 @@ export async function dashboardDelPeriodo(
       cobradoCentavos:  n(m0.cobrado),
     },
     caja: {
-      esteMesCentavos:     n(k0.este_mes),
-      mesAnteriorCentavos: n(k0.mes_anterior),
+      esteMesCentavos:     n(k0.este_mes)     + n(fk0.este_mes),
+      mesAnteriorCentavos: n(k0.mes_anterior) + n(fk0.mes_anterior),
     },
     serie: armarSerie(
       serie as unknown as { key: string; devengado: string; cobrado: string }[],

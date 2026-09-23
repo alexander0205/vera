@@ -147,6 +147,34 @@ export default function DashboardEscolarClient() {
         </div>
       </div>
 
+      {/* Aviso de información faltante (Alex, panorama): cuando hay alumnos
+          matriculados pero todavía NADA devengado, las cifras de abajo salen en
+          cero y se leían como «el colegio no debe nada». Se explica por qué y se
+          muestra lo esperado, en vez de presentar ceros como definitivos. */}
+      {d.matricula.activos > 0 && cartera.devengadoCentavos === 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          {d.porDevengarCentavos > 0 ? (
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Todavía no hay cargos generados este año</p>
+              <p className="mt-0.5 text-sm text-amber-800">
+                Hay {d.matricula.activos} {d.matricula.activos === 1 ? 'alumno matriculado' : 'alumnos matriculados'} y aún no se ha devengado ningún cargo, por eso las cifras de abajo salen en cero. Lo esperado del año es <b>{fmtDOP(d.porDevengarCentavos)}</b>: la deuda por grado y concepto se llenará cuando corra la facturación (el día de emisión de cada cuota).
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Faltan tarifas por configurar</p>
+              <p className="mt-0.5 text-sm text-amber-800">
+                Hay {d.matricula.activos} {d.matricula.activos === 1 ? 'alumno matriculado' : 'alumnos matriculados'} pero no hay tarifas por grado o concepto, así que no se puede calcular la deuda ni lo esperado del año. Configúralas para que el panorama se llene.
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link href="/escolar/configuracion">Ir a Configuración</Link>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Las cuatro cifras de pie ───────────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tarjeta
