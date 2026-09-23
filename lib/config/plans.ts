@@ -186,7 +186,7 @@ export const PLANS: PlanDef[] = [
   // 450/900/1500/2400 cubriría el techo, y cuesta dinero en cada envío.
   {
     key: 'colegio-basico', familia: 'colegio',
-    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    modulos: [...MODULES_BASE, 'escolar', 'pos', 'nomina'],
     name: 'Básico', price: 135, priceEnvKey: 'STRIPE_PRICE_COLEGIO_BASICO',
     limits: { docs: -1, users: 2, trialDocs: -1, estudiantes: 150, whatsappMensajes: 300, smsMensajes: 300 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
@@ -194,12 +194,12 @@ export const PLANS: PlanDef[] = [
       description: 'Hasta 150 estudiantes',
       badgeColor: 'bg-gray-100 text-gray-700 border-gray-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 150 estudiantes', 'e-CF ilimitados', '2 usuarios', '8 horas de implementación'],
+      marketingFeatures: ['Hasta 150 estudiantes', 'e-CF ilimitados', 'Nómina del personal incluida', '2 usuarios', '8 horas de implementación'],
     },
   },
   {
     key: 'colegio-intermedio', familia: 'colegio',
-    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    modulos: [...MODULES_BASE, 'escolar', 'pos', 'nomina'],
     name: 'Intermedio', price: 237, priceEnvKey: 'STRIPE_PRICE_COLEGIO_INTERMEDIO',
     limits: { docs: -1, users: 3, trialDocs: -1, estudiantes: 300, whatsappMensajes: 675, smsMensajes: 675 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
@@ -212,7 +212,7 @@ export const PLANS: PlanDef[] = [
   },
   {
     key: 'colegio-avanzado', familia: 'colegio',
-    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    modulos: [...MODULES_BASE, 'escolar', 'pos', 'nomina'],
     name: 'Avanzado', price: 350, priceEnvKey: 'STRIPE_PRICE_COLEGIO_AVANZADO',
     limits: { docs: -1, users: 5, trialDocs: -1, estudiantes: 500, whatsappMensajes: 1200, smsMensajes: 1200 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
@@ -225,7 +225,7 @@ export const PLANS: PlanDef[] = [
   },
   {
     key: 'colegio-institucional', familia: 'colegio',
-    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    modulos: [...MODULES_BASE, 'escolar', 'pos', 'nomina'],
     name: 'Institucional', price: 500, priceEnvKey: 'STRIPE_PRICE_COLEGIO_INSTITUCIONAL',
     limits: { docs: -1, users: 9, trialDocs: -1, estudiantes: 800, whatsappMensajes: 1950, smsMensajes: 1950 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
@@ -515,14 +515,18 @@ export const ADDONS: AddonDef[] = [
     descripcion: 'Caja registradora, turnos e inventario por almacén.',
   },
   {
-    // Nómina se vende suelto sobre cualquier plan. No viene incluido en ninguna
-    // familia (incluidoEn: []): un colegio y un negocio lo contratan igual.
+    // Nómina se vende suelta sobre la familia e-CF y viene DENTRO de los tramos
+    // de colegio: un colegio siempre tiene personal —docentes, administración,
+    // conserjería— y su TSS es parte de lo que vino a resolver, no un extra.
+    // `incluidoEn` y los `modulos` de los tramos van juntos a propósito: el
+    // precio no puede decir «incluida» mientras la compuerta del módulo la
+    // deja cerrada.
     key: 'nomina',
     modulo: 'nomina',
     name: 'Nómina',
     price: 12,
     priceEnvKey: 'STRIPE_PRICE_MODULO_NOMINA',
-    incluidoEn: [],
+    incluidoEn: ['colegio'],
     descripcion: 'Empleados, corridas de nómina (TSS/ISR) y pago al personal.',
   },
 ];
@@ -616,9 +620,11 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Facturación electrónica, contabilidad completa, inventario y compras.',
     familia: 'ecf',
     addons: [],
-    // Sin cifra publicada: lo que paga un negocio se arma con su volumen, sus
-    // usuarios y lo que haya que migrarle. Decisión del dueño.
-    precioBajoCotizacion: true,
+    // Publica su cifra. Son los cuatro planes de la familia `ecf` —9, 19, 35 y
+    // 65— y es exactamente lo que Stripe cobra. Quien busca un facturador
+    // compara números antes de escribirle a nadie: sin cifra, la comparación la
+    // hace con el de al lado.
+    precioBajoCotizacion: false,
     gancho: 'Deja de perseguir lo que te deben y de armar los 606 a mano.',
     vende: [
       'Emites e-CF ante la DGII sin salir del sistema ni pagar un tercero',
@@ -633,10 +639,11 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP más el punto de venta: caja, turnos y stock por almacén.',
     familia: 'ecf',
     addons: ['pos'],
-    // Es la misma familia `ecf` con el POS sumado, así que arrastra su misma
-    // regla: si el plan de debajo se cotiza, el combinado también. Tenerlas
-    // distintas dejaría el precio del adicional a la vista por resta.
-    precioBajoCotizacion: true,
+    // Publica, igual que la línea de abajo: es la misma familia `ecf` con el
+    // POS sumado, así que su cifra es el plan más los US$9 del adicional. Las
+    // dos van juntas a propósito — con una publicando y la otra no, el precio
+    // del adicional salía por resta de todos modos.
+    precioBajoCotizacion: false,
     gancho: 'Lo que se vende, se descuenta del inventario y se factura en el mismo acto.',
     vende: [
       'Cobras en mostrador con caja, turnos y cuadre al cerrar',
@@ -651,15 +658,11 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP, el punto de venta de la cafetería y la gobernanza del colegio.',
     familia: 'colegio',
     addons: [],
-    // Tampoco publica cifra. Los cuatro tramos siguen valiendo 135/237/350/500
-    // en el catálogo y Stripe los cobra igual: lo único que cambia es que el
-    // número no se le enseña a nadie. El tramo se acuerda hablando.
-    //
-    // Era la única línea que publicaba, y por eso la web pública no enseñaba
-    // los 135/237/350/500 —/precios los tapaba aparte, a mano— pero
-    // /dashboard/suscripcion y /bienvenida sí los enseñaban. Con esto se
-    // callan las tres.
-    precioBajoCotizacion: true,
+    // Publica sus cuatro tramos —135, 237, 350 y 500—, que es lo que Stripe
+    // cobra. El recomendador de /precios sigue enseñando además el precio POR
+    // ESTUDIANTE: es la cifra con la que un director compara de verdad, contra
+    // la mensualidad que él cobra.
+    precioBajoCotizacion: false,
     // Un colegio no pierde plata de golpe: la pierde en goteo, y las tres vías
     // por las que se va son exactamente las tres que el sistema cierra. Por eso
     // el texto empieza por el dinero y no por las funciones — el director no
@@ -673,6 +676,60 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     ],
   },
 ];
+
+// ─── Lo que se vende aparte del sistema ──────────────────────────────────────
+
+/**
+ * Una aplicación de Zero que NO entra en estos planes.
+ *
+ * No es un plan, no es un adicional y no es un módulo: no tiene precio en
+ * Stripe, no tiene `ModuleKey`, y `teams.modulos_habilitados` no la conoce. Por
+ * eso vive aparte de PLANS y de ADDONS —meterla ahí la haría aparecer en el
+ * checkout, en los límites y en las compuertas de módulos, donde no existe— y
+ * al mismo tiempo no se escribe a mano en cada página: el sitio público tiene
+ * que nombrarla en la portada y en /precios, y dos copias se separan.
+ *
+ * `bajoCotizacion` está en el tipo y no fijado a `true` porque el día que se le
+ * ponga tarifa de lista, el sitio deja de pedir que escriban con solo cambiar
+ * este archivo.
+ */
+export interface ProductoAparte {
+  key: string;
+  nombre: string;
+  /** Una línea: qué es. */
+  descripcion: string;
+  /** Qué hace, en cosas que el producto HACE hoy. */
+  hace: string[];
+  /** Si no publica cifra, donde iría el precio se lee TEXTO_BAJO_COTIZACION. */
+  bajoCotizacion: boolean;
+  /** Precio en USD/mes cuando publica. `null` mientras se cotice. */
+  precio: number | null;
+}
+
+export const PRODUCTOS_APARTE: ProductoAparte[] = [
+  {
+    key: 'crm',
+    nombre: 'Zero CRM',
+    // No es «el WhatsApp de Zero». WhatsApp es UNO de sus canales: el producto
+    // es el que atiende, ordena y da seguimiento a todo el que pregunta antes
+    // de comprar, y tiene su propio panel, su pipeline y su agenda.
+    descripcion: 'Atiende, ordena y da seguimiento a todo el que pregunta antes de comprar.',
+    hace: [
+      'Un asistente contesta al instante, pregunta lo que hace falta y pasa la conversación a una persona cuando toca',
+      'WhatsApp, Messenger e Instagram caen en una sola bandeja, y se ve quién atiende cada una',
+      'Cada contacto avanza por un tablero —nuevo, contactado, cita, cerrado— y avisa del que lleva días quieto',
+      'Agenda las citas con las horas que tengas libres, las sincroniza con Google Calendar y manda el recordatorio',
+      'Fichas de cliente con su historial, formularios que se guardan solos y reportes de cuánto entra y cuánto cierra',
+    ],
+    bajoCotizacion: true,
+    precio: null,
+  },
+];
+
+/** Un producto aparte por su clave. `null` si no existe. */
+export function getProductoAparte(key: string): ProductoAparte | null {
+  return PRODUCTOS_APARTE.find(p => p.key === key) ?? null;
+}
 
 // ─── Color del plan en la UI ──────────────────────────────────────────────────
 
