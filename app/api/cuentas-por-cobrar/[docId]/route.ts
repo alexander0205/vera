@@ -15,6 +15,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { teamHasModule } from '@/lib/auth/modules';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ docId: string }> }) {
   const user = await getUser();
@@ -45,14 +46,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docI
   }
   // El detalle se pide igual aunque la cuenta ya no esté en cartera (saldada
   // mientras el panel estaba abierto): el historial sigue siendo válido.
-  // El origen escolar se pide aparte y por su propio módulo: cobranza no
-  // importa las tablas escolares (ver lib/administracion-escolar/origen-factura).
-  // `responsableEscolar`: el cliente es tutor de pago en el colegio, aunque
-  // esta factura no cubra cargos escolares → la cartera ofrece ir a su ficha.
+  //
+  // El puente a Gobernanza (sección "Origen escolar" + botón "Ver responsable")
+  // solo aparece si la empresa tiene el MÓDULO escolar activo en su plan. No
+  // basta con que existan datos escolares: un colegio que se dio de baja de
+  // Gobernanza conserva sus estudiantes en la base, y aun así el botón no debe
+  // salir (pedido Darian 2026-09-23: "el botón solo cuando tengas gobernanza
+  // activada"). Sin el módulo no se corren siquiera las consultas escolares.
+  const escolarActivo = await teamHasModule(teamId, 'escolar');
   const [detalle, origenEscolar, responsableEscolar] = await Promise.all([
     getDetalleCuenta(teamId, id),
-    getOrigenEscolarDeFactura(teamId, id),
-    esResponsableEscolar(teamId, cuenta?.clientId ?? null),
+    escolarActivo ? getOrigenEscolarDeFactura(teamId, id) : Promise.resolve([]),
+    escolarActivo ? esResponsableEscolar(teamId, cuenta?.clientId ?? null) : Promise.resolve(false),
   ]);
   return NextResponse.json({ cuenta, ...detalle, origenEscolar, responsableEscolar });
 }
