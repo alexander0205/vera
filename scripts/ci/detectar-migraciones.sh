@@ -5,7 +5,7 @@
 #
 # Uso:
 #   scripts/ci/detectar-migraciones.sh <sha-base> <sha-head>
-#   scripts/ci/detectar-migraciones.sh --contra-v2   # HEAD vs origin/v2, para correr en local antes de abrir un PR
+#   scripts/ci/detectar-migraciones.sh --contra-master   # HEAD vs origin/master, para correr en local antes de abrir un PR
 #
 # Salida: primera línea "hay-migraciones" o "sin-migraciones"; el resto, la
 # lista de archivos si los hay. Exit code 0 cuando los refs son válidos —
@@ -14,9 +14,9 @@
 # "sin-migraciones" falsamente.
 set -euo pipefail
 
-if [ "${1:-}" = "--contra-v2" ]; then
-  git fetch origin v2 --quiet
-  BASE="origin/v2"
+if [ "${1:-}" = "--contra-master" ]; then
+  git fetch origin master --quiet
+  BASE="origin/master"
   HEAD="HEAD"
 else
   BASE="${1:?Falta el sha base. Uso: detectar-migraciones.sh <sha-base> <sha-head>}"

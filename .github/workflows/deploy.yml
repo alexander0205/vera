@@ -2,7 +2,7 @@ name: Deploy
 
 # Un solo workflow, tres jobs en cadena — igual al patrón que ya usan otros
 # proyectos del equipo (Validar → Check migraciones → Deploy en un solo run,
-# visible de un vistazo en Actions). Dispara directo en cada push a `v2`, no
+# visible de un vistazo en Actions). Dispara directo en cada push a `master`, no
 # depende de que "CI" (que gatea los PRs) haya corrido antes: revalida todo
 # de cero sobre el commit que va a producción.
 #
@@ -19,7 +19,7 @@ name: Deploy
 #      del equipo necesita acceso a Vercel para publicar.
 on:
   push:
-    branches: [v2]
+    branches: [master]
 
 permissions:
   contents: read
@@ -99,7 +99,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'deploy.yml',
-              branch: 'v2',
+              branch: 'master',
               status: 'success',
               per_page: 1,
             });
