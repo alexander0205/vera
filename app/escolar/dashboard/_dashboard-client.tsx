@@ -4,12 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, FileWarning,
-  Loader2, PiggyBank, RefreshCw, TrendingUp, Users, Wallet,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarClock, FileCheck, FileWarning,
+  History, Loader2, PiggyBank, RefreshCw, TrendingUp, Users, Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
-import { fmtDOP } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { TRAMOS, tramoDeAtraso, type TramoKey } from '@/lib/administracion-escolar/cartera';
 // Solo el tipo: `dashboard.ts` es `server-only` y la importación de tipo se
 // borra al compilar, así que nada de la base llega al bundle del navegador.
@@ -266,6 +266,20 @@ export default function DashboardEscolarClient() {
               })}
             </div>
           )}
+          {/* Aparte y bajo una raya: no suma a la cartera del año (los tramos
+              de arriba cuadran con ella), pero es atraso de verdad y el más
+              viejo de todos. */}
+          {d.anterior.centavos > 0 && (
+            <div className="mt-3 flex items-center gap-3 border-t border-dashed border-gray-200 pt-3">
+              <span className="w-24 shrink-0 text-xs font-medium text-red-800">Años anteriores</span>
+              <span className="flex-1 text-xs text-gray-500">
+                Fuera de la cartera del año · {d.anterior.alumnos} {d.anterior.alumnos === 1 ? 'alumno' : 'alumnos'}
+              </span>
+              <span className="w-32 shrink-0 text-right text-sm font-medium tabular-nums text-red-800">
+                {fmtDOP(d.anterior.centavos)}
+              </span>
+            </div>
+          )}
         </Panel>
 
         <Panel titulo="Por dónde entra el dinero" sub="Cobros del año, por método de pago.">
@@ -343,42 +357,66 @@ export default function DashboardEscolarClient() {
         <Panel
           className="lg:col-span-2"
           titulo="A quién llamar"
-          sub="Los diez que más deben, con el atraso de su cargo más viejo."
+          sub="Las diez familias que más deben —este año, años anteriores y facturas directas—, con el atraso de lo más viejo."
         >
           {d.deudores.length === 0 ? (
-            <Vacio>Nadie debe nada en este año escolar.</Vacio>
+            <Vacio>Nadie debe nada.</Vacio>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left text-xs text-gray-500">
-                    <th className="pb-2 font-medium">Alumno</th>
                     <th className="pb-2 font-medium">Responsable de pago</th>
+                    <th className="pb-2 font-medium">Alumnos</th>
                     <th className="pb-2 text-right font-medium">Debe</th>
                     <th className="pb-2 text-right font-medium">Atraso</th>
                   </tr>
                 </thead>
                 <tbody>
                   {d.deudores.map((f) => (
-                    <tr key={f.estudianteId} className="border-b border-gray-50 last:border-0">
+                    <tr
+                      key={f.clientId != null ? `c${f.clientId}` : `a${f.alumnos[0]?.id}`}
+                      className="border-b border-gray-50 align-top last:border-0"
+                    >
+                      {/* Se llama a una persona: la fila es la familia y lleva a
+                          su ficha, donde está todo lo que debe. Sin responsable
+                          no hay a quién llamar, y eso es un problema distinto de
+                          deber dinero: se dice, no se deja en blanco. */}
                       <td className="py-2 pr-3">
-                        <Link
-                          href={`/escolar/estudiantes?estudianteId=${f.estudianteId}`}
-                          className="font-medium text-zero-600 hover:underline"
-                        >
-                          {f.estudiante}
-                        </Link>
-                        {f.curso && <span className="ml-1.5 text-xs text-gray-400">{f.curso}</span>}
+                        {f.clientId != null ? (
+                          <Link
+                            href={`/escolar/responsables/${f.clientId}`}
+                            className="font-medium text-zero-600 hover:underline"
+                          >
+                            {f.responsable ?? 'Responsable'}
+                          </Link>
+                        ) : (
+                          <span className="text-amber-600">Sin responsable asignado</span>
+                        )}
                       </td>
-                      {/* Sin responsable no hay a quién llamar, y eso es un
-                          problema distinto de deber dinero: se dice, no se
-                          deja en blanco. */}
-                      <td className="py-2 pr-3 text-gray-700">
-                        {f.responsable ?? <span className="text-amber-600">Sin responsable asignado</span>}
+                      <td className="py-2 pr-3">
+                        {f.alumnos.map((a) => (
+                          <div key={a.id} className="leading-5">
+                            <Link
+                              href={`/escolar/estudiantes/${a.id}`}
+                              className="text-gray-700 hover:text-zero-600 hover:underline"
+                            >
+                              {a.nombre}
+                            </Link>
+                            {a.curso && <span className="ml-1.5 text-xs text-gray-400">{a.curso}</span>}
+                          </div>
+                        ))}
                       </td>
-                      <td className="py-2 text-right tabular-nums text-gray-900">{fmtDOP(f.deudaCentavos)}</td>
+                      <td className="whitespace-nowrap py-2 text-right tabular-nums text-gray-900">
+                        {fmtDOP(f.deudaCentavos)}
+                        {f.anteriorCentavos > 0 && (
+                          <div className="text-xs text-red-700">
+                            {fmtDOP(f.anteriorCentavos)} de años anteriores
+                          </div>
+                        )}
+                      </td>
                       <td
-                        className="py-2 text-right tabular-nums font-medium"
+                        className="whitespace-nowrap py-2 pl-3 text-right tabular-nums font-medium"
                         style={{ color: COLOR_TRAMO[tramoDeAtraso(f.diasAtraso)] }}
                       >
                         {f.diasAtraso > 0 ? `${f.diasAtraso} d` : 'al día'}
@@ -392,6 +430,64 @@ export default function DashboardEscolarClient() {
         </Panel>
 
         <div className="space-y-4">
+          {/* Plata que el padre dice haber pagado y nadie revisó. Mientras
+              espera, sigue contada como deuda y la familia puede salir arriba
+              en «A quién llamar» aunque ya pagó: revisarlo va antes que llamar. */}
+          {d.porValidar.cantidad > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-white p-4">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <FileCheck className="h-4 w-4 text-amber-500" />
+                Pagos por validar
+              </h2>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{fmtDOP(d.porValidar.centavos)}</p>
+              <p className="mt-1 text-sm text-gray-500">
+                {d.porValidar.cantidad} {d.porValidar.cantidad === 1 ? 'comprobante subido' : 'comprobantes subidos'} por
+                las familias sin revisar
+                {d.porValidar.desde && <> (el más viejo desde el {fmtFechaCorta(d.porValidar.desde)})</>}.
+                Hasta aprobarlos siguen contando como deuda.
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link href="/escolar/pagos?tab=comprobantes">Revisar comprobantes</Link>
+              </Button>
+            </div>
+          )}
+
+          {/* La deuda que dejó el año pasado. No entra en la cartera del año
+              —esa cuadra con sus tramos—, pero filtrarlo todo por año la
+              escondía, y es la más vieja: la que menos se cobra sola. */}
+          {d.anterior.centavos > 0 && (
+            <div className="rounded-xl border border-red-200 bg-white p-4">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <History className="h-4 w-4 text-red-500" />
+                Deuda de años anteriores
+              </h2>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{fmtDOP(d.anterior.centavos)}</p>
+              <p className="mt-1 text-sm text-gray-500">
+                {d.anterior.alumnos} {d.anterior.alumnos === 1 ? 'alumno arrastra' : 'alumnos arrastran'} saldo
+                de años escolares pasados.
+              </p>
+              <ul className="mt-2 space-y-1 text-sm">
+                {d.anterior.reinscritos.alumnos > 0 && (
+                  <li className="flex justify-between gap-2">
+                    <span className="text-gray-600">Siguen en el colegio ({d.anterior.reinscritos.alumnos})</span>
+                    <span className="tabular-nums text-gray-900">{fmtDOP(d.anterior.reinscritos.centavos)}</span>
+                  </li>
+                )}
+                {d.anterior.noReinscritos.alumnos > 0 && (
+                  <li className="flex justify-between gap-2">
+                    <span className="text-gray-600">Ya no están ({d.anterior.noReinscritos.alumnos})</span>
+                    <span className="tabular-nums text-gray-900">{fmtDOP(d.anterior.noReinscritos.centavos)}</span>
+                  </li>
+                )}
+              </ul>
+              {d.anterior.sinFacturaCentavos > 0 && (
+                <p className="mt-2 text-xs text-red-700">
+                  {fmtDOP(d.anterior.sinFacturaCentavos)} nunca se facturó: la familia no recibió nada que pagar.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* El agujero propio de este modelo: el cargo es la fuente de verdad
               de la deuda y puede existir sin factura, así que el colegio la
               tiene contada y el padre nunca recibió nada que pagar. */}

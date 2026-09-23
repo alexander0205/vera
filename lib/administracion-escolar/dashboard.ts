@@ -116,14 +116,46 @@ export interface FilaGrado {
   pendienteCentavos: number;
 }
 
+/**
+ * Una FAMILIA a la que llamar, no un alumno: tres hermanos con deuda son una
+ * sola llamada. Suma sus cargos del año, lo que arrastra de años anteriores y
+ * las facturas hechas directo en Facturación.
+ */
 export interface FilaDeudor {
-  estudianteId: number;
-  estudiante: string;
-  curso: string | null;
+  /** Contacto responsable de pago. `null` = alumno sin responsable asignado. */
+  clientId: number | null;
   responsable: string | null;
+  /** Alumnos de la familia: los que deben y los matriculados este año. */
+  alumnos: { id: number; nombre: string; curso: string | null }[];
   deudaCentavos: number;
-  /** Atraso del cargo más viejo que sigue debiendo. */
+  /** De esa deuda, lo que viene de años escolares anteriores. */
+  anteriorCentavos: number;
+  /** Atraso del cargo o factura más viejo que sigue debiendo. */
   diasAtraso: number;
+}
+
+/**
+ * Saldo que quedó de años escolares ANTERIORES al consultado. No entra en la
+ * cartera del año (esa tiene que cuadrar con sus tramos), pero tampoco puede
+ * desaparecer: es la deuda más vieja y la que menos se cobra sola.
+ */
+export interface DeudaAnterior {
+  centavos: number;
+  alumnos: number;
+  /** Alumnos que siguen en el colegio este año: se les cobra en la ventanilla. */
+  reinscritos: { alumnos: number; centavos: number };
+  /** Los que ya no están: cobranza de salida. */
+  noReinscritos: { alumnos: number; centavos: number };
+  /** Parte que nunca tuvo documento: la familia no recibió nada que pagar. */
+  sinFacturaCentavos: number;
+}
+
+/** Comprobantes que los padres subieron por el enlace de pago y nadie revisó. */
+export interface PagosPorValidar {
+  cantidad: number;
+  centavos: number;
+  /** Fecha del más viejo sin revisar (`YYYY-MM-DD`). */
+  desde: string | null;
 }
 
 export interface FilaMetodo {
@@ -161,6 +193,8 @@ export interface DashboardEscolar {
    * también los que aún no vencen, que si no quedaban invisibles.
    */
   sinFacturar: { centavos: number; cargos: number; centavosTotal: number; cargosTotal: number };
+  anterior: DeudaAnterior;
+  porValidar: PagosPorValidar;
   /** Lo que el calendario todavía no ha convertido en deuda. */
   porDevengarCentavos: number;
   matricula: Matricula;
@@ -190,8 +224,8 @@ function bordesDeMes(fecha: string) {
 /**
  * Todo el panorama de un año escolar.
  *
- * Las trece consultas van en un solo `Promise.all` porque ninguna depende de
- * otra: en serie, pintar la pantalla eran trece idas y vueltas seguidas a Neon,
+ * Las diecisiete consultas van en un solo `Promise.all` porque ninguna depende
+ * de otra: en serie, pintar la pantalla eran diecisiete idas y vueltas a Neon,
  * que con latencia de red se notan más que el trabajo de la base.
  */
 export async function dashboardDelPeriodo(
@@ -221,15 +255,65 @@ export async function dashboardDelPeriodo(
 
   const diasAtraso = sql`(${hoy}::date - c.fecha_vencimiento)`;
 
+  // Facturación directa de las familias del colegio, como CTEs (`familias`,
+  // `directos`) para anteponer con `WITH`.
+  //
+  // El panorama nace del motor escolar (cargos), pero un colegio factura mucho
+  // DIRECTO en Facturación —inscripción, colegiatura suelta— sin que eso pase
+  // por un cargo. Esa plata es real y debe verse. Se toman las facturas del AÑO
+  // ESCOLAR (por fecha de emisión) cuyo cliente es responsable de pago de un
+  // alumno MATRICULADO —así entra la familia y NO la cafetería ni el POS a
+  // Consumidor Final— y que NO tienen ya un cargo escolar detrás (esas ya las
+  // cuenta el motor; contarlas otra vez duplicaría). Una sola definición para
+  // cartera, caja, métodos, familias y deudores: si cada una filtrara a su
+  // manera, las tarjetas se contradirían.
+  const directosCte = sql`
+    familias AS (
+      SELECT DISTINCT es.facturar_a_client_id AS client_id
+      FROM admin_escolar_matriculas m
+      JOIN admin_escolar_estudiantes es ON es.id = m.estudiante_id AND es.team_id = ${teamId}
+      WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
+        AND es.facturar_a_client_id IS NOT NULL
+    ),
+    directos AS (
+      SELECT d.id, d.client_id, d.monto_total,
+             -- varchar(10): ''::date lanza, y varchar < date no existe.
+             NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_pago,
+             COALESCE((SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
+                        WHERE p.ecf_document_id = d.id), 0) AS pagado
+      FROM ecf_documents d
+      JOIN familias f ON f.client_id = d.client_id
+      WHERE d.team_id = ${teamId}
+        -- Mismo universo que la cartera de Facturación (getCuentasPorCobrar):
+        -- fuera anuladas/rechazadas, NC (34), compras (41/43/47) y las ND de
+        -- mora, que se agrupan en su factura padre.
+        AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+        AND d.tipo_ecf NOT IN ('34', '41', '43', '47')
+        AND d.mora_origen_id IS NULL
+        -- fecha_emision es timestamp: el último día entra entero.
+        AND d.fecha_emision >= ${periodo.fecha_inicio ?? '0001-01-01'}::date
+        AND d.fecha_emision <  (${periodo.fecha_fin ?? '9999-12-30'}::date + 1)
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_escolar_cargos c
+           WHERE c.ecf_document_id = d.id AND c.team_id = ${teamId} AND c.${NO_ANULADO}
+        )
+    )`;
+
+  // Años escolares que empezaron antes que el consultado. Su saldo es deuda
+  // arrastrada: sin fecha de inicio no hay «antes» y la lista sale vacía.
+  const periodosAnteriores = sql`
+    SELECT pa.id FROM admin_escolar_periodos pa
+    WHERE pa.team_id = ${teamId} AND pa.id <> ${periodoId}
+      AND pa.fecha_inicio < ${periodo.fecha_inicio}::date`;
+
   const [
     cartera, tramos, mes, caja, serie, conceptos, grados,
     deudores, metodos, sinFacturar, porDevengar, matricula,
-    factCartera, factCaja,
+    factCartera, factCaja, familias, anterior, porValidar,
   ] = await Promise.all([
-    // ── 1. El resumen. `familias` cuenta CONTACTOS responsables de pago —dos
-    //    hermanos del mismo padre son una familia, no dos— y cae al alumno
-    //    cuando no tiene ninguno asignado: si no, el colegio con veinte alumnos
-    //    sin responsable vería «0 familias deben» con la cartera llena.
+    // ── 1. El resumen. Las familias con deuda se cuentan aparte (15): deben
+    //    juntarse con las de la facturación directa ANTES de contar, o la
+    //    familia que debe por los dos lados sale dos veces.
     db.execute(sql`
       SELECT
         COALESCE(SUM(c.monto_centavos), 0)::bigint                    AS devengado,
@@ -238,13 +322,7 @@ export async function dashboardDelPeriodo(
         COALESCE(SUM(c.saldo_centavos) FILTER (
           WHERE c.fecha_vencimiento IS NOT NULL AND c.fecha_vencimiento < ${hoy}::date
         ), 0)::bigint                                                 AS vencido,
-        COUNT(*)::int                                                 AS cargos,
-        COUNT(DISTINCT CASE WHEN c.saldo_centavos > 0 THEN COALESCE(
-          (SELECT 'cliente:' || es.facturar_a_client_id FROM admin_escolar_estudiantes es
-            WHERE es.id = c.estudiante_id AND es.team_id = ${teamId}
-              AND es.facturar_a_client_id IS NOT NULL),
-          'alumno:' || c.estudiante_id
-        ) END)::int                                                   AS familias
+        COUNT(*)::int                                                 AS cargos
       FROM admin_escolar_cargos c
       WHERE ${cargoVivo}
     `),
@@ -353,51 +431,99 @@ export async function dashboardDelPeriodo(
 
     // ── 8. A quién llamar. Diez y no más: es una lista para descolgar el
     //    teléfono hoy, y una de cuarenta no se llama.
+    //
+    //    Por FAMILIA (contacto responsable de pago; el alumno sin responsable va
+    //    solo), porque se llama a una persona y no a cada hermano. Junta todo lo
+    //    que esa persona debe: cargos del año, cargos de años anteriores —si
+    //    no, el que arrastra la deuda más vieja no aparecía— y las facturas
+    //    hechas directo en Facturación.
     db.execute(sql`
-      SELECT c.estudiante_id,
-             e.nombres, e.apellidos,
-             (SELECT cu.nombre || ' · ' || gr.nombre
-                FROM admin_escolar_matriculas m
-                JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
-                JOIN admin_escolar_grados gr ON gr.id = cu.grado_id
-               WHERE m.estudiante_id = c.estudiante_id AND m.periodo_id = ${periodoId}
-                 AND m.team_id = ${teamId} LIMIT 1)                     AS curso,
-             -- El responsable de pago es un CONTACTO de Facturacion, no un
-             -- tutor marcado: la casilla responsable_pago de los tutores quedo
-             -- muerta al separarse los dos conceptos, y leyendola toda la tabla
-             -- decia sin responsable aunque el alumno lo tuviera asignado.
-             (SELECT cl.razon_social FROM admin_escolar_estudiantes es
-                JOIN clients cl ON cl.id = es.facturar_a_client_id AND cl.team_id = ${teamId}
-               WHERE es.id = c.estudiante_id AND es.team_id = ${teamId}) AS responsable,
-             SUM(c.saldo_centavos)::bigint                              AS deuda,
-             -- El vencimiento más viejo que sigue sin pagarse. Los días se
-             -- cuentan luego en JS con diasDeAtraso, para que la tabla y el
-             -- color de la fila salgan del mismo cálculo y no de dos restas de
-             -- fechas escritas en lenguajes distintos.
-             MIN(c.fecha_vencimiento)::text                             AS vence
-      FROM admin_escolar_cargos c
-      JOIN admin_escolar_estudiantes e ON e.id = c.estudiante_id AND e.team_id = ${teamId}
-      WHERE ${cargoVivo} AND c.saldo_centavos > 0
-      GROUP BY c.estudiante_id, e.nombres, e.apellidos
-      ORDER BY deuda DESC
-      LIMIT 10
+      WITH ${directosCte},
+      deuda AS (
+        -- El responsable de pago es un CONTACTO de Facturacion, no un tutor
+        -- marcado: la casilla responsable_pago de los tutores quedo muerta al
+        -- separarse los dos conceptos.
+        SELECT es.facturar_a_client_id AS client_id, c.estudiante_id,
+               c.saldo_centavos::bigint AS saldo, c.fecha_vencimiento AS vence,
+               (c.periodo_id <> ${periodoId}) AS anterior
+        FROM admin_escolar_cargos c
+        JOIN admin_escolar_estudiantes es ON es.id = c.estudiante_id AND es.team_id = ${teamId}
+        WHERE c.team_id = ${teamId} AND c.${NO_ANULADO} AND c.saldo_centavos > 0
+          AND (c.periodo_id = ${periodoId} OR c.periodo_id IN (${periodosAnteriores}))
+        UNION ALL
+        SELECT client_id, NULL, (monto_total - pagado)::bigint, fecha_limite_pago, false
+        FROM directos
+        WHERE monto_total - pagado > 0
+      ),
+      top AS (
+        SELECT client_id,
+               SUM(saldo)::bigint                                     AS deuda,
+               COALESCE(SUM(saldo) FILTER (WHERE anterior), 0)::bigint AS anterior,
+               -- El vencimiento más viejo que sigue sin pagarse. Los días se
+               -- cuentan luego en JS con diasDeAtraso, para que la tabla y el
+               -- color de la fila salgan del mismo cálculo.
+               MIN(vence)::text                                       AS vence,
+               array_agg(DISTINCT estudiante_id) FILTER (WHERE estudiante_id IS NOT NULL) AS con_deuda
+        FROM deuda
+        GROUP BY client_id, CASE WHEN client_id IS NULL THEN estudiante_id END
+        ORDER BY deuda DESC
+        LIMIT 10
+      )
+      SELECT t.client_id, t.deuda, t.anterior, t.vence,
+             (SELECT cl.razon_social FROM clients cl
+               WHERE cl.id = t.client_id AND cl.team_id = ${teamId})   AS responsable,
+             -- Los alumnos de la familia: los que deben y, si la deuda es solo
+             -- de facturas directas (sin alumno), los matriculados este año.
+             (SELECT COALESCE(json_agg(json_build_object(
+                       'id', e.id,
+                       'nombre', trim(coalesce(e.nombres, '') || ' ' || coalesce(e.apellidos, '')),
+                       -- El curso de este año si lo tiene; si no (se fue), el último.
+                       'curso', (SELECT cu.nombre || ' · ' || gr.nombre
+                                   FROM admin_escolar_matriculas m
+                                   JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
+                                   JOIN admin_escolar_grados gr ON gr.id = cu.grado_id
+                                  WHERE m.estudiante_id = e.id AND m.team_id = ${teamId}
+                                  ORDER BY (m.periodo_id = ${periodoId}) DESC, m.id DESC
+                                  LIMIT 1)
+                     ) ORDER BY e.nombres, e.apellidos), '[]'::json)
+                FROM admin_escolar_estudiantes e
+               WHERE e.team_id = ${teamId}
+                 AND (e.id = ANY(t.con_deuda)
+                      OR (t.client_id IS NOT NULL AND e.facturar_a_client_id = t.client_id
+                          AND EXISTS (SELECT 1 FROM admin_escolar_matriculas m
+                                       WHERE m.estudiante_id = e.id AND m.team_id = ${teamId}
+                                         AND m.periodo_id = ${periodoId} AND m.estado = 'activa')))
+             )                                                          AS alumnos
+      FROM top t
+      ORDER BY t.deuda DESC
     `),
 
-    // ── 9. Por dónde entra el dinero. Mismo prorrateo que la caja del mes.
+    // ── 9. Por dónde entra el dinero. Mismo universo que la caja: pagos de
+    //    facturas con cargo (prorrateados, como la 4) más los de la facturación
+    //    directa (enteros, como la 14). Sin la segunda parte, lo cobrado fuera
+    //    del motor no salía en el donut y los porcentajes mentían.
     db.execute(sql`
       WITH escolar AS (
         SELECT c.ecf_document_id AS doc, SUM(c.monto_centavos)::numeric AS cargos
         FROM admin_escolar_cargos c
         WHERE ${cargoVivo} AND c.ecf_document_id IS NOT NULL
         GROUP BY 1
-      )
-      SELECT p.metodo,
-             COALESCE(SUM(p.monto_centavos * LEAST(1.0, e.cargos / NULLIF(d.monto_total, 0))), 0)::bigint AS centavos
-      FROM pagos_recibidos p
-      JOIN escolar e       ON e.doc = p.ecf_document_id
-      JOIN ecf_documents d ON d.id  = p.ecf_document_id
-      WHERE p.team_id = ${teamId}
-      GROUP BY p.metodo
+      ),
+      ${directosCte}
+      SELECT metodo, COALESCE(SUM(centavos), 0)::bigint AS centavos
+      FROM (
+        SELECT p.metodo, p.monto_centavos * LEAST(1.0, e.cargos / NULLIF(d.monto_total, 0)) AS centavos
+        FROM pagos_recibidos p
+        JOIN escolar e       ON e.doc = p.ecf_document_id
+        JOIN ecf_documents d ON d.id  = p.ecf_document_id
+        WHERE p.team_id = ${teamId}
+        UNION ALL
+        SELECT p.metodo, p.monto_centavos
+        FROM pagos_recibidos p
+        JOIN directos x ON x.id = p.ecf_document_id
+        WHERE p.team_id = ${teamId}
+      ) t
+      GROUP BY metodo
       ORDER BY centavos DESC
     `),
 
@@ -519,45 +645,10 @@ export async function dashboardDelPeriodo(
       WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId}
     `),
 
-    // ── 13. Facturación directa de las familias del colegio.
-    //
-    //     El panorama nace del motor escolar (cargos), pero un colegio factura
-    //     mucho DIRECTO en Facturación —inscripción, colegiatura suelta— sin que
-    //     eso pase por un cargo. Esa plata (facturada, cobrada y pendiente) es
-    //     real y debe verse aquí. Se toman las facturas del AÑO ESCOLAR (por
-    //     fecha de emisión) cuyo cliente es responsable de pago de un alumno
-    //     MATRICULADO —así entra la familia y NO la cafetería ni el POS a
-    //     Consumidor Final— y que NO tienen ya un cargo escolar detrás (esas ya
-    //     las cuenta el motor; contarlas otra vez duplicaría).
+    // ── 13. Facturación directa de las familias (ver `directosCte`): lo
+    //     facturado, cobrado y pendiente que vive solo en Facturación.
     db.execute(sql`
-      WITH familias AS (
-        SELECT DISTINCT es.facturar_a_client_id AS client_id
-        FROM admin_escolar_matriculas m
-        JOIN admin_escolar_estudiantes es ON es.id = m.estudiante_id AND es.team_id = ${teamId}
-        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
-          AND es.facturar_a_client_id IS NOT NULL
-      ),
-      fact AS (
-        SELECT d.id, d.client_id, d.monto_total,
-               -- varchar(10): ''::date lanza, y varchar < date no existe.
-               NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_pago,
-               COALESCE((SELECT SUM(p.monto_centavos) FROM pagos_recibidos p WHERE p.ecf_document_id = d.id), 0) AS pagado
-        FROM ecf_documents d
-        JOIN familias f ON f.client_id = d.client_id
-        WHERE d.team_id = ${teamId}
-          -- Mismo universo que la cartera de Facturación (getCuentasPorCobrar):
-          -- fuera anuladas/rechazadas, NC (34), compras (41/43/47) y las ND de
-          -- mora, que se agrupan en su factura padre.
-          AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
-          AND d.tipo_ecf NOT IN ('34', '41', '43', '47')
-          AND d.mora_origen_id IS NULL
-          AND d.fecha_emision >= ${periodo.fecha_inicio ?? '0001-01-01'}::date
-          AND d.fecha_emision <  (${periodo.fecha_fin ?? '9999-12-30'}::date + 1)
-          AND NOT EXISTS (
-            SELECT 1 FROM admin_escolar_cargos c
-             WHERE c.ecf_document_id = d.id AND c.team_id = ${teamId} AND c.${NO_ANULADO}
-          )
-      )
+      WITH ${directosCte}
       SELECT
         COALESCE(SUM(monto_total), 0)::bigint                         AS facturado,
         COALESCE(SUM(pagado), 0)::bigint                              AS cobrado,
@@ -566,49 +657,24 @@ export async function dashboardDelPeriodo(
           WHERE fecha_limite_pago IS NOT NULL AND fecha_limite_pago < ${hoy}::date
         ), 0)::bigint                                                 AS vencido,
         COUNT(*)::int                                                 AS docs,
-        COUNT(DISTINCT client_id) FILTER (WHERE monto_total - pagado > 0)::int AS familias,
         -- Antigüedad de este mismo saldo, con los tramos de la 2 — sin esto las
         -- barras suman menos que la cartera pendiente de arriba.
         (SELECT COALESCE(json_agg(json_build_object('tramo', t.tramo, 'saldo', t.saldo)), '[]'::json)
            FROM (
              SELECT ${caseTramos(sql`(${hoy}::date - fecha_limite_pago)`)} AS tramo,
                     SUM(monto_total - pagado)::bigint AS saldo
-             FROM fact
+             FROM directos
              WHERE monto_total - pagado > 0
              GROUP BY 1
            ) t)                                                       AS tramos
-      FROM fact
+      FROM directos
     `),
 
     // ── 14. Lo que esas facturas directas cobraron en el mes (para la caja).
-    //     Mismo universo que la 13; se cuenta el pago entero (la factura es de la
-    //     familia), y como excluye las facturas con cargo, no cruza con la 4.
+    //     Se cuenta el pago entero (la factura es de la familia), y como excluye
+    //     las facturas con cargo, no cruza con la 4.
     db.execute(sql`
-      WITH familias AS (
-        SELECT DISTINCT es.facturar_a_client_id AS client_id
-        FROM admin_escolar_matriculas m
-        JOIN admin_escolar_estudiantes es ON es.id = m.estudiante_id AND es.team_id = ${teamId}
-        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
-          AND es.facturar_a_client_id IS NOT NULL
-      ),
-      docs AS (
-        SELECT d.id
-        FROM ecf_documents d
-        JOIN familias f ON f.client_id = d.client_id
-        WHERE d.team_id = ${teamId}
-          -- Mismo universo que la cartera de Facturación (getCuentasPorCobrar):
-          -- fuera anuladas/rechazadas, NC (34), compras (41/43/47) y las ND de
-          -- mora, que se agrupan en su factura padre.
-          AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
-          AND d.tipo_ecf NOT IN ('34', '41', '43', '47')
-          AND d.mora_origen_id IS NULL
-          AND d.fecha_emision >= ${periodo.fecha_inicio ?? '0001-01-01'}::date
-          AND d.fecha_emision <  (${periodo.fecha_fin ?? '9999-12-30'}::date + 1)
-          AND NOT EXISTS (
-            SELECT 1 FROM admin_escolar_cargos c
-             WHERE c.ecf_document_id = d.id AND c.team_id = ${teamId} AND c.${NO_ANULADO}
-          )
-      )
+      WITH ${directosCte}
       SELECT
         COALESCE(SUM(p.monto_centavos) FILTER (
           WHERE p.fecha_pago >= ${mesInicio}::date AND p.fecha_pago < ${mesSiguiente}::date
@@ -617,8 +683,64 @@ export async function dashboardDelPeriodo(
           WHERE p.fecha_pago >= ${mesAnterior}::date AND p.fecha_pago < ${mesInicio}::date
         ), 0)::bigint AS mes_anterior
       FROM pagos_recibidos p
-      JOIN docs ON docs.id = p.ecf_document_id
+      JOIN directos x ON x.id = p.ecf_document_id
       WHERE p.team_id = ${teamId}
+    `),
+
+    // ── 15. Familias con deuda en el año. Se juntan las claves de los dos
+    //     lados ANTES de contar: sumar dos COUNT DISTINCT contaba dos veces a la
+    //     familia que debe cargos y también facturas directas. La clave es el
+    //     CONTACTO responsable —dos hermanos del mismo padre son una familia— y
+    //     cae al alumno cuando no tiene ninguno: si no, el colegio con veinte
+    //     alumnos sin responsable vería «0 familias deben» con la cartera llena.
+    db.execute(sql`
+      WITH ${directosCte}
+      SELECT COUNT(DISTINCT k)::int AS familias
+      FROM (
+        SELECT COALESCE('cliente:' || es.facturar_a_client_id, 'alumno:' || c.estudiante_id) AS k
+        FROM admin_escolar_cargos c
+        LEFT JOIN admin_escolar_estudiantes es ON es.id = c.estudiante_id AND es.team_id = ${teamId}
+        WHERE ${cargoVivo} AND c.saldo_centavos > 0
+        UNION ALL
+        SELECT 'cliente:' || client_id FROM directos WHERE monto_total - pagado > 0
+      ) t
+    `),
+
+    // ── 16. Deuda de años anteriores. Fuera de la cartera del año —que tiene
+    //     que cuadrar con sus tramos—, pero a la vista: filtrar todo por el año
+    //     escondía justo la deuda más vieja, la que menos se cobra sola.
+    //     Separada en quien sigue en el colegio (se le cobra en la ventanilla)
+    //     y quien ya no (cobranza de salida).
+    db.execute(sql`
+      SELECT
+        COALESCE(SUM(c.saldo_centavos), 0)::bigint                               AS centavos,
+        COUNT(DISTINCT c.estudiante_id)::int                                     AS alumnos,
+        COUNT(DISTINCT c.estudiante_id) FILTER (WHERE r.sigue)::int              AS alumnos_re,
+        COALESCE(SUM(c.saldo_centavos) FILTER (WHERE r.sigue), 0)::bigint        AS centavos_re,
+        COALESCE(SUM(c.saldo_centavos) FILTER (WHERE c.ecf_document_id IS NULL), 0)::bigint AS sin_factura
+      FROM admin_escolar_cargos c
+      CROSS JOIN LATERAL (
+        SELECT EXISTS (
+          SELECT 1 FROM admin_escolar_matriculas m
+           WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId}
+             AND m.estado = 'activa' AND m.estudiante_id = c.estudiante_id
+        ) AS sigue
+      ) r
+      WHERE c.team_id = ${teamId} AND c.${NO_ANULADO} AND c.saldo_centavos > 0
+        AND c.periodo_id IN (${periodosAnteriores})
+    `),
+
+    // ── 17. Pagos por validar: comprobantes que los padres subieron por el
+    //     enlace de pago y nadie ha revisado. Mientras esperan, esa plata sigue
+    //     contada como deuda y la familia puede salir en «A quién llamar»
+    //     aunque ya haya pagado. No va por año: un comprobante viejo sin
+    //     revisar es igual de urgente.
+    db.execute(sql`
+      SELECT COUNT(*)::int                           AS cantidad,
+             COALESCE(SUM(monto_centavos), 0)::bigint AS centavos,
+             MIN(creado_en)::date::text               AS desde
+      FROM admin_escolar_comprobantes
+      WHERE team_id = ${teamId} AND estado = 'pendiente'
     `),
   ]);
 
@@ -633,6 +755,11 @@ export async function dashboardDelPeriodo(
   // facturado/cobrado/pendiente que vive solo en Facturación.
   const fc0 = (factCartera as unknown as Record<string, unknown>[])[0] ?? {};
   const fk0 = (factCaja as unknown as Record<string, unknown>[])[0] ?? {};
+  const f0 = (familias as unknown as Record<string, unknown>[])[0] ?? {};
+  const a0 = (anterior as unknown as Record<string, unknown>[])[0] ?? {};
+  const v0 = (porValidar as unknown as Record<string, unknown>[])[0] ?? {};
+  // json_agg puede volver ya parseado o como texto según el driver.
+  const json = <T,>(v: unknown): T => (typeof v === 'string' ? JSON.parse(v) : v) as T;
 
   const porTramo = Object.fromEntries(TRAMOS.map((t) => [t.key, 0])) as Record<TramoKey, number>;
   for (const f of tramos as unknown as { tramo: TramoKey | null; saldo: string }[]) {
@@ -641,8 +768,7 @@ export async function dashboardDelPeriodo(
     porTramo[f.tramo ?? 'porVencer'] += n(f.saldo);
   }
   // Las facturas directas (13) entran igual: sin fecha límite = por vencer.
-  const tramosFact = typeof fc0.tramos === 'string' ? JSON.parse(fc0.tramos) : fc0.tramos;
-  for (const f of (tramosFact ?? []) as { tramo: TramoKey | null; saldo: number | string }[]) {
+  for (const f of json<{ tramo: TramoKey | null; saldo: number | string }[] | null>(fc0.tramos) ?? []) {
     porTramo[f.tramo ?? 'porVencer'] += n(f.saldo);
   }
 
@@ -656,7 +782,7 @@ export async function dashboardDelPeriodo(
       pendienteCentavos: n(c0.pendiente) + n(fc0.pendiente),
       vencidoCentavos:   n(c0.vencido)   + n(fc0.vencido),
       cargos:            n(c0.cargos)    + n(fc0.docs),
-      familiasConDeuda:  n(c0.familias)  + n(fc0.familias),
+      familiasConDeuda:  n(f0.familias),
     },
     tramos: porTramo,
     mes: {
@@ -691,11 +817,12 @@ export async function dashboardDelPeriodo(
       pendienteCentavos: n(f.pendiente),
     })),
     deudores: (deudores as unknown as Record<string, unknown>[]).map((f) => ({
-      estudianteId: n(f.estudiante_id),
-      estudiante: `${f.nombres ?? ''} ${f.apellidos ?? ''}`.trim(),
-      curso: f.curso == null ? null : String(f.curso),
+      clientId: f.client_id == null ? null : n(f.client_id),
       responsable: f.responsable == null ? null : String(f.responsable),
+      alumnos: (json<{ id: number; nombre: string; curso: string | null }[] | null>(f.alumnos) ?? [])
+        .map((a) => ({ id: n(a.id), nombre: a.nombre || 'Estudiante', curso: a.curso ?? null })),
       deudaCentavos: n(f.deuda),
+      anteriorCentavos: n(f.anterior),
       // Negativo = el cargo más viejo todavía no vence. Se aplana a 0: «−12
       // días de atraso» no se lee en ninguna tabla.
       diasAtraso: Math.max(0, diasDeAtraso(f.vence == null ? null : String(f.vence), hoy)),
@@ -706,6 +833,18 @@ export async function dashboardDelPeriodo(
     sinFacturar: {
       centavos: n(s0.centavos), cargos: n(s0.cargos),
       centavosTotal: n(s0.centavos_total), cargosTotal: n(s0.cargos_total),
+    },
+    anterior: {
+      centavos: n(a0.centavos),
+      alumnos:  n(a0.alumnos),
+      reinscritos:   { alumnos: n(a0.alumnos_re), centavos: n(a0.centavos_re) },
+      noReinscritos: { alumnos: n(a0.alumnos) - n(a0.alumnos_re), centavos: n(a0.centavos) - n(a0.centavos_re) },
+      sinFacturaCentavos: n(a0.sin_factura),
+    },
+    porValidar: {
+      cantidad: n(v0.cantidad),
+      centavos: n(v0.centavos),
+      desde: v0.desde == null ? null : String(v0.desde),
     },
     porDevengarCentavos: n(d0.centavos),
     matricula: {
