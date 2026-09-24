@@ -546,6 +546,7 @@ export async function sincronizarSaldosDesdeFacturas(
     db
     .select({
       id: adminEscolarCargos.id,
+      estudianteId: adminEscolarCargos.estudianteId,
       ecfDocumentId: adminEscolarCargos.ecfDocumentId,
       montoCentavos: adminEscolarCargos.montoCentavos,
       saldoCentavos: adminEscolarCargos.saldoCentavos,
@@ -598,6 +599,31 @@ export async function sincronizarSaldosDesdeFacturas(
   const facturaById = new Map(facturas.map((f) => [f.id, f]));
   const pagadoById = new Map(pagos.map((p) => [p.ecfDocumentId, Number(p.pagado)]));
 
+  // Subtotal por (factura, estudiante) según el `dependienteId` de cada línea.
+  // El estudiante se identifica por su `dependiente_id` (enlace exacto con
+  // Facturación), no por nombre. Solo se usa cuando una factura paga a varios
+  // hermanos, para repartir por hijo y no cruzar el pago de uno con otro.
+  const subRows = (await db.execute(sql`
+    SELECT d.id AS fid, e.id AS est,
+           SUM((li->>'precioUnitarioItem')::numeric * (li->>'cantidadItem')::numeric)::int AS sub
+    FROM ${ecfDocuments} d
+    CROSS JOIN LATERAL jsonb_array_elements(d.lineas_json::jsonb) li
+    JOIN ${adminEscolarEstudiantes} e
+      ON e.team_id = d.team_id
+     AND e.dependiente_id = (li->>'dependienteId')::int
+    WHERE d.team_id = ${teamId}
+      AND d.id IN (${sql.join(facturaIds.map((id) => sql`${id}`), sql`, `)})
+      AND (li->>'dependienteId') ~ '^[0-9]+$'
+    GROUP BY d.id, e.id
+  `)) as unknown as { fid: number; est: number; sub: number }[];
+
+  const subPorFacturaHijo = new Map<number, Map<number, number>>();
+  for (const r of subRows) {
+    const m = subPorFacturaHijo.get(Number(r.fid)) ?? new Map<number, number>();
+    m.set(Number(r.est), Number(r.sub));
+    subPorFacturaHijo.set(Number(r.fid), m);
+  }
+
   const hoy = new Date().toISOString().slice(0, 10);
 
   // 4. Agrupar cargos por factura y repartir lo cobrado en cascada.
@@ -625,10 +651,33 @@ export async function sincronizarSaldosDesdeFacturas(
     // Lo cobrado incluye las NC: ya redujeron lo que la familia debe.
     const cobrado = (pagadoById.get(fid) ?? 0) + Number(f.ncAplicado ?? 0);
 
-    const calculados = repartirCobro(grupo, cobrado, hoy, {
-      facturaAnulada: anulada,
-      facturaSaldada: f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA',
-    });
+    const saldada = f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA';
+    const hijos = new Set(grupo.map((c) => c.estudianteId));
+
+    let calculados: SaldoCalculado[];
+    if (hijos.size <= 1) {
+      // Caso normal (una factura, un estudiante): comportamiento sin cambios.
+      calculados = repartirCobro(grupo, cobrado, hoy, { facturaAnulada: anulada, facturaSaldada: saldada });
+    } else {
+      // Factura que paga a varios hermanos en un mismo documento: cada hijo se
+      // salda SOLO con la parte de lo cobrado que corresponde a SUS líneas
+      // (proporcional a su subtotal en la factura), para no acreditarle a un
+      // niño el pago del hermano. Un hijo sin líneas propias no recibe nada.
+      const subMap = subPorFacturaHijo.get(fid) ?? new Map<number, number>();
+      const totalSub = [...hijos].reduce((s, e) => s + (subMap.get(e) ?? 0), 0);
+      calculados = [];
+      for (const est of hijos) {
+        const cargosHijo = grupo.filter((c) => c.estudianteId === est);
+        if (anulada) {
+          calculados.push(...repartirCobro(cargosHijo, 0, hoy, { facturaAnulada: true }));
+          continue;
+        }
+        const sub = subMap.get(est) ?? 0;
+        const share = totalSub > 0 ? Math.round((cobrado * sub) / totalSub) : 0;
+        // "Saldada" aplica por hijo solo si tiene líneas propias en la factura.
+        calculados.push(...repartirCobro(cargosHijo, share, hoy, { facturaSaldada: saldada && sub > 0 }));
+      }
+    }
 
     for (const r of calculados) {
       const actual = porId.get(r.id);
