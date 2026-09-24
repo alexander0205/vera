@@ -14,13 +14,13 @@
 
 import type { Metadata } from 'next';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { DatosDeProducto } from '../../_datos-estructurados';
+import { DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
 import { Iconos } from '../../_piezas';
 import { Encabezado, Titulo, Antetitulo } from '../../_bloques';
 import { Contenedor } from '../../_piezas';
 import {
   CierreProducto, FranjaProducto, HeroProducto, SeccionConImagen, SeccionProducto,
-  type PuntoDeProducto,
+  PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
 import { AsientosEnVivo } from './_asientos';
 
@@ -68,6 +68,29 @@ const FISCAL: PuntoDeProducto[] = [
   { titulo: 'Cierre de ejercicio', detalle: 'Cierra el año, arrastra resultados y deja el período anterior bloqueado.', icono: Iconos.reloj },
   { titulo: 'Permisos del contador', detalle: 'Tu contador externo entra a lo suyo sin ver la nómina ni tocar facturas.', icono: Iconos.usuarios },
 ];
+
+const PREGUNTAS = [
+  {
+    pregunta: '¿La contabilidad viene incluida?',
+    respuesta: 'Sí, en todos los planes y sin costo aparte. No es un módulo que se compra: viene con el sistema.',
+  },
+  {
+    pregunta: '¿Los asientos son automáticos?',
+    respuesta: 'Sí. Cada factura, cobro, nota de crédito, anulación, compra, gasto, depreciación y corrida de nómina deja su asiento, con la cuenta que hayas configurado. Y el sistema valida el cuadre antes de guardar: un asiento descuadrado no entra.',
+  },
+  {
+    pregunta: '¿Mi contador puede entrar?',
+    respuesta: 'Sí, con su propio usuario y permisos de contabilidad: ve los libros y los reportes sin ver la nómina ni poder facturar. Se acabó mandar Excel por WhatsApp.',
+  },
+  {
+    pregunta: '¿Genera los reportes 606, 607 y 608?',
+    respuesta: 'Sí, en el formato de la DGII, armados desde lo que ya está registrado. Cuadran con los libros porque salen de ellos.',
+  },
+  {
+    pregunta: '¿Maneja activos fijos y cierre de ejercicio?',
+    respuesta: 'Sí. Los activos fijos se registran con su vida útil y la depreciación corre sola cada mes con su asiento; el cierre de ejercicio arrastra resultados y deja bloqueado el período anterior.',
+  },
+] as const;
 
 export default function ContabilidadPage() {
   return (
@@ -152,6 +175,9 @@ export default function ContabilidadPage() {
           'Todo queda registrado: quién asentó qué y cuándo',
         ]}
       />
+
+      <DatosDeRuta migas={[{ nombre: 'Productos', ruta: '/productos/contabilidad' }, { nombre: 'Contabilidad', ruta: '/productos/contabilidad' }]} />
+      <PreguntasProducto preguntas={PREGUNTAS} />
 
       <CierreProducto
         antetitulo="Contabilidad"

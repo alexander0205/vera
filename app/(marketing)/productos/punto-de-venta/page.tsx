@@ -12,13 +12,13 @@
 import type { Metadata } from 'next';
 import { ADDONS, addonBajoCotizacion } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { DatosDeProducto } from '../../_datos-estructurados';
+import { DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
 import { Contenedor, Iconos } from '../../_piezas';
 import { Antetitulo, Titulo } from '../../_bloques';
 import { CajaDemo } from './_caja';
 import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
-  type PuntoDeProducto,
+  PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
 
 export const metadata: Metadata = {
@@ -55,6 +55,29 @@ const MOSTRADOR: PuntoDeProducto[] = [
   { titulo: 'Varias cajas a la vez', detalle: 'Cada terminal cobra por su lado y todo llega al mismo reporte.', icono: Iconos.base },
   { titulo: 'Venta a crédito', detalle: 'El fiao queda en la cuenta del cliente, con su saldo, y entra a la cartera de cobros.', icono: Iconos.dinero },
 ];
+
+const PREGUNTAS = [
+  {
+    pregunta: '¿La venta del punto de venta sale con factura fiscal?',
+    respuesta: 'Sí. Al cobrar se emite el comprobante fiscal electrónico válido ante la DGII, en el mismo acto y sin pasar por otro sistema. También puede salir como ticket sin valor fiscal si la venta no lo necesita.',
+  },
+  {
+    pregunta: '¿El punto de venta funciona sin internet?',
+    respuesta: 'No. Necesita conexión: la caja trabaja contra el mismo sistema donde están el inventario, la cartera y la contabilidad, y el comprobante fiscal se emite en línea ante la DGII.',
+  },
+  {
+    pregunta: '¿La venta descuenta del inventario?',
+    respuesta: 'Sí, artículo por artículo, y la devolución lo devuelve. Las existencias son las mismas que ve facturación: no hay dos conteos.',
+  },
+  {
+    pregunta: '¿Cuánto cuesta el punto de venta?',
+    respuesta: 'Se suma a cualquier plan de facturación por US$9 al mes. En los planes de colegio ya viene incluido, porque la cafetería es un punto de venta.',
+  },
+  {
+    pregunta: '¿Sirve para un restaurante?',
+    respuesta: 'Sí: mesas, comandas y mesero asignado, con la cuenta abierta hasta que se cobra. Y para colmados y tiendas, con listas de precios y venta a crédito que entra sola a cuentas por cobrar.',
+  },
+] as const;
 
 export default function PuntoDeVentaPage() {
   return (
@@ -131,6 +154,9 @@ export default function PuntoDeVentaPage() {
             : <>Se suma a cualquier plan de facturación. En los planes de colegio ya viene incluido: la cafetería es un punto de venta.</>
         }
       />
+
+      <DatosDeRuta migas={[{ nombre: 'Productos', ruta: '/productos/punto-de-venta' }, { nombre: 'Punto de venta', ruta: '/productos/punto-de-venta' }]} />
+      <PreguntasProducto preguntas={PREGUNTAS} />
 
       <CierreProducto
         antetitulo="Punto de venta"

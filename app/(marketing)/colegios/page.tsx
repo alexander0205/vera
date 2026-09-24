@@ -19,6 +19,8 @@ import {
 } from '../_bloques';
 import { CONTACTO, Contenedor, Flecha, Iconos } from '../_piezas';
 import { CicloDeCobro } from './_ciclo';
+import { PreguntasProducto } from '../_producto';
+import { DatosDeProducto, DatosDeRuta } from '../_datos-estructurados';
 import { ResumenDePrecios } from '../_precios-resumen';
 
 export const metadata: Metadata = {
@@ -47,6 +49,13 @@ function desdeDe(familia: 'colegio' | 'ecf'): number | null {
 const DESDE_NEGOCIO = desdeDe('ecf');
 /** El tramo escolar más alto: es la promesa de techo del módulo de colegios. */
 const TOPE_ESTUDIANTES = Math.max(...planesDeFamilia('colegio').map(p => p.limits.estudiantes));
+
+/** El rango de los tramos, para declarar la oferta. Vacío si se cotizan. */
+const PRECIOS_COLEGIO = familiaBajoCotizacion('colegio')
+  ? []
+  : planesDeFamilia('colegio').map(p => p.price).filter(p => p > 0);
+const TRAMOS_DESDE = PRECIOS_COLEGIO.length > 0 ? Math.min(...PRECIOS_COLEGIO) : null;
+const TRAMOS_HASTA = PRECIOS_COLEGIO.length > 0 ? Math.max(...PRECIOS_COLEGIO) : null;
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
 
@@ -117,6 +126,33 @@ const EQUIPO = [
 ] as const;
 
 // ─── Portada ──────────────────────────────────────────────────────────────────
+
+const PREGUNTAS = [
+  {
+    pregunta: '¿La mora se aplica sola?',
+    respuesta: 'Sí. El colegio configura el recargo y los días una vez, y a partir de ahí entra solo cuando el cargo vence. Es lo que hoy se pierde: la mora que nadie se acordó de aplicar.',
+  },
+  {
+    pregunta: '¿Los padres pueden pagar en línea?',
+    respuesta: 'Sí. Cada familia recibe su enlace de pago por WhatsApp o correo y paga con tarjeta desde el teléfono, o sube el comprobante de su transferencia para que el colegio lo apruebe.',
+  },
+  {
+    pregunta: '¿Cuánto cuesta el sistema para un colegio?',
+    respuesta: 'Se cobra por institución según la matrícula, no por usuario: cuatro tramos desde US$135 al mes hasta 150 estudiantes, y hasta US$500 al mes hasta 800. Incluye implementación y entrenamiento.',
+  },
+  {
+    pregunta: '¿Incluye facturación, contabilidad y nómina?',
+    respuesta: 'Sí, los ocho módulos: matrícula, cobros, facturación e-CF ante la DGII, avisos a las familias, contabilidad, nómina del personal, punto de venta para la cafetería e inventario. No se compran aparte.',
+  },
+  {
+    pregunta: '¿Los avisos salen por WhatsApp?',
+    respuesta: 'Sí, y también por SMS y correo, en los tres momentos del ciclo: al emitir, al vencer y antes de que entre el recargo. Cada tramo trae su tope mensual de mensajes.',
+  },
+  {
+    pregunta: '¿Migran la matrícula y los saldos?',
+    respuesta: 'Sí. Cargamos estudiantes, responsables, cuotas y saldos pendientes, y dejamos el período escolar armado antes de que el colegio empiece a usarlo.',
+  },
+] as const;
 
 export default function ColegiosPage() {
   return (
@@ -392,6 +428,26 @@ export default function ColegiosPage() {
           </div>
         </Contenedor>
       </section>
+
+      <DatosDeProducto
+        nombre="Zero ERP Colegio"
+        descripcion="Sistema de gestión escolar dominicano: matrícula, cargos y mensualidades con facturación e-CF ante la DGII, mora automática, avisos por WhatsApp, SMS y correo, portal de pago para los padres, contabilidad, nómina del personal y punto de venta para la cafetería."
+        ruta="/colegios"
+        captura="/home/capturas/demo-colegio.png"
+        precioDesde={TRAMOS_DESDE}
+        precioHasta={TRAMOS_HASTA}
+        funciones={[
+          'Matrícula y estructura académica por período',
+          'Mensualidades facturadas con comprobante fiscal electrónico',
+          'Mora que se aplica sola al vencer',
+          'Avisos a las familias por WhatsApp, SMS y correo',
+          'Portal de pago para el padre, con tarjeta o comprobante',
+          'Contabilidad y nómina del personal incluidas',
+          'Punto de venta para la cafetería',
+        ]}
+      />
+      <DatosDeRuta migas={[{ nombre: 'Colegios', ruta: '/colegios' }]} />
+      <PreguntasProducto preguntas={PREGUNTAS} />
 
       {/* ── Llamado final ──────────────────────────────────────────────────── */}
       <section>
