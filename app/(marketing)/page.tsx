@@ -13,36 +13,51 @@
  *    facturación, administración, punto de venta, contabilidad, nómina y
  *    escolar. El CRM de Zero es otra aplicación y se nombra como tal, no como
  *    un módulo de estos planes.
- *  - Ninguna cifra del negocio se escribe a mano: sale de `lib/config/plans.ts`
- *    y respeta su bandera «bajo cotización», que hoy tapa el precio.
+ *  - Ninguna cifra se escribe a mano: los precios salen de
+ *    `lib/config/plans.ts` a través de `ResumenDePrecios`, y respetan su
+ *    bandera «bajo cotización». Hoy las tres líneas publican.
  */
 
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
-import { familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
-import { CONTACTO, Contenedor, Flecha, Iconos } from './_piezas';
-import {
-  Antetitulo, BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo, Titulo,
-} from './_bloques';
+import { TEXTO_BAJO_COTIZACION, getProductoAparte } from '@/lib/config/plans';
+import { CONTACTO, Cheque, Contenedor, Flecha, Iconos } from './_piezas';
+import { BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo } from './_bloques';
+import { SITIO_PUBLICO } from '@/lib/config/enlaces';
+import { DatosDelSitio } from './_datos-estructurados';
+import { ResumenDePrecios } from './_precios-resumen';
+import { ENLACE_CRM, ENLACE_ERP, MODULOS } from './_menu';
 
 export const metadata: Metadata = {
-  title: { absolute: 'Zero — El control financiero de tu negocio' },
+  title: { absolute: 'Zero — ERP, CRM con inteligencia artificial y facturación electrónica en República Dominicana' },
   description:
-    'Facturación e-CF ante la DGII, cobros, inventario, punto de venta, contabilidad y nómina en un solo sistema. Se registra una vez y cae en todos lados.',
+    'Facturación e-CF ante la DGII, cobros, inventario, punto de venta, contabilidad y nómina en un solo sistema, con un CRM de agentes de inteligencia artificial que atienden por WhatsApp, web y teléfono.',
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    url: SITIO_PUBLICO,
+    images: [{ url: '/home/capturas/demo-facturacion.png', width: 1440, height: 900, alt: 'Panel de Zero' }],
+    title: 'Zero — El control financiero de tu negocio, de punta a punta',
+    description:
+      'ERP con facturación electrónica certificada ante la DGII, punto de venta, nómina, contabilidad y un CRM con agentes de IA. Hecho en República Dominicana.',
+  },
 };
 
-// ─── Cifras del catálogo ──────────────────────────────────────────────────────
+// ─── Lo que sale del catálogo ─────────────────────────────────────────────────
 
-/** El «desde US$N» de una línea, o null si esa línea no publica precio. */
-function desdeDe(familia: 'colegio' | 'ecf'): number | null {
-  if (familiaBajoCotizacion(familia)) return null;
-  const precios = planesDeFamilia(familia).map(p => p.price).filter(p => p > 0);
-  return precios.length > 0 ? Math.min(...precios) : null;
-}
+/**
+ * El CRM, que es de Zero pero no es uno de estos planes.
+ *
+ * Los precios de los planes no se leen aquí: los pinta `ResumenDePrecios`
+ * directo del catálogo, con su regla de cotización incluida.
+ */
+const CRM = getProductoAparte('crm');
 
-const DESDE_NEGOCIO = desdeDe('ecf');
+const PRECIO_CRM = CRM && !CRM.bajoCotizacion && CRM.precio !== null
+  ? `US$${CRM.precio}/mes`
+  : TEXTO_BAJO_COTIZACION;
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
 
@@ -67,16 +82,6 @@ const RECORRIDO = [
 ] as const;
 
 const ASIENTOS = 'Factura · Cobro · Nota de crédito · Anulación · Compra · Gasto · Depreciación · Nómina · Pago de nómina';
-
-/** Los módulos que existen hoy en el sistema. Ver lib/config/modules.ts. */
-const MODULOS = [
-  { titulo: 'Facturación electrónica', detalle: 'Los diez tipos de e-CF ante la DGII, con su PDF al cliente.', icono: Iconos.factura },
-  { titulo: 'Cobros y cuentas por cobrar', detalle: 'Quién te debe, cuánto y desde cuándo, con links de pago.', icono: Iconos.tarjeta },
-  { titulo: 'Contabilidad', detalle: 'Asientos automáticos, estados financieros y los 606 y 607 armados.', icono: Iconos.contabilidad },
-  { titulo: 'Inventario, compras y gastos', detalle: 'Stock por almacén, costo real y la factura del proveedor desde una foto.', icono: Iconos.cuadros },
-  { titulo: 'Punto de venta y restaurante', detalle: 'Caja con turnos, mesas y cuadre al cierre.', icono: Iconos.pos },
-  { titulo: 'Nómina', detalle: 'TSS, ISR, regalía y vacaciones, con su asiento contable.', icono: Iconos.usuarios },
-] as const;
 
 const INDUSTRIAS = [
   { titulo: 'Restaurantes y cafeterías', detalle: 'La comanda va en papel y la factura se hace después.', foto: '/home/fotos/30-restaurante.png', href: '/precios' },
@@ -121,22 +126,25 @@ export default function PortadaPage() {
             </p>
           </div>
 
+          {/* La pantalla del sistema con la empresa de DEMOSTRACIÓN, no con la
+              cuenta de nadie: «Colegio Demo Zero», sembrada con
+              `scripts/seed-demo-completo.ts` y capturada del sistema corriendo.
+              Antes iba una cuenta real, con su RNC y los nombres de sus
+              clientes dentro. */}
           <div className="relative mt-10 sm:mt-[52px]">
             <div className="relative mx-auto max-w-[940px]">
               <div className="rounded-t-2xl bg-[#1b2333] p-3 pb-0 shadow-[0_50px_90px_-40px_rgba(16,42,114,.55)]">
                 <Image
-                  src="/home/capturas/zero-facturacion.png"
-                  alt="Factura electrónica emitida en Zero, con su e-NCF y el estado de la DGII"
-                  width={1722}
-                  height={860}
+                  src="/home/capturas/demo-facturacion.png"
+                  alt="Panel de Zero con los ingresos del mes, las secuencias y las cuentas por cobrar"
+                  width={1440}
+                  height={900}
                   priority
                   className="block w-full rounded-t-lg"
                 />
               </div>
               <div className="mx-auto h-[15px] max-w-[1010px] rounded-b-xl bg-[linear-gradient(180deg,#d8dee9,#aeb6c6)] shadow-[0_14px_24px_-14px_rgba(16,42,114,.45)]" />
 
-              {/* Dos momentos del producto, no dos promesas: lo que pasa solo
-                  cuando emites y cuando cobras. */}
               <figure className="absolute left-[clamp(-78px,-4vw,0px)] top-[36%] hidden w-[min(252px,30%)] rounded-2xl border border-[#e7ecf7] bg-white p-4 shadow-[0_26px_50px_-24px_rgba(16,42,114,.45)] md:block">
                 <span className="grid size-[30px] place-items-center rounded-full bg-[#e6f7ee] text-[#12925a]">
                   <Iconos.escudo className="size-4" />
@@ -244,19 +252,56 @@ export default function PortadaPage() {
               antetitulo="Lo que hay adentro"
               titulo="Seis módulos. Una sola base de datos."
               detalle="Se arma con los módulos que tu operación usa, y todos escriben sobre los mismos datos."
-              enlace={{ texto: 'Ver qué incluye cada plan', href: '/precios' }}
+              enlace={{ texto: 'Ver Zero ERP completo', href: ENLACE_ERP }}
             />
             <div className="min-w-0">
               <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
                 {MODULOS.map(m => (
-                  <TarjetaModulo key={m.titulo} icono={m.icono} titulo={m.titulo} detalle={m.detalle} />
+                  <TarjetaModulo key={m.href} href={m.href} icono={m.icono} titulo={m.titulo} detalle={m.detalle} />
                 ))}
               </ul>
-              {/* El CRM es de Zero, pero es otra aplicación: se nombra aquí para
-                  que nadie lo busque dentro del sistema ni lo crea incluido. */}
-              <p className="m-0 mt-4 text-pretty text-[13px] leading-[1.6] text-[#5c6373]">
-                Zero también tiene su <span className="font-semibold text-[#102a72]">CRM con WhatsApp</span>, para atender y dar seguimiento a lo que llega por mensaje. Va por su cuenta, fuera de estos planes.
-              </p>
+              {/* El CRM se nombra aquí y se cuenta en `/crm`: es otro sistema
+                  —con su panel, su pipeline, su bandeja y su agenda— y meterlo
+                  entero en la portada dejaba fuera la mitad. La tarjeta entera
+                  es el enlace. El texto sale de PRODUCTOS_APARTE. */}
+              {CRM && (
+                <Link href={ENLACE_CRM} className="mt-3 grid items-center gap-5 rounded-[15px] border border-[#e7edfb] bg-[#f9fbff] p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-[#edf1fe] text-zero-600">
+                        <Iconos.soporte className="size-[18px]" />
+                      </span>
+                      <span className="font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">
+                        {CRM.nombre}
+                      </span>
+                      <span className="ml-auto text-[11.5px] font-semibold text-zero-600">{PRECIO_CRM}</span>
+                    </div>
+                    <p className="m-0 mt-3 text-pretty text-[12.5px] leading-[1.55] text-[#5c6373]">
+                      {CRM.descripcion} Se contrata aparte de estos planes y trabaja pegado al
+                      sistema: por ahí salen los avisos de cobro a tus clientes.
+                    </p>
+                    <span className="mt-3 inline-flex items-center gap-2 text-[12.5px] font-semibold text-zero-600">
+                      Ver qué hace {CRM.nombre}
+                      <Flecha tamano={13} />
+                    </span>
+                    <ul className="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">
+                      {CRM.hace.map(linea => (
+                        <li key={linea} className="flex min-w-0 items-start gap-2 text-[12.5px] leading-[1.5] text-[#3b4252]">
+                          <Cheque tamano={11} color="#3658e1" grosor={3.4} />
+                          <span className="min-w-0">{linea}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <Image
+                    src="/home/capturas/zero-crm.png"
+                    alt="Panel de Zero CRM: pipeline, contactos, bandeja y calendario"
+                    width={924}
+                    height={578}
+                    className="min-w-0 rounded-xl border border-[#e2e8f7] bg-white shadow-[0_26px_50px_-30px_rgba(16,42,114,.5)]"
+                  />
+                </Link>
+              )}
             </div>
           </div>
         </Contenedor>
@@ -298,28 +343,24 @@ export default function PortadaPage() {
       </section>
 
       {/* ── Planes ─────────────────────────────────────────────────────────── */}
+      {/* La lista completa, no un «desde». El mínimo obliga a quien tiene tres
+          usuarios y factura todos los días a entrar a otra página para saber si
+          le sirve, y en esa página se decide igual: mejor decidirlo aquí. */}
       <section id="planes" className="scroll-mt-20">
         <Contenedor className="pt-16 sm:pt-[82px]">
-          <div className="flex flex-wrap items-center justify-between gap-8 rounded-3xl border border-[#e7edfb] bg-[#f5f8ff] p-7 sm:p-11">
-            <div className="min-w-0 flex-[1_1_380px]">
-              <Antetitulo>Planes</Antetitulo>
-              {DESDE_NEGOCIO === null ? (
-                <Titulo className="mt-3.5">Todos los planes traen el sistema completo.</Titulo>
-              ) : (
-                <p className="m-0 mt-3.5 flex flex-wrap items-baseline gap-2">
-                  <span className="text-[15px] text-[#5c6373]">Desde</span>
-                  <span className="font-[family-name:var(--font-display)] text-[46px] font-semibold tracking-[-.048em] text-[#102a72]">US${DESDE_NEGOCIO}</span>
-                  <span className="text-[15px] text-[#8a90a0]">/mes</span>
-                </p>
-              )}
-              <p className="m-0 mt-3 max-w-[470px] text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
-                Lo único que cambia es cuánto facturas y cuántas personas lo usan. Implementación y acompañamiento incluidos.
-              </p>
+          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,2fr)] lg:gap-12">
+            <div className="min-w-0">
+              <Encabezado
+                antetitulo="Planes"
+                titulo="Todos los precios, con lo que cambia entre uno y otro."
+                detalle="Lo único que cambia es cuánto facturas y cuántas personas lo usan. El sistema es el mismo en todos, con implementación y acompañamiento incluidos."
+              />
+              <div className="mt-6 flex flex-wrap gap-3">
+                <BotonPrimario href="/sign-up">Empieza gratis</BotonPrimario>
+                <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
+              </div>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-3">
-              <BotonPrimario href="/precios">Ver precios</BotonPrimario>
-              <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
-            </div>
+            <ResumenDePrecios />
           </div>
         </Contenedor>
       </section>
@@ -371,6 +412,9 @@ export default function PortadaPage() {
           </div>
         </Contenedor>
       </section>
+
+      {/* Quiénes somos y qué es este sitio, para buscadores y asistentes. */}
+      <DatosDelSitio />
     </>
   );
 }

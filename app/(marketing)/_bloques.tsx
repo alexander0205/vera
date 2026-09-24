@@ -72,16 +72,23 @@ export function BotonSecundario({ href, children }: { href: string; children: Re
   );
 }
 
-/** Tarjeta de módulo: icono a la izquierda, nombre y una línea de qué hace. */
+/**
+ * Tarjeta de módulo: icono a la izquierda, nombre y una línea de qué hace.
+ *
+ * Con `href` es un enlace a la página del módulo. Sin él, es una tarjeta muda
+ * —la usan las páginas de producto, donde el visitante YA está dentro y
+ * mandarlo a la misma página sería un enlace que no lleva a ningún lado—.
+ */
 export function TarjetaModulo({
-  icono: Icono, titulo, detalle,
+  icono: Icono, titulo, detalle, href,
 }: {
   icono: (p: { className?: string }) => React.ReactElement;
   titulo: string;
   detalle: string;
+  href?: string;
 }) {
-  return (
-    <li className="flex min-w-0 gap-3.5 rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]">
+  const contenido = (
+    <>
       <span className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-[#edf1fe] text-zero-600">
         <Icono className="size-[18px]" />
       </span>
@@ -89,6 +96,16 @@ export function TarjetaModulo({
         <span className="block text-pretty font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">{titulo}</span>
         <span className="mt-1.5 block text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">{detalle}</span>
       </span>
+    </>
+  );
+
+  const clases = 'flex min-w-0 gap-3.5 rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]';
+
+  return (
+    <li className="min-w-0">
+      {href
+        ? <Link href={href} className={`${clases} h-full`}>{contenido}</Link>
+        : <span className={`${clases} h-full`}>{contenido}</span>}
     </li>
   );
 }

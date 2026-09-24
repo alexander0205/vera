@@ -13,9 +13,11 @@
  */
 
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import {
   ADDONS, LINEAS_PRODUCTO, TEXTO_BAJO_COTIZACION,
-  addonBajoCotizacion, lineaBajoCotizacion, planesDeLinea,
+  addonBajoCotizacion, familiaBajoCotizacion, getProductoAparte,
+  lineaBajoCotizacion, planesDeFamilia, planesDeLinea,
   type Feature, type PlanDef,
 } from '@/lib/config/plans';
 import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
@@ -23,17 +25,32 @@ import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, TarjetasContacto } from '../_piezas';
 import { Acordeon, type Pregunta } from '../_acordeon';
 import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
-import { Planes, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
+import { Planes, type AdicionalVista, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
 import { CierreDePrecios, PerfilProvider } from './_perfil';
+
+/**
+ * El «desde US$N» de la familia de facturación, o cadena vacía si no publica.
+ *
+ * Va derivado y no escrito porque esta cadena es lo que se ve en Google: una
+ * cifra copiada a mano aquí sobrevive al día que suba el plan, y la promesa que
+ * queda en el buscador no la revisa nadie.
+ */
+const DESDE_FACTURACION = (() => {
+  if (familiaBajoCotizacion('ecf')) return '';
+  const precios = planesDeFamilia('ecf').map(p => p.price).filter(p => p > 0);
+  return precios.length > 0 ? ` desde US$${Math.min(...precios)} al mes` : '';
+})();
 
 export const metadata: Metadata = {
   title: 'Planes y precios',
-  // Sin cifras aquí: la descripción es lo que Google enseña debajo del enlace,
-  // y prometer «los precios» para que al entrar no haya ninguno es la peor
-  // forma de recibir a nadie. Antes decía «con sus precios y topes», y dejó de
-  // ser cierto el día que las líneas de facturación pasaron a cotizarse.
+  alternates: { canonical: '/precios' },
+  keywords: ['precios ERP República Dominicana', 'cuánto cuesta facturación electrónica', 'planes software contable', 'precio punto de venta'],
+  // La descripción es lo que Google enseña debajo del enlace, así que promete
+  // lo que hay al entrar y nada más. Vuelve a decir «precios» porque las tres
+  // líneas volvieron a publicarlos; el día que alguna se calle, esta línea se
+  // revisa con ella.
   description:
-    'Planes de facturación electrónica, punto de venta y colegios: qué incluye cada uno y hasta dónde llega. El precio se arma con tus números. Sin contrato mínimo.',
+    `Planes de facturación electrónica, punto de venta y colegios, con sus precios y sus topes${DESDE_FACTURACION}. Sin contrato mínimo.`,
 };
 
 // ─── Traductores de catálogo a celda ─────────────────────────────────────────
@@ -198,17 +215,16 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
   const esColegio = linea.familia === 'colegio';
   const conPos = linea.addons.includes('pos') || esColegio;
 
-  // Dos motivos distintos para no enseñar la cifra, y conviene no confundirlos
-  // porque el texto que se pinta en su lugar no es el mismo:
+  // Un solo motivo para no enseñar la cifra: que el catálogo no la publique.
   //
-  //  · `bajoCotizacion` — la línea NO tiene precio de catálogo publicado. Sale
-  //    de `precioBajoCotizacion` y vale en todo el sistema, no solo aquí.
-  //  · `esColegio`      — decisión de MERCADEO de esta página en concreto: el
-  //    tramo sí tiene cifra, y se enseña dentro del sistema, pero publicarla
-  //    hace que el colegio de 600 se descarte solo y el de 80 crea que le
-  //    sobra. Lo que se quiere ahí es la conversación, no el número.
+  // Esta página tenía además su propia excepción —`|| esColegio`, escrita aquí
+  // a mano— que tapaba el tramo escolar aunque el catálogo lo publicara. Eso es
+  // exactamente lo que `precioBajoCotizacion` existe para evitar: con la regla
+  // duplicada, publicar una línea desde el catálogo no la publicaba aquí, y
+  // nadie sabía por qué. Si algún día hay que volver a callar una línea, se
+  // calla en `lib/config/plans.ts` y se calla en todas las pantallas a la vez.
   const bajoCotizacion = lineaBajoCotizacion(linea.key);
-  const sinCifra = bajoCotizacion || esColegio;
+  const sinCifra = bajoCotizacion;
 
   const planes: PlanVista[] = conPrecio.map(({ plan, precio }, i) => {
     // `-1` es el «sin tope» del catálogo; la tarjeta lo pinta con el lazo.
@@ -239,6 +255,21 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
     };
   });
 
+  // Lo que se le puede sumar a ESTA línea. Lo que ya viene dentro no se ofrece:
+  // en los tramos de colegio el Punto de Venta es la cafetería y ya está
+  // pagado, así que marcarlo ahí sería cobrarlo dos veces.
+  const adicionales: AdicionalVista[] = ADDONS
+    .filter(a => !a.incluidoEn.includes(linea.familia) && !linea.addons.includes(a.key))
+    .map(a => ({
+      key: a.key,
+      modulo: a.modulo,
+      nombre: a.name,
+      descripcion: a.descripcion,
+      // `null` cuando toca cotizar: la cifra no sale del servidor, igual que
+      // la del plan.
+      precio: addonBajoCotizacion(a.key, linea.familia) ? null : a.price,
+    }));
+
   return {
     key: linea.key,
     nombre: linea.nombre,
@@ -246,6 +277,7 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
     gancho: linea.gancho,
     esColegio,
     bajoCotizacion,
+    adicionales,
     // De la familia de la línea: 15 en e-CF, 30 en colegio. Es el mismo número
     // que `crearSuscripcionDePrueba` le pasa a Stripe como `trial_period_days`,
     // así que la página no puede prometer una cosa y el cobro contar otra.
@@ -318,9 +350,21 @@ const MOMENTOS = [
 // ─── Página ──────────────────────────────────────────────────────────────────
 
 export default function PreciosPage() {
-  const lineas = LINEAS_PRODUCTO.map(l => vistaDeLinea(l.key)).filter((l): l is LineaVista => l !== null);
-  const addonPos = ADDONS.find(a => a.key === 'pos');
-  const posBajoCotizacion = addonBajoCotizacion('pos', 'ecf');
+  // «Zero POS + ERP» no se enseña como línea: son los mismos cuatro planes de
+  // Zero ERP con el adicional sumado, y ponerlos en un selector aparte obligaba
+  // a comparar dos columnas casi idénticas para descubrir que la diferencia son
+  // nueve dólares. El Punto de Venta se ofrece donde se entiende: como
+  // adicional, y marcable en el recomendador de aquí abajo.
+  //
+  // La línea sigue en el catálogo porque el onboarding la usa —«vendo en
+  // mostrador» deduce `pos-erp` desde la actividad de la DGII— y la pantalla de
+  // suscripción la compara. Lo que cambia es qué se le enseña al que no es
+  // cliente todavía.
+  const lineas = LINEAS_PRODUCTO
+    .filter(l => l.key !== 'pos-erp')
+    .map(l => vistaDeLinea(l.key))
+    .filter((l): l is LineaVista => l !== null);
+  const crm = getProductoAparte('crm');
   const lineaColegio = lineas.find(l => l.esColegio);
 
   const canales = [
@@ -346,20 +390,48 @@ export default function PreciosPage() {
             Adicionales
           </h2>
           <div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-            {addonPos && (
-              <div className="rounded-2xl border border-[#e9ebf3] bg-white p-5">
-                <div className="font-[family-name:var(--font-display)] text-sm font-semibold">{addonPos.name}</div>
-                {/* El adicional se vende SOBRE la familia e-CF, que va bajo
-                    cotización: publicar aquí su cifra sería dar por resta el
-                    precio del combinado que la tarjeta de arriba no enseña. */}
+            {/* Los dos adicionales del catálogo, no uno. La Nómina se vendía
+                igual que el Punto de Venta y no estaba en esta lista: se
+                escribió la tarjeta del POS a mano y la de Nómina nació después,
+                en ADDONS, sin que nadie se acordara de esta página. Recorriendo
+                el array, el que entre tercero aparece solo. */}
+            {ADDONS.map(addon => {
+              const bajoCotizacion = addonBajoCotizacion(addon.key, 'ecf');
+              const incluidoEnColegio = addon.incluidoEn.includes('colegio');
+              return (
+                <div key={addon.key} className="rounded-2xl border border-[#e9ebf3] bg-white p-5">
+                  <div className="font-[family-name:var(--font-display)] text-sm font-semibold">{addon.name}</div>
+                  <div className="mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold text-zero-600">
+                    {bajoCotizacion ? TEXTO_BAJO_COTIZACION : `+US$${addon.price} / mes`}
+                  </div>
+                  <p className="mt-2.5 text-pretty text-xs leading-relaxed text-gray-500">
+                    {addon.descripcion} Se contrata sobre cualquier plan
+                    {incluidoEnColegio ? ' de facturación: en los tramos de colegio ya viene dentro.' : ', de facturación o de colegio.'}
+                  </p>
+                </div>
+              );
+            })}
+
+            {/* El CRM no es un adicional: es otra aplicación, con su propia
+                cuenta y su propio cobro. Va aquí porque es donde el visitante
+                pregunta «¿y esto cuánto es?», y se dice que se cotiza en vez de
+                dejarlo sin respuesta. Sale de PRODUCTOS_APARTE. */}
+            {crm && (
+              <Link href="/productos/crm" className="block rounded-2xl border border-[#e9ebf3] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200">
+                <div className="font-[family-name:var(--font-display)] text-sm font-semibold">{crm.nombre}</div>
                 <div className="mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold text-zero-600">
-                  {posBajoCotizacion ? TEXTO_BAJO_COTIZACION : `+US$${addonPos.price} / mes`}
+                  {crm.bajoCotizacion || crm.precio === null ? TEXTO_BAJO_COTIZACION : `US$${crm.precio} / mes`}
                 </div>
                 <p className="mt-2.5 text-pretty text-xs leading-relaxed text-gray-500">
-                  {addonPos.descripcion} Se contrata sobre cualquier plan de facturación.
+                  {crm.descripcion} Asistente que contesta, bandeja de WhatsApp, Messenger e
+                  Instagram, tablero y agenda. No entra en estos planes: se contrata aparte.
                 </p>
-              </div>
+                <span className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-zero-600">
+                  Ver qué hace
+                </span>
+              </Link>
             )}
+
             <div className="rounded-2xl border border-[#e9ebf3] bg-white p-5">
               <div className="font-[family-name:var(--font-display)] text-sm font-semibold">Migración de tus datos</div>
               <div className="mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold text-zero-600">

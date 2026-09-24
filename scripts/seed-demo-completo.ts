@@ -129,6 +129,14 @@ const dia = (offset: number) => {
   }
 
   // ── Facturación: 10 facturas en varios estados ────────────────────────────
+  // Los cobros primero: `pagos_recibidos` apunta a la factura, y borrarla de
+  // frente rompe la llave foránea en la segunda corrida —que es justo cuando
+  // un sembrador idempotente tiene que funcionar—.
+  await sql`
+    DELETE FROM pagos_recibidos
+    WHERE ecf_document_id IN (
+      SELECT id FROM ecf_documents WHERE team_id = ${T} AND codigo LIKE 'DEMO-%'
+    )`;
   await sql`DELETE FROM ecf_documents WHERE team_id = ${T} AND codigo LIKE 'DEMO-%'`;
   const facturas: { id: number; total: number }[] = [];
   for (let i = 1; i <= 10; i++) {
@@ -156,7 +164,7 @@ const dia = (offset: number) => {
   }
 
   // ── Escolar: catálogo ─────────────────────────────────────────────────────
-  const upsert = async (tabla: 'admin_escolar_periodos' | 'admin_escolar_cursos', nombre: string, extra = {}) => {
+  const upsert = async (tabla: 'admin_escolar_periodos', nombre: string, extra = {}) => {
     const [ya] = await sql<{ id: number }[]>`
       SELECT id FROM ${sql(tabla)} WHERE team_id = ${T} AND nombre = ${nombre} LIMIT 1`;
     if (ya) return ya.id;
@@ -168,11 +176,32 @@ const dia = (offset: number) => {
   const periodoId = await upsert('admin_escolar_periodos', 'Año escolar 2026-2027', {
     fecha_inicio: '2026-08-01', fecha_fin: '2027-06-30', activo: true,
   });
-  const cursoIds = [
-    await upsert('admin_escolar_cursos', '1ro Primaria', { nivel: 'primaria', orden: 1 }),
-    await upsert('admin_escolar_cursos', '2do Primaria', { nivel: 'primaria', orden: 2 }),
-    await upsert('admin_escolar_cursos', '3ro Primaria', { nivel: 'primaria', orden: 3 }),
-  ];
+  // La estructura académica es de tres pisos desde la migración del módulo
+  // escolar: servicio (tanda) → grado → curso (la sección). El sembrador se
+  // quedó en el de dos y por eso reventaba: `cursos.grado_id` es obligatorio.
+  const [servicio] = await sql<{ id: number }[]>`
+    INSERT INTO admin_escolar_servicios (team_id, periodo_id, nombre, tanda, orden, activo)
+    VALUES (${T}, ${periodoId}, 'Primaria', 'matutina', 1, true)
+    ON CONFLICT DO NOTHING
+    RETURNING id`;
+  const servicioId = servicio?.id ?? (await sql<{ id: number }[]>`
+    SELECT id FROM admin_escolar_servicios WHERE team_id = ${T} AND nombre = 'Primaria' LIMIT 1`)[0].id;
+
+  const cursoIds: number[] = [];
+  for (const [i, nombre] of ['1ro Primaria', '2do Primaria', '3ro Primaria'].entries()) {
+    const [ya] = await sql<{ id: number }[]>`
+      SELECT c.id FROM admin_escolar_cursos c
+      JOIN admin_escolar_grados g ON g.id = c.grado_id
+      WHERE c.team_id = ${T} AND g.nombre = ${nombre} LIMIT 1`;
+    if (ya) { cursoIds.push(ya.id); continue; }
+    const [grado] = await sql<{ id: number }[]>`
+      INSERT INTO admin_escolar_grados (team_id, servicio_id, nombre, nivel, orden, activo)
+      VALUES (${T}, ${servicioId}, ${nombre}, 'primaria', ${i + 1}, true) RETURNING id`;
+    const [curso] = await sql<{ id: number }[]>`
+      INSERT INTO admin_escolar_cursos (team_id, grado_id, nombre, nivel, orden, activo)
+      VALUES (${T}, ${grado.id}, 'A', 'primaria', 1, true) RETURNING id`;
+    cursoIds.push(curso.id);
+  }
 
   const conceptos: Record<string, number> = {};
   for (const nombre of ['Mensualidad', 'Inscripción anual', 'Transporte escolar']) {

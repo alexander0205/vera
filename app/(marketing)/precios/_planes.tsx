@@ -9,12 +9,13 @@
  * archivo tuviera un número del catálogo, sería el número que se queda viejo.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePerfil } from './_perfil';
 import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
 import { CanalesAviso } from '@/components/canales-aviso';
 import { Cheque, Contenedor, Iconos } from '../_piezas';
+import type { TopeDePlan } from '@/lib/config/plan-vista';
 
 // ─── Lo que llega del servidor ───────────────────────────────────────────────
 
@@ -41,31 +42,50 @@ export type PlanVista = {
    * `null` = este plan no publica precio, y en su lugar va la invitación a
    * hablar con nosotros. El servidor ni siquiera manda la cifra (ver
    * `page.tsx`), así que aquí no hay nada que esconder — si no vino, no
-   * existe. El POR QUÉ no vino lo dice `LineaVista.bajoCotizacion`, y no es
-   * el mismo en las tres líneas.
+   * existe. Hoy las tres líneas publican, así que esto llega con número; la
+   * rama sigue porque `precioBajoCotizacion` puede volver a callar una.
    */
   precio: number | null;
   /**
    * Lo que le sale el mes por estudiante, ya dividido en el servidor.
    *
-   * Va aparte del precio y no se calcula aquí porque en colegio `precio`
-   * llega en `null` a propósito: enviarlo para dividirlo en el navegador lo
-   * habría vuelto a publicar en el HTML, que es justo lo que se quitó.
+   * Se manda dividido y no se calcula aquí para que siga sirviendo el día que
+   * la línea de colegio vuelva a callar su total: entonces `precio` llega en
+   * `null` y esta cifra es la única que queda, sin que el HTML publique el
+   * total por la puerta de atrás.
    */
   porEstudiante: number | null;
   destacado: boolean;
   /**
-   * `sinTope` en vez de la palabra: el lazo ES el infinito de la marca, y en
-   * una fila que dice «Comprobantes/mes» dibuja mejor el «no se acaba» que
-   * dos palabras que hay que leer.
+   * Los topes tal como los arma `topesDePlan`, que es el mismo sitio del que
+   * los saca la pantalla de suscripción: escribir aquí la forma a mano dejaba
+   * fuera los campos que se agregaran allá —pasó con `clave`, que es lo que
+   * permite encender la fila del Punto de Venta al marcarlo—.
    */
-  topes: { etiqueta: string; valor: string; sinTope?: boolean; canales?: boolean }[];
+  topes: TopeDePlan[];
   incluyeTitulo: string;
   incluye: string[];
   /** Crudos, para el recomendador. -1 = sin tope / no aplica. */
   docs: number;
   usuarios: number;
   estudiantes: number;
+};
+
+/**
+ * Un módulo que se le puede sumar al plan desde el recomendador.
+ *
+ * Solo llegan los que NO vienen ya dentro de la línea (ver `page.tsx`): en los
+ * tramos de colegio el Punto de Venta es la cafetería y ya está pagado, así que
+ * ahí no se ofrece.
+ */
+export type AdicionalVista = {
+  key: string;
+  /** El módulo que enciende. Sirve para saber qué fila de topes reescribir. */
+  modulo: string;
+  nombre: string;
+  descripcion: string;
+  /** `null` mientras se cotice: la cifra no sale del servidor. */
+  precio: number | null;
 };
 
 export type LineaVista = {
@@ -77,13 +97,14 @@ export type LineaVista = {
   /**
    * La línea no tiene precio de catálogo: se cotiza con el cliente.
    *
-   * Distinto de que la cifra falte por la decisión de mercadeo de esta página
-   * —que es lo que pasa con los tramos de colegio, que SÍ tienen precio y se
-   * enseña dentro del sistema—. Lo que cambia es qué se escribe en el hueco:
-   * al colegio se le dice de qué depende su tramo, y aquí que el precio se
-   * arma con su operación.
+   * Es el único motivo por el que una tarjeta puede salir sin cifra. Esta
+   * página tuvo además su propia excepción para el colegio —cifra escondida
+   * aquí aunque el catálogo la publicara— y se quitó: la regla vive en
+   * `precioBajoCotizacion` y vale para todas las pantallas a la vez.
    */
   bajoCotizacion: boolean;
+  /** Lo que se le puede sumar al plan, con su precio. */
+  adicionales: AdicionalVista[];
   conPos: boolean;
   /**
    * Días de prueba de ESTA línea, no del producto.
@@ -104,21 +125,17 @@ const usd = (n: number) => `US$${n.toLocaleString('es-DO')}`;
  *
  * Una tarjeta con el hueco en blanco parece un olvido y el visitante se va a
  * buscar el precio a otro lado; decir de qué depende convierte la ausencia en
- * una razón. Son dos razones distintas y por eso son dos textos: el colegio
- * tiene tramo y lo que no se publica es su total, mientras que en las líneas
- * de facturación no hay cifra de catálogo que publicar.
+ * una razón.
+ *
+ * Hay un solo texto porque hay un solo motivo: que el catálogo no publique esa
+ * línea. Había un segundo —el del colegio, «Precio a la medida»— de cuando esta
+ * página tapaba el tramo escolar por su cuenta; al publicarse los cuatro
+ * tramos, ese texto no lo alcanzaba ya ninguna pantalla.
  */
-function huecoDePrecio(linea: LineaVista): { titulo: string; detalle: string } {
-  return linea.bajoCotizacion
-    ? {
-      titulo: 'Precio bajo cotización',
-      detalle: 'Lo armamos con tu volumen, tus usuarios y lo que haya que migrar.',
-    }
-    : {
-      titulo: 'Precio a la medida',
-      detalle: 'Depende de cuántos estudiantes tienes y de la implementación que necesites.',
-    };
-}
+const HUECO_DE_PRECIO = {
+  titulo: 'Precio bajo cotización',
+  detalle: 'Lo armamos con tu volumen, tus usuarios y lo que haya que migrar.',
+} as const;
 
 /** A dónde se va a pedir el precio. El perfil viaja puesto: ya lo dijo. */
 const hrefCotizar = (linea: LineaVista) =>
@@ -264,7 +281,6 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
           {linea.planes.map(p => {
             const oscuro = !p.destacado && p === linea.planes[linea.planes.length - 1];
             const esColegio = linea.key === 'erp-colegio';
-            const hueco = huecoDePrecio(linea);
             return (
               <div
                 key={p.key}
@@ -289,17 +305,17 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                 </div>
 
                 {/* Sin cifra, pero con motivo y con salida: el texto dice de
-                    qué depende (ver `huecoDePrecio`) y el enlace lleva a
+                    qué depende (ver `HUECO_DE_PRECIO`) y el enlace lleva a
                     pedirlo. Un hueco sin ninguna de las dos cosas parece un
                     olvido y el visitante se va a buscar el precio a otro
                     lado. */}
                 {p.precio === null ? (
                   <div className="mt-4">
                     <div className={`font-[family-name:var(--font-display)] text-[19px] font-semibold leading-tight tracking-[-.6px] ${oscuro ? 'text-white' : 'text-[#0f1118]'}`}>
-                      {hueco.titulo}
+                      {HUECO_DE_PRECIO.titulo}
                     </div>
                     <p className={`mt-1.5 text-pretty text-[11.5px] leading-snug ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
-                      {hueco.detalle}
+                      {HUECO_DE_PRECIO.detalle}
                     </p>
                     {/* Solo donde el botón de abajo NO lleva ya a contacto: en
                         colegio sería el mismo destino dos veces seguidas. */}
@@ -464,7 +480,7 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   </div>
                   {p.precio === null ? (
                     <div className={`mt-1 text-pretty text-[10.5px] font-semibold leading-tight ${p.destacado ? 'text-zero-600' : 'text-[#4a5164]'}`}>
-                      {huecoDePrecio(tabla).titulo}
+                      {HUECO_DE_PRECIO.titulo}
                     </div>
                   ) : (
                     <div className={`mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold ${p.destacado ? 'text-zero-600' : 'text-[#0f1118]'}`}>
@@ -547,11 +563,9 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
             «precios mensuales en dólares» sobre cuatro columnas sin una sola
             cifra es contradecirse en la misma pantalla. */}
         <p className="mt-3 text-[11.5px] text-gray-500">
-          {tabla.esColegio
-            ? 'El precio de cada tramo se arma con los números de tu colegio. El lazo de Zero indica sin tope.'
-            : tabla.bajoCotizacion
-              ? 'El precio se arma con tu operación y se cotiza en dólares, sin ITBIS. El lazo de Zero indica sin tope.'
-              : 'Precios mensuales en dólares estadounidenses, sin ITBIS. El lazo de Zero indica sin tope.'}
+          {tabla.bajoCotizacion
+            ? 'El precio se arma con tu operación y se cotiza en dólares, sin ITBIS. El lazo de Zero indica sin tope.'
+            : 'Precios mensuales en dólares estadounidenses, sin ITBIS. El lazo de Zero indica sin tope.'}
         </p>
       </Contenedor>
     </>
@@ -587,10 +601,31 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
   const [facturas, setFacturas] = useState(180);
   const [estudiantes, setEstudiantes] = useState(220);
   const [usuarios, setUsuarios] = useState(3);
+  /**
+   * Los adicionales marcados.
+   *
+   * El recomendador decía el plan y su precio, pero el Punto de Venta y la
+   * Nómina se venden sueltos: quien vende en mostrador veía US$35 y pagaba
+   * US$44. Ahora se marcan aquí y la cifra de al lado es la que va a pagar.
+   */
+  const [sumados, setSumados] = useState<string[]>([]);
 
   const esColegio = perfil === 'colegio';
   const planes = linea.planes;
-  const hueco = huecoDePrecio(linea);
+
+  // Al cambiar de línea, lo marcado no viaja: el colegio no ofrece los mismos
+  // adicionales, y arrastrar una selección que ya no existe deja sumando un
+  // precio que la tarjeta no explica.
+  useEffect(() => { setSumados([]); }, [linea.key]);
+
+  const elegidos = linea.adicionales.filter(a => sumados.includes(a.key));
+  const extra = elegidos.reduce((s, a) => s + (a.precio ?? 0), 0);
+  const modulosSumados = elegidos.map(a => a.modulo);
+
+  function alternarAdicional(key: string) {
+    setSumados(ks => (ks.includes(key) ? ks.filter(k => k !== key) : [...ks, key]));
+  }
+
   // Que la línea no enseñe cifra, venga de donde venga el motivo: es lo que
   // decide si el bloque azul promete un precio o una conversación.
   const sinCifra = planes.every(p => p.precio === null);
@@ -640,6 +675,43 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
           />
         )}
         <Deslizador etiqueta="Usuarios del sistema" valor={usuarios} min={1} max={10} paso={1} onChange={setUsuarios} />
+
+        {linea.adicionales.length > 0 && (
+          <div className="mt-6">
+            <div className="text-[12.5px] font-semibold text-[#3b4252]">¿Le sumas algo?</div>
+            <div className="mt-2.5 flex flex-col gap-2">
+              {linea.adicionales.map(a => {
+                const marcado = sumados.includes(a.key);
+                return (
+                  <label
+                    key={a.key}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                      marcado ? 'border-zero-300 bg-white' : 'border-[#e4e8f4] bg-white/60 hover:border-zero-200'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={() => alternarAdicional(a.key)}
+                      className="mt-0.5 size-4 shrink-0 accent-zero-600"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <span className="text-[12.5px] font-semibold text-[#102a72]">{a.nombre}</span>
+                        <span className="text-[12px] font-semibold tabular-nums text-zero-600">
+                          {a.precio === null ? HUECO_DE_PRECIO.titulo : `+${usd(a.precio)} / mes`}
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-pretty text-[11.5px] leading-[1.45] text-[#6b7280]">
+                        {a.descripcion}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="relative min-w-0 overflow-hidden rounded-2xl bg-[#102a72] p-6 text-white">
@@ -661,7 +733,7 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
               {sugerido.precio === null ? (
                 <>
                   <div className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-semibold leading-tight tracking-[-.8px]">
-                    {hueco.titulo}
+                    {HUECO_DE_PRECIO.titulo}
                   </div>
                   <p className="mt-2 text-pretty text-[12.5px] leading-relaxed text-white/70">
                     {linea.bajoCotizacion
@@ -691,11 +763,17 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
                 <>
                   <div className="mt-4 flex items-baseline gap-1.5">
                     <span className="font-[family-name:var(--font-display)] text-[38px] font-semibold tracking-[-1.5px] tabular-nums">
-                      {usd(sugerido.precio)}
+                      {usd(sugerido.precio + extra)}
                     </span>
                     <span className="text-[13px] text-white/70">/ mes</span>
                   </div>
-                  <div className="mt-1 text-[11.5px] text-white/60">Sin costo de instalación</div>
+                  {/* Con algo marcado, la suma se enseña desglosada: una cifra
+                      que sube sin decir de dónde sale parece un error. */}
+                  <div className="mt-1 text-[11.5px] text-white/60">
+                    {elegidos.length > 0
+                      ? `${sugerido.nombre} ${usd(sugerido.precio)}${elegidos.map(a => ` + ${a.nombre} ${a.precio === null ? '(se cotiza)' : usd(a.precio)}`).join('')}`
+                      : 'Sin costo de instalación'}
+                  </div>
                 </>
               )}
               <div className="my-4 h-px bg-white/15" />
@@ -703,7 +781,12 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
                 {sugerido.topes.map(t => (
                   <div key={t.etiqueta} className="flex items-baseline justify-between gap-2.5 text-[12.5px]">
                     <span className="min-w-0 flex-1 text-white/70">{t.etiqueta}</span>
-                    <span className="shrink-0 text-right font-medium tabular-nums">{t.valor}</span>
+                    {/* Marcar el Punto de Venta arriba tiene que encender su
+                        fila: dejarla en «No incluido» mientras el precio ya lo
+                        cobra es contradecirse en la misma tarjeta. */}
+                    <span className="shrink-0 text-right font-medium tabular-nums">
+                      {t.clave && modulosSumados.includes(t.clave) ? 'Incluido' : t.valor}
+                    </span>
                   </div>
                 ))}
               </div>
