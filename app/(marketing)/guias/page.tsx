@@ -14,19 +14,20 @@ import { Antetitulo } from '../_bloques';
 import { DatosDeRuta } from '../_datos-estructurados';
 
 export const metadata: Metadata = {
-  title: 'Guías: facturación electrónica, reportes de la DGII y nómina dominicana',
+  title: 'Guías: facturación electrónica, ITBIS, reportes de la DGII y nómina dominicana',
   description:
-    'Cómo emitir un e-CF, cuándo se envían el 606, el 607 y el 608, cómo se calcula la nómina con AFP, SFS e ISR y cómo se saca la regalía pascual. Explicado en corto y sin vender nada.',
+    'Cómo emitir un e-CF y cuánto cuesta, cuándo se declara el ITBIS, cuándo se envían el 606, el 607 y el 608, cómo se calcula la nómina con AFP, SFS e ISR y cómo se saca la regalía pascual. Explicado en corto y sin vender nada.',
   keywords: [
     'guías fiscales República Dominicana', 'cómo facturar electrónicamente', 'reportes DGII',
-    'nómina dominicana', 'regalía pascual',
+    'nómina dominicana', 'regalía pascual', 'ITBIS', 'formulario IT-1',
+    'cuánto cuesta facturación electrónica',
   ],
   alternates: { canonical: '/guias' },
   openGraph: {
     type: 'website',
     url: urlDelSitio('/guias'),
     title: 'Guías de Zero: DGII, facturación y nómina',
-    description: 'Los trámites que todo negocio dominicano tiene que hacer, explicados en corto.',
+    description: 'Los trámites que todo negocio dominicano tiene que hacer, explicados en corto y con sus fuentes.',
   },
 };
 
@@ -52,6 +53,20 @@ export const GUIAS: Guia[] = [
     titulo: 'Formatos 606, 607 y 608: qué son y cuándo se envían',
     resumen: 'Qué reporta cada uno, qué lleva campo por campo y por qué rebotan los envíos. Se mandan dentro de los primeros 15 días del mes siguiente.',
     minutos: 6,
+  },
+  {
+    slug: 'cuanto-cuesta-facturacion-electronica',
+    categoria: 'Facturación',
+    titulo: '¿Cuánto cuesta facturar electrónicamente en República Dominicana?',
+    resumen: 'El facturador de la DGII es gratis hasta 150 comprobantes al mes; el certificado digital no lo regala nadie. Las cuatro partidas y las seis preguntas que hacerle a cualquier proveedor.',
+    minutos: 7,
+  },
+  {
+    slug: 'itbis-it1',
+    categoria: 'Fiscal',
+    titulo: 'ITBIS y formulario IT-1: la cuenta y la fecha',
+    resumen: 'La tasa general es 18 % y la declaración va antes del día 20 del mes siguiente, aunque el mes haya estado en cero. Con un ejemplo de la cuenta y lo que cuesta llegar tarde.',
+    minutos: 5,
   },
   {
     slug: 'calcular-nomina',
@@ -80,7 +95,7 @@ export default function GuiasPage() {
               Los trámites que hay que hacer sí o sí, explicados en corto.
             </h1>
             <p className="m-0 mt-5 text-pretty text-[17px] leading-[1.6] text-[#4a5164]">
-              Facturación electrónica, reportes de la DGII y nómina dominicana. Sirven aunque no uses
+              Facturación electrónica, ITBIS, reportes de la DGII y nómina dominicana. Sirven aunque no uses
               Zero: la respuesta está en el primer párrafo y el producto aparece al final, si acaso.
             </p>
           </div>

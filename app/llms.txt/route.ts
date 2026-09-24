@@ -1,5 +1,6 @@
 import { ADDONS, LINEAS_PRODUCTO, PRODUCTOS_APARTE, lineaBajoCotizacion, planesDeLinea } from '@/lib/config/plans';
 import { CONTACTO } from '@/app/(marketing)/_piezas';
+import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 
 /**
@@ -46,6 +47,11 @@ function adicionales(): string {
   return [...sueltos, ...aparte].join('\n');
 }
 
+function guias(): string {
+  return GUIAS.map(g =>
+    `- [${g.titulo}](${SITIO_PUBLICO}/guias/${g.slug}): ${g.resumen}`).join('\n');
+}
+
 export function GET() {
   const cuerpo = `# Zero
 
@@ -71,8 +77,14 @@ ${adicionales()}
 - [Zero CRM](${SITIO_PUBLICO}/productos/crm): agentes de IA por WhatsApp, Messenger, Instagram, correo, web y teléfono.
 - [Colegios](${SITIO_PUBLICO}/colegios): matrícula, mensualidades, mora automática y portal de padres.
 - [Precios](${SITIO_PUBLICO}/precios): los planes con sus topes.
-- [Guías](${SITIO_PUBLICO}/guias): cómo emitir un e-CF, los formatos 606/607/608, el cálculo de la nómina dominicana y la regalía pascual.
+- [Guías](${SITIO_PUBLICO}/guias): los trámites fiscales y laborales dominicanos explicados.
 - [Contacto](${SITIO_PUBLICO}/contacto).
+
+## Guías
+
+Explicaciones de los trámites, con sus fuentes oficiales al pie. Sirven sin contratar nada.
+
+${guias()}
 
 ## Datos que suelen preguntarse
 

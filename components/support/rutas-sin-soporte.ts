@@ -44,11 +44,29 @@ export const RUTAS_SIN_SOPORTE = [
   '/firmar/', '/horas/',
   // Quien fotografía una factura de proveedor con el enlace de la empresa.
   '/subir-factura/',
+  /*
+    La web pública: portada, productos, precios, colegios, guías, contacto y lo
+    legal. Quien las abre es un desconocido que llegó por Google, y el
+    `LlamadaGlobalProvider` vive en el layout RAÍZ —encima de `(marketing)`—,
+    así que sin esto cada visitante anónimo sondea `/llamada` cada 3 segundos y
+    se lleva un 401 hasta que cierre la pestaña. Es el mismo fallo del enlace de
+    pago, multiplicado por todo el tráfico de búsqueda que el sitio salga a
+    buscar.
+
+    La portada va aparte, en `PORTADA`: como prefijo, '/' se come el sitio
+    entero y apaga el soporte también dentro de la aplicación.
+  */
+  '/productos/', '/precios', '/colegios', '/guias', '/contacto',
+  '/terminos', '/privacidad',
 ];
+
+/** La portada. Se compara COMPLETA, nunca como prefijo. */
+const PORTADA = '/';
 
 /** ¿En esta ruta hay soporte? `null`/`undefined` (aún sin resolver) cuenta como que sí. */
 export function soporteAplica(pathname: string | null | undefined): boolean {
   if (!pathname) return true;
+  if (pathname === PORTADA) return false;
   return !RUTAS_SIN_SOPORTE.some((p) => pathname.startsWith(p));
 }
 
