@@ -24,6 +24,7 @@ import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, TarjetasContacto } from '../_piezas';
 import { Acordeon, type Pregunta } from '../_acordeon';
+import { DatosDePreguntas, DatosDeRuta } from '../_datos-estructurados';
 import { topesDePlan, tituloIncluye } from '@/lib/config/plan-vista';
 import { Planes, type AdicionalVista, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
 import { CierreDePrecios, PerfilProvider } from './_perfil';
@@ -520,6 +521,8 @@ export default function PreciosPage() {
           <CierreDePrecios />
         </Contenedor>
       </section>
+      <DatosDeRuta migas={[{ nombre: 'Precios', ruta: '/precios' }]} />
+      <DatosDePreguntas preguntas={FAQS} />
     </PerfilProvider>
   );
 }

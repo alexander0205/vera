@@ -31,6 +31,24 @@ const ORGANIZACION = {
   telephone: CONTACTO.telefono,
   areaServed: { '@type': 'Country', name: 'República Dominicana' },
   address: { '@type': 'PostalAddress', addressCountry: 'DO', addressLocality: 'Santo Domingo' },
+  // Un asistente que contesta «¿a quién le escribo?» saca el dato de aquí.
+  contactPoint: [
+    {
+      '@type': 'ContactPoint',
+      contactType: 'sales',
+      telephone: CONTACTO.telefono,
+      email: CONTACTO.ventas,
+      areaServed: 'DO',
+      availableLanguage: ['Spanish'],
+    },
+    {
+      '@type': 'ContactPoint',
+      contactType: 'customer support',
+      email: CONTACTO.soporte,
+      areaServed: 'DO',
+      availableLanguage: ['Spanish'],
+    },
+  ],
 } as const;
 
 function Json({ datos }: { datos: object }) {
@@ -75,7 +93,7 @@ export function DatosDelSitio() {
  * preguntan por un sistema, no por un artículo de tienda.
  */
 export function DatosDeProducto({
-  nombre, descripcion, ruta, captura, precioDesde, funciones,
+  nombre, descripcion, ruta, captura, precioDesde, precioHasta, funciones,
 }: {
   nombre: string;
   descripcion: string;
@@ -83,6 +101,8 @@ export function DatosDeProducto({
   captura?: string;
   /** En dólares al mes. Se omite cuando la línea se cotiza. */
   precioDesde?: number | null;
+  /** El techo del rango. Con los dos, se declara `AggregateOffer`. */
+  precioHasta?: number | null;
   funciones: readonly string[];
 }) {
   return (
@@ -101,14 +121,23 @@ export function DatosDeProducto({
         publisher: { '@id': `${SITIO_PUBLICO}/#organizacion` },
         ...(precioDesde != null
           ? {
-            offers: {
-              '@type': 'Offer',
-              price: precioDesde,
-              priceCurrency: 'USD',
-              // `lowPrice` sin `highPrice` no vale: se declara como «desde».
-              availability: 'https://schema.org/InStock',
-              url: urlDelSitio('/precios'),
-            },
+            offers: precioHasta != null && precioHasta !== precioDesde
+              ? {
+                '@type': 'AggregateOffer',
+                lowPrice: precioDesde,
+                highPrice: precioHasta,
+                priceCurrency: 'USD',
+                offerCount: 4,
+                availability: 'https://schema.org/InStock',
+                url: urlDelSitio('/precios'),
+              }
+              : {
+                '@type': 'Offer',
+                price: precioDesde,
+                priceCurrency: 'USD',
+                availability: 'https://schema.org/InStock',
+                url: urlDelSitio('/precios'),
+              },
           }
           : {}),
       }}
@@ -138,6 +167,33 @@ export function DatosDePreguntas({
           name: p.pregunta,
           acceptedAnswer: { '@type': 'Answer', text: p.respuesta },
         })),
+      }}
+    />
+  );
+}
+
+/**
+ * Las migas de pan de una página interior.
+ *
+ * Es lo que hace que en el resultado salga «zero.com.do › Productos › Nómina»
+ * en vez de la dirección cruda, y lo que le dice a un asistente dónde encaja
+ * esta página dentro del sitio.
+ */
+export function DatosDeRuta({ migas }: { migas: readonly { nombre: string; ruta: string }[] }) {
+  return (
+    <Json
+      datos={{
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Inicio', item: SITIO_PUBLICO },
+          ...migas.map((m, i) => ({
+            '@type': 'ListItem',
+            position: i + 2,
+            name: m.nombre,
+            item: urlDelSitio(m.ruta),
+          })),
+        ],
       }}
     />
   );

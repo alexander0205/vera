@@ -14,13 +14,13 @@
 import type { Metadata } from 'next';
 import { ADDONS, addonBajoCotizacion } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { DatosDeProducto } from '../../_datos-estructurados';
+import { DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
 import { Contenedor, Iconos } from '../../_piezas';
 import { Antetitulo, Titulo } from '../../_bloques';
 import { CalculadoraNomina } from './_calculadora';
 import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
-  type PuntoDeProducto,
+  PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
 
 export const metadata: Metadata = {
@@ -55,6 +55,29 @@ const PERSONAL: PuntoDeProducto[] = [
   { titulo: 'Seguros y descuentos fijos', detalle: 'Lo que se le retiene todos los meses queda configurado una vez.', icono: Iconos.escudo },
   { titulo: 'Quién ve los sueldos', detalle: 'Permisos aparte: se puede registrar asistencia sin poder ver lo que gana nadie.', icono: Iconos.base },
 ];
+
+const PREGUNTAS = [
+  {
+    pregunta: '¿Calcula la TSS y el ISR con la ley dominicana?',
+    respuesta: 'Sí: AFP 2.87 % y SFS 3.04 % del empleado, ISR por la escala vigente de la DGII, y del lado patronal AFP, SFS, riesgos laborales e INFOTEP, con los topes del salario mínimo cotizable. Es el mismo motor que puedes probar en la calculadora de esta página.',
+  },
+  {
+    pregunta: '¿Genera el archivo de la TSS?',
+    respuesta: 'Sí. Al cerrar la corrida sale el archivo con lo que cotiza cada empleado, listo para subir. No hay que armarlo a mano.',
+  },
+  {
+    pregunta: '¿Calcula prestaciones laborales o liquidaciones?',
+    respuesta: 'Todavía no. El sistema sí acumula las provisiones de regalía y vacaciones mes a mes, pero el cálculo de una liquidación por salida no está hoy en el módulo.',
+  },
+  {
+    pregunta: '¿Cuánto cuesta la nómina?',
+    respuesta: 'Se suma a cualquier plan por US$12 al mes. En los planes de colegio viene incluida: un colegio siempre tiene personal.',
+  },
+  {
+    pregunta: '¿La nómina se contabiliza sola?',
+    respuesta: 'Sí. Al cerrar la corrida entra el asiento con el gasto de sueldos, las retenciones por pagar y el neto, cada uno en su cuenta, sin volver a digitar.',
+  },
+] as const;
 
 export default function NominaPage() {
   return (
@@ -130,6 +153,9 @@ export default function NominaPage() {
             : <>Se suma a cualquier plan. En los planes de colegio viene incluida: un colegio siempre tiene personal.</>
         }
       />
+
+      <DatosDeRuta migas={[{ nombre: 'Productos', ruta: '/productos/nomina' }, { nombre: 'Nómina', ruta: '/productos/nomina' }]} />
+      <PreguntasProducto preguntas={PREGUNTAS} />
 
       <CierreProducto
         antetitulo="Nómina"

@@ -19,13 +19,13 @@
 import type { Metadata } from 'next';
 import { familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { DatosDeProducto } from '../../_datos-estructurados';
+import { DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
 import { Contenedor, Iconos } from '../../_piezas';
 import { Antetitulo, Titulo } from '../../_bloques';
 import { RecorridoDelDinero } from './_recorrido';
 import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
-  type PuntoDeProducto,
+  PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
 
 export const metadata: Metadata = {
@@ -47,11 +47,13 @@ export const metadata: Metadata = {
 };
 
 /** El «desde US$N» sale del catálogo, y se calla si la línea se cotiza. */
-const DESDE = (() => {
-  if (familiaBajoCotizacion('ecf')) return null;
-  const precios = planesDeFamilia('ecf').map(p => p.price).filter(p => p > 0);
-  return precios.length > 0 ? Math.min(...precios) : null;
-})();
+const PRECIOS_ECF = familiaBajoCotizacion('ecf')
+  ? []
+  : planesDeFamilia('ecf').map(p => p.price).filter(p => p > 0);
+
+const DESDE = PRECIOS_ECF.length > 0 ? Math.min(...PRECIOS_ECF) : null;
+/** El techo del rango, para declarar la oferta como `AggregateOffer`. */
+const HASTA = PRECIOS_ECF.length > 0 ? Math.max(...PRECIOS_ECF) : null;
 
 const FACTURACION: PuntoDeProducto[] = [
   { titulo: 'Los diez tipos de e-CF', detalle: 'Factura de crédito fiscal, consumo, notas de crédito y débito, gubernamental y las demás, emitidas y acusadas ante la DGII.', icono: Iconos.factura },
@@ -84,6 +86,33 @@ const CONTABILIDAD: PuntoDeProducto[] = [
   { titulo: '606, 607 y 608', detalle: 'Los reportes salen armados en el formato que la DGII pide.', icono: Iconos.reportes },
   { titulo: 'Activos fijos y cierre', detalle: 'La depreciación corre sola y el ejercicio se cierra sin armar nada aparte.', icono: Iconos.engranaje },
 ];
+
+const PREGUNTAS = [
+  {
+    pregunta: '¿Zero emite comprobantes fiscales electrónicos ante la DGII?',
+    respuesta: 'Sí. Emite los diez tipos de e-CF —factura de crédito fiscal, consumo, notas de crédito y débito, gubernamental, regímenes especiales y las demás—, firmados y acusados por la DGII desde el mismo sistema, sin software aparte y sin pagar a un tercero por el envío.',
+  },
+  {
+    pregunta: '¿Cuánto cuesta un ERP con facturación electrónica en República Dominicana?',
+    respuesta: `Zero ERP arranca en US$${DESDE ?? 9} al mes e incluye facturación e-CF, cuentas por cobrar, inventario, compras y contabilidad. Lo que cambia entre planes es cuántos comprobantes emites y cuántas personas lo usan. El punto de venta se suma por US$9 al mes y la nómina por US$12. Sin contrato mínimo y con 15 días de prueba.`,
+  },
+  {
+    pregunta: '¿Incluye contabilidad o hay que comprarla aparte?',
+    respuesta: 'Incluida en todos los planes, sin costo extra: cada factura, cobro, compra, gasto, nómina y depreciación deja su asiento en el diario. La mayoría de la competencia la cobra aparte o no la tiene.',
+  },
+  {
+    pregunta: '¿Genera los reportes 606, 607 y 608?',
+    respuesta: 'Sí, en el formato que la DGII pide y armados con lo que ya registraste durante el mes. No hay que volver a capturar nada para declarar.',
+  },
+  {
+    pregunta: '¿Hay que instalar algo?',
+    respuesta: 'No. Funciona en el navegador, desde cualquier computadora o tableta. Lo único que puede necesitar instalación es una impresora fiscal si ya tienes una.',
+  },
+  {
+    pregunta: '¿Migran mis datos actuales?',
+    respuesta: 'Sí. Un equipo dominicano carga tus productos, clientes y saldos pendientes, deja lista la habilitación de e-CF ante la DGII y entrena a quien va a facturar todos los días.',
+  },
+] as const;
 
 export default function ErpPage() {
   return (
@@ -181,6 +210,9 @@ export default function ErpPage() {
         }
       />
 
+      <DatosDeRuta migas={[{ nombre: 'Productos', ruta: '/productos/erp' }, { nombre: 'Zero ERP', ruta: '/productos/erp' }]} />
+      <PreguntasProducto preguntas={PREGUNTAS} />
+
       <CierreProducto
         antetitulo="Zero ERP"
         titulo="Empieza a facturar esta semana."
@@ -196,6 +228,7 @@ export default function ErpPage() {
         descripcion="Sistema de gestión con facturación electrónica e-CF certificada ante la DGII, cuentas por cobrar, inventario con costo promedio real, compras con retenciones y contabilidad con asientos automáticos."
         ruta="/productos/erp"
         precioDesde={DESDE}
+        precioHasta={HASTA}
         funciones={[
           'Los diez tipos de comprobante fiscal electrónico ante la DGII',
           'Cotizaciones y facturas recurrentes',

@@ -21,7 +21,7 @@
 import type { Metadata } from 'next';
 import { TEXTO_BAJO_COTIZACION, getProductoAparte } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { DatosDePreguntas, DatosDeProducto } from '../../_datos-estructurados';
+import { DatosDePreguntas, DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
 import { Cheque, CONTACTO, Contenedor, IconoWhatsApp, Iconos } from '../../_piezas';
 import { Acordeon, type Pregunta } from '../../_acordeon';
 import { Antetitulo, Encabezado, Titulo } from '../../_bloques';
@@ -602,6 +602,7 @@ export default function CrmPage() {
           'API REST y webhooks en las dos direcciones',
         ]}
       />
+      <DatosDeRuta migas={[{ nombre: 'Productos', ruta: '/productos/crm' }, { nombre: 'Zero CRM', ruta: '/productos/crm' }]} />
       <DatosDePreguntas preguntas={CAPACIDADES} />
     </>
   );

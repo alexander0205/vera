@@ -19,6 +19,8 @@ import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
 import { CONTACTO, Cheque, Contenedor, Flecha, IconoWhatsApp } from './_piezas';
 import { Antetitulo, BotonPrimario, BotonSecundario, Encabezado, Titulo } from './_bloques';
+import { Acordeon, type Pregunta } from './_acordeon';
+import { DatosDePreguntas } from './_datos-estructurados';
 
 export type PuntoDeProducto = {
   titulo: string;
@@ -292,6 +294,39 @@ export function PrecioProducto({ texto }: { texto: React.ReactNode }) {
           </Link>
         </div>
       </Contenedor>
+    </section>
+  );
+}
+
+/**
+ * Las preguntas de siempre, contestadas en la página.
+ *
+ * No es relleno: es lo que un asistente cita cuando alguien pregunta «¿cuánto
+ * cuesta facturar electrónicamente en República Dominicana?». Por eso van
+ * escritas como se preguntan —con sus palabras, no con las nuestras— y la
+ * respuesta empieza por el sí o el no.
+ *
+ * El mismo bloque declara el `FAQPage`: el dato estructurado tiene que ser el
+ * MISMO contenido que se lee arriba, nunca uno paralelo. El acordeón pinta las
+ * respuestas en el HTML aunque estén plegadas, así que un robot las ve.
+ */
+export function PreguntasProducto({
+  preguntas, titulo = 'Lo que siempre preguntan',
+}: {
+  preguntas: readonly Pregunta[];
+  titulo?: string;
+}) {
+  return (
+    <section id="preguntas" className="scroll-mt-20">
+      <Contenedor className="pt-16 sm:pt-[82px]">
+        <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.5fr)] lg:gap-12">
+          <Encabezado antetitulo="Preguntas frecuentes" titulo={titulo} />
+          <div className="min-w-0">
+            <Acordeon preguntas={preguntas} />
+          </div>
+        </div>
+      </Contenedor>
+      <DatosDePreguntas preguntas={preguntas} />
     </section>
   );
 }
