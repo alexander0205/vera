@@ -31,6 +31,33 @@ const ORGANIZACION = {
   telephone: CONTACTO.telefono,
   areaServed: { '@type': 'Country', name: 'República Dominicana' },
   address: { '@type': 'PostalAddress', addressCountry: 'DO', addressLocality: 'Santo Domingo' },
+  knowsLanguage: 'es-DO',
+  slogan: 'El control financiero de tu negocio, de punta a punta.',
+  /**
+   * El horario de atención, que es lo que contesta «¿a qué hora abren?».
+   *
+   * No se declara `LocalBusiness` aunque tiente: ese tipo pide una dirección de
+   * calle y aquí no hay oficina abierta al público. Inventarla para sacar una
+   * ficha en el mapa es justo lo que Google penaliza —y lo que deja al cliente
+   * tocando una puerta que no existe—. Para salir en el mapa, la vía correcta
+   * es un Perfil de Empresa declarado como negocio de área de servicio.
+   */
+  openingHoursSpecification: [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      opens: '08:00',
+      closes: '17:00',
+      description: 'Ventas',
+    },
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      opens: '07:00',
+      closes: '24:00',
+      description: 'Soporte',
+    },
+  ],
   // Un asistente que contesta «¿a quién le escribo?» saca el dato de aquí.
   contactPoint: [
     {
