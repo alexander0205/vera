@@ -71,6 +71,7 @@ ${adicionales()}
 - [Zero CRM](${SITIO_PUBLICO}/productos/crm): agentes de IA por WhatsApp, Messenger, Instagram, correo, web y teléfono.
 - [Colegios](${SITIO_PUBLICO}/colegios): matrícula, mensualidades, mora automática y portal de padres.
 - [Precios](${SITIO_PUBLICO}/precios): los planes con sus topes.
+- [Guías](${SITIO_PUBLICO}/guias): cómo emitir un e-CF, los formatos 606/607/608, el cálculo de la nómina dominicana y la regalía pascual.
 - [Contacto](${SITIO_PUBLICO}/contacto).
 
 ## Datos que suelen preguntarse

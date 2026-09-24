@@ -198,3 +198,39 @@ export function DatosDeRuta({ migas }: { migas: readonly { nombre: string; ruta:
     />
   );
 }
+
+/**
+ * Una guía, declarada como artículo.
+ *
+ * `Article` y no `BlogPosting`: no es un blog con opinión, es documentación de
+ * un trámite. `dateModified` importa más que la fecha de publicación —para una
+ * guía fiscal, lo que el lector y el buscador quieren saber es si sigue
+ * vigente— y por eso se declara siempre.
+ */
+export function DatosDeArticulo({
+  titulo, descripcion, ruta, actualizada,
+}: {
+  titulo: string;
+  descripcion: string;
+  ruta: string;
+  /** ISO (YYYY-MM-DD). */
+  actualizada: string;
+}) {
+  return (
+    <Json
+      datos={{
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: titulo,
+        description: descripcion,
+        url: urlDelSitio(ruta),
+        inLanguage: 'es-DO',
+        dateModified: actualizada,
+        datePublished: actualizada,
+        author: { '@id': `${SITIO_PUBLICO}/#organizacion` },
+        publisher: { '@id': `${SITIO_PUBLICO}/#organizacion` },
+        mainEntityOfPage: { '@type': 'WebPage', '@id': urlDelSitio(ruta) },
+      }}
+    />
+  );
+}

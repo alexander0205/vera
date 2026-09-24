@@ -68,6 +68,26 @@ export const metadata: Metadata = {
     googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 },
   },
   category: 'technology',
+  /**
+   * La verificación de Search Console y Bing, por variable de entorno.
+   *
+   * Se hace así y no con el archivo HTML que ofrece Google porque el código
+   * cambia si alguien rehace la propiedad, y con esto no hay que tocar el
+   * repositorio: se pone `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` en Vercel y
+   * sale la etiqueta. Sin la variable no se pinta nada —una etiqueta de
+   * verificación vacía es peor que ninguna—.
+   *
+   * La otra vía, sin código, es un TXT en el DNS de midominio.do; sirve igual y
+   * cubre todos los subdominios de una vez.
+   */
+  verification: {
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+      : {}),
+    ...(process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION
+      ? { other: { 'msvalidate.01': process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION } }
+      : {}),
+  },
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
