@@ -35,6 +35,7 @@ const ENLACES = [
   { href: ENLACE_CRM, texto: 'CRM' },
   { href: '/colegios', texto: 'Colegios' },
   { href: '/precios', texto: 'Precios' },
+  { href: '/guias', texto: 'Guías' },
   { href: '/contacto', texto: 'Contacto' },
 ] as const;
 

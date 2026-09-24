@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
+import { GUIAS } from '@/app/(marketing)/guias/page';
 
 /**
  * El mapa del sitio público.
@@ -23,6 +24,7 @@ const RUTAS = [
   { ruta: '/productos/contabilidad', prioridad: 0.8 },
   { ruta: '/colegios', prioridad: 0.8 },
   { ruta: '/precios', prioridad: 0.9 },
+  { ruta: '/guias', prioridad: 0.7 },
   { ruta: '/contacto', prioridad: 0.6 },
   { ruta: '/terminos', prioridad: 0.2 },
   { ruta: '/privacidad', prioridad: 0.2 },
@@ -30,7 +32,12 @@ const RUTAS = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const cuando = new Date();
-  return RUTAS.map(({ ruta, prioridad }) => ({
+  // Las guías salen de su propia lista: una guía nueva entra al sitemap sola.
+  const todas = [
+    ...RUTAS,
+    ...GUIAS.map(g => ({ ruta: `/guias/${g.slug}`, prioridad: 0.7 })),
+  ];
+  return todas.map(({ ruta, prioridad }) => ({
     url: new URL(ruta, SITIO_PUBLICO).toString(),
     lastModified: cuando,
     changeFrequency: 'weekly',

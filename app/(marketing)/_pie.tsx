@@ -41,6 +41,7 @@ const COLUMNAS = [
       { texto: 'Contabilidad', href: '/productos/contabilidad' },
       { texto: 'Zero CRM', href: '/productos/crm' },
       { texto: 'Colegios', href: '/colegios' },
+      { texto: 'Guías', href: '/guias' },
     ],
   },
 ] as const;
