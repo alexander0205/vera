@@ -269,7 +269,7 @@ export default function CrmPage() {
                 sistema hizo por su cuenta mientras hablaba: validar la identidad, consultar la
                 agenda, escribir la cita, mandar el enlace de pago.
               </p>
-              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#666d80]">
                 Nada de esto lo escribió una persona.
               </p>
             </div>

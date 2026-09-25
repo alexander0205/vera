@@ -189,7 +189,7 @@ export function CabeceraMarketing() {
                     <Flecha tamano={13} className="ml-auto shrink-0 text-zero-600" />
                   </Link>
 
-                  <p className="m-0 px-2 pb-2 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#8a90a0]">
+                  <p className="m-0 px-2 pb-2 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
                     Dentro del ERP
                   </p>
                   <div className="grid grid-cols-2 gap-1">
@@ -303,7 +303,7 @@ export function CabeceraMarketing() {
               Inicio
             </Link>
 
-            <p className="m-0 px-3 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#8a90a0]">
+            <p className="m-0 px-3 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
               Dentro del ERP
             </p>
             <Link

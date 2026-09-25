@@ -108,7 +108,7 @@ export default function NominaPage() {
                 que la empresa paga por encima, que es la parte que nadie tiene en la cabeza cuando
                 ofrece un salario.
               </p>
-              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#666d80]">
                 Los números salen del mismo motor que corre tu nómina adentro.
               </p>
             </div>

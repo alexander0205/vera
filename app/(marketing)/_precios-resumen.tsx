@@ -64,7 +64,7 @@ function TarjetaLinea({ lineaKey }: { lineaKey: string }) {
           >
             <span className="min-w-0">
               <span className="block text-[13.5px] font-semibold text-[#102a72]">{plan.name}</span>
-              <span className="mt-0.5 block text-pretty text-[11.5px] leading-[1.45] text-[#8a90a0]">
+              <span className="mt-0.5 block text-pretty text-[11.5px] leading-[1.45] text-[#666d80]">
                 {porQueSeCobra(plan)}
               </span>
             </span>
@@ -77,7 +77,7 @@ function TarjetaLinea({ lineaKey }: { lineaKey: string }) {
                 <span className="font-[family-name:var(--font-display)] text-[17px] font-semibold tabular-nums tracking-[-.02em] text-[#102a72]">
                   {usd(precio)}
                 </span>
-                <span className="ml-1 text-[11.5px] text-[#8a90a0]">/mes</span>
+                <span className="ml-1 text-[11.5px] text-[#666d80]">/mes</span>
               </span>
             )}
           </li>
@@ -87,8 +87,52 @@ function TarjetaLinea({ lineaKey }: { lineaKey: string }) {
   );
 }
 
+/** La página que cuenta cada línea, para la mención de una línea. */
+const PAGINA_DE_LINEA: Record<string, string> = {
+  erp: '/productos/erp',
+  'pos-erp': '/productos/punto-de-venta',
+  'erp-colegio': '/colegios',
+};
+
+/**
+ * Una línea nombrada en una frase, con su precio de entrada.
+ *
+ * Para la portada: el colegio tiene su página, y media sección de tramos por
+ * estudiante en la portada de un negocio es media sección que no le habla a
+ * nadie ahí. Pero el colegio que sí llega tiene que saber que existe y cuánto
+ * cuesta sin buscarlo. La cifra sale del catálogo como todas.
+ */
+function MencionDeLinea({ lineaKey }: { lineaKey: string }) {
+  const linea = getLinea(lineaKey);
+  if (!linea) return null;
+  const planes = planesDeLinea(linea.key);
+  const desde = planes.length > 0 ? Math.min(...planes.map(p => p.precio)) : null;
+  const porEstudiantes = planes.some(p => p.plan.limits.estudiantes > 0);
+  const cifra = lineaBajoCotizacion(linea.key) || desde === null
+    ? TEXTO_BAJO_COTIZACION.toLowerCase()
+    : `desde ${usd(desde)} al mes`;
+
+  return (
+    <Link
+      href={PAGINA_DE_LINEA[linea.key] ?? '/precios'}
+      className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-2xl border border-[#e7edfb] bg-white px-5 py-4 transition hover:-translate-y-0.5 hover:border-zero-200"
+    >
+      <span className="min-w-0 text-pretty text-[13px] leading-[1.5] text-[#3b4252]">
+        <span className="font-semibold text-[#102a72]">{linea.nombre}</span>
+        {porEstudiantes ? ' se cobra por cantidad de estudiantes, ' : ', '}
+        {cifra}.
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-[12.5px] font-semibold text-zero-600">
+        Ver la línea
+        <Flecha tamano={12} />
+      </span>
+    </Link>
+  );
+}
+
 export function ResumenDePrecios({
   lineas = ['erp', 'erp-colegio'],
+  mencionar = [],
 }: {
   /**
    * Qué líneas enseñar, por su clave del catálogo.
@@ -101,6 +145,8 @@ export function ResumenDePrecios({
    * funcionalidad por funcionalidad.
    */
   lineas?: string[];
+  /** Líneas que solo se nombran, en una frase con su precio de entrada. */
+  mencionar?: string[];
 }) {
   const familias = new Set(
     lineas.map(k => getLinea(k)?.familia).filter((f): f is 'ecf' | 'colegio' => f !== undefined),
@@ -115,6 +161,7 @@ export function ResumenDePrecios({
     <div className="min-w-0">
       <div className={`grid min-w-0 gap-3.5 ${lineas.length > 1 ? 'sm:grid-cols-2' : ''}`}>
         {lineas.map(key => <TarjetaLinea key={key} lineaKey={key} />)}
+        {mencionar.map(key => <MencionDeLinea key={key} lineaKey={key} />)}
       </div>
 
       <div className="mt-3.5 grid min-w-0 gap-3.5 sm:grid-cols-2">
@@ -140,7 +187,9 @@ export function ResumenDePrecios({
           <Link
             key={p.key}
             href="/productos/crm"
-            className="block min-w-0 rounded-2xl border border-dashed border-[#d9e1f6] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200"
+            className={`block min-w-0 rounded-2xl border border-dashed border-[#d9e1f6] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 ${
+              adicionales.length % 2 === 0 ? 'sm:col-span-2' : ''
+            }`}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5">
               <span className="font-[family-name:var(--font-display)] text-[13.5px] font-semibold text-[#102a72]">
@@ -158,7 +207,7 @@ export function ResumenDePrecios({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <p className="m-0 text-[11.5px] text-[#8a90a0]">
+        <p className="m-0 text-[11.5px] text-[#666d80]">
           Precios mensuales en dólares estadounidenses, sin ITBIS. Sin contrato mínimo.
         </p>
         <Link

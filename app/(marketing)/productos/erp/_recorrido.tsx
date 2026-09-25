@@ -3,7 +3,7 @@
 /**
  * El recorrido de una venta, paso por paso y tocable.
  *
- * La portada lo cuenta en seis tarjetas quietas; aquí se camina. Cada paso dice
+ * Se camina, en la portada y en /productos/erp. Cada paso dice
  * QUÉ hace el usuario y qué escribe el sistema por su cuenta —el e-CF, el
  * movimiento de inventario, el asiento—, que es la diferencia entre un
  * facturador y esto.

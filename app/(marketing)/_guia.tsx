@@ -62,7 +62,7 @@ export function Guia({
                 {titulo}
               </h1>
               <p className="m-0 mt-5 text-pretty text-[17px] leading-[1.6] text-[#4a5164]">{bajada}</p>
-              <p className="m-0 mt-5 text-[12.5px] text-[#8a90a0]">
+              <p className="m-0 mt-5 text-[12.5px] text-[#666d80]">
                 Actualizada el {fecha} · {minutos} min de lectura
               </p>
             </div>
@@ -91,7 +91,7 @@ export function Guia({
         {fuentes && fuentes.length > 0 && (
           <Contenedor className="pt-10">
             <div className="mx-auto max-w-[760px] border-t border-[#eef1f8] pt-5">
-              <p className="m-0 text-[11px] font-semibold uppercase tracking-[.16em] text-[#8a90a0]">Fuentes</p>
+              <p className="m-0 text-[11px] font-semibold uppercase tracking-[.16em] text-[#666d80]">Fuentes</p>
               <ul className="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">
                 {fuentes.map(f => (
                   <li key={f.url}>
@@ -202,7 +202,7 @@ export function Tabla({
     <div className="overflow-x-auto rounded-xl border border-[#e7edfb]">
       <table className="w-full border-collapse text-[13.5px]">
         <thead>
-          <tr className="border-b border-[#eef1f8] bg-[#f7f9ff] text-[11px] uppercase tracking-[.1em] text-[#8a90a0]">
+          <tr className="border-b border-[#eef1f8] bg-[#f7f9ff] text-[11px] uppercase tracking-[.1em] text-[#666d80]">
             {columnas.map((c, i) => (
               <th key={c} className={`px-4 py-2.5 font-semibold ${i === 0 ? 'text-left' : 'text-right'}`}>{c}</th>
             ))}

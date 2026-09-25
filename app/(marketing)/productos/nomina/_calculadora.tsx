@@ -91,7 +91,7 @@ export function CalculadoraNomina() {
 
         {/* ── Lo que paga la empresa por encima ──────────────────────────── */}
         <div className="p-5">
-          <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#8a90a0]">
+          <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
             Paga la empresa, encima del sueldo
           </p>
           <ul className="m-0 mt-3.5 flex list-none flex-col gap-2.5 p-0">
@@ -112,7 +112,7 @@ export function CalculadoraNomina() {
         </div>
       </div>
 
-      <p className="m-0 border-t border-[#eef1f8] px-5 py-3 text-[11px] leading-[1.5] text-[#8a90a0]">
+      <p className="m-0 border-t border-[#eef1f8] px-5 py-3 text-[11px] leading-[1.5] text-[#666d80]">
         Calculado con el mismo motor que corre la nómina dentro del sistema: tasas {t.anio} y la
         escala del ISR vigente. Falta sumarle lo que el mes traiga —horas extra, bonos, préstamos— y
         las provisiones de regalía y vacaciones, que el sistema acumula aparte.
@@ -136,7 +136,7 @@ function Fila({
       </span>
       <span
         className={`shrink-0 text-right text-[13px] tabular-nums ${
-          apagado ? 'text-[#8a90a0]' : fuerte ? 'font-semibold text-[#102a72]' : 'font-medium text-[#3b4252]'
+          apagado ? 'text-[#666d80]' : fuerte ? 'font-semibold text-[#102a72]' : 'font-medium text-[#3b4252]'
         }`}
       >
         {valor}

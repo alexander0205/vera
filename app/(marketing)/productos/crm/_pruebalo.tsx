@@ -147,7 +147,7 @@ export function Pruebalo() {
               es lo que separa a esto de un menú de opciones. */}
           <ul className="m-0 flex list-none flex-col gap-1 self-end p-0 text-right">
             {pasos.slice(0, Math.min(paso + 1, pasos.length)).map((p, i) => (
-              <li key={p} className="text-[11px] font-medium text-[#8a90a0]">
+              <li key={p} className="text-[11px] font-medium text-[#666d80]">
                 {i < paso ? '✓' : '•'} {p}
               </li>
             ))}
