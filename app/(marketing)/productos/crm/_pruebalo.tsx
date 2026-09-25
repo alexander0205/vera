@@ -114,7 +114,7 @@ export function Pruebalo() {
           onChange={e => setTexto(e.target.value)}
           placeholder="Escribe como le escribirías por WhatsApp…"
           aria-label="Escríbele al agente"
-          className="h-11 min-w-0 flex-1 rounded-xl border border-[#e4e8f4] px-3.5 text-[13px] text-[#102a72] outline-none transition placeholder:text-[#a8aebd] focus:border-zero-300"
+          className="h-11 min-w-0 flex-1 rounded-xl border border-[#e4e8f4] px-3.5 text-[13px] text-[#102a72] outline-none transition placeholder:text-[#6b7183] focus:border-zero-300"
         />
         <button
           type="submit"
@@ -161,7 +161,7 @@ export function Pruebalo() {
         </div>
       )}
 
-      <p className="m-0 mt-3 text-[11px] leading-[1.5] text-[#a8aebd]">
+      <p className="m-0 mt-3 text-[11px] leading-[1.5] text-[#666d80]">
         Demostración con respuestas preparadas. El agente de tu institución contesta con tus
         documentos, tus precios y tus sistemas.
       </p>

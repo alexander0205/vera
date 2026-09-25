@@ -52,7 +52,7 @@ const TEMAS: Record<Perfil, string[]> = {
 type Errores = Partial<Record<'nombre' | 'empresa' | 'email' | 'telefono', string>>;
 
 const claseCampo = (malo: boolean) =>
-  `h-11 w-full rounded-[11px] border-[1.5px] px-3.5 text-[13.5px] text-[#0f1118] outline-none transition placeholder:text-[#a8aebc] focus:border-zero-600 ${
+  `h-11 w-full rounded-[11px] border-[1.5px] px-3.5 text-[13.5px] text-[#0f1118] outline-none transition placeholder:text-[#6b7183] focus:border-zero-600 ${
     malo ? 'border-[#e9a5a5] bg-[#fef7f7]' : 'border-[#e4e7f0] bg-[#fafbfe]'
   }`;
 
@@ -337,7 +337,7 @@ export function FormularioContacto() {
           value={mensaje}
           onChange={e => setMensaje(e.target.value)}
           placeholder="Hoy facturamos en Excel y llevamos las cuotas en una libreta…"
-          className="w-full resize-y rounded-[11px] border-[1.5px] border-[#e4e7f0] bg-[#fafbfe] p-3.5 text-[13.5px] leading-relaxed text-[#0f1118] outline-none transition placeholder:text-[#a8aebc] focus:border-zero-600"
+          className="w-full resize-y rounded-[11px] border-[1.5px] border-[#e4e7f0] bg-[#fafbfe] p-3.5 text-[13.5px] leading-relaxed text-[#0f1118] outline-none transition placeholder:text-[#6b7183] focus:border-zero-600"
         />
       </div>
 

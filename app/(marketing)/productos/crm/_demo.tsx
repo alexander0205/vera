@@ -153,7 +153,7 @@ export function DemoConversacion() {
             <span className="block text-[12.5px] font-semibold text-[#102a72]">{CASOS[caso].quien}</span>
             <span className="block text-[11px] text-[#666d80]">{CASOS[caso].canal}</span>
           </span>
-          <span className="ml-auto inline-flex h-[20px] items-center gap-1.5 rounded-full bg-[#e8f6ee] px-2 text-[10px] font-semibold uppercase tracking-[.4px] text-[#1f8a56]">
+          <span className="ml-auto inline-flex h-[20px] items-center gap-1.5 rounded-full bg-[#e8f6ee] px-2 text-[10px] font-semibold uppercase tracking-[.4px] text-[#0f7a4b]">
             <span className="size-1.5 rounded-full bg-[#25a366]" />
             Atendiendo el agente
           </span>

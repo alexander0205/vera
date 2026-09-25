@@ -110,7 +110,7 @@ export function CajaDemo() {
         </div>
 
         {lineas.length === 0 && !cobrado && (
-          <p className="m-0 mt-6 text-pretty text-center text-[12.5px] leading-[1.5] text-[#a8aebd]">
+          <p className="m-0 mt-6 text-pretty text-center text-[12.5px] leading-[1.5] text-[#666d80]">
             Toca un producto para agregarlo.
           </p>
         )}
@@ -158,13 +158,13 @@ export function CajaDemo() {
               /* Lo que pasó al cobrar. Es el argumento entero de la página. */
               <ul className="m-0 mt-3.5 flex list-none flex-col gap-2 p-0">
                 {AL_COBRAR.slice(0, pasos).map(paso => (
-                  <li key={paso} className="flex items-start gap-2 text-[11.5px] leading-[1.45] text-[#1f8a56]">
+                  <li key={paso} className="flex items-start gap-2 text-[11.5px] leading-[1.45] text-[#0f7a4b]">
                     <span aria-hidden>✓</span>
                     <span className="min-w-0 text-[#3b4252]">{paso}</span>
                   </li>
                 ))}
                 {pasos < AL_COBRAR.length && (
-                  <li className="text-[11.5px] text-[#a8aebd]">procesando…</li>
+                  <li className="text-[11.5px] text-[#666d80]">procesando…</li>
                 )}
               </ul>
             )}

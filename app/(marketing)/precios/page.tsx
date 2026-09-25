@@ -369,7 +369,7 @@ export default function PreciosPage() {
   const lineaColegio = lineas.find(l => l.esColegio);
 
   const canales = [
-    { nombre: 'WhatsApp', tope: 'Con tope mensual por plan', icono: IconoWhatsApp, fondo: 'bg-[#e8f6ee]', color: 'text-[#25a366]' },
+    { nombre: 'WhatsApp', tope: 'Con tope mensual por plan', icono: IconoWhatsApp, fondo: 'bg-[#e8f6ee]', color: 'text-[#12925a]' },
     { nombre: 'SMS', tope: 'Con tope mensual por plan', icono: Iconos.sms, fondo: 'bg-[#edf1fe]', color: 'text-[#2a48c4]' },
     { nombre: 'Correo', tope: 'Sin límite', icono: Iconos.correo, fondo: 'bg-[#edf1fe]', color: 'text-[#2a48c4]' },
   ];

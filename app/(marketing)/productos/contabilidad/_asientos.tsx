@@ -167,7 +167,7 @@ export function AsientosEnVivo() {
               <tr key={l.codigo} className="border-b border-[#f4f6fc]">
                 <td className="px-5 py-3">
                   <span className="block font-medium text-[#102a72]">{l.cuenta}</span>
-                  <span className="block text-[11px] tabular-nums text-[#a8aebd]">{l.codigo}</span>
+                  <span className="block text-[11px] tabular-nums text-[#666d80]">{l.codigo}</span>
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums text-[#3b4252]">{l.debe ? peso(l.debe) : '—'}</td>
                 <td className="px-5 py-3 text-right tabular-nums text-[#3b4252]">{l.haber ? peso(l.haber) : '—'}</td>
@@ -184,7 +184,7 @@ export function AsientosEnVivo() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eef1f8] px-5 py-3">
           <span
             className={`inline-flex h-[24px] items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold ${
-              cuadra ? 'bg-[#e8f6ee] text-[#1f8a56]' : 'bg-[#fdeaea] text-[#c0392b]'
+              cuadra ? 'bg-[#e8f6ee] text-[#0f7a4b]' : 'bg-[#fdeaea] text-[#c0392b]'
             }`}
           >
             <span className={`size-1.5 rounded-full ${cuadra ? 'bg-[#25a366]' : 'bg-[#c0392b]'}`} />
