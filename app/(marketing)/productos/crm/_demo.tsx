@@ -36,7 +36,7 @@ const CASOS: Caso[] = [
     clave: 'inscripcion',
     pestana: 'Una inscripción',
     canal: 'WhatsApp',
-    quien: 'Indiana R.',
+    quien: 'Isabel R.',
     turnos: [
       { de: 'cliente', texto: 'Buenas, quisiera información para inscribir a mi hijo en pre-primero.' },
       { de: 'agente', texto: '¡Hola! Con gusto. Pre-primero tiene inscripción de RD$3,500 y mensualidad de RD$4,200. ¿Quiere agendar una visita al plantel?' },
@@ -151,7 +151,7 @@ export function DemoConversacion() {
           </span>
           <span className="min-w-0">
             <span className="block text-[12.5px] font-semibold text-[#102a72]">{CASOS[caso].quien}</span>
-            <span className="block text-[11px] text-[#8a90a0]">{CASOS[caso].canal}</span>
+            <span className="block text-[11px] text-[#666d80]">{CASOS[caso].canal}</span>
           </span>
           <span className="ml-auto inline-flex h-[20px] items-center gap-1.5 rounded-full bg-[#e8f6ee] px-2 text-[10px] font-semibold uppercase tracking-[.4px] text-[#1f8a56]">
             <span className="size-1.5 rounded-full bg-[#25a366]" />
@@ -167,7 +167,7 @@ export function DemoConversacion() {
               return (
                 <p
                   key={i}
-                  className="m-0 self-center text-pretty px-3 py-1 text-center text-[11px] font-medium leading-[1.45] text-[#8a90a0]"
+                  className="m-0 self-center text-pretty px-3 py-1 text-center text-[11px] font-medium leading-[1.45] text-[#666d80]"
                 >
                   ⚙ {t.texto}
                 </p>
@@ -202,7 +202,7 @@ export function DemoConversacion() {
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-[#eef1f8] px-4 py-3">
-          <span className="text-[11px] text-[#8a90a0]">
+          <span className="text-[11px] text-[#666d80]">
             Conversación de ejemplo. El agente se arma con tus servicios y tus reglas.
           </span>
           <button
