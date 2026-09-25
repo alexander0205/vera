@@ -119,7 +119,7 @@ export function PantallaDelHero() {
               Asiento contable
             </figcaption>
             <span
-              className="hero-sella ml-auto rounded-full bg-[#e6f7ee] px-2 py-0.5 text-[10.5px] font-semibold text-[#12925a]"
+              className="hero-sella ml-auto rounded-full bg-[#e6f7ee] px-2 py-0.5 text-[10.5px] font-semibold text-[#0f7a4b]"
               style={retraso(RITMO.sello)}
             >
               Cuadra

@@ -31,7 +31,7 @@ export function ConversacionCrm() {
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-[#e2e8f7] bg-[#f7f9ff] shadow-[0_26px_50px_-30px_rgba(16,42,114,.5)]">
       <div className="flex items-center gap-2.5 border-b border-[#e7edfb] bg-white px-4 py-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#e6f7ee] text-[11px] font-bold text-[#12925a]">LE</span>
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#e6f7ee] text-[11px] font-bold text-[#0f7a4b]">LE</span>
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-semibold text-[#102a72]">Colmado La Esquina</span>
           <span className="block text-[11px] text-[#666d80]">WhatsApp</span>

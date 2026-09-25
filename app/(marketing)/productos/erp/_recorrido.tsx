@@ -116,7 +116,7 @@ export function RecorridoDelDinero() {
                   }`}
                 />
                 <span className={`mt-2 block whitespace-nowrap text-[11px] font-semibold uppercase tracking-[.12em] transition ${
-                  on ? 'text-zero-600' : 'text-[#a8aebd]'
+                  on ? 'text-zero-600' : 'text-[#666d80]'
                 }`}
                 >
                   {i + 1}. {p.rotulo}

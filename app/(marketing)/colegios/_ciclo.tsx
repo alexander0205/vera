@@ -76,7 +76,7 @@ export function CicloDeCobro() {
           return (
             <li key={h.titulo} className="relative pb-5 last:pb-0">
               <span className={`absolute -left-[26px] top-1 size-2.5 rounded-full ring-4 ring-white ${tono.punto}`} />
-              <span className="block text-[11px] font-semibold uppercase tracking-[.12em] text-[#a8aebd]">
+              <span className="block text-[11px] font-semibold uppercase tracking-[.12em] text-[#666d80]">
                 {h.cuando}
               </span>
               <span className={`mt-1 block font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.02em] ${tono.texto}`}>
