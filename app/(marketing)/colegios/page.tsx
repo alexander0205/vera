@@ -219,7 +219,7 @@ export default function ColegiosPage() {
                 <span className="grid size-[30px] place-items-center rounded-full bg-[#e6f7ee] text-[#12925a]">
                   <Iconos.dinero className="size-4" />
                 </span>
-                <figcaption className="mt-3 text-[11.5px] text-[#8a90a0]">Mensualidad pagada</figcaption>
+                <figcaption className="mt-3 text-[11.5px] text-[#666d80]">Mensualidad pagada</figcaption>
                 <p className="m-0 mt-0.5 font-[family-name:var(--font-display)] text-[21px] font-semibold tracking-[-.04em] text-[#102a72]">RD$8,500.00</p>
                 <p className="m-0 mt-1.5 text-[11.5px] text-[#5c6373]">Familia Díaz · 4to B · hoy, 10:24</p>
               </figure>

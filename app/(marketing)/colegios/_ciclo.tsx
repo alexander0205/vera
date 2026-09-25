@@ -88,7 +88,7 @@ export function CicloDeCobro() {
         })}
       </ol>
 
-      <p className="m-0 mt-4 text-pretty text-[11.5px] leading-[1.5] text-[#8a90a0]">
+      <p className="m-0 mt-4 text-pretty text-[11.5px] leading-[1.5] text-[#666d80]">
         Las fechas, el recargo y por qué canales sale cada aviso los configura el colegio una vez.
       </p>
     </div>

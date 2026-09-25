@@ -59,7 +59,7 @@ export function PieMarketing() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/marca/zero-horizontal-blanco.svg" alt="Zero" width={300} height={62} className="h-6 w-auto" />
             <p className="mt-4 max-w-[260px] text-[12.5px] leading-relaxed text-white/50">
-              Facturación electrónica, administración y colegio en un solo sistema.
+              Facturación electrónica, contabilidad, punto de venta, nómina y CRM para negocios dominicanos.
             </p>
           </div>
 

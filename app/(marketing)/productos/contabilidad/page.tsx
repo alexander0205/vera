@@ -116,7 +116,7 @@ export default function ContabilidadPage() {
                 catálogo dominicano. Mueve el monto y mira cómo se recalculan: el ITBIS, la
                 retención, el neto de la nómina.
               </p>
-              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#666d80]">
                 Nadie teclea nada de esto.
               </p>
             </div>

@@ -94,7 +94,9 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     // `overflow-x-hidden`: varias secciones sacan el lazo de marca fuera de su
     // caja a propósito y sin esto el móvil gana una barra horizontal.
-    <div className="flex min-h-[100dvh] flex-col overflow-x-hidden bg-white text-[#0f1118]">
+    // `sitio-publico` acota los estilos de foco y de aparición de globals.css a
+    // estas páginas: la aplicación tiene los suyos.
+    <div className="sitio-publico flex min-h-[100dvh] flex-col overflow-x-hidden bg-white text-[#0f1118]">
       <CabeceraMarketing />
       <main className="flex-1">{children}</main>
       <PieMarketing />

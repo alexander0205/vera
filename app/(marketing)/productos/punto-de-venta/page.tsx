@@ -109,7 +109,7 @@ export default function PuntoDeVentaPage() {
                 el sistema hace en ese mismo segundo —el comprobante fiscal, el inventario que baja,
                 el asiento contable y el ticket—.
               </p>
-              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#8a90a0]">
+              <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#666d80]">
                 Nada de eso es un paso aparte que alguien tenga que acordarse de dar.
               </p>
             </div>

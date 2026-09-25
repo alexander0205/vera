@@ -72,7 +72,7 @@ export function CajaDemo() {
     <div className="grid min-w-0 gap-3.5 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
       {/* ── El catálogo ────────────────────────────────────────────────── */}
       <div className="min-w-0 rounded-2xl border border-[#e7edfb] bg-white p-4">
-        <p className="m-0 mb-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#8a90a0]">
+        <p className="m-0 mb-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
           Toca para vender
         </p>
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
@@ -99,7 +99,7 @@ export function CajaDemo() {
       {/* ── El carrito ─────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-col rounded-2xl border border-[#e7edfb] bg-[#fbfcff] p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#8a90a0]">
+          <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
             Venta en curso
           </p>
           {(lineas.length > 0 || cobrado) && (
@@ -122,7 +122,7 @@ export function CajaDemo() {
               return (
                 <li key={nombre} className="flex items-baseline justify-between gap-2 text-[12.5px]">
                   <span className="min-w-0 truncate text-[#3b4252]">
-                    <span className="tabular-nums text-[#8a90a0]">{cant}×</span> {nombre}
+                    <span className="tabular-nums text-[#666d80]">{cant}×</span> {nombre}
                   </span>
                   <span className="shrink-0 tabular-nums text-[#102a72]">{peso(a.precio * cant)}</span>
                 </li>

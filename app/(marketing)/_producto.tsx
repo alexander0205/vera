@@ -62,7 +62,7 @@ export function HeroProducto({
             <BotonPrimario href={href}>{accion}</BotonPrimario>
             <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
           </div>
-          {pie && <p className="mt-4 text-[13px] text-[#8a90a0]">{pie}</p>}
+          {pie && <p className="mt-4 text-[13px] text-[#666d80]">{pie}</p>}
         </div>
 
         {captura && (

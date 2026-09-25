@@ -80,12 +80,14 @@ export function BotonSecundario({ href, children }: { href: string; children: Re
  * mandarlo a la misma página sería un enlace que no lleva a ningún lado—.
  */
 export function TarjetaModulo({
-  icono: Icono, titulo, detalle, href,
+  icono: Icono, titulo, detalle, href, className = '',
 }: {
   icono: (p: { className?: string }) => React.ReactElement;
   titulo: string;
   detalle: string;
   href?: string;
+  /** Clases del `<li>`: la portada las usa para la fila que rueda en el teléfono. */
+  className?: string;
 }) {
   const contenido = (
     <>
@@ -102,7 +104,7 @@ export function TarjetaModulo({
   const clases = 'flex min-w-0 gap-3.5 rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]';
 
   return (
-    <li className="min-w-0">
+    <li className={`min-w-0 ${className}`}>
       {href
         ? <Link href={href} className={`${clases} h-full`}>{contenido}</Link>
         : <span className={`${clases} h-full`}>{contenido}</span>}

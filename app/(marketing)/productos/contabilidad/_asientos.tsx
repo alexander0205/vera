@@ -156,7 +156,7 @@ export function AsientosEnVivo() {
             que baila al cambiar de dígitos se lee como un borrador. */}
         <table className="w-full border-collapse text-[12.5px]">
           <thead>
-            <tr className="border-b border-[#eef1f8] text-[10.5px] uppercase tracking-[.12em] text-[#8a90a0]">
+            <tr className="border-b border-[#eef1f8] text-[10.5px] uppercase tracking-[.12em] text-[#666d80]">
               <th className="px-5 py-2.5 text-left font-semibold">Cuenta</th>
               <th className="px-3 py-2.5 text-right font-semibold">Debe</th>
               <th className="px-5 py-2.5 text-right font-semibold">Haber</th>
@@ -190,7 +190,7 @@ export function AsientosEnVivo() {
             <span className={`size-1.5 rounded-full ${cuadra ? 'bg-[#25a366]' : 'bg-[#c0392b]'}`} />
             {cuadra ? 'Cuadrado: debe = haber' : 'Descuadrado'}
           </span>
-          <span className="text-[11px] text-[#8a90a0]">
+          <span className="text-[11px] text-[#666d80]">
             El sistema no guarda un asiento descuadrado. Si no cuadra, no entra.
           </span>
         </div>
