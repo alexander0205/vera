@@ -2,7 +2,7 @@ import 'server-only';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { almacenes, teams } from '@/lib/db/schema';
-import { getConfig, cuentasDeGasto } from '@/lib/contabilidad/config';
+import { getConfig, cuentasDeGasto, cuentasDeSalida } from '@/lib/contabilidad/config';
 import { recepciones } from '@/lib/ecf-api/client';
 import { leerEcfRecibido } from '@/lib/compras/ecf-xml';
 import { hoyRD } from '@/lib/utils/format';
@@ -18,7 +18,7 @@ import type { ContextoRegistro } from './_registrar-client';
 export async function contextoRegistro(
   teamId: number, clase: 'compra' | 'gasto', ecfIdPedido: string | null, capturaId: number | null = null,
 ): Promise<ContextoRegistro> {
-  const [cfg, listaAlmacenes, [team], cuentaPorCategoria, cuentasGasto] = await Promise.all([
+  const [cfg, listaAlmacenes, [team], cuentaPorCategoria, cuentasGasto, salida] = await Promise.all([
     getConfig(teamId),
     db.select({ id: almacenes.id, nombre: almacenes.nombre }).from(almacenes).where(eq(almacenes.teamId, teamId)).orderBy(almacenes.nombre),
     db.select({ rnc: teams.rnc, cp: teams.ecfCodigoPublico }).from(teams).where(eq(teams.id, teamId)).limit(1),
@@ -31,6 +31,8 @@ export async function contextoRegistro(
       WHERE team_id = ${teamId} AND imputable AND activa AND tipo IN ('gasto', 'costo', 'activo')
       ORDER BY codigo
     `) as unknown as Promise<{ id: number; codigo: string; nombre: string }[]>,
+    // De qué cuentas puede salir el dinero, y a cuál apunta hoy cada método.
+    cuentasDeSalida(teamId),
   ]);
 
   let inicial: ContextoRegistro['inicial'] = null;
@@ -91,6 +93,8 @@ export async function contextoRegistro(
     almacenes: listaAlmacenes,
     cuentasGasto: [...cuentasGasto],
     cuentaPorCategoria,
+    cuentasSalida: salida.cuentas,
+    cuentaSalidaPorMetodo: salida.porMetodo,
     rncEmpresa: team?.rnc ?? null,
     hoy: hoyRD(),
     inicial,

@@ -23,7 +23,8 @@ import { cache } from 'react';
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { parseLineas } from '@/lib/reportes/shared';
-import { getConfig, resolverCuentaCobro, claveContableDePago, getCuentasGasto, catalogoImputable } from './config';
+import { getConfig, resolverCuentaCobro, claveContableDePago, getCuentasGasto, catalogoImputable, cuentasDeSalida } from './config';
+import { elegirCuentaSalida } from './cuenta-salida';
 import { elegirCuentaGasto } from './cuenta-gasto';
 import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import type { ClaveMetodo } from './metodos';
@@ -735,7 +736,7 @@ export async function generarAsientoCompra(
 
   const filas = await db.execute(sql`
     SELECT id, clase, estado, monto_total AS "montoTotal", itbis_cents AS "itbisCents",
-           forma_pago AS "formaPago", metodo_pago AS "metodoPago",
+           forma_pago AS "formaPago", metodo_pago AS "metodoPago", cuenta_salida_id AS "cuentaSalidaId",
            to_char(fecha, 'YYYY-MM-DD') AS fecha,
            proveedor_nombre AS "proveedorNombre", referencia_encf AS ncf,
            tipo_bienes_606 AS "tipoBienes606",
@@ -804,7 +805,7 @@ export async function generarAsientoCompra(
 
   const esContado = c.formaPago === 'contado';
   const contrapartida = esContado
-    ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'))
+    ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'), numeroONull(c.cuentaSalidaId))
     : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   if (!contrapartida) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
 
@@ -896,17 +897,18 @@ export async function generarAsientoPagoProveedor(teamId: number, pagoId: number
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
   const filas = await db.execute(sql`
     SELECT p.id, p.monto_cents AS "montoCents", p.metodo, to_char(p.fecha_pago,'YYYY-MM-DD') AS fecha,
-           c.proveedor_nombre AS "proveedorNombre"
+           p.cuenta_salida_id AS "cuentaSalidaId", c.proveedor_nombre AS "proveedorNombre"
     FROM pagos_proveedores p JOIN compras_locales c ON c.id = p.compra_id AND c.team_id = p.team_id
     WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
   `);
-  const fila = (filas as unknown as { id: number; montoCents: unknown; metodo: string; fecha: string; proveedorNombre: string | null }[])[0];
+  const fila = (filas as unknown as { id: number; montoCents: unknown; metodo: string; fecha: string; cuentaSalidaId: number | null; proveedorNombre: string | null }[])[0];
   // monto_cents es BIGINT: el driver lo devuelve como texto y sumarlo concatenaba.
   const pago = fila ? { ...fila, montoCents: Number(fila.montoCents ?? 0) } : null;
   if (!pago || pago.montoCents <= 0) return { creado: false, motivo: 'sin-monto' };
   const cxp = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
-  const salida = (await resolverCuentaCobro(teamId, pago.metodo as ClaveMetodo)) ??
-    (pago.metodo === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null);
+  const salida = (await cuentaElegidaDeSalida(teamId, pago.cuentaSalidaId))
+    ?? (await resolverCuentaCobro(teamId, pago.metodo as ClaveMetodo))
+    ?? (pago.metodo === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null);
   if (!cxp) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
   if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
   const concepto = `Pago proveedor #${pago.id}${pago.proveedorNombre ? ` · ${pago.proveedorNombre}` : ''}`;
@@ -1060,15 +1062,31 @@ export async function generarAsientoGastoDoc(
 // ─── Asientos de nómina ──────────────────────────────────────────────────────
 
 /**
- * Cuenta por la que sale el dinero de un pago de nómina. La del método de cobro
- * configurado si existe; si no, la del catálogo base: efectivo a 1101 Caja,
- * transferencia y cheque a 1102 Bancos.
+ * La cuenta que se eligió al registrar, si todavía sirve: una que desactivaron
+ * después, o que nunca pudo soltar dinero, se ignora (ver `cuenta-salida`).
  */
-async function cuentaSalidaFondos(teamId: number, metodo: string): Promise<number | null> {
+async function cuentaElegidaDeSalida(teamId: number, elegidaId: number | null): Promise<number | null> {
+  if (!elegidaId) return null;
+  const { cuentas } = await cuentasDeSalida(teamId);
+  const elegida = elegirCuentaSalida({ elegidaId, salida: new Map(cuentas.map((c) => [c.id, c])) });
+  return elegida?.cuenta.id ?? null;
+}
+
+/**
+ * Cuenta por la que sale el dinero: la elegida al registrar si la hubo, si no
+ * la del método de cobro configurado, y si no la del catálogo base (efectivo a
+ * 1101 Caja, lo demás a 1102 Bancos). La usan los pagos de nómina y los gastos.
+ */
+async function cuentaSalidaFondos(teamId: number, metodo: string, elegidaId: number | null = null): Promise<number | null> {
+  const elegida = await cuentaElegidaDeSalida(teamId, elegidaId);
+  if (elegida) return elegida;
   const configurada = await resolverCuentaCobro(teamId, metodo as ClaveMetodo);
   if (configurada) return configurada;
   return cuentaPorCodigo(teamId, metodo === 'efectivo' ? '1101' : '1102');
 }
+
+/** Lo que viene de la base como columna nullable: BIGINT/INTEGER o null. */
+const numeroONull = (v: unknown): number | null => (v == null ? null : Number(v) || null);
 
 /**
  * Las cuentas de nómina de un team. Cada una usa la dedicada si está

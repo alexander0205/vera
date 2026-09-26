@@ -11,7 +11,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { comprasLocales, comprasLocalesItems, ecfDocuments, products } from '@/lib/db/schema';
-import { getConfig, catalogoImputable } from '@/lib/contabilidad/config';
+import { getConfig, catalogoImputable, cuentasDeSalida } from '@/lib/contabilidad/config';
 import { generarAsientoCompra, generarAsientoCompraAnulada, type ResultadoGeneracion } from '@/lib/contabilidad/asientos';
 import { registrarEntradas, revertirEntradas } from '@/lib/inventario/entrada';
 import { esFechaYMD } from '@/lib/nomina/periodos';
@@ -63,6 +63,8 @@ export interface RegistroCompra {
   propinaCents: number;
   formaPago: 'contado' | 'credito';
   metodoPago: MetodoPagoCompra;
+  /** De qué cuenta salió el dinero; null = la del método de pago. */
+  cuentaSalidaId?: number | null;
   fechaPago?: string | null;
   fechaVencimiento?: string | null;
   almacenId?: number | null;
@@ -140,6 +142,14 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   if (fechaPago && fechaPago < r.fecha) throw new CompraError('El pago no puede ser anterior al comprobante');
   const fechaVencimiento = r.formaPago === 'credito' && r.fechaVencimiento && esFechaYMD(r.fechaVencimiento) ? r.fechaVencimiento : null;
   if (fechaVencimiento && fechaVencimiento < r.fecha) throw new CompraError('El vencimiento no puede ser anterior al comprobante');
+  // A crédito todavía no sale dinero: la cuenta se elige al pagar.
+  const cuentaSalidaId = r.formaPago === 'contado' ? (r.cuentaSalidaId ?? null) : null;
+  if (cuentaSalidaId) {
+    const { cuentas } = await cuentasDeSalida(teamId);
+    if (!cuentas.some((c) => c.id === cuentaSalidaId)) {
+      throw new CompraError('De esa cuenta no puede salir dinero: elige una de caja o banco', 400, 'cuentaSalida');
+    }
+  }
 
   // ── Líneas ──
   if (!Array.isArray(r.lineas) || r.lineas.length === 0) throw new CompraError('Agrega al menos una línea');
@@ -230,6 +240,7 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
       propinaCents: r.propinaCents,
       formaPago: r.formaPago,
       metodoPago: r.metodoPago,
+      cuentaSalidaId,
       fechaPago,
       fechaVencimiento,
       estadoPago: r.formaPago === 'contado' ? 'PAGADA' : 'PENDIENTE',

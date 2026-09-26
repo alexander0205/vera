@@ -31,6 +31,10 @@ export interface ContextoRegistro {
   cuentasGasto: { id: number; codigo: string; nombre: string }[];
   /** A qué cuenta va cada categoría en esta empresa, y de dónde sale esa cuenta. */
   cuentaPorCategoria: Record<string, { cuenta: { id: number; codigo: string; nombre: string }; origen: 'linea' | 'configurada' | 'catalogo' | 'general' } | null>;
+  /** Cuentas de las que puede salir el dinero: caja, bancos y las de los métodos. */
+  cuentasSalida: { id: number; codigo: string; nombre: string }[];
+  /** A qué cuenta apunta hoy cada método de pago, para decir cuál es la automática. */
+  cuentaSalidaPorMetodo: Record<string, number>;
   rncEmpresa: string | null;
   hoy: string;
   inicial: {
@@ -173,6 +177,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   // ── Pago ──
   const [formaPago, setFormaPago] = useState<'contado' | 'credito'>(ini?.formaPago ?? 'contado');
   const [metodoPago, setMetodoPago] = useState(ini?.metodoPago ?? 'transferencia');
+  // '' = la cuenta del método, que es como funcionaba antes de poder elegirla.
+  const [cuentaSalida, setCuentaSalida] = useState('');
   const [fechaPago, setFechaPago] = useState(contexto.hoy);
   const [fechaVencimiento, setFechaVencimiento] = useState(ini?.fechaVencimiento ?? '');
   const [notas, setNotas] = useState('');
@@ -182,6 +188,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const ocupado = useRef(false);
 
   // ── Derivados ──
+  // La cuenta que usaría el asiento sin elegir nada: la del método de pago.
+  const cuentaAutomatica = contexto.cuentasSalida.find((c) => c.id === contexto.cuentaSalidaPorMetodo[metodoPago]) ?? null;
   const idInfo = analizarIdentificacion(proveedorRnc);
   const ncfInfo = analizarNcf(ncf);
   const lineasCalc = lineas.map((l) => {
@@ -327,6 +335,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           propinaCents: imp.propinaCents,
           formaPago,
           metodoPago,
+          cuentaSalidaId: formaPago === 'contado' && cuentaSalida ? Number(cuentaSalida) : null,
           fechaPago: formaPago === 'contado' ? fechaPago : null,
           fechaVencimiento: formaPago === 'credito' ? fechaVencimiento || null : null,
           almacenId: almacenId ? Number(almacenId) : null,
@@ -762,6 +771,25 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </div>
                 )}
               </div>
+              {formaPago === 'contado' && contexto.cuentasSalida.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cuenta-salida">Sale de</Label>
+                  <NativeSelect
+                    id="cuenta-salida"
+                    data-testid="cuenta-salida"
+                    value={cuentaSalida}
+                    onChange={(e) => setCuentaSalida(e.target.value)}
+                  >
+                    <option value="">{cuentaAutomatica ? `Automática · ${cuentaAutomatica.codigo} ${cuentaAutomatica.nombre}` : 'Automática (la del método de pago)'}</option>
+                    {contexto.cuentasSalida.map((c) => (
+                      <option key={c.id} value={String(c.id)}>{c.codigo} · {c.nombre}</option>
+                    ))}
+                  </NativeSelect>
+                  <p className="text-xs text-muted-foreground">
+                    La cuenta de caja o banco de la que salió el dinero. Cámbiala si no salió de la de siempre.
+                  </p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="notas">Notas internas</Label>
                 <Textarea id="notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} placeholder="Orden de compra, observaciones…" />
