@@ -15,6 +15,8 @@
 
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { VerFacturaDrawer } from './VerFacturaDrawer';
+import { VincularPlanExistente } from './VincularPlanExistente';
+import { CuentasPorCobrarEscolar } from './CuentasPorCobrarEscolar';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -27,8 +29,9 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
 
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
-import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
+import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone, Eye } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { coberturaVinculo } from '@/lib/administracion-escolar/cobertura-vinculo';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -99,6 +102,8 @@ export interface Cargo {
   facturaEncf: string | null;
   facturaCodigo: string | null;
   facturaEstadoPago: string | null;
+  /** Monto total de la factura vinculada (centavos). Para mostrar «sin cubrir». */
+  facturaMontoCentavos: number | null;
   /** Estado ante la DGII (BORRADOR, EN_PROCESO, ACEPTADO…), no el de cobro. */
   facturaEstado: string | null;
 }
@@ -230,7 +235,7 @@ export interface FacturaSuelta {
 
 // Lanza en 404/500 para que SWR lo trate como error y no cachee un cuerpo vacío
 // como si fuera la ficha.
-const VISTAS = ['mensualidades', 'otros', 'facturas', 'pagos'] as const;
+const VISTAS = ['mensualidades', 'otros', 'cxc', 'pagos'] as const;
 
 // ─── Página ────────────────────────────────────────────────────────────────
 
@@ -444,6 +449,27 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
     .filter((c) => c.ecfDocumentId != null && ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .reduce((s, c) => s + c.saldoCentavos, 0);
   const saldoPorFacturar = Math.max(0, saldo - saldoPorCobrar);
+  // Item 7 (Alex): las facturas sueltas —hechas en Facturación, sin cargo ni
+  // período detrás, p. ej. inscripción cuando el colegio no tiene ese concepto—
+  // deben contar en el resumen si se emitieron en el AÑO ESCOLAR de este período
+  // (por fecha de emisión). Solo en el período activo, para no sumarlas en cada
+  // período. Así «facturado/pagado/pendiente» dejan de ignorar lo del año.
+  const inicioAnio = grupo.fechaInicio?.slice(0, 10) ?? null;
+  const finAnio = grupo.fechaFin?.slice(0, 10) ?? null;
+  const facturasAnio = grupo.periodoActivo
+    ? facturasSueltas.filter((f) => {
+        const d = f.fecha?.slice(0, 10);
+        return !!d && (!inicioAnio || d >= inicioAnio) && (!finAnio || d <= finAnio);
+      })
+    : [];
+  const facturadoSueltas = facturasAnio.reduce((s, f) => s + f.montoTotal, 0);
+  const pagadoSueltas = facturasAnio.reduce((s, f) => s + f.pagadoCentavos, 0);
+  const pendienteSueltas = facturasAnio.reduce((s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0);
+  // Totales del resumen = lo del período + las facturas del año sin período.
+  const facturadoResumen = facturadoCentavos + facturadoSueltas;
+  const pagadoResumen = pagado + pagadoSueltas;
+  const saldoResumen = saldo + pendienteSueltas;
+  const saldoPorCobrarResumen = saldoPorCobrar + pendienteSueltas;
   // Mes solo identifica fecha. La tabla mensual agrupa exclusivamente concepto
   // mensualidad; uniforme/actividad con mes van a Otros cargos.
   const mensualidades = cargosPeriodo.filter((c) => c.conceptoTipo === 'mensualidad');
@@ -588,27 +614,27 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         <PeriodoStat
           icon={Receipt}
           label="Facturado"
-          value={fmtDOP(facturadoCentavos)}
+          value={fmtDOP(facturadoResumen)}
           detail={porFacturarCentavos > 0
             ? <span className="font-medium text-amber-700">Por facturar {fmtDOP(porFacturarCentavos)}</span>
-            : 'Todo facturado'}
+            : facturadoSueltas > 0 ? 'Incluye facturas del año' : 'Todo facturado'}
           tone="blue" />
-        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
+        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagadoResumen)} detail="Total del período" tone="verde" />
         <PeriodoStat
           icon={AlertTriangle}
           label="Pendiente"
-          value={fmtDOP(saldo)}
+          value={fmtDOP(saldoResumen)}
           // Rojo solo si hay algo emitido sin cobrar. Si todo lo que se debe
           // está aún «Sin facturar», la tarjeta no alarma: lo que toca es
           // emitir, no perseguir un pago. Ver criterio del MD de facturas.
           detail={
-            saldoPorCobrar > 0 && saldoPorFacturar > 0
-              ? `Por cobrar ${fmtDOP(saldoPorCobrar)} · por facturar ${fmtDOP(saldoPorFacturar)}`
-              : saldoPorCobrar > 0 ? 'Saldo por cobrar'
+            saldoPorCobrarResumen > 0 && saldoPorFacturar > 0
+              ? `Por cobrar ${fmtDOP(saldoPorCobrarResumen)} · por facturar ${fmtDOP(saldoPorFacturar)}`
+              : saldoPorCobrarResumen > 0 ? 'Saldo por cobrar'
               : saldoPorFacturar > 0 ? 'Aún por facturar'
               : 'Sin deuda'
           }
-          tone={saldoPorCobrar > 0 ? 'red' : 'gray'}
+          tone={saldoPorCobrarResumen > 0 ? 'red' : 'gray'}
         />
         <PeriodoStat
           icon={CalendarDays}
@@ -620,7 +646,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           // once mil pesos por cobrar.
           detail={proximo
             ? fmtDOP(proximo.saldoCentavos)
-            : saldo > 0 ? 'Sin fecha límite' : 'Sin deuda'}
+            : saldoResumen > 0 ? 'Sin fecha límite' : 'Sin deuda'}
           tone="gray"
         />
       </div>
@@ -628,9 +654,9 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
       <div>
         <div className="flex gap-6 border-b border-gray-200 overflow-x-auto">
           {[
-            ['mensualidades', 'Cuentas por cobrar'],
-            ['otros', 'Otros cargos'],
-            ['facturas', 'Facturas'],
+            ['mensualidades', 'Recurrencia'],
+            ['otros', 'Facturas'],
+            ['cxc', 'Cuentas por cobrar'],
             ['pagos', 'Pagos'],
           ].map(([value, label]) => (
             <button
@@ -648,6 +674,12 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
 
         {vista === 'mensualidades' && (
           <>
+            {/* Colegio migrado con planes recurrentes previos: si el alumno ya
+                tiene un plan suelto en Facturación, ofrecer VINCULARLO en vez de
+                crear otro. Se auto-oculta si no hay plan que sugerir. */}
+            {puedeGestionar && grupo.facturaRecurrenteId == null && grupo.matriculaId && (
+              <VincularPlanExistente matriculaId={grupo.matriculaId} onVinculado={() => router.refresh()} />
+            )}
             {/* Motivo visible: sin plan recurrente, la mensualidad se DEVENGA
                 como deuda pero nunca se emite su factura sola. Antes solo se veía
                 «Sin facturar» sin decir por qué, y el colegio esperaba la factura
@@ -726,36 +758,12 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
               )
             )}
 
-            {/* TODAS sus facturas: las que salieron de un cargo y las que se
-                hicieron en Facturación por fuera del plan. Separarlas obligaba
-                a mirar en dos sitios para contestar «¿qué le hemos facturado?». */}
-            {vista === 'facturas' && (
-              facturas.length === 0 && facturasSueltas.length === 0
-                ? <EmptyBox text="Sin facturas" /> : (
-                <SimpleTable head={['Mes', 'Concepto', 'Factura', 'Monto', 'Estado']}
-                  rows={[
-                    ...facturas.map((c) => [
-                      c.mes ? `${MESES[c.mes]} ${c.anio}` : String(c.anio),
-                      c.concepto ?? '—',
-                      facturaLink(c),
-                      fmtDOP(c.montoCentavos),
-                      c.facturaEstadoPago ?? '—',
-                    ]),
-                    ...facturasSueltas.map((f) => [
-                      fmtFechaCorta(f.fecha),
-                      f.lineas.length > 0
-                        ? f.lineas.map((l) => l.nombre).join(', ')
-                        : 'Hecha en Facturación',
-                      <Link key={`f-${f.id}`} href={`/dashboard/facturas/${f.id}`}
-                        className="text-zero-600 hover:underline">
-                        {f.encf || f.codigo || `Factura #${f.id}`}
-                      </Link>,
-                      fmtDOP(f.montoTotal),
-                      f.montoTotal - f.pagadoCentavos <= 0 ? 'PAGADO'
-                        : f.pagadoCentavos > 0 ? 'PARCIAL' : 'PENDIENTE',
-                    ]),
-                  ]} />
-              )
+            {/* Cuentas por cobrar en contexto: el mismo resumen financiero de la
+                cuenta por cobrar de Facturación (facturado/pagado/pendiente +
+                próximo vencimiento y detalle de facturas), pero abierto aquí sin
+                mandar a la persona a otra pantalla. En construcción (Etapa 2). */}
+            {vista === 'cxc' && (
+              <CuentasPorCobrarEscolar clientId={tutorClientId ?? null} puedePagos={puedePagos} />
             )}
 
             {/* Y todos los pagos, incluidos los de esas facturas: se cobraban
@@ -1472,6 +1480,14 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                     su PDF, y esta es la única tabla donde aparecen las facturas
                     del alumno que no salen de un cargo. */}
                 <td className="px-3 py-2.5 text-right">
+                  <div className="inline-flex items-center justify-end gap-0.5">
+                  {onVerFactura && (
+                    <button type="button" onClick={() => onVerFactura(f.id)}
+                      aria-label="Ver factura"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100">
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  )}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button type="button"
@@ -1481,9 +1497,6 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem onSelect={() => onVerFactura?.(f.id)}>
-                        <FileText className="h-4 w-4" />Ver factura
-                      </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => router.push(`/dashboard/facturas/${f.id}`)}>
                         <ExternalLink className="h-4 w-4" />Abrir en Facturación
                       </DropdownMenuItem>
@@ -1501,6 +1514,7 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 </td>
               </tr>
             )];
@@ -2168,6 +2182,20 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
   if (!tieneAccion) return <span className="text-gray-300 text-xs">—</span>;
 
   return (
+    <div className="inline-flex items-center justify-end gap-0.5">
+      {/* «Ver factura» fuera del menú: acción de consulta frecuente, con icono de
+          ojo como en Cuentas por cobrar. Abre la factura en contexto (cajón), sin
+          salir a Facturación. */}
+      {tieneFactura && onVerFactura && (
+        <button
+          type="button"
+          onClick={() => onVerFactura(cargo.ecfDocumentId!)}
+          aria-label="Ver factura"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
+      )}
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -2211,14 +2239,7 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
             <Link2 className="h-4 w-4" />Vincular factura
           </DropdownMenuItem>
         )}
-        {/* Antes esto solo salía cuando NO se podía cobrar ni facturar, así que
-            un usuario con permisos no tenía por dónde abrir la factura del mes:
-            la veía en la columna pero el menú no la ofrecía. */}
-        {tieneFactura && (
-          <DropdownMenuItem onSelect={() => onVerFactura?.(cargo.ecfDocumentId!)}>
-            <Receipt className="h-4 w-4" />Ver factura
-          </DropdownMenuItem>
-        )}
+        {/* «Ver factura» salió del menú a un botón de ojo al lado (arriba). */}
         {/* Salir a Facturación es OTRA cosa que ver la factura: se va de la
             ficha de la familia. Se queda, pero dicho con su nombre. */}
         {tieneFactura && (
@@ -2273,6 +2294,7 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    </div>
   );
 }
 
@@ -2553,18 +2575,37 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
         <Receipt className="h-3 w-3" />{ref}
       </Link>
     );
-    // Con factura y saldo pendiente: ir a la factura a registrar el cobro.
-    if (puedePagos && facturable) {
-      return (
-        <span className="inline-flex items-center justify-end gap-3">
-          {chip}
-          <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
-            <Wallet className="h-3 w-3" />Registrar pago
-          </button>
+    // Transparencia neutra: mostrar sin interpretar cuánto de este cargo queda
+    // sin cubrir por su factura, o si la factura está vinculada pero sin saldar.
+    const cobertura = coberturaVinculo(cargo);
+    const nota =
+      cobertura.tipo === 'sin-cubrir' ? (
+        <span className="text-[11px] text-amber-600"
+          title="La factura vinculada es menor que el cargo; esta parte queda sin cubrir. Revisar si es un descuento acordado o la factura equivocada.">
+          sin cubrir {fmtDOP(cobertura.sinCubrirCentavos)}
         </span>
-      );
-    }
-    return chip;
+      ) : cobertura.tipo === 'pendiente' ? (
+        <span className="text-[11px] text-gray-400"
+          title="Factura vinculada pero aún no saldada; el cargo sigue pendiente hasta que se pague.">
+          pendiente de saldar
+        </span>
+      ) : null;
+    // Con factura y saldo pendiente: ir a la factura a registrar el cobro.
+    const fila = puedePagos && facturable ? (
+      <span className="inline-flex items-center justify-end gap-3">
+        {chip}
+        <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
+          <Wallet className="h-3 w-3" />Registrar pago
+        </button>
+      </span>
+    ) : chip;
+    if (!nota) return fila;
+    return (
+      <span className="inline-flex flex-col items-end gap-0.5">
+        {fila}
+        {nota}
+      </span>
+    );
   }
   const acciones: React.ReactNode[] = [];
   if (puedeFacturar && facturable) {
