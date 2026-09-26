@@ -2,6 +2,7 @@ import { ADDONS, LINEAS_PRODUCTO, PRODUCTOS_APARTE, lineaBajoCotizacion, planesD
 import { CONTACTO } from '@/app/(marketing)/_piezas';
 import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 
 /**
  * `/llms.txt` — el sitio resumido para quien lo lee con un modelo.
@@ -52,6 +53,16 @@ function guias(): string {
     `- [${g.titulo}](${SITIO_PUBLICO}/guias/${g.slug}): ${g.resumen}`).join('\n');
 }
 
+/** La prueba, leída de la perilla: si un día las familias vuelven a separarse, se dice. */
+function textoPrueba(): string {
+  const ecf = diasDePrueba('ecf');
+  const colegio = diasDePrueba('colegio');
+  const cuanto = ecf === colegio
+    ? `${ecf} días gratis en todos los planes`
+    : `${ecf} días en los planes de facturación y ${colegio} en los de colegio`;
+  return `Sí: ${cuanto}${PRUEBA.pideTarjeta ? '' : ', sin tarjeta'}.`;
+}
+
 export function GET() {
   const cuerpo = `# Zero
 
@@ -93,7 +104,7 @@ ${guias()}
 - **¿Incluye contabilidad?** Sí, en todos los planes, sin costo aparte.
 - **¿Tiene inteligencia artificial?** Sí. Zero CRM usa agentes que entienden lenguaje natural, leen notas de voz y fotos con OCR, responden desde los documentos que se les cargan citando la fuente, verifican identidad, agendan citas, cobran y contestan llamadas por voz.
 - **¿Se integra con otros sistemas?** Sí: API REST y webhooks en las dos direcciones, WhatsApp Business API, Google Calendar, CardNet y Azul.
-- **¿Hay prueba?** 15 días en los planes de facturación y 30 en los de colegio. Sin contrato mínimo.
+- **¿Hay prueba?** ${textoPrueba()} Sin contrato mínimo.
 - **Contacto:** ${CONTACTO.ventas} · ${CONTACTO.telefono} · WhatsApp ${CONTACTO.whatsapp}
 
 ## Qué NO hace (para no inducir a error)

@@ -49,11 +49,11 @@ export function Encabezado({
   );
 }
 
-export function BotonPrimario({ href, children }: { href: string; children: React.ReactNode }) {
+export function BotonPrimario({ href, children, className = '' }: { href: string; children: React.ReactNode; className?: string }) {
   return (
     <Link
       href={href}
-      className="flex h-[52px] items-center gap-2.5 rounded-xl bg-zero-600 px-7 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white shadow-[0_18px_34px_-18px_rgba(54,88,225,.75)] transition hover:-translate-y-0.5 hover:bg-zero-700"
+      className={`flex h-[52px] items-center justify-center gap-2.5 rounded-xl bg-zero-600 px-7 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white shadow-[0_18px_34px_-18px_rgba(54,88,225,.75)] transition hover:-translate-y-0.5 hover:bg-zero-700 ${className}`}
     >
       {children}
       <Flecha tamano={15} />
@@ -61,11 +61,11 @@ export function BotonPrimario({ href, children }: { href: string; children: Reac
   );
 }
 
-export function BotonSecundario({ href, children }: { href: string; children: React.ReactNode }) {
+export function BotonSecundario({ href, children, className = '' }: { href: string; children: React.ReactNode; className?: string }) {
   return (
     <Link
       href={href}
-      className="flex h-[52px] items-center rounded-xl border border-[#dce3f2] bg-white px-[26px] font-[family-name:var(--font-display)] text-[15px] font-semibold text-[#102a72] transition hover:-translate-y-0.5 hover:border-zero-300"
+      className={`flex h-[52px] items-center justify-center rounded-xl border border-[#dce3f2] bg-white px-[26px] font-[family-name:var(--font-display)] text-[15px] font-semibold text-[#102a72] transition hover:-translate-y-0.5 hover:border-zero-300 ${className}`}
     >
       {children}
     </Link>

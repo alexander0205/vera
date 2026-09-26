@@ -20,6 +20,7 @@ import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
   PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
+import { PRUEBA } from '@/lib/config/suscripcion';
 
 export const metadata: Metadata = {
   title: 'Punto de venta con facturación e-CF — caja para colmados, tiendas y restaurantes',
@@ -161,7 +162,7 @@ export default function PuntoDeVentaPage() {
       <CierreProducto
         antetitulo="Punto de venta"
         titulo="Monta tu caja esta semana."
-        detalle="Abre tu cuenta y prueba 15 días, o cuéntanos qué vendes y te dejamos el catálogo cargado."
+        detalle={`Abre tu cuenta y prueba ${PRUEBA.dias} días gratis, o cuéntanos qué vendes y te dejamos el catálogo cargado.`}
         nota={{
           titulo: 'Lo que hace falta de tu lado',
           detalle: 'Una tableta o computadora, tu lista de productos y —si la vas a usar— la impresora térmica.',

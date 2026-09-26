@@ -21,6 +21,7 @@ import {
   Building2, Plus, Check, ArrowRight, Loader2,
   CreditCard, Crown, AlertCircle,
 } from 'lucide-react';
+import { PRUEBA } from '@/lib/config/suscripcion';
 
 interface Empresa {
   id: number;
@@ -281,7 +282,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
             value={nombreComercial} onChange={e => setNombreComercial(e.target.value)} disabled={creando}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
           <Alert severity="info" icon={<CreditCard size={16} />} sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
-            Al continuar, te redirigiremos a elegir el plan para esta empresa. Incluye <strong>15 días de prueba gratis</strong>.
+            Al continuar, te redirigiremos a elegir el plan para esta empresa. Incluye <strong>{PRUEBA.dias} días de prueba gratis</strong>.
           </Alert>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>

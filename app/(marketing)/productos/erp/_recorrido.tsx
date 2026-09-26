@@ -98,8 +98,12 @@ export function RecorridoDelDinero() {
 
   return (
     <div className="min-w-0">
-      {/* La línea del recorrido. En móvil se convierte en una fila que rueda. */}
-      <ol className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 pb-1">
+      {/*
+        La línea del recorrido. En el teléfono no caben seis rótulos —se montaban
+        unos sobre otros—: quedan las seis barras, tocables, y debajo el nombre
+        del paso en el que va.
+      */}
+      <ol className="m-0 flex list-none gap-1.5 p-0">
         {PASOS.map((p, i) => {
           const on = i === activo;
           return (
@@ -108,14 +112,15 @@ export function RecorridoDelDinero() {
                 type="button"
                 onClick={() => { setAutomatico(false); setActivo(i); }}
                 aria-current={on ? 'step' : undefined}
-                className="w-full cursor-pointer text-left"
+                aria-label={`${i + 1}. ${p.rotulo}`}
+                className="w-full cursor-pointer py-3 text-left sm:py-0"
               >
                 <span
                   className={`block h-1 rounded-full transition-all duration-500 ${
                     i <= activo ? 'bg-zero-600' : 'bg-[#e4e8f4]'
                   }`}
                 />
-                <span className={`mt-2 block whitespace-nowrap text-[11px] font-semibold uppercase tracking-[.12em] transition ${
+                <span className={`mt-2 hidden whitespace-nowrap text-[11px] font-semibold uppercase tracking-[.12em] transition sm:block ${
                   on ? 'text-zero-600' : 'text-[#666d80]'
                 }`}
                 >
@@ -126,6 +131,9 @@ export function RecorridoDelDinero() {
           );
         })}
       </ol>
+      <p className="m-0 text-[11px] font-semibold uppercase tracking-[.12em] text-zero-600 sm:hidden">
+        Paso {activo + 1} de {PASOS.length} · {paso.rotulo}
+      </p>
 
       <div className="mt-5 grid gap-5 rounded-2xl border border-[#e7edfb] bg-white p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,.9fr)]">
         <div className="min-w-0">

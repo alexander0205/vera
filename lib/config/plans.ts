@@ -655,7 +655,7 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
   {
     key: 'erp-colegio',
     nombre: 'Zero ERP Colegio',
-    descripcion: 'Todo el ERP, el punto de venta de la cafetería y la gobernanza del colegio.',
+    descripcion: 'Todo incluido: facturación e-CF, contabilidad, nómina, el punto de venta de la cafetería y la gobernanza del colegio.',
     familia: 'colegio',
     addons: [],
     // Publica sus cuatro tramos —135, 237, 350 y 500—, que es lo que Stripe

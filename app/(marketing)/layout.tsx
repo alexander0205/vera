@@ -16,6 +16,7 @@ import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 import { CabeceraMarketing } from './_cabecera';
 import { PieMarketing } from './_pie';
+import { BarraPrueba } from './_barra-prueba';
 
 export const metadata: Metadata = {
   /**
@@ -100,6 +101,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <CabeceraMarketing />
       <main className="flex-1">{children}</main>
       <PieMarketing />
+      <BarraPrueba />
       <GoogleAnalytics />
     </div>
   );
