@@ -17,10 +17,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
-import { CONTACTO, Cheque, Contenedor, Flecha, IconoWhatsApp } from './_piezas';
-import { Antetitulo, BotonPrimario, BotonSecundario, Encabezado, Titulo } from './_bloques';
+import { CONTACTO, Cheque, Contenedor, Flecha } from './_piezas';
+import { Antetitulo, BotonPrimario, Encabezado, Titulo } from './_bloques';
 import { Acordeon, type Pregunta } from './_acordeon';
 import { DatosDePreguntas } from './_datos-estructurados';
+import { BotonPrueba, BotonWhatsApp, GarantiasPrueba, type Familia } from './_llamados';
 
 export type PuntoDeProducto = {
   titulo: string;
@@ -30,7 +31,7 @@ export type PuntoDeProducto = {
 
 /** Encabezado de una página de producto, con su captura debajo. */
 export function HeroProducto({
-  antetitulo, titulo, bajada, pie, captura, alt, accion = 'Empieza gratis', href = '/sign-up',
+  antetitulo, titulo, bajada, pie, captura, alt, accion, href = '/sign-up', familia = 'ecf',
 }: {
   antetitulo: string;
   titulo: string;
@@ -44,8 +45,14 @@ export function HeroProducto({
    */
   captura?: string;
   alt?: string;
+  /**
+   * Un llamado propio en vez de la prueba. Lo usa el CRM, que se vende aparte
+   * y bajo cotización: ahí no hay prueba que ofrecer, hay una demostración.
+   */
   accion?: string;
   href?: string;
+  /** De qué familia son los días de prueba del botón: 15 en e-CF, 30 en colegio. */
+  familia?: Familia;
 }) {
   return (
     <section className="relative overflow-hidden bg-[linear-gradient(180deg,#f4f8ff_0%,#edf3ff_42%,#ffffff_100%)]">
@@ -58,11 +65,12 @@ export function HeroProducto({
           <p className="mx-auto mt-5 max-w-[620px] text-pretty text-[17px] leading-[1.6] text-[#4a5164]">
             {bajada}
           </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <BotonPrimario href={href}>{accion}</BotonPrimario>
-            <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
+          <div data-llamado className="mt-8 flex flex-wrap justify-center gap-3">
+            {accion ? <BotonPrimario href={href}>{accion}</BotonPrimario> : <BotonPrueba familia={familia} />}
+            <BotonWhatsApp />
           </div>
-          {pie && <p className="mt-4 text-[13px] text-[#666d80]">{pie}</p>}
+          {!accion && <GarantiasPrueba centrado className="mt-4" />}
+          {pie && <p className="mt-2 text-[13px] text-[#666d80]">{pie}</p>}
         </div>
 
         {captura && (
@@ -226,15 +234,17 @@ export function FranjaProducto({
 
 /** El bloque oscuro del final: qué sigue y por dónde escribirnos. */
 export function CierreProducto({
-  antetitulo, titulo, detalle, nota, accion = 'Empieza gratis', href = '/sign-up',
+  antetitulo, titulo, detalle, nota, accion, href = '/sign-up', familia = 'ecf',
 }: {
   antetitulo: string;
   titulo: string;
   detalle: string;
   /** La tarjeta de al lado: lo que hace falta del lado del cliente. */
   nota: { titulo: string; detalle: string };
+  /** Un llamado propio en vez de la prueba (el CRM: demostración). */
   accion?: string;
   href?: string;
+  familia?: Familia;
 }) {
   return (
     <section>
@@ -250,18 +260,11 @@ export function CierreProducto({
                 {titulo}
               </h2>
               <p className="m-0 mt-3.5 max-w-[520px] text-pretty text-[15px] leading-[1.6] text-white/70">{detalle}</p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <BotonPrimario href={href}>{accion}</BotonPrimario>
-                <a
-                  href={CONTACTO.whatsappHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex h-[52px] items-center gap-2.5 rounded-xl border border-white/20 px-[26px] font-[family-name:var(--font-display)] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/40"
-                >
-                  <IconoWhatsApp tamano={16} />
-                  O escríbenos por WhatsApp
-                </a>
+              <div data-llamado className="mt-7 flex flex-wrap gap-3">
+                {accion ? <BotonPrimario href={href}>{accion}</BotonPrimario> : <BotonPrueba familia={familia} />}
+                <BotonWhatsApp tono="oscuro" texto="O escríbenos por WhatsApp" />
               </div>
+              {!accion && <GarantiasPrueba tono="oscuro" className="mt-4" />}
             </div>
             <div className="min-w-0 rounded-2xl border border-white/12 bg-white/[.06] p-6">
               <p className="m-0 text-[12.5px] font-semibold text-white">{nota.titulo}</p>

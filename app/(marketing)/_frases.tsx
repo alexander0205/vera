@@ -17,6 +17,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Cheque, Flecha } from './_piezas';
+import { BotonPrueba } from './_llamados';
 
 type Frase = { frase: string; modulo: string; resuelve: string; href: string };
 
@@ -149,13 +150,16 @@ export function FrasesDelDueno() {
           </p>
         </div>
         {marcadas.size >= 2 && (
-          <a
-            href="#recorrido"
-            className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-xl bg-white px-5 font-[family-name:var(--font-display)] text-[14px] font-semibold text-[#102a72] transition hover:-translate-y-0.5 sm:self-auto"
-          >
-            Ver cómo se conectan
-            <Flecha tamano={13} />
-          </a>
+          <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-3">
+            <BotonPrueba tono="claro" tamano="mediano" />
+            <a
+              href="#recorrido"
+              className="inline-flex items-center gap-2 text-[14px] font-semibold text-white/85 underline-offset-4 transition hover:text-white hover:underline"
+            >
+              Ver cómo se conectan
+              <Flecha tamano={13} />
+            </a>
+          </div>
         )}
       </div>
     </div>

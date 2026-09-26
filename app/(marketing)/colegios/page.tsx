@@ -15,13 +15,15 @@ import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
 import { familiaBajoCotizacion, planesDeFamilia } from '@/lib/config/plans';
 import {
-  Antetitulo, BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo, Titulo,
+  Antetitulo, BotonSecundario, Encabezado, TarjetaModulo, Titulo,
 } from '../_bloques';
-import { CONTACTO, Contenedor, Flecha, Iconos } from '../_piezas';
+import { CONTACTO, Contenedor, Flecha, IconoWhatsApp, Iconos } from '../_piezas';
 import { CicloDeCobro } from './_ciclo';
 import { PreguntasProducto } from '../_producto';
 import { DatosDeProducto, DatosDeRuta } from '../_datos-estructurados';
 import { ResumenDePrecios } from '../_precios-resumen';
+import { BotonPrueba, GarantiasPrueba } from '../_llamados';
+import { diasDePrueba } from '@/lib/config/suscripcion';
 
 export const metadata: Metadata = {
   title: 'Software para colegios en República Dominicana — cobros, portal de padres y facturación',
@@ -181,10 +183,11 @@ export default function ColegiosPage() {
             <p className="relative z-[2] mx-auto mt-5 max-w-[600px] text-pretty text-[17px] leading-[1.6] text-[#4a5164] sm:text-lg">
               Mensualidades, cobranza, contabilidad, nómina y comunicación con las familias en un solo sistema.
             </p>
-            <div className="relative z-[2] mt-8 flex flex-wrap justify-center gap-3">
-              <BotonPrimario href="/contacto">Solicita una demo</BotonPrimario>
-              <BotonSecundario href="#modulos">Conoce la plataforma</BotonSecundario>
+            <div data-llamado className="relative z-[2] mt-8 flex flex-wrap justify-center gap-3">
+              <BotonPrueba familia="colegio" />
+              <BotonSecundario href="/contacto?perfil=colegio" className="w-full sm:w-auto">Solicita una demo</BotonSecundario>
             </div>
+            <GarantiasPrueba centrado extra={['Implementación incluida']} className="relative z-[2] mt-4" />
 
             <ul className="mt-9 flex flex-wrap justify-center gap-x-6 gap-y-4 lg:hidden">
               {HERO_PILARES.map(p => (
@@ -419,10 +422,12 @@ export default function ColegiosPage() {
                 titulo="El tramo depende de cuántos estudiantes tienes."
                 detalle={`Se cobra por institución, no por usuario —hasta ${TOPE_ESTUDIANTES.toLocaleString('es-DO')} estudiantes en el tramo más alto—, con implementación y entrenamiento incluidos.${DESDE_NEGOCIO !== null ? ` Los negocios tienen sus propios planes desde US$${DESDE_NEGOCIO}/mes.` : ''}`}
               />
-              <div className="mt-6 flex flex-wrap gap-3">
-                <BotonPrimario href="/contacto">Hablar con ventas</BotonPrimario>
-                <BotonSecundario href="/precios">Comparar planes</BotonSecundario>
+              <div data-llamado className="mt-6 flex flex-wrap gap-3">
+                <BotonPrueba familia="colegio" />
+                <BotonSecundario href="/contacto?perfil=colegio" className="w-full sm:w-auto">Solicita una demo</BotonSecundario>
               </div>
+              <GarantiasPrueba className="mt-4" />
+              <p className="m-0 mt-2 text-[13px] text-[#5c6373]">Si al terminar no sigues, no se cobra nada.</p>
             </div>
             <ResumenDePrecios lineas={['erp-colegio']} />
           </div>
@@ -462,24 +467,23 @@ export default function ColegiosPage() {
                 <h2 className="m-0 mt-3.5 font-[family-name:var(--font-display)] text-[clamp(1.75rem,3.4vw,2.125rem)] font-semibold leading-[1.1] tracking-[-.045em] text-balance text-white">
                   Ordena tu colegio antes del próximo trimestre.
                 </h2>
-                <p className="m-0 mt-3.5 max-w-[380px] text-pretty text-[14.5px] leading-[1.65] text-white/70">
-                  Una demo de 30 minutos con la cartera de tu institución. Sin compromiso y sin instalación.
+                <p className="m-0 mt-3.5 max-w-[400px] text-pretty text-[14.5px] leading-[1.65] text-white/70">
+                  Pruébalo {diasDePrueba('colegio')} días con tus propios estudiantes, o te lo enseñamos
+                  en una demo con la cartera de tu institución.
                 </p>
-                <div className="mt-6 flex flex-wrap items-center gap-5">
+                {/* Igual que arriba: primero probar, al lado la demo. El cierre
+                    era solo la demo, y quien llegaba hasta aquí convencido
+                    tenía que volver al principio para encontrar la prueba. */}
+                <div data-llamado className="mt-6 flex flex-wrap gap-3">
+                  <BotonPrueba familia="colegio" />
                   <Link
-                    href="/contacto"
-                    className="flex h-12 items-center gap-2.5 rounded-xl bg-zero-600 px-6 font-[family-name:var(--font-display)] text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-zero-500"
+                    href="/contacto?perfil=colegio"
+                    className="flex h-[52px] w-full items-center justify-center rounded-xl border border-white/25 px-6 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/50 sm:w-auto"
                   >
                     Solicita una demo
-                    <Flecha tamano={14} />
                   </Link>
-                  <a
-                    href={CONTACTO.whatsappHref}
-                    className="border-b border-white/40 pb-0.5 text-[13.5px] font-semibold text-white transition hover:border-white"
-                  >
-                    O escríbenos por WhatsApp
-                  </a>
                 </div>
+                <GarantiasPrueba tono="oscuro" extra={['Implementación incluida']} className="mt-4" />
               </div>
 
               <div className="min-w-0 rounded-2xl bg-white p-5">
@@ -502,6 +506,15 @@ export default function ColegiosPage() {
                   </span>
                   <span className="grid size-[34px] -ml-2.5 place-items-center rounded-full border-2 border-white bg-[#edf1fe] text-[11.5px] font-bold text-zero-600">+6</span>
                 </div>
+                <a
+                  href={CONTACTO.whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 text-[13px] font-semibold text-[#102a72] transition hover:text-zero-600"
+                >
+                  <span className="text-[#1faa59]"><IconoWhatsApp tamano={15} /></span>
+                  Escríbenos por WhatsApp
+                </a>
               </div>
             </div>
           </div>

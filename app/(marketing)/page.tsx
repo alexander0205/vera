@@ -29,7 +29,7 @@ import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
 import { TEXTO_BAJO_COTIZACION, getProductoAparte } from '@/lib/config/plans';
 import { CONTACTO, Cheque, Contenedor, Flecha, Iconos } from './_piezas';
-import { Antetitulo, BotonPrimario, BotonSecundario, Encabezado, TarjetaModulo, Titulo } from './_bloques';
+import { Antetitulo, Encabezado, TarjetaModulo, Titulo } from './_bloques';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { DatosDelSitio } from './_datos-estructurados';
 import { ResumenDePrecios } from './_precios-resumen';
@@ -40,6 +40,7 @@ import { FrasesDelDueno } from './_frases';
 import { ParaQuien } from './_para-quien';
 import { ConversacionCrm } from './_conversacion-crm';
 import { RecorridoDelDinero } from './productos/erp/_recorrido';
+import { BotonPrueba, BotonWhatsApp, GarantiasPrueba, LlamadoEnLinea } from './_llamados';
 
 export const metadata: Metadata = {
   title: { absolute: 'Zero — ERP, CRM con inteligencia artificial y facturación electrónica en República Dominicana' },
@@ -115,20 +116,14 @@ export default function PortadaPage() {
             <p className="mx-auto mt-5 max-w-[640px] text-pretty text-[17px] leading-[1.6] text-[#4a5164] sm:text-lg">
               Registras una venta una vez y cae sola donde tiene que caer: en la factura, el inventario, la cartera, la caja y la contabilidad. Al mismo tiempo.
             </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <BotonPrimario href="/sign-up">Empieza gratis</BotonPrimario>
-              <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
+            {/* El llamado dice cuánto dura la prueba y el segundo camino es
+                WhatsApp, no un formulario. `data-llamado` le dice a la barra
+                del teléfono que aquí ya hay un botón a la vista. */}
+            <div data-llamado className="mt-8 flex flex-wrap justify-center gap-3">
+              <BotonPrueba />
+              <BotonWhatsApp />
             </div>
-            {/* Cada promesa en un bloque que no se parte: en el teléfono
-                «mínimo» se quedaba solo en una línea. */}
-            <ul className="m-0 mx-auto mt-4 flex max-w-[640px] list-none flex-wrap justify-center gap-x-4 gap-y-1.5 p-0 text-[13px] text-[#5c6373]">
-              {['Certificados ante la DGII', 'Sin instalación', 'Sin contrato mínimo'].map(t => (
-                <li key={t} className="flex items-center gap-1.5 whitespace-nowrap">
-                  <Cheque tamano={11} color="#12925a" grosor={3.4} />
-                  {t}
-                </li>
-              ))}
-            </ul>
+            <GarantiasPrueba centrado extra={['Certificados ante la DGII']} className="mx-auto mt-4 max-w-[640px]" />
           </div>
 
           <PantallaDelHero />
@@ -195,6 +190,9 @@ export default function PortadaPage() {
           <p className="m-0 mt-6 text-pretty text-[13px] leading-[1.6] text-[#5c6373]">
             <span className="font-semibold text-[#102a72]">Cada operación deja su asiento:</span> {ASIENTOS}.
           </p>
+          <AlVer retraso={60} className="mt-8">
+            <LlamadoEnLinea titulo="Haz este recorrido con tus propias ventas." />
+          </AlVer>
         </Contenedor>
       </section>
 
@@ -322,10 +320,14 @@ export default function PortadaPage() {
                 titulo="Todos los precios, con lo que cambia entre uno y otro."
                 detalle="Lo único que cambia es cuánto facturas y cuántas personas lo usan. El sistema es el mismo en todos, con implementación y acompañamiento incluidos."
               />
-              <div className="mt-6 flex flex-wrap gap-3">
-                <BotonPrimario href="/sign-up">Empieza gratis</BotonPrimario>
-                <BotonSecundario href="/contacto">Habla con ventas</BotonSecundario>
+              <div data-llamado className="mt-6 flex flex-wrap gap-3">
+                <BotonPrueba />
+                <BotonWhatsApp />
               </div>
+              <GarantiasPrueba className="mt-4" />
+              {/* Sin tarjeta no hay a qué cobrarle: si no sigue, la cuenta queda en
+                  solo lectura y no pasa nada más (lib/config/suscripcion.ts). */}
+              <p className="m-0 mt-2 text-[13px] text-[#5c6373]">Si al terminar no sigues, no se cobra nada.</p>
             </AlVer>
             <AlVer retraso={90}>
               <ResumenDePrecios lineas={['erp']} mencionar={['erp-colegio']} />
@@ -350,21 +352,11 @@ export default function PortadaPage() {
                 <p className="m-0 mt-3.5 max-w-[400px] text-pretty text-[14.5px] leading-[1.65] text-white/70">
                   Abre tu cuenta y emite hoy, o cuéntanos cómo trabajas y te decimos con qué módulos empezar.
                 </p>
-                <div className="mt-6 flex flex-wrap items-center gap-5">
-                  <Link
-                    href="/sign-up"
-                    className="flex h-12 items-center gap-2.5 rounded-xl bg-zero-600 px-6 font-[family-name:var(--font-display)] text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-zero-500"
-                  >
-                    Empieza gratis
-                    <Flecha tamano={14} />
-                  </Link>
-                  <a
-                    href={CONTACTO.whatsappHref}
-                    className="border-b border-white/40 pb-0.5 text-[13.5px] font-semibold text-white transition hover:border-white"
-                  >
-                    O escríbenos por WhatsApp
-                  </a>
+                <div data-llamado className="mt-6 flex flex-wrap items-center gap-3">
+                  <BotonPrueba />
+                  <BotonWhatsApp tono="oscuro" />
                 </div>
+                <GarantiasPrueba tono="oscuro" className="mt-4" />
               </div>
 
               {/* La tarjeta blanca vuelve a fondo claro: su foco va en azul. */}

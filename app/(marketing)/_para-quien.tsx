@@ -21,13 +21,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import { Cheque, Flecha } from './_piezas';
+import { BotonPrueba } from './_llamados';
 
 type Industria = {
   clave: string;
   titulo: string;
   corto: string;
   dolor: string;
-  usa: [string, string, string];
+  /** Lo que usa de Zero. El colegio lleva más: su tramo trae todos los módulos. */
+  usa: string[];
   href: string;
   enlace: string;
   imagen: { src: string; ancho: number; alto: number; posicion: string; esCaptura?: boolean };
@@ -89,7 +91,14 @@ const INDUSTRIAS: Industria[] = [
     titulo: 'Colegios',
     corto: 'Colegios',
     dolor: 'Mensualidades, mora y cobranza que dependen de una libreta.',
-    usa: ['Cargos por estudiante, cada uno con su estado', 'Recargo por mora con días de gracia', 'Un link de pago para cada familia'],
+    // El tramo de colegio trae TODOS los módulos (lib/config/plans.ts): se dice
+    // aquí con nombre, no con un «y más».
+    usa: [
+      'Mensualidades, mora y un link de pago para cada familia',
+      'Punto de venta para la cafetería',
+      'Facturación e-CF de cada cobro ante la DGII',
+      'Contabilidad y nómina del personal, incluidas',
+    ],
     href: '/colegios',
     enlace: 'Ver Zero para colegios',
     imagen: { src: '/home/fotos/12-familia.png', ancho: 1086, alto: 1448, posicion: '50% 30%' },
@@ -183,13 +192,16 @@ export function ParaQuien() {
               </li>
             ))}
           </ul>
-          <Link
-            href={ind.href}
-            className="mt-6 inline-flex items-center gap-2 self-start text-[14px] font-semibold text-zero-600 transition hover:text-[#102a72] md:mt-auto md:pt-6"
-          >
-            {ind.enlace}
-            <Flecha tamano={13} />
-          </Link>
+          <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 md:mt-auto md:pt-6">
+            <BotonPrueba familia={ind.clave === 'colegios' ? 'colegio' : 'ecf'} tamano="mediano" />
+            <Link
+              href={ind.href}
+              className="inline-flex items-center gap-2 text-[14px] font-semibold text-zero-600 transition hover:text-[#102a72]"
+            >
+              {ind.enlace}
+              <Flecha tamano={13} />
+            </Link>
+          </div>
         </div>
       </div>
     </div>

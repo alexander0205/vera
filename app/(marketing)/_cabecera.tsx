@@ -269,7 +269,7 @@ export function CabeceraMarketing() {
                 href="/sign-up"
                 className="flex h-10 items-center whitespace-nowrap rounded-[11px] bg-zero-600 px-5 text-[13.5px] font-semibold text-white shadow-[0_8px_20px_-8px_rgba(54,88,225,.7)] transition hover:bg-zero-700"
               >
-                Empieza gratis
+                Prueba gratis
               </Link>
             )}
           </div>
@@ -290,7 +290,7 @@ export function CabeceraMarketing() {
 
       {abierto && (
         // `max-h` + scroll: con los seis módulos dentro, la lista pasa del alto
-        // de un teléfono y el botón de «Empieza gratis» quedaba fuera de
+        // de un teléfono y el botón de «Prueba gratis» quedaba fuera de
         // alcance, debajo del borde de la pantalla.
         <div className="max-h-[calc(100dvh-68px)] overflow-y-auto border-t border-[#edeff5] bg-white md:hidden">
           <Contenedor className="flex flex-col gap-1 py-3">
@@ -347,7 +347,7 @@ export function CabeceraMarketing() {
               href="/sign-up"
               className="mt-1 flex h-11 items-center justify-center rounded-xl bg-zero-600 text-sm font-semibold text-white"
             >
-              Empieza gratis
+              Prueba gratis
             </Link>
           </Contenedor>
         </div>

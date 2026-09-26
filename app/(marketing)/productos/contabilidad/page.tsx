@@ -23,6 +23,7 @@ import {
   PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
 import { AsientosEnVivo } from './_asientos';
+import { PRUEBA } from '@/lib/config/suscripcion';
 
 export const metadata: Metadata = {
   title: 'Contabilidad — asientos automáticos, estados financieros y reportes 606, 607 y 608',
@@ -182,7 +183,7 @@ export default function ContabilidadPage() {
       <CierreProducto
         antetitulo="Contabilidad"
         titulo="Que el mes cierre sin correr."
-        detalle="Abre tu cuenta y prueba 15 días, o cuéntanos cómo llevas la contabilidad hoy y te decimos qué se automatiza."
+        detalle={`Abre tu cuenta y prueba ${PRUEBA.dias} días gratis, o cuéntanos cómo llevas la contabilidad hoy y te decimos qué se automatiza.`}
         nota={{
           titulo: 'Lo que hace falta de tu lado',
           detalle: 'Tu catálogo de cuentas si ya tienes uno —o usas el nuestro— y los saldos con los que arrancas.',

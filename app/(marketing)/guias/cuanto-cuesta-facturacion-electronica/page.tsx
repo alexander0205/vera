@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { urlDelSitio } from '@/lib/config/enlaces';
 import { ADDONS, limiteTexto, planesDeLinea } from '@/lib/config/plans';
 import { Apartado, Dato, Enlace, Guia, Lista, Parrafo, Tabla } from '../../_guia';
+import { PRUEBA } from '@/lib/config/suscripcion';
 
 export const metadata: Metadata = {
   title: '¿Cuánto cuesta facturar electrónicamente en República Dominicana?',
@@ -76,7 +77,7 @@ export default function GuiaCuantoCuesta() {
       ]}
       cta={{
         titulo: 'Lo que cuesta Zero, sin cotizar',
-        detalle: 'Los planes están publicados con sus topes y lo que incluye cada uno. La contabilidad va dentro de todos, sin costo aparte, y la prueba es de 15 días sin tarjeta.',
+        detalle: `Los planes están publicados con sus topes y lo que incluye cada uno. La contabilidad va dentro de todos, sin costo aparte, y la prueba es de ${PRUEBA.dias} días${PRUEBA.pideTarjeta ? '' : ' sin tarjeta'}.`,
         href: '/precios',
         accion: 'Ver los precios',
       }}

@@ -27,6 +27,7 @@ import {
   CierreProducto, FranjaProducto, HeroProducto, PrecioProducto, SeccionProducto,
   PreguntasProducto, type PuntoDeProducto,
 } from '../../_producto';
+import { PRUEBA } from '@/lib/config/suscripcion';
 
 export const metadata: Metadata = {
   title: 'Zero ERP — facturación electrónica, inventario y contabilidad para República Dominicana',
@@ -94,7 +95,7 @@ const PREGUNTAS = [
   },
   {
     pregunta: '¿Cuánto cuesta un ERP con facturación electrónica en República Dominicana?',
-    respuesta: `Zero ERP arranca en US$${DESDE ?? 9} al mes e incluye facturación e-CF, cuentas por cobrar, inventario, compras y contabilidad. Lo que cambia entre planes es cuántos comprobantes emites y cuántas personas lo usan. El punto de venta se suma por US$9 al mes y la nómina por US$12. Sin contrato mínimo y con 15 días de prueba.`,
+    respuesta: `Zero ERP arranca en US$${DESDE ?? 9} al mes e incluye facturación e-CF, cuentas por cobrar, inventario, compras y contabilidad. Lo que cambia entre planes es cuántos comprobantes emites y cuántas personas lo usan. El punto de venta se suma por US$9 al mes y la nómina por US$12. Sin contrato mínimo y con ${PRUEBA.dias} días de prueba.`,
   },
   {
     pregunta: '¿Incluye contabilidad o hay que comprarla aparte?',
@@ -121,7 +122,7 @@ export default function ErpPage() {
         antetitulo="Zero ERP"
         titulo="Deja de perseguir lo que te deben y de armar los 606 a mano."
         bajada="Facturación electrónica, cobros, inventario, compras y contabilidad sobre los mismos datos. Se registra una vez y cae donde tiene que caer."
-        pie={DESDE !== null ? `Desde US$${DESDE} al mes · 15 días de prueba · Sin instalación` : '15 días de prueba · Sin instalación'}
+        pie={DESDE !== null ? `Desde US$${DESDE} al mes · Contabilidad incluida · Sin instalación` : 'Contabilidad incluida · Sin instalación'}
         captura="/home/capturas/demo-facturacion.png"
         alt="Panel de Zero con los ingresos del mes, las secuencias disponibles y la cartera"
       />
@@ -216,7 +217,7 @@ export default function ErpPage() {
       <CierreProducto
         antetitulo="Zero ERP"
         titulo="Empieza a facturar esta semana."
-        detalle="Abre tu cuenta y prueba 15 días, o cuéntanos cómo trabajas y te decimos con qué módulos empezar."
+        detalle={`Abre tu cuenta y prueba ${PRUEBA.dias} días gratis, o cuéntanos cómo trabajas y te decimos con qué módulos empezar.`}
         nota={{
           titulo: 'Lo que hace falta de tu lado',
           detalle: 'Tu RNC, el certificado digital de la empresa y media hora para contarnos cómo facturas hoy.',

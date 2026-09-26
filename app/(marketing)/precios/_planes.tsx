@@ -366,26 +366,25 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   ))}
                 </div>
 
-                {/* Un colegio no se compra solo: hay que migrar matrículas,
-                    alguien tiene que enseñárselo a la secretaria y el precio
-                    se arma con sus números. Ahí la conversación es el camino
-                    honesto, y por eso el botón la ofrece en vez de mandar a un
-                    registro que no va a poder completar.
+                {/* Todos los planes llevan a la prueba, con los días de su
+                    línea (15 en facturación, 30 en colegio; ver `diasDePrueba`).
+                    Un colegio también puede empezar solo: el registro pregunta
+                    «Soy un colegio», cuántos estudiantes tiene y le sugiere el
+                    tramo. Como montarlo es migrar matrículas y enseñárselo a la
+                    secretaría, debajo queda el camino de hablar con alguien.
 
                     En las líneas de facturación el botón SIGUE siendo la
-                    prueba aunque ya no se publique el precio, y no es un
-                    descuido: la prueba no cobra nada ni pide tarjeta —Stripe
-                    la deja en pausa si al terminar no hay método de pago—, así
-                    que nadie acaba pagando una cifra que no vio. Lo que sí se
-                    cerró es el botón que COBRA (ver `lib/payments/actions.ts`).
-                    Quien quiera el número antes de probar lo pide por el
-                    enlace de arriba.
+                    prueba aunque no se publique el precio, y no es un descuido:
+                    la prueba no cobra nada ni pide tarjeta —Stripe la deja en
+                    pausa si al terminar no hay método de pago—, así que nadie
+                    acaba pagando una cifra que no vio. Lo que sí se cerró es el
+                    botón que COBRA (ver `lib/payments/actions.ts`).
 
                     El `?perfil=` llega al formulario de contacto: quien viene
                     de esta tarjeta ya dijo quién es, y volver a preguntárselo
                     le enseña de entrada las preguntas del otro perfil. */}
                 <Link
-                  href={esColegio ? '/contacto?perfil=colegio' : '/sign-up'}
+                  href="/sign-up"
                   className={`mt-4 flex h-11 items-center justify-center rounded-xl px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight transition ${
                     p.destacado
                       ? 'border-[1.5px] border-zero-600 bg-zero-600 text-white hover:border-zero-700 hover:bg-zero-700'
@@ -394,8 +393,16 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                         : 'border-[1.5px] border-[#dce1f0] bg-white text-[#102a72] hover:border-zero-600 hover:text-zero-600'
                   }`}
                 >
-                  {esColegio ? 'Hablar con un representante' : `Empieza gratis ${linea.diasPrueba} días`}
+                  {`Prueba ${linea.diasPrueba} días gratis`}
                 </Link>
+                {esColegio && (
+                  <Link
+                    href="/contacto?perfil=colegio"
+                    className={`mt-2 block text-center text-[12px] font-semibold underline-offset-2 hover:underline ${oscuro ? 'text-white/80' : 'text-zero-600'}`}
+                  >
+                    o habla con un representante
+                  </Link>
+                )}
 
                 <div className={`mt-5 text-[11px] font-semibold uppercase tracking-[.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
                   {p.incluyeTitulo}
@@ -804,16 +811,28 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
             </>
           )}
 
+          {/* Con plan y precio, el paso siguiente es probarlo, igual que en
+              las tarjetas: «Solicitar este plan» mandaba a un formulario a
+              quien ya había decidido. A ventas solo va lo que no tiene cifra
+              o se sale del catálogo. */}
           <Link
-            href={hrefCotizar(linea)}
+            href={sugerido && sugerido.precio !== null ? '/sign-up' : hrefCotizar(linea)}
             className="mt-6 flex h-11 items-center justify-center rounded-xl bg-white px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight text-[#102a72] transition hover:-translate-y-0.5"
           >
             {!sugerido
               ? 'Hablar con ventas'
               : sugerido.precio === null
                 ? linea.bajoCotizacion ? 'Pedir cotización' : 'Hablar con un representante'
-                : 'Solicitar este plan'}
+                : `Prueba ${linea.diasPrueba} días gratis`}
           </Link>
+          {sugerido && sugerido.precio !== null && linea.esColegio && (
+            <Link
+              href={hrefCotizar(linea)}
+              className="mt-2 block text-center text-[12px] font-semibold text-white/80 underline-offset-2 hover:underline"
+            >
+              o habla con un representante
+            </Link>
+          )}
           {/* El pie no puede hablar de «precios» sobre un bloque sin ninguno:
               es contradecirse en tres centímetros. */}
           <div className="mt-3 text-center text-[11px] text-white/55">

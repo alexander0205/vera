@@ -87,6 +87,26 @@ function TarjetaLinea({ lineaKey }: { lineaKey: string }) {
   );
 }
 
+/**
+ * Lo que trae una línea, con nombre, leído de los módulos de su primer plan.
+ *
+ * En el colegio el punto de venta es el de la cafetería, y así se dice. Sale
+ * del catálogo para que el día que un tramo cambie de módulos, la frase cambie
+ * con él.
+ */
+function modulosQueIncluye(lineaKey: string, esColegio: boolean): string[] {
+  const modulos = planesDeLinea(lineaKey)[0]?.plan.modulos ?? [];
+  const nombres: [string, string][] = [
+    ['facturacion', 'facturación'],
+    ['contabilidad', 'contabilidad'],
+    ['nomina', 'nómina'],
+    ['pos', esColegio ? 'el punto de venta de la cafetería' : 'punto de venta'],
+  ];
+  return nombres.filter(([clave]) => (modulos as readonly string[]).includes(clave)).map(([, n]) => n);
+}
+
+const enLista = (xs: string[]) => xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`;
+
 /** La página que cuenta cada línea, para la mención de una línea. */
 const PAGINA_DE_LINEA: Record<string, string> = {
   erp: '/productos/erp',
@@ -111,6 +131,7 @@ function MencionDeLinea({ lineaKey }: { lineaKey: string }) {
   const cifra = lineaBajoCotizacion(linea.key) || desde === null
     ? TEXTO_BAJO_COTIZACION.toLowerCase()
     : `desde ${usd(desde)} al mes`;
+  const incluye = modulosQueIncluye(linea.key, linea.familia === 'colegio');
 
   return (
     <Link
@@ -120,7 +141,8 @@ function MencionDeLinea({ lineaKey }: { lineaKey: string }) {
       <span className="min-w-0 text-pretty text-[13px] leading-[1.5] text-[#3b4252]">
         <span className="font-semibold text-[#102a72]">{linea.nombre}</span>
         {porEstudiantes ? ' se cobra por cantidad de estudiantes, ' : ', '}
-        {cifra}.
+        {cifra}
+        {incluye.length > 0 && <>, con {enLista(incluye)} incluidos</>}.
       </span>
       <span className="inline-flex shrink-0 items-center gap-1.5 text-[12.5px] font-semibold text-zero-600">
         Ver la línea
