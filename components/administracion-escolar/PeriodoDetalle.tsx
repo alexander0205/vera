@@ -551,6 +551,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           becaTipo={grupo.becaTipo}
           becaValor={grupo.becaValor}
           becaMotivo={grupo.becaMotivo}
+          conceptoMensualidadId={grupo.conceptoMensualidadId}
           onGuardado={onCargoCreado}
         />
       )}
@@ -2317,7 +2318,7 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
  * tarifa del grado. El motivo deja escrito el porqué (histórico, hermano…).
  */
 function TarifaEstudianteDialog({
-  open, onOpenChange, matriculaId, estudianteId, periodoId, becaTipo, becaValor, becaMotivo, onGuardado,
+  open, onOpenChange, matriculaId, estudianteId, periodoId, becaTipo, becaValor, becaMotivo, conceptoMensualidadId, onGuardado,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -2327,6 +2328,8 @@ function TarifaEstudianteDialog({
   becaTipo: string | null;
   becaValor: number | null;
   becaMotivo: string | null;
+  /** Generación (concepto de mensualidad) actual del alumno. */
+  conceptoMensualidadId: number | null;
   onGuardado: () => void;
 }) {
   type Modo = 'normal' | 'monto' | 'porcentaje';
@@ -2335,6 +2338,9 @@ function TarifaEstudianteDialog({
   // El monto se teclea en pesos; se guarda en centavos. El % es entero 1-100.
   const [valor, setValor] = useState('');
   const [motivo, setMotivo] = useState('');
+  // La generación elegida (concepto de mensualidad). Es la ubicación del alumno,
+  // no su precio: el importe lo pone el monto propio / descuento de arriba.
+  const [generacionSel, setGeneracionSel] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2343,6 +2349,8 @@ function TarifaEstudianteDialog({
   type ConceptoLite = { id: number; nombre: string; tipo: string };
   type PrecioLite = { id: number; conceptoId: number; objetivoTipo: string; objetivoId: number; montoCentavos: number; productId: number | null; activo: boolean };
   const [conceptos, setConceptos] = useState<ConceptoLite[]>([]);
+  // Conceptos de mensualidad = las generaciones que se pueden elegir.
+  const [generaciones, setGeneraciones] = useState<ConceptoLite[]>([]);
   const [precios, setPrecios] = useState<PrecioLite[]>([]);
   const [conceptoSel, setConceptoSel] = useState('');
   const [precioOtro, setPrecioOtro] = useState('');
@@ -2362,9 +2370,10 @@ function TarifaEstudianteDialog({
       : '',
     );
     setMotivo(becaMotivo ?? '');
+    setGeneracionSel(conceptoMensualidadId != null ? String(conceptoMensualidadId) : '');
     setError(null);
     setConceptoSel(''); setPrecioOtro(''); setModoOtro('guardar'); setErrorOtro(null);
-  }, [open, becaTipo, becaValor, becaMotivo, modoInicial]);
+  }, [open, becaTipo, becaValor, becaMotivo, conceptoMensualidadId, modoInicial]);
 
   // Conceptos (para elegir) y precios del año (para leer el precio personal ya
   // puesto y el producto de facturación que usa cada concepto).
@@ -2375,9 +2384,12 @@ function TarifaEstudianteDialog({
         fetch('/api/administracion-escolar/conceptos').then((r) => r.json()),
         fetch(`/api/administracion-escolar/concepto-precios?periodoId=${periodoId}`).then((r) => r.json()),
       ]);
+      const activos = ((cs.conceptos ?? []) as (ConceptoLite & { activo?: boolean })[])
+        .filter((c) => c.activo !== false);
       // La mensualidad se maneja arriba (beca): aquí van los DEMÁS conceptos.
-      setConceptos(((cs.conceptos ?? []) as (ConceptoLite & { activo?: boolean })[])
-        .filter((c) => c.activo !== false && c.tipo !== 'mensualidad'));
+      setConceptos(activos.filter((c) => c.tipo !== 'mensualidad'));
+      // Las mensualidades son las generaciones elegibles.
+      setGeneraciones(activos.filter((c) => c.tipo === 'mensualidad'));
       setPrecios((cp.precios ?? []) as PrecioLite[]);
     } catch { /* la sección queda vacía; la de mensualidad sigue usable */ }
   }, [periodoId]);
@@ -2456,6 +2468,11 @@ function TarifaEstudianteDialog({
         becaMotivo: motivo.trim() || null,
       };
     }
+    // La generación (ubicación), solo si el usuario la cambió. Fija el concepto,
+    // no su precio: el importe lo pone el monto propio / descuento de arriba.
+    if (generacionSel && generacionSel !== String(conceptoMensualidadId ?? '')) {
+      body.conceptoMensualidadId = Number(generacionSel);
+    }
     setGuardando(true);
     try {
       const res = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}`, {
@@ -2465,9 +2482,22 @@ function TarifaEstudianteDialog({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setError(json.error ?? 'No se pudo guardar.'); return; }
+
+      // Poblar Cuentas por cobrar al instante: crea las cuotas del año alineadas
+      // al recurrente, al monto recién guardado. Silencioso si no hay recurrente
+      // (nada a lo que alinear) — el precio igual quedó guardado.
+      let generadas = 0;
+      try {
+        const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, { method: 'POST' });
+        const gj = await g.json().catch(() => ({}));
+        if (g.ok) generadas = gj.cargosCreados ?? 0;
+      } catch { /* no bloquea el guardado del precio */ }
+
       onOpenChange(false);
       onGuardado();
-      toast.success(modo === 'normal' ? 'Vuelve a la tarifa de su generación.' : 'Tarifa personal guardada.');
+      toast.success(generadas > 0
+        ? `Guardado. ${generadas} mensualidad${generadas === 1 ? '' : 'es'} en Cuentas por cobrar.`
+        : (modo === 'normal' ? 'Vuelve a la tarifa de su generación.' : 'Tarifa personal guardada.'));
     } catch {
       setError('No se pudo guardar.');
     } finally {
@@ -2489,6 +2519,21 @@ function TarifaEstudianteDialog({
           subtitle="La mensualidad de este estudiante. No cambia la de los demás." />
         <div className="space-y-3 px-6 pb-2">
           {error && <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</div>}
+
+          {/* Generación: la UBICACIÓN del alumno (lo que se ve en Cuentas por
+              cobrar como «1ra/2da/3ra…»), no su precio. El importe lo pone el
+              monto propio / descuento de abajo. */}
+          {generaciones.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs">Generación</Label>
+              <NativeSelect value={generacionSel} onChange={(e) => setGeneracionSel(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {generaciones.map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
+              </NativeSelect>
+              <p className="text-[11px] text-gray-400">Ubica al alumno en su generación. El precio lo fija su monto propio, no la tarifa de esa generación.</p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             {OPCIONES.map((o) => (
               <button key={o.id} type="button" onClick={() => setModo(o.id)}
