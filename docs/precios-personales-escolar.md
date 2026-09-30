@@ -13,6 +13,17 @@ En el mismo diálogo, **Precio personal de otro concepto** crea o cambia una fil
 
 La resolución de tarifas se usa en plan de matrícula, devengo, prefill de factura y proyección del dashboard. Al quitar un precio personal, se elimina únicamente esa tarifa: los cargos existentes se conservan, pues pudieron haberse creado antes de la excepción. Las tarifas de estructura mantienen sus reglas de eliminación de cargos huérfanos.
 
+## Emisión automática del 25
+
+La factura recurrente congela sus ítems al configurarla. Para que un **monto propio** o un **descuento** puesto DESPUÉS sí se cobre, el emisor (`generarFacturaDeRecurrente`, tanto el cron del día 25 como «Generar ahora») **reprecia la mensualidad en cada emisión** vía `tarifaMensualidadActual`: resuelve la tarifa de la matrícula y, **solo si el origen es del propio alumno** (`beca` = monto propio/descuento, o `estudiante` = precio con `objetivo_tipo='estudiante'`), sobrescribe el `precioUnitarioItem` de la línea.
+
+Guardas deliberadas, para no cambiar montos por sorpresa:
+- **Solo planes de una línea.** Los multi-línea (p. ej. colegio + guardería) se dejan congelados: cuál línea es la mensualidad es ambiguo.
+- **Solo excepción del alumno.** Si la tarifa sale de la estructura (servicio/grado/sección = la de su generación), se conserva el precio congelado. Reprecificar en masa todas las mensualidades a la tarifa de generación es otra decisión (el cutover de precios de estructura), no la de esta función.
+- **Sin tarifa que resolver** (recurrente no escolar, sin concepto de mensualidad) → se conserva el precio congelado. Sin regresión.
+
+El cargo del mes que refleja la factura (`reflejarFacturaRecurrenteEnCargo`) toma el monto ya repreciado.
+
 ## Verificación local
 
 `tsc --noEmit` pasó el 30-09-2026. Prueba HTTP contra la app y base local: precio personal de RD$42.36 guardado sin cargo; segundo POST con devengo creó un cargo de 4236 centavos; repetir creó cero. Otra prueba creó y quitó un precio personal en una matrícula que ya tenía un cargo de Inscripción y confirmó que ese cargo siguió intacto.
