@@ -15,4 +15,6 @@ La resolución de tarifas se usa en plan de matrícula, devengo, prefill de fact
 
 ## Verificación local
 
-`tsc --noEmit` pasó el 30-09-2026. Prueba HTTP contra la app y base local: precio personal de RD$42.36 guardado sin cargo; segundo POST con devengo creó un cargo de 4236 centavos; repetir creó cero. Otra prueba creó y quitó un precio personal en una matrícula que ya tenía un cargo de Inscripción y confirmó que ese cargo siguió intacto. Los datos de prueba se restauraron. La interacción del diálogo en navegador sigue pendiente de verificación: la ficha se renderiza, pero sus botones no respondieron en la sesión de navegador usada en esta revisión.
+`tsc --noEmit` pasó el 30-09-2026. Prueba HTTP contra la app y base local: precio personal de RD$42.36 guardado sin cargo; segundo POST con devengo creó un cargo de 4236 centavos; repetir creó cero. Otra prueba creó y quitó un precio personal en una matrícula que ya tenía un cargo de Inscripción y confirmó que ese cargo siguió intacto.
+
+Prueba en navegador, con el servidor local activo: **Solo guardar el precio** creó la tarifa personal sin crear deuda; **Generar el cargo ahora** mostró la nota ámbar, creó un cargo pendiente de RD$42.36 y actualizó el pendiente visible en la ficha. Repetir sobre un cargo existente no lo duplicó. Al terminar se eliminaron las filas de prueba y se restauró `conceptos_ids` como arreglo JSON original.
