@@ -440,7 +440,7 @@ export async function dashboardDelPeriodo(
     //     es una proyección, no un cobro.
     db.execute(sql`
       WITH mat AS (
-        SELECT m.id, m.curso_id AS seccion_id, cu.grado_id, g.servicio_id,
+        SELECT m.id, m.estudiante_id, m.curso_id AS seccion_id, cu.grado_id, g.servicio_id,
                m.beca_tipo, m.beca_valor, m.conceptos_ids,
                COALESCE(m.fecha_inscripcion::text, ${periodo.fecha_inicio ?? '0001-01-01'}) AS desde
         FROM admin_escolar_matriculas m
@@ -462,6 +462,10 @@ export async function dashboardDelPeriodo(
          AND co.id = ANY(ARRAY(SELECT jsonb_array_elements_text(mat.conceptos_ids)::int))
         CROSS JOIN LATERAL (
           SELECT COALESCE(
+            -- La tarifa PERSONAL del alumno gana sobre sección/grado/servicio.
+            (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
+              WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
+                AND pr.activo AND pr.objetivo_tipo = 'estudiante' AND pr.objetivo_id = mat.estudiante_id),
             (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
               WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
                 AND pr.activo AND pr.objetivo_tipo = 'seccion'  AND pr.objetivo_id = mat.seccion_id),

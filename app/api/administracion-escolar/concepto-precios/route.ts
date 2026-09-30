@@ -3,7 +3,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarServicios, adminEscolarGrados, adminEscolarCursos, adminEscolarPeriodos,
-  adminEscolarConceptosPago, adminEscolarConceptoPrecios, products,
+  adminEscolarConceptosPago, adminEscolarConceptoPrecios, adminEscolarEstudiantes, adminEscolarMatriculas, products,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
@@ -11,8 +11,11 @@ import {
   calcularImpactoPrecio, eliminarPrecioCompleto, eliminarSoloTarifa, matriculasBajoObjetivo,
 } from '@/lib/administracion-escolar/tarifa-lifecycle';
 import { devengarPeriodo } from '@/lib/administracion-escolar/devengar';
+import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
 
-const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion']);
+// 'estudiante' es la tarifa PERSONAL de un alumno para un concepto: su
+// `objetivo_id` es el id del estudiante, y gana sobre sección/grado/servicio.
+const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion', 'estudiante']);
 
 /** Productos que son venta de mostrador, no cargo escolar. */
 const NO_ES_CARGO = /t-?shirt|camis|uniforme|polo/i;
@@ -110,11 +113,19 @@ export async function POST(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
   if (!auth.ok) return auth.response;
   const t = auth.teamId;
-  const { conceptoId, periodoId, objetivoTipo, objetivoId, monto, productId, nuevoProducto } = await req.json();
+  const { conceptoId, periodoId, objetivoTipo, objetivoId, monto, productId, nuevoProducto, devengar } = await req.json();
 
   const cId = Number(conceptoId), oId = Number(objetivoId), pId = Number(periodoId);
   if (!cId || !oId || !pId || !TIPOS_OBJ.has(objetivoTipo)) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
+  }
+
+  // La tarifa personal apunta a un alumno: sin esto, un `objetivo_id` de otra
+  // empresa (o inexistente) quedaría como precio propio enganchado a nadie.
+  if (objetivoTipo === 'estudiante') {
+    const [est] = await db.select({ id: adminEscolarEstudiantes.id }).from(adminEscolarEstudiantes)
+      .where(and(eq(adminEscolarEstudiantes.id, oId), eq(adminEscolarEstudiantes.teamId, t))).limit(1);
+    if (!est) return NextResponse.json({ error: 'Estudiante no encontrado' }, { status: 404 });
   }
 
   const [c] = await db.select({ id: adminEscolarConceptosPago.id, productId: adminEscolarConceptosPago.productId })
@@ -161,6 +172,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Monto inválido' }, { status: 400 });
   }
 
+  // Para el precio personal, heredar el producto de la tarifa que realmente
+  // cubre a este alumno. Elegir cualquier precio del concepto podía copiar el
+  // producto de otro grado (y su ITBIS). Si el concepto ya tiene producto,
+  // `resolverTarifa` permite conservar uno más específico cuando existe.
+  if (objetivoTipo === 'estudiante' && prodId == null) {
+    const [matricula] = await db.select({ id: adminEscolarMatriculas.id }).from(adminEscolarMatriculas)
+      .where(and(eq(adminEscolarMatriculas.teamId, t), eq(adminEscolarMatriculas.estudianteId, oId), eq(adminEscolarMatriculas.periodoId, pId)))
+      .limit(1);
+    if (matricula) {
+      const heredada = await resolverTarifa(t, matricula.id, cId);
+      prodId = heredada?.productId ?? null;
+    }
+  }
+
   /**
    * R2: una tarifa tiene que poder facturarse contra un producto.
    *
@@ -186,7 +211,7 @@ export async function POST(req: NextRequest) {
         adminEscolarConceptoPrecios.periodoId, adminEscolarConceptoPrecios.objetivoTipo,
         adminEscolarConceptoPrecios.objetivoId,
       ],
-      set: { montoCentavos, ...(prodId != null ? { productId: prodId } : {}), updatedAt: new Date() },
+      set: { montoCentavos, ...(prodId != null ? { productId: prodId } : {}), activo: true, updatedAt: new Date() },
     })
     .returning();
   invalidarEstructura(t);
@@ -196,8 +221,14 @@ export async function POST(req: NextRequest) {
   // concepto. Es un devengo acotado e idempotente —el índice único evita
   // duplicados—; si falla, el precio ya quedó guardado y el cron mensual
   // recupera lo que falte, así que no tumba la respuesta.
+  //
+  // Para un precio de estructura (servicio/grado/sección) el devengo va siempre,
+  // como antes. Para la tarifa PERSONAL de un alumno lo decide quien la pone:
+  // `devengar:true` le crea la deuda ya; `false` solo guarda el precio y la
+  // deuda saldrá al facturar como siempre. La UI lo ofrece en palabras.
+  const hacerDevengo = objetivoTipo === 'estudiante' ? devengar === true : true;
   let cargosCreados = 0;
-  try {
+  if (hacerDevengo) try {
     const matriculaIds = await matriculasBajoObjetivo(db, t, pId, objetivoTipo, oId);
     if (matriculaIds.length) {
       // Mismo criterio que el cron: hasta hoy, no hasta fin de mes. Poner el
@@ -237,6 +268,15 @@ export async function DELETE(req: NextRequest) {
   if (!impacto) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
   if (preview) return NextResponse.json({ impacto });
+
+  // Quitar una excepción personal solo revierte el precio. Los cargos del
+  // alumno pueden existir desde antes de esa excepción (inscripción, por
+  // ejemplo); el borrado genérico de tarifas huérfanas los eliminaría.
+  if (impacto.objetivoTipo === 'estudiante') {
+    await db.transaction((tx) => eliminarSoloTarifa(tx, t, id));
+    invalidarEstructura(t);
+    return NextResponse.json({ ok: true, modo: 'solo-tarifa' });
+  }
 
   if (modo === 'solo-tarifa') {
     await db.transaction((tx) => eliminarSoloTarifa(tx, t, id));

@@ -197,7 +197,7 @@ export async function devengarPeriodo(
   for (const m of matriculas) {
     const ctx = await contextoDeSeccion(teamId, periodoId, m.cursoId, {
       tipo: m.becaTipo, valor: m.becaValor,
-    });
+    }, m.estudianteId);
     if (!ctx) {
       // La sección de la matrícula no resuelve grado/servicio: sin eso no hay
       // tarifa que aplicar. Se anota para que no sea un pendiente mudo.

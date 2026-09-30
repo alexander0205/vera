@@ -126,6 +126,16 @@ export function matriculasDeEstudiante(teamId: number, estudianteId: number) {
       recurrenteEstado: facturasRecurrentes.estado,
       recurrenteDiaCobro: facturasRecurrentes.diaCobro,
       recurrenteProxima: facturasRecurrentes.proximaEmision,
+      // La tarifa personal de la mensualidad: `monto` fija lo que paga este
+      // alumno, `porcentaje` le descuenta sobre la tarifa de su generación. El
+      // motivo explica el porqué (histórico, hermano, acuerdo). Se edita en
+      // «Configuración mensual» de la ficha.
+      becaTipo: adminEscolarMatriculas.becaTipo,
+      becaValor: adminEscolarMatriculas.becaValor,
+      becaMotivo: adminEscolarMatriculas.becaMotivo,
+      // Cuál es su concepto de mensualidad (su generación): sirve para nombrar
+      // la tarifa base sobre la que aplica la personal.
+      conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
       notas: adminEscolarMatriculas.notas,
     })
     .from(adminEscolarMatriculas)

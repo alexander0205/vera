@@ -586,6 +586,7 @@ export async function prefillDeCargos(
   if (previsto) {
     const [mat] = await db
       .select({
+        estudianteId: adminEscolarMatriculas.estudianteId,
         cursoId: adminEscolarMatriculas.cursoId,
         periodoId: adminEscolarMatriculas.periodoId,
         fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
@@ -598,7 +599,7 @@ export async function prefillDeCargos(
 
     const ctxTarifa = mat
       ? await contextoDeSeccion(teamId, mat.periodoId, mat.cursoId,
-          { tipo: mat.becaTipo, valor: mat.becaValor })
+          { tipo: mat.becaTipo, valor: mat.becaValor }, mat.estudianteId)
       : null;
 
     if (!ctxTarifa || !mat) {
