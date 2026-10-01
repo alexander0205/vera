@@ -374,6 +374,7 @@ export async function editarCuenta(
   // también hacia atrás. Se permite cuando no daña nada y alguien lo confirmó:
   // las reglas y el porqué están en `./cambio-tipo`.
   const reclasifica = input.tipo !== undefined && input.tipo !== actual.tipo && conMovimientos;
+  let confirmacionPendiente: string | null = null;
   if (reclasifica) {
     const decision = evaluarCambioTipo({
       codigo: actual.codigo,
@@ -388,7 +389,9 @@ export async function editarCuenta(
       confirmado: opciones.confirmarCambioTipo === true,
     });
     if (decision.decision === 'bloqueado') throw new CuentaError(decision.mensaje, 409);
-    if (decision.decision === 'requiere-confirmacion') throw new CambioTipoSinConfirmarError(decision.mensaje);
+    // La confirmación se pide al final, cuando ninguna otra regla va a rechazar
+    // la edición: no tiene sentido confirmar algo que igual no se puede guardar.
+    if (decision.decision === 'requiere-confirmacion') confirmacionPendiente = decision.mensaje;
   }
 
   // Quitarle "acepta movimientos" a una cuenta que ya los tiene dejaría esos
@@ -439,6 +442,8 @@ export async function editarCuenta(
       );
     }
   }
+
+  if (confirmacionPendiente) throw new CambioTipoSinConfirmarError(confirmacionPendiente);
 
   const sets = [
     input.codigo     !== undefined ? sql`codigo = ${input.codigo.trim()}` : null,
