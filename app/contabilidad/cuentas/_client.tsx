@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useTransition, useCallback, memo } from 'react';
+import { useState, useMemo, useTransition, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Power, Trash2, ChevronRight, ChevronDown, Download, Upload } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -487,12 +487,13 @@ function CuentaDialog({
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
   /**
-   * El aviso del servidor cuando el cambio de tipo mueve cifras ya reportadas.
-   * Mientras está, el botón principal confirma. Cualquier cambio en el
-   * formulario lo descarta: lo confirmado tiene que ser lo que se guarda.
+   * El aviso del servidor cuando el cambio de tipo mueve cifras ya reportadas,
+   * junto con el formulario EXACTO al que se refiere. Si el formulario cambia
+   * después —incluso mientras se guardaba—, el aviso deja de valer solo: lo
+   * confirmado tiene que ser lo que se guarda.
    */
-  const [confirmacion, setConfirmacion] = useState<string | null>(null);
-  useEffect(() => { setConfirmacion(null); }, [form]);
+  const [confirmacion, setConfirmacion] = useState<{ mensaje: string; para: FormState } | null>(null);
+  const avisoVigente = confirmacion?.para === form ? confirmacion.mensaje : null;
 
   // Las opciones del padre no dependen de lo que se teclea: se arman una vez.
   // Un `TextField select` clona todos sus hijos en cada render.
@@ -504,38 +505,50 @@ function CuentaDialog({
   ], [padresPosibles]);
 
   async function guardar(confirmarCambioTipo = false) {
+    // Lo que se manda es lo que se confirma: si el usuario sigue tecleando
+    // mientras responde el servidor, el aviso queda atado a esta versión.
+    const enviado = form;
     setGuardando(true);
     setError(null);
+    setConfirmacion(null);
 
-    const esEdicion = form.id !== undefined;
-    const res = await fetch(
-      esEdicion ? `/api/contabilidad/cuentas/${form.id}` : '/api/contabilidad/cuentas',
-      {
-        method: esEdicion ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          codigo: form.codigo,
-          nombre: form.nombre,
-          tipo: form.tipo,
-          naturaleza: form.naturaleza,
-          cuentaPadreId: form.cuentaPadreId,
-          imputable: form.imputable,
-          confirmarCambioTipo,
-        }),
-      },
-    );
+    try {
+      const esEdicion = enviado.id !== undefined;
+      const res = await fetch(
+        esEdicion ? `/api/contabilidad/cuentas/${enviado.id}` : '/api/contabilidad/cuentas',
+        {
+          method: esEdicion ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            codigo: enviado.codigo,
+            nombre: enviado.nombre,
+            tipo: enviado.tipo,
+            naturaleza: enviado.naturaleza,
+            cuentaPadreId: enviado.cuentaPadreId,
+            imputable: enviado.imputable,
+            confirmarCambioTipo,
+          }),
+        },
+      );
 
-    setGuardando(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      if (body.requiereConfirmacion) {
-        setConfirmacion(body.error);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.requiereConfirmacion) {
+          setConfirmacion({
+            mensaje: body.error ?? 'Este cambio de tipo necesita tu confirmación.',
+            para: enviado,
+          });
+          return;
+        }
+        setError(body.error ?? 'No se pudo guardar la cuenta.');
         return;
       }
-      setError(body.error ?? 'No se pudo guardar la cuenta.');
-      return;
+      onGuardada();
+    } catch {
+      setError('No se pudo guardar la cuenta. Revisa tu conexión e inténtalo de nuevo.');
+    } finally {
+      setGuardando(false);
     }
-    onGuardada();
   }
 
   return (
@@ -547,9 +560,9 @@ function CuentaDialog({
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
-          {confirmacion && (
+          {avisoVigente && (
             <Alert severity="warning">
-              {confirmacion} ¿Confirmas el cambio?
+              {avisoVigente} ¿Confirmas el cambio?
             </Alert>
           )}
 
@@ -652,18 +665,14 @@ function CuentaDialog({
         >
           Cancelar
         </Button>
-        {confirmacion ? (
-          <Button
-            variant="contained" color="warning"
-            onClick={() => guardar(true)} disabled={guardando || ocupado}
-          >
-            {guardando ? 'Guardando…' : 'Sí, cambiar el tipo'}
-          </Button>
-        ) : (
-          <Button variant="contained" onClick={() => guardar()} disabled={guardando || ocupado}>
-            {guardando ? 'Guardando…' : 'Guardar'}
-          </Button>
-        )}
+        <Button
+          variant="contained"
+          color={avisoVigente ? 'warning' : 'primary'}
+          onClick={() => guardar(avisoVigente !== null)}
+          disabled={guardando || ocupado}
+        >
+          {guardando ? 'Guardando…' : avisoVigente ? 'Sí, cambiar el tipo' : 'Guardar'}
+        </Button>
       </DialogActions>
     </Dialog>
   );
