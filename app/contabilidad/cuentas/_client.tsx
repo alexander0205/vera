@@ -50,6 +50,11 @@ function naturalezaPorTipo(tipo: string) {
   return tipo === 'activo' || tipo === 'costo' || tipo === 'gasto' ? 'deudora' : 'acreedora';
 }
 
+/** Etiqueta del tipo para mostrar: "gasto" → "Gastos". */
+function etiquetaTipo(tipo: string) {
+  return TIPOS.find((t) => t.valor === tipo)?.label ?? tipo;
+}
+
 interface FormState {
   id?:            number;
   codigo:         string;
@@ -64,6 +69,9 @@ const FORM_VACIO: FormState = {
   codigo: '', nombre: '', tipo: 'activo', naturaleza: 'deudora',
   cuentaPadreId: null, imputable: true,
 };
+
+/** Una cuenta de agrupación que puede ser padre, con su tipo para heredarlo. */
+interface PadrePosible { id: number; codigo: string; nombre: string; tipo: string }
 
 export function CatalogoClient({
   cuentasIniciales,
@@ -108,11 +116,11 @@ export function CatalogoClient({
 
   /** Candidatas a cuenta padre: solo las de agrupación, y nunca la propia cuenta. */
   const padresPosibles = useMemo(() => {
-    const out: { id: number; codigo: string; nombre: string }[] = [];
+    const out: PadrePosible[] = [];
     const recorrer = (nodos: CuentaNodo[]) => {
       for (const n of nodos) {
         if (!n.imputable && n.id !== dialogo?.id) {
-          out.push({ id: n.id, codigo: n.codigo, nombre: n.nombre });
+          out.push({ id: n.id, codigo: n.codigo, nombre: n.nombre, tipo: n.tipo });
         }
         recorrer(n.hijas);
       }
@@ -478,7 +486,7 @@ function CuentaDialog({
   inicial, padresPosibles, onCerrar, onGuardada, ocupado,
 }: {
   inicial: FormState;
-  padresPosibles: { id: number; codigo: string; nombre: string }[];
+  padresPosibles: PadrePosible[];
   onCerrar: () => void;
   onGuardada: () => void;
   ocupado: boolean;
@@ -503,6 +511,8 @@ function CuentaDialog({
       <MenuItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</MenuItem>
     )),
   ], [padresPosibles]);
+
+  const padreElegido = padresPosibles.find((p) => p.id === form.cuentaPadreId);
 
   async function guardar(confirmarCambioTipo = false) {
     // Lo que se manda es lo que se confirma: si el usuario sigue tecleando
@@ -621,10 +631,20 @@ function CuentaDialog({
             <TextField
               label="Cuenta padre" select fullWidth
               value={form.cuentaPadreId ?? ''}
-              onChange={(e) => setForm((f) => ({
-                ...f,
-                cuentaPadreId: e.target.value ? Number(e.target.value) : null,
-              }))}
+              onChange={(e) => {
+                const cuentaPadreId = e.target.value ? Number(e.target.value) : null;
+                const padre = padresPosibles.find((p) => p.id === cuentaPadreId);
+                setForm((f) => ({
+                  ...f,
+                  cuentaPadreId,
+                  // Una cuenta NUEVA hereda el tipo de su grupo: así nació el
+                  // error de las 63xx creadas como Activo bajo "Gastos". Al
+                  // editar no se toca: cambiar el tipo es una decisión aparte.
+                  ...(f.id === undefined && padre
+                    ? { tipo: padre.tipo, naturaleza: naturalezaPorTipo(padre.tipo) }
+                    : {}),
+                }));
+              }}
             >
               {opcionesPadre}
             </TextField>
@@ -632,6 +652,13 @@ function CuentaDialog({
               Solo aparecen las cuentas que agrupan. Una cuenta que acepta
               movimientos no puede tener hijas.
             </Typography>
+            {padreElegido && padreElegido.tipo !== form.tipo && (
+              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#d97706' }}>
+                Su grupo, {padreElegido.codigo} {padreElegido.nombre}, es de tipo{' '}
+                {etiquetaTipo(padreElegido.tipo)}. Revisa que esta cuenta de verdad
+                sea {etiquetaTipo(form.tipo)}.
+              </Typography>
+            )}
           </Box>
 
           <FormControlLabel
