@@ -410,7 +410,7 @@ const FilaCuenta = memo(function FilaCuenta({
           px: 1, py: 0.25, borderRadius: '4px', whiteSpace: 'nowrap',
           bgcolor: tono.bg, color: tono.fg, border: `1px solid ${tono.border}`,
         }}>
-          {TIPOS.find((t) => t.valor === c.tipo)?.label ?? c.tipo}
+          {etiquetaTipo(c.tipo)}
         </Box>
       </TableCell>
       <TableCell sx={{ color: '#4b5563' }}>
@@ -639,8 +639,9 @@ function CuentaDialog({
                   cuentaPadreId,
                   // Una cuenta NUEVA hereda el tipo de su grupo: así nació el
                   // error de las 63xx creadas como Activo bajo "Gastos". Al
-                  // editar no se toca: cambiar el tipo es una decisión aparte.
-                  ...(f.id === undefined && padre
+                  // editar no se toca: cambiar el tipo es una decisión aparte. Si el tipo ya
+                  // es el del grupo, no se toca: respeta una naturaleza invertida a propósito.
+                  ...(f.id === undefined && padre && padre.tipo !== f.tipo
                     ? { tipo: padre.tipo, naturaleza: naturalezaPorTipo(padre.tipo) }
                     : {}),
                 }));
