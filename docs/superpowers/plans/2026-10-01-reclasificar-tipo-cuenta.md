@@ -1299,7 +1299,7 @@ git commit -m "feat(contabilidad): una cuenta nueva hereda el tipo de su grupo y
 **Files:**
 - Create: `scripts/verificar-cambio-tipo-cuenta.ts`
 
-`.env` apunta a producción y los scripts lo cargan. Este script escribe datos, así que se niega a correr si `POSTGRES_URL` falta o apunta al host de producción (`ep-raspy-mud-annawbag`, el mismo que vigila `tests/setup-sin-produccion.ts`). Todo lo que crea es sintético (códigos `ZZVER…`) y lo borra al terminar.
+`.env` apunta a producción y los scripts lo cargan. Este script escribe datos, así que NO carga `.env` (la URL tiene que venir escrita en el comando) y además se niega a correr si `POSTGRES_URL` falta o apunta al host de producción (`ep-raspy-mud-annawbag`, el mismo que vigila `tests/setup-sin-produccion.ts`). Todo lo que crea es sintético (códigos `ZZVER…`) y lo borra al terminar.
 
 - [ ] **Step 1: Write the script**
 
@@ -1315,8 +1315,12 @@ Create `scripts/verificar-cambio-tipo-cuenta.ts`:
  * Siembra cuentas y asientos sintéticos (códigos ZZVER…), prueba las reglas de
  * `lib/contabilidad/cambio-tipo.ts` a través de `editarCuenta` y mide el efecto
  * en el Balance general. Deja el team exactamente como estaba.
+ *
+ * A propósito NO carga `.env`: ese archivo apunta a producción. La URL tiene
+ * que venir escrita en el comando, y además no puede ser la de producción.
  */
-import 'dotenv/config';
+
+export {}; // módulo propio: sin import/export tsc lo trata como script global
 
 const HOST_PRODUCCION = 'ep-raspy-mud-annawbag';
 const url = process.env.POSTGRES_URL ?? '';
@@ -1469,9 +1473,10 @@ type Linea = { cuentaId: number; debe: number; haber: number };
 
 - [ ] **Step 2: Check the guard refuses production**
 
-Run (without setting `POSTGRES_URL`, so `.env` loads):
-`npx tsx scripts/verificar-cambio-tipo-cuenta.ts`
-Expected: exits with code 1 and prints "Este script escribe datos. Córrelo solo contra una rama de Neon", without touching the database.
+Only with fake URLs that cannot resolve; never with `.env` loaded (it points to production):
+- `env -u POSTGRES_URL npx tsx scripts/verificar-cambio-tipo-cuenta.ts` → "Este script escribe datos…", exit 1 (also proves the script does not read `.env`).
+- `POSTGRES_URL="postgresql://x:y@ep-raspy-mud-annawbag.invalid:5432/nada" TEAM_ID=1 USER_ID=1 npx tsx scripts/verificar-cambio-tipo-cuenta.ts` → same message, exit 1.
+- `POSTGRES_URL="postgresql://x:y@rama-falsa.invalid:5432/nada" npx tsx scripts/verificar-cambio-tipo-cuenta.ts` → "Faltan TEAM_ID y USER_ID (enteros).", exit 1.
 
 - [ ] **Step 3: Run it against a Neon branch**
 
