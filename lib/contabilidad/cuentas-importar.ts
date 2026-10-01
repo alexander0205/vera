@@ -111,8 +111,8 @@ export async function importarCatalogo(
             }
 
             // Solo lo que cambia. Mandar un campo igual a `editarCuenta` podría
-            // disparar una regla por nada —cambiar el tipo de una cuenta con
-            // movimientos está prohibido aunque sea «al mismo tipo»—.
+            // disparar una regla por nada, y la vista previa diría que cambió
+            // algo que no cambió.
             const cambios: EditarCuentaInput = {};
             if (f.nombre !== undefined && f.nombre !== actual.nombre) cambios.nombre = f.nombre;
             if (f.tipo !== undefined && f.tipo !== actual.tipo) cambios.tipo = f.tipo;
@@ -127,7 +127,12 @@ export async function importarCatalogo(
               return;
             }
 
-            const editada = await editarCuenta(teamId, actual.id, cambios, userId, sp);
+            // La vista previa es la confirmación: quien aplica ya vio la lista
+            // de cuentas cuyo tipo cambia. Las demás reglas del cambio de tipo
+            // aplican igual que en el formulario.
+            const editada = await editarCuenta(
+              teamId, actual.id, cambios, userId, sp, { confirmarCambioTipo: true },
+            );
             porCodigo.set(editada.codigo, editada);
             resultado.actualizadas.push({
               fila: f.fila,
