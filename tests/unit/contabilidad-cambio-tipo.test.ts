@@ -44,10 +44,11 @@ describe('casos reales', () => {
     const r = evaluarCambioTipo(hechos({ confirmado: false }));
     expect(r.decision).toBe('requiere-confirmacion');
     if (r.decision !== 'requiere-confirmacion') return;
-    expect(r.mensaje).toContain('6301 Impuesto a los activos');
-    expect(r.mensaje).toContain('3 movimientos');
-    expect(r.mensaje).toContain('del Balance general al Estado de resultados');
-    expect(r.mensaje).toContain('meses anteriores');
+    expect(r.mensaje).toBe(
+      '"6301 Impuesto a los activos" tiene 3 movimientos. Pasarla de Activo a Gastos no cambia ' +
+      'ningún asiento. Su saldo pasa del Balance general al Estado de resultados, también en los ' +
+      'reportes de meses anteriores.',
+    );
   });
 
   it('SOLUCIONES 6304: confirmado, se permite', () => {
@@ -79,6 +80,7 @@ describe('regla 1: misma naturaleza', () => {
     expect(r.decision).toBe('bloqueado');
     if (r.decision !== 'bloqueado') return;
     expect(r.mensaje).toContain('daría vuelta a su saldo');
+    expect(r.mensaje).toContain('solo puede pasar a Activo, Costos o Gastos');
   });
 
   it('Pasivo → Patrimonio tienen la misma naturaleza y se permite', () => {
@@ -93,7 +95,7 @@ describe('regla 1: misma naturaleza', () => {
     const r = evaluarCambioTipo(hechos({ naturalezaFinal: 'acreedora' }));
     expect(r.decision).toBe('bloqueado');
     if (r.decision !== 'bloqueado') return;
-    expect(r.mensaje).toContain('sin cambiar la naturaleza');
+    expect(r.mensaje).toContain('pero no la naturaleza');
   });
 
   it('una cuenta de naturaleza invertida no puede cambiar de tipo con movimientos', () => {
@@ -105,6 +107,15 @@ describe('regla 1: misma naturaleza', () => {
     expect(r.decision).toBe('bloqueado');
     if (r.decision !== 'bloqueado') return;
     expect(r.mensaje).toContain('daría vuelta a su saldo');
+    expect(r.mensaje).toContain('solo puede pasar a Pasivo, Patrimonio o Ingresos');
+  });
+
+  it('una cuenta invertida sí puede pasar a un tipo de su misma naturaleza (1202 → Pasivo)', () => {
+    const r = evaluarCambioTipo(hechos({
+      codigo: '1202', nombre: 'Depreciación acumulada', tipoNuevo: 'pasivo',
+      naturalezaActual: 'acreedora', naturalezaFinal: 'acreedora',
+    }));
+    expect(r).toEqual({ decision: 'permitido' });
   });
 });
 
@@ -113,8 +124,11 @@ describe('regla 2: ejercicio cerrado', () => {
     const r = evaluarCambioTipo(hechos({ movimientosEnEjercicioCerrado: true }));
     expect(r.decision).toBe('bloqueado');
     if (r.decision !== 'bloqueado') return;
-    expect(r.mensaje).toContain('ejercicio ya cerrado');
-    expect(r.mensaje).toContain('Reabre el ejercicio');
+    expect(r.mensaje).toBe(
+      '"6301 Impuesto a los activos" tiene movimientos en un ejercicio ya cerrado, y esos saldos ' +
+      'no se pueden mover hacia atrás. Para pasarla de Activo a Gastos, reabre el ejercicio en ' +
+      '«Cierre de ejercicio», cambia el tipo y vuelve a cerrarlo.',
+    );
   });
 
   it('también cuando el cambio no sale del reporte (Costos → Gastos)', () => {
@@ -158,9 +172,22 @@ describe('regla 3: métodos de cobro', () => {
     }));
     expect(r).toEqual({ decision: 'permitido' });
   });
+
+  it('revisa todos los usos, no solo el primero', () => {
+    const r = evaluarCambioTipo(hechos({
+      tipoActual: 'costo', tipoNuevo: 'gasto',
+      usosEnMetodos: [
+        { metodo: 'Link de pago — Azul', rol: 'comision' },
+        { metodo: 'Efectivo', rol: 'entrada' },
+      ],
+    }));
+    expect(r.decision).toBe('bloqueado');
+    if (r.decision !== 'bloqueado') return;
+    expect(r.mensaje).toContain('entra el dinero de Efectivo');
+  });
 });
 
-describe('regla 5: confirmación', () => {
+describe('regla 4: confirmación', () => {
   it('Gastos → Activo explica que el saldo pasa al Balance general', () => {
     const r = evaluarCambioTipo(hechos({ tipoActual: 'gasto', tipoNuevo: 'activo', confirmado: false }));
     expect(r.decision).toBe('requiere-confirmacion');
@@ -178,5 +205,15 @@ describe('regla 5: confirmación', () => {
   it('las reglas que bloquean ganan aunque venga confirmado', () => {
     const r = evaluarCambioTipo(hechos({ tipoNuevo: 'ingreso', naturalezaFinal: 'acreedora', confirmado: true }));
     expect(r.decision).toBe('bloqueado');
+  });
+
+  it('Pasivo → Patrimonio explica que cambia de sección dentro del Balance general', () => {
+    const r = evaluarCambioTipo(hechos({
+      tipoActual: 'pasivo', tipoNuevo: 'patrimonio',
+      naturalezaActual: 'acreedora', naturalezaFinal: 'acreedora', confirmado: false,
+    }));
+    expect(r.decision).toBe('requiere-confirmacion');
+    if (r.decision !== 'requiere-confirmacion') return;
+    expect(r.mensaje).toContain('cambia de sección dentro del Balance general');
   });
 });

@@ -12,8 +12,8 @@
  * 2026-10-01):
  *   1. la naturaleza del tipo nuevo es la naturaleza actual de la cuenta, y no
  *      cambia en la misma operación: el saldo nunca se da vuelta;
- *   2. sin movimientos en un ejercicio cerrado: esos saldos ya se declararon,
- *      y hay que reabrir el ejercicio primero;
+ *   2. sin movimientos en un ejercicio cerrado: esos saldos no se mueven hacia
+ *      atrás, y hay que reabrir el ejercicio primero;
  *   3. sin romper un método de cobro: su cuenta de entrada es de activo y su
  *      cuenta de comisión es de gasto (las mismas reglas de `guardarMetodo`);
  *   4. con confirmación explícita de quien lo hace.
@@ -76,37 +76,35 @@ export function evaluarCambioTipo(h: HechosCambioTipo): ResultadoCambioTipo {
   // contrario en todos los reportes. Se compara contra la naturaleza GUARDADA:
   // una cuenta invertida (1202, activo acreedora) tampoco puede pasar a Gastos.
   if (naturalezaPorTipo(h.tipoNuevo) !== h.naturalezaActual) {
+    const posibles = h.naturalezaActual === 'deudora'
+      ? 'Activo, Costos o Gastos'
+      : 'Pasivo, Patrimonio o Ingresos';
     return {
       decision: 'bloqueado',
       mensaje:
         `"${cuenta}" tiene movimientos, y pasarla de ${de} a ${a} daría vuelta a su saldo. ` +
-        'Con movimientos solo se puede cambiar a un tipo de la misma naturaleza: ' +
-        'Activo, Costos y Gastos entre sí, o Pasivo, Patrimonio e Ingresos entre sí.',
+        `Es de naturaleza ${h.naturalezaActual}, así que con movimientos solo puede pasar a ${posibles}.`,
     };
   }
   if (h.naturalezaFinal !== h.naturalezaActual) {
     return {
       decision: 'bloqueado',
       mensaje:
-        `"${cuenta}" tiene movimientos: cambia el tipo sin cambiar la naturaleza ` +
-        `(se queda ${h.naturalezaActual}).`,
+        `"${cuenta}" tiene movimientos: se le puede cambiar el tipo, pero no la naturaleza, ` +
+        `que tiene que quedarse ${h.naturalezaActual}.`,
     };
   }
 
-  // 2. Un ejercicio cerrado ya se declaró: sus saldos no se mueven hacia atrás.
+  // 2. Los saldos de un ejercicio cerrado no se mueven hacia atrás.
   if (h.movimientosEnEjercicioCerrado) {
     return {
       decision: 'bloqueado',
       mensaje:
-        `"${cuenta}" tiene movimientos en un ejercicio ya cerrado, y esos saldos ya se ` +
-        `declararon. Para pasarla de ${de} a ${a}, Reabre el ejercicio en Cierre de ` +
-        'ejercicio, cambia el tipo y vuelve a cerrarlo.',
+        `"${cuenta}" tiene movimientos en un ejercicio ya cerrado, y esos saldos no se pueden ` +
+        `mover hacia atrás. Para pasarla de ${de} a ${a}, reabre el ejercicio en ` +
+        '«Cierre de ejercicio», cambia el tipo y vuelve a cerrarlo.',
     };
   }
-
-  const grupoActual = grupoDeTipo(h.tipoActual);
-  const grupoNuevo  = grupoDeTipo(h.tipoNuevo);
-  const cruza = grupoActual !== grupoNuevo;
 
   // 3. Las mismas reglas que pone la configuración al asignar la cuenta.
   for (const u of h.usosEnMetodos) {
@@ -131,6 +129,9 @@ export function evaluarCambioTipo(h: HechosCambioTipo): ResultadoCambioTipo {
   // 4. Nada lo impide, pero mueve cifras ya reportadas: que se vea antes.
   if (!h.confirmado) {
     const n = h.movimientos === 1 ? '1 movimiento' : `${h.movimientos} movimientos`;
+    const grupoActual = grupoDeTipo(h.tipoActual);
+    const grupoNuevo  = grupoDeTipo(h.tipoNuevo);
+    const cruza = grupoActual !== grupoNuevo;
     const efecto = cruza
       ? `Su saldo pasa del ${NOMBRE_REPORTE[grupoActual]} al ${NOMBRE_REPORTE[grupoNuevo]}`
       : `Su saldo cambia de sección dentro del ${NOMBRE_REPORTE[grupoActual]}`;
