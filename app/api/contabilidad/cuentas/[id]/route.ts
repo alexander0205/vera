@@ -23,7 +23,7 @@ import { userCanForTeam } from '@/lib/auth/permissions';
 import {
   editarCuenta, borrarCuenta, CuentaError, CambioTipoSinConfirmarError,
 } from '@/lib/contabilidad/cuentas';
-import { getIp } from '@/lib/audit';
+import { getIp, type AuditAction } from '@/lib/audit';
 
 async function autorizar() {
   const user = await getUser();
@@ -88,9 +88,10 @@ export async function PATCH(
           teamId,
           userId:    user.id,
           actor:     user.email,
-          action:    'CONTABILIDAD_CUENTA_RECLASIFICADA',
+          action:    'CONTABILIDAD_CUENTA_RECLASIFICADA' satisfies AuditAction,
           resource:  editada.codigo,
-          ipAddress: getIp(req),
+          // varchar(45): un x-forwarded-for raro no puede tumbar el cambio.
+          ipAddress: getIp(req)?.slice(0, 45) ?? null,
           metadata:  JSON.stringify({
             cuentaId: editada.id, nombre: editada.nombre, ...editada.reclasificacion,
           }),
