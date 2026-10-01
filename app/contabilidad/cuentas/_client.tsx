@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition, useCallback, memo } from 'react';
+import { useState, useMemo, useEffect, useTransition, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Power, Trash2, ChevronRight, ChevronDown, Download, Upload } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -486,6 +486,13 @@ function CuentaDialog({
   const [form, setForm]           = useState<FormState>(inicial);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  /**
+   * El aviso del servidor cuando el cambio de tipo mueve cifras ya reportadas.
+   * Mientras está, el botón principal confirma. Cualquier cambio en el
+   * formulario lo descarta: lo confirmado tiene que ser lo que se guarda.
+   */
+  const [confirmacion, setConfirmacion] = useState<string | null>(null);
+  useEffect(() => { setConfirmacion(null); }, [form]);
 
   // Las opciones del padre no dependen de lo que se teclea: se arman una vez.
   // Un `TextField select` clona todos sus hijos en cada render.
@@ -496,7 +503,7 @@ function CuentaDialog({
     )),
   ], [padresPosibles]);
 
-  async function guardar() {
+  async function guardar(confirmarCambioTipo = false) {
     setGuardando(true);
     setError(null);
 
@@ -513,6 +520,7 @@ function CuentaDialog({
           naturaleza: form.naturaleza,
           cuentaPadreId: form.cuentaPadreId,
           imputable: form.imputable,
+          confirmarCambioTipo,
         }),
       },
     );
@@ -520,6 +528,10 @@ function CuentaDialog({
     setGuardando(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      if (body.requiereConfirmacion) {
+        setConfirmacion(body.error);
+        return;
+      }
       setError(body.error ?? 'No se pudo guardar la cuenta.');
       return;
     }
@@ -535,6 +547,11 @@ function CuentaDialog({
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          {confirmacion && (
+            <Alert severity="warning">
+              {confirmacion} ¿Confirmas el cambio?
+            </Alert>
+          )}
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 1.5 }}>
             <TextField
@@ -635,9 +652,18 @@ function CuentaDialog({
         >
           Cancelar
         </Button>
-        <Button variant="contained" onClick={guardar} disabled={guardando || ocupado}>
-          {guardando ? 'Guardando…' : 'Guardar'}
-        </Button>
+        {confirmacion ? (
+          <Button
+            variant="contained" color="warning"
+            onClick={() => guardar(true)} disabled={guardando || ocupado}
+          >
+            {guardando ? 'Guardando…' : 'Sí, cambiar el tipo'}
+          </Button>
+        ) : (
+          <Button variant="contained" onClick={() => guardar()} disabled={guardando || ocupado}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
