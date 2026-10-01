@@ -72,7 +72,10 @@ export type AuditAction =
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
-  | 'CONTABILIDAD_CATALOGO_IMPORTADO';
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Cambiar el tipo de una cuenta con movimientos mueve su saldo entre
+  // reportes, también hacia atrás. Se traza quién, cuál y de qué a qué.
+  | 'CONTABILIDAD_CUENTA_RECLASIFICADA';
 
 export interface AuditParams {
   teamId:    number;

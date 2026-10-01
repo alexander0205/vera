@@ -3,17 +3,27 @@
  * DELETE /api/contabilidad/cuentas/[id]  — borrar (solo sin hijas ni movimientos)
  *
  * Las reglas (código inmutable con movimientos, no borrar con historia, ciclos
- * en la jerarquía) viven en `lib/contabilidad/cuentas.ts` y lanzan `CuentaError`
- * con su propio status. Aquí solo se traducen a HTTP.
+ * en la jerarquía, cuándo se puede cambiar el tipo) viven en
+ * `lib/contabilidad/cuentas.ts` y lanzan `CuentaError` con su propio status.
+ * Aquí solo se traducen a HTTP.
+ *
+ * Cambiar el tipo de una cuenta con movimientos pide confirmación: la primera
+ * vez responde 409 con `requiereConfirmacion: true` y el aviso en `error`; el
+ * formulario lo muestra y vuelve a mandar con `confirmarCambioTipo: true`.
+ * Cuando se aplica, la constancia en `audit_logs` se escribe en la MISMA
+ * transacción: sin constancia no hay cambio.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
-import { teamMembers } from '@/lib/db/schema';
+import { teamMembers, auditLogs } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
-import { editarCuenta, borrarCuenta, CuentaError } from '@/lib/contabilidad/cuentas';
+import {
+  editarCuenta, borrarCuenta, CuentaError, CambioTipoSinConfirmarError,
+} from '@/lib/contabilidad/cuentas';
+import { getIp } from '@/lib/audit';
 
 async function autorizar() {
   const user = await getUser();
@@ -57,21 +67,46 @@ export async function PATCH(
   const b = body as Record<string, unknown>;
 
   try {
-    const cuenta = await editarCuenta(teamId, id, {
-      codigo:     typeof b.codigo === 'string' ? b.codigo : undefined,
-      nombre:     typeof b.nombre === 'string' ? b.nombre : undefined,
-      tipo:       typeof b.tipo === 'string' ? b.tipo as never : undefined,
-      naturaleza: typeof b.naturaleza === 'string' ? b.naturaleza as never : undefined,
-      // null es un valor válido: desengancha la cuenta de su padre.
-      cuentaPadreId: b.cuentaPadreId === null
-        ? null
-        : typeof b.cuentaPadreId === 'number' ? b.cuentaPadreId : undefined,
-      imputable:  typeof b.imputable === 'boolean' ? b.imputable : undefined,
-      activa:     typeof b.activa === 'boolean' ? b.activa : undefined,
-    }, user.id);
+    const cuenta = await db.transaction(async (tx) => {
+      const editada = await editarCuenta(teamId, id, {
+        codigo:     typeof b.codigo === 'string' ? b.codigo : undefined,
+        nombre:     typeof b.nombre === 'string' ? b.nombre : undefined,
+        tipo:       typeof b.tipo === 'string' ? b.tipo as never : undefined,
+        naturaleza: typeof b.naturaleza === 'string' ? b.naturaleza as never : undefined,
+        // null es un valor válido: desengancha la cuenta de su padre.
+        cuentaPadreId: b.cuentaPadreId === null
+          ? null
+          : typeof b.cuentaPadreId === 'number' ? b.cuentaPadreId : undefined,
+        imputable:  typeof b.imputable === 'boolean' ? b.imputable : undefined,
+        activa:     typeof b.activa === 'boolean' ? b.activa : undefined,
+      }, user.id, tx, { confirmarCambioTipo: b.confirmarCambioTipo === true });
+
+      // La bitácora del cambio de tipo va en la misma transacción que el
+      // cambio: si no se puede registrar quién y cuándo, no se aplica.
+      if (editada.reclasificacion) {
+        await tx.insert(auditLogs).values({
+          teamId,
+          userId:    user.id,
+          actor:     user.email,
+          action:    'CONTABILIDAD_CUENTA_RECLASIFICADA',
+          resource:  editada.codigo,
+          ipAddress: getIp(req),
+          metadata:  JSON.stringify({
+            cuentaId: editada.id, nombre: editada.nombre, ...editada.reclasificacion,
+          }),
+        });
+      }
+      return editada;
+    });
 
     return NextResponse.json({ cuenta });
   } catch (e) {
+    if (e instanceof CambioTipoSinConfirmarError) {
+      return NextResponse.json(
+        { error: e.message, requiereConfirmacion: true },
+        { status: e.status },
+      );
+    }
     if (e instanceof CuentaError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
