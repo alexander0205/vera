@@ -48,6 +48,8 @@ const compraSchema = z.object({
   propinaCents: centavos.default(0),
   formaPago: z.enum(['contado', 'credito']),
   metodoPago: z.enum(METODOS_PAGO_COMPRA).default('efectivo'),
+  /** Cuenta de la que sale el dinero; null = la del método de pago. */
+  cuentaSalidaId: z.number().int().positive().nullable().optional(),
   fechaPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   almacenId: z.number().int().positive().nullable().optional(),

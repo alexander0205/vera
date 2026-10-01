@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
 import { leerQr } from '@/lib/compras/captura/qr';
@@ -35,5 +35,33 @@ describe('QR en la foto de la factura', () => {
 
   it('un PDF no revienta', async () => {
     expect(await leerQr(Buffer.from('%PDF-1.4\n%falso'))).toBeNull();
+  });
+
+  /**
+   * En producción sharp se quedó sin su binario y el QR dejó de leerse: todo
+   * entraba por IA. Estas dos comprueban el camino de respaldo, el decodificador
+   * de JPEG en JavaScript puro, simulando que sharp no carga.
+   */
+  describe('sin sharp (como en producción el 2026-09-23)', () => {
+    const sinSharp = async () => {
+      vi.resetModules();
+      vi.doMock('sharp', () => { throw new Error('Could not load the sharp module'); });
+      return import('@/lib/compras/captura/qr');
+    };
+
+    it('lo encuentra igual en un JPEG', async () => {
+      const foto = await facturaConQr(260);
+      const { leerQr: leer } = await sinSharp();
+      expect(leerTimbre(await leer(foto))?.encf).toBe('E310000000034');
+      vi.doUnmock('sharp');
+    });
+
+    it('lo que no es JPEG se salta sin romperse', async () => {
+      const png = await sharp({ create: { width: 400, height: 400, channels: 3, background: '#ffffff' } }).png().toBuffer();
+      const { leerQr: leer } = await sinSharp();
+      expect(await leer(png)).toBeNull();
+      expect(await leer(Buffer.from('%PDF-1.4'))).toBeNull();
+      vi.doUnmock('sharp');
+    });
   });
 });

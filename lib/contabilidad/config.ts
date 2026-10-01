@@ -21,6 +21,7 @@ import {
 import type { RegimenItbis } from './compras';
 import { categoriaCompra, CATEGORIAS_COMPRA } from '@/lib/compras/categorias';
 import { elegirCuentaGasto, type CuentaCatalogo, type CuentaGastoElegida } from './cuenta-gasto';
+import { cuentasDeMetodos, esCuentaDeSalida } from './cuenta-salida';
 
 // Las claves y etiquetas viven en `./metodos` porque la pantalla de
 // configuración es un componente de cliente y no puede importar este archivo:
@@ -543,6 +544,25 @@ export async function cuentasDeGasto(teamId: number): Promise<Record<string, Cue
   }
   return salida;
 }
+
+/**
+ * Las cuentas entre las que se puede elegir «de dónde salió el dinero», y a
+ * cuál apunta hoy cada método de pago. Lo usan el formulario de gasto y el
+ * diálogo de pago a proveedor; el asiento usa las mismas para validar
+ * (ver `./cuenta-salida`).
+ */
+export const cuentasDeSalida = cache(async function cuentasDeSalida(teamId: number): Promise<{
+  cuentas: CuentaCatalogo[];
+  /** Clave de método → cuenta configurada. */
+  porMetodo: Record<string, number>;
+}> {
+  const [catalogo, metodos] = await Promise.all([catalogoImputable(teamId), getMetodosConfigurados(teamId)]);
+  const configuradas = cuentasDeMetodos(metodos);
+  return {
+    cuentas: [...catalogo.imputables.values()].filter((c) => esCuentaDeSalida(c, configuradas)),
+    porMetodo: Object.fromEntries(metodos.map((m) => [m.clave, m.cuentaId])),
+  };
+});
 
 // ─── Resolución ──────────────────────────────────────────────────────────────
 

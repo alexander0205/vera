@@ -49,11 +49,11 @@ export function Encabezado({
   );
 }
 
-export function BotonPrimario({ href, children }: { href: string; children: React.ReactNode }) {
+export function BotonPrimario({ href, children, className = '' }: { href: string; children: React.ReactNode; className?: string }) {
   return (
     <Link
       href={href}
-      className="flex h-[52px] items-center gap-2.5 rounded-xl bg-zero-600 px-7 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white shadow-[0_18px_34px_-18px_rgba(54,88,225,.75)] transition hover:-translate-y-0.5 hover:bg-zero-700"
+      className={`flex h-[52px] items-center justify-center gap-2.5 rounded-xl bg-zero-600 px-7 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white shadow-[0_18px_34px_-18px_rgba(54,88,225,.75)] transition hover:-translate-y-0.5 hover:bg-zero-700 ${className}`}
     >
       {children}
       <Flecha tamano={15} />
@@ -61,27 +61,36 @@ export function BotonPrimario({ href, children }: { href: string; children: Reac
   );
 }
 
-export function BotonSecundario({ href, children }: { href: string; children: React.ReactNode }) {
+export function BotonSecundario({ href, children, className = '' }: { href: string; children: React.ReactNode; className?: string }) {
   return (
     <Link
       href={href}
-      className="flex h-[52px] items-center rounded-xl border border-[#dce3f2] bg-white px-[26px] font-[family-name:var(--font-display)] text-[15px] font-semibold text-[#102a72] transition hover:-translate-y-0.5 hover:border-zero-300"
+      className={`flex h-[52px] items-center justify-center rounded-xl border border-[#dce3f2] bg-white px-[26px] font-[family-name:var(--font-display)] text-[15px] font-semibold text-[#102a72] transition hover:-translate-y-0.5 hover:border-zero-300 ${className}`}
     >
       {children}
     </Link>
   );
 }
 
-/** Tarjeta de módulo: icono a la izquierda, nombre y una línea de qué hace. */
+/**
+ * Tarjeta de módulo: icono a la izquierda, nombre y una línea de qué hace.
+ *
+ * Con `href` es un enlace a la página del módulo. Sin él, es una tarjeta muda
+ * —la usan las páginas de producto, donde el visitante YA está dentro y
+ * mandarlo a la misma página sería un enlace que no lleva a ningún lado—.
+ */
 export function TarjetaModulo({
-  icono: Icono, titulo, detalle,
+  icono: Icono, titulo, detalle, href, className = '',
 }: {
   icono: (p: { className?: string }) => React.ReactElement;
   titulo: string;
   detalle: string;
+  href?: string;
+  /** Clases del `<li>`: la portada las usa para la fila que rueda en el teléfono. */
+  className?: string;
 }) {
-  return (
-    <li className="flex min-w-0 gap-3.5 rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]">
+  const contenido = (
+    <>
       <span className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-[#edf1fe] text-zero-600">
         <Icono className="size-[18px]" />
       </span>
@@ -89,6 +98,16 @@ export function TarjetaModulo({
         <span className="block text-pretty font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">{titulo}</span>
         <span className="mt-1.5 block text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">{detalle}</span>
       </span>
+    </>
+  );
+
+  const clases = 'flex min-w-0 gap-3.5 rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]';
+
+  return (
+    <li className={`min-w-0 ${className}`}>
+      {href
+        ? <Link href={href} className={`${clases} h-full`}>{contenido}</Link>
+        : <span className={`${clases} h-full`}>{contenido}</span>}
     </li>
   );
 }

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { generarAsientoPagoProveedor } from './asientos';
+import { cuentasDeSalida } from './config';
 
 export interface CuentaPorPagar {
   id: number; proveedorNombre: string | null; proveedorRnc: string | null; referenciaEncf: string | null;
@@ -46,8 +47,14 @@ export async function getPagosProveedor(teamId:number, compraId:number) {
 
 export class PagoProveedorError extends Error {}
 
-export async function registrarPagoProveedor(input: { teamId:number; compraId:number; montoCents:number; metodo:string; fechaPago:string; referencia?:string|null; notas?:string|null; userId:number }) {
+export async function registrarPagoProveedor(input: { teamId:number; compraId:number; montoCents:number; metodo:string; fechaPago:string; referencia?:string|null; notas?:string|null; cuentaSalidaId?:number|null; userId:number }) {
   if (!Number.isSafeInteger(input.montoCents) || input.montoCents <= 0) throw new PagoProveedorError('Monto de pago inválido.');
+  // De qué cuenta sale el dinero: solo caja, bancos o la de un método de pago.
+  const cuentaSalidaId = input.cuentaSalidaId ?? null;
+  if (cuentaSalidaId) {
+    const { cuentas } = await cuentasDeSalida(input.teamId);
+    if (!cuentas.some(c => c.id === cuentaSalidaId)) throw new PagoProveedorError('De esa cuenta no puede salir dinero: elige una de caja o banco.');
+  }
   const pago = await db.transaction(async tx => {
     const compras = await tx.execute(sql`SELECT monto_total - itbis_retenido_cents - isr_retenido_cents AS monto_total, estado FROM compras_locales WHERE id=${input.compraId} AND team_id=${input.teamId} AND forma_pago='credito' FOR UPDATE`);
     const compra = (compras as unknown as { monto_total:number; estado:string }[])[0];
@@ -56,8 +63,8 @@ export async function registrarPagoProveedor(input: { teamId:number; compraId:nu
     const sums = await tx.execute(sql`SELECT coalesce(sum(monto_cents),0) AS pagado FROM pagos_proveedores WHERE compra_id=${input.compraId} AND team_id=${input.teamId}`);
     const saldo = Number((sums as unknown as { pagado:number }[])[0].pagado);
     if (input.montoCents > Number(compra.monto_total) - saldo) throw new PagoProveedorError('El pago excede saldo pendiente.');
-    const filas = await tx.execute(sql`INSERT INTO pagos_proveedores (team_id,compra_id,monto_cents,metodo,fecha_pago,referencia,notas,created_by)
-      VALUES (${input.teamId},${input.compraId},${input.montoCents},${input.metodo},${input.fechaPago},${input.referencia??null},${input.notas??null},${input.userId}) RETURNING id`);
+    const filas = await tx.execute(sql`INSERT INTO pagos_proveedores (team_id,compra_id,monto_cents,metodo,cuenta_salida_id,fecha_pago,referencia,notas,created_by)
+      VALUES (${input.teamId},${input.compraId},${input.montoCents},${input.metodo},${cuentaSalidaId},${input.fechaPago},${input.referencia??null},${input.notas??null},${input.userId}) RETURNING id`);
     const id = (filas as unknown as {id:number}[])[0].id;
     const restante = Number(compra.monto_total) - saldo - input.montoCents;
     // Cuando queda saldada, la fecha del último pago es la «fecha de pago» del 606.

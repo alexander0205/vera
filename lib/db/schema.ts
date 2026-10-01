@@ -1527,6 +1527,8 @@ export const comprasLocales = pgTable('compras_locales', {
   metodoPago:       varchar('metodo_pago', { length: 30 }).notNull().default('efectivo'),
   fechaVencimiento: date('fecha_vencimiento'),
   estadoPago:       varchar('estado_pago', { length: 12 }).notNull().default('PENDIENTE'),
+  /** De qué cuenta salió el dinero; NULL = la del método (migración 0183). */
+  cuentaSalidaId:   integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 
@@ -1589,6 +1591,8 @@ export const pagosProveedores = pgTable('pagos_proveedores', {
   compraId: integer('compra_id').notNull().references(() => comprasLocales.id),
   montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
   metodo: varchar('metodo', { length: 30 }).notNull(),
+  /** De qué cuenta salió el dinero; NULL = la del método (migración 0183). */
+  cuentaSalidaId: integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
   fechaPago: date('fecha_pago').notNull(),
   referencia: varchar('referencia', { length: 100 }),
   notas: text('notas'),

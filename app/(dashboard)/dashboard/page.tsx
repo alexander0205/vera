@@ -21,6 +21,9 @@ import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
 
 const NOMBRE_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+/** Cifra corta para las barras del gráfico en el teléfono: «1.5 M», «872 K». */
+const COMPACTO = new Intl.NumberFormat('es-DO', { notation: 'compact', maximumFractionDigits: 1 });
 const rd = (centavos: number) => `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
 
 const ESTADO_CHIP: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'default' | 'info' | 'primary' | 'secondary'; variant?: 'filled' | 'outlined' }> = {
@@ -178,11 +181,17 @@ export default async function DashboardPage() {
             color: '#0369a1',
             bg:    '#f0f9ff',
           },
-        ].map(stat => (
+        ].map((stat, i) => (
           <Card
             key={stat.label}
             elevation={0}
-            sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}
+            sx={{
+              border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden',
+              // En el teléfono, a dos columnas, «RD$1,866,131.20» no cabe en su
+              // media tarjeta y se cortaba. Los ingresos van a lo ancho; las
+              // otras dos cifras, cortas, siguen lado a lado.
+              gridColumn: { xs: i === 0 ? '1 / -1' : 'auto', lg: 'auto' },
+            }}
           >
             <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
@@ -203,7 +212,7 @@ export default async function DashboardPage() {
                   <stat.icon style={{ width: 16, height: 16, color: stat.color }} />
                 </Box>
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', lineHeight: 1.2 }}>
+              <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', lineHeight: 1.2, fontSize: { xs: '1.75rem', sm: '2.125rem' }, overflowWrap: 'anywhere' }}>
                 {stat.value}
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
@@ -253,15 +262,23 @@ export default async function DashboardPage() {
               (() => {
                 const max = Math.max(...stats.serieMeses.map(m => m.montoCentavos), 1);
                 return (
-                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1.5, height: 140 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: { xs: 0.75, sm: 1.5 }, height: 140 }}>
                     {stats.serieMeses.map(m => {
                       const [y, mo] = m.mes.split('-');
                       const esActual = Number(mo) - 1 === new Date().getMonth() && Number(y) === new Date().getFullYear();
                       const alturaPct = Math.max(4, (m.montoCentavos / max) * 100);
                       return (
-                        <Box key={m.mes} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, height: '100%', justifyContent: 'flex-end' }}>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.6875rem', fontWeight: 600 }}>
-                            {m.montoCentavos > 0 ? rd(m.montoCentavos).replace('RD$', '').split('.')[0] : ''}
+                        <Box key={m.mes} sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, height: '100%', justifyContent: 'flex-end' }}>
+                          {/* La cifra entera («1,534,079») mide más que la barra en el
+                              teléfono y empujaba la última fuera de la tarjeta. Ahí va
+                              compacta («1.5 M»); desde tablet, entera. */}
+                          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.6875rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {m.montoCentavos > 0 && (
+                              <>
+                                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{COMPACTO.format(m.montoCentavos / 100)}</Box>
+                                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{rd(m.montoCentavos).replace('RD$', '').split('.')[0]}</Box>
+                              </>
+                            )}
                           </Typography>
                           <Box
                             sx={{

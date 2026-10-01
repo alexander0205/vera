@@ -40,6 +40,25 @@
 export const BASE_PUBLICA = 'https://app.zero.com.do';
 
 /**
+ * El sitio público, tal como queda indexado.
+ *
+ * `zero.com.do` responde 308 hacia `www.zero.com.do`, así que el canónico es
+ * el `www`: apuntar los `<link rel=canonical>` y el sitemap al que redirige
+ * reparte la misma página entre dos direcciones y Google se queda con la que
+ * le parezca.
+ *
+ * Aparte de `BASE_PUBLICA`, que es el host de la APLICACIÓN. Son dos cosas
+ * distintas y mezclarlas mandaría a quien busca «facturación electrónica» a
+ * una pantalla de inicio de sesión.
+ */
+export const SITIO_PUBLICO = 'https://www.zero.com.do';
+
+/** Una ruta del sitio público, absoluta. Para metadatos y datos estructurados. */
+export function urlDelSitio(ruta: string): string {
+  return new URL(ruta, SITIO_PUBLICO).toString();
+}
+
+/**
  * ¿El host es de la máquina o de la red de casa?
  *
  * Vive en este módulo, que no importa nada, para que pueda usarlo tanto quien

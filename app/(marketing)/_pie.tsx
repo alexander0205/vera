@@ -33,12 +33,15 @@ const COLUMNAS = [
     ],
   },
   {
-    titulo: 'Plataforma',
+    titulo: 'Productos',
     enlaces: [
-      { texto: 'Módulos', href: '/#modulos' },
-      { texto: 'El recorrido del dinero', href: '/#recorrido' },
-      { texto: 'Para quién es', href: '/#industrias' },
+      { texto: 'Zero ERP', href: '/productos/erp' },
+      { texto: 'Punto de venta', href: '/productos/punto-de-venta' },
+      { texto: 'Nómina', href: '/productos/nomina' },
+      { texto: 'Contabilidad', href: '/productos/contabilidad' },
+      { texto: 'Zero CRM', href: '/productos/crm' },
       { texto: 'Colegios', href: '/colegios' },
+      { texto: 'Guías', href: '/guias' },
     ],
   },
 ] as const;
@@ -56,7 +59,7 @@ export function PieMarketing() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/marca/zero-horizontal-blanco.svg" alt="Zero" width={300} height={62} className="h-6 w-auto" />
             <p className="mt-4 max-w-[260px] text-[12.5px] leading-relaxed text-white/50">
-              Facturación electrónica, administración y colegio en un solo sistema.
+              Facturación electrónica, contabilidad, punto de venta, nómina y CRM para negocios dominicanos.
             </p>
           </div>
 

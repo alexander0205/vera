@@ -62,6 +62,46 @@ describe('soporteAplica', () => {
     assert.equal(soporteAplica('/fotos-galeria'), true);
   });
 
+  /**
+   * La web pública. El `LlamadaGlobalProvider` vive en el layout raíz, encima
+   * de `(marketing)`, así que sin la lista cada visitante que llega por Google
+   * sondea `/llamada` cada 3 segundos y se lleva un 401 hasta cerrar la
+   * pestaña.
+   */
+  it('no en la web pública', () => {
+    for (const p of [
+      '/',
+      '/productos/erp',
+      '/productos/crm',
+      '/precios',
+      '/colegios',
+      '/guias',
+      '/guias/itbis-it1',
+      '/contacto',
+      '/terminos',
+      '/privacidad',
+    ]) {
+      assert.equal(soporteAplica(p), false, p);
+    }
+  });
+
+  /**
+   * La portada se compara COMPLETA. Como prefijo, '/' apaga el soporte en la
+   * aplicación entera — que es justo donde tiene que estar encendido.
+   */
+  it('la portada no se lleva por delante la aplicación', () => {
+    assert.equal(soporteAplica('/'), false);
+    for (const p of ['/dashboard', '/pos', '/escolar/estudiantes/282', '/nomina/horas']) {
+      assert.equal(soporteAplica(p), true, p);
+    }
+  });
+
+  /** Dos rutas que se parecen a las públicas y no lo son. */
+  it('contabilidad no es contacto', () => {
+    assert.equal(soporteAplica('/contabilidad'), true);
+    assert.equal(soporteAplica('/dashboard/productos'), true);
+  });
+
   /** Antes de que Next resuelva la ruta no se esconde nada: se asume que sí. */
   it('sin ruta todavía, el soporte aplica', () => {
     assert.equal(soporteAplica(null), true);

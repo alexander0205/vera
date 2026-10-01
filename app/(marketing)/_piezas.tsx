@@ -289,7 +289,7 @@ export function TarjetasContacto() {
         rel="noopener noreferrer"
         className={`${base} border-[#dceee2] hover:border-[#25a366]`}
       >
-        <span className="grid size-8 place-items-center rounded-[9px] bg-[#e8f6ee] text-[#25a366]">
+        <span className="grid size-8 place-items-center rounded-[9px] bg-[#e8f6ee] text-[#12925a]">
           <IconoWhatsApp />
         </span>
         <span className="mt-3 block text-[11px] font-semibold uppercase tracking-[.5px] text-gray-500">WhatsApp</span>

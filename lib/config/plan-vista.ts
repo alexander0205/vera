@@ -18,6 +18,15 @@ import { CANALES_TEXTO } from '@/components/canales-aviso';
 
 export interface TopeDePlan {
   etiqueta: string;
+  /**
+   * Identificador estable de la fila, para las pantallas que la reescriben.
+   *
+   * El recomendador de /precios deja marcar el Punto de Venta y entonces esa
+   * fila pasa a «Incluido». Sin clave habría que reconocerla por su etiqueta,
+   * y el día que el texto cambie de mayúscula el comportamiento se pierde sin
+   * que falle nada.
+   */
+  clave?: 'pos';
   /** Lo que se lee. Con `canales` puesto es además lo que oye un lector de
    *  pantalla, porque en la tarjeta se dibujan iconos en su lugar. */
   valor: string;
@@ -78,6 +87,7 @@ export function topesDePlan(
     valor: plan.features.includes('contabilidad-avanzada') ? 'Incluida' : 'No incluida',
   };
   const puntoDeVenta: TopeDePlan = {
+    clave: 'pos',
     etiqueta: 'Punto de venta',
     valor: conPos || plan.modulos.includes('pos') ? 'Incluido' : 'No incluido',
   };
@@ -92,6 +102,10 @@ export function topesDePlan(
         valor: plan.modulos.includes('escolar') ? 'Incluida' : 'No incluida',
       },
       puntoDeVenta,
+      {
+        etiqueta: 'Nómina',
+        valor: plan.modulos.includes('nomina') ? 'Incluida' : 'No incluida',
+      },
       contabilidad,
       NOTIFICACIONES,
       // El colegio conecta SU PROPIO número: `elegirRemitente` usa el suyo
