@@ -25,6 +25,10 @@
  *   3. No factura lo que no tiene calendario. Inscripción, uniforme o materiales
  *      son pago único: sin cuota no hay fecha de emisión, y sin fecha de
  *      emisión no hay nada que dispare la factura.
+ *   4. No factura lo que no tiene saldo. El becado al 100% devenga su cargo en
+ *      cero —así consta la exención y el mes no se queda anunciado como
+ *      previsto— pero no estrena una factura de RD$0 ni ensucia la de sus
+ *      hermanos con una línea de cero.
  */
 
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
@@ -62,7 +66,7 @@ export interface FacturaGenerada {
 
 /** Por qué un grupo de cargos que tocaba facturar no se facturó. */
 export interface DiagnosticoFacturacion {
-  motivo: 'sin-responsable' | 'prefill-rechazado' | 'sin-lineas' | 'error';
+  motivo: 'sin-responsable' | 'sin-saldo' | 'prefill-rechazado' | 'sin-lineas' | 'error';
   detalle: string;
   cargoIds: number[];
 }
@@ -181,12 +185,29 @@ export async function facturarCuotasEmitidas(
   const porResponsable = new Map<number, typeof cargos>();
   const diagnostico: DiagnosticoFacturacion[] = [];
   const huerfanos: number[] = [];
+  const sinSaldo: number[] = [];
 
   for (const c of cargos) {
+    // Un becado al 100% devenga su cargo igual —deja constancia de la exención
+    // y consume la cuota, así que el mes no se queda anunciado como previsto—
+    // pero no hay nada que cobrarle. Sin esto, el hijo único becado estrenaría
+    // una factura de RD$0 y el que tiene hermanos metería una línea de cero en
+    // la de la familia. Un cargo ya cobrado no llega hasta aquí: su estado es
+    // `pagado` y `COBRABLES` lo deja fuera, así que el saldo en cero de verdad
+    // solo lo tiene la beca.
+    if (c.saldoCentavos <= 0) { sinSaldo.push(c.id); continue; }
     if (c.clienteId == null) { huerfanos.push(c.id); continue; }
     const grupo = porResponsable.get(c.clienteId) ?? [];
     grupo.push(c);
     porResponsable.set(c.clienteId, grupo);
+  }
+
+  if (sinSaldo.length) {
+    diagnostico.push({
+      motivo: 'sin-saldo',
+      detalle: `${sinSaldo.length} cargo(s) sin saldo que cobrar (beca total): no se facturan.`,
+      cargoIds: sinSaldo,
+    });
   }
 
   if (huerfanos.length) {

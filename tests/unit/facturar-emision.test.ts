@@ -158,6 +158,33 @@ describe('facturarCuotasEmitidas', () => {
     expect(insertados[0]).toMatchObject({ tipoPago: 1, fechaLimitePago: null });
   });
 
+  /**
+   * El becado al 100% devenga su cargo en cero —así consta la exención y el mes
+   * no se queda anunciado como previsto— pero no hay nada que cobrarle.
+   */
+  it('becado al 100%, hijo único: no estrena una factura de RD$0', async () => {
+    cargosDevueltos = [{ ...cargo(1, 55), saldoCentavos: 0 }];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-01', hasta: '2026-09-01' });
+
+    expect(r.facturas).toHaveLength(0);
+    expect(insertados).toHaveLength(0);
+    expect(r.diagnostico).toEqual([
+      expect.objectContaining({ motivo: 'sin-saldo', cargoIds: [1] }),
+    ]);
+  });
+
+  it('becado con hermanos: no mete una línea de cero en la factura de la familia', async () => {
+    cargosDevueltos = [{ ...cargo(1, 55), saldoCentavos: 0 }, cargo(2, 55), cargo(3, 55)];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-01', hasta: '2026-09-01' });
+
+    expect(r.facturas).toHaveLength(1);
+    expect(r.facturas[0].cargoIds).toEqual([2, 3]);
+    expect(JSON.parse(insertados[0].lineasJson as string)).toHaveLength(2);
+    expect(r.diagnostico).toEqual([
+      expect.objectContaining({ motivo: 'sin-saldo', cargoIds: [1] }),
+    ]);
+  });
+
   it('alumno sin responsable de pago: no se factura y queda dicho por qué', async () => {
     cargosDevueltos = [cargo(1, null), cargo(2, 55)];
     const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-01', hasta: '2026-09-01' });
