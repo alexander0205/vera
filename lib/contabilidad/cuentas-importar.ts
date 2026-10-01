@@ -19,6 +19,9 @@
  */
 
 import { db } from '@/lib/db/drizzle';
+import { auditLogs } from '@/lib/db/schema';
+import type { AuditAction } from '@/lib/audit';
+import type { TipoCuenta } from './catalogo-base';
 import {
   listarCuentas, crearCuenta, editarCuenta, CuentaError,
   type Cuenta, type EditarCuentaInput,
@@ -29,7 +32,13 @@ export interface ResultadoImportacion {
   /** true solo si se confirmó y no hubo ni un error: los cambios quedaron. */
   aplicado: boolean;
   creadas: { fila: number; codigo: string; nombre: string }[];
-  actualizadas: { fila: number; codigo: string; cambios: string[] }[];
+  actualizadas: {
+    fila: number;
+    codigo: string;
+    cambios: string[];
+    /** Cuando se le cambió el tipo a una cuenta con movimientos. */
+    reclasificacion?: { de: TipoCuenta; a: TipoCuenta; movimientos: number };
+  }[];
   sinCambios: number;
   errores: ErrorFila[];
 }
@@ -55,7 +64,12 @@ export async function importarCatalogo(
   teamId: number,
   userId: number,
   filas: FilaCatalogo[],
-  opts: { aplicar: boolean; erroresDeLectura?: ErrorFila[] },
+  opts: {
+    aplicar: boolean;
+    erroresDeLectura?: ErrorFila[];
+    /** Quién aplica: la constancia de cada reclasificación se escribe en la misma transacción. */
+    auditoria?: { actor: string; ip: string | null };
+  },
 ): Promise<ResultadoImportacion> {
   const { ordenadas, errores: erroresOrden } = ordenarPadresPrimero(filas);
 
@@ -73,6 +87,7 @@ export async function importarCatalogo(
       // que una hija del archivo encuentre al padre recién creado dos filas antes.
       const existentes = await listarCuentas(teamId, { incluirInactivas: true }, tx);
       const porCodigo = new Map<string, Cuenta>(existentes.map((c) => [c.codigo, c]));
+      const reclasificadas: { cuentaId: number; codigo: string; nombre: string; de: TipoCuenta; a: TipoCuenta; movimientos: number }[] = [];
 
       for (const f of ordenadas) {
         try {
@@ -127,9 +142,9 @@ export async function importarCatalogo(
               return;
             }
 
-            // La vista previa es la confirmación: quien aplica ya vio la lista
-            // de cuentas cuyo tipo cambia. Las demás reglas del cambio de tipo
-            // aplican igual que en el formulario.
+            // La vista previa es la confirmación: muestra cada cuenta con movimientos
+            // cuyo tipo cambia (de qué a qué y cuántos movimientos). Las demás reglas
+            // del cambio de tipo aplican igual que en el formulario.
             const editada = await editarCuenta(
               teamId, actual.id, cambios, userId, sp, { confirmarCambioTipo: true },
             );
@@ -138,7 +153,14 @@ export async function importarCatalogo(
               fila: f.fila,
               codigo: f.codigo,
               cambios: claves.map((k) => NOMBRE_CAMBIO[k]),
+              ...(editada.reclasificacion ? { reclasificacion: editada.reclasificacion } : {}),
             });
+            if (editada.reclasificacion) {
+              reclasificadas.push({
+                cuentaId: editada.id, codigo: editada.codigo, nombre: editada.nombre,
+                ...editada.reclasificacion,
+              });
+            }
           });
         } catch (e) {
           if (e instanceof CuentaError) {
@@ -146,6 +168,28 @@ export async function importarCatalogo(
             continue;
           }
           throw e;
+        }
+      }
+
+      // Al aplicar de verdad, la constancia de cada cuenta reclasificada va en
+      // la misma transacción que la importación: sin constancia no hay cambio.
+      if (opts.aplicar && resultado.errores.length === 0 && reclasificadas.length > 0) {
+        if (!opts.auditoria) {
+          throw new Error('importarCatalogo: falta quién aplica para la bitácora del cambio de tipo.');
+        }
+        for (const r of reclasificadas) {
+          await tx.insert(auditLogs).values({
+            teamId,
+            userId,
+            actor:     opts.auditoria.actor,
+            action:    'CONTABILIDAD_CUENTA_RECLASIFICADA' satisfies AuditAction,
+            resource:  r.codigo,
+            ipAddress: opts.auditoria.ip?.slice(0, 45) ?? null,
+            metadata:  JSON.stringify({
+              cuentaId: r.cuentaId, nombre: r.nombre,
+              de: r.de, a: r.a, movimientos: r.movimientos, origen: 'importacion',
+            }),
+          });
         }
       }
 

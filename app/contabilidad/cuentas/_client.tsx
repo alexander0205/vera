@@ -714,8 +714,8 @@ function CuentaDialog({
  *
  * La vista previa no es un cálculo aparte: el servidor corre la importación
  * entera con las mismas reglas y la deshace. Por eso «se crearán 12» es
- * exactamente lo que pasa al aplicar, y un error de regla —cambiar el tipo de
- * una cuenta con movimientos— aparece AQUÍ, con su fila, y no a mitad del
+ * exactamente lo que pasa al aplicar, y un error de regla —por ejemplo, cambiar el tipo de
+ * una cuenta con movimientos en un ejercicio cerrado— aparece AQUÍ, con su fila, y no a mitad del
  * guardado.
  */
 function ImportarCatalogoDialog({
@@ -849,6 +849,13 @@ function ImportarCatalogoDialog({
                 Todo en orden. Al aplicar: <strong>{resultado.creadas.length}</strong> cuenta(s) nueva(s),{' '}
                 <strong>{resultado.actualizadas.length}</strong> actualizada(s) y {resultado.sinCambios} sin cambios.
               </Alert>
+              {resultado.actualizadas.some((a) => a.reclasificacion) && (
+                <Alert severity="warning">
+                  Algunas cuentas con movimientos cambian de tipo. Al aplicar, su saldo cambia de
+                  lugar en los reportes, también en los de meses anteriores, y queda registrado
+                  quién lo hizo.
+                </Alert>
+              )}
               <Box sx={{ ...CARD, maxHeight: 280, overflow: 'auto' }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
@@ -870,7 +877,17 @@ function ImportarCatalogoDialog({
                       <TableRow key={`a-${a.codigo}`}>
                         <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{a.codigo}</TableCell>
                         <TableCell sx={{ color: '#1d4ed8', fontWeight: 500 }}>Cambia</TableCell>
-                        <TableCell sx={{ color: '#4b5563' }}>{a.cambios.join(', ')}</TableCell>
+                        <TableCell sx={{ color: '#4b5563' }}>
+                          {a.cambios.join(', ')}
+                          {a.reclasificacion && (
+                            <Typography component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#b45309' }}>
+                              Tipo {etiquetaTipo(a.reclasificacion.de)} → {etiquetaTipo(a.reclasificacion.a)}, con{' '}
+                              {a.reclasificacion.movimientos}{' '}
+                              {a.reclasificacion.movimientos === 1 ? 'movimiento' : 'movimientos'}: su saldo
+                              también cambia de lugar en los reportes de meses anteriores.
+                            </Typography>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
