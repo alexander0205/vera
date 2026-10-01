@@ -87,7 +87,7 @@ export function construirLibroCatalogo(cuentas: Cuenta[]): ExcelJS.Workbook {
     '• Importar nunca borra: una cuenta que quites del archivo se queda como está en Zero. Para quitarla, desactívala (Activa = No).',
     '• Para una cuenta nueva hacen falta Código, Nombre y Tipo. Si dejas Naturaleza vacía se toma la que corresponde al tipo.',
     '• Código cuenta padre vacío = cuenta raíz. La cuenta padre tiene que agrupar (Acepta movimientos = No).',
-    '• Una cuenta con movimientos contables no puede cambiar de tipo, ni dejar de aceptar movimientos.',
+    '• Una cuenta con movimientos no puede dejar de aceptar movimientos. Su tipo solo puede cambiar a otro de la misma naturaleza (Activo, Costos y Gastos entre sí; Pasivo, Patrimonio e Ingresos entre sí), y no si tiene movimientos en un ejercicio cerrado o es la cuenta de un método de cobro.',
     '• Si una sola fila tiene un error no se aplica nada: Zero te dice qué fila revisar y el catálogo queda igual.',
     '• Antes de aplicar verás cuántas cuentas se crean y cuáles cambian.',
   ].forEach((texto, i) => {
