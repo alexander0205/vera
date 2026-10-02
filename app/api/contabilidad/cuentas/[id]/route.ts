@@ -94,6 +94,7 @@ export async function PATCH(
           ipAddress: getIp(req)?.slice(0, 45) ?? null,
           metadata:  JSON.stringify({
             cuentaId: editada.id, nombre: editada.nombre, ...editada.reclasificacion,
+            origen: 'formulario',
           }),
         });
       }

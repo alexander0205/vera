@@ -8,8 +8,10 @@
  * `lib/contabilidad/cambio-tipo.ts` a través de `editarCuenta` y mide el efecto
  * en el Balance general. Deja el team exactamente como estaba.
  *
- * A propósito NO carga `.env`: ese archivo apunta a producción. La URL tiene
- * que venir escrita en el comando, y además no puede ser la de producción.
+ * A propósito NO toma la URL de la base de `.env` (ese archivo apunta a
+ * producción): `POSTGRES_URL` tiene que venir escrita en el comando, se valida
+ * antes de importar nada, y no puede ser la de producción. Las demás variables
+ * de `.env` sí las carga `lib/db/drizzle.ts`, pero dotenv no pisa la URL ya puesta.
  */
 
 export {}; // módulo propio: evita choques de nombres globales con otros scripts

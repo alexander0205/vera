@@ -101,8 +101,8 @@ export function evaluarCambioTipo(h: HechosCambioTipo): ResultadoCambioTipo {
       decision: 'bloqueado',
       mensaje:
         `"${cuenta}" tiene movimientos en un ejercicio ya cerrado, y esos saldos no se pueden ` +
-        `mover hacia atrás. Para pasarla de ${de} a ${a}, reabre el ejercicio en ` +
-        '«Cierre de ejercicio», cambia el tipo y vuelve a cerrarlo.',
+        `mover hacia atrás. Para pasarla de ${de} a ${a}, reabre en «Cierre de ejercicio» ` +
+        'los ejercicios afectados (del más reciente al más antiguo), cambia el tipo y vuelve a cerrarlos.',
     };
   }
 

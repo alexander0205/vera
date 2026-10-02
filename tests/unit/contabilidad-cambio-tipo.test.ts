@@ -126,8 +126,9 @@ describe('regla 2: ejercicio cerrado', () => {
     if (r.decision !== 'bloqueado') return;
     expect(r.mensaje).toBe(
       '"6301 Impuesto a los activos" tiene movimientos en un ejercicio ya cerrado, y esos saldos ' +
-      'no se pueden mover hacia atrás. Para pasarla de Activo a Gastos, reabre el ejercicio en ' +
-      '«Cierre de ejercicio», cambia el tipo y vuelve a cerrarlo.',
+      'no se pueden mover hacia atrás. Para pasarla de Activo a Gastos, reabre en «Cierre de ' +
+      'ejercicio» los ejercicios afectados (del más reciente al más antiguo), cambia el tipo y ' +
+      'vuelve a cerrarlos.',
     );
   });
 
