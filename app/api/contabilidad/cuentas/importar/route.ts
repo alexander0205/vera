@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
   const resultado = await importarCatalogo(auth.teamId, auth.user.id, lectura.filas, {
     aplicar,
     erroresDeLectura: lectura.errores,
+    auditoria: { actor: auth.user.email, ip: getIp(req) },
   });
 
   if (resultado.aplicado) {
@@ -86,6 +87,9 @@ export async function POST(req: NextRequest) {
         creadas: resultado.creadas.length,
         actualizadas: resultado.actualizadas.length,
         sinCambios: resultado.sinCambios,
+        tiposCambiados: resultado.actualizadas
+          .filter((a) => a.cambios.includes('tipo'))
+          .map((a) => a.codigo),
       },
     });
   }

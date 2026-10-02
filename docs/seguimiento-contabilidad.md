@@ -408,7 +408,7 @@ Los 4 subpasos del plan quedaron cubiertos:
 | 1 | Estructura del catálogo | `codigo`, `nombre`, `tipo`, `naturaleza`, `cuenta_padre_id`, `activa`, más `imputable` y `es_base` |
 | 2 | Catálogo base | 27 cuentas, numeración estándar RD, 3 niveles. Cubre las 8 que exige el plan |
 | 3 | Personalización | Crear, renombrar, mover de padre, invertir naturaleza, desactivar |
-| 4 | Proteger cuentas usadas | Sin borrado con hijas ni movimientos; código y tipo inmutables con movimientos |
+| 4 | Proteger cuentas usadas | Sin borrado con hijas ni movimientos; código inmutable con movimientos; tipo cambiable solo bajo las reglas de `lib/contabilidad/cambio-tipo.ts` (ver decisión 2026-10-01) |
 
 ### Decisiones de diseño (no reabrir sin motivo)
 
@@ -429,6 +429,17 @@ Los 4 subpasos del plan quedaron cubiertos:
   contadores locales.
 - **Las cuentas base no se borran desde la UI**, solo se desactivan. Borrar queda
   para las que crea el usuario (`es_base = false`).
+- **El tipo de una cuenta con movimientos se puede corregir, con reglas
+  (2026-10-01).** Antes era inmutable y dos empresas quedaron atascadas con
+  cuentas de gasto creadas como Activo (SOLUCIONES 6301/6304, YISRAEL KIDS
+  SCHOOL 6320). Los reportes leen el tipo en vivo, así que el cambio reclasifica
+  también los meses anteriores; por eso pide confirmación y queda en
+  `audit_logs` (`CONTABILIDAD_CUENTA_RECLASIFICADA`), escrito en la misma
+  transacción que el cambio (también al importar desde Excel). Se bloquea si la
+  naturaleza del tipo nuevo no es la de la cuenta (invertiría el saldo), si la
+  cuenta tiene movimientos en un ejercicio cerrado (hay que reabrirlo), o si
+  rompe la cuenta de un método de cobro. Criterios revisados con el tech lead
+  el 2026-10-01.
 
 ### La pieza que mira al futuro
 

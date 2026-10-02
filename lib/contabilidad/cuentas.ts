@@ -6,10 +6,10 @@
  * y una guarda que solo existe en el formulario no es una guarda.
  *
  * Sobre "tiene movimientos": desde el Paso 4 la tabla de asientos existe, así
- * que `tieneMovimientos` protege de verdad — una cuenta con apuntes ya no se
- * puede borrar, ni cambiarle el código o el tipo. La comprobación con
- * `to_regclass` se conserva por si el módulo corre contra una base donde la
- * migración 0085 todavía no se aplicó.
+ * que `contarMovimientos` protege de verdad — una cuenta con apuntes ya no se
+ * puede borrar ni cambiarle el código, y su tipo solo cambia bajo las reglas de
+ * `./cambio-tipo`. La comprobación con `to_regclass` se conserva por si el
+ * módulo corre contra una base donde la migración 0085 todavía no se aplicó.
  */
 
 import { db } from '@/lib/db/drizzle';
@@ -19,6 +19,8 @@ import {
   type TipoCuenta,
   type NaturalezaCuenta,
 } from './catalogo-base';
+import { evaluarCambioTipo, type UsoEnMetodo } from './cambio-tipo';
+import { CLAVE_METODO_LABEL, type ClaveMetodo } from './metodos';
 
 /**
  * Con qué se habla con la base: `db` normalmente, o una transacción.
@@ -57,6 +59,18 @@ export class CuentaError extends Error {
   constructor(message: string, readonly status: number = 400) {
     super(message);
     this.name = 'CuentaError';
+  }
+}
+
+/**
+ * El cambio de tipo es posible, pero mueve cifras ya reportadas y nadie lo
+ * confirmó todavía. La API lo traduce a 409 con `requiereConfirmacion`, para que
+ * el formulario muestre el aviso y vuelva a mandar con `confirmarCambioTipo`.
+ */
+export class CambioTipoSinConfirmarError extends CuentaError {
+  constructor(message: string) {
+    super(message, 409);
+    this.name = 'CambioTipoSinConfirmarError';
   }
 }
 
@@ -132,27 +146,73 @@ async function getCuenta(teamId: number, id: number, ex: Ejecutor = db): Promise
 // ─── Guardas ─────────────────────────────────────────────────────────────────
 
 /**
- * ¿La cuenta tiene asientos contables?
+ * ¿Cuántas líneas de asiento tiene la cuenta?
  *
  * La tabla `contabilidad_asiento_lineas` llega en el Paso 4. Hasta entonces
- * esta función devuelve `false` — pero la consulta ya está escrita, así que en
+ * esta función devuelve 0 — pero la consulta ya está escrita, así que en
  * cuanto la tabla exista empieza a proteger sin tocar este archivo.
  *
  * El `to_regclass` es la forma barata de preguntarle a Postgres si una tabla
  * existe sin que la consulta reviente con `42P01`.
  */
-export async function tieneMovimientos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
+export async function contarMovimientos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<number> {
   const [{ existe }] = await ex.execute<{ existe: boolean }>(sql`
     SELECT to_regclass('public.contabilidad_asiento_lineas') IS NOT NULL AS existe
   `);
-  if (!existe) return false;
+  if (!existe) return 0;
 
   const [{ total }] = await ex.execute<{ total: number }>(sql`
     SELECT count(*)::int AS total
     FROM contabilidad_asiento_lineas
     WHERE team_id = ${teamId} AND cuenta_id = ${cuentaId}
   `);
-  return total > 0;
+  return total;
+}
+
+/** ¿La cuenta tiene asientos contables? */
+export async function tieneMovimientos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
+  return (await contarMovimientos(teamId, cuentaId, ex)) > 0;
+}
+
+/**
+ * ¿La cuenta tiene líneas fechadas dentro de un ejercicio ya cerrado?
+ *
+ * Los ejercicios se cierran en orden y solo se reabre el último (ver
+ * `./cierre`), así que todo lo fechado hasta el último cierre está cerrado.
+ * Sin cierres, `max()` es NULL y la comparación nunca es verdadera.
+ */
+async function movimientosEnEjercicioCerrado(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
+  const [{ hay }] = await ex.execute<{ hay: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM contabilidad_asiento_lineas l
+      JOIN contabilidad_asientos a ON a.id = l.asiento_id
+      WHERE l.team_id = ${teamId} AND l.cuenta_id = ${cuentaId}
+        AND a.fecha <= (SELECT max(fecha_cierre) FROM contabilidad_cierres WHERE team_id = ${teamId})
+    ) AS hay
+  `);
+  return hay === true;
+}
+
+/** Los métodos de cobro que usan la cuenta, como entrada o como comisión. */
+async function usosEnMetodos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<UsoEnMetodo[]> {
+  const rows = await ex.execute(sql`
+    SELECT clave,
+           cuenta_id = ${cuentaId}          AS entrada,
+           cuenta_comision_id = ${cuentaId} AS comision
+    FROM contabilidad_config_metodos_pago
+    WHERE team_id = ${teamId}
+      AND (cuenta_id = ${cuentaId} OR cuenta_comision_id = ${cuentaId})
+    ORDER BY clave
+  `) as unknown as { clave: ClaveMetodo; entrada: boolean; comision: boolean | null }[];
+
+  const usos: UsoEnMetodo[] = [];
+  for (const r of rows) {
+    const metodo = CLAVE_METODO_LABEL[r.clave] ?? r.clave;
+    if (r.entrada) usos.push({ metodo, rol: 'entrada' });
+    if (r.comision) usos.push({ metodo, rol: 'comision' });
+  }
+  return usos;
 }
 
 async function tieneHijas(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
@@ -278,19 +338,26 @@ export interface EditarCuentaInput {
   activa?:       boolean;
 }
 
+export interface CuentaEditada extends Cuenta {
+  /** Presente cuando se cambió el tipo de una cuenta con movimientos. */
+  reclasificacion?: { de: TipoCuenta; a: TipoCuenta; movimientos: number };
+}
+
 export async function editarCuenta(
   teamId: number,
   id: number,
   input: EditarCuentaInput,
   userId: number,
   ex: Ejecutor = db,
-): Promise<Cuenta> {
+  opciones: { confirmarCambioTipo?: boolean } = {},
+): Promise<CuentaEditada> {
   validarCampos(input);
 
   const actual = await getCuenta(teamId, id, ex);
   if (!actual) throw new CuentaError('La cuenta no existe.', 404);
 
-  const conMovimientos = await tieneMovimientos(teamId, id, ex);
+  const movimientos = await contarMovimientos(teamId, id, ex);
+  const conMovimientos = movimientos > 0;
 
   // El código es el identificador con el que trabaja el contador y por el que se
   // referencian los reportes históricos. Con movimientos encima, cambiarlo
@@ -303,14 +370,28 @@ export async function editarCuenta(
     );
   }
 
-  // Cambiar la clase con movimientos encima movería asientos ya emitidos de una
-  // sección del balance a otra, y los reportes de periodos cerrados dejarían de
-  // cuadrar contra lo que se declaró.
-  if (input.tipo !== undefined && input.tipo !== actual.tipo && conMovimientos) {
-    throw new CuentaError(
-      `La cuenta ${actual.codigo} ya tiene movimientos contables, así que su tipo no se puede cambiar.`,
-      409,
-    );
+  // Cambiar la clase con movimientos mueve el saldo de la cuenta entre reportes,
+  // también hacia atrás. Se permite cuando no daña nada y alguien lo confirmó:
+  // las reglas y el porqué están en `./cambio-tipo`.
+  const reclasifica = input.tipo !== undefined && input.tipo !== actual.tipo && conMovimientos;
+  let confirmacionPendiente: string | null = null;
+  if (reclasifica) {
+    const decision = evaluarCambioTipo({
+      codigo: actual.codigo,
+      nombre: actual.nombre,
+      tipoActual: actual.tipo,
+      tipoNuevo: input.tipo!,
+      naturalezaActual: actual.naturaleza,
+      naturalezaFinal: input.naturaleza ?? actual.naturaleza,
+      movimientos,
+      movimientosEnEjercicioCerrado: await movimientosEnEjercicioCerrado(teamId, id, ex),
+      usosEnMetodos: await usosEnMetodos(teamId, id, ex),
+      confirmado: opciones.confirmarCambioTipo === true,
+    });
+    if (decision.decision === 'bloqueado') throw new CuentaError(decision.mensaje, 409);
+    // La confirmación se pide al final, cuando ninguna otra regla va a rechazar
+    // la edición: no tiene sentido confirmar algo que igual no se puede guardar.
+    if (decision.decision === 'requiere-confirmacion') confirmacionPendiente = decision.mensaje;
   }
 
   // Quitarle "acepta movimientos" a una cuenta que ya los tiene dejaría esos
@@ -362,6 +443,8 @@ export async function editarCuenta(
     }
   }
 
+  if (confirmacionPendiente) throw new CambioTipoSinConfirmarError(confirmacionPendiente);
+
   const sets = [
     input.codigo     !== undefined ? sql`codigo = ${input.codigo.trim()}` : null,
     input.nombre     !== undefined ? sql`nombre = ${input.nombre.trim()}` : null,
@@ -391,7 +474,10 @@ export async function editarCuenta(
     throw e;
   });
 
-  return (rows as unknown as Cuenta[])[0];
+  const editada = (rows as unknown as Cuenta[])[0];
+  return reclasifica
+    ? { ...editada, reclasificacion: { de: actual.tipo, a: input.tipo!, movimientos } }
+    : editada;
 }
 
 /**

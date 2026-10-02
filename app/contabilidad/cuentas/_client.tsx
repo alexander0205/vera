@@ -50,6 +50,11 @@ function naturalezaPorTipo(tipo: string) {
   return tipo === 'activo' || tipo === 'costo' || tipo === 'gasto' ? 'deudora' : 'acreedora';
 }
 
+/** Etiqueta del tipo para mostrar: "gasto" → "Gastos". */
+function etiquetaTipo(tipo: string) {
+  return TIPOS.find((t) => t.valor === tipo)?.label ?? tipo;
+}
+
 interface FormState {
   id?:            number;
   codigo:         string;
@@ -64,6 +69,9 @@ const FORM_VACIO: FormState = {
   codigo: '', nombre: '', tipo: 'activo', naturaleza: 'deudora',
   cuentaPadreId: null, imputable: true,
 };
+
+/** Una cuenta de agrupación que puede ser padre, con su tipo para heredarlo. */
+interface PadrePosible { id: number; codigo: string; nombre: string; tipo: string }
 
 export function CatalogoClient({
   cuentasIniciales,
@@ -108,11 +116,11 @@ export function CatalogoClient({
 
   /** Candidatas a cuenta padre: solo las de agrupación, y nunca la propia cuenta. */
   const padresPosibles = useMemo(() => {
-    const out: { id: number; codigo: string; nombre: string }[] = [];
+    const out: PadrePosible[] = [];
     const recorrer = (nodos: CuentaNodo[]) => {
       for (const n of nodos) {
         if (!n.imputable && n.id !== dialogo?.id) {
-          out.push({ id: n.id, codigo: n.codigo, nombre: n.nombre });
+          out.push({ id: n.id, codigo: n.codigo, nombre: n.nombre, tipo: n.tipo });
         }
         recorrer(n.hijas);
       }
@@ -402,7 +410,7 @@ const FilaCuenta = memo(function FilaCuenta({
           px: 1, py: 0.25, borderRadius: '4px', whiteSpace: 'nowrap',
           bgcolor: tono.bg, color: tono.fg, border: `1px solid ${tono.border}`,
         }}>
-          {TIPOS.find((t) => t.valor === c.tipo)?.label ?? c.tipo}
+          {etiquetaTipo(c.tipo)}
         </Box>
       </TableCell>
       <TableCell sx={{ color: '#4b5563' }}>
@@ -478,7 +486,7 @@ function CuentaDialog({
   inicial, padresPosibles, onCerrar, onGuardada, ocupado,
 }: {
   inicial: FormState;
-  padresPosibles: { id: number; codigo: string; nombre: string }[];
+  padresPosibles: PadrePosible[];
   onCerrar: () => void;
   onGuardada: () => void;
   ocupado: boolean;
@@ -486,6 +494,14 @@ function CuentaDialog({
   const [form, setForm]           = useState<FormState>(inicial);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  /**
+   * El aviso del servidor cuando el cambio de tipo mueve cifras ya reportadas,
+   * junto con el formulario EXACTO al que se refiere. Si el formulario cambia
+   * después —incluso mientras se guardaba—, el aviso deja de valer solo: lo
+   * confirmado tiene que ser lo que se guarda.
+   */
+  const [confirmacion, setConfirmacion] = useState<{ mensaje: string; para: FormState } | null>(null);
+  const avisoVigente = confirmacion?.para === form ? confirmacion.mensaje : null;
 
   // Las opciones del padre no dependen de lo que se teclea: se arman una vez.
   // Un `TextField select` clona todos sus hijos en cada render.
@@ -496,34 +512,53 @@ function CuentaDialog({
     )),
   ], [padresPosibles]);
 
-  async function guardar() {
+  const padreElegido = padresPosibles.find((p) => p.id === form.cuentaPadreId);
+
+  async function guardar(confirmarCambioTipo = false) {
+    // Lo que se manda es lo que se confirma: si el usuario sigue tecleando
+    // mientras responde el servidor, el aviso queda atado a esta versión.
+    const enviado = form;
     setGuardando(true);
     setError(null);
+    setConfirmacion(null);
 
-    const esEdicion = form.id !== undefined;
-    const res = await fetch(
-      esEdicion ? `/api/contabilidad/cuentas/${form.id}` : '/api/contabilidad/cuentas',
-      {
-        method: esEdicion ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          codigo: form.codigo,
-          nombre: form.nombre,
-          tipo: form.tipo,
-          naturaleza: form.naturaleza,
-          cuentaPadreId: form.cuentaPadreId,
-          imputable: form.imputable,
-        }),
-      },
-    );
+    try {
+      const esEdicion = enviado.id !== undefined;
+      const res = await fetch(
+        esEdicion ? `/api/contabilidad/cuentas/${enviado.id}` : '/api/contabilidad/cuentas',
+        {
+          method: esEdicion ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            codigo: enviado.codigo,
+            nombre: enviado.nombre,
+            tipo: enviado.tipo,
+            naturaleza: enviado.naturaleza,
+            cuentaPadreId: enviado.cuentaPadreId,
+            imputable: enviado.imputable,
+            confirmarCambioTipo,
+          }),
+        },
+      );
 
-    setGuardando(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? 'No se pudo guardar la cuenta.');
-      return;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.requiereConfirmacion) {
+          setConfirmacion({
+            mensaje: body.error ?? 'Este cambio de tipo necesita tu confirmación.',
+            para: enviado,
+          });
+          return;
+        }
+        setError(body.error ?? 'No se pudo guardar la cuenta.');
+        return;
+      }
+      onGuardada();
+    } catch {
+      setError('No se pudo guardar la cuenta. Revisa tu conexión e inténtalo de nuevo.');
+    } finally {
+      setGuardando(false);
     }
-    onGuardada();
   }
 
   return (
@@ -535,6 +570,11 @@ function CuentaDialog({
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+          {avisoVigente && (
+            <Alert severity="warning">
+              {avisoVigente} ¿Confirmas el cambio?
+            </Alert>
+          )}
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 1.5 }}>
             <TextField
@@ -591,10 +631,21 @@ function CuentaDialog({
             <TextField
               label="Cuenta padre" select fullWidth
               value={form.cuentaPadreId ?? ''}
-              onChange={(e) => setForm((f) => ({
-                ...f,
-                cuentaPadreId: e.target.value ? Number(e.target.value) : null,
-              }))}
+              onChange={(e) => {
+                const cuentaPadreId = e.target.value ? Number(e.target.value) : null;
+                const padre = padresPosibles.find((p) => p.id === cuentaPadreId);
+                setForm((f) => ({
+                  ...f,
+                  cuentaPadreId,
+                  // Una cuenta NUEVA hereda el tipo de su grupo: así nació el
+                  // error de las 63xx creadas como Activo bajo "Gastos". Al
+                  // editar no se toca: cambiar el tipo es una decisión aparte. Si el tipo ya
+                  // es el del grupo, no se toca: respeta una naturaleza invertida a propósito.
+                  ...(f.id === undefined && padre && padre.tipo !== f.tipo
+                    ? { tipo: padre.tipo, naturaleza: naturalezaPorTipo(padre.tipo) }
+                    : {}),
+                }));
+              }}
             >
               {opcionesPadre}
             </TextField>
@@ -602,6 +653,13 @@ function CuentaDialog({
               Solo aparecen las cuentas que agrupan. Una cuenta que acepta
               movimientos no puede tener hijas.
             </Typography>
+            {padreElegido && padreElegido.tipo !== form.tipo && (
+              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#d97706' }}>
+                Su grupo, {padreElegido.codigo} {padreElegido.nombre}, es de tipo{' '}
+                {etiquetaTipo(padreElegido.tipo)}. Revisa que esta cuenta de verdad
+                sea {etiquetaTipo(form.tipo)}.
+              </Typography>
+            )}
           </Box>
 
           <FormControlLabel
@@ -635,8 +693,13 @@ function CuentaDialog({
         >
           Cancelar
         </Button>
-        <Button variant="contained" onClick={guardar} disabled={guardando || ocupado}>
-          {guardando ? 'Guardando…' : 'Guardar'}
+        <Button
+          variant="contained"
+          color={avisoVigente ? 'warning' : 'primary'}
+          onClick={() => guardar(avisoVigente !== null)}
+          disabled={guardando || ocupado}
+        >
+          {guardando ? 'Guardando…' : avisoVigente ? 'Sí, cambiar el tipo' : 'Guardar'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -651,8 +714,8 @@ function CuentaDialog({
  *
  * La vista previa no es un cálculo aparte: el servidor corre la importación
  * entera con las mismas reglas y la deshace. Por eso «se crearán 12» es
- * exactamente lo que pasa al aplicar, y un error de regla —cambiar el tipo de
- * una cuenta con movimientos— aparece AQUÍ, con su fila, y no a mitad del
+ * exactamente lo que pasa al aplicar, y un error de regla —por ejemplo, cambiar el tipo de
+ * una cuenta con movimientos en un ejercicio cerrado— aparece AQUÍ, con su fila, y no a mitad del
  * guardado.
  */
 function ImportarCatalogoDialog({
@@ -786,6 +849,13 @@ function ImportarCatalogoDialog({
                 Todo en orden. Al aplicar: <strong>{resultado.creadas.length}</strong> cuenta(s) nueva(s),{' '}
                 <strong>{resultado.actualizadas.length}</strong> actualizada(s) y {resultado.sinCambios} sin cambios.
               </Alert>
+              {resultado.actualizadas.some((a) => a.reclasificacion) && (
+                <Alert severity="warning">
+                  Algunas cuentas con movimientos cambian de tipo. Al aplicar, su saldo cambia de
+                  lugar en los reportes, también en los de meses anteriores, y queda registrado
+                  quién lo hizo.
+                </Alert>
+              )}
               <Box sx={{ ...CARD, maxHeight: 280, overflow: 'auto' }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
@@ -807,7 +877,17 @@ function ImportarCatalogoDialog({
                       <TableRow key={`a-${a.codigo}`}>
                         <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{a.codigo}</TableCell>
                         <TableCell sx={{ color: '#1d4ed8', fontWeight: 500 }}>Cambia</TableCell>
-                        <TableCell sx={{ color: '#4b5563' }}>{a.cambios.join(', ')}</TableCell>
+                        <TableCell sx={{ color: '#4b5563' }}>
+                          {a.cambios.join(', ')}
+                          {a.reclasificacion && (
+                            <Typography component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#b45309' }}>
+                              Tipo {etiquetaTipo(a.reclasificacion.de)} → {etiquetaTipo(a.reclasificacion.a)}, con{' '}
+                              {a.reclasificacion.movimientos}{' '}
+                              {a.reclasificacion.movimientos === 1 ? 'movimiento' : 'movimientos'}: su saldo
+                              también cambia de lugar en los reportes de meses anteriores.
+                            </Typography>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
