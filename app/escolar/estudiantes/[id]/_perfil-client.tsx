@@ -12,10 +12,11 @@ import { Label } from '@/components/ui/label';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Ban, Mail, MessageCircle, Smartphone, Users } from 'lucide-react';
+import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Ban, Mail, MessageCircle, Smartphone, Users, Receipt } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
-import { useTabUrl } from '@/lib/hooks/useUrlEstado';
+import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
+import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
 
 import { labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
@@ -161,6 +162,24 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   const pagosSueltos = data?.pagosSueltos ?? [];
   const avisos = data?.avisos ?? [];
   const avisosProgramados = data?.avisosProgramados ?? [];
+
+  // Cajón de «Nueva factura» al nivel de la ficha, igual que en Responsables de
+  // pago: vive en la URL (?factura=nueva|c:ids), no en estado suelto, para que
+  // recargar o el «atrás» del navegador lo cierren bien y se pueda compartir.
+  const { params, setParams } = useUrlParams();
+  const enCurso = params.get('factura');
+  const cajon = useMemo(() => {
+    if (!enCurso) return null;
+    if (enCurso.startsWith('c:')) {
+      const ids = enCurso.slice(2).split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+      return ids.length ? { cargos: ids } : null;
+    }
+    return { cargos: null };
+  }, [enCurso]);
+  const abrirCajon = (valor: string) => setParams({ factura: valor });
+  // Solo lo que aún NO tiene factura: volver a facturar un cargo ya facturado
+  // cobraría dos veces.
+  const sinFacturar = cargos.filter((c) => !c.ecfDocumentId).map((c) => c.id);
   // Solo la primera carga tapa la pantalla: en las recargas posteriores
   // (registrar pago, editar, tutores) se sigue viendo lo de antes, que es lo
   // que evitaba desmontar <Tabs> y perder la pestaña activa.
@@ -610,11 +629,14 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
           {grupos.length > 0
             ? <PeriodoFiltroBar grupos={grupos} value={grupoActivo?.key ?? null} onChange={setPeriodoKey} />
             : <span className="text-sm text-gray-400">Sin períodos matriculados</span>}
-          {puedeGestionar && (
-            <Button size="sm" variant="outline" onClick={() => setReinscribirAbierto(true)}>
-              {/* «Reinscribir» delante de alguien que nunca estuvo matriculado
-                  se lee como si te hubieras equivocado de botón. */}
-              <Plus className="h-4 w-4 mr-1.5" />{matriculas.length === 0 ? 'Inscribir' : 'Reinscribir'}
+          {/* «Facturar»: mismo flujo de «Nueva factura» de Responsables de pago,
+              arranca de todo lo que el alumno debe sin facturar. Inscribir /
+              reinscribir vive en Matriculación (en lote y por período), así que
+              este botón dejó de ser «Reinscribir». El diálogo de reinscripción se
+              conserva para el auto-flujo del alta (?matricular=1). */}
+          {puedeFacturar && responsable && (
+            <Button size="sm" variant="default" onClick={() => abrirCajon('nueva')}>
+              <Receipt className="h-4 w-4 mr-1.5" />Facturar
             </Button>
           )}
         </div>
@@ -798,6 +820,22 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
         open={reinscribirAbierto}
         onClose={() => setReinscribirAbierto(false)}
         onSaved={() => { setReinscribirAbierto(false); cargar(); }}
+      />
+
+      {/* «Nueva factura» del alumno: mismo cajón que Responsables de pago, con
+          los cargos del alumno que aún no tienen factura y su responsable como
+          comprador. Se abre desde el botón «Facturar». */}
+      <FacturaDrawer
+        abierto={cajon != null && responsable != null}
+        onCerrar={() => { setParams({ factura: null }); void cargar(); }}
+        perfilEmpresa={perfilEmpresa}
+        cargosIniciales={cajon?.cargos ?? sinFacturar}
+        clienteInicial={responsable ? {
+          id: responsable.clientId, razonSocial: responsable.razonSocial,
+          rnc: responsable.rnc, email: responsable.email,
+          telefono: responsable.telefono ?? responsable.celular,
+        } : undefined}
+        previsto={null}
       />
 
       {cargoVincularFactura && (

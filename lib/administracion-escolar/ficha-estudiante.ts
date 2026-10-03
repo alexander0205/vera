@@ -176,6 +176,9 @@ export function cargosDeEstudiante(teamId: number, estudianteId: number) {
       facturaEncf: ecfDocuments.encf,
       facturaCodigo: ecfDocuments.codigo,
       facturaEstadoPago: ecfDocuments.estadoPago,
+      // Monto TOTAL de la factura vinculada. Con él la ficha muestra sin
+      // interpretar cuando la factura es más chica que el cargo («sin cubrir»).
+      facturaMontoCentavos: ecfDocuments.montoTotal,
       // Estado ANTE LA DGII, que no es el de cobro: con él la ficha sabe si a
       // esta factura todavía le falta emitirse y puede ofrecerlo en el menú.
       facturaEstado: ecfDocuments.estado,

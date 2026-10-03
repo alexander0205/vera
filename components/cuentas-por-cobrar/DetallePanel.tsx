@@ -37,6 +37,7 @@ export function DetallePanel({
 }) {
   const [detalle, setDetalle] = useState<DetalleCuenta | null>(null);
   const [origenEscolar, setOrigenEscolar] = useState<OrigenEscolarFactura[]>([]);
+  const [responsableEscolar, setResponsableEscolar] = useState(false);
   const [actual, setActual]   = useState<Cuenta>(cuenta);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -55,12 +56,15 @@ export function DetallePanel({
         if (!vivo) return;
         setDetalle(j);
         setOrigenEscolar(j.origenEscolar ?? []);
+        setResponsableEscolar(j.responsableEscolar === true);
         if (j.cuenta) setActual(j.cuenta);
       })
       .catch(e => { if (vivo) setError(e instanceof Error ? e.message : 'Error'); })
       .finally(() => { if (vivo) setLoading(false); });
     return () => { vivo = false; };
   }, [cuenta.id]);
+
+  const irAGobernanza = actual.clientId != null && (responsableEscolar || origenEscolar.length > 0);
 
   return (
     <Drawer
@@ -223,12 +227,16 @@ export function DetallePanel({
         >
           Registrar pago
         </Button>
+        {/* Puente a Gobernanza: si el cliente es responsable de pago en el
+            colegio, el botón lleva a su ficha (todo lo que la familia debe),
+            no a la factura — esa sigue a un clic en el código de la cabecera. */}
         <Button
-          component={Link} href={`/dashboard/facturas/${actual.id}`} nativeButton={false}
+          component={Link} nativeButton={false}
+          href={irAGobernanza ? `/escolar/responsables/${actual.clientId}` : `/dashboard/facturas/${actual.id}`}
           variant="outlined" color="inherit"
           sx={{ color: '#374151', borderColor: '#d1d5db', whiteSpace: 'nowrap', flexShrink: 0 }}
         >
-          Ver factura
+          {irAGobernanza ? 'Ver responsable' : 'Ver factura'}
         </Button>
       </Box>
     </Drawer>
