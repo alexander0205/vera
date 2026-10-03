@@ -13,6 +13,7 @@
  */
 
 import { db } from '@/lib/db/drizzle';
+import { vetoDeClase } from './clase-cuenta';
 import { sql } from 'drizzle-orm';
 import {
   naturalezaPorTipo,
@@ -43,6 +44,8 @@ export interface Cuenta {
   cuentaPadreId: number | null;
   imputable:     boolean;
   activa:        boolean;
+  /** Apuntes contables que ya tiene. 0 = se puede cambiar todo. */
+  movimientos:   number;
   esBase:        boolean;
 }
 
@@ -76,7 +79,30 @@ export async function listarCuentas(
       ${opts.incluirInactivas ? sql`` : sql`AND activa`}
     ORDER BY codigo
   `);
-  return rows as unknown as Cuenta[];
+  const cuentas = rows as unknown as Cuenta[];
+  const apuntes = await conteoMovimientos(teamId, ex);
+  return cuentas.map((c) => ({ ...c, movimientos: apuntes.get(c.id) ?? 0 }));
+}
+
+/**
+ * Cuántos apuntes tiene cada cuenta. La pantalla lo necesita para decir qué se
+ * puede cambiar y qué no (ver `clase-cuenta`). Va aparte y con el mismo
+ * `to_regclass` que `tieneMovimientos` para no reventar contra una base sin la
+ * tabla de asientos; sale del índice (team_id, cuenta_id), así que no cuesta.
+ */
+async function conteoMovimientos(teamId: number, ex: Ejecutor = db): Promise<Map<number, number>> {
+  const [{ existe }] = await ex.execute<{ existe: boolean }>(sql`
+    SELECT to_regclass('public.contabilidad_asiento_lineas') IS NOT NULL AS existe
+  `);
+  if (!existe) return new Map();
+
+  const filas = await ex.execute<{ cuentaId: number; total: number }>(sql`
+    SELECT cuenta_id AS "cuentaId", count(*)::int AS total
+    FROM contabilidad_asiento_lineas
+    WHERE team_id = ${teamId}
+    GROUP BY cuenta_id
+  `);
+  return new Map((filas as unknown as { cuentaId: number; total: number }[]).map((f) => [f.cuentaId, f.total]));
 }
 
 /**
@@ -126,7 +152,8 @@ async function getCuenta(teamId: number, id: number, ex: Ejecutor = db): Promise
     FROM contabilidad_cuentas
     WHERE team_id = ${teamId} AND id = ${id}
   `);
-  return (rows as unknown as Cuenta[])[0] ?? null;
+  const cuenta = (rows as unknown as Cuenta[])[0];
+  return cuenta ? { ...cuenta, movimientos: await contarMovimientos(teamId, id, ex) } : null;
 }
 
 // ─── Guardas ─────────────────────────────────────────────────────────────────
@@ -142,17 +169,47 @@ async function getCuenta(teamId: number, id: number, ex: Ejecutor = db): Promise
  * existe sin que la consulta reviente con `42P01`.
  */
 export async function tieneMovimientos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
+  return (await contarMovimientos(teamId, cuentaId, ex)) > 0;
+}
+
+/** Cuántos apuntes tiene una cuenta. 0 también cuando la tabla todavía no existe. */
+async function contarMovimientos(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<number> {
   const [{ existe }] = await ex.execute<{ existe: boolean }>(sql`
     SELECT to_regclass('public.contabilidad_asiento_lineas') IS NOT NULL AS existe
   `);
-  if (!existe) return false;
+  if (!existe) return 0;
 
   const [{ total }] = await ex.execute<{ total: number }>(sql`
     SELECT count(*)::int AS total
     FROM contabilidad_asiento_lineas
     WHERE team_id = ${teamId} AND cuenta_id = ${cuentaId}
   `);
-  return total > 0;
+  return total;
+}
+
+/**
+ * El ejercicio cerrado más reciente que cubre apuntes de esta cuenta, o null.
+ * Un cierre declaró un resultado con la cuenta en la sección donde estaba, así
+ * que reclasificarla después dejaría ese cierre sin cuadrar.
+ */
+async function ejercicioCerradoDeLaCuenta(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<number | null> {
+  const [{ existe }] = await ex.execute<{ existe: boolean }>(sql`
+    SELECT to_regclass('public.contabilidad_cierres') IS NOT NULL AS existe
+  `);
+  if (!existe) return null;
+
+  const filas = await ex.execute<{ ejercicio: number | null }>(sql`
+    SELECT max(c.ejercicio)::int AS ejercicio
+    FROM contabilidad_cierres c
+    WHERE c.team_id = ${teamId}
+      AND EXISTS (
+        SELECT 1 FROM contabilidad_asiento_lineas l
+        JOIN contabilidad_asientos a ON a.id = l.asiento_id
+        WHERE l.team_id = ${teamId} AND l.cuenta_id = ${cuentaId}
+          AND extract(year FROM a.fecha) <= c.ejercicio
+      )
+  `);
+  return (filas as unknown as { ejercicio: number | null }[])[0]?.ejercicio ?? null;
 }
 
 async function tieneHijas(teamId: number, cuentaId: number, ex: Ejecutor = db): Promise<boolean> {
@@ -265,7 +322,7 @@ export async function crearCuenta(
   if (!creada) {
     throw new CuentaError(`Ya existe una cuenta con el código ${codigo}.`, 409);
   }
-  return creada;
+  return { ...creada, movimientos: 0 };
 }
 
 export interface EditarCuentaInput {
@@ -303,12 +360,29 @@ export async function editarCuenta(
     );
   }
 
-  // Cambiar la clase con movimientos encima movería asientos ya emitidos de una
-  // sección del balance a otra, y los reportes de periodos cerrados dejarían de
-  // cuadrar contra lo que se declaró.
-  if (input.tipo !== undefined && input.tipo !== actual.tipo && conMovimientos) {
+  // Corregir la clase de una cuenta con apuntes encima SÍ se puede: no mueve
+  // ningún asiento, solo cambia en qué reporte sale. Lo que se veta es
+  // invertirle la naturaleza o tocar un ejercicio cerrado — ver `clase-cuenta`.
+  const veto = vetoDeClase({
+    tipoActual:       actual.tipo,
+    tipoNuevo:        input.tipo ?? actual.tipo,
+    naturalezaActual: actual.naturaleza,
+    naturalezaNueva:  input.naturaleza ?? actual.naturaleza,
+    conMovimientos,
+    ejercicioCerrado: conMovimientos ? await ejercicioCerradoDeLaCuenta(teamId, id, ex) : null,
+  });
+  if (veto === 'naturaleza-invertida') {
     throw new CuentaError(
-      `La cuenta ${actual.codigo} ya tiene movimientos contables, así que su tipo no se puede cambiar.`,
+      `La cuenta ${actual.codigo} ya tiene movimientos, así que no se le puede invertir la naturaleza: ` +
+      'todos sus saldos cambiarían de signo, también los de atrás. ' +
+      'Crea la cuenta que necesitas y pasa el saldo con un asiento de reclasificación.',
+      409,
+    );
+  }
+  if (veto === 'ejercicio-cerrado') {
+    throw new CuentaError(
+      `La cuenta ${actual.codigo} tiene movimientos dentro de un ejercicio ya cerrado, así que su tipo no se puede cambiar: ` +
+      'el cierre se declaró con esta cuenta donde estaba.',
       409,
     );
   }
@@ -391,7 +465,7 @@ export async function editarCuenta(
     throw e;
   });
 
-  return (rows as unknown as Cuenta[])[0];
+  return { ...(rows as unknown as Cuenta[])[0], movimientos: await contarMovimientos(teamId, id, ex) };
 }
 
 /**
