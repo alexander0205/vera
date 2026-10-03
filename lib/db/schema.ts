@@ -3313,6 +3313,17 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaProvVacacionesPagarId: integer('cuenta_prov_vacaciones_pagar_id').references(() => contabilidadCuentas.id),
   cuentaProvCesantiaGastoId:   integer('cuenta_prov_cesantia_gasto_id').references(() => contabilidadCuentas.id),
   cuentaProvCesantiaPagarId:   integer('cuenta_prov_cesantia_pagar_id').references(() => contabilidadCuentas.id),
+  /**
+   * Nómina — cada aporte patronal a su cuenta de gasto y cada retención del
+   * empleado a su pasivo (migración 0184). Vacías: todo va a las generales de
+   * aportes y retenciones, como antes.
+   */
+  cuentaAporteSfsGastoId:     integer('cuenta_aporte_sfs_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaAporteAfpGastoId:     integer('cuenta_aporte_afp_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaAporteSrlGastoId:     integer('cuenta_aporte_srl_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaAporteInfotepGastoId: integer('cuenta_aporte_infotep_gasto_id').references(() => contabilidadCuentas.id),
+  cuentaRetSfsPagarId:        integer('cuenta_ret_sfs_pagar_id').references(() => contabilidadCuentas.id),
+  cuentaRetAfpPagarId:        integer('cuenta_ret_afp_pagar_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.3 — exento capitaliza ITBIS; gravado registra crédito fiscal 1104. */
   regimenItbis: varchar('regimen_itbis', { length: 10 }).notNull().default('exento'),
   updatedBy: integer('updated_by').references(() => users.id),
