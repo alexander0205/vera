@@ -58,11 +58,15 @@ interface FormState {
   naturaleza:     string;
   cuentaPadreId:  number | null;
   imputable:      boolean;
+  /** Apuntes que ya tiene la cuenta: decide qué se puede cambiar y qué no. */
+  movimientos:    number;
+  /** La naturaleza con la que se abrió el diálogo, para no dejar invertirla. */
+  naturalezaOriginal?: string;
 }
 
 const FORM_VACIO: FormState = {
   codigo: '', nombre: '', tipo: 'activo', naturaleza: 'deudora',
-  cuentaPadreId: null, imputable: true,
+  cuentaPadreId: null, imputable: true, movimientos: 0,
 };
 
 export function CatalogoClient({
@@ -147,6 +151,7 @@ export function CatalogoClient({
     setDialogo({
       id: c.id, codigo: c.codigo, nombre: c.nombre, tipo: c.tipo,
       naturaleza: c.naturaleza, cuentaPadreId: c.cuentaPadreId, imputable: c.imputable,
+      movimientos: c.movimientos ?? 0, naturalezaOriginal: c.naturaleza,
     });
   }, []);
 
@@ -543,6 +548,10 @@ function CuentaDialog({
               onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))}
               placeholder="1101"
               autoFocus={!form.id}
+              // Con apuntes encima el código es la referencia de los reportes
+              // de atrás: el servidor lo rechaza, así que aquí ni se ofrece.
+              disabled={form.movimientos > 0}
+              helperText={form.movimientos > 0 ? 'Con movimientos el código no se cambia.' : undefined}
               slotProps={{ input: { sx: { fontFamily: 'monospace' } } }}
             />
             <TextField
@@ -562,7 +571,10 @@ function CuentaDialog({
                 tipo: e.target.value,
                 // Al cambiar la clase se repropone su naturaleza. Si el
                 // usuario la invierte después, esa elección se respeta.
-                naturaleza: naturalezaPorTipo(e.target.value),
+                // Con apuntes encima la naturaleza se queda como está: moverla
+                // le cambiaría el signo a todo el histórico y el servidor lo
+                // rechaza. Corregir la clase sí se puede.
+                naturaleza: f.movimientos > 0 ? f.naturaleza : naturalezaPorTipo(e.target.value),
               }))}
             >
               {TIPOS.map((t) => (
@@ -574,6 +586,9 @@ function CuentaDialog({
                 label="Naturaleza" select fullWidth
                 value={form.naturaleza}
                 onChange={(e) => setForm((f) => ({ ...f, naturaleza: e.target.value }))}
+                // Invertirla con apuntes encima le cambia el signo al saldo y a
+                // todo el histórico: eso ya es otra cuenta.
+                disabled={form.movimientos > 0}
               >
                 <MenuItem value="deudora">Deudora</MenuItem>
                 <MenuItem value="acreedora">Acreedora</MenuItem>
@@ -586,6 +601,17 @@ function CuentaDialog({
               )}
             </Box>
           </Box>
+
+          {form.movimientos > 0 && (
+            <Alert severity="info" sx={{ fontSize: '0.8125rem' }}>
+              Esta cuenta ya tiene {form.movimientos} {form.movimientos === 1 ? 'movimiento' : 'movimientos'}.
+              {' '}El <strong>tipo sí se puede corregir</strong>: los asientos no se mueven, solo cambia en qué
+              reporte sale la cuenta — por ejemplo, de Balance general a Estado de resultados.
+              {' '}Lo que no se puede con movimientos encima es cambiarle el código ni invertirle la naturaleza,
+              porque eso le cambiaría el signo a todo su histórico. Para eso se crea otra cuenta y se pasa el
+              saldo con un asiento de reclasificación.
+            </Alert>
+          )}
 
           <Box>
             <TextField
