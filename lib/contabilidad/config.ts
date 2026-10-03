@@ -67,6 +67,14 @@ export interface ConfigContable {
   cuentaNominaAportesPagarId: number | null;
   /** Nómina — INFOTEP por pagar (Haber). Fallback: aportes patronales por pagar. */
   cuentaNominaInfotepPagarId: number | null;
+  /** Cada aporte patronal a su cuenta de gasto. Vacías: la general de aportes. */
+  cuentaAporteSfsGastoId:     number | null;
+  cuentaAporteAfpGastoId:     number | null;
+  cuentaAporteSrlGastoId:     number | null;
+  cuentaAporteInfotepGastoId: number | null;
+  /** Lo retenido al empleado, por concepto. Vacías: la general de retenciones. */
+  cuentaRetSfsPagarId:        number | null;
+  cuentaRetAfpPagarId:        number | null;
   /** Nómina — sueldos netos por pagar (Haber). Fallback: por pagar → 2101. */
   cuentaNominaPorPagarId:     number | null;
   /** Nómina — si se asienta la provisión (regalía/vac/cesantía) cada mes. Off por defecto. */
@@ -96,6 +104,8 @@ const CONFIG_VACIA: ConfigContable = {
   cuentaNominaSueldoId: null, cuentaNominaAportesGastoId: null,
   cuentaNominaRetencionesId: null, cuentaNominaAportesPagarId: null, cuentaNominaPorPagarId: null,
   cuentaNominaIsrPagarId: null, cuentaNominaInfotepPagarId: null,
+  cuentaAporteSfsGastoId: null, cuentaAporteAfpGastoId: null, cuentaAporteSrlGastoId: null,
+  cuentaAporteInfotepGastoId: null, cuentaRetSfsPagarId: null, cuentaRetAfpPagarId: null,
   provisionarNomina: false, cuentaProvisionGastoId: null, cuentaProvisionPorPagarId: null,
   cuentaProvRegaliaGastoId: null, cuentaProvRegaliaPagarId: null,
   cuentaProvVacacionesGastoId: null, cuentaProvVacacionesPagarId: null,
@@ -139,6 +149,12 @@ export const getConfig = cache(async function getConfig(teamId: number): Promise
            cuenta_provision_por_pagar_id  AS "cuentaProvisionPorPagarId",
            cuenta_nomina_isr_pagar_id      AS "cuentaNominaIsrPagarId",
            cuenta_nomina_infotep_pagar_id  AS "cuentaNominaInfotepPagarId",
+           cuenta_aporte_sfs_gasto_id      AS "cuentaAporteSfsGastoId",
+           cuenta_aporte_afp_gasto_id      AS "cuentaAporteAfpGastoId",
+           cuenta_aporte_srl_gasto_id      AS "cuentaAporteSrlGastoId",
+           cuenta_aporte_infotep_gasto_id  AS "cuentaAporteInfotepGastoId",
+           cuenta_ret_sfs_pagar_id         AS "cuentaRetSfsPagarId",
+           cuenta_ret_afp_pagar_id         AS "cuentaRetAfpPagarId",
            cuenta_prov_regalia_gasto_id    AS "cuentaProvRegaliaGastoId",
            cuenta_prov_regalia_pagar_id    AS "cuentaProvRegaliaPagarId",
            cuenta_prov_vacaciones_gasto_id AS "cuentaProvVacacionesGastoId",
@@ -267,6 +283,12 @@ export interface GuardarConfigInput {
   cuentaProvisionPorPagarId?:  number | null;
   cuentaNominaIsrPagarId?:     number | null;
   cuentaNominaInfotepPagarId?: number | null;
+  cuentaAporteSfsGastoId?:     number | null;
+  cuentaAporteAfpGastoId?:     number | null;
+  cuentaAporteSrlGastoId?:     number | null;
+  cuentaAporteInfotepGastoId?: number | null;
+  cuentaRetSfsPagarId?:        number | null;
+  cuentaRetAfpPagarId?:        number | null;
   cuentaProvRegaliaGastoId?:    number | null;
   cuentaProvRegaliaPagarId?:    number | null;
   cuentaProvVacacionesGastoId?: number | null;
@@ -309,6 +331,12 @@ export async function guardarConfig(
     cuentaProvisionPorPagarId:  'cuenta_provision_por_pagar_id',
     cuentaNominaIsrPagarId:      'cuenta_nomina_isr_pagar_id',
     cuentaNominaInfotepPagarId:  'cuenta_nomina_infotep_pagar_id',
+    cuentaAporteSfsGastoId:      'cuenta_aporte_sfs_gasto_id',
+    cuentaAporteAfpGastoId:      'cuenta_aporte_afp_gasto_id',
+    cuentaAporteSrlGastoId:      'cuenta_aporte_srl_gasto_id',
+    cuentaAporteInfotepGastoId:  'cuenta_aporte_infotep_gasto_id',
+    cuentaRetSfsPagarId:         'cuenta_ret_sfs_pagar_id',
+    cuentaRetAfpPagarId:         'cuenta_ret_afp_pagar_id',
     cuentaProvRegaliaGastoId:    'cuenta_prov_regalia_gasto_id',
     cuentaProvRegaliaPagarId:    'cuenta_prov_regalia_pagar_id',
     cuentaProvVacacionesGastoId: 'cuenta_prov_vacaciones_gasto_id',
