@@ -1111,6 +1111,13 @@ async function cuentasNomina(teamId: number): Promise<CuentasNomina | { motivo: 
     aportesTss,
     infotep: cfg.cuentaNominaInfotepPagarId ?? aportesTss,
     sueldosPorPagar: cfg.cuentaNominaPorPagarId ?? cuentaPorPagar,
+    // Vacías: cada concepto cae en la cuenta general, como antes de 0184.
+    gastoAporteSfs:     cfg.cuentaAporteSfsGastoId,
+    gastoAporteAfp:     cfg.cuentaAporteAfpGastoId,
+    gastoAporteSrl:     cfg.cuentaAporteSrlGastoId,
+    gastoAporteInfotep: cfg.cuentaAporteInfotepGastoId,
+    retencionSfs:       cfg.cuentaRetSfsPagarId,
+    retencionAfp:       cfg.cuentaRetAfpPagarId,
   };
 }
 
@@ -1136,7 +1143,12 @@ export async function generarAsientoNomina(
            coalesce(sum(l.isr_cents), 0)     AS isr,
            coalesce(sum(l.otras_deducciones_cents), 0) AS otras,
            coalesce(sum(l.afp_patronal_cents + l.sfs_patronal_cents + l.srl_patronal_cents), 0) AS "aportesTss",
-           coalesce(sum(l.infotep_patronal_cents), 0) AS infotep
+           coalesce(sum(l.infotep_patronal_cents), 0) AS infotep,
+           coalesce(sum(l.sfs_patronal_cents), 0) AS "sfsPatronal",
+           coalesce(sum(l.afp_patronal_cents), 0) AS "afpPatronal",
+           coalesce(sum(l.srl_patronal_cents), 0) AS "srlPatronal",
+           coalesce(sum(l.sfs_empleado_cents + l.dependientes_adicionales_cents), 0) AS "sfsEmpleado",
+           coalesce(sum(l.afp_empleado_cents), 0) AS "afpEmpleado"
     FROM nomina_corridas c
     LEFT JOIN nomina_lineas l ON l.corrida_id = c.id
     WHERE c.team_id = ${teamId} AND c.id = ${corridaId}
@@ -1155,6 +1167,13 @@ export async function generarAsientoNomina(
     otrasDeduccionesCents: Number(f.otras),
     aportesTssCents: Number(f.aportesTss),
     infotepCents: Number(f.infotep),
+    detalle: {
+      sfsPatronalCents: Number(f.sfsPatronal),
+      afpPatronalCents: Number(f.afpPatronal),
+      srlPatronalCents: Number(f.srlPatronal),
+      sfsEmpleadoCents: Number(f.sfsEmpleado),
+      afpEmpleadoCents: Number(f.afpEmpleado),
+    },
   };
   if (sumas.brutoCents <= 0) return { creado: false, motivo: 'sin-monto' };
 
@@ -1192,14 +1211,15 @@ export async function generarAsientoPagoNominaObligacion(
            o.parte_retenciones_cents AS "retenciones", o.parte_aportes_cents AS "aportes",
            to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
            c.descripcion,
-           (SELECT coalesce(sum(l.infotep_patronal_cents), 0) FROM nomina_lineas l WHERE l.corrida_id = c.id) AS infotep
+           (SELECT coalesce(sum(l.infotep_patronal_cents), 0) FROM nomina_lineas l WHERE l.corrida_id = c.id) AS infotep,
+           (SELECT coalesce(sum(l.afp_empleado_cents), 0) FROM nomina_lineas l WHERE l.corrida_id = c.id) AS "afpEmpleado"
     FROM nomina_obligaciones o
     JOIN nomina_corridas c ON c.id = o.corrida_id AND c.team_id = o.team_id
     WHERE o.team_id = ${teamId} AND o.id = ${obligacionId}
   `);
   const o = (filas as unknown as {
     destino: string; monto: string | number; retenciones: string | number; aportes: string | number;
-    fecha: string; descripcion: string; infotep: string | number;
+    fecha: string; descripcion: string; infotep: string | number; afpEmpleado: string | number;
   }[])[0];
   if (!o) return { creado: false, motivo: 'no-es-gasto' };
   const monto = Number(o.monto);
@@ -1216,6 +1236,7 @@ export async function generarAsientoPagoNominaObligacion(
     retencionesCents: Number(o.retenciones),
     aportesCents: Number(o.aportes),
     infotepCents: o.destino === 'DGII' ? 0 : Number(o.infotep),
+    retencionAfpCents: o.destino === 'DGII' ? undefined : Number(o.afpEmpleado),
   }, { ...cuentas, salida });
 
   const asientoId = await insertarAsiento(
