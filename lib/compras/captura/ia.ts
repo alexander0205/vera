@@ -59,11 +59,13 @@ export const iaDisponible = (): boolean => modeloCaptura() !== null;
 
 const CATALOGO = CATEGORIAS_COMPRA.map((c) => `  ${c.clave}: ${c.label} — ${c.ejemplo}`).join('\n');
 
-const INSTRUCCIONES = `Eres asistente contable en República Dominicana. Lees la foto de la factura de un PROVEEDOR (algo que la empresa compró) y devuelves sus datos tal como están impresos, para registrarla sin teclear nada.
+const INSTRUCCIONES = `Eres asistente contable en República Dominicana. Lees la factura de un PROVEEDOR (algo que la empresa compró) —puede ser la foto del papel o el PDF que mandó el proveedor— y devuelves sus datos tal como están impresos, para registrarla sin teclear nada.
 - El RNC o cédula que interesa es el de quien VENDE (el emisor), no el del comprador.
 - NCF: B + 2 dígitos + 8 dígitos (B0100000123). e-NCF: E + 2 dígitos + 10 dígitos (E310000000045). Cópialo exacto.
 - Montos en pesos como números, sin símbolo ni separador de miles.
 - ITBIS es el impuesto (18 % o 16 %). La propina legal (10 %) es de restaurantes; no la sumes al ITBIS.
+- Una factura puede traer impuestos que NO son ITBIS, y cada uno va en su campo: el selectivo al consumo (ISC) en "isc"; lo demás —la contribución al desarrollo de las telecomunicaciones (CDT, 2 %), tasas municipales, recargos fiscales— en "otrosImpuestos". Nunca los metas dentro del ITBIS ni dentro del subtotal: una factura de internet suele llevar ITBIS 18 %, ISC 10 % y CDT 2 %, y los tres por separado.
+- subtotal + itbis + isc + otrosImpuestos + propina tiene que dar el total impreso. Si no da, vuelve a mirar: algún impuesto está en el campo equivocado.
 - precioUnitario va SIN ITBIS. En muchos recibos (supermercados) la columna de valor ya incluye el ITBIS y el ITBIS sale en otra columna: réstaselo.
 - Los recibos de caja (supermercados, tiendas, farmacias) imprimen arriba el RNC del comercio, la autorización de la DGII («Res DGII: 02-2009  Del: 02/02/2009», «AUTORIZADO POR DGII»), la fecha y hora de la venta («09/08/22 10:09:38») y luego «NIF:… NCF:…». Cada cosa va en su campo: la resolución y su fecha en resolucionDgii y fechaResolucionDgii; la fecha de la venta en fecha; lo que sigue a «NCF:» en ncf; el NIF en nif. El RNC es el número que sigue a «RNC», aunque la foto corte la palabra.
 - Fecha de emisión: la de la venta, que suele ir junto a la hora; nunca la de la resolución DGII. En RD las fechas van día/mes/año; un año de dos cifras es 20XX.
@@ -106,7 +108,7 @@ async function leerCon(modelo: LanguageModel, archivos: { buffer: Buffer; mime: 
           type: 'text',
           text: [
             ctx.empresa ? `La empresa que compró es ${ctx.empresa}.` : '',
-            archivos.length > 1 ? `La factura ocupa ${archivos.length} fotos, en orden.` : 'Esta es la factura.',
+            archivos.length > 1 ? `La factura ocupa ${archivos.length} archivos, en orden.` : 'Esta es la factura.',
           ].filter(Boolean).join(' '),
         },
         ...archivos.map((a) => ({ type: 'file' as const, mediaType: a.mime, data: a.buffer })),

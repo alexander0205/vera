@@ -358,11 +358,15 @@ export function inicialDesdeCaptura(d: DatosCaptura): { inicial: InicialRegistro
   const avisos = [...d.avisos];
   let lineas = d.lineas;
   if (!lineas.length && d.totalCents != null && d.totalCents > 0) {
-    const propina = d.propinaCents ?? 0;
+    // Todo lo que el total lleva encima de la base y no es ITBIS. Sin restar el
+    // ISC y los otros impuestos —una factura de telecomunicaciones trae ISC del
+    // 10 % y contribución del 2 %— la base salía inflada y el ITBIS parecía del
+    // 16 %, con lo que la línea nacía con la tasa equivocada.
+    const encima = (d.propinaCents ?? 0) + (d.iscCents ?? 0) + (d.otrosImpuestosCents ?? 0);
     const itbis = d.itbisCents;
     const descripcion = d.ncf ? `Factura ${d.ncf}` : 'Factura del proveedor';
     if (itbis != null && itbis > 0) {
-      const base = d.subtotalCents ?? d.totalCents - itbis - propina;
+      const base = d.subtotalCents ?? d.totalCents - itbis - encima;
       const ratio = base > 0 ? itbis / base : 0;
       const tasa: TasaItbis = Math.abs(ratio - 0.18) < 0.01 ? '0.18' : Math.abs(ratio - 0.16) < 0.01 ? '0.16' : '0.18';
       if (tasa === '0.18' && Math.abs(ratio - 0.18) >= 0.01) {
@@ -370,7 +374,7 @@ export function inicialDesdeCaptura(d: DatosCaptura): { inicial: InicialRegistro
       }
       lineas = [{ descripcion, cantidad: 1, costoUnitarioCents: Math.max(0, base), itbisTasa: tasa, esServicio: false, categoria: d.categoria }];
     } else {
-      lineas = [{ descripcion, cantidad: 1, costoUnitarioCents: d.totalCents - propina, itbisTasa: 'exento', esServicio: false, categoria: d.categoria }];
+      lineas = [{ descripcion, cantidad: 1, costoUnitarioCents: d.totalCents - encima, itbisTasa: 'exento', esServicio: false, categoria: d.categoria }];
       avisos.push('No se leyó el ITBIS: la línea quedó exenta por el total. Si la factura trae ITBIS, sepáralo mirando la foto.');
     }
   }

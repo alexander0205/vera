@@ -87,8 +87,8 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
     const metodo = qr ? 'qr' : ia ? 'ia' : 'manual';
     if (metodo === 'manual') {
       datos.avisos.unshift(iaDisponible()
-        ? 'No se pudo leer la factura: complétala mirando la foto.'
-        : 'La foto no trae el QR de un e-CF y la lectura con IA no está activada: complétala mirando la foto.');
+        ? 'No se pudo leer la factura: complétala mirando el comprobante.'
+        : 'El comprobante no trae el QR de un e-CF y la lectura con IA no está activada: complétalo a mano mirándolo.');
     }
 
     await db.update(capturaFacturas)
@@ -99,7 +99,7 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
     await db.update(capturaFacturas)
       .set({
         estado: 'por_revisar', metodo: 'manual', procesadoEn: new Date(), error: String(e).slice(0, 500),
-        datos: { ...DATOS_VACIOS, avisos: ['No se pudo leer la foto: complétala a mano.'] },
+        datos: { ...DATOS_VACIOS, avisos: ['No se pudo leer el comprobante: complétalo a mano.'] },
       })
       .where(soloSiProcesando);
   }

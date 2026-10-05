@@ -29,6 +29,7 @@ import { analizarNcf } from '@/lib/compras/fiscal';
 import { NuevoGasto } from './_nuevo-gasto';
 import { SelectorMes } from './_selector-mes';
 import { EnlaceFotos } from './_enlace-fotos';
+import { SubirComprobante } from '@/components/compras/subir-comprobante';
 import { BandejaCapturas } from './_bandeja-capturas';
 import { listarCapturas } from '@/lib/compras/captura/consultas';
 
@@ -155,6 +156,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <SelectorMes mes={mes} hoy={hoy} />
           <EnlaceFotos />
+          <SubirComprobante />
           <NuevoGasto />
         </Box>
       </Box>
