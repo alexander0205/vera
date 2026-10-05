@@ -5,6 +5,7 @@ import { capturaFacturas, products, rncPadron, teams } from '@/lib/db/schema';
 import { recepciones } from '@/lib/ecf-api/client';
 import { leerArchivosDeCaptura } from './archivos';
 import { leerQr } from './qr';
+import { imagenesDePdf } from './pdf';
 import { leerTimbre } from './timbre';
 import { combinarDatos, datosDesdeIa, datosDesdeTimbre, emparejarProductos, DATOS_VACIOS, type DatosCaptura } from './datos';
 import { iaDisponible, leerFacturaConIa } from './ia';
@@ -30,11 +31,20 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
       .from(teams).where(eq(teams.id, teamId)).limit(1);
     const archivos = await leerArchivosDeCaptura(teamId, capturaId);
 
+    // El timbre, venga en una foto o dentro del PDF. Un PDF no tiene píxeles
+    // que mirar, así que se le sacan las imágenes que lleva dentro: el QR es
+    // una de ellas. Sin esto, subir el PDF de un e-CF perdía el dato exacto y
+    // dejaba la factura en manos de la lectura con IA.
     let qr: DatosCaptura | null = null;
     for (const a of archivos) {
-      if (!a.mime.startsWith('image/')) continue;
-      const timbre = leerTimbre(await leerQr(a.buffer));
-      if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+      const candidatos = a.mime.startsWith('image/')
+        ? [a.buffer]
+        : a.mime === 'application/pdf' ? await imagenesDePdf(a.buffer) : [];
+      for (const imagen of candidatos) {
+        const timbre = leerTimbre(await leerQr(imagen));
+        if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+      }
+      if (qr) break;
     }
 
     let ia: DatosCaptura | null = null;
