@@ -82,6 +82,7 @@ const INSTRUCCIONES = `Eres asistente contable en República Dominicana. Lees la
 - Fecha de emisión en formato YYYY-MM-DD.
 - tipoProveedor: rst solo si la factura dice Régimen Simplificado de Tributación; exterior si el proveedor es de otro país.
 - metodoPago solo si la factura dice con qué se pagó.
+- formaPago: manda lo que diga el pie de la factura. «Al contado», «de contado» o un recibo marcado «Pagado» es contado, aunque arriba haya una fecha de vencimiento: muchas facturas de aquí la imprimen por formulario, a veces con años de margen, y no significa que se deba. Solo es credito si dice crédito o a plazo, o si el recibo está pendiente.
 - clase: "compra" solo si es mercancía o materia prima que ESTA empresa revende o usa para producir lo que vende; "gasto" si se consume en la operación (servicios, combustible, comida, artículos de higiene o limpieza, papelería de oficina, reparaciones...). Si dudas, "gasto".
 - Clasifica el gasto con UNA de estas claves, la que mejor lo describa:
 ${CATALOGO}

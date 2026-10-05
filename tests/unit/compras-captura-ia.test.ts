@@ -98,6 +98,19 @@ describe('qué se le manda al modelo', () => {
     expect(partes[0].text).toContain('2 archivos, en orden');
   });
 
+  it('se le dice que una fecha de vencimiento no vuelve la factura a crédito', async () => {
+    // La factura real de Falco dice «Al contado / Pagado» al pie y trae arriba
+    // un vencimiento de 2027 puesto por formulario. Con la instrucción vieja
+    // —«crédito si trae fecha de vencimiento»— se registraba como por pagar.
+    process.env.AI_GATEWAY_API_KEY = 'llave-de-prueba';
+    const { leerFacturaConIa } = await cargar();
+    await leerFacturaConIa([{ buffer: Buffer.from('%PDF-1.4'), mime: 'application/pdf' }]);
+
+    const instrucciones: string = generarTexto.mock.calls[0][0].instructions;
+    expect(instrucciones).toContain('Al contado');
+    expect(instrucciones).toContain('no significa que se deba');
+  });
+
   it('se le dice que el ISC y las tasas van aparte del ITBIS', async () => {
     process.env.AI_GATEWAY_API_KEY = 'llave-de-prueba';
     const { leerFacturaConIa } = await cargar();

@@ -96,7 +96,8 @@ export const esquemaLecturaIa = z.object({
   ncf: z.string().nullable().describe('El NCF o e-NCF, lo que sigue a «NCF:», p. ej. B0100000123 o E310000000045'),
   fecha: z.string().nullable()
     .describe('Fecha de la venta, la que va junto a la hora (p. ej. «09/08/22 10:09:38» es 2022-08-09), en formato YYYY-MM-DD. Nunca la de la resolución DGII'),
-  formaPago: z.enum(['contado', 'credito']).nullable().describe('credito si dice crédito o trae fecha de vencimiento'),
+  formaPago: z.enum(['contado', 'credito']).nullable()
+    .describe('contado si la factura dice «al contado», «de contado» o aparece como pagada; credito solo si dice crédito o a plazo. Una fecha de vencimiento por sí sola NO la hace a crédito'),
   metodoPago: z.enum(METODOS_PAGO_COMPRA).nullable().describe('Con qué se pagó, si la factura lo dice: efectivo, transferencia, cheque, tarjeta o deposito'),
   categoria: z.enum(CLAVES_CATEGORIA).nullable().describe('La categoría del gasto que mejor describe la factura completa'),
   moneda: z.string().nullable().describe('DOP o USD'),
