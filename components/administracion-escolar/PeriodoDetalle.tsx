@@ -1250,78 +1250,85 @@ function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, 
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-100">
-        {/* `min-w` con `table-fixed`: sin él las nueve columnas se comprimen hasta
-            montarse unas sobre otras —«RD$3,000.00RD$0.00RD$3,000.00» pegado— en
-            vez de dejar que el contenedor se desplace. El `overflow-x-auto` del
-            padre no llegaba a activarse nunca porque la tabla siempre «cabía». */}
-        <table className="w-full min-w-[860px] table-fixed text-sm">
-          <ColumnasCuentas />
-          <thead>
-            <tr className="bg-gray-50 text-left text-xs text-gray-500">
-              <th className="px-3 py-2.5 font-medium">Período</th>
-              <th className="px-3 py-2.5 font-medium">Concepto</th>
-              {/* Por dónde ya se le avisó de este cobro. Va aquí y no pegado al
-                  concepto: junto al nombre los iconos se leían como parte de él. */}
-              <th className="px-3 py-2.5 font-medium">Avisos</th>
-              <th className="px-3 py-2.5 font-medium">
-                <button
-                  type="button"
-                  onClick={() => setOrden((o) => (o === 'asc' ? 'desc' : 'asc'))}
-                  className="inline-flex items-center gap-1 hover:text-gray-700"
-                  title={orden === 'asc' ? 'Del más próximo al más lejano' : 'Del más lejano al más próximo'}
-                >
-                  Vencimiento
-                  <ArrowUpDown className="h-3 w-3" />
-                </button>
-              </th>
-              <th className="px-3 py-2.5 font-medium">Estado</th>
-              <th className="px-3 py-2.5 font-medium text-right">Monto</th>
-              <th className="px-3 py-2.5 font-medium text-right">Pagado</th>
-              <th className="px-3 py-2.5 font-medium text-right">Pendiente</th>
-              <th className="px-3 py-2.5 font-medium text-right">Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const key = `${r.anio}-${r.mes}`;
-              return (
-                <MesFila
-                onReenviarAviso={onReenviarAviso}
-                reenviandoCargoId={reenviandoCargoId}
-                  key={key}
-                  r={r}
-                  diaFacturaAuto={diaFacturaAuto}
-                  tutorClientId={tutorClientId}
-                  abierto={expandidos.has(key)}
-                  onToggle={() => setExpandidos((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(key)) next.delete(key); else next.add(key);
-                    return next;
-                  })}
-                  puedePagos={puedePagos}
-                  puedeFacturar={puedeFacturar}
-                  puedeGestionar={puedeGestionar}
-                  onRegistrarPago={onRegistrarPago}
-                  onAplicarMora={onAplicarMora}
-                  onCrearFactura={onCrearFactura}
-                  onVerFactura={onVerFactura}
-                  onVincular={onVincular}
-                  onAnular={onAnular}
-                  onAnularFactura={onAnularFactura}
-                  onEnviarCorreo={onEnviarCorreo}
-                  onPrevisto={onPrevisto}
-                  onDetalle={onDetalle}
-                  enviadosPorCargo={enviadosPorCargo}
-                  aplicandoMoraFacturaId={aplicandoMoraFacturaId}
-                  marcados={marcados}
-                  onMarcarCargo={onMarcarCargo}
-                  onMarcarVarios={onMarcarVarios}
-                />
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="overflow-hidden rounded-lg border border-gray-100">
+        {/* Solo la tabla se desplaza de lado. El pie con la paginación va fuera
+            de este contenedor: dentro se iba con ella y quedaba cortado. */}
+        <div className="overflow-x-auto">
+          {/* Ancho mínimo con `table-fixed`: sin él las nueve columnas se comprimen
+              hasta montarse unas sobre otras —«RD$3,000.00RD$0.00RD$3,000.00»
+              pegado— en vez de dejar que el contenedor se desplace. El mínimo es la
+              suma de `MINIMOS_CUENTAS`; con un número puesto a mano (860 px) las
+              columnas de importes seguían quedándose cortas.
+              `tabular-nums`: todas las cifras miden lo mismo, así que los importes
+              de una columna caen alineados dígito con dígito. */}
+          <table className="w-full table-fixed text-sm tabular-nums" style={{ minWidth: ANCHO_MINIMO_CUENTAS }}>
+            <ColumnasCuentas />
+            <thead>
+              <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                <th className="px-3 py-2.5 font-medium">Período</th>
+                <th className="px-3 py-2.5 font-medium">Concepto</th>
+                {/* Por dónde ya se le avisó de este cobro. Va aquí y no pegado al
+                    concepto: junto al nombre los iconos se leían como parte de él. */}
+                <th className="px-3 py-2.5 font-medium">Avisos</th>
+                <th className="px-3 py-2.5 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setOrden((o) => (o === 'asc' ? 'desc' : 'asc'))}
+                    className="inline-flex items-center gap-1 hover:text-gray-700"
+                    title={orden === 'asc' ? 'Del más próximo al más lejano' : 'Del más lejano al más próximo'}
+                  >
+                    Vencimiento
+                    <ArrowUpDown className="h-3 w-3" />
+                  </button>
+                </th>
+                <th className="px-3 py-2.5 font-medium">Estado</th>
+                <th className="px-3 py-2.5 font-medium text-right">Monto</th>
+                <th className="px-3 py-2.5 font-medium text-right">Pagado</th>
+                <th className="px-3 py-2.5 font-medium text-right">Pendiente</th>
+                <th className="px-3 py-2.5 font-medium text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const key = `${r.anio}-${r.mes}`;
+                return (
+                  <MesFila
+                  onReenviarAviso={onReenviarAviso}
+                  reenviandoCargoId={reenviandoCargoId}
+                    key={key}
+                    r={r}
+                    diaFacturaAuto={diaFacturaAuto}
+                    tutorClientId={tutorClientId}
+                    abierto={expandidos.has(key)}
+                    onToggle={() => setExpandidos((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(key)) next.delete(key); else next.add(key);
+                      return next;
+                    })}
+                    puedePagos={puedePagos}
+                    puedeFacturar={puedeFacturar}
+                    puedeGestionar={puedeGestionar}
+                    onRegistrarPago={onRegistrarPago}
+                    onAplicarMora={onAplicarMora}
+                    onCrearFactura={onCrearFactura}
+                    onVerFactura={onVerFactura}
+                    onVincular={onVincular}
+                    onAnular={onAnular}
+                    onAnularFactura={onAnularFactura}
+                    onEnviarCorreo={onEnviarCorreo}
+                    onPrevisto={onPrevisto}
+                    onDetalle={onDetalle}
+                    enviadosPorCargo={enviadosPorCargo}
+                    aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+                    marcados={marcados}
+                    onMarcarCargo={onMarcarCargo}
+                    onMarcarVarios={onMarcarVarios}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
           <span>
@@ -1684,8 +1691,34 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
  * desplazadas respecto a las del padre, que es justo lo que hace que el
  * desplegable parezca un cuerpo extraño en vez de la continuación de la fila.
  */
-// La columna de Avisos va estrecha: son tres iconos de 14 px.
-const ANCHOS_CUENTAS = ['16%', '23%', '7%', '10%', '9%', '10%', '9%', '11%', '5%'];
+/**
+ * Lo mínimo que necesita cada columna, en px y contando el relleno de la celda.
+ *
+ * Antes eran porcentajes puestos a ojo —Monto 10 %, Pagado 9 %— sobre una tabla
+ * de 860 px como mínimo: 77 px para un «RD$3,000.00» que mide 90. El importe se
+ * salía de su celda y se montaba sobre el de al lado, el mes se cortaba en
+ * «Septiem…» y el estado en «Sin f…».
+ *
+ * Cada número de aquí sale de medir el dato más largo de su columna: el mes con
+ * su casilla y sus iconos, un importe de cinco cifras, la etiqueta «Sin
+ * facturar», los dos botones de un cargo ya facturado. De la lista salen las
+ * dos cosas a la vez —el ancho mínimo de la tabla es la suma y el porcentaje de
+ * cada columna es su parte de esa suma—, así que en el mínimo cada una tiene
+ * justo lo suyo y de ahí para arriba crecen todas a la par.
+ */
+const MINIMOS_CUENTAS = [
+  204, // Período
+  180, // Concepto: el único que puede partirse en dos líneas
+  76,  // Avisos: tres iconos de 14 px
+  112, // Vencimiento
+  112, // Estado
+  116, // Monto
+  116, // Pagado
+  116, // Pendiente
+  76,  // Acción
+];
+const ANCHO_MINIMO_CUENTAS = MINIMOS_CUENTAS.reduce((s, w) => s + w, 0);
+const ANCHOS_CUENTAS = MINIMOS_CUENTAS.map((w) => `${(w / ANCHO_MINIMO_CUENTAS) * 100}%`);
 
 /**
  * La casilla para meter un cargo en la próxima factura.
