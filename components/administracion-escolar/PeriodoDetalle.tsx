@@ -241,7 +241,7 @@ const VISTAS = ['mensualidades', 'otros', 'facturas', 'pagos'] as const;
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, avisos, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, perfilEmpresa, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onEnviarFactura, onReenviarAviso, reenviandoCargoId }: {
+export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, avisos, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, clienteInicial, perfilEmpresa, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onEnviarFactura, onReenviarAviso, reenviandoCargoId }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   planes: PlanesPorMatricula | undefined;
   /** Recargo del negocio y canales del colegio: para explicar cada cuota. */
@@ -257,6 +257,13 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   puedeGestionar: boolean;
   estudianteId: number;
   tutorClientId: number | null;
+  /**
+   * El responsable de pago, para «Nueva factura» cuando no queda ningún cargo
+   * que facturar: sin él el cajón abría sin comprador ni beneficiarios. Es el
+   * mismo dato que le pasa la ficha de la familia.
+   */
+  clienteInicial?: { id: number; razonSocial: string; rnc: string | null;
+    email: string | null; telefono: string | null } | null;
   /** Datos del emisor, resueltos en el servidor por la página. Los usa el cajón. */
   perfilEmpresa: EmpresaPerfil | null;
   onRegistrarPago: (ecfDocumentId: number) => void;
@@ -326,6 +333,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
    * Y vive en la URL, no en un `useState`: recargar no lo cierra y el enlace
    * se puede mandar.
    *
+   *   ?factura=nueva       → todo lo que el alumno debe sin facturar en el período
    *   ?factura=c:12,13     → esos cargos
    *   ?factura=p:2811.44.3 → un mes por adelantado (matrícula.cuota.concepto)
    */
@@ -345,7 +353,9 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         ? { cargos: null, previsto: { matriculaId: m, cuotaId: c, conceptoId: k } }
         : null;
     }
-    return null;
+    // Cualquier otra cosa es «Nueva factura» a secas, igual que en la ficha de
+    // la familia: mejor eso que una URL que dice que hay un cajón y no lo abre.
+    return { cargos: null, previsto: null };
   }, [enCurso]);
 
   const facturarCargos = (ids: number[]) => {
@@ -901,7 +911,15 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           onCargoCreado();
         }}
         perfilEmpresa={perfilEmpresa}
-        cargosIniciales={cajon?.cargos ?? []}
+        // «Nueva factura» (sin cargos en la URL) arranca de lo que el alumno
+        // debe sin facturar: solo lo que NO tiene factura y aún tiene saldo,
+        // porque volver a facturar un cargo ya facturado le cobraría dos veces
+        // a la familia. En orden de mes, que es como se lee una factura.
+        cargosIniciales={cajon?.previsto ? [] : (cajon?.cargos ?? cargosSinFactura
+          .filter((c) => c.saldoCentavos > 0)
+          .sort((a, b) => a.anio - b.anio || (a.mes ?? 0) - (b.mes ?? 0) || a.id - b.id)
+          .map((c) => c.id))}
+        clienteInicial={clienteInicial ?? null}
         previsto={cajon?.previsto ?? null}
       />
 

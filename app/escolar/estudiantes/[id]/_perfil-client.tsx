@@ -12,10 +12,10 @@ import { Label } from '@/components/ui/label';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Ban, Mail, MessageCircle, Smartphone, Users } from 'lucide-react';
+import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Ban, Mail, MessageCircle, Receipt, Smartphone, Users } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
-import { useTabUrl } from '@/lib/hooks/useUrlEstado';
+import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 
 import { labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
@@ -170,6 +170,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   // Pestaña activa en la URL (?tab=…), para que recargar o volver desde una
   // factura caiga donde el usuario estaba.
   const [tab, setTab] = useTabUrl('tab', TABS, 'periodo');
+  const { setParams } = useUrlParams();
 
   /**
    * El alta manda aquí con `?matricular=1` en cuanto crea al alumno.
@@ -604,18 +605,38 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
       </div>
 
       {/* Filtro de período — padre global: filtra el detalle de "Por período".
-          Al lado, la reinscripción crea una matrícula nueva (otro período/curso). */}
+          Al lado va lo que se hace con el alumno que se tiene delante: al que
+          nunca estuvo matriculado, inscribirlo; al que ya lo está, facturarle. */}
       {(grupos.length > 0 || puedeGestionar) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           {grupos.length > 0
             ? <PeriodoFiltroBar grupos={grupos} value={grupoActivo?.key ?? null} onChange={setPeriodoKey} />
             : <span className="text-sm text-gray-400">Sin períodos matriculados</span>}
-          {puedeGestionar && (
-            <Button size="sm" variant="outline" onClick={() => setReinscribirAbierto(true)}>
-              {/* «Reinscribir» delante de alguien que nunca estuvo matriculado
-                  se lee como si te hubieras equivocado de botón. */}
-              <Plus className="h-4 w-4 mr-1.5" />{matriculas.length === 0 ? 'Inscribir' : 'Reinscribir'}
-            </Button>
+          {matriculas.length === 0 ? (
+            puedeGestionar && (
+              <Button size="sm" variant="outline" onClick={() => setReinscribirAbierto(true)}>
+                <Plus className="h-4 w-4 mr-1.5" />Inscribir
+              </Button>
+            )
+          ) : (
+            /* El mismo botón que tiene la ficha del responsable de pago. Aquí
+               estaba «Reinscribir», que se usa una vez al año; facturar es lo
+               que se viene a hacer a esta pantalla y solo se podía mes a mes,
+               desde los tres puntos de cada fila. Hace falta un responsable:
+               sin él no hay a quién emitirle la factura, y eso se resuelve con
+               «Asignar responsable», que está arriba. */
+            puedeFacturar && grupoActivo && responsable && (
+              <Button
+                size="sm"
+                variant="default"
+                // La pestaña y el cajón en un solo cambio de URL: el cajón vive
+                // dentro de «Por período», y desde «Tutores» o «Documentos» no
+                // habría dónde abrirlo.
+                onClick={() => setParams({ tab: null, factura: 'nueva' })}
+              >
+                <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
+              </Button>
+            )
           )}
         </div>
       )}
@@ -653,6 +674,11 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                 puedeGestionar={puedeGestionar}
                 estudianteId={estudiante.id}
                 tutorClientId={responsable?.clientId ?? null}
+                clienteInicial={responsable ? {
+                  id: responsable.clientId, razonSocial: responsable.razonSocial,
+                  rnc: responsable.rnc, email: responsable.email,
+                  telefono: responsable.telefono ?? responsable.celular,
+                } : null}
                 perfilEmpresa={perfilEmpresa}
                 onRegistrarPago={abrirPago}
                 onAplicarMora={(ecfId) => setMoraFacturaId(ecfId)}
