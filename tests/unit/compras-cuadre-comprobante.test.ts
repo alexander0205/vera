@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cuadrarConComprobante, erroresCompra, resumirCompra, totalizarLineas } from '@/lib/compras/fiscal';
-import { datosDesdeIa, inicialDesdeCaptura, type LecturaIa } from '@/lib/compras/captura/datos';
+import { cuadrarLineas, datosDesdeIa, inicialDesdeCaptura, type LecturaIa } from '@/lib/compras/captura/datos';
 
 /**
  * El caso que destapó esto: una factura de internet de RD$1,500.01.
@@ -89,5 +89,28 @@ describe('borrador leído de una factura con impuestos que no son ITBIS', () => 
       otrosImpuestosCents: inicial.otrosImpuestosCents ?? 0,
     }));
     expect(cuadrarConComprobante(resumen.totalCents, inicial.montoTotalCents!).estado).toBe('cuadra');
+  });
+});
+
+describe('las líneas contra el total, con impuestos que no son ITBIS', () => {
+  const lineas = [
+    { descripcion: 'Internet', cantidad: 1, costoUnitarioCents: 210_000, itbisTasa: '0.18' as const, esServicio: true, categoria: null },
+    { descripcion: 'Router', cantidad: 1, costoUnitarioCents: 25_000, itbisTasa: '0.18' as const, esServicio: false, categoria: null },
+  ];
+  // 2,350.00 + ITBIS 423.00 + ISC 235.00 + contribución 47.00 = 3,055.00
+  const TOTAL = 305_500;
+  const EXTRAS = 23_500 + 4_700;
+
+  it('descontando el ISC y la contribución, las líneas cuadran', () => {
+    expect(cuadrarLineas(lineas, TOTAL, EXTRAS)).toMatchObject({ noCuadra: false, incluianItbis: false });
+  });
+
+  it('sin descontarlos avisaba de que no cuadran estando bien', () => {
+    // El aviso falso que salía en la primera lectura real con IA.
+    expect(cuadrarLineas(lineas, TOTAL).noCuadra).toBe(true);
+  });
+
+  it('y sigue cazando las líneas que de verdad no explican el total', () => {
+    expect(cuadrarLineas(lineas, 900_000, EXTRAS).noCuadra).toBe(true);
   });
 });

@@ -198,7 +198,11 @@ export function datosDesdeIa(l: LecturaIa, hoy: string = new Date().toISOString(
   // Las cuentas tienen que cuadrar: los modelos pequeños a veces toman el precio
   // con ITBIS incluido (recibos de supermercado) o se inventan el total cuando la
   // foto está cortada. Se comprueba contra el total leído, no se adivina.
-  const cuadre = cuadrarLineas(lineas, aCents(total));
+  const cuadre = cuadrarLineas(
+    lineas,
+    aCents(total),
+    (aCents(l.isc) ?? 0) + (aCents(l.otrosImpuestos) ?? 0) + (aCents(l.propina) ?? 0),
+  );
   if (cuadre.incluianItbis) avisos.push('Los precios de la factura ya incluían el ITBIS: se separó en cada línea.');
   if (cuadre.noCuadra) avisos.push('Las líneas no suman el total leído: revísalas con la foto antes de registrar.');
 
@@ -260,11 +264,19 @@ const TASA_NUM: Record<TasaItbis, number> = { '0.18': 0.18, '0.16': 0.16, '0': 0
  * TAL CUAL ya dan el total (±1 %), es que el precio impreso incluía el ITBIS y
  * se le quita a cada una. Si ni así ni sumándoles el ITBIS se llega al total,
  * se avisa. Sin total leído no se toca nada.
+ *
+ * `extrasCents` es todo lo que el total lleva encima y NO es ITBIS: el ISC, la
+ * contribución de telecomunicaciones, la propina. Sin descontarlo, una factura
+ * de internet jamás cuadra —las líneas más su ITBIS se quedan por debajo del
+ * total— y salía un aviso de que no cuadran cuando estaban perfectas. Un aviso
+ * que siempre salta enseña a no leer los avisos.
  */
-export function cuadrarLineas(lineas: LineaCaptura[], totalCents: number | null): {
+export function cuadrarLineas(lineas: LineaCaptura[], totalCents: number | null, extrasCents = 0): {
   lineas: LineaCaptura[]; incluianItbis: boolean; noCuadra: boolean;
 } {
   if (!lineas.length || !totalCents) return { lineas, incluianItbis: false, noCuadra: false };
+  // Contra lo que de verdad tienen que explicar las líneas.
+  totalCents = Math.max(0, totalCents - Math.max(0, extrasCents));
   const tal = lineas.reduce((s, x) => s + x.cantidad * x.costoUnitarioCents, 0);
   const conItbis = lineas.reduce((s, x) => s + Math.round(x.cantidad * x.costoUnitarioCents * (1 + TASA_NUM[x.itbisTasa])), 0);
   const cerca = (a: number) => Math.abs(a - totalCents) <= Math.max(100, totalCents * 0.01);

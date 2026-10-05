@@ -1,6 +1,7 @@
 import 'server-only';
 import { generateText, Output, type LanguageModel } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { CATEGORIAS_COMPRA } from '../categorias';
 import { esquemaLecturaIa, type LecturaIa } from './datos';
 
@@ -13,7 +14,11 @@ import { esquemaLecturaIa, type LecturaIa } from './datos';
  *   · **Vercel AI Gateway**: en Vercel autentica solo con el token OIDC del
  *     despliegue (hay que habilitarlo en el proyecto); en local, con
  *     AI_GATEWAY_API_KEY.
- *   · **Llave de Anthropic** (ANTHROPIC_API_KEY): para probar sin gateway.
+ *   · **Llave del proveedor** (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY):
+ *     se habla directo con él, sin pasar por el gateway. Es el camino para
+ *     probar la lectura en local antes de tener gateway, y el que queda si el
+ *     gateway se cae. Ojo con el plan gratuito de Google AI Studio: entrena con
+ *     lo que se le manda, así que ahí no van facturas de un cliente.
  *
  * Sin ninguna de las dos no se llama a nadie: el QR del e-CF sigue leyéndose y
  * lo demás queda para completarlo mirando la foto.
@@ -42,16 +47,19 @@ const porGateway = () => Boolean(process.env.AI_GATEWAY_API_KEY || process.env.V
 function comoModelo(id: string): LanguageModel | null {
   if (!id) return null;
   if (porGateway()) return id;
-  // Sin gateway solo se puede llamar a Anthropic, con su llave: para ese camino
-  // hay que pedir un modelo suyo en CAPTURA_IA_MODELO o en el respaldo.
+  // Sin gateway se llama al proveedor directamente, con su llave. El id lleva
+  // delante quién lo sirve —`google/gemini-2.5-flash-lite`— y es el mismo que
+  // usa el gateway, así que cambiar de camino no obliga a tocar la config.
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY && id.startsWith('google/')) return google(id.slice('google/'.length));
   if (process.env.ANTHROPIC_API_KEY && id.startsWith('anthropic/')) return anthropic(id.slice('anthropic/'.length));
   return null;
 }
 
 /**
- * El modelo con el que leer, o null si no hay forma de llamarlo. Con una llave
- * suelta de Anthropic —sin gateway— el principal no se puede llamar, así que
- * entra el respaldo: es lo que hace que funcione poniendo solo ANTHROPIC_API_KEY.
+ * El modelo con el que leer, o null si no hay forma de llamarlo. Cuando la
+ * llave suelta que hay no sirve para el principal —una de Anthropic con un
+ * modelo de Google delante— entra el respaldo, y por eso basta con poner una
+ * sola llave para que esto funcione.
  */
 export const modeloCaptura = (): LanguageModel | null => comoModelo(MODELO) ?? comoModelo(RESPALDO);
 
