@@ -318,7 +318,24 @@ export function datosDesdeTimbre(t: TimbreEcf, rncEmpresa: string | null): Datos
 export function combinarDatos(qr: DatosCaptura | null, ia: DatosCaptura | null): DatosCaptura {
   if (!qr) return ia ?? { ...DATOS_VACIOS };
   if (!ia) return qr;
-  const avisos = [...qr.avisos, ...ia.avisos];
+
+  /**
+   * Los avisos de la lectura con IA que el QR deja sin sentido.
+   *
+   * La IA se queja de lo que no supo leer, y el QR trae justo esos campos
+   * exactos. Sin quitarlos salía «No se leyó el RNC del proveedor» con el RNC
+   * ahí puesto, al lado. Un aviso que contradice lo que se está viendo le quita
+   * el crédito a todos los demás, y los otros hay que leerlos.
+   */
+  const resueltos: [boolean, RegExp][] = [
+    [qr.proveedorRnc != null, /RNC del proveedor/i],
+    [qr.ncf != null, /NCF válido/i],
+    [qr.fecha != null, /fecha leída/i],
+  ];
+  const avisos = [
+    ...qr.avisos,
+    ...ia.avisos.filter((a) => !resueltos.some(([loTrae, patron]) => loTrae && patron.test(a))),
+  ];
   if (qr.totalCents != null && ia.totalCents != null && Math.abs(qr.totalCents - ia.totalCents) > 100) {
     avisos.push('El total leído de la foto no coincide con el del QR: vale el del QR.');
   }

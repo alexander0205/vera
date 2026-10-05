@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { cuadrarConComprobante, erroresCompra, resumirCompra, totalizarLineas } from '@/lib/compras/fiscal';
-import { cuadrarLineas, datosDesdeIa, inicialDesdeCaptura, type LecturaIa } from '@/lib/compras/captura/datos';
+import { combinarDatos, cuadrarLineas, datosDesdeIa, datosDesdeTimbre, inicialDesdeCaptura, type LecturaIa } from '@/lib/compras/captura/datos';
+import { leerTimbre } from '@/lib/compras/captura/timbre';
 
 /**
  * El caso que destapó esto: una factura de internet de RD$1,500.01.
@@ -112,5 +113,44 @@ describe('las líneas contra el total, con impuestos que no son ITBIS', () => {
 
   it('y sigue cazando las líneas que de verdad no explican el total', () => {
     expect(cuadrarLineas(lineas, 900_000, EXTRAS).noCuadra).toBe(true);
+  });
+});
+
+describe('el QR calla los avisos de la IA que él mismo resuelve', () => {
+  // Un timbre de prueba real, generado fuera de aquí: trae el emisor, el e-NCF,
+  // la fecha y el total exactos.
+  const QR = 'https://ecf.dgii.gov.do/testecf/consultatimbre?rncemisor=130000001'
+    + '&rnccomprador=133716348&encf=e310000000001&fechaemision=10-10-2020'
+    + '&montototal=02.11&codigoseguridad=dcp79q';
+
+  const lecturaCiega = (p: Partial<LecturaIa> = {}): LecturaIa => ({
+    esFactura: true, clase: 'gasto', legible: true, completa: true,
+    proveedorNombre: 'PROVEEDOR DE PRUEBA SRL', nif: null, proveedorRnc: null, tipoProveedor: null,
+    resolucionDgii: null, fechaResolucionDgii: null, ncf: null, fecha: null,
+    formaPago: null, metodoPago: null, categoria: null, moneda: 'DOP',
+    subtotal: null, itbis: null, isc: null, otrosImpuestos: null, propina: null,
+    itbisRetenido: null, isrRetenido: null, totalImpreso: null, total: null, lineas: [], ...p,
+  });
+
+  it('no dice «no se leyó el RNC» cuando el QR lo trae', () => {
+    const ia = datosDesdeIa(lecturaCiega(), '2026-10-05');
+    expect(ia.avisos.join(' ')).toContain('No se leyó el RNC');
+
+    const qr = datosDesdeTimbre(leerTimbre(QR)!, '133716348');
+    const juntos = combinarDatos(qr, ia);
+    expect(juntos.proveedorRnc).toBe('130000001');
+    expect(juntos.avisos.join(' ')).not.toContain('No se leyó el RNC');
+    expect(juntos.avisos.join(' ')).not.toContain('No se leyó un NCF válido');
+  });
+
+  it('pero los avisos del propio QR se conservan', () => {
+    const qr = datosDesdeTimbre(leerTimbre(QR)!, '133716348');
+    const juntos = combinarDatos(qr, datosDesdeIa(lecturaCiega(), '2026-10-05'));
+    expect(juntos.avisos.join(' ')).toContain('ambiente de pruebas');
+  });
+
+  it('y sin QR el aviso de la IA sigue saliendo', () => {
+    const ia = datosDesdeIa(lecturaCiega(), '2026-10-05');
+    expect(combinarDatos(null, ia).avisos.join(' ')).toContain('No se leyó el RNC');
   });
 });
