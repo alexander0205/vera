@@ -20,9 +20,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarEstudiantes } from '@/lib/db/schema';
+import { adminEscolarCargos, adminEscolarEstudiantes } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { fichaEstudiante } from '@/lib/administracion-escolar/ficha-estudiante';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -38,18 +38,40 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
   }
 
+  /**
+   * Los hijos que se enseñan: los activos, y los que sin estarlo deben algo.
+   *
+   * Es el mismo corte que usa la cabecera de la familia (`detalleResponsable`),
+   * y tiene que serlo: si una dijera «1 hijo matriculado» y la otra pintara dos
+   * tarjetas, la pantalla se contradiría a sí misma.
+   *
+   * Salían todos los que cuelgan del contacto, y con eso la ficha repetida de
+   * un alumno —ya retirada, sin matrícula y sin un peso pendiente— aparecía
+   * como un segundo hijo «sin matrícula».
+   */
   const hijos = await db
     .select({
       id: adminEscolarEstudiantes.id,
       nombres: adminEscolarEstudiantes.nombres,
       apellidos: adminEscolarEstudiantes.apellidos,
+      estado: adminEscolarEstudiantes.estado,
     })
     .from(adminEscolarEstudiantes)
     .where(and(
       eq(adminEscolarEstudiantes.teamId, auth.teamId),
       eq(adminEscolarEstudiantes.facturarAClientId, clientId),
+      or(
+        eq(adminEscolarEstudiantes.estado, 'activo'),
+        sql`EXISTS (
+          SELECT 1 FROM ${adminEscolarCargos}
+           WHERE ${adminEscolarCargos.estudianteId} = ${adminEscolarEstudiantes.id}
+             AND ${adminEscolarCargos.teamId} = ${auth.teamId}
+             AND ${adminEscolarCargos.estado} <> 'anulado'
+             AND ${adminEscolarCargos.saldoCentavos} > 0
+        )`,
+      ),
     ))
-    .orderBy(adminEscolarEstudiantes.nombres);
+    .orderBy(sql`(${adminEscolarEstudiantes.estado} = 'activo') DESC`, adminEscolarEstudiantes.nombres);
 
   // Sin hijos no es un error: es un contacto de Facturación al que todavía no
   // se le ha asignado ningún alumno. La pantalla lo dice con una lista vacía.
@@ -139,7 +161,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     // El año en curso primero: es el que se viene a mirar.
     periodos.sort((a, b) => Number(b.activo) - Number(a.activo) || (b.periodoId ?? 0) - (a.periodoId ?? 0));
-    out.push({ estudianteId: h.id, alumno, periodos });
+    out.push({ estudianteId: h.id, alumno, estado: h.estado, periodos });
   }
 
   return NextResponse.json({ hijos: out });

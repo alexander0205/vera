@@ -179,6 +179,13 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const c = data.contacto;
 
   /*
+    «Matriculado» es el que está activo. La lista de hijos puede traer además a
+    un retirado que dejó algo debiendo —hay que seguir viéndolo para cobrarle—,
+    pero ese ya no es un hijo matriculado y no se cuenta como tal.
+  */
+  const matriculados = data.hijos.filter((h) => h.estado === 'activo').length;
+
+  /*
     Las cuatro cifras tienen que contar EL MISMO dinero.
 
     «Facturado» salía solo de los cargos y «Pendiente» sumaba además las
@@ -312,7 +319,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             </Typography>
             <Separador />
             <Typography component="span" sx={{ fontSize: '0.78125rem', color: '#6B7280' }}>
-              {data.hijos.length} {data.hijos.length === 1 ? 'hijo matriculado' : 'hijos matriculados'}
+              {matriculados} {matriculados === 1 ? 'hijo matriculado' : 'hijos matriculados'}
             </Typography>
             <Separador />
             {pendiente <= 0 ? (

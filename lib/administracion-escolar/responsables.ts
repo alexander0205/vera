@@ -22,6 +22,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { avisosProgramadosDeEstudiante } from '@/lib/administracion-escolar/ficha-estudiante';
+import { coincideDocumento } from '@/lib/busqueda/documento';
 
 export interface FilaResponsable {
   clientId: number;
@@ -31,8 +32,16 @@ export interface FilaResponsable {
   telefono: string | null;
   celular: string | null;
   whatsapp: string | null;
-  /** Alumnos del módulo que le facturan a este contacto. */
+  /**
+   * Hijos MATRICULADOS: alumnos activos que le facturan a este contacto.
+   *
+   * Los retirados no cuentan. Contaban, y una madre con un solo hijo salía con
+   * «2 hijos matriculados» porque al niño lo habían registrado dos veces y la
+   * ficha repetida, ya retirada, seguía colgando de ella.
+   */
   alumnos: number;
+  /** Alumnos suyos que ya no están activos: retirados, graduados, inactivos. */
+  retirados: number;
   /** Beneficiarios en Contactos: los hijos que el colegio ya le factura. */
   beneficiarios: number;
   /** Saldo vivo de los cargos de sus alumnos. */
@@ -50,6 +59,8 @@ export interface ListaResponsables {
   incontactables: number;
   /** Contactos con beneficiarios que aún no tienen alumno en el módulo. */
   sinFicha: number;
+  /** Familias que ya no tienen ningún hijo activo ni deben nada. */
+  retiradas: number;
   /** Las cifras de la cabecera, del colegio entero y no de la página. */
   stats: {
     familias: number;
@@ -64,7 +75,11 @@ export interface ListaResponsables {
  * todavía no tienen ningún alumno del módulo: los que faltan por traer desde
  * Estudiantes. Se dejan a un lado y no mezclados, igual que allí.
  */
-export type FiltroResponsables = 'con-deuda' | 'sin-contacto' | 'sin-ficha' | 'todos';
+export type FiltroResponsables = 'con-deuda' | 'sin-contacto' | 'sin-ficha' | 'retiradas' | 'todos';
+
+/** Los filtros que acepta el listado. La ruta valida contra esta lista. */
+export const FILTROS_RESPONSABLES: readonly FiltroResponsables[] =
+  ['todos', 'con-deuda', 'sin-contacto', 'sin-ficha', 'retiradas'];
 
 export async function listarResponsables(
   teamId: number,
@@ -81,13 +96,17 @@ export async function listarResponsables(
   const base = sql`
     SELECT c.id, c.razon_social, c.rnc, c.email, c.telefono, c.celular, c.whatsapp,
            COALESCE(a.alumnos, 0)::int                    AS alumnos,
+           COALESCE(a.fichas, 0)::int                     AS fichas,
            COALESCE(b.beneficiarios, 0)::int              AS beneficiarios,
            COALESCE(a.deuda, 0)::bigint                   AS deuda_escolar,
            COALESCE(f.saldo, 0)::bigint                   AS deuda_facturas,
            a.vence_mas_viejo::text                        AS vence_mas_viejo
       FROM clients c
       LEFT JOIN LATERAL (
-        SELECT count(DISTINCT e.id) AS alumnos,
+        -- «alumnos» son los activos; «fichas», todos los que cuelgan de él. La
+        -- deuda NO se recorta: lo que dejó debiendo un retirado se sigue debiendo.
+        SELECT count(DISTINCT e.id) FILTER (WHERE e.estado = 'activo') AS alumnos,
+               count(DISTINCT e.id) AS fichas,
                SUM(g.saldo_centavos) AS deuda,
                MIN(g.fecha_vencimiento) FILTER (WHERE g.saldo_centavos > 0) AS vence_mas_viejo
           FROM admin_escolar_estudiantes e
@@ -115,22 +134,49 @@ export async function listarResponsables(
            AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g2 WHERE g2.ecf_document_id = x.id)
       ) f ON true
      WHERE c.team_id = ${teamId}
-       AND (COALESCE(a.alumnos, 0) > 0 OR COALESCE(b.beneficiarios, 0) > 0)
+       AND (COALESCE(a.fichas, 0) > 0 OR COALESCE(b.beneficiarios, 0) > 0)
   `;
 
   /**
-   * Por defecto solo los que SON responsables de un alumno del módulo.
+   * Por defecto solo las familias VIGENTES: las que tienen un hijo activo.
    *
    * Antes salían los 306 contactos con beneficiarios y la pantalla se leía como
    * «el colegio tiene 306 familias», cuando 302 de ellas ni siquiera tienen
    * ficha escolar todavía. Los que faltan por traer viven en su propio filtro.
+   *
+   * Y después salían también las que ya no tienen a nadie en el colegio: el
+   * contador decía 149 familias para 118 que de verdad pagan este año. Ahora
+   * una familia sin hijos activos solo se queda en la lista si todavía debe
+   * algo —que es justo a la que hay que seguir llamando—; el resto pasa a
+   * «Sin hijos activos».
    */
-  const soloConFicha = filtro === 'sin-ficha'
-    ? sql`alumnos = 0`
-    : sql`alumnos > 0`;
+  const debe = sql`(deuda_escolar + deuda_facturas) > 0`;
+  const vigente = sql`(alumnos > 0 OR (fichas > 0 AND ${debe}))`;
+  const retirada = sql`(fichas > 0 AND alumnos = 0 AND NOT ${debe})`;
+  const sinFichaEscolar = sql`fichas = 0`;
 
+  /**
+   * Buscando en «Todas» se busca en todas las que tienen ficha, vigentes o no.
+   *
+   * Quien teclea un nombre o una cédula quiere encontrar a esa persona, no
+   * enterarse de en qué pastilla vive: con la lista vacía y la familia
+   * existiendo, lo que se concluye es que el buscador no funciona.
+   */
+  const conFicha = sql`fichas > 0`;
+  const delFiltro = filtro === 'sin-ficha'
+    ? sinFichaEscolar
+    : filtro === 'retiradas'
+      ? retirada
+      : filtro === 'todos' && q
+        ? conFicha
+        : vigente;
+
+  // Por nombre o por documento. El documento se compara por sus dígitos: la
+  // cédula se guarda pelada y se teclea con guiones.
+  const porDocumento = q ? coincideDocumento(sql`c.rnc`, q) : null;
   const conBusqueda = q
-    ? sql`${base} AND (c.razon_social ILIKE ${'%' + q + '%'} OR c.rnc ILIKE ${'%' + q + '%'})`
+    ? sql`${base} AND (c.razon_social ILIKE ${'%' + q + '%'} OR c.rnc ILIKE ${'%' + q + '%'}${
+        porDocumento ? sql` OR ${porDocumento}` : sql``})`
     : base;
   /** Las cifras de arriba NO se recortan con la búsqueda: son del colegio. */
   const sinFiltroDeTexto = base;
@@ -141,28 +187,35 @@ export async function listarResponsables(
   const extra = filtro === 'sin-contacto'
     ? sql` AND ${sinCanal}`
     : filtro === 'con-deuda'
-      ? sql` AND (deuda_escolar + deuda_facturas) > 0`
+      ? sql` AND ${debe}`
       : sql``;
-  const conFiltro = sql`SELECT * FROM (${conBusqueda}) t WHERE ${soloConFicha}${extra}`;
+  const conFiltro = sql`SELECT * FROM (${conBusqueda}) t WHERE ${delFiltro}${extra}`;
 
-  const [filas, conteo] = await Promise.all([
+  const [filas, cuantas, conteo] = await Promise.all([
     db.execute(sql`
       ${conFiltro}
        ORDER BY (deuda_escolar + deuda_facturas) DESC, razon_social ASC
        LIMIT ${limit} OFFSET ${offset}`),
-    // Los contadores de la cabecera se cuentan sobre TODAS las familias con
-    // ficha, no sobre el filtro ni la página: si cambiaran al filtrar, dejarían
-    // de servir para saber cómo va el colegio.
+    /**
+     * Cuántas filas tiene LO QUE SE ESTÁ MIRANDO: es lo que necesita el
+     * paginador.
+     *
+     * Salía del conteo de abajo, que a propósito no mira ni el filtro ni el
+     * texto, y por eso «Con deuda» y cualquier búsqueda anunciaban las mismas
+     * seis páginas que la lista entera —las últimas, vacías—.
+     */
+    db.execute(sql`SELECT count(*)::int AS n FROM (${conFiltro}) x`),
+    // Los contadores de la cabecera se cuentan sobre TODAS las familias
+    // vigentes, no sobre el filtro ni la página: si cambiaran al filtrar,
+    // dejarían de servir para saber cómo va el colegio.
     db.execute(sql`
-      SELECT count(*) FILTER (WHERE ${soloConFicha})::int                     total,
-             count(*) FILTER (WHERE ${soloConFicha} AND ${sinCanal})::int     incontactables,
-             count(*) FILTER (WHERE alumnos = 0)::int                         sin_ficha,
-             count(*) FILTER (WHERE alumnos > 0)::int                         familias,
-             count(*) FILTER (WHERE alumnos > 0
-               AND (deuda_escolar + deuda_facturas) > 0)::int                 con_deuda,
+      SELECT count(*) FILTER (WHERE ${vigente} AND ${sinCanal})::int          incontactables,
+             count(*) FILTER (WHERE ${sinFichaEscolar})::int                   sin_ficha,
+             count(*) FILTER (WHERE ${retirada})::int                          retiradas,
+             count(*) FILTER (WHERE ${vigente})::int                           familias,
+             count(*) FILTER (WHERE ${vigente} AND ${debe})::int               con_deuda,
              COALESCE(SUM(deuda_escolar + deuda_facturas)
-               FILTER (WHERE alumnos > 0), 0)::bigint                         deuda_total,
-             count(*) FILTER (WHERE alumnos > 0 AND ${sinCanal})::int         sin_canal
+               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_total
         FROM (${sinFiltroDeTexto}) t`),
   ]);
 
@@ -178,24 +231,32 @@ export async function listarResponsables(
       celular: (r.celular as string) ?? null,
       whatsapp: (r.whatsapp as string) ?? null,
       alumnos: Number(r.alumnos ?? 0),
+      retirados: Math.max(0, Number(r.fichas ?? 0) - Number(r.alumnos ?? 0)),
       beneficiarios: Number(r.beneficiarios ?? 0),
       deudaEscolarCentavos: Number(r.deuda_escolar ?? 0),
       deudaFacturasCentavos: Number(r.deuda_facturas ?? 0),
       venceMasViejo: (r.vence_mas_viejo as string) ?? null,
     })),
-    total: Number(c0.total ?? 0),
+    total: Number((cuantas as unknown as Record<string, unknown>[])[0]?.n ?? 0),
     incontactables: Number(c0.incontactables ?? 0),
     sinFicha: Number(c0.sin_ficha ?? 0),
+    retiradas: Number(c0.retiradas ?? 0),
     stats: {
       familias: Number(c0.familias ?? 0),
       conDeuda: Number(c0.con_deuda ?? 0),
       deudaTotalCentavos: Number(c0.deuda_total ?? 0),
-      incontactables: Number(c0.sin_canal ?? 0),
+      incontactables: Number(c0.incontactables ?? 0),
     },
   };
 }
 
-/** Un hijo de la familia, con lo que debe. */
+/**
+ * Un hijo de la familia, con lo que debe.
+ *
+ * Solo salen los activos y los que, sin estarlo, dejaron algo debiendo. La
+ * ficha repetida de un alumno, ya retirada y sin un peso pendiente, no es un
+ * hijo más: enseñarla es contar dos veces al mismo niño.
+ */
 export interface HijoResponsable {
   estudianteId: number | null;
   nombre: string;
@@ -297,7 +358,8 @@ export async function detalleResponsable(
               AND g.estado <> 'anulado' AND g.saldo_centavos > 0
        WHERE e.team_id = ${teamId} AND e.facturar_a_client_id = ${clientId}
        GROUP BY e.id, e.nombres, e.apellidos, e.estado
-       ORDER BY e.nombres`),
+      HAVING e.estado = 'activo' OR COALESCE(SUM(g.saldo_centavos), 0) > 0
+       ORDER BY (e.estado = 'activo') DESC, e.nombres`),
 
     db.execute(sql`
       SELECT x.id, x.codigo, x.encf, x.fecha_emision, x.monto_total,
