@@ -7,6 +7,7 @@
  */
 import 'server-only';
 import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists, notExists } from 'drizzle-orm';
+import { coincideDocumento } from '@/lib/busqueda/documento';
 import { repartirCobro, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
 import { db } from '@/lib/db/drizzle';
 import {
@@ -138,6 +139,12 @@ export async function listarEstudiantesEnriquecidos(
       ilike(adminEscolarEstudiantes.apellidos, p),
       ilike(sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos}`, p),
       ilike(adminEscolarEstudiantes.codigo, p),
+      // Por documento, se haya guardado con guiones o sin ellos. El del alumno
+      // es su código RNE —un menor no tiene cédula—; el del tutor y el de quien
+      // paga, su cédula o su RNC: con la cédula del padre en la mano se llega a
+      // sus hijos sin saber cómo está escrito el nombre.
+      ilike(adminEscolarEstudiantes.codigoRne, p),
+      coincideDocumento(adminEscolarEstudiantes.codigoRne, q) ?? undefined,
       // Buscar por el nombre de CUALQUIER tutor del alumno, no solo del que
       // tuviera marcada la casilla `responsable_pago` —que ya nadie marca, así
       // que buscar «Scarlet» no encontraba a su hijo—. Y también por el
@@ -150,13 +157,19 @@ export async function listarEstudiantesEnriquecidos(
         .where(and(
           eq(adminEscolarEstudianteTutores.estudianteId, adminEscolarEstudiantes.id),
           eq(adminEscolarEstudianteTutores.teamId, teamId),
-          ilike(adminEscolarTutores.nombre, p),
+          or(
+            ilike(adminEscolarTutores.nombre, p),
+            coincideDocumento(adminEscolarTutores.documento, q) ?? undefined,
+          ),
         ))),
       exists(db.select({ x: sql`1` }).from(clients)
         .where(and(
           eq(clients.id, adminEscolarEstudiantes.facturarAClientId),
           eq(clients.teamId, teamId),
-          ilike(clients.razonSocial, p),
+          or(
+            ilike(clients.razonSocial, p),
+            coincideDocumento(clients.rnc, q) ?? undefined,
+          ),
         ))),
     )!);
   }

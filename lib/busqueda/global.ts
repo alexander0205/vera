@@ -36,12 +36,15 @@ import {
   ecfDocuments,
   products,
   adminEscolarEstudiantes,
+  adminEscolarTutores,
   teamMembers,
   users,
 } from '@/lib/db/schema';
 import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
+import { coincideDocumento, fmtDocumento } from '@/lib/busqueda/documento';
+import { resolverFamilias, type VinculoFamilia } from '@/lib/busqueda/familias';
 import {
   TIPOS_RESULTADO,
   TITULO_GRUPO,
@@ -97,24 +100,57 @@ function pesos(centavos: number | null | undefined): string {
   return `RD$ ${((centavos ?? 0) / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
 }
 
+/**
+ * Cuántas personas se traen antes de decidir a qué ficha lleva cada una. Más
+ * que el tope de la lista porque varias coincidencias acaban siendo la MISMA
+ * persona (contacto y tutor a la vez) y se funden en un renglón.
+ */
+const CANDIDATOS_FAMILIA = 20;
+
 interface Contexto {
   teamId: number;
   q: string;
   p: string;
   /** ¿Puede ver facturas? Decide a dónde lleva una venta del POS. */
   verFacturas: boolean;
+  /**
+   * Buscando desde Gobernanza, y con permiso para ver a las familias.
+   *
+   * Ahí el padre ya sale en «Padres y responsables», que lo lleva a su ficha
+   * del colegio. Repetirlo debajo como «Cliente» ofrecía dos renglones con el
+   * mismo nombre, y el segundo abría el formulario de Contactos de
+   * Facturación: quien buscaba a un padre acababa editando un cliente.
+   */
+  familiasAparte: boolean;
 }
 
 // ─── Fuentes ─────────────────────────────────────────────────────────────────
 // Cada una: filtra por teamId, ordena por lo más útil y corta en TOPE.
 
-async function buscarClientes({ teamId, p }: Contexto): Promise<ResultadoBusqueda[]> {
+async function buscarClientes({ teamId, p, q, familiasAparte }: Contexto): Promise<ResultadoBusqueda[]> {
   const filas = await db
     .select({ id: clients.id, razonSocial: clients.razonSocial, rnc: clients.rnc, email: clients.email })
     .from(clients)
     .where(and(
       eq(clients.teamId, teamId),
-      or(ilike(clients.razonSocial, p), ilike(clients.rnc, p), ilike(clients.email, p)),
+      or(
+        ilike(clients.razonSocial, p), ilike(clients.rnc, p), ilike(clients.email, p),
+        // Por documento, se haya guardado con guiones o sin ellos.
+        coincideDocumento(clients.rnc, q) ?? undefined,
+      ),
+      // Dentro de Gobernanza, quien es familia del colegio sale en su grupo y
+      // no aquí. Familia = le facturan a un alumno, o es tutor de alguno.
+      familiasAparte
+        ? sql`NOT EXISTS (
+            SELECT 1 FROM ${adminEscolarEstudiantes}
+             WHERE ${adminEscolarEstudiantes.facturarAClientId} = ${clients.id}
+               AND ${adminEscolarEstudiantes.teamId} = ${teamId}
+          ) AND NOT EXISTS (
+            SELECT 1 FROM ${adminEscolarTutores}
+             WHERE ${adminEscolarTutores.clientId} = ${clients.id}
+               AND ${adminEscolarTutores.teamId} = ${teamId}
+          )`
+        : undefined,
     ))
     .orderBy(clients.razonSocial)
     .limit(TOPE);
@@ -122,7 +158,7 @@ async function buscarClientes({ teamId, p }: Contexto): Promise<ResultadoBusqued
     tipo: 'cliente' as const,
     id: c.id,
     label: c.razonSocial,
-    sublabel: c.rnc ? `RNC ${c.rnc}` : (c.email ?? 'Sin RNC'),
+    sublabel: fmtDocumento(c.rnc) ?? c.email ?? 'Sin RNC',
     // `/dashboard/clientes/:id` NO existe —la única pantalla de un contacto
     // suelto es su ficha de edición— y enlazar ahí daba un 404. El listado
     // tampoco sirve: no lee ningún parámetro de búsqueda, así que llevaría a
@@ -265,10 +301,13 @@ async function buscarVentas({ teamId, p, verFacturas }: Contexto): Promise<Resul
  * saldos del colegio entero y calcula estadísticas, y eso no puede correr en
  * cada pulsación de tecla.
  *
+ * Y por su documento, que en un menor es el código RNE: no tiene cédula.
+ *
  * Buscar por el nombre del padre no hace falta aquí: para eso está el grupo
- * «Responsables de pago», que sale justo debajo.
+ * «Padres y responsables», que sale justo debajo y lleva a la ficha de quien
+ * paga.
  */
-async function buscarEstudiantes({ teamId, p }: Contexto): Promise<ResultadoBusqueda[]> {
+async function buscarEstudiantes({ teamId, p, q }: Contexto): Promise<ResultadoBusqueda[]> {
   const filas = await db
     .select({
       id: adminEscolarEstudiantes.id,
@@ -292,9 +331,16 @@ async function buscarEstudiantes({ teamId, p }: Contexto): Promise<ResultadoBusq
         ilike(adminEscolarEstudiantes.apellidos, p),
         ilike(sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos}`, p),
         ilike(adminEscolarEstudiantes.codigo, p),
+        ilike(adminEscolarEstudiantes.codigoRne, p),
+        coincideDocumento(adminEscolarEstudiantes.codigoRne, q) ?? undefined,
       ),
     ))
-    .orderBy(adminEscolarEstudiantes.apellidos, adminEscolarEstudiantes.nombres)
+    // Los activos primero. Con cinco huecos, la ficha repetida y ya retirada
+    // de un alumno no puede salir por delante de la que se usa.
+    .orderBy(
+      sql`(${adminEscolarEstudiantes.estado} = 'activo') DESC`,
+      adminEscolarEstudiantes.apellidos, adminEscolarEstudiantes.nombres,
+    )
     .limit(TOPE);
   return filas.map((e) => ({
     tipo: 'estudiante' as const,
@@ -310,34 +356,99 @@ async function buscarEstudiantes({ teamId, p }: Contexto): Promise<ResultadoBusq
 }
 
 /**
- * Responsables de pago: el contacto al que el colegio le factura.
+ * Padres y responsables de pago.
  *
- * No son una tabla propia —el módulo se apoya en el padrón de Facturación—,
- * así que la familia se reconoce por tener al menos un alumno que le factura a
- * ella. El ferretero que le vende al colegio no es una familia y no sale.
+ * Dos fuentes, porque una persona entra al colegio de dos maneras:
+ *
+ *   · como CONTACTO al que se le factura —el padrón es el de Facturación, y la
+ *     familia se reconoce por tener un alumno que le factura a ella; el
+ *     ferretero que le vende al colegio no sale—,
+ *   · como TUTOR de un alumno, pague o no.
+ *
+ * Antes solo se miraba la primera, así que el padre que no paga no existía
+ * para el buscador. Ahora se encuentran los dos y los dos llevan al mismo
+ * sitio: la ficha del responsable de pago del hijo. A cuál exactamente lo
+ * decide `resolverFamilias`.
+ *
+ * Por nombre, por correo o por documento —cédula o RNC, con guiones o sin—.
+ *
+ * Una sola consulta: los tutores se buscan por lo escrito Y por ser el
+ * contacto de alguien que ya coincidió, para que un padre que figura con un
+ * nombre en Contactos y otro en su ficha de tutor siga siendo una persona.
  */
-async function buscarResponsables({ teamId, p }: Contexto): Promise<ResultadoBusqueda[]> {
-  const filas = await db
-    .select({ id: clients.id, razonSocial: clients.razonSocial, rnc: clients.rnc, email: clients.email })
-    .from(clients)
-    .where(and(
-      eq(clients.teamId, teamId),
-      or(ilike(clients.razonSocial, p), ilike(clients.rnc, p), ilike(clients.email, p)),
-      sql`EXISTS (
-        SELECT 1 FROM ${adminEscolarEstudiantes}
-        WHERE ${adminEscolarEstudiantes.facturarAClientId} = ${clients.id}
-          AND ${adminEscolarEstudiantes.teamId} = ${teamId}
-      )`,
-    ))
-    .orderBy(clients.razonSocial)
-    .limit(TOPE);
-  return filas.map((r) => ({
-    tipo: 'responsable' as const,
-    id: r.id,
-    label: r.razonSocial,
-    sublabel: r.rnc ? `RNC ${r.rnc}` : (r.email ?? 'Familia del colegio'),
-    href: `/escolar/responsables/${r.id}`,
+async function buscarResponsables({ teamId, p, q }: Contexto): Promise<ResultadoBusqueda[]> {
+  const docContacto = coincideDocumento(sql`c.rnc`, q);
+  const docTutor = coincideDocumento(sql`t.documento`, q);
+  const coincideContacto = sql`(c.razon_social ILIKE ${p} OR c.rnc ILIKE ${p} OR c.email ILIKE ${p}${
+    docContacto ? sql` OR ${docContacto}` : sql``})`;
+  const coincideTutor = sql`(t.nombre ILIKE ${p} OR t.documento ILIKE ${p} OR t.email ILIKE ${p}${
+    docTutor ? sql` OR ${docTutor}` : sql``})`;
+
+  const filas = await db.execute(sql`
+    WITH pagadores AS (
+      SELECT c.id, c.razon_social, c.rnc
+        FROM clients c
+       WHERE c.team_id = ${teamId} AND ${coincideContacto}
+         AND EXISTS (SELECT 1 FROM admin_escolar_estudiantes e
+                      WHERE e.facturar_a_client_id = c.id AND e.team_id = ${teamId})
+       ORDER BY c.razon_social
+       LIMIT ${CANDIDATOS_FAMILIA}
+    ),
+    tutores AS (
+      SELECT t.id, t.client_id, t.nombre, t.documento
+        FROM admin_escolar_tutores t
+       WHERE t.team_id = ${teamId}
+         AND (${coincideTutor} OR t.client_id IN (SELECT id FROM pagadores))
+       ORDER BY t.nombre
+       LIMIT ${CANDIDATOS_FAMILIA}
+    )
+    -- Por quién paga cada contacto.
+    SELECT pg.id AS persona_client_id, NULL::int AS tutor_id,
+           pg.razon_social AS nombre, pg.rnc AS documento, NULL::text AS relacion,
+           e.id AS estudiante_id,
+           -- Solo los nombres: «paga por Ana y Luis» ya lleva el apellido en
+           -- quien paga, y con cinco renglones no sobra el ancho.
+           e.nombres AS alumno,
+           (e.estado = 'activo') AS activo,
+           pg.id AS destino_id, pg.razon_social AS destino,
+           true AS pagador_asignado
+      FROM pagadores pg
+      JOIN admin_escolar_estudiantes e
+        ON e.facturar_a_client_id = pg.id AND e.team_id = ${teamId}
+    UNION ALL
+    -- De quién es padre o tutor cada uno, y quién paga por ese hijo.
+    SELECT t.client_id, t.id, t.nombre, t.documento, et.relacion,
+           e.id,
+           e.nombres,
+           COALESCE(e.estado = 'activo', false),
+           d.id, d.razon_social,
+           (e.facturar_a_client_id IS NOT NULL)
+      FROM tutores t
+      LEFT JOIN admin_escolar_estudiante_tutores et
+        ON et.tutor_id = t.id AND et.team_id = ${teamId}
+      LEFT JOIN admin_escolar_estudiantes e
+        ON e.id = et.estudiante_id AND e.team_id = ${teamId}
+      -- Sin responsable de pago puesto se cae al contacto del propio tutor:
+      -- mejor su ficha que ningún sitio al que ir.
+      LEFT JOIN clients d
+        ON d.id = COALESCE(e.facturar_a_client_id, t.client_id) AND d.team_id = ${teamId}
+  `);
+
+  const vinculos: VinculoFamilia[] = (filas as unknown as Record<string, unknown>[]).map((r) => ({
+    personaClientId: r.persona_client_id == null ? null : Number(r.persona_client_id),
+    tutorId: r.tutor_id == null ? null : Number(r.tutor_id),
+    nombre: String(r.nombre ?? ''),
+    documento: (r.documento as string) ?? null,
+    relacion: (r.relacion as string) ?? null,
+    estudianteId: r.estudiante_id == null ? null : Number(r.estudiante_id),
+    alumno: r.alumno == null ? null : String(r.alumno).trim(),
+    activo: r.activo === true,
+    destinoId: r.destino_id == null ? null : Number(r.destino_id),
+    destino: (r.destino as string) ?? null,
+    pagadorAsignado: r.pagador_asignado === true,
   }));
+
+  return resolverFamilias(vinculos, TOPE);
 }
 
 /** Usuarios del equipo. Solo los de ESTA empresa: el join va por team_members. */
@@ -416,6 +527,7 @@ export async function buscarGlobal(opts: {
     q,
     p: patron(q),
     verFacturas: permisos.includes('facturas:ver'),
+    familiasAparte: opts.moduloActual === 'escolar' && permitidos.includes('responsable'),
   };
 
   // En paralelo, no en cadena: son varias consultas por pulsación y en fila
