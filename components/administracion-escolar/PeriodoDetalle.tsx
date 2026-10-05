@@ -333,7 +333,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
    * Y vive en la URL, no en un `useState`: recargar no lo cierra y el enlace
    * se puede mandar.
    *
-   *   ?factura=nueva       → todo lo que el alumno debe sin facturar en el período
+   *   ?factura=nueva       → vacía; lo que el alumno debe se ofrece en el buscador
    *   ?factura=c:12,13     → esos cargos
    *   ?factura=p:2811.44.3 → un mes por adelantado (matrícula.cuota.concepto)
    */
@@ -911,14 +911,15 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           onCargoCreado();
         }}
         perfilEmpresa={perfilEmpresa}
-        // «Nueva factura» (sin cargos en la URL) arranca de lo que el alumno
-        // debe sin facturar: solo lo que NO tiene factura y aún tiene saldo,
-        // porque volver a facturar un cargo ya facturado le cobraría dos veces
-        // a la familia. En orden de mes, que es como se lee una factura.
-        cargosIniciales={cajon?.previsto ? [] : (cajon?.cargos ?? cargosSinFactura
-          .filter((c) => c.saldoCentavos > 0)
-          .sort((a, b) => a.anio - b.anio || (a.mes ?? 0) - (b.mes ?? 0) || a.id - b.id)
-          .map((c) => c.id))}
+        cargosIniciales={cajon?.cargos ?? []}
+        // «Nueva factura» (sin cargos en la URL) abre VACÍA. Lo que el alumno
+        // debe no se mete en líneas: se le pasa al buscador de productos, que
+        // lo ofrece mes a mes con el precio de ese alumno. Solo lo que NO tiene
+        // factura y aún tiene saldo, porque volver a facturar un cargo ya
+        // facturado le cobraría dos veces a la familia.
+        cargosOfrecidos={cajon && !cajon.cargos && !cajon.previsto
+          ? cargosSinFactura.filter((c) => c.saldoCentavos > 0).map((c) => c.id)
+          : undefined}
         clienteInicial={clienteInicial ?? null}
         previsto={cajon?.previsto ?? null}
       />

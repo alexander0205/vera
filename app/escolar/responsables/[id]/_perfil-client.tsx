@@ -90,7 +90,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
    * de más abajo ya vivían en la query; esto solo termina de aplicar la misma
    * regla a lo que se abre encima de ellas.
    *
-   *   ?factura=nueva                  → todo lo que la familia debe sin facturar
+   *   ?factura=nueva                  → vacía; lo que la familia debe se ofrece en el buscador
    *   ?factura=c:12,13                → esos cargos (viene de «Facturar juntos»)
    *   ?factura=p:2811.44.3            → un mes por adelantado (matrícula.cuota.concepto)
    */
@@ -375,8 +375,8 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             <Button
               variant="default"
               size="sm"
-              // Explícito: «Nueva factura» arranca de todo lo que la familia
-              // debe sin facturar, no de lo que quedara de un «Adelantar».
+              // Explícito: «Nueva factura» abre vacía, no con lo que quedara
+              // de un «Adelantar». Lo que la familia debe se elige dentro.
               onClick={() => abrirCajon('nueva')}
             >
               <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
@@ -397,10 +397,17 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
         }}
         perfilEmpresa={perfilEmpresa}
-        // Solo los cargos QUE AÚN NO TIENEN FACTURA. Volver a facturar uno ya
-        // facturado le cobraría dos veces a la familia: el error que más caro
-        // sale y el que nadie nota hasta que el padre reclama.
-        cargosIniciales={cajon?.previsto ? [] : (cajon?.cargos ?? sinFacturar.map((g) => g.id))}
+        cargosIniciales={cajon?.cargos ?? []}
+        // «Nueva factura» abre VACÍA: antes salía con todo lo que la familia
+        // debía ya metido en líneas, el año entero para quien venía a cobrar un
+        // mes. Esos cargos van ahora al buscador de productos, que ofrece cada
+        // mes con el precio de su alumno. Solo los QUE AÚN NO TIENEN FACTURA:
+        // volver a facturar uno ya facturado le cobraría dos veces a la
+        // familia, el error que más caro sale y el que nadie nota hasta que el
+        // padre reclama.
+        cargosOfrecidos={cajon && !cajon.cargos && !cajon.previsto
+          ? sinFacturar.map((g) => g.id)
+          : undefined}
         // La familia de esta ficha, para cuando no hay ningún cargo que
         // facturar: sin esto el cajón abría sin comprador y sin beneficiarios.
         clienteInicial={{
