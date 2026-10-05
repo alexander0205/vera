@@ -50,12 +50,18 @@ const INTENTOS = 40;
 
 const pesoMb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
-export function SubirComprobante({ etiqueta = 'Subir comprobante', variante = 'outline' }: {
+export function SubirComprobante({ etiqueta = 'Subir comprobante', variante = 'outline', control }: {
   etiqueta?: string;
   variante?: 'outline' | 'default';
+  /**
+   * Para abrirlo desde otro sitio —el menú «¿Qué comprobante tienes?»— en vez
+   * de desde su propio botón. Con esto no se pinta botón ninguno.
+   */
+  control?: { abierto: boolean; setAbierto: (v: boolean) => void };
 }) {
   const router = useRouter();
-  const [abierto, setAbierto] = useState(false);
+  const propio = useState(false);
+  const [abierto, setAbierto] = control ? [control.abierto, control.setAbierto] as const : propio;
   const [archivos, setArchivos] = useState<File[]>([]);
   const [nota, setNota] = useState('');
   const [fase, setFase] = useState<'eligiendo' | 'subiendo' | 'leyendo'>('eligiendo');
@@ -137,10 +143,12 @@ export function SubirComprobante({ etiqueta = 'Subir comprobante', variante = 'o
 
   return (
     <>
-      <Button type="button" variant={variante} size="sm" onClick={() => setAbierto(true)}
-        className="gap-1.5" data-testid="boton-subir-comprobante">
-        <Upload className="h-4 w-4" /> {etiqueta}
-      </Button>
+      {!control && (
+        <Button type="button" variant={variante} size="sm" onClick={() => setAbierto(true)}
+          className="gap-1.5" data-testid="boton-subir-comprobante">
+          <Upload className="h-4 w-4" /> {etiqueta}
+        </Button>
+      )}
 
       <Dialog open={abierto} onOpenChange={cerrar}>
         <DialogContent className="max-w-md">
