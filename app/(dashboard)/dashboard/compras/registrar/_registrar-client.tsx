@@ -951,9 +951,17 @@ function FotosCaptura({ captura }: { captura: NonNullable<ContextoRegistro['capt
           <div key={a.id} className="space-y-1">
             {/* iframe y no object: el CSP de la app trae `object-src 'none'`
                 y deja pasar `frame-src 'self'`. En el navegador del teléfono
-                puede salir en blanco, y para eso está el enlace de debajo. */}
+                puede salir en blanco, y para eso está el enlace de debajo.
+
+                El alto sale de la proporción de un folio, no de la pantalla: a
+                lo ancho del panel cabe la hoja entera, y con una altura fija
+                sobraba medio panel de fondo oscuro del visor. Se toma la
+                proporción carta, la más corta de las dos que se usan aquí,
+                porque una hoja A4 dentro solo pide un pelín de scroll mientras
+                que al revés vuelve la franja negra. */}
             <iframe src={`${url(a.id)}#toolbar=0&navpanes=0&view=FitH`}
-              className="h-[70vh] w-full rounded-md border" title={`PDF ${i + 1} de la factura`} />
+              className="aspect-[17/22] w-full rounded-md border bg-muted"
+              title={`PDF ${i + 1} de la factura`} />
             <a href={url(a.id)} target="_blank" rel="noreferrer"
               className="block px-1 text-xs text-zero-700 underline">
               Abrir el PDF{varios ? ` ${i + 1}` : ''} en una pestaña
