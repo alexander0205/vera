@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/lib/toast';
+import { comprimirImagen } from '@/lib/utils/comprimir-imagen';
 
 /**
  * Subir el comprobante que ya está en el ordenador: el PDF que mandó el
@@ -26,7 +27,22 @@ import { toast } from '@/lib/toast';
 /** Los mismos que acepta el servidor (`detectarTipo`). */
 const ACEPTA = 'application/pdf,image/jpeg,image/png,image/webp';
 const MAX_ARCHIVOS = 4;
-const MAX_MB = 10;
+
+/**
+ * El techo de verdad no es el del servidor (10 MB por archivo), sino el body de
+ * 4,5 MB de las funciones de Vercel: por encima de eso la subida muere en la
+ * plataforma, antes de llegar al código, con un error que no dice nada. Se mide
+ * sobre la SUMA, que es lo que viaja, y se deja aire para el resto del formulario.
+ */
+const MAX_TOTAL_MB = 4;
+
+/**
+ * Las imágenes se recomprimen aquí, como hace el teléfono. A 2000 px se sigue
+ * leyendo el QR del e-CF y la letra pequeña, que es lo que la lectura necesita.
+ * Un PDF pasa intacto: no hay forma de encogerlo en el navegador.
+ */
+const LADO_MAX_IMAGEN = 2000;
+const CALIDAD_IMAGEN = 0.85;
 
 /** Cada cuánto se pregunta si la lectura terminó, y cuántas veces. */
 const ESPERA_MS = 1500;
@@ -52,15 +68,23 @@ export function SubirComprobante({ etiqueta = 'Subir comprobante', variante = 'o
     if (!v) { setArchivos([]); setNota(''); }
   }, [ocupado]);
 
-  function elegir(lista: FileList | null) {
+  async function elegir(lista: FileList | null) {
     if (!lista) return;
-    const nuevos = Array.from(lista);
-    const grande = nuevos.find((f) => f.size > MAX_MB * 1024 * 1024);
-    if (grande) {
-      toast.error(`«${grande.name}» pesa ${pesoMb(grande.size)} MB: el tope es ${MAX_MB} MB.`);
-      return;
-    }
-    setArchivos((previos) => [...previos, ...nuevos].slice(0, MAX_ARCHIVOS));
+    const nuevos = await Promise.all(
+      Array.from(lista).map((f) => comprimirImagen(f, { ladoMax: LADO_MAX_IMAGEN, calidad: CALIDAD_IMAGEN })),
+    );
+    setArchivos((previos) => {
+      const juntos = [...previos, ...nuevos].slice(0, MAX_ARCHIVOS);
+      const total = juntos.reduce((n, f) => n + f.size, 0);
+      if (total > MAX_TOTAL_MB * 1024 * 1024) {
+        toast.error(
+          `Entre todos suman ${pesoMb(total)} MB y el tope es ${MAX_TOTAL_MB} MB. `
+          + 'Si es un PDF pesado, vuelve a guardarlo con menos calidad o sube solo las páginas con los datos.',
+        );
+        return previos;
+      }
+      return juntos;
+    });
     if (inputRef.current) inputRef.current.value = '';
   }
 
@@ -131,10 +155,10 @@ export function SubirComprobante({ etiqueta = 'Subir comprobante', variante = 'o
             <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 p-6 text-center hover:bg-gray-50">
               <FileUp className="h-7 w-7 text-gray-400" />
               <span className="text-sm font-medium text-gray-700">Elige el archivo</span>
-              <span className="text-xs text-gray-500">PDF o imagen · hasta {MAX_ARCHIVOS} archivos de {MAX_MB} MB</span>
+              <span className="text-xs text-gray-500">PDF o imagen · hasta {MAX_ARCHIVOS} archivos, {MAX_TOTAL_MB} MB en total</span>
               <input ref={inputRef} type="file" accept={ACEPTA} multiple className="sr-only"
                 data-testid="archivo-comprobante" disabled={ocupado}
-                onChange={(e) => elegir(e.target.files)} />
+                onChange={(e) => void elegir(e.target.files)} />
             </label>
 
             {archivos.length > 0 && (
