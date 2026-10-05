@@ -242,6 +242,9 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const resumen = resumirCompra(totales.baseCents, imp);
   const totalImpresoCents = aCentavos(totalImpreso) ?? 0;
   const cuadre = totalImpresoCents > 0 ? cuadrarConComprobante(resumen.totalCents, totalImpresoCents) : null;
+  const faltaPct = cuadre && cuadre.estado !== 'cuadra' && totales.baseCents > 0
+    ? (Math.abs(cuadre.diferenciaCents) / totales.baseCents) * 100
+    : null;
   const tipo606Auto = tipo606Dominante(lineasCalc.map((x, i) => ({ tipo606: x.l.tipo === 'producto' ? '09' : x.cat?.tipo606 ?? '02', baseCents: totales.lineas[i].baseCents })));
   const tipo606Final = (tipo606 || tipo606Auto) as keyof typeof TIPOS_BIENES_606;
 
@@ -672,17 +675,21 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
               <h2 className="text-base font-semibold">3 · Impuestos y retenciones</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="isc">ISC</Label>
+                  <Label htmlFor="isc">ISC <span className="font-normal text-muted-foreground">(RD$)</span></Label>
                   <Input id="isc" value={isc} onChange={(e) => setIsc(e.target.value)} inputMode="decimal" placeholder="0.00" />
-                  <p className="text-xs text-muted-foreground">Selectivo al consumo: telecomunicaciones, seguros, bebidas, tabaco.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Selectivo al consumo: telecomunicaciones, seguros, bebidas, tabaco. Escribe el <strong>monto en pesos</strong>, no el porcentaje.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="otros-impuestos">Otros impuestos y tasas</Label>
+                  <Label htmlFor="otros-impuestos">Otros impuestos y tasas <span className="font-normal text-muted-foreground">(RD$)</span></Label>
                   <Input id="otros-impuestos" value={otros} onChange={(e) => setOtros(e.target.value)} inputMode="decimal" placeholder="0.00" />
-                  <p className="text-xs text-muted-foreground">Lo demás que cobra el comprobante: la contribución del 2 % de telecomunicaciones, tasas municipales…</p>
+                  <p className="text-xs text-muted-foreground">
+                    Lo demás que cobra el comprobante: la contribución del 2 % de telecomunicaciones, tasas municipales… También el <strong>monto</strong>.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="propina">Propina legal (10 %)</Label>
+                  <Label htmlFor="propina">Propina legal <span className="font-normal text-muted-foreground">(RD$)</span></Label>
                   <Input id="propina" value={propina} onChange={(e) => setPropina(e.target.value)} inputMode="decimal" placeholder="0.00" />
                   <p className="text-xs text-muted-foreground">Solo bares y restaurantes. No es ITBIS.</p>
                 </div>
@@ -710,7 +717,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                       {cuadre.estado === 'falta'
                         ? `Faltan ${pesos(cuadre.diferenciaCents)} para llegar al total impreso.`
                         : `Este registro suma ${pesos(-cuadre.diferenciaCents)} de más que el total impreso.`}
-                      {' '}Revisa las líneas y los impuestos de arriba: lo que no es ITBIS va en «ISC» o en «Otros impuestos y tasas».
+                      {faltaPct !== null && ` Es el ${faltaPct.toFixed(1)} % del monto sin impuestos: búscalo con ese nombre en el comprobante.`}
+                      {' '}Lo que no es ITBIS va en «ISC» o en «Otros impuestos y tasas», en pesos.
                     </span>
                   </p>
                 )}
