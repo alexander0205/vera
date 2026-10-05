@@ -122,6 +122,7 @@ export default function CargosClient() {
   const [query, setQuery] = useState('');
   const [filtroPeriodo, setFiltroPeriodo] = useState('todos');
   const [filtroEstado, setFiltroEstado] = useState('todos');
+  const [filtroConcepto, setFiltroConcepto] = useState('todos');
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -163,6 +164,7 @@ export default function CargosClient() {
     const params = new URLSearchParams();
     if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
     if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
+    if (filtroConcepto !== 'todos') params.set('conceptoId', filtroConcepto);
     params.set('pagina', String(pagina));
     const res = await fetch(`/api/administracion-escolar/cargos?${params}`);
     const data = await res.json();
@@ -173,7 +175,7 @@ export default function CargosClient() {
       paginas: data.paginas ?? 1,
       porPagina: data.porPagina ?? 50,
     });
-  }, [filtroEstado, filtroPeriodo, pagina]);
+  }, [filtroConcepto, filtroEstado, filtroPeriodo, pagina]);
 
   const cargarCatalogos = useCallback(async () => {
     const [periodosRes, cursosRes, conceptosRes, matriculasRes, estudiantesRes] = await Promise.all([
@@ -386,6 +388,12 @@ export default function CargosClient() {
   }
 
   const sinCatalogos = periodos.length === 0 || conceptosActivos.length === 0 || matriculas.length === 0;
+  // Una lista vacía con un filtro puesto no significa que el colegio no tenga
+  // cargos: significa que ninguno cumple el filtro. Sin distinguirlo, filtrar
+  // por un concepto sin cargos decía «Aún no hay cargos generados» y ofrecía
+  // generarlos.
+  const hayFiltro = filtroPeriodo !== 'todos' || filtroEstado !== 'todos' || filtroConcepto !== 'todos';
+  const sinCargos = cargos.length === 0 && !hayFiltro;
 
   return (
     <section className="p-6 space-y-6">
@@ -428,6 +436,22 @@ export default function CargosClient() {
                 {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
               </SelectContent>
             </Select>
+            {/* Por concepto, y resuelto en el servidor: el buscador de al lado
+                solo mira la página que hay cargada, así que escribir el nombre
+                de un concepto poco usado no encontraba nada. Van también los
+                inactivos: un concepto que ya no se ofrece puede seguir teniendo
+                cargos vivos. */}
+            <Select value={filtroConcepto} onValueChange={(v: string) => { setPagina(1); setFiltroConcepto(v); }}>
+              <SelectTrigger className="lg:w-60"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Concepto: Todos</SelectItem>
+                {conceptos.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.nombre}{c.activo === false ? ' (inactivo)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={filtroEstado} onValueChange={(v: string) => { setPagina(1); setFiltroEstado(v); }}>
               <SelectTrigger className="lg:w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -443,8 +467,8 @@ export default function CargosClient() {
           ) : filtrados.length === 0 ? (
             <div className="text-center py-16">
               <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 font-medium">{cargos.length === 0 ? 'Aún no hay cargos generados' : 'Sin resultados'}</p>
-              {cargos.length === 0 && puedeGestionar && !sinCatalogos && (
+              <p className="text-gray-500 font-medium">{sinCargos ? 'Aún no hay cargos generados' : 'Sin resultados'}</p>
+              {sinCargos && puedeGestionar && !sinCatalogos && (
                 <Button className="mt-4 bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirGenerar}>
                   <Plus className="h-4 w-4 mr-1" />Generar cargos
                 </Button>

@@ -23,11 +23,16 @@ export async function GET(req: NextRequest) {
   // Los cargos de UNA matrícula: lo pide la pantalla de edición para enseñar
   // qué se le está cobrando de verdad a ese alumno, no el plan teórico.
   const matriculaId = sp.get('matriculaId');
+  // Un solo concepto. Se filtra aquí y no en la pantalla porque el listado va
+  // paginado: el buscador de «Cargos y deudas» solo mira los 50 cargos que
+  // tiene cargados, y un concepto poco usado cae en una página que nadie abre.
+  const conceptoId = Number(sp.get('conceptoId'));
 
   const where = [eq(adminEscolarCargos.teamId, teamId)];
   if (periodoId) where.push(eq(adminEscolarCargos.periodoId, parseInt(periodoId)));
   if (estado) where.push(eq(adminEscolarCargos.estado, estado));
   if (matriculaId) where.push(eq(adminEscolarCargos.matriculaId, parseInt(matriculaId)));
+  if (Number.isInteger(conceptoId) && conceptoId > 0) where.push(eq(adminEscolarCargos.conceptoId, conceptoId));
 
   // Un colegio genera un cargo por alumno, mes y concepto: unos 5.100 al año
   // con 465 alumnos. Sin paginar, esta ruta devolvía todos de golpe.
