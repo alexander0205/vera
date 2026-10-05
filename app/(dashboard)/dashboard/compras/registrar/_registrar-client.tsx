@@ -875,6 +875,15 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
               <Fila k={formaPago === 'contado' ? 'Pagas al proveedor' : 'Le debes al proveedor'} v={pesos(resumen.netoAPagarCents)} fuerte />
               <div className="space-y-1 border-t pt-2 text-xs text-muted-foreground">
                 <p>ITBIS que adelantas: <span className="font-medium text-foreground" data-testid="itbis-adelantar">{pesos(resumen.itbisPorAdelantarCents)}</span></p>
+                {resumen.itbisPorAdelantarCents === 0 && totales.itbisCents > 0 && (
+                  <p data-testid="motivo-sin-adelanto">
+                    {!ncfInfo.daCreditoItbis && ncfInfo.valido
+                      ? `Un comprobante de ${ncfInfo.nombre.toLowerCase()} no da crédito: el ITBIS se suma al gasto.`
+                      : contexto.regimenItbis !== 'gravado'
+                        ? 'Tu empresa está como exenta de ITBIS, así que el de las compras va al gasto en vez de adelantarse. Se cambia en Contabilidad › Configuración.'
+                        : 'Lo llevaste entero al costo en el paso 3.'}
+                  </p>
+                )}
                 {resumen.retencionesCents > 0 && <p>Retenciones a pagar a la DGII: <span className="font-medium text-foreground">{pesos(resumen.retencionesCents)}</span></p>}
                 <p>606: {ncfInfo.valido && !ncfInfo.reporta606 ? 'no se reporta' : `tipo ${tipo606Final} · ${TIPOS_BIENES_606[tipo606Final]}`}</p>
               </div>
@@ -920,19 +929,36 @@ function Fila({ k, v, fuerte, tenue }: { k: string; v: string; fuerte?: boolean;
   );
 }
 
-/** Las fotos de la factura al lado del formulario: se registra mirándolas. */
+/**
+ * El comprobante al lado del formulario: se registra mirándolo.
+ *
+ * El PDF se enseña, no se enlaza. Un enlace obliga a saltar a otra pestaña y
+ * volver por cada dato que se comprueba, que es justo lo que este panel viene a
+ * evitar; y el archivo ya está autorizado y servido por la misma sesión, así
+ * que no hay nada que ganar escondiéndolo. El enlace sigue debajo para verlo en
+ * grande o descargarlo.
+ */
 function FotosCaptura({ captura }: { captura: NonNullable<ContextoRegistro['captura']> }) {
   const url = (archivoId: number) => `/api/gastos/capturas/${captura.id}/archivos/${archivoId}`;
+  const varios = captura.archivos.length > 1;
   return (
     <Card>
       <CardContent className="space-y-2 p-3" data-testid="fotos-captura">
         <p className="px-1 text-xs font-medium text-muted-foreground">
-          Factura fotografiada{captura.subidoPor ? ` · la envió ${captura.subidoPor}` : ''}
+          Comprobante{captura.subidoPor ? ` · lo envió ${captura.subidoPor}` : ''}
         </p>
         {captura.archivos.map((a, i) => a.mime === 'application/pdf' ? (
-          <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" className="block rounded-md border p-3 text-sm text-zero-700 underline">
-            Ver PDF {captura.archivos.length > 1 ? i + 1 : ''}
-          </a>
+          <div key={a.id} className="space-y-1">
+            {/* iframe y no object: el CSP de la app trae `object-src 'none'`
+                y deja pasar `frame-src 'self'`. En el navegador del teléfono
+                puede salir en blanco, y para eso está el enlace de debajo. */}
+            <iframe src={`${url(a.id)}#toolbar=0&navpanes=0&view=FitH`}
+              className="h-[70vh] w-full rounded-md border" title={`PDF ${i + 1} de la factura`} />
+            <a href={url(a.id)} target="_blank" rel="noreferrer"
+              className="block px-1 text-xs text-zero-700 underline">
+              Abrir el PDF{varios ? ` ${i + 1}` : ''} en una pestaña
+            </a>
+          </div>
         ) : (
           <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" title="Abrir en grande">
             {/* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */}
