@@ -5,7 +5,7 @@ import { capturaFacturas, products, rncPadron, teams } from '@/lib/db/schema';
 import { recepciones } from '@/lib/ecf-api/client';
 import { leerArchivosDeCaptura } from './archivos';
 import { leerQr } from './qr';
-import { imagenesDePdf } from './pdf';
+import { imagenesDePdf, pintarPrimeraPagina } from './pdf';
 import { leerTimbre } from './timbre';
 import { combinarDatos, datosDesdeIa, datosDesdeTimbre, emparejarProductos, DATOS_VACIOS, type DatosCaptura } from './datos';
 import { iaDisponible, leerFacturaConIa } from './ia';
@@ -37,14 +37,26 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
     // dejaba la factura en manos de la lectura con IA.
     let qr: DatosCaptura | null = null;
     for (const a of archivos) {
-      const candidatos = a.mime.startsWith('image/')
-        ? [a.buffer]
-        : a.mime === 'application/pdf' ? await imagenesDePdf(a.buffer) : [];
-      for (const imagen of candidatos) {
+      if (a.mime.startsWith('image/')) {
+        const timbre = leerTimbre(await leerQr(a.buffer));
+        if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+        continue;
+      }
+      if (a.mime !== 'application/pdf') continue;
+      // Primero las imágenes que el PDF ya trae dentro, que es de donde sale el
+      // QR cuando el proveedor lo incrusta como tal. Si no hay suerte —hay
+      // generadores que lo dibujan con trazos— se pinta la página y se busca
+      // ahí. Lo caro solo si lo barato falla.
+      for (const imagen of await imagenesDePdf(a.buffer)) {
         const timbre = leerTimbre(await leerQr(imagen));
         if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
       }
       if (qr) break;
+      const pagina = await pintarPrimeraPagina(a.buffer);
+      if (pagina) {
+        const timbre = leerTimbre(await leerQr(pagina));
+        if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+      }
     }
 
     let ia: DatosCaptura | null = null;
