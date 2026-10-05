@@ -12,6 +12,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { BuscadorSelect, type OpcionBuscador } from '@/components/ui/buscador-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog';
 import { toast } from '@/lib/toast';
 import { pesosACentavos } from '@/lib/nomina/montos';
 import {
@@ -935,45 +936,82 @@ function Fila({ k, v, fuerte, tenue }: { k: string; v: string; fuerte?: boolean;
  * El PDF se enseña, no se enlaza. Un enlace obliga a saltar a otra pestaña y
  * volver por cada dato que se comprueba, que es justo lo que este panel viene a
  * evitar; y el archivo ya está autorizado y servido por la misma sesión, así
- * que no hay nada que ganar escondiéndolo. El enlace sigue debajo para verlo en
- * grande o descargarlo.
+ * que no hay nada que ganar escondiéndolo.
+ *
+ * En la columna cabe la hoja entera pero no la letra pequeña, así que al
+ * tocarla se abre a pantalla casi completa, que es donde de verdad se comprueba
+ * un NCF o un importe. El enlace a una pestaña aparte sigue para descargarla.
  */
 function FotosCaptura({ captura }: { captura: NonNullable<ContextoRegistro['captura']> }) {
   const url = (archivoId: number) => `/api/gastos/capturas/${captura.id}/archivos/${archivoId}`;
   const varios = captura.archivos.length > 1;
-  return (
-    <Card>
-      <CardContent className="space-y-2 p-3" data-testid="fotos-captura">
-        <p className="px-1 text-xs font-medium text-muted-foreground">
-          Comprobante{captura.subidoPor ? ` · lo envió ${captura.subidoPor}` : ''}
-        </p>
-        {captura.archivos.map((a, i) => a.mime === 'application/pdf' ? (
-          <div key={a.id} className="space-y-1">
-            {/* iframe y no object: el CSP de la app trae `object-src 'none'`
-                y deja pasar `frame-src 'self'`. En el navegador del teléfono
-                puede salir en blanco, y para eso está el enlace de debajo.
+  const [ampliado, setAmpliado] = useState<{ id: number; mime: string; n: number } | null>(null);
+  const esPdf = ampliado?.mime === 'application/pdf';
 
-                El alto sale de la proporción de un folio, no de la pantalla: a
-                lo ancho del panel cabe la hoja entera, y con una altura fija
-                sobraba medio panel de fondo oscuro del visor. Se toma la
-                proporción carta, la más corta de las dos que se usan aquí,
-                porque una hoja A4 dentro solo pide un pelín de scroll mientras
-                que al revés vuelve la franja negra. */}
-            <iframe src={`${url(a.id)}#toolbar=0&navpanes=0&view=FitH`}
-              className="aspect-[17/22] w-full rounded-md border bg-muted"
-              title={`PDF ${i + 1} de la factura`} />
-            <a href={url(a.id)} target="_blank" rel="noreferrer"
-              className="block px-1 text-xs text-zero-700 underline">
-              Abrir el PDF{varios ? ` ${i + 1}` : ''} en una pestaña
-            </a>
-          </div>
-        ) : (
-          <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" title="Abrir en grande">
-            {/* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */}
-            <img src={url(a.id)} alt={`Foto ${i + 1} de la factura`} className="max-h-[70vh] w-full rounded-md border object-contain" />
-          </a>
-        ))}
-      </CardContent>
-    </Card>
+  return (
+    <>
+      <Card>
+        <CardContent className="space-y-2 p-3" data-testid="fotos-captura">
+          <p className="px-1 text-xs font-medium text-muted-foreground">
+            Comprobante{captura.subidoPor ? ` · lo envió ${captura.subidoPor}` : ''}
+          </p>
+          {captura.archivos.map((a, i) => (
+            <div key={a.id} className="space-y-1">
+              <button type="button" onClick={() => setAmpliado({ id: a.id, mime: a.mime, n: i + 1 })}
+                title="Verlo en grande" data-testid={`ampliar-${a.id}`}
+                className="group relative block w-full cursor-zoom-in overflow-hidden rounded-md border bg-muted">
+                {a.mime === 'application/pdf' ? (
+                  /* iframe y no object: el CSP de la app trae `object-src 'none'`
+                     y deja pasar `frame-src 'self'`. `pointer-events-none` para
+                     que el clic sea de este botón y no se lo quede el visor del
+                     PDF, que si no se traga el gesto y nunca amplía.
+
+                     El alto sale de la proporción de un folio, no de la pantalla:
+                     a lo ancho de la columna cabe la hoja entera, y con una
+                     altura fija sobraba medio panel de fondo oscuro del visor. Se
+                     toma la proporción carta, la más corta de las dos que se usan
+                     aquí, porque una hoja A4 dentro solo pide un pelín de scroll
+                     mientras que al revés vuelve la franja negra. */
+                  <iframe src={`${url(a.id)}#toolbar=0&navpanes=0&view=FitH`} tabIndex={-1}
+                    className="pointer-events-none aspect-[17/22] w-full"
+                    title={`PDF ${i + 1} del comprobante`} />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */
+                  <img src={url(a.id)} alt={`Foto ${i + 1} del comprobante`}
+                    className="max-h-[70vh] w-full object-contain" />
+                )}
+                <span className="pointer-events-none absolute inset-0 hidden items-end justify-center bg-gradient-to-t from-black/50 to-transparent pb-2 text-xs font-medium text-white group-hover:flex">
+                  Ver en grande
+                </span>
+              </button>
+              <a href={url(a.id)} target="_blank" rel="noreferrer"
+                className="block px-1 text-xs text-zero-700 underline">
+                Abrir{varios ? ` el ${i + 1}` : ''} en una pestaña
+              </a>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Dialog open={ampliado !== null} onOpenChange={(o) => !o && setAmpliado(null)}>
+        <DialogContent className="max-w-[92vw] sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              Comprobante{ampliado && varios ? ` · ${ampliado.n} de ${captura.archivos.length}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            {ampliado && (esPdf ? (
+              <iframe src={`${url(ampliado.id)}#view=FitH`} className="h-[78vh] w-full rounded-md border bg-muted"
+                title="Comprobante en grande" />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */
+              <img src={url(ampliado.id)} alt="Comprobante en grande"
+                className="max-h-[78vh] w-full rounded-md object-contain" />
+            ))}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
