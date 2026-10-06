@@ -397,16 +397,26 @@ export function MatriculaDialog({
 
             <div className="space-y-1.5">
               <Label>Estudiante *</Label>
-              {/* Al editar se puede cambiar, pero no de un clic: el campo
-                  arranca enseñando de quién es la matrícula y hay que pedir
-                  «Cambiar». Cambiar de alumno mueve con él toda su deuda, y la
-                  API lo niega en cuanto hay una factura o un pago detrás. */}
+              {/* Cambiar de alumno se ofrece SOLO en Matriculación, no en la
+                  ficha del estudiante (`estudianteFijoId`).
+
+                  En la ficha el alumno no es un campo: es el contexto. La URL,
+                  la cabecera y la deuda de la pantalla entera son suyos, así
+                  que mudarle la matrícula a otro deja mirando la ficha de
+                  alguien que ya no tiene esa matrícula —y el que la recibe está
+                  en otra pantalla, sin verla. En Matriculación el alumno es una
+                  columna de la fila que se está corrigiendo, que es justo donde
+                  se descubre haber matriculado al hermano equivocado.
+
+                  Y ni ahí de un clic: el campo arranca enseñando de quién es y
+                  hay que pedir «Cambiar». Mueve con él toda su deuda, y la API
+                  lo niega en cuanto hay una factura o un pago detrás. */}
               {(editando || estudianteFijoId != null) && !cambiandoAlumno ? (
                 <div className="flex items-center gap-2">
                   <div className="flex h-10 flex-1 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
                     {nombreFijo ?? 'Este estudiante'}
                   </div>
-                  {editando && puedeGestionar && (
+                  {editando && puedeGestionar && estudianteFijoId == null && (
                     <Button type="button" variant="outline" size="sm"
                       onClick={() => { setCambiandoAlumno(true); void cargarEstudiantes(); }}>
                       Cambiar
