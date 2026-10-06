@@ -43,7 +43,9 @@ export const TITULO_GRUPO: Record<TipoResultado, string> = {
   producto:    'Productos',
   venta:       'Ventas del POS',
   estudiante:  'Estudiantes',
-  responsable: 'Responsables de pago',
+  // Padres también: se busque al que paga o al que solo es tutor, se llega a
+  // la ficha del responsable de pago de su hijo.
+  responsable: 'Padres y responsables de pago',
   usuario:     'Usuarios del equipo',
 };
 

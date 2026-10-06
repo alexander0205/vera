@@ -28,7 +28,7 @@ import {
  */
 
 /** De dónde salió el monto. Sirve para explicarlo en la UI. */
-export type OrigenTarifa = 'beca' | 'seccion' | 'grado' | 'servicio';
+export type OrigenTarifa = 'beca' | 'estudiante' | 'seccion' | 'grado' | 'servicio';
 
 export interface TarifaResuelta {
   montoCentavos: number;
@@ -58,6 +58,13 @@ export interface ContextoTarifa {
   servicioId: number;
   becaTipo: string | null;
   becaValor: number | null;
+  /**
+   * El alumno, para su tarifa PERSONAL de un concepto (precio con
+   * `objetivo_tipo='estudiante'`). Gana sobre sección/grado/servicio. `null`
+   * cuando quien resuelve todavía no tiene alumno (una pantalla de estructura),
+   * y entonces no hay excepción individual que aplicar.
+   */
+  estudianteId?: number | null;
 }
 
 /** Sube por la sección hasta encontrar el grado y el servicio de una sección. */
@@ -66,6 +73,7 @@ export async function contextoDeSeccion(
   periodoId: number,
   seccionId: number,
   beca?: { tipo: string | null; valor: number | null },
+  estudianteId?: number | null,
 ): Promise<ContextoTarifa | null> {
   const [fila] = await db
     .select({ gradoId: adminEscolarCursos.gradoId, servicioId: adminEscolarGrados.servicioId })
@@ -81,6 +89,7 @@ export async function contextoDeSeccion(
     servicioId: fila.servicioId,
     becaTipo: beca?.tipo ?? null,
     becaValor: beca?.valor ?? null,
+    estudianteId: estudianteId ?? null,
   };
 }
 
@@ -127,8 +136,10 @@ export async function resolverTarifas(
 
   const admiteBeca = new Map(conceptos.map((c) => [c.id, c.admiteBeca]));
 
-  // Lo más específico gana: una tarifa en el grado tapa la del servicio.
+  // Lo más específico gana: el precio propio del alumno tapa el de su sección,
+  // que tapa el del grado, que tapa el del servicio.
   const cadena: { tipo: OrigenTarifa; id: number }[] = [
+    ...(ctx.estudianteId ? [{ tipo: 'estudiante' as const, id: ctx.estudianteId }] : []),
     { tipo: 'seccion',  id: ctx.seccionId },
     { tipo: 'grado',    id: ctx.gradoId },
     { tipo: 'servicio', id: ctx.servicioId },
@@ -187,12 +198,13 @@ export async function resolverTarifa(
 ): Promise<TarifaResuelta | null> {
   const [ctx] = await db
     .select({
-      periodoId:  adminEscolarMatriculas.periodoId,
-      seccionId:  adminEscolarMatriculas.cursoId,
-      becaTipo:   adminEscolarMatriculas.becaTipo,
-      becaValor:  adminEscolarMatriculas.becaValor,
-      gradoId:    adminEscolarCursos.gradoId,
-      servicioId: adminEscolarGrados.servicioId,
+      periodoId:    adminEscolarMatriculas.periodoId,
+      seccionId:    adminEscolarMatriculas.cursoId,
+      becaTipo:     adminEscolarMatriculas.becaTipo,
+      becaValor:    adminEscolarMatriculas.becaValor,
+      estudianteId: adminEscolarMatriculas.estudianteId,
+      gradoId:      adminEscolarCursos.gradoId,
+      servicioId:   adminEscolarGrados.servicioId,
     })
     .from(adminEscolarMatriculas)
     .innerJoin(adminEscolarCursos, eq(adminEscolarCursos.id, adminEscolarMatriculas.cursoId))
@@ -220,8 +232,10 @@ export async function resolverTarifa(
       eq(adminEscolarConceptoPrecios.activo, true),
     ));
 
-  // Lo más específico gana: una tarifa en el grado tapa la del servicio.
+  // Lo más específico gana: el precio propio del alumno tapa el de su sección,
+  // que tapa el del grado, que tapa el del servicio.
   const cadena: { tipo: OrigenTarifa; id: number }[] = [
+    ...(ctx.estudianteId ? [{ tipo: 'estudiante' as const, id: ctx.estudianteId }] : []),
     { tipo: 'seccion',  id: ctx.seccionId },
     { tipo: 'grado',    id: ctx.gradoId },
     { tipo: 'servicio', id: ctx.servicioId },

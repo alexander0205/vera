@@ -362,7 +362,9 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
             <Paper key={h.estudianteId} variant="outlined" sx={{ borderRadius: '16px', borderColor: '#E6E8F0', overflow: 'hidden' }}>
               <CabeceraHijo hijo={h} />
               <Typography sx={{ px: 2.75, py: 3, textAlign: 'center', fontSize: '0.8125rem', color: '#9AA0AC' }}>
-                Sin matrícula: no tiene meses que cobrar todavía.
+                {h.estado === 'activo'
+                  ? 'Sin matrícula: no tiene meses que cobrar todavía.'
+                  : 'Ya no está en el colegio. Lo que dejó debiendo está en su ficha.'}
               </Typography>
             </Paper>
           );
@@ -831,6 +833,11 @@ function CabeceraHijo({ hijo, periodo }: {
         </Link>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.125, mt: 0.625, flexWrap: 'wrap' }}>
           {periodo?.curso && <Chip tono="gris">{periodo.curso}</Chip>}
+          {/* Solo llega aquí un no activo si dejó algo debiendo: se dice, para
+              que nadie le prepare la factura del mes que viene. */}
+          {hijo.estado !== 'activo' && (
+            <Chip tono="gris">{hijo.estado.charAt(0).toUpperCase() + hijo.estado.slice(1)}</Chip>
+          )}
           {periodo && (
             alDia
               ? <Chip tono="verde">{periodo.activo ? 'Activa · al día' : 'Al día'}</Chip>

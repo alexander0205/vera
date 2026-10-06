@@ -54,5 +54,13 @@ export interface PeriodoDeHijo {
 export interface HijoConPeriodos {
   estudianteId: number;
   alumno: string;
+  /**
+   * `activo`, o el estado con que salió del colegio.
+   *
+   * Un retirado solo llega hasta aquí si dejó algo debiendo, y la tarjeta
+   * tiene que decirlo: sin la etiqueta se lee como un hijo más al que hay que
+   * facturarle el mes que viene.
+   */
+  estado: string;
   periodos: PeriodoDeHijo[];
 }

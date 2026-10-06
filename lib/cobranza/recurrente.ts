@@ -13,7 +13,7 @@ import { calcularTotales } from '@/lib/ecf/types';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import {
-  reflejarFacturaRecurrenteEnCargo, mesYaFacturadoAMano,
+  reflejarFacturaRecurrenteEnCargo, mesYaFacturadoAMano, tarifaMensualidadActual,
 } from '@/lib/administracion-escolar/facturacion-recurrente';
 
 export interface GenerarFacturaResult {
@@ -133,11 +133,26 @@ export async function generarFacturaDeRecurrente(
   // Parsear ítems y calcular totales
   let montoTotal = fr.totalEstimado;
   let totalItbis = 0;
-  const lineasJson: string = fr.items;
+  let lineasJson: string = fr.items;
 
   try {
     const items = JSON.parse(fr.items);
     if (Array.isArray(items) && items.length > 0) {
+      // Escolar: repreciar la mensualidad al monto vigente de la matrícula
+      // (monto propio, descuento o tarifa de su generación) en cada emisión, en
+      // vez de reemitir el precio congelado al configurar la recurrente. Solo se
+      // toca la ÚNICA línea de un plan de una sola línea —el caso normal de la
+      // colegiatura—; los planes multi-línea (p.ej. colegio + guardería) se
+      // dejan como están porque cuál línea es la mensualidad es ambiguo. Si no
+      // hay tarifa que resolver (recurrente no escolar, sin concepto, sin
+      // tarifa en la cadena), se conserva el precio congelado: sin regresión.
+      if (items.length === 1) {
+        const montoCentavos = await tarifaMensualidadActual(fr.id);
+        if (montoCentavos != null) {
+          items[0] = { ...items[0], precioUnitarioItem: montoCentavos / 100 };
+          lineasJson = JSON.stringify(items);
+        }
+      }
       const totales = calcularTotales(items);
       // calcularTotales devuelve DOP; la columna montoTotal/totalItbis es en centavos.
       const mt = Math.round(totales.montoTotal * 100);

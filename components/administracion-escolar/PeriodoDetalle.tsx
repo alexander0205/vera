@@ -13,7 +13,7 @@
  * decide qué hace al cobrar, al anular o al facturar.
  */
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { VerFacturaDrawer } from './VerFacturaDrawer';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -77,6 +77,11 @@ export interface Matricula {
   recurrenteEstado: string | null;
   recurrenteDiaCobro: number | null;
   recurrenteProxima: string | null;
+  /** Tarifa personal de la mensualidad: null = paga la de su generación. */
+  becaTipo: string | null;
+  becaValor: number | null;
+  becaMotivo: string | null;
+  conceptoMensualidadId: number | null;
   notas: string | null;
 }
 export interface Cargo {
@@ -236,7 +241,7 @@ const VISTAS = ['mensualidades', 'otros', 'facturas', 'pagos'] as const;
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, avisos, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, perfilEmpresa, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onEnviarFactura, onReenviarAviso, reenviandoCargoId }: {
+export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, avisos, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, clienteInicial, perfilEmpresa, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular, onAnularFactura, onEnviarCorreo, onEnviarFactura, onReenviarAviso, reenviandoCargoId }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   planes: PlanesPorMatricula | undefined;
   /** Recargo del negocio y canales del colegio: para explicar cada cuota. */
@@ -252,6 +257,13 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   puedeGestionar: boolean;
   estudianteId: number;
   tutorClientId: number | null;
+  /**
+   * El responsable de pago, para «Nueva factura» cuando no queda ningún cargo
+   * que facturar: sin él el cajón abría sin comprador ni beneficiarios. Es el
+   * mismo dato que le pasa la ficha de la familia.
+   */
+  clienteInicial?: { id: number; razonSocial: string; rnc: string | null;
+    email: string | null; telefono: string | null } | null;
   /** Datos del emisor, resueltos en el servidor por la página. Los usa el cajón. */
   perfilEmpresa: EmpresaPerfil | null;
   onRegistrarPago: (ecfDocumentId: number) => void;
@@ -272,6 +284,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   // La sub-pestaña también vive en la URL (?v=…): es la que el usuario mira de
   // verdad, y se perdía en cada recarga.
   const [vista, setVista] = useTabUrl('v', VISTAS, 'mensualidades');
+  const [tarifaAbierta, setTarifaAbierta] = useState(false);
   const [crearCargoAbierto, setCrearCargoAbierto] = useState(false);
   // Mes preseleccionado al agregar cargo desde el panel de un mes específico.
   // null = flujo general (elige el mes en el diálogo).
@@ -320,6 +333,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
    * Y vive en la URL, no en un `useState`: recargar no lo cierra y el enlace
    * se puede mandar.
    *
+   *   ?factura=nueva       → vacía; lo que el alumno debe se ofrece en el buscador
    *   ?factura=c:12,13     → esos cargos
    *   ?factura=p:2811.44.3 → un mes por adelantado (matrícula.cuota.concepto)
    */
@@ -339,7 +353,9 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         ? { cargos: null, previsto: { matriculaId: m, cuotaId: c, conceptoId: k } }
         : null;
     }
-    return null;
+    // Cualquier otra cosa es «Nueva factura» a secas, igual que en la ficha de
+    // la familia: mejor eso que una URL que dice que hay un cajón y no lo abre.
+    return { cargos: null, previsto: null };
   }, [enCurso]);
 
   const facturarCargos = (ids: number[]) => {
@@ -535,6 +551,20 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
   return (
     <div className="space-y-4">
       <VerFacturaDrawer documentoId={facturaEnCajon} onCerrar={() => setFacturaEnCajon(null)} />
+      {grupo.matriculaId && (
+        <TarifaEstudianteDialog
+          open={tarifaAbierta}
+          onOpenChange={setTarifaAbierta}
+          matriculaId={grupo.matriculaId}
+          estudianteId={estudianteId}
+          periodoId={grupo.periodoId}
+          becaTipo={grupo.becaTipo}
+          becaValor={grupo.becaValor}
+          becaMotivo={grupo.becaMotivo}
+          conceptoMensualidadId={grupo.conceptoMensualidadId}
+          onGuardado={onCargoCreado}
+        />
+      )}
       {/* Sin repetir «Período 2026-2027 · A»: la barra de períodos de arriba ya
           dice cuál se está mirando, con su curso y su saldo. Decirlo dos veces
           en la misma pantalla no informa, solo empuja hacia abajo lo que sí.
@@ -547,14 +577,23 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
               <Pencil className="h-4 w-4 mr-1.5" />Editar matrícula
             </Button>
           )}
-          {puedeFacturar && grupo.matriculaId && (
-            <Button size="sm" variant="outline" onClick={() => router.push(
-              grupo.facturaRecurrenteId
-                ? `/dashboard/facturas-recurrentes/${grupo.facturaRecurrenteId}`
-                : `/dashboard/facturas-recurrentes/nueva?matriculaId=${grupo.matriculaId}`,
-            )} disabled={!grupo.facturaRecurrenteId && (!grupo.fechaInicio || !grupo.fechaFin)}>
-              <FileText className="h-4 w-4 mr-1.5" />
-              {grupo.facturaRecurrenteId ? 'Gestionar mensualidad' : 'Configurar mensualidad'}
+          {/*
+            «Configuración mensual» ahora es la tarifa PERSONAL del alumno, no el
+            control de recurrencias que vivía aquí (se pidió sacarlo de la ficha:
+            enviaba a /dashboard/facturas-recurrentes, un flujo que no es de este
+            sitio). Fija lo que paga ESTE estudiante de mensualidad —un monto
+            propio o un descuento sobre la tarifa de su generación— sin tocar la
+            de los demás. La recurrencia sigue existiendo, se gestiona fuera.
+          */}
+          {puedeGestionar && grupo.matriculaId && (
+            <Button size="sm" variant="outline" onClick={() => setTarifaAbierta(true)}>
+              <Wallet className="h-4 w-4 mr-1.5" />
+              Configuración mensual
+              {grupo.becaTipo && (
+                <span className="ml-1.5 rounded-full bg-zero-50 px-1.5 py-0.5 text-[10px] font-medium text-zero-700">
+                  personal
+                </span>
+              )}
             </Button>
           )}
           {/*
@@ -656,10 +695,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
               <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
-                  La mensualidad no está configurada para facturarse automáticamente: los cargos se generan como deuda, pero <b>no se emite la factura sola</b> en su fecha.
-                  {puedeFacturar && grupo.matriculaId
-                    ? <> Pulsa <b>«Configurar mensualidad»</b> arriba para que se emita cada mes.</>
-                    : <> Configúrala desde el botón de arriba para que se emita cada mes.</>}
+                  La mensualidad no está configurada para facturarse automáticamente: los cargos se generan como deuda, pero <b>no se emite la factura sola</b> en su fecha. Factúrala cada mes desde aquí, o pídele al administrador que active la emisión automática.
                 </div>
               </div>
             )}
@@ -876,6 +912,15 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         }}
         perfilEmpresa={perfilEmpresa}
         cargosIniciales={cajon?.cargos ?? []}
+        // «Nueva factura» (sin cargos en la URL) abre VACÍA. Lo que el alumno
+        // debe no se mete en líneas: se le pasa al buscador de productos, que
+        // lo ofrece mes a mes con el precio de ese alumno. Solo lo que NO tiene
+        // factura y aún tiene saldo, porque volver a facturar un cargo ya
+        // facturado le cobraría dos veces a la familia.
+        cargosOfrecidos={cajon && !cajon.cargos && !cajon.previsto
+          ? cargosSinFactura.filter((c) => c.saldoCentavos > 0).map((c) => c.id)
+          : undefined}
+        clienteInicial={clienteInicial ?? null}
         previsto={cajon?.previsto ?? null}
       />
 
@@ -1224,78 +1269,85 @@ function MensualidadesTabla({ diaFacturaAuto, tutorClientId, cargos, previstos, 
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-100">
-        {/* `min-w` con `table-fixed`: sin él las nueve columnas se comprimen hasta
-            montarse unas sobre otras —«RD$3,000.00RD$0.00RD$3,000.00» pegado— en
-            vez de dejar que el contenedor se desplace. El `overflow-x-auto` del
-            padre no llegaba a activarse nunca porque la tabla siempre «cabía». */}
-        <table className="w-full min-w-[860px] table-fixed text-sm">
-          <ColumnasCuentas />
-          <thead>
-            <tr className="bg-gray-50 text-left text-xs text-gray-500">
-              <th className="px-3 py-2.5 font-medium">Período</th>
-              <th className="px-3 py-2.5 font-medium">Concepto</th>
-              {/* Por dónde ya se le avisó de este cobro. Va aquí y no pegado al
-                  concepto: junto al nombre los iconos se leían como parte de él. */}
-              <th className="px-3 py-2.5 font-medium">Avisos</th>
-              <th className="px-3 py-2.5 font-medium">
-                <button
-                  type="button"
-                  onClick={() => setOrden((o) => (o === 'asc' ? 'desc' : 'asc'))}
-                  className="inline-flex items-center gap-1 hover:text-gray-700"
-                  title={orden === 'asc' ? 'Del más próximo al más lejano' : 'Del más lejano al más próximo'}
-                >
-                  Vencimiento
-                  <ArrowUpDown className="h-3 w-3" />
-                </button>
-              </th>
-              <th className="px-3 py-2.5 font-medium">Estado</th>
-              <th className="px-3 py-2.5 font-medium text-right">Monto</th>
-              <th className="px-3 py-2.5 font-medium text-right">Pagado</th>
-              <th className="px-3 py-2.5 font-medium text-right">Pendiente</th>
-              <th className="px-3 py-2.5 font-medium text-right">Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const key = `${r.anio}-${r.mes}`;
-              return (
-                <MesFila
-                onReenviarAviso={onReenviarAviso}
-                reenviandoCargoId={reenviandoCargoId}
-                  key={key}
-                  r={r}
-                  diaFacturaAuto={diaFacturaAuto}
-                  tutorClientId={tutorClientId}
-                  abierto={expandidos.has(key)}
-                  onToggle={() => setExpandidos((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(key)) next.delete(key); else next.add(key);
-                    return next;
-                  })}
-                  puedePagos={puedePagos}
-                  puedeFacturar={puedeFacturar}
-                  puedeGestionar={puedeGestionar}
-                  onRegistrarPago={onRegistrarPago}
-                  onAplicarMora={onAplicarMora}
-                  onCrearFactura={onCrearFactura}
-                  onVerFactura={onVerFactura}
-                  onVincular={onVincular}
-                  onAnular={onAnular}
-                  onAnularFactura={onAnularFactura}
-                  onEnviarCorreo={onEnviarCorreo}
-                  onPrevisto={onPrevisto}
-                  onDetalle={onDetalle}
-                  enviadosPorCargo={enviadosPorCargo}
-                  aplicandoMoraFacturaId={aplicandoMoraFacturaId}
-                  marcados={marcados}
-                  onMarcarCargo={onMarcarCargo}
-                  onMarcarVarios={onMarcarVarios}
-                />
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="overflow-hidden rounded-lg border border-gray-100">
+        {/* Solo la tabla se desplaza de lado. El pie con la paginación va fuera
+            de este contenedor: dentro se iba con ella y quedaba cortado. */}
+        <div className="overflow-x-auto">
+          {/* Ancho mínimo con `table-fixed`: sin él las nueve columnas se comprimen
+              hasta montarse unas sobre otras —«RD$3,000.00RD$0.00RD$3,000.00»
+              pegado— en vez de dejar que el contenedor se desplace. El mínimo es la
+              suma de `MINIMOS_CUENTAS`; con un número puesto a mano (860 px) las
+              columnas de importes seguían quedándose cortas.
+              `tabular-nums`: todas las cifras miden lo mismo, así que los importes
+              de una columna caen alineados dígito con dígito. */}
+          <table className="w-full table-fixed text-sm tabular-nums" style={{ minWidth: ANCHO_MINIMO_CUENTAS }}>
+            <ColumnasCuentas />
+            <thead>
+              <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                <th className="px-3 py-2.5 font-medium">Período</th>
+                <th className="px-3 py-2.5 font-medium">Concepto</th>
+                {/* Por dónde ya se le avisó de este cobro. Va aquí y no pegado al
+                    concepto: junto al nombre los iconos se leían como parte de él. */}
+                <th className="px-3 py-2.5 font-medium">Avisos</th>
+                <th className="px-3 py-2.5 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setOrden((o) => (o === 'asc' ? 'desc' : 'asc'))}
+                    className="inline-flex items-center gap-1 hover:text-gray-700"
+                    title={orden === 'asc' ? 'Del más próximo al más lejano' : 'Del más lejano al más próximo'}
+                  >
+                    Vencimiento
+                    <ArrowUpDown className="h-3 w-3" />
+                  </button>
+                </th>
+                <th className="px-3 py-2.5 font-medium">Estado</th>
+                <th className="px-3 py-2.5 font-medium text-right">Monto</th>
+                <th className="px-3 py-2.5 font-medium text-right">Pagado</th>
+                <th className="px-3 py-2.5 font-medium text-right">Pendiente</th>
+                <th className="px-3 py-2.5 font-medium text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const key = `${r.anio}-${r.mes}`;
+                return (
+                  <MesFila
+                  onReenviarAviso={onReenviarAviso}
+                  reenviandoCargoId={reenviandoCargoId}
+                    key={key}
+                    r={r}
+                    diaFacturaAuto={diaFacturaAuto}
+                    tutorClientId={tutorClientId}
+                    abierto={expandidos.has(key)}
+                    onToggle={() => setExpandidos((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(key)) next.delete(key); else next.add(key);
+                      return next;
+                    })}
+                    puedePagos={puedePagos}
+                    puedeFacturar={puedeFacturar}
+                    puedeGestionar={puedeGestionar}
+                    onRegistrarPago={onRegistrarPago}
+                    onAplicarMora={onAplicarMora}
+                    onCrearFactura={onCrearFactura}
+                    onVerFactura={onVerFactura}
+                    onVincular={onVincular}
+                    onAnular={onAnular}
+                    onAnularFactura={onAnularFactura}
+                    onEnviarCorreo={onEnviarCorreo}
+                    onPrevisto={onPrevisto}
+                    onDetalle={onDetalle}
+                    enviadosPorCargo={enviadosPorCargo}
+                    aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+                    marcados={marcados}
+                    onMarcarCargo={onMarcarCargo}
+                    onMarcarVarios={onMarcarVarios}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
           <span>
@@ -1658,8 +1710,34 @@ function OtrosCargosTabla({ cargos, previstos, facturasSueltas = [], onEnviarFac
  * desplazadas respecto a las del padre, que es justo lo que hace que el
  * desplegable parezca un cuerpo extraño en vez de la continuación de la fila.
  */
-// La columna de Avisos va estrecha: son tres iconos de 14 px.
-const ANCHOS_CUENTAS = ['16%', '23%', '7%', '10%', '9%', '10%', '9%', '11%', '5%'];
+/**
+ * Lo mínimo que necesita cada columna, en px y contando el relleno de la celda.
+ *
+ * Antes eran porcentajes puestos a ojo —Monto 10 %, Pagado 9 %— sobre una tabla
+ * de 860 px como mínimo: 77 px para un «RD$3,000.00» que mide 90. El importe se
+ * salía de su celda y se montaba sobre el de al lado, el mes se cortaba en
+ * «Septiem…» y el estado en «Sin f…».
+ *
+ * Cada número de aquí sale de medir el dato más largo de su columna: el mes con
+ * su casilla y sus iconos, un importe de cinco cifras, la etiqueta «Sin
+ * facturar», los dos botones de un cargo ya facturado. De la lista salen las
+ * dos cosas a la vez —el ancho mínimo de la tabla es la suma y el porcentaje de
+ * cada columna es su parte de esa suma—, así que en el mínimo cada una tiene
+ * justo lo suyo y de ahí para arriba crecen todas a la par.
+ */
+const MINIMOS_CUENTAS = [
+  204, // Período
+  180, // Concepto: el único que puede partirse en dos líneas
+  76,  // Avisos: tres iconos de 14 px
+  112, // Vencimiento
+  112, // Estado
+  116, // Monto
+  116, // Pagado
+  116, // Pendiente
+  76,  // Acción
+];
+const ANCHO_MINIMO_CUENTAS = MINIMOS_CUENTAS.reduce((s, w) => s + w, 0);
+const ANCHOS_CUENTAS = MINIMOS_CUENTAS.map((w) => `${(w / ANCHO_MINIMO_CUENTAS) * 100}%`);
 
 /**
  * La casilla para meter un cargo en la próxima factura.
@@ -2276,6 +2354,347 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, me
   );
 }
 
+/**
+ * La tarifa PERSONAL de la mensualidad de un alumno.
+ *
+ * Vive donde antes estaba el acceso a facturas recurrentes («Configuración
+ * mensual»), que se pidió sacar de la ficha. Fija lo que paga ESTE estudiante,
+ * sin tocar la tarifa de su generación ni la de los demás:
+ *
+ *  - «La de su generación»: sin excepción, paga la tarifa base de su grado.
+ *  - «Monto propio»: un importe fijo al mes, sea cual sea la base.
+ *  - «Descuento»: un porcentaje sobre la tarifa de su generación.
+ *
+ * Se guarda como beca en la matrícula (`monto`/`porcentaje` + motivo), que es
+ * lo que la facturación y la vista financiera ya resuelven por encima de la
+ * tarifa del grado. El motivo deja escrito el porqué (histórico, hermano…).
+ */
+function TarifaEstudianteDialog({
+  open, onOpenChange, matriculaId, estudianteId, periodoId, becaTipo, becaValor, becaMotivo, conceptoMensualidadId, onGuardado,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  matriculaId: number;
+  estudianteId: number;
+  periodoId: number | null;
+  becaTipo: string | null;
+  becaValor: number | null;
+  becaMotivo: string | null;
+  /** Generación (concepto de mensualidad) actual del alumno. */
+  conceptoMensualidadId: number | null;
+  onGuardado: () => void;
+}) {
+  type Modo = 'normal' | 'monto' | 'porcentaje';
+  const modoInicial: Modo = becaTipo === 'monto' ? 'monto' : becaTipo === 'porcentaje' ? 'porcentaje' : 'normal';
+  const [modo, setModo] = useState<Modo>(modoInicial);
+  // El monto se teclea en pesos; se guarda en centavos. El % es entero 1-100.
+  const [valor, setValor] = useState('');
+  const [motivo, setMotivo] = useState('');
+  // La generación elegida (concepto de mensualidad). Es la ubicación del alumno,
+  // no su precio: el importe lo pone el monto propio / descuento de arriba.
+  const [generacionSel, setGeneracionSel] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── Sección «otro concepto»: precio personal de un concepto que no es la
+  //    mensualidad (un uniforme, una actividad…), con su propio guardado.
+  type ConceptoLite = { id: number; nombre: string; tipo: string };
+  type PrecioLite = { id: number; conceptoId: number; objetivoTipo: string; objetivoId: number; montoCentavos: number; productId: number | null; activo: boolean };
+  const [conceptos, setConceptos] = useState<ConceptoLite[]>([]);
+  // Conceptos de mensualidad = las generaciones que se pueden elegir.
+  const [generaciones, setGeneraciones] = useState<ConceptoLite[]>([]);
+  const [precios, setPrecios] = useState<PrecioLite[]>([]);
+  const [conceptoSel, setConceptoSel] = useState('');
+  const [precioOtro, setPrecioOtro] = useState('');
+  // 'guardar' = solo el precio; 'ahora' = además genera el cargo ya (devengo).
+  const [modoOtro, setModoOtro] = useState<'guardar' | 'ahora'>('guardar');
+  const [guardandoOtro, setGuardandoOtro] = useState(false);
+  const [errorOtro, setErrorOtro] = useState<string | null>(null);
+
+  // Reposicionar los campos cada vez que se abre: el diálogo se reusa entre
+  // matrículas y arrastraría lo tecleado en la anterior.
+  useEffect(() => {
+    if (!open) return;
+    setModo(modoInicial);
+    setValor(
+      becaTipo === 'monto' ? (becaValor != null ? (becaValor / 100).toString() : '')
+      : becaTipo === 'porcentaje' ? (becaValor != null ? String(becaValor) : '')
+      : '',
+    );
+    setMotivo(becaMotivo ?? '');
+    setGeneracionSel(conceptoMensualidadId != null ? String(conceptoMensualidadId) : '');
+    setError(null);
+    setConceptoSel(''); setPrecioOtro(''); setModoOtro('guardar'); setErrorOtro(null);
+  }, [open, becaTipo, becaValor, becaMotivo, conceptoMensualidadId, modoInicial]);
+
+  // Conceptos (para elegir) y precios del año (para leer el precio personal ya
+  // puesto y el producto de facturación que usa cada concepto).
+  const cargarOtros = useCallback(async () => {
+    if (periodoId == null) return;
+    try {
+      const [cs, cp] = await Promise.all([
+        fetch('/api/administracion-escolar/conceptos').then((r) => r.json()),
+        fetch(`/api/administracion-escolar/concepto-precios?periodoId=${periodoId}`).then((r) => r.json()),
+      ]);
+      const activos = ((cs.conceptos ?? []) as (ConceptoLite & { activo?: boolean })[])
+        .filter((c) => c.activo !== false);
+      // La mensualidad se maneja arriba (beca): aquí van los DEMÁS conceptos.
+      setConceptos(activos.filter((c) => c.tipo !== 'mensualidad'));
+      // Las mensualidades son las generaciones elegibles.
+      setGeneraciones(activos.filter((c) => c.tipo === 'mensualidad'));
+      setPrecios((cp.precios ?? []) as PrecioLite[]);
+    } catch { /* la sección queda vacía; la de mensualidad sigue usable */ }
+  }, [periodoId]);
+  useEffect(() => { if (open) void cargarOtros(); }, [open, cargarOtros]);
+
+  // El precio personal ya puesto para el concepto elegido, si existe.
+  const precioPersonal = precios.find(
+    (p) => p.activo && p.objetivoTipo === 'estudiante' && p.objetivoId === estudianteId && String(p.conceptoId) === conceptoSel,
+  ) ?? null;
+  // Al cambiar de concepto, precargar su precio personal si lo tiene.
+  useEffect(() => {
+    setPrecioOtro(precioPersonal != null ? (precioPersonal.montoCentavos / 100).toString() : '');
+    setErrorOtro(null);
+  }, [conceptoSel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function guardarOtro(quitar = false) {
+    setErrorOtro(null);
+    if (!conceptoSel) { setErrorOtro('Elige un concepto.'); return; }
+    setGuardandoOtro(true);
+    try {
+      if (quitar) {
+        if (!precioPersonal) { onOpenChange(false); return; }
+        const res = await fetch(`/api/administracion-escolar/concepto-precios?id=${precioPersonal.id}`, { method: 'DELETE' });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) { setErrorOtro(j.error ?? 'No se pudo quitar.'); return; }
+        await cargarOtros();
+        onGuardado();
+        toast.success('Quitado: vuelve al precio normal del concepto.');
+        return;
+      }
+      const n = Number(precioOtro.replace(',', '.'));
+      if (!precioOtro.trim() || !Number.isFinite(n) || n < 0) { setErrorOtro('Escribe el precio.'); return; }
+      const res = await fetch('/api/administracion-escolar/concepto-precios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conceptoId: Number(conceptoSel), periodoId, objetivoTipo: 'estudiante', objetivoId: estudianteId,
+          monto: n,
+          devengar: modoOtro === 'ahora',
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setErrorOtro(j.error ?? 'No se pudo guardar.'); return; }
+      await cargarOtros();
+      onGuardado();
+      toast.success(modoOtro === 'ahora'
+        ? (j.cargosCreados ? 'Precio guardado y cargo generado.' : 'Precio guardado (no había cargo pendiente que generar).')
+        : 'Precio guardado sin crear un cargo ahora.');
+    } catch {
+      setErrorOtro('No se pudo guardar.');
+    } finally {
+      setGuardandoOtro(false);
+    }
+  }
+
+  async function guardar() {
+    setError(null);
+    // Cuerpo del PATCH: `normal` quita la beca (tipo null); los otros la fijan.
+    let body: Record<string, unknown>;
+    if (modo === 'normal') {
+      body = { becaTipo: null };
+    } else {
+      const n = Number(valor.replace(',', '.'));
+      if (!Number.isFinite(n) || n <= 0) {
+        setError(modo === 'monto' ? 'Escribe el monto mensual.' : 'Escribe el porcentaje de descuento.');
+        return;
+      }
+      if (modo === 'porcentaje' && (n <= 0 || n > 100)) {
+        setError('El descuento va de 1 a 100%.');
+        return;
+      }
+      body = {
+        becaTipo: modo,
+        // Monto en centavos; porcentaje tal cual.
+        becaValor: modo === 'monto' ? Math.round(n * 100) : n,
+        becaMotivo: motivo.trim() || null,
+      };
+    }
+    // La generación (ubicación), solo si el usuario la cambió. Fija el concepto,
+    // no su precio: el importe lo pone el monto propio / descuento de arriba.
+    if (generacionSel && generacionSel !== String(conceptoMensualidadId ?? '')) {
+      body.conceptoMensualidadId = Number(generacionSel);
+    }
+    setGuardando(true);
+    try {
+      const res = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(json.error ?? 'No se pudo guardar.'); return; }
+
+      // Poblar Cuentas por cobrar al instante: crea las cuotas del año alineadas
+      // al recurrente, al monto recién guardado. Silencioso si no hay recurrente
+      // (nada a lo que alinear) — el precio igual quedó guardado.
+      let generadas = 0;
+      try {
+        const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, { method: 'POST' });
+        const gj = await g.json().catch(() => ({}));
+        if (g.ok) generadas = gj.cargosCreados ?? 0;
+      } catch { /* no bloquea el guardado del precio */ }
+
+      onOpenChange(false);
+      onGuardado();
+      toast.success(generadas > 0
+        ? `Guardado. ${generadas} mensualidad${generadas === 1 ? '' : 'es'} en Cuentas por cobrar.`
+        : (modo === 'normal' ? 'Vuelve a la tarifa de su generación.' : 'Tarifa personal guardada.'));
+    } catch {
+      setError('No se pudo guardar.');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const OPCIONES: { id: Modo; titulo: string; sub: string }[] = [
+    { id: 'normal',     titulo: 'La de su generación', sub: 'Sin excepción: paga la tarifa de su grado.' },
+    { id: 'monto',      titulo: 'Monto propio',        sub: 'Un importe fijo al mes para este alumno.' },
+    { id: 'porcentaje', titulo: 'Descuento',           sub: 'Un porcentaje sobre la tarifa de su generación.' },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <ModalHeader
+          title="Configuración mensual"
+          subtitle="La mensualidad de este estudiante. No cambia la de los demás." />
+        <div className="space-y-3 px-6 pb-2">
+          {error && <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</div>}
+
+          {/* Generación: la UBICACIÓN del alumno (lo que se ve en Cuentas por
+              cobrar como «1ra/2da/3ra…»), no su precio. El importe lo pone el
+              monto propio / descuento de abajo. */}
+          {generaciones.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs">Generación</Label>
+              <NativeSelect value={generacionSel} onChange={(e) => setGeneracionSel(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {generaciones.map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
+              </NativeSelect>
+              <p className="text-[11px] text-gray-400">Ubica al alumno en su generación. El precio lo fija su monto propio, no la tarifa de esa generación.</p>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            {OPCIONES.map((o) => (
+              <button key={o.id} type="button" onClick={() => setModo(o.id)}
+                className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                  modo === o.id ? 'border-zero-500 bg-zero-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                  modo === o.id ? 'border-zero-600' : 'border-gray-300'}`}>
+                  {modo === o.id && <span className="h-2 w-2 rounded-full bg-zero-600" />}
+                </span>
+                <span className="min-w-0">
+                  <span className={`block text-sm ${modo === o.id ? 'font-medium text-zero-800' : 'text-gray-800'}`}>{o.titulo}</span>
+                  <span className="block text-xs text-gray-500">{o.sub}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {modo !== 'normal' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">{modo === 'monto' ? 'Monto al mes (RD$)' : 'Descuento (%)'}</Label>
+                <Input type="number" step={modo === 'monto' ? '0.01' : '1'} value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                  placeholder={modo === 'monto' ? '0.00' : '0'} autoFocus />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Motivo (opcional)</Label>
+                <Input value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Hermano, histórico…" />
+              </div>
+            </div>
+          )}
+
+          {/* ── Precio personal de OTRO concepto (uniforme, actividad…) ─────── */}
+          <div className="mt-2 border-t border-gray-100 pt-3">
+            <p className="text-sm font-medium text-gray-800">Precio personal de otro concepto</p>
+            <p className="mb-2 text-xs text-gray-500">Solo para este alumno, sin cambiar el precio de los demás.</p>
+            {errorOtro && <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{errorOtro}</div>}
+            <div className="space-y-1">
+              <Label className="text-xs">Concepto</Label>
+              <NativeSelect value={conceptoSel} onChange={(e) => setConceptoSel(e.target.value)}>
+                <option value="">Elige un concepto…</option>
+                {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+              </NativeSelect>
+            </div>
+
+            {conceptoSel && (
+              <div className="mt-2 space-y-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Precio para este alumno (RD$)</Label>
+                  <Input type="number" step="0.01" value={precioOtro}
+                    onChange={(e) => setPrecioOtro(e.target.value)} placeholder="0.00" />
+                  {precioPersonal && (
+                    <p className="text-[11px] text-gray-400">Ya tiene un precio personal puesto. Cámbialo o quítalo.</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ['guardar', 'Solo guardar el precio'],
+                    ['ahora', 'Generar el cargo ahora'],
+                  ] as const).map(([id, txt]) => (
+                    <button key={id} type="button" onClick={() => setModoOtro(id)}
+                      className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                        modoOtro === id ? 'border-zero-500 bg-zero-50 font-medium text-zero-800' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}>
+                      {txt}
+                    </button>
+                  ))}
+                </div>
+
+                {/* La nota que el cliente pidió: qué hace de verdad cada opción. */}
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  {modoOtro === 'guardar' ? (
+                    <span><b>Solo se guarda el precio.</b> Este paso no crea deuda. Si el concepto está programado, su próximo devengo puede generar el cargo. Úsalo si todavía no quieres cobrárselo.</span>
+                  ) : (
+                    <span><b>Se guarda el precio y se intenta generar el cargo ahora.</b> Si el concepto está asignado al alumno y ya corresponde cobrarlo, aparecerá en «Pendiente». Si ya existe, no se duplica.</span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  {precioPersonal && (
+                    <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700"
+                      onClick={() => void guardarOtro(true)} disabled={guardandoOtro}>
+                      Quitar precio personal
+                    </Button>
+                  )}
+                  <Button size="sm" className="bg-zero-600 hover:bg-zero-700"
+                    onClick={() => void guardarOtro(false)} disabled={guardandoOtro}>
+                    {guardandoOtro && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Guardar este concepto
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>Cerrar</Button>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={guardar} disabled={guardando}>
+            {guardando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Guardar mensualidad
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
   const grupos = new Map<string, {
     key: string;
@@ -2292,6 +2711,11 @@ export function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[])
     facturaRecurrenteId: number | null;
     /** Día del mes en que la recurrente factura sola. null = no hay recurrente activa. */
     diaFacturaAuto: number | null;
+    /** Tarifa personal de la mensualidad de esta matrícula (beca). */
+    becaTipo: string | null;
+    becaValor: number | null;
+    becaMotivo: string | null;
+    conceptoMensualidadId: number | null;
     cargos: Cargo[];
   }>();
 
@@ -2314,6 +2738,10 @@ export function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[])
       diaFacturaAuto: m.recurrenteEstado === 'activa'
         ? (m.recurrenteDiaCobro ?? (Number(m.recurrenteProxima?.slice(8, 10)) || null))
         : null,
+      becaTipo: m.becaTipo,
+      becaValor: m.becaValor,
+      becaMotivo: m.becaMotivo,
+      conceptoMensualidadId: m.conceptoMensualidadId,
       cargos: [],
     });
   }
@@ -2340,6 +2768,10 @@ export function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[])
           fechaFin: null,
           facturaRecurrenteId: null,
           diaFacturaAuto: null,
+          becaTipo: null,
+          becaValor: null,
+          becaMotivo: null,
+          conceptoMensualidadId: null,
           cargos: [],
         };
         grupos.set(key, grupo);

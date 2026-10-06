@@ -87,6 +87,7 @@ export default function NuevaFacturaForm({
   initialData,
   categoriaFija,
   cargosIniciales,
+  cargosOfrecidos,
   clienteInicial,
   previsto,
   onVolver,
@@ -104,6 +105,18 @@ export default function NuevaFacturaForm({
    * poner el parámetro — hoy, el cajón de la ficha de familia.
    */
   cargosIniciales?: number[];
+  /**
+   * Cargos que se OFRECEN en el buscador de productos, sin ponerlos en la
+   * factura.
+   *
+   * «Nueva factura» abría con todo lo que la familia debía sin facturar ya
+   * metido en líneas: nueve meses de colegiatura para quien venía a cobrar
+   * uno. Ahora abre vacía, y lo que el alumno debe sale al buscar el producto
+   * en su línea —«COLEGIO — Noviembre 2026», con SU precio, que no tiene por
+   * qué ser el de otro alumno del mismo concepto—. Elegirlo ahí deja la
+   * factura atada a ese cargo, igual que si hubiera venido precargado.
+   */
+  cargosOfrecidos?: number[];
   /**
    * A quién se le factura, cuando no hay ningún cargo del que deducirlo.
    *
@@ -637,6 +650,8 @@ export default function NuevaFacturaForm({
    */
   function cargarPrefillEscolar(
     cargoIds: number[], p?: { matriculaId: number; cuotaId: number; conceptoId: number } | null,
+    /** Solo alimenta el buscador: ni líneas, ni comprador, ni cargos de origen. */
+    soloOfrecer = false,
   ) {
     fetch('/api/administracion-escolar/cargos/prefill-factura', {
       method: 'POST',
@@ -663,6 +678,12 @@ export default function NuevaFacturaForm({
             .filter((o) => o.linea && o.saldoCentavos > 0)
             .map((o) => ({ ...o, contexto: contextoATexto(ctxTodos.get(o.estudianteId)) })),
         );
+
+        // «Nueva factura» a secas: lo que vino marcado solo era la lista de lo
+        // que se puede añadir. La factura se queda vacía y cada mes entra
+        // cuando alguien lo elige en el buscador (`aplicarCuotaEnLinea`), que
+        // es también quien lo apunta en `origenCargos`.
+        if (soloOfrecer) return;
 
         const elegidas = (datos.opciones ?? []).filter((o) => o.seleccionado);
         if (elegidas.length === 0) return;
@@ -695,6 +716,13 @@ export default function NuevaFacturaForm({
         if (its.length) dispatchItems({ type: 'SET', items: its });
       })
       .catch((e: unknown) => {
+        // Sin la lista la factura se puede hacer igual, pero los meses del
+        // alumno no saldrán en el buscador: se dice, porque una línea escrita
+        // a mano no queda atada a ningún cargo.
+        if (soloOfrecer) {
+          toast.warning('No se pudieron cargar los cargos pendientes: no saldrán al buscar el producto.');
+          return;
+        }
         toast.error(e instanceof Error ? e.message : 'No se pudo preparar la factura');
       })
       // Pase lo que pase se quita: si la carga falló hay que poder escribir la
@@ -798,6 +826,14 @@ export default function NuevaFacturaForm({
     // otras pantallas y no hace falta moverlas para esto.
     if (previsto || cargosIniciales?.length) {
       cargarPrefillEscolar(cargosIniciales ?? [], previsto);
+      return;
+    }
+    // «Nueva factura» desde una ficha: vacía, con el comprador puesto ya —no
+    // hay que esperar a la lista para saber a quién se le factura— y con lo
+    // que se debe cargándose por detrás para el buscador.
+    if (cargosOfrecidos?.length) {
+      if (clienteInicial) seleccionarCliente(clienteInicial);
+      cargarPrefillEscolar(cargosOfrecidos, null, true);
       return;
     }
     if (qpDesdeCargos) {
@@ -1243,7 +1279,12 @@ export default function NuevaFacturaForm({
     const texto = q.trim().toLowerCase();
 
     return opcionesEscolares
-      .filter((o) => o.estudianteId === dependienteId)
+      // Por el BENEFICIARIO de la opción, no por su `estudianteId`. La línea de
+      // la factura guarda al hijo como beneficiario de Facturación, y el alumno
+      // de Gobernanza lleva otro número: comparando uno con otro el buscador no
+      // ofrecía ninguna cuota, salvo que los dos ids coincidieran por
+      // casualidad, y quedaban solo los productos genéricos del catálogo.
+      .filter((o) => o.linea?.dependienteId === dependienteId)
       // Lo que ya está en la factura no se vuelve a ofrecer: añadir dos veces
       // el mismo mes es cobrarlo dos veces.
       .filter((o) => !items.some((it) => it.cuotaClave === `${o.estudianteId}:${o.cargoId}:${o.mes ?? 0}:${o.anio}`))

@@ -35,6 +35,7 @@ interface Resp {
   total: number;
   incontactables: number;
   sinFicha: number;
+  retiradas: number;
   stats: {
     familias: number; conDeuda: number;
     deudaTotalCentavos: number; incontactables: number;
@@ -171,13 +172,19 @@ export default function ResponsablesClient() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input className="pl-8" placeholder="Buscar por nombre o RNC…"
+              <Input className="pl-8" placeholder="Buscar por nombre, cédula o RNC…"
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setParams({ q: texto || null, p: null }); }} />
             </div>
+            {/* «Sin hijos activos» solo aparece si hay alguna: son las familias
+                que ya no tienen a nadie en el colegio ni deben nada. Salían
+                mezcladas con las que pagan este año y engordaban el contador. */}
             {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['sin-contacto', 'Sin contacto'],
-               ['sin-ficha', `Falta traerlas${data?.sinFicha ? ` (${data.sinFicha})` : ''}`]] as const)
+               ['sin-ficha', `Falta traerlas${data?.sinFicha ? ` (${data.sinFicha})` : ''}`],
+               ...((data?.retiradas ?? 0) > 0 || filtro === 'retiradas'
+                 ? [['retiradas', `Sin hijos activos${data?.retiradas ? ` (${data.retiradas})` : ''}`] as const]
+                 : [])] as const)
               .map(([v, etiqueta]) => (
                 <button key={v} type="button"
                   onClick={() => setParams({ filtro: v === 'todos' ? null : v, p: null })}
@@ -233,8 +240,18 @@ export default function ResponsablesClient() {
                           {/* Alumnos del módulo y beneficiarios de Contactos son
                               dos cuentas distintas: el colegio puede facturarle
                               por tres hijos y tener solo uno con ficha escolar. */}
-                          {f.alumnos > 0 ? `${f.alumnos} con ficha` : 'sin ficha'}
-                          {f.beneficiarios > f.alumnos && (
+                          {f.alumnos > 0
+                            ? `${f.alumnos} ${f.alumnos === 1 ? 'activo' : 'activos'}`
+                            : f.retirados > 0 ? 'sin hijos activos' : 'sin ficha'}
+                          {/* El retirado se dice aparte y no se suma: contarlo
+                              como hijo es lo que hacía salir dos veces al mismo
+                              niño cuando su ficha estaba repetida. */}
+                          {f.retirados > 0 && (
+                            <span className="block text-xs text-gray-400">
+                              {f.retirados} {f.retirados === 1 ? 'retirado' : 'retirados'}
+                            </span>
+                          )}
+                          {f.beneficiarios > f.alumnos + f.retirados && (
                             <span className="block text-xs text-gray-400">
                               {f.beneficiarios} en Contactos
                             </span>
@@ -316,7 +333,7 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-gray-900">{fila.razonSocial}</p>
           <p className="text-xs text-gray-500">
-            {fila.rnc ?? 'Sin documento'} · {fila.alumnos} alumno{fila.alumnos === 1 ? '' : 's'}
+            {fila.rnc ?? 'Sin documento'} · {fila.alumnos} {fila.alumnos === 1 ? 'hijo activo' : 'hijos activos'}
           </p>
         </div>
         <button type="button" onClick={onCerrar}
@@ -327,7 +344,7 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <MiniCard label="Hijos con ficha" value={String(fila.alumnos)} />
+        <MiniCard label="Hijos activos" value={String(fila.alumnos)} />
         <MiniCard label="En Contactos" value={String(fila.beneficiarios)} />
         <MiniCard label="Más viejo sin pagar"
           value={fila.venceMasViejo ? fmtFechaCorta(fila.venceMasViejo) : '—'}
@@ -361,14 +378,18 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
         {!detalle ? (
           <div className="flex justify-center py-3"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
         ) : hijos.length === 0 ? (
-          <p className="text-sm text-gray-500">Sin alumnos con ficha escolar.</p>
+          <p className="text-sm text-gray-500">
+            {fila.retirados > 0 ? 'Ya no tiene hijos activos en el colegio.' : 'Sin alumnos con ficha escolar.'}
+          </p>
         ) : (
           <div className="space-y-1.5">
             {hijos.map((h) => (
               <Link key={h.estudianteId} href={`/escolar/estudiantes/${h.estudianteId}`}
                 className="flex items-baseline gap-2 rounded-md px-1 py-1 text-sm hover:bg-gray-50">
                 <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{h.nombre}</span>
-                <span className="shrink-0 text-xs text-gray-500">{h.curso ?? 'sin matrícula'}</span>
+                <span className="shrink-0 text-xs text-gray-500">
+                  {h.estado && h.estado !== 'activo' ? h.estado : (h.curso ?? 'sin matrícula')}
+                </span>
                 <span className={`shrink-0 font-semibold ${h.deudaCentavos > 0 ? 'text-red-600' : 'text-zero-700'}`}>
                   {h.deudaCentavos > 0 ? fmtDOP(h.deudaCentavos) : 'Al día'}
                 </span>

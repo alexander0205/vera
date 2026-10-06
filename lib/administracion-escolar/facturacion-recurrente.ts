@@ -9,6 +9,47 @@ import {
 } from '@/lib/db/schema';
 import { and, eq, isNull, isNotNull } from 'drizzle-orm';
 import { mesPerteneceAlPeriodo } from './periodo-utils';
+import { resolverTarifa } from './tarifas';
+
+/**
+ * Monto vigente de la mensualidad de la matrícula atada a una recurrente.
+ *
+ * La recurrente congela el precio cuando se configura; esto lo vuelve a
+ * resolver EN CADA emisión desde la matrícula (monto propio, descuento o la
+ * tarifa de su generación), para que un cambio hecho en la ficha DESPUÉS de
+ * crear la recurrente sí se cobre del 25 en adelante. Antes el cron reemitía
+ * eternamente el monto viejo aunque la secretaria le pusiera un monto propio.
+ *
+ * Solo repreciamos por una EXCEPCIÓN del propio alumno: un monto propio o un
+ * descuento en su matrícula (`origen='beca'`), o un precio con
+ * `objetivo_tipo='estudiante'` (`origen='estudiante'`). Cuando la tarifa sale de
+ * la estructura (servicio/grado/sección = la de su generación) NO se toca la
+ * recurrente: reprecificar en masa todas las mensualidades a la tarifa de
+ * generación es otra decisión —el cutover de precios de estructura— y no la de
+ * esta función; el emisor conserva el precio congelado y no hay cambio sorpresa.
+ *
+ * Devuelve centavos, o `null` cuando no hay excepción del alumno que aplicar
+ * (recurrente no escolar, sin concepto de mensualidad, o tarifa de estructura)
+ * — y entonces el emisor conserva el precio congelado, sin regresión.
+ */
+export async function tarifaMensualidadActual(
+  facturaRecurrenteId: number,
+): Promise<number | null> {
+  const [matricula] = await db
+    .select({
+      id: adminEscolarMatriculas.id,
+      teamId: adminEscolarMatriculas.teamId,
+      conceptoId: adminEscolarMatriculas.conceptoMensualidadId,
+    })
+    .from(adminEscolarMatriculas)
+    .where(eq(adminEscolarMatriculas.facturaRecurrenteId, facturaRecurrenteId))
+    .limit(1);
+  if (!matricula?.conceptoId) return null;
+
+  const tarifa = await resolverTarifa(matricula.teamId, matricula.id, matricula.conceptoId);
+  if (!tarifa || (tarifa.origen !== 'beca' && tarifa.origen !== 'estudiante')) return null;
+  return tarifa.montoCentavos;
+}
 
 /**
  * ¿La mensualidad de ese mes ya se facturó a mano?

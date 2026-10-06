@@ -54,7 +54,7 @@ export async function cargarPlan(teamId: number, matriculaId: number): Promise<P
   const ctx = await contextoDeSeccion(teamId, matricula.periodoId, matricula.cursoId, {
     tipo: matricula.becaTipo,
     valor: matricula.becaValor,
-  });
+  }, matricula.estudianteId);
   if (!ctx) return { ...base, lineas: [], devenga: false };
 
   const desde = String(matricula.fechaInscripcion ?? new Date().toISOString().slice(0, 10));

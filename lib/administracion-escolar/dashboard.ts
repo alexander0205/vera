@@ -4,6 +4,11 @@ import { db } from '@/lib/db/drizzle';
 // Los tramos viven en `cartera.ts` y no aquí porque la pantalla también los
 // necesita, y este módulo es `server-only`.
 import { TRAMOS, diasDeAtraso, type TramoKey } from './cartera';
+// Lo mismo con la serie: sin base, para poder probarla y para que la pantalla
+// use los mismos nombres de mes.
+import { armarSerie, normalizarMes, type PuntoMensual, type SerieArmada } from './serie-mensual';
+
+export type { PuntoMensual };
 
 /**
  * El panorama financiero del colegio: si entró la plata, quién debe y qué falta
@@ -25,6 +30,12 @@ import { TRAMOS, diasDeAtraso, type TramoKey } from './cartera';
  *  2. **Los cargos anulados no existen.** No son deuda perdonada ni cobrada:
  *     son un cobro que nunca debió emitirse, y contarlos en el denominador
  *     hunde el porcentaje de cumplimiento sin que nadie deba nada.
+ *
+ *  3. **Cada cargo es de UN mes, y es el suyo.** El mes sale de `anio`/`mes`
+ *     del cargo —el mes al que pertenece la cuota, el que lee el padre en su
+ *     recibo— y solo si no lo tiene, del vencimiento. Se agrupaba siempre por
+ *     vencimiento, y con cinco días para pagar la cuota de febrero vence el 2
+ *     de marzo: febrero salía vacío y marzo con el doble.
  *
  * Nada de aquí escribe. Es una pantalla de lectura, incluso donde la cifra
  * dependa de un saldo que otra ruta sí sincroniza.
@@ -62,39 +73,47 @@ export interface ResumenCartera {
   pendienteCentavos: number;
   /** La parte del pendiente cuyo plazo ya pasó. */
   vencidoCentavos: number;
+  /**
+   * La parte del pendiente que es de meses que TODAVÍA NO HAN LLEGADO.
+   *
+   * Existe porque hay colegios que cargan el año entero al matricular: ahí el
+   * pendiente son nueve meses de colegiatura que nadie debe aún, y enseñarlo
+   * como una sola cifra se leía como «esto es lo que tiene que entrar ya».
+   */
+  futuroCentavos: number;
+  /** El resto: ya toca pagarlo y sigue dentro de plazo. Los tres suman `pendiente`. */
+  corrienteCentavos: number;
   cargos: number;
   /** Familias con algo pendiente. Cuenta responsables de pago, no alumnos:
    *  tres hermanos con la misma deuda son una sola llamada. */
   familiasConDeuda: number;
 }
 
-export interface CumplimientoMes {
-  /** Mes en curso, `YYYY-MM`. */
-  mes: string;
-  /** Lo que vencía en el mes. */
-  esperadoCentavos: number;
-  /** De eso, lo cobrado. Mismo conjunto de cargos que `esperado`. */
-  cobradoCentavos: number;
-}
-
 export interface CajaMes {
-  /** Cobros de facturas del colegio que entraron en el mes en curso. */
+  /** El mes del que se habla, `YYYY-MM`: el elegido en el filtro, o el de hoy. */
+  mes: string;
+  /** Cobros de facturas del colegio que entraron en ese mes. */
   esteMesCentavos: number;
   /** El mismo cálculo para el mes anterior, para poder decir si subió. */
   mesAnteriorCentavos: number;
+  /** Todo lo que ha entrado por las facturas de este año escolar. */
+  totalCentavos: number;
 }
 
-export interface PuntoMensual {
-  /** `YYYY-MM`. */
-  key: string;
-  mes: number;
-  anio: number;
-  devengadoCentavos: number;
-  cobradoCentavos: number;
-  /** Si el mes ya llegó. Los de más adelante se pintan planos: no es que hayan
-   *  cobrado cero, es que todavía no hay nada que cobrar. */
-  transcurrido: boolean;
+/**
+ * Por dónde se recorta el panorama. Los tres se combinan.
+ *
+ * Sin ninguno es el año escolar completo, que es como se abre la pantalla.
+ */
+export interface FiltrosDashboard {
+  /** `YYYY-MM`: solo los cargos de ese mes. */
+  mes?: string | null;
+  conceptoId?: number | null;
+  gradoId?: number | null;
 }
+
+export interface OpcionConcepto { id: number; nombre: string; activo: boolean }
+export interface OpcionGrado { id: number; grado: string; servicio: string; tanda: string | null }
 
 export interface FilaConcepto {
   conceptoId: number;
@@ -145,12 +164,23 @@ export interface DashboardEscolar {
   periodo: string;
   /** La fecha con la que se calculó todo (hora de RD). */
   hoy: string;
+  /** Los filtros YA validados: lo que no era un mes, un concepto o un grado de
+   *  este año escolar vuelve como `null`, y la pantalla lo quita de la URL. */
+  filtros: { mes: string | null; conceptoId: number | null; gradoId: number | null };
+  /** Lo que se puede elegir en cada filtro. No se recorta con los filtros
+   *  puestos: si no, elegir un concepto dejaría el desplegable con uno solo. */
+  opciones: { conceptos: OpcionConcepto[]; grados: OpcionGrado[] };
   cartera: ResumenCartera;
   /** Saldo vivo repartido por antigüedad. Suma `cartera.pendienteCentavos`. */
   tramos: Record<TramoKey, number>;
-  mes: CumplimientoMes;
   caja: CajaMes;
+  /**
+   * El año mes a mes. NO se recorta con el filtro de mes —es de donde se elige
+   * el mes—, pero sí con el de concepto y el de grado.
+   */
   serie: PuntoMensual[];
+  /** Cargos sin mes ni vencimiento: la fila que cuadra la tabla con el total. */
+  sinMes: SerieArmada['sinMes'];
   conceptos: FilaConcepto[];
   grados: FilaGrado[];
   deudores: FilaDeudor[];
@@ -188,41 +218,129 @@ function bordesDeMes(fecha: string) {
 // ─── La consulta ─────────────────────────────────────────────────────────────
 
 /**
- * Todo el panorama de un año escolar.
+ * Todo el panorama de un año escolar, entero o recortado por `pedidos`.
  *
- * Las trece consultas van en un solo `Promise.all` porque ninguna depende de
- * otra: en serie, pintar la pantalla eran trece idas y vueltas seguidas a Neon,
- * que con latencia de red se notan más que el trabajo de la base.
+ * Las doce consultas de cifras van en un solo `Promise.all` porque ninguna
+ * depende de otra: en serie, pintar la pantalla eran doce idas y vueltas
+ * seguidas a Neon, que con latencia de red se notan más que el trabajo de la
+ * base. Delante va solo una tanda corta —el período y las opciones de los
+ * filtros— porque de ella depende qué filtros se aceptan.
  */
 export async function dashboardDelPeriodo(
   teamId: number,
   periodoId: number,
   hoy: string = hoyRD(),
+  pedidos: FiltrosDashboard = {},
 ): Promise<DashboardEscolar | null> {
-  const [periodo] = (await db.execute(sql`
-    SELECT id, nombre, fecha_inicio::text AS fecha_inicio, fecha_fin::text AS fecha_fin
-    FROM admin_escolar_periodos
-    WHERE id = ${periodoId} AND team_id = ${teamId}
-    LIMIT 1
-  `)) as unknown as { id: number; nombre: string; fecha_inicio: string | null; fecha_fin: string | null }[];
+  // El período y lo que se puede elegir en los filtros, de una vez: son tres
+  // consultas cortas y hacen falta ANTES que las cifras, para no filtrar por un
+  // concepto o un grado que no es de este año.
+  const [periodos, opConceptos, opGrados] = await Promise.all([
+    db.execute(sql`
+      SELECT id, nombre, fecha_inicio::text AS fecha_inicio, fecha_fin::text AS fecha_fin
+      FROM admin_escolar_periodos
+      WHERE id = ${periodoId} AND team_id = ${teamId}
+      LIMIT 1
+    `),
+    // Los conceptos que tienen algún cargo este año, estén activos o no: el que
+    // se dejó de usar a mitad de curso sigue teniendo deuda que mirar.
+    db.execute(sql`
+      SELECT co.id, co.nombre, co.activo
+      FROM admin_escolar_conceptos_pago co
+      WHERE co.team_id = ${teamId}
+        AND EXISTS (
+          SELECT 1 FROM admin_escolar_cargos c
+           WHERE c.concepto_id = co.id AND c.team_id = ${teamId}
+             AND c.periodo_id = ${periodoId} AND c.${NO_ANULADO}
+        )
+      ORDER BY co.nombre
+    `),
+    db.execute(sql`
+      SELECT g.id, g.nombre AS grado, s.nombre AS servicio, s.tanda
+      FROM admin_escolar_grados g
+      JOIN admin_escolar_servicios s ON s.id = g.servicio_id
+      WHERE g.team_id = ${teamId} AND s.periodo_id = ${periodoId}
+      ORDER BY s.orden, g.orden, g.nombre
+    `),
+  ]);
+  const [periodo] = periodos as unknown as
+    { id: number; nombre: string; fecha_inicio: string | null; fecha_fin: string | null }[];
   if (!periodo) return null;
 
-  const { inicio: mesInicio, siguiente: mesSiguiente, anterior: mesAnterior } = bordesDeMes(hoy);
+  const opciones = {
+    conceptos: (opConceptos as unknown as Record<string, unknown>[]).map((f) => ({
+      id: n(f.id), nombre: String(f.nombre), activo: f.activo === true,
+    })),
+    grados: (opGrados as unknown as Record<string, unknown>[]).map((f) => ({
+      id: n(f.id), grado: String(f.grado), servicio: String(f.servicio),
+      tanda: f.tanda == null ? null : String(f.tanda),
+    })),
+  };
+
+  // Lo que llega por URL se valida contra lo que existe. Un id que no es de
+  // este año no se pasa a las consultas: daría una pantalla entera de ceros, y
+  // «el colegio no ha cobrado nada» es peor diagnóstico que ignorar el filtro.
+  const filtros = {
+    mes: normalizarMes(pedidos.mes),
+    conceptoId: opciones.conceptos.some((c) => c.id === pedidos.conceptoId) ? pedidos.conceptoId! : null,
+    gradoId: opciones.grados.some((g) => g.id === pedidos.gradoId) ? pedidos.gradoId! : null,
+  };
+
+  const mesActual = hoy.slice(0, 7);
+  const { siguiente: mesSiguiente } = bordesDeMes(hoy);
   // Hasta dónde llega lo devengado: el fin del mes en curso, el mismo horizonte
   // que usa `devengarPeriodo`. Con otro, «por devengar» contaría cuotas que el
   // devengo ya considera suyas y el año sumaría de más.
   const finDeMes = sql`(${mesSiguiente}::date - 1)`;
 
+  // La caja se mira del mes elegido; sin mes elegido, del que corre.
+  const mesCaja = filtros.mes ?? mesActual;
+  const { inicio: cajaInicio, siguiente: cajaSiguiente, anterior: cajaAnterior } =
+    bordesDeMes(`${mesCaja}-01`);
+
+  /**
+   * El mes de un cargo. Ver la decisión 3 de la cabecera.
+   *
+   * `anio` es el año de la emisión de su cuota y `mes` el mes al que la cuota
+   * pertenece (así los escribe `devengar.ts`), de modo que juntos dan el mes
+   * que el padre lee en su recibo.
+   */
+  const mesDelCargo = sql`(CASE WHEN c.mes BETWEEN 1 AND 12
+    THEN c.anio::text || '-' || lpad(c.mes::text, 2, '0')
+    ELSE to_char(c.fecha_vencimiento, 'YYYY-MM') END)`;
+  /** Lo mismo para una cuota del calendario que aún no es cargo. */
+  const mesDeLaCuota = sql`(CASE WHEN q.mes BETWEEN 1 AND 12
+    THEN to_char(q.fecha_emision, 'YYYY') || '-' || lpad(q.mes::text, 2, '0')
+    ELSE to_char(q.fecha_emision, 'YYYY-MM') END)`;
+
+  const deConcepto = filtros.conceptoId ? sql` AND c.concepto_id = ${filtros.conceptoId}` : sql``;
+  // El grado es el de la MATRÍCULA del cargo, igual que en la tabla por grado.
+  const deGrado = filtros.gradoId
+    ? sql` AND EXISTS (
+        SELECT 1 FROM admin_escolar_matriculas fm
+          JOIN admin_escolar_cursos fc ON fc.id = fm.curso_id
+         WHERE fm.id = c.matricula_id AND fc.grado_id = ${filtros.gradoId})`
+    : sql``;
+  const deMes = filtros.mes ? sql` AND ${mesDelCargo} = ${filtros.mes}` : sql``;
+
   // Base común: el predicado de «cargo vivo del período». Es solo el predicado
   // —sin FROM ni WHERE— para poder meterle JOINs delante a cada consulta.
   // Escrito una vez porque olvidar el `<> 'anulado'` en una sola basta para que
   // dos tarjetas de la misma pantalla se contradigan.
-  const cargoVivo = sql`c.team_id = ${teamId} AND c.periodo_id = ${periodoId} AND c.${NO_ANULADO}`;
+  //
+  // Son dos, y la diferencia es el mes:
+  //   · `cargoDelAnio` lleva concepto y grado. Es el de la serie —que enseña
+  //     todos los meses para poder elegir uno— y el de la caja, porque el
+  //     dinero que entra en octubre puede ser de la cuota de septiembre.
+  //   · `cargoVivo` lleva además el mes. Es el de todo lo demás.
+  const cargoDelAnio = sql`c.team_id = ${teamId} AND c.periodo_id = ${periodoId} AND c.${NO_ANULADO}${deConcepto}${deGrado}`;
+  const cargoVivo = sql`${cargoDelAnio}${deMes}`;
 
   const diasAtraso = sql`(${hoy}::date - c.fecha_vencimiento)`;
+  const yaVencio = sql`(c.fecha_vencimiento IS NOT NULL AND c.fecha_vencimiento < ${hoy}::date)`;
 
   const [
-    cartera, tramos, mes, caja, serie, conceptos, grados,
+    cartera, tramos, caja, serie, cajaPorMes, conceptos, grados,
     deudores, metodos, sinFacturar, porDevengar, matricula,
   ] = await Promise.all([
     // ── 1. El resumen. `familias` cuenta CONTACTOS responsables de pago —dos
@@ -234,9 +352,12 @@ export async function dashboardDelPeriodo(
         COALESCE(SUM(c.monto_centavos), 0)::bigint                    AS devengado,
         COALESCE(SUM(c.monto_centavos - c.saldo_centavos), 0)::bigint AS cobrado,
         COALESCE(SUM(c.saldo_centavos), 0)::bigint                    AS pendiente,
+        COALESCE(SUM(c.saldo_centavos) FILTER (WHERE ${yaVencio}), 0)::bigint AS vencido,
+        -- De un mes que no ha llegado y sin vencer. Un cargo sin mes da NULL en
+        -- la comparación y se queda fuera: cuenta como corriente, no como futuro.
         COALESCE(SUM(c.saldo_centavos) FILTER (
-          WHERE c.fecha_vencimiento IS NOT NULL AND c.fecha_vencimiento < ${hoy}::date
-        ), 0)::bigint                                                 AS vencido,
+          WHERE NOT ${yaVencio} AND ${mesDelCargo} > ${mesActual}
+        ), 0)::bigint                                                 AS futuro,
         COUNT(*)::int                                                 AS cargos,
         COUNT(DISTINCT CASE WHEN c.saldo_centavos > 0 THEN COALESCE(
           (SELECT 'cliente:' || es.facturar_a_client_id FROM admin_escolar_estudiantes es
@@ -257,57 +378,66 @@ export async function dashboardDelPeriodo(
       GROUP BY 1
     `),
 
-    // ── 3. Cumplimiento del mes. Cobrado y esperado sobre EL MISMO conjunto de
-    //    cargos (los que vencen en el mes) para que el porcentaje quiera decir
-    //    algo: cruzar la caja del mes contra lo que vencía mezcla poblaciones y
-    //    da cumplimientos por encima del 100% cuando alguien salda un atraso.
-    db.execute(sql`
-      SELECT
-        COALESCE(SUM(c.monto_centavos), 0)::bigint                    AS esperado,
-        COALESCE(SUM(c.monto_centavos - c.saldo_centavos), 0)::bigint AS cobrado
-      FROM admin_escolar_cargos c
-      WHERE ${cargoVivo}
-        AND c.fecha_vencimiento >= ${mesInicio}::date
-        AND c.fecha_vencimiento <  ${mesSiguiente}::date
-    `),
-
-    // ── 4. Lo que entró en caja, del ledger de cobros de las facturas.
+    // ── 3. Lo que entró en caja, del ledger de cobros de las facturas.
     //
     //    Prorrateado: una factura del colegio vale MÁS que sus cargos (lleva
     //    ITBIS, y puede traer líneas que no son escolares). Sumar el pago
     //    entero inflaría el recaudo del colegio con dinero que no es de la
     //    colegiatura. El tope de 1 evita lo contrario —contar de más— cuando
     //    los cargos ligados suman más que el documento.
+    //
+    //    Sobre `cargoDelAnio` y no sobre `cargoVivo`: con octubre elegido se
+    //    quiere saber qué entró EN octubre, y parte de eso paga la cuota de
+    //    septiembre. Filtrando por el mes del cargo no se vería.
     db.execute(sql`
       WITH escolar AS (
         SELECT c.ecf_document_id AS doc, SUM(c.monto_centavos)::numeric AS cargos
         FROM admin_escolar_cargos c
-        WHERE ${cargoVivo} AND c.ecf_document_id IS NOT NULL
+        WHERE ${cargoDelAnio} AND c.ecf_document_id IS NOT NULL
         GROUP BY 1
       )
       SELECT
         COALESCE(SUM(p.monto_centavos * LEAST(1.0, e.cargos / NULLIF(d.monto_total, 0))) FILTER (
-          WHERE p.fecha_pago >= ${mesInicio}::date AND p.fecha_pago < ${mesSiguiente}::date
+          WHERE p.fecha_pago >= ${cajaInicio}::date AND p.fecha_pago < ${cajaSiguiente}::date
         ), 0)::bigint AS este_mes,
         COALESCE(SUM(p.monto_centavos * LEAST(1.0, e.cargos / NULLIF(d.monto_total, 0))) FILTER (
-          WHERE p.fecha_pago >= ${mesAnterior}::date AND p.fecha_pago < ${mesInicio}::date
-        ), 0)::bigint AS mes_anterior
+          WHERE p.fecha_pago >= ${cajaAnterior}::date AND p.fecha_pago < ${cajaInicio}::date
+        ), 0)::bigint AS mes_anterior,
+        COALESCE(SUM(p.monto_centavos * LEAST(1.0, e.cargos / NULLIF(d.monto_total, 0))), 0)::bigint AS total
       FROM pagos_recibidos p
       JOIN escolar e       ON e.doc = p.ecf_document_id
       JOIN ecf_documents d ON d.id  = p.ecf_document_id
       WHERE p.team_id = ${teamId}
     `),
 
-    // ── 5. Serie mensual. Agrupada por el mes del VENCIMIENTO y no por el de
-    //    emisión: el dueño lee la barra como «lo que esperaba cobrar en
-    //    octubre», y con conceptos que dan quince días para pagar la emisión
-    //    cae un mes antes que el dinero.
+    // ── 4. Serie mensual, por el mes DEL CARGO (decisión 3 de la cabecera).
+    //    Todos los meses aunque haya uno elegido: la serie es de donde se
+    //    elige. Los cargos sin mes ni vencimiento vuelven con `key` NULL y
+    //    `armarSerie` los aparta en su propia fila.
     db.execute(sql`
-      SELECT to_char(c.fecha_vencimiento, 'YYYY-MM')                  AS key,
+      SELECT ${mesDelCargo}                                            AS key,
              COALESCE(SUM(c.monto_centavos), 0)::bigint               AS devengado,
              COALESCE(SUM(c.monto_centavos - c.saldo_centavos), 0)::bigint AS cobrado
       FROM admin_escolar_cargos c
-      WHERE ${cargoVivo} AND c.fecha_vencimiento IS NOT NULL
+      WHERE ${cargoDelAnio}
+      GROUP BY 1
+    `),
+
+    // ── 5. Lo que entró en caja cada mes. Mismo prorrateo que la consulta 3,
+    //    agrupado por el mes en que se recibió el pago.
+    db.execute(sql`
+      WITH escolar AS (
+        SELECT c.ecf_document_id AS doc, SUM(c.monto_centavos)::numeric AS cargos
+        FROM admin_escolar_cargos c
+        WHERE ${cargoDelAnio} AND c.ecf_document_id IS NOT NULL
+        GROUP BY 1
+      )
+      SELECT to_char(p.fecha_pago, 'YYYY-MM') AS key,
+             COALESCE(SUM(p.monto_centavos * LEAST(1.0, e.cargos / NULLIF(d.monto_total, 0))), 0)::bigint AS centavos
+      FROM pagos_recibidos p
+      JOIN escolar e       ON e.doc = p.ecf_document_id
+      JOIN ecf_documents d ON d.id  = p.ecf_document_id
+      WHERE p.team_id = ${teamId}
       GROUP BY 1
     `),
 
@@ -343,9 +473,12 @@ export async function dashboardDelPeriodo(
       LEFT JOIN admin_escolar_matriculas m ON m.team_id = ${teamId}
         AND m.periodo_id = ${periodoId}
         AND m.curso_id IN (SELECT id FROM admin_escolar_cursos WHERE grado_id = g.id)
+      -- Concepto y mes van en el ON y no en el WHERE: en el WHERE el grado sin
+      -- cargos de ese mes desaparecería de la tabla en vez de salir en cero.
       LEFT JOIN admin_escolar_cargos c ON c.matricula_id = m.id
-        AND c.team_id = ${teamId} AND c.periodo_id = ${periodoId} AND c.${NO_ANULADO}
-      WHERE g.team_id = ${teamId} AND s.periodo_id = ${periodoId}
+        AND c.team_id = ${teamId} AND c.periodo_id = ${periodoId} AND c.${NO_ANULADO}${deConcepto}${deMes}
+      WHERE g.team_id = ${teamId} AND s.periodo_id = ${periodoId}${
+        filtros.gradoId ? sql` AND g.id = ${filtros.gradoId}` : sql``}
       GROUP BY g.id, g.nombre, g.orden, s.nombre, s.tanda, s.orden
       ORDER BY s.orden, g.orden, g.nombre
     `),
@@ -382,12 +515,14 @@ export async function dashboardDelPeriodo(
       LIMIT 10
     `),
 
-    // ── 9. Por dónde entra el dinero. Mismo prorrateo que la caja del mes.
+    // ── 9. Por dónde entra el dinero. Mismo prorrateo que la caja del mes, y
+    //    como ella sobre `cargoDelAnio`: con un mes elegido son los pagos
+    //    RECIBIDOS ese mes, no los de las cuotas de ese mes.
     db.execute(sql`
       WITH escolar AS (
         SELECT c.ecf_document_id AS doc, SUM(c.monto_centavos)::numeric AS cargos
         FROM admin_escolar_cargos c
-        WHERE ${cargoVivo} AND c.ecf_document_id IS NOT NULL
+        WHERE ${cargoDelAnio} AND c.ecf_document_id IS NOT NULL
         GROUP BY 1
       )
       SELECT p.metodo,
@@ -395,7 +530,9 @@ export async function dashboardDelPeriodo(
       FROM pagos_recibidos p
       JOIN escolar e       ON e.doc = p.ecf_document_id
       JOIN ecf_documents d ON d.id  = p.ecf_document_id
-      WHERE p.team_id = ${teamId}
+      WHERE p.team_id = ${teamId}${filtros.mes
+        ? sql` AND p.fecha_pago >= ${cajaInicio}::date AND p.fecha_pago < ${cajaSiguiente}::date`
+        : sql``}
       GROUP BY p.metodo
       ORDER BY centavos DESC
     `),
@@ -411,12 +548,8 @@ export async function dashboardDelPeriodo(
     //     decía «todo lo vencido está facturado» y se leía como «todo bien».
     db.execute(sql`
       SELECT
-        COALESCE(SUM(c.saldo_centavos) FILTER (
-          WHERE c.fecha_vencimiento IS NOT NULL AND c.fecha_vencimiento < ${hoy}::date
-        ), 0)::bigint                                     AS centavos,
-        COUNT(*) FILTER (
-          WHERE c.fecha_vencimiento IS NOT NULL AND c.fecha_vencimiento < ${hoy}::date
-        )::int                                            AS cargos,
+        COALESCE(SUM(c.saldo_centavos) FILTER (WHERE ${yaVencio}), 0)::bigint AS centavos,
+        COUNT(*) FILTER (WHERE ${yaVencio})::int          AS cargos,
         COALESCE(SUM(c.saldo_centavos), 0)::bigint        AS centavos_total,
         COUNT(*)::int                                     AS cargos_total
       FROM admin_escolar_cargos c
@@ -440,13 +573,14 @@ export async function dashboardDelPeriodo(
     //     es una proyección, no un cobro.
     db.execute(sql`
       WITH mat AS (
-        SELECT m.id, m.curso_id AS seccion_id, cu.grado_id, g.servicio_id,
+        SELECT m.id, m.estudiante_id, m.curso_id AS seccion_id, cu.grado_id, g.servicio_id,
                m.beca_tipo, m.beca_valor, m.conceptos_ids,
                COALESCE(m.fecha_inscripcion::text, ${periodo.fecha_inicio ?? '0001-01-01'}) AS desde
         FROM admin_escolar_matriculas m
         JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
         JOIN admin_escolar_grados g  ON g.id  = cu.grado_id
-        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'
+        WHERE m.team_id = ${teamId} AND m.periodo_id = ${periodoId} AND m.estado = 'activa'${
+          filtros.gradoId ? sql` AND g.id = ${filtros.gradoId}` : sql``}
       ),
       tarifa AS (
         SELECT mat.id AS matricula_id, mat.desde, co.id AS concepto_id, co.tipo,
@@ -459,9 +593,14 @@ export async function dashboardDelPeriodo(
         FROM mat
         JOIN admin_escolar_conceptos_pago co
           ON co.team_id = ${teamId} AND co.activo
-         AND co.id = ANY(ARRAY(SELECT jsonb_array_elements_text(mat.conceptos_ids)::int))
+         AND co.id = ANY(ARRAY(SELECT jsonb_array_elements_text(mat.conceptos_ids)::int))${
+           filtros.conceptoId ? sql` AND co.id = ${filtros.conceptoId}` : sql``}
         CROSS JOIN LATERAL (
           SELECT COALESCE(
+            -- La tarifa PERSONAL del alumno gana sobre sección/grado/servicio.
+            (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
+              WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
+                AND pr.activo AND pr.objetivo_tipo = 'estudiante' AND pr.objetivo_id = mat.estudiante_id),
             (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
               WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
                 AND pr.activo AND pr.objetivo_tipo = 'seccion'  AND pr.objetivo_id = mat.seccion_id),
@@ -489,7 +628,8 @@ export async function dashboardDelPeriodo(
         ON q.team_id = ${teamId} AND q.periodo_id = ${periodoId} AND q.activo
        AND q.concepto_id = t.concepto_id
       JOIN pesos pe ON pe.concepto_id = t.concepto_id
-      WHERE t.monto IS NOT NULL
+      WHERE t.monto IS NOT NULL${
+        filtros.mes ? sql` AND ${mesDeLaCuota} = ${filtros.mes}` : sql``}
         -- Todavía no emitida...
         AND q.fecha_emision > ${finDeMes}
         -- ...y el alumno ya estaba dentro cuando toque emitirla.
@@ -520,7 +660,6 @@ export async function dashboardDelPeriodo(
   ]);
 
   const c0 = (cartera as unknown as Record<string, unknown>[])[0] ?? {};
-  const m0 = (mes as unknown as Record<string, unknown>[])[0] ?? {};
   const k0 = (caja as unknown as Record<string, unknown>[])[0] ?? {};
   const s0 = (sinFacturar as unknown as Record<string, unknown>[])[0] ?? {};
   const d0 = (porDevengar as unknown as Record<string, unknown>[])[0] ?? {};
@@ -533,32 +672,43 @@ export async function dashboardDelPeriodo(
     porTramo[f.tramo ?? 'porVencer'] += n(f.saldo);
   }
 
+  const armada = armarSerie(
+    serie as unknown as { key: string | null; devengado: string; cobrado: string }[],
+    cajaPorMes as unknown as { key: string | null; centavos: string }[],
+    periodo.fecha_inicio, periodo.fecha_fin, hoy,
+  );
+
+  const pendiente = n(c0.pendiente);
+  const vencido = n(c0.vencido);
+  const futuro = n(c0.futuro);
+
   return {
     periodoId: periodo.id,
     periodo: periodo.nombre,
     hoy,
+    filtros,
+    opciones,
     cartera: {
       devengadoCentavos: n(c0.devengado),
       cobradoCentavos:   n(c0.cobrado),
-      pendienteCentavos: n(c0.pendiente),
-      vencidoCentavos:   n(c0.vencido),
+      pendienteCentavos: pendiente,
+      vencidoCentavos:   vencido,
+      futuroCentavos:    futuro,
+      // Por resta y no con un tercer FILTER: así los tres no pueden dejar de
+      // sumar el pendiente por un cargo que cayera en dos condiciones.
+      corrienteCentavos: Math.max(0, pendiente - vencido - futuro),
       cargos:            n(c0.cargos),
       familiasConDeuda:  n(c0.familias),
     },
     tramos: porTramo,
-    mes: {
-      mes: mesInicio.slice(0, 7),
-      esperadoCentavos: n(m0.esperado),
-      cobradoCentavos:  n(m0.cobrado),
-    },
     caja: {
+      mes: mesCaja,
       esteMesCentavos:     n(k0.este_mes),
       mesAnteriorCentavos: n(k0.mes_anterior),
+      totalCentavos:       n(k0.total),
     },
-    serie: armarSerie(
-      serie as unknown as { key: string; devengado: string; cobrado: string }[],
-      periodo.fecha_inicio, periodo.fecha_fin, hoy,
-    ),
+    serie: armada.puntos,
+    sinMes: armada.sinMes,
     conceptos: (conceptos as unknown as Record<string, unknown>[]).map((f) => ({
       conceptoId: n(f.id),
       nombre: String(f.nombre),
@@ -602,53 +752,4 @@ export async function dashboardDelPeriodo(
       finalizados: n(t0.finalizados),
     },
   };
-}
-
-/**
- * Rellena los meses del año escolar que no devolvieron fila.
- *
- * Un mes sin cargos no es un hueco que la gráfica pueda saltarse: agosto vacío
- * entre julio y septiembre significa que ese mes no se cobró nada, y omitir la
- * barra hace que la serie parezca continua cuando no lo es. Los meses que aún
- * no han llegado se marcan `transcurrido: false` para que la pantalla los pinte
- * planos en vez de como un mes con cero cobrado.
- */
-function armarSerie(
-  filas: { key: string; devengado: string; cobrado: string }[],
-  fechaInicio: string | null,
-  fechaFin: string | null,
-  hoy: string,
-): PuntoMensual[] {
-  const porKey = new Map(filas.map((f) => [f.key, f]));
-  const mesActual = hoy.slice(0, 7);
-
-  // Sin rango de año escolar no hay calendario que rellenar; se enseña lo que
-  // haya, ordenado. Un período sin configurar es un problema que se ve mejor
-  // con tres barras sueltas que con doce inventadas.
-  const claves = fechaInicio && fechaFin
-    ? mesesEntre(fechaInicio.slice(0, 7), fechaFin.slice(0, 7))
-    : [...porKey.keys()].sort();
-
-  return claves.map((key) => {
-    const f = porKey.get(key);
-    const [anio, mes] = key.split('-').map(Number);
-    return {
-      key, mes, anio,
-      devengadoCentavos: n(f?.devengado),
-      cobradoCentavos:   n(f?.cobrado),
-      transcurrido: key <= mesActual,
-    };
-  });
-}
-
-/** Claves `YYYY-MM` de `desde` a `hasta`, ambas incluidas. */
-function mesesEntre(desde: string, hasta: string): string[] {
-  const [a1, m1] = desde.split('-').map(Number);
-  const [a2, m2] = hasta.split('-').map(Number);
-  const total = (a2 * 12 + m2) - (a1 * 12 + m1);
-  if (!Number.isFinite(total) || total < 0) return [];
-  return Array.from({ length: total + 1 }, (_, i) => {
-    const idx = a1 * 12 + (m1 - 1) + i;
-    return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
-  });
 }

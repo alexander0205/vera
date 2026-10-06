@@ -8,6 +8,9 @@ import { dashboardDelPeriodo, hoyRD } from '@/lib/administracion-escolar/dashboa
 /**
  * El panorama financiero del año escolar.
  *
+ * `?mes=YYYY-MM`, `?conceptoId=` y `?gradoId=` lo recortan; sin ninguno es el
+ * año completo.
+ *
  * Sin `periodoId` responde con el ACTIVO, que es el que el colegio quiere ver
  * el 99% de las veces. Se resuelve aquí y no en el cliente para que la pantalla
  * no tenga que pedir primero la lista de períodos y luego los números: eran dos
@@ -57,7 +60,19 @@ export async function GET(req: NextRequest) {
   // error, que es mucho más difícil de diagnosticar.
   const periodoId = periodos.some((p) => p.id === pedido) ? pedido : porDefecto;
 
-  const datos = await dashboardDelPeriodo(teamId, periodoId, hoyRD());
+  // Los filtros llegan crudos: quién es un mes, un concepto o un grado válido
+  // de este año lo decide `dashboardDelPeriodo`, que es quien tiene la lista, y
+  // devuelve en `datos.filtros` los que aceptó.
+  const sp = req.nextUrl.searchParams;
+  const entero = (v: string | null) => {
+    const x = Number(v);
+    return Number.isInteger(x) && x > 0 ? x : null;
+  };
+  const datos = await dashboardDelPeriodo(teamId, periodoId, hoyRD(), {
+    mes: sp.get('mes'),
+    conceptoId: entero(sp.get('conceptoId')),
+    gradoId: entero(sp.get('gradoId')),
+  });
 
   return NextResponse.json({ periodos, datos });
 }

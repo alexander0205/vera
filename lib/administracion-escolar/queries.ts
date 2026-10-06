@@ -7,7 +7,8 @@
  */
 import 'server-only';
 import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists, notExists } from 'drizzle-orm';
-import { repartirCobro, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
+import { coincideDocumento } from '@/lib/busqueda/documento';
+import { repartirCobroEntreHermanos, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes,
@@ -138,6 +139,12 @@ export async function listarEstudiantesEnriquecidos(
       ilike(adminEscolarEstudiantes.apellidos, p),
       ilike(sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos}`, p),
       ilike(adminEscolarEstudiantes.codigo, p),
+      // Por documento, se haya guardado con guiones o sin ellos. El del alumno
+      // es su código RNE —un menor no tiene cédula—; el del tutor y el de quien
+      // paga, su cédula o su RNC: con la cédula del padre en la mano se llega a
+      // sus hijos sin saber cómo está escrito el nombre.
+      ilike(adminEscolarEstudiantes.codigoRne, p),
+      coincideDocumento(adminEscolarEstudiantes.codigoRne, q) ?? undefined,
       // Buscar por el nombre de CUALQUIER tutor del alumno, no solo del que
       // tuviera marcada la casilla `responsable_pago` —que ya nadie marca, así
       // que buscar «Scarlet» no encontraba a su hijo—. Y también por el
@@ -150,13 +157,19 @@ export async function listarEstudiantesEnriquecidos(
         .where(and(
           eq(adminEscolarEstudianteTutores.estudianteId, adminEscolarEstudiantes.id),
           eq(adminEscolarEstudianteTutores.teamId, teamId),
-          ilike(adminEscolarTutores.nombre, p),
+          or(
+            ilike(adminEscolarTutores.nombre, p),
+            coincideDocumento(adminEscolarTutores.documento, q) ?? undefined,
+          ),
         ))),
       exists(db.select({ x: sql`1` }).from(clients)
         .where(and(
           eq(clients.id, adminEscolarEstudiantes.facturarAClientId),
           eq(clients.teamId, teamId),
-          ilike(clients.razonSocial, p),
+          or(
+            ilike(clients.razonSocial, p),
+            coincideDocumento(clients.rnc, q) ?? undefined,
+          ),
         ))),
     )!);
   }
@@ -546,6 +559,7 @@ export async function sincronizarSaldosDesdeFacturas(
     db
     .select({
       id: adminEscolarCargos.id,
+      estudianteId: adminEscolarCargos.estudianteId,
       ecfDocumentId: adminEscolarCargos.ecfDocumentId,
       montoCentavos: adminEscolarCargos.montoCentavos,
       saldoCentavos: adminEscolarCargos.saldoCentavos,
@@ -598,6 +612,31 @@ export async function sincronizarSaldosDesdeFacturas(
   const facturaById = new Map(facturas.map((f) => [f.id, f]));
   const pagadoById = new Map(pagos.map((p) => [p.ecfDocumentId, Number(p.pagado)]));
 
+  // Subtotal por (factura, estudiante) según el `dependienteId` de cada línea.
+  // El estudiante se identifica por su `dependiente_id` (enlace exacto con
+  // Facturación), no por nombre. Solo se usa cuando una factura paga a varios
+  // hermanos, para repartir por hijo y no cruzar el pago de uno con otro.
+  const subRows = (await db.execute(sql`
+    SELECT d.id AS fid, e.id AS est,
+           SUM((li->>'precioUnitarioItem')::numeric * (li->>'cantidadItem')::numeric)::int AS sub
+    FROM ${ecfDocuments} d
+    CROSS JOIN LATERAL jsonb_array_elements(d.lineas_json::jsonb) li
+    JOIN ${adminEscolarEstudiantes} e
+      ON e.team_id = d.team_id
+     AND e.dependiente_id = (li->>'dependienteId')::int
+    WHERE d.team_id = ${teamId}
+      AND d.id IN (${sql.join(facturaIds.map((id) => sql`${id}`), sql`, `)})
+      AND (li->>'dependienteId') ~ '^[0-9]+$'
+    GROUP BY d.id, e.id
+  `)) as unknown as { fid: number; est: number; sub: number }[];
+
+  const subPorFacturaHijo = new Map<number, Map<number, number>>();
+  for (const r of subRows) {
+    const m = subPorFacturaHijo.get(Number(r.fid)) ?? new Map<number, number>();
+    m.set(Number(r.est), Number(r.sub));
+    subPorFacturaHijo.set(Number(r.fid), m);
+  }
+
   const hoy = new Date().toISOString().slice(0, 10);
 
   // 4. Agrupar cargos por factura y repartir lo cobrado en cascada.
@@ -625,10 +664,15 @@ export async function sincronizarSaldosDesdeFacturas(
     // Lo cobrado incluye las NC: ya redujeron lo que la familia debe.
     const cobrado = (pagadoById.get(fid) ?? 0) + Number(f.ncAplicado ?? 0);
 
-    const calculados = repartirCobro(grupo, cobrado, hoy, {
-      facturaAnulada: anulada,
-      facturaSaldada: f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA',
-    });
+    const saldada = f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA';
+    // Con un solo estudiante por factura —el caso común— esto es `repartirCobro`
+    // sin más. Con varios hermanos reparte por hijo, y solo cuando la factura
+    // dice de quién es cada línea: si no, la factura entera contra todos sus
+    // cargos, como siempre (ver `repartirCobroEntreHermanos`).
+    const calculados = repartirCobroEntreHermanos(
+      grupo, cobrado, hoy, subPorFacturaHijo.get(fid) ?? new Map<number, number>(),
+      { facturaAnulada: anulada, facturaSaldada: saldada },
+    );
 
     for (const r of calculados) {
       const actual = porId.get(r.id);
