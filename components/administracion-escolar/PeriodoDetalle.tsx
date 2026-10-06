@@ -623,32 +623,51 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <PeriodoStat
-          icon={Receipt}
-          label="Facturado"
-          value={fmtDOP(facturadoCentavos)}
-          detail={porFacturarCentavos > 0
-            ? <span className="font-medium text-amber-700">Por facturar {fmtDOP(porFacturarCentavos)}</span>
-            : 'Todo facturado'}
-          tone="blue" />
-        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
-        <PeriodoStat
-          icon={AlertTriangle}
-          label="Pendiente"
-          value={fmtDOP(saldo)}
-          // Rojo solo si hay algo emitido sin cobrar. Si todo lo que se debe
-          // está aún «Sin facturar», la tarjeta no alarma: lo que toca es
-          // emitir, no perseguir un pago. Ver criterio del MD de facturas.
-          detail={
-            saldoPorCobrar > 0 && saldoPorFacturar > 0
-              ? `Por cobrar ${fmtDOP(saldoPorCobrar)} · por facturar ${fmtDOP(saldoPorFacturar)}`
-              : saldoPorCobrar > 0 ? 'Saldo por cobrar'
-              : saldoPorFacturar > 0 ? 'Aún por facturar'
-              : 'Sin deuda'
-          }
-          tone={saldoPorCobrar > 0 ? 'red' : 'gray'}
-        />
+      {/* Las cuatro cifras del año, que antes eran cuatro tarjetas sueltas.
+
+          «Facturado RD$9,200» arriba del todo, al lado de «Pendiente
+          RD$33,800», se leía como si al alumno le hubieran facturado nueve mil
+          y debiera treinta y tres mil más: dos números del mismo tamaño que se
+          miden contra cosas distintas —uno contra lo emitido, el otro contra lo
+          cobrado—. El colegio preguntaba «¿pero entonces cuánto es el año?», y
+          esa cifra no estaba en ninguna parte.
+
+          Ahora hay UNA cuenta —el total del año— partida en los tres estados
+          por los que pasa un peso: cobrado, facturado sin cobrar, y todavía sin
+          factura. Suman el total, así que se pueden comprobar con el dedo. */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="flex items-center gap-2 text-xs font-medium text-gray-600">
+              <Receipt className="h-4 w-4 text-gray-500" />Total del año escolar
+            </span>
+            <span className="text-xl font-semibold text-gray-900">{fmtDOP(total)}</span>
+          </div>
+
+          {/* La barra es la misma cuenta, dibujada: lo verde ya entró, lo rojo
+              se persigue, lo ámbar ni siquiera se ha emitido. */}
+          <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-gray-100">
+            <div className="bg-emerald-500" style={{ width: parte(pagado, total) }} />
+            <div className="bg-red-500" style={{ width: parte(saldoPorCobrar, total) }} />
+            <div className="bg-amber-400" style={{ width: parte(saldoPorFacturar, total) }} />
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <TramoAnual color="bg-emerald-500" label="Pagado" monto={pagado}
+              pie="ya entró el dinero" total={total} />
+            <TramoAnual color="bg-red-500" label="Por cobrar" monto={saldoPorCobrar}
+              pie="facturado y sin pagar" total={total} />
+            <TramoAnual color="bg-amber-400" label="Por facturar" monto={saldoPorFacturar}
+              pie="aún sin factura emitida" total={total} />
+          </div>
+
+          <p className="mt-3 border-t border-gray-100 pt-2.5 text-xs text-gray-500">
+            Lleva <b className="font-medium text-gray-700">{fmtDOP(facturadoCentavos)}</b> facturados de{' '}
+            {fmtDOP(total)}. Lo que falta son cargos del año que todavía no se han emitido:
+            se deben, pero lo que toca con ellos es facturarlos.
+          </p>
+        </div>
+
         <PeriodoStat
           icon={CalendarDays}
           label="Próximo vencimiento"
@@ -1110,6 +1129,41 @@ function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matricu
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Lo que ocupa un tramo en la barra del año. Sin año, no hay barra. */
+function parte(centavos: number, total: number): string {
+  if (total <= 0 || centavos <= 0) return '0%';
+  return `${(centavos / total) * 100}%`;
+}
+
+/**
+ * Un tramo del año, con su color, su importe y qué significa en una línea.
+ *
+ * El pie no decora: «Por cobrar» y «Por facturar» se parecen demasiado escritos
+ * —el colegio los leía como dos formas de decir lo mismo— y la diferencia entre
+ * perseguir un pago y emitir un documento es justo la que decide qué se hace
+ * esta semana.
+ */
+function TramoAnual({ color, label, monto, pie, total }: {
+  color: string;
+  label: string;
+  monto: number;
+  pie: string;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.round((monto / total) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${color}`} />
+        <span className="text-xs font-medium text-gray-600">{label}</span>
+        <span className="text-xs text-gray-400">{pct}%</span>
+      </div>
+      <p className="mt-1 text-base font-semibold text-gray-900">{fmtDOP(monto)}</p>
+      <p className="text-xs text-gray-500">{pie}</p>
+    </div>
   );
 }
 

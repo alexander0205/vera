@@ -7,12 +7,51 @@ import {
   adminEscolarCargos,
   adminEscolarPagos,
   adminEscolarConceptosPago,
+  adminEscolarEstudiantes,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, count, inArray, isNotNull } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
+
+/**
+ * Una matrícula con lo que hace falta para editarla: su curso, su estado y los
+ * conceptos recurrentes que se le están cobrando.
+ *
+ * El listado (`GET /matriculas`) no trae `conceptosIds` —son cientos de filas y
+ * nadie los mira ahí—, así que el diálogo de edición no tenía de dónde sacar
+ * qué se le cobra a ESTE alumno todos los meses.
+ */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
+  const { id } = await params;
+  const matriculaId = parseInt(id, 10);
+  if (!Number.isFinite(matriculaId)) {
+    return NextResponse.json({ error: 'Matrícula no válida' }, { status: 400 });
+  }
+
+  const [row] = await db.select({
+      id: adminEscolarMatriculas.id,
+      estudianteId: adminEscolarMatriculas.estudianteId,
+      periodoId: adminEscolarMatriculas.periodoId,
+      cursoId: adminEscolarMatriculas.cursoId,
+      documentoListaId: adminEscolarMatriculas.documentoListaId,
+      fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
+      estado: adminEscolarMatriculas.estado,
+      codigoMatricula: adminEscolarMatriculas.codigoMatricula,
+      notas: adminEscolarMatriculas.notas,
+      conceptosIds: adminEscolarMatriculas.conceptosIds,
+      conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
+    })
+    .from(adminEscolarMatriculas)
+    .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
+    .limit(1);
+  if (!row) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+  return NextResponse.json({ matricula: row });
+}
 
 /**
  * Edita una matrícula existente (período, curso, fecha de inscripción, estado,
@@ -28,6 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const {
     periodoId, cursoId, documentoListaId, fechaInscripcion, estado, codigoMatricula, notas,
     becaTipo, becaValor, becaMotivo, conceptoMensualidadId,
+    estudianteId, conceptosIds,
   } = await req.json();
   const matriculaId = parseInt(id, 10);
   const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado, conceptosIds: adminEscolarMatriculas.conceptosIds })
@@ -35,6 +75,84 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
     .limit(1);
   if (!actual) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+
+  /**
+   * Cambiar de alumno una matrícula ya creada.
+   *
+   * No estaba, y hacía falta: se matricula al hermano equivocado —dos niños de
+   * la misma familia, el mismo apellido, el mismo grado— y la única salida era
+   * borrar la matrícula, que el sistema niega en cuanto tiene un cargo. La
+   * familia se quedaba con la deuda colgando del niño que no era.
+   *
+   * Se permite SOLO mientras la matrícula no haya movido dinero de verdad: sin
+   * factura emitida y sin un peso cobrado. Con una factura detrás, el alumno
+   * que figura es el del e-CF y eso ya no se corrige por aquí.
+   *
+   * Los cargos se mudan con ella: cuelgan del estudiante además de la
+   * matrícula, y dejarlos atrás partiría la deuda entre los dos niños.
+   */
+  let estudianteFinal = actual.estudianteId;
+  if (estudianteId !== undefined && Number(estudianteId) !== actual.estudianteId) {
+    const nuevoEstudianteId = Number(estudianteId);
+    if (!Number.isInteger(nuevoEstudianteId) || nuevoEstudianteId <= 0) {
+      return NextResponse.json({ error: 'Estudiante no válido' }, { status: 400 });
+    }
+    const [alumno] = await db.select({ id: adminEscolarEstudiantes.id })
+      .from(adminEscolarEstudiantes)
+      .where(and(eq(adminEscolarEstudiantes.id, nuevoEstudianteId), eq(adminEscolarEstudiantes.teamId, teamId)))
+      .limit(1);
+    if (!alumno) return NextResponse.json({ error: 'Estudiante no encontrado' }, { status: 404 });
+
+    const [facturados] = await db.select({ n: count() })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.matriculaId, matriculaId),
+        eq(adminEscolarCargos.teamId, teamId),
+        isNotNull(adminEscolarCargos.ecfDocumentId),
+      ));
+    if ((facturados?.n ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'Esta matrícula ya tiene cargos facturados: no se le puede cambiar el estudiante. Anula las facturas o crea la matrícula en el alumno correcto.' },
+        { status: 409 },
+      );
+    }
+    const [cobrados] = await db.select({ n: count() })
+      .from(adminEscolarPagos)
+      .where(and(eq(adminEscolarPagos.matriculaId, matriculaId), eq(adminEscolarPagos.teamId, teamId)));
+    if ((cobrados?.n ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'Esta matrícula ya tiene pagos registrados: no se le puede cambiar el estudiante.' },
+        { status: 409 },
+      );
+    }
+    estudianteFinal = nuevoEstudianteId;
+  }
+
+  /**
+   * Los conceptos RECURRENTES de la matrícula: lo que se le va a ir cobrando
+   * mes a mes además de la colegiatura —la sala de tareas, el transporte, el
+   * comedor—. Es la lista que lee el devengo; añadir uno aquí hace que sus
+   * cuotas aparezcan en el plan y se vuelvan deuda cuando llegue su mes.
+   *
+   * Solo se podía elegir al matricular. Quitar uno no borra lo ya cargado: deja
+   * de generarse hacia adelante, y los cargos viejos se anulan donde se anulan.
+   */
+  let conceptosSet: number[] | null = null;
+  if (Array.isArray(conceptosIds)) {
+    const pedidos = [...new Set(conceptosIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    if (pedidos.length > 0) {
+      const existentes = await db.select({ id: adminEscolarConceptosPago.id })
+        .from(adminEscolarConceptosPago)
+        .where(and(
+          eq(adminEscolarConceptosPago.teamId, teamId),
+          inArray(adminEscolarConceptosPago.id, pedidos),
+        ));
+      if (existentes.length !== pedidos.length) {
+        return NextResponse.json({ error: 'Alguno de los conceptos no es de este colegio.' }, { status: 404 });
+      }
+    }
+    conceptosSet = pedidos;
+  }
 
   /**
    * La GENERACIÓN del alumno (concepto de mensualidad). Es su ubicación —lo que
@@ -57,7 +175,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     // Conserva los conceptos que NO son mensualidad; reemplaza la mensualidad
     // vieja (cualquiera) por la elegida, sin duplicar.
-    const idsActuales = (actual.conceptosIds ?? []).map(Number);
+    const idsActuales = (conceptosSet ?? actual.conceptosIds ?? []).map(Number);
     const mensualidadIds = new Set(
       (await db.select({ id: adminEscolarConceptosPago.id })
         .from(adminEscolarConceptosPago)
@@ -83,7 +201,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const estadoFinal = estado !== undefined && ESTADOS.includes(estado) ? estado : actual.estado;
   if (estadoFinal === 'activa') {
     const conflicto = await conflictoMatriculaActivaPorPeriodo({
-      teamId, estudianteId: actual.estudianteId, periodoId: periodoFinal, excluirMatriculaId: matriculaId,
+      teamId, estudianteId: estudianteFinal, periodoId: periodoFinal, excluirMatriculaId: matriculaId,
     });
     if (conflicto) return NextResponse.json({ error: conflicto }, { status: 409 });
   }
@@ -134,6 +252,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const [row] = await db.update(adminEscolarMatriculas)
       .set({
+        ...(estudianteFinal !== actual.estudianteId ? { estudianteId: estudianteFinal } : {}),
+        ...(conceptosSet && !generacionSet ? { conceptosIds: conceptosSet } : {}),
         ...(periodoId !== undefined ? { periodoId: Number(periodoId) } : {}),
         ...(cursoId !== undefined ? { cursoId: Number(cursoId) } : {}),
         ...(documentoListaId !== undefined
@@ -157,6 +277,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       })
       .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
       .returning();
+
+    // Los cargos cuelgan del estudiante además de la matrícula: si se quedaran
+    // atrás, la deuda saldría en la ficha del niño equivocado.
+    if (estudianteFinal !== actual.estudianteId) {
+      await db.update(adminEscolarCargos)
+        .set({ estudianteId: estudianteFinal, updatedAt: new Date() })
+        .where(and(eq(adminEscolarCargos.matriculaId, matriculaId), eq(adminEscolarCargos.teamId, teamId)));
+    }
+
     return NextResponse.json({ matricula: row });
   } catch (err: unknown) {
     // Choque con el índice parcial: ya hay otra matrícula activa en ese período.

@@ -22,16 +22,29 @@ import { eq, and } from 'drizzle-orm';
  * mostrar sus pagos en el perfil equivocado.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:pagos');
-  if (!auth.ok) return auth.response;
-  const { teamId } = auth;
   const { id } = await params;
   const cargoId = parseInt(id, 10);
   if (!Number.isInteger(cargoId) || cargoId <= 0) {
     return NextResponse.json({ error: 'Cargo inválido' }, { status: 400 });
   }
 
-  const { ecfDocumentId } = await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => ({}));
+  const { ecfDocumentId } = body;
+  /**
+   * Corregirle el importe a un cargo es otra cosa que tocar su cobro: pide el
+   * permiso de gestión y escritura, no el de pagos. Un cajero puede desvincular
+   * una factura mal puesta; cambiarle el precio a la colegiatura de un niño es
+   * una decisión de administración.
+   */
+  const tocaImporte = body.montoCentavos !== undefined || body.fechaVencimiento !== undefined;
+  const auth = tocaImporte
+    ? await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar', { escritura: true })
+    : await requireModuleAndPermission('escolar', 'administracion-escolar:pagos');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
+
+  if (tocaImporte) return editarImporte(teamId, cargoId, body);
+
   if (ecfDocumentId != null) {
     return NextResponse.json(
       { error: 'Para vincular una factura usa /cargos/[id]/saldar-con-factura; aquí solo se desvincula.' },
@@ -44,6 +57,98 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, teamId)))
     .returning();
   if (!row) return NextResponse.json({ error: 'Cargo no encontrado' }, { status: 404 });
+  return NextResponse.json({ cargo: row });
+}
+
+/**
+ * Cambia el monto —y de paso el vencimiento— de un cargo todavía corregible.
+ *
+ * Existe porque el precio de un alumno se equivoca al escribirlo, no al
+ * cobrarlo: se le pone 3,700 al que paga 2,800, y hasta ahora la única salida
+ * era anular el cargo y rehacerlo, perdiendo su cuota, su mes y su sitio en el
+ * calendario.
+ *
+ * Lo que NO se toca aquí:
+ *  - un cargo ya facturado: el importe que vale es el de la factura, y
+ *    cambiarlo por detrás dejaría el e-CF diciendo una cosa y la deuda otra;
+ *  - un cargo anulado: no es deuda de nadie;
+ *  - bajar el monto por debajo de lo ya pagado: eso no es corregir un precio,
+ *    es inventar un saldo a favor que este módulo no sabe devolver.
+ *
+ * El saldo se recalcula conservando lo cobrado (`monto - saldo`), así que un
+ * cargo con un abono encima queda `parcial` por la diferencia nueva.
+ */
+async function editarImporte(
+  teamId: number,
+  cargoId: number,
+  body: { montoCentavos?: unknown; fechaVencimiento?: unknown },
+) {
+  const [cargo] = await db.select({
+      id: adminEscolarCargos.id,
+      estado: adminEscolarCargos.estado,
+      ecfDocumentId: adminEscolarCargos.ecfDocumentId,
+      montoCentavos: adminEscolarCargos.montoCentavos,
+      saldoCentavos: adminEscolarCargos.saldoCentavos,
+    })
+    .from(adminEscolarCargos)
+    .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, teamId)))
+    .limit(1);
+  if (!cargo) return NextResponse.json({ error: 'Cargo no encontrado' }, { status: 404 });
+
+  if (cargo.estado === 'anulado') {
+    return NextResponse.json({ error: 'Este cargo está anulado: ya no se le cambia el monto.' }, { status: 409 });
+  }
+  if (cargo.ecfDocumentId != null) {
+    return NextResponse.json(
+      { error: 'Este cargo ya está en una factura. Desvincula o anula la factura antes de cambiarle el monto.' },
+      { status: 409 },
+    );
+  }
+
+  const pagadoCentavos = Math.max(0, cargo.montoCentavos - cargo.saldoCentavos);
+  const cambios: Record<string, unknown> = { updatedAt: new Date() };
+
+  if (body.montoCentavos !== undefined) {
+    const nuevo = Number(body.montoCentavos);
+    if (!Number.isInteger(nuevo) || nuevo < 0) {
+      return NextResponse.json(
+        { error: 'El monto tiene que ser un número entero de centavos, y no negativo.' },
+        { status: 400 },
+      );
+    }
+    if (nuevo < pagadoCentavos) {
+      const pagado = (pagadoCentavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 });
+      return NextResponse.json(
+        { error: `Ya tiene RD$${pagado} pagados: el monto no puede quedar por debajo.` },
+        { status: 409 },
+      );
+    }
+    const saldo = nuevo - pagadoCentavos;
+    cambios.montoCentavos = nuevo;
+    cambios.saldoCentavos = saldo;
+    // El estado sale del saldo, salvo el vencido: si ya pasó su fecha sigue
+    // vencido aunque se le corrija el precio.
+    cambios.estado = saldo === 0 ? 'pagado'
+      : pagadoCentavos > 0 ? 'parcial'
+      : cargo.estado === 'vencido' ? 'vencido'
+      : 'pendiente';
+  }
+
+  if (body.fechaVencimiento !== undefined) {
+    const f = body.fechaVencimiento;
+    if (f !== null && (typeof f !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(f))) {
+      return NextResponse.json(
+        { error: 'La fecha de vencimiento no tiene el formato AAAA-MM-DD.' },
+        { status: 400 },
+      );
+    }
+    cambios.fechaVencimiento = (f as string | null) || null;
+  }
+
+  const [row] = await db.update(adminEscolarCargos)
+    .set(cambios)
+    .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, teamId)))
+    .returning();
   return NextResponse.json({ cargo: row });
 }
 

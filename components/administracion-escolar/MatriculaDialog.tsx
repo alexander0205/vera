@@ -10,7 +10,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { BuscadorSelect, type OpcionBuscador } from '@/components/ui/buscador-select';
 import { SelectorCurso, type CursoOpcion } from '@/components/administracion-escolar/SelectorCurso';
 import { PlanCobroSelector } from '@/components/administracion-escolar/PlanCobroSelector';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Check, Loader2, Pencil, Plus, X } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
@@ -39,6 +39,9 @@ interface EstudianteOpcion {
   id: number; nombres: string; apellidos: string; codigo: string | null; estado: string;
 }
 
+/** Un concepto de pago del colegio, para elegir cuáles se le cobran. */
+interface Concepto { id: number; nombre: string; tipo: string; activo?: boolean }
+
 /** Un cargo ya creado, tal como está en la cuenta del alumno. */
 interface CargoMatricula {
   id: number;
@@ -47,6 +50,8 @@ interface CargoMatricula {
   saldoCentavos: number;
   fechaVencimiento: string | null;
   estado: string;
+  /** Con factura detrás el monto ya no se corrige aquí: manda el e-CF. */
+  ecfDocumentId?: number | null;
 }
 
 export interface MatriculaEditable {
@@ -122,6 +127,10 @@ export function MatriculaDialog({
   const editando = matricula != null;
   const { permissions } = usePermissions();
   const puedeConfigurar = permissions.includes('administracion-escolar:configurar');
+  // Corregir el alumno, los conceptos o el monto de un cargo es gestión, no
+  // configuración del catálogo: quien solo consulta ve la matrícula pero no la
+  // toca.
+  const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
 
   // El período de la matrícula que se edita no cuenta como ocupado: lo ocupa
   // ella misma, y sin esto no se podría ni abrir para cambiarle el curso.
@@ -153,6 +162,15 @@ export function MatriculaDialog({
   const [conceptos, setConceptos] = useState<number[]>([]);
   const [cargosActuales, setCargosActuales] = useState<CargoMatricula[]>([]);
   const [cargosCargando, setCargosCargando] = useState(false);
+  /**
+   * Los conceptos recurrentes de la matrícula que se edita, y el catálogo del
+   * colegio para poder añadirle otro. Se piden aparte: el listado de matrículas
+   * no trae «conceptosIds» y sin ellos no se sabe qué se le está cobrando.
+   */
+  const [conceptosMatricula, setConceptosMatricula] = useState<number[]>([]);
+  const [conceptosCatalogo, setConceptosCatalogo] = useState<Concepto[]>([]);
+  /** Se pidió cambiar de alumno: hasta entonces el campo solo enseña quién es. */
+  const [cambiandoAlumno, setCambiandoAlumno] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -189,11 +207,25 @@ export function MatriculaDialog({
     return lista.find((x) => x.activo) ?? null;
   }, [estudianteFijoId]);
 
+  /**
+   * Los alumnos, pedidos solo cuando hacen falta.
+   *
+   * Al editar no se bajan de entrada —son cientos de filas para enseñar un
+   * nombre que ya se sabe—, pero sí en cuanto alguien pulsa «Cambiar».
+   */
+  const cargarEstudiantes = useCallback(async () => {
+    const data = await fetch('/api/administracion-escolar/estudiantes/opciones')
+      .then((r) => (r.ok ? r.json() : { estudiantes: [] }))
+      .catch(() => ({ estudiantes: [] }));
+    setEstudiantes((previos) => (previos.length > 0 ? previos : data.estudiantes ?? []));
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setError(null);
     setNuevoPeriodo(null);
     setConceptos([]);
+    setCambiandoAlumno(false);
     if (matricula) {
       // Al editar manda lo que ya tiene la matrícula. De la sección salen solos
       // el servicio y el grado: los deduce `SelectorCurso`.
@@ -246,6 +278,28 @@ export function MatriculaDialog({
     return () => { vigente = false; };
   }, [open, matricula]);
 
+  /**
+   * Qué se le cobra todos los meses a ESTA matrícula, y qué más podría cobrársele.
+   *
+   * Los dos en la misma espera para que la tarjeta no se pinte a medias: sin el
+   * catálogo, los conceptos elegidos saldrían como «Concepto 31».
+   */
+  useEffect(() => {
+    if (!open || !matricula) { setConceptosMatricula([]); setConceptosCatalogo([]); return; }
+    let vigente = true;
+    void Promise.all([
+      fetch(`/api/administracion-escolar/matriculas/${matricula.id}`)
+        .then((r) => (r.ok ? r.json() : { matricula: null })).catch(() => ({ matricula: null })),
+      fetch('/api/administracion-escolar/conceptos')
+        .then((r) => (r.ok ? r.json() : { conceptos: [] })).catch(() => ({ conceptos: [] })),
+    ]).then(([m, c]) => {
+      if (!vigente) return;
+      setConceptosMatricula(((m.matricula?.conceptosIds ?? []) as unknown[]).map(Number));
+      setConceptosCatalogo(c.conceptos ?? []);
+    });
+    return () => { vigente = false; };
+  }, [open, matricula]);
+
   // Una sección de un grado o servicio dado de baja no se ofrece: matricular
   // ahí deja al alumno colgando de una estructura que ya nadie mantiene.
   const cursosActivos = useMemo(
@@ -287,8 +341,6 @@ export function MatriculaDialog({
     }
     setSaving(true); setError(null);
     try {
-      // El estudiante no se manda al editar: cambiar de alumno una matrícula ya
-      // creada no es una corrección, es otra matrícula.
       const res = await fetch(
         editando
           ? `/api/administracion-escolar/matriculas/${matricula.id}`
@@ -297,7 +349,7 @@ export function MatriculaDialog({
           method: editando ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            ...(editando ? {} : { estudianteId: Number(form.estudianteId) }),
+            estudianteId: Number(form.estudianteId),
             periodoId: Number(form.periodoId),
             cursoId: Number(form.cursoId),
             documentoListaId: form.documentoListaId ? Number(form.documentoListaId) : null,
@@ -306,7 +358,10 @@ export function MatriculaDialog({
             notas: form.notas || null,
             // `conceptos`, que es como lo lee la API. Con otro nombre la
             // matrícula nacía sin cargos y sin decirlo.
-            ...(editando ? { estado: form.estado } : { conceptos }),
+            // Al editar viaja la lista de conceptos recurrentes: es lo que lee
+            // el devengo para saber qué cargarle cada mes. Al crear va como
+            // `conceptos`, que es como lo lee el alta.
+            ...(editando ? { estado: form.estado, conceptosIds: conceptosMatricula } : { conceptos }),
           }),
         },
       );
@@ -325,7 +380,7 @@ export function MatriculaDialog({
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
       {/* Ancho y en dos columnas: los datos de la inscripción a la izquierda y
           lo que se le va a cobrar a la derecha. */}
-      <DialogContent maxWidth={false} className="flex !h-[70vh] !w-[70vw] !max-w-none flex-col">
+      <DialogContent maxWidth={false} className="flex !h-[85vh] !w-[80vw] !max-w-none flex-col">
         <ModalHeader
           title={editando ? 'Editar matrícula' : esPrimera ? 'Matricular estudiante' : 'Nueva matrícula'}
           subtitle={editando
@@ -342,18 +397,37 @@ export function MatriculaDialog({
 
             <div className="space-y-1.5">
               <Label>Estudiante *</Label>
-              {editando || estudianteFijoId != null ? (
-                <div className="flex h-10 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
-                  {nombreFijo ?? 'Este estudiante'}
+              {/* Al editar se puede cambiar, pero no de un clic: el campo
+                  arranca enseñando de quién es la matrícula y hay que pedir
+                  «Cambiar». Cambiar de alumno mueve con él toda su deuda, y la
+                  API lo niega en cuanto hay una factura o un pago detrás. */}
+              {(editando || estudianteFijoId != null) && !cambiandoAlumno ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex h-10 flex-1 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
+                    {nombreFijo ?? 'Este estudiante'}
+                  </div>
+                  {editando && puedeGestionar && (
+                    <Button type="button" variant="outline" size="sm"
+                      onClick={() => { setCambiandoAlumno(true); void cargarEstudiantes(); }}>
+                      Cambiar
+                    </Button>
+                  )}
                 </div>
               ) : (
-                <BuscadorSelect
-                  value={form.estudianteId}
-                  onChange={(v) => setForm((f) => ({ ...f, estudianteId: v }))}
-                  opciones={opcionesEstudiante}
-                  placeholder="Escribe el nombre o el código…"
-                  vacio="Ningún alumno con ese nombre"
-                />
+                <>
+                  <BuscadorSelect
+                    value={form.estudianteId}
+                    onChange={(v) => setForm((f) => ({ ...f, estudianteId: v }))}
+                    opciones={opcionesEstudiante}
+                    placeholder="Escribe el nombre o el código…"
+                    vacio="Ningún alumno con ese nombre"
+                  />
+                  {editando && (
+                    <p className="text-xs text-amber-700">
+                      La deuda de esta matrícula se va con el alumno que elijas. No se puede si ya tiene facturas o pagos.
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
@@ -447,63 +521,27 @@ export function MatriculaDialog({
           </div>
 
           {/* Columna derecha: el dinero. */}
-          <div className="mt-4 space-y-4 md:mt-0">
-            {/* Al editar: lo que ya se le está cobrando de verdad. Se enseña
-                para que quien corrige una matrícula vea las consecuencias — si
-                le cambia el curso, estos montos ya no corresponden. */}
+          <div className="mt-4 flex min-h-0 flex-col gap-4 md:mt-0">
+            {/* Al editar: lo que se le cobra todos los meses, y lo que ya se le
+                cargó de verdad. Lo primero se cambia aquí —es la lista que lee
+                el devengo—; lo segundo se corrige cargo a cargo. */}
             {editando && (
-              <div className="rounded-lg border border-gray-200">
-                <div className="flex items-baseline justify-between border-b border-gray-100 px-3 py-2">
-                  <span className="text-sm font-medium text-gray-900">Cargos de esta matrícula</span>
-                  <span className="text-xs text-gray-500">{cargosActuales.length} cargo(s)</span>
-                </div>
-                {cargosCargando ? (
-                  <p className="flex items-center gap-2 px-3 py-4 text-sm text-gray-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />Cargando…
-                  </p>
-                ) : cargosActuales.length === 0 ? (
-                  <p className="px-3 py-4 text-sm text-gray-500">
-                    Todavía no tiene cargos. Se irán generando cada mes según el calendario.
-                  </p>
-                ) : (
-                  <>
-                    <div className="max-h-48 overflow-y-auto">
-                      {cargosActuales.map((c) => {
-                        const anulado = c.estado === 'anulado';
-                        return (
-                          <div key={c.id}
-                            className="flex items-baseline justify-between gap-2 border-b border-gray-100 px-3 py-2 last:border-b-0">
-                            <span className="min-w-0 flex-1">
-                              <span className={`block truncate text-sm ${anulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                                {c.concepto ?? 'Sin concepto'}
-                              </span>
-                              <span className="block text-xs text-gray-500">
-                                {c.fechaVencimiento ? `vence ${fmtFechaCorta(c.fechaVencimiento)}` : 'sin vencimiento'}
-                                {' · '}{anulado ? 'anulado' : c.saldoCentavos === 0 ? 'pagado' : 'pendiente'}
-                              </span>
-                            </span>
-                            <span className={`whitespace-nowrap text-sm ${anulado ? 'text-gray-400 line-through' : 'font-medium text-gray-900'}`}>
-                              {fmtRD(c.montoCentavos)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-baseline justify-between bg-gray-50 px-3 py-2.5">
-                      <span className="text-sm font-medium text-gray-900">Pendiente de pago</span>
-                      <span className="text-base font-semibold text-gray-900">
-                        {fmtRD(cargosActuales
-                          .filter((c) => c.estado !== 'anulado')
-                          .reduce((a, c) => a + c.saldoCentavos, 0))}
-                      </span>
-                    </div>
-                    <p className="px-3 pb-2.5 pt-2 text-xs text-gray-500">
-                      Para quitar uno, anúlalo desde Cargos o desde la ficha del estudiante.
-                      Cambiar el curso aquí no recalcula los cargos ya creados.
-                    </p>
-                  </>
-                )}
-              </div>
+              <ConceptosRecurrentes
+                catalogo={conceptosCatalogo}
+                elegidos={conceptosMatricula}
+                onCambio={setConceptosMatricula}
+                editable={puedeGestionar}
+              />
+            )}
+
+            {editando && (
+              <CargosDeLaMatricula
+                cargos={cargosActuales}
+                cargando={cargosCargando}
+                editable={puedeGestionar}
+                onGuardado={(cargo) => setCargosActuales((lista) =>
+                  lista.map((c) => (c.id === cargo.id ? { ...c, ...cargo } : c)))}
+              />
             )}
 
             {/* Al crear: lo que va a deber el alumno. No se cobra nada aquí:
@@ -556,6 +594,242 @@ function InlineCrear({ value, onChange, onGuardar, onCancelar, saving, placehold
       <Button type="button" variant="outline" size="icon" onClick={onCancelar} disabled={saving}>
         <X className="h-4 w-4" />
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Los conceptos que esta matrícula paga TODOS LOS MESES.
+ *
+ * Es la lista que lee el devengo: lo que está marcado aquí se convierte en
+ * cargo cuando llega su mes. Solo se podía elegir al matricular, así que al
+ * alumno que empieza la sala de tareas en noviembre no había dónde apuntárselo
+ * —se le creaban los cargos a mano, mes a mes, y en enero ya nadie se acordaba.
+ *
+ * Quitar uno no borra nada de lo ya cargado: deja de generarse hacia adelante.
+ * Lo viejo se anula desde los cargos, que es donde se ve lo que se debe.
+ */
+function ConceptosRecurrentes({ catalogo, elegidos, onCambio, editable }: {
+  catalogo: Concepto[];
+  elegidos: number[];
+  onCambio: (ids: number[]) => void;
+  editable: boolean;
+}) {
+  const porId = useMemo(() => new Map(catalogo.map((c) => [c.id, c])), [catalogo]);
+  // Lo que todavía se le puede añadir: los conceptos vivos del colegio que no
+  // tenga ya. Un concepto dado de baja no se ofrece, pero si lo tiene puesto se
+  // sigue enseñando: esconderlo haría creer que no se le cobra.
+  const disponibles = catalogo.filter((c) => c.activo !== false && !elegidos.includes(c.id));
+
+  return (
+    <div className="rounded-lg border border-gray-200">
+      <div className="flex items-baseline justify-between border-b border-gray-100 px-3 py-2">
+        <span className="text-sm font-medium text-gray-900">Conceptos de esta matrícula</span>
+        <span className="text-xs text-gray-500">{elegidos.length} concepto(s)</span>
+      </div>
+
+      {elegidos.length === 0 ? (
+        <p className="px-3 py-3 text-sm text-gray-500">
+          No tiene ninguno marcado: se le cobrará lo que su grado pague por defecto.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 px-3 py-2.5">
+          {elegidos.map((id) => {
+            const c = porId.get(id);
+            return (
+              <span key={id}
+                className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                {c?.nombre ?? `Concepto ${id}`}
+                {editable && (
+                  <button type="button" title="Quitar de esta matrícula"
+                    className="text-gray-400 hover:text-red-600"
+                    onClick={() => onCambio(elegidos.filter((x) => x !== id))}>
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {editable && (
+        <div className="border-t border-gray-100 px-3 py-2.5">
+          <NativeSelect
+            value=""
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              if (id) onCambio([...elegidos, id]);
+            }}
+          >
+            <option value="">Agregar un concepto…</option>
+            {disponibles.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.nombre}{c.tipo === 'mensualidad' ? ' — mensualidad' : ''}
+              </option>
+            ))}
+          </NativeSelect>
+          <p className="mt-1.5 text-xs text-gray-500">
+            Se cobra cada mes según su tarifa. Quitar uno no borra los cargos que ya tiene.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Los cargos REALES de la matrícula, con su precio corregible.
+ *
+ * No el plan: el plan dice lo que tocaría cobrar hoy según la configuración, y
+ * eso ya no describe a un alumno matriculado hace meses —le han podido anular
+ * una cuota o facturarle a mano—. Lo que hay que enseñar al editar es su
+ * cuenta.
+ *
+ * El monto se edita aquí porque es donde se mira: el precio se escribe mal al
+ * matricular, se ve mal al revisar la matrícula, y hasta ahora había que anular
+ * el cargo y rehacerlo —perdiendo su mes y su cuota— para cambiar una cifra. Un
+ * cargo ya facturado no se toca: manda la factura.
+ */
+function CargosDeLaMatricula({ cargos, cargando, editable, onGuardado }: {
+  cargos: CargoMatricula[];
+  cargando: boolean;
+  editable: boolean;
+  onGuardado: (cargo: Partial<CargoMatricula> & { id: number }) => void;
+}) {
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [valor, setValor] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function abrir(c: CargoMatricula) {
+    setEditandoId(c.id);
+    setValor((c.montoCentavos / 100).toFixed(2));
+    setError(null);
+  }
+
+  async function guardar(c: CargoMatricula) {
+    const centavos = Math.round(Number(valor.replace(',', '.')) * 100);
+    if (!Number.isFinite(centavos) || centavos < 0) { setError('Escribe un monto válido'); return; }
+    if (centavos === c.montoCentavos) { setEditandoId(null); return; }
+    setGuardando(true); setError(null);
+    try {
+      const res = await fetch(`/api/administracion-escolar/cargos/${c.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ montoCentavos: centavos }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo cambiar el monto');
+      onGuardado({
+        id: c.id,
+        montoCentavos: data.cargo?.montoCentavos ?? centavos,
+        saldoCentavos: data.cargo?.saldoCentavos ?? centavos,
+        estado: data.cargo?.estado ?? c.estado,
+      });
+      setEditandoId(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No se pudo cambiar el monto');
+    } finally { setGuardando(false); }
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200">
+      <div className="flex items-baseline justify-between border-b border-gray-100 px-3 py-2">
+        <span className="text-sm font-medium text-gray-900">Cargos de esta matrícula</span>
+        <span className="text-xs text-gray-500">{cargos.length} cargo(s)</span>
+      </div>
+
+      {error && (
+        <p className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+      )}
+
+      {cargando ? (
+        <p className="flex items-center gap-2 px-3 py-4 text-sm text-gray-500">
+          <Loader2 className="h-4 w-4 animate-spin" />Cargando…
+        </p>
+      ) : cargos.length === 0 ? (
+        <p className="px-3 py-4 text-sm text-gray-500">
+          Todavía no tiene cargos. Se irán generando cada mes según el calendario.
+        </p>
+      ) : (
+        <>
+          {/* Ocupa lo que quede de alto en vez de 192px fijos: con doce meses
+              había que arrastrar una lista de cuatro filas dentro de un diálogo
+              medio vacío. */}
+          <div className="min-h-[14rem] flex-1 overflow-y-auto">
+            {cargos.map((c) => {
+              const anulado = c.estado === 'anulado';
+              const facturado = c.ecfDocumentId != null;
+              const bloqueado = anulado || facturado;
+              const editandoEste = editandoId === c.id;
+              return (
+                <div key={c.id}
+                  className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 last:border-b-0">
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-sm ${anulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                      {c.concepto ?? 'Sin concepto'}
+                    </span>
+                    <span className="block text-xs text-gray-500">
+                      {c.fechaVencimiento ? `vence ${fmtFechaCorta(c.fechaVencimiento)}` : 'sin vencimiento'}
+                      {' · '}{anulado ? 'anulado' : c.saldoCentavos === 0 ? 'pagado' : 'pendiente'}
+                      {facturado ? ' · facturado' : ''}
+                    </span>
+                  </span>
+
+                  {editandoEste ? (
+                    <span className="flex items-center gap-1">
+                      <Input autoFocus type="number" step="0.01" min="0" value={valor} className="h-8 w-28 text-right"
+                        onChange={(e) => setValor(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); void guardar(c); }
+                          if (e.key === 'Escape') { e.preventDefault(); setEditandoId(null); }
+                        }} />
+                      <Button type="button" size="icon" className="h-8 w-8 bg-zero-600 hover:bg-zero-700"
+                        disabled={guardando} onClick={() => void guardar(c)}>
+                        {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      </Button>
+                      <Button type="button" size="icon" variant="outline" className="h-8 w-8"
+                        disabled={guardando} onClick={() => setEditandoId(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </span>
+                  ) : (
+                    <button type="button"
+                      disabled={!editable || bloqueado}
+                      onClick={() => abrir(c)}
+                      title={facturado
+                        ? 'Ya está en una factura: corrige la factura, no el cargo'
+                        : anulado ? 'Cargo anulado'
+                        : editable ? 'Cambiar el monto' : 'No tienes permiso para cambiarlo'}
+                      className={`group flex items-center gap-1.5 rounded px-1.5 py-1 text-sm ${
+                        anulado ? 'text-gray-400 line-through'
+                          : bloqueado || !editable ? 'font-medium text-gray-900'
+                          : 'font-medium text-gray-900 hover:bg-gray-100'}`}>
+                      <span className="whitespace-nowrap">{fmtRD(c.montoCentavos)}</span>
+                      {editable && !bloqueado && (
+                        <Pencil className="h-3 w-3 text-gray-400 group-hover:text-gray-700" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-baseline justify-between bg-gray-50 px-3 py-2.5">
+            <span className="text-sm font-medium text-gray-900">Pendiente de pago</span>
+            <span className="text-base font-semibold text-gray-900">
+              {fmtRD(cargos
+                .filter((c) => c.estado !== 'anulado')
+                .reduce((a, c) => a + c.saldoCentavos, 0))}
+            </span>
+          </div>
+          <p className="px-3 pb-2.5 pt-2 text-xs text-gray-500">
+            Toca el monto para corregirlo. Para quitar un cargo, anúlalo desde la ficha del estudiante.
+            Cambiar el curso aquí no recalcula los cargos ya creados.
+          </p>
+        </>
+      )}
     </div>
   );
 }
