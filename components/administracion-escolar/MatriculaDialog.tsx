@@ -169,8 +169,6 @@ export function MatriculaDialog({
    */
   const [conceptosMatricula, setConceptosMatricula] = useState<number[]>([]);
   const [conceptosCatalogo, setConceptosCatalogo] = useState<Concepto[]>([]);
-  /** Se pidió cambiar de alumno: hasta entonces el campo solo enseña quién es. */
-  const [cambiandoAlumno, setCambiandoAlumno] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -207,25 +205,11 @@ export function MatriculaDialog({
     return lista.find((x) => x.activo) ?? null;
   }, [estudianteFijoId]);
 
-  /**
-   * Los alumnos, pedidos solo cuando hacen falta.
-   *
-   * Al editar no se bajan de entrada —son cientos de filas para enseñar un
-   * nombre que ya se sabe—, pero sí en cuanto alguien pulsa «Cambiar».
-   */
-  const cargarEstudiantes = useCallback(async () => {
-    const data = await fetch('/api/administracion-escolar/estudiantes/opciones')
-      .then((r) => (r.ok ? r.json() : { estudiantes: [] }))
-      .catch(() => ({ estudiantes: [] }));
-    setEstudiantes((previos) => (previos.length > 0 ? previos : data.estudiantes ?? []));
-  }, []);
-
   useEffect(() => {
     if (!open) return;
     setError(null);
     setNuevoPeriodo(null);
     setConceptos([]);
-    setCambiandoAlumno(false);
     if (matricula) {
       // Al editar manda lo que ya tiene la matrícula. De la sección salen solos
       // el servicio y el grado: los deduce `SelectorCurso`.
@@ -349,7 +333,9 @@ export function MatriculaDialog({
           method: editando ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            estudianteId: Number(form.estudianteId),
+            // El estudiante no se manda al editar: cambiar de alumno una
+            // matrícula ya creada no es una corrección, es otra matrícula.
+            ...(editando ? {} : { estudianteId: Number(form.estudianteId) }),
             periodoId: Number(form.periodoId),
             cursoId: Number(form.cursoId),
             documentoListaId: form.documentoListaId ? Number(form.documentoListaId) : null,
@@ -397,47 +383,18 @@ export function MatriculaDialog({
 
             <div className="space-y-1.5">
               <Label>Estudiante *</Label>
-              {/* Cambiar de alumno se ofrece SOLO en Matriculación, no en la
-                  ficha del estudiante (`estudianteFijoId`).
-
-                  En la ficha el alumno no es un campo: es el contexto. La URL,
-                  la cabecera y la deuda de la pantalla entera son suyos, así
-                  que mudarle la matrícula a otro deja mirando la ficha de
-                  alguien que ya no tiene esa matrícula —y el que la recibe está
-                  en otra pantalla, sin verla. En Matriculación el alumno es una
-                  columna de la fila que se está corrigiendo, que es justo donde
-                  se descubre haber matriculado al hermano equivocado.
-
-                  Y ni ahí de un clic: el campo arranca enseñando de quién es y
-                  hay que pedir «Cambiar». Mueve con él toda su deuda, y la API
-                  lo niega en cuanto hay una factura o un pago detrás. */}
-              {(editando || estudianteFijoId != null) && !cambiandoAlumno ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex h-10 flex-1 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
-                    {nombreFijo ?? 'Este estudiante'}
-                  </div>
-                  {editando && puedeGestionar && estudianteFijoId == null && (
-                    <Button type="button" variant="outline" size="sm"
-                      onClick={() => { setCambiandoAlumno(true); void cargarEstudiantes(); }}>
-                      Cambiar
-                    </Button>
-                  )}
+              {editando || estudianteFijoId != null ? (
+                <div className="flex h-10 items-center rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
+                  {nombreFijo ?? 'Este estudiante'}
                 </div>
               ) : (
-                <>
-                  <BuscadorSelect
-                    value={form.estudianteId}
-                    onChange={(v) => setForm((f) => ({ ...f, estudianteId: v }))}
-                    opciones={opcionesEstudiante}
-                    placeholder="Escribe el nombre o el código…"
-                    vacio="Ningún alumno con ese nombre"
-                  />
-                  {editando && (
-                    <p className="text-xs text-amber-700">
-                      La deuda de esta matrícula se va con el alumno que elijas. No se puede si ya tiene facturas o pagos.
-                    </p>
-                  )}
-                </>
+                <BuscadorSelect
+                  value={form.estudianteId}
+                  onChange={(v) => setForm((f) => ({ ...f, estudianteId: v }))}
+                  opciones={opcionesEstudiante}
+                  placeholder="Escribe el nombre o el código…"
+                  vacio="Ningún alumno con ese nombre"
+                />
               )}
             </div>
 
