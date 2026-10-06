@@ -8,7 +8,7 @@
 import 'server-only';
 import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists, notExists } from 'drizzle-orm';
 import { coincideDocumento } from '@/lib/busqueda/documento';
-import { repartirCobro, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
+import { repartirCobroEntreHermanos, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes,
@@ -665,32 +665,14 @@ export async function sincronizarSaldosDesdeFacturas(
     const cobrado = (pagadoById.get(fid) ?? 0) + Number(f.ncAplicado ?? 0);
 
     const saldada = f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA';
-    const hijos = new Set(grupo.map((c) => c.estudianteId));
-
-    let calculados: SaldoCalculado[];
-    if (hijos.size <= 1) {
-      // Caso normal (una factura, un estudiante): comportamiento sin cambios.
-      calculados = repartirCobro(grupo, cobrado, hoy, { facturaAnulada: anulada, facturaSaldada: saldada });
-    } else {
-      // Factura que paga a varios hermanos en un mismo documento: cada hijo se
-      // salda SOLO con la parte de lo cobrado que corresponde a SUS líneas
-      // (proporcional a su subtotal en la factura), para no acreditarle a un
-      // niño el pago del hermano. Un hijo sin líneas propias no recibe nada.
-      const subMap = subPorFacturaHijo.get(fid) ?? new Map<number, number>();
-      const totalSub = [...hijos].reduce((s, e) => s + (subMap.get(e) ?? 0), 0);
-      calculados = [];
-      for (const est of hijos) {
-        const cargosHijo = grupo.filter((c) => c.estudianteId === est);
-        if (anulada) {
-          calculados.push(...repartirCobro(cargosHijo, 0, hoy, { facturaAnulada: true }));
-          continue;
-        }
-        const sub = subMap.get(est) ?? 0;
-        const share = totalSub > 0 ? Math.round((cobrado * sub) / totalSub) : 0;
-        // "Saldada" aplica por hijo solo si tiene líneas propias en la factura.
-        calculados.push(...repartirCobro(cargosHijo, share, hoy, { facturaSaldada: saldada && sub > 0 }));
-      }
-    }
+    // Con un solo estudiante por factura —el caso común— esto es `repartirCobro`
+    // sin más. Con varios hermanos reparte por hijo, y solo cuando la factura
+    // dice de quién es cada línea: si no, la factura entera contra todos sus
+    // cargos, como siempre (ver `repartirCobroEntreHermanos`).
+    const calculados = repartirCobroEntreHermanos(
+      grupo, cobrado, hoy, subPorFacturaHijo.get(fid) ?? new Map<number, number>(),
+      { facturaAnulada: anulada, facturaSaldada: saldada },
+    );
 
     for (const r of calculados) {
       const actual = porId.get(r.id);
