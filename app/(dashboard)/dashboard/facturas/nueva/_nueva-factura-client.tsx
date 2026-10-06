@@ -23,6 +23,7 @@ export default function NuevaFacturaFormClient({
   initialPerfil,
   categoriaFija,
   cargosIniciales,
+  cargosOfrecidos,
   clienteInicial,
   previsto,
   onVolver,
@@ -34,6 +35,8 @@ export default function NuevaFacturaFormClient({
   categoriaFija?: string;
   /** Cargos escolares con los que arrancar, cuando no hay URL donde ponerlos. */
   cargosIniciales?: number[];
+  /** Cargos que solo se ofrecen en el buscador: la factura abre vacía. */
+  cargosOfrecidos?: number[];
   /** A quién facturarle cuando no hay cargos de los que deducirlo. */
   clienteInicial?: { id: number; razonSocial: string; rnc: string | null;
     email: string | null; telefono: string | null } | null;
@@ -51,6 +54,7 @@ export default function NuevaFacturaFormClient({
       initialPerfil={initialPerfil}
       categoriaFija={categoriaFija}
       cargosIniciales={cargosIniciales}
+      cargosOfrecidos={cargosOfrecidos}
       clienteInicial={clienteInicial}
       previsto={previsto}
       onVolver={onVolver}

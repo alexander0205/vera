@@ -30,6 +30,7 @@ export function FacturaDrawer({
   onCerrar,
   perfilEmpresa,
   cargosIniciales,
+  cargosOfrecidos,
   clienteInicial,
   previsto,
 }: {
@@ -46,6 +47,14 @@ export function FacturaDrawer({
    * al cargo al guardarla.
    */
   cargosIniciales?: number[];
+  /**
+   * Lo que se debe sin facturar, para «Nueva factura» a secas.
+   *
+   * No entra en la factura: alimenta el buscador de productos, donde cada mes
+   * sale con el precio de ese alumno. La factura abre vacía y quien factura
+   * elige qué cobra.
+   */
+  cargosOfrecidos?: number[];
   /**
    * La familia de la ficha, para cuando no hay ningún cargo que facturar.
    *
@@ -120,6 +129,7 @@ export function FacturaDrawer({
             initialPerfil={perfilEmpresa}
             categoriaFija="factura-venta"
             cargosIniciales={cargosIniciales}
+            cargosOfrecidos={cargosOfrecidos}
             clienteInicial={clienteInicial}
             previsto={previsto}
             // El «Volver» de la barra del formulario navegaba a

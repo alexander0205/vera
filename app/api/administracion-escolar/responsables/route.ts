@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { listarResponsables, type FiltroResponsables } from '@/lib/administracion-escolar/responsables';
-
-const FILTROS: FiltroResponsables[] = ['con-deuda', 'sin-contacto', 'todos'];
+import {
+  listarResponsables, FILTROS_RESPONSABLES, type FiltroResponsables,
+} from '@/lib/administracion-escolar/responsables';
 
 /**
  * Las familias que pagan, con su deuda y por dónde se les puede escribir.
@@ -20,7 +20,12 @@ export async function GET(req: NextRequest) {
 
   const datos = await listarResponsables(auth.teamId, {
     q: sp.get('q') ?? undefined,
-    filtro: FILTROS.includes(filtro as FiltroResponsables) ? (filtro as FiltroResponsables) : 'todos',
+    // La lista de filtros es la de la consulta, no una copia: aquí había una
+    // copia a la que le faltaba «sin-ficha», y la pastilla «Falta traerlas»
+    // enseñaba la lista entera sin avisar.
+    filtro: FILTROS_RESPONSABLES.includes(filtro as FiltroResponsables)
+      ? (filtro as FiltroResponsables)
+      : 'todos',
     limit: Number(sp.get('limit')) || 25,
     offset: Number(sp.get('offset')) || 0,
   });

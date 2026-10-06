@@ -287,6 +287,18 @@ export async function matriculasBajoObjetivo(
 ): Promise<number[]> {
   // Todo se resuelve a un conjunto de secciones (cursos); la matrícula cuelga
   // de la sección.
+  // El precio PERSONAL de un alumno cuelga del estudiante, no de una sección:
+  // se resuelve directo a su(s) matrícula(s) del período.
+  if (objetivoTipo === 'estudiante') {
+    const mats = await exec.select({ id: adminEscolarMatriculas.id }).from(adminEscolarMatriculas)
+      .where(and(
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.periodoId, periodoId),
+        eq(adminEscolarMatriculas.estudianteId, objetivoId),
+      ));
+    return mats.map((m) => m.id);
+  }
+
   let cursoIds: number[];
   if (objetivoTipo === 'seccion') {
     cursoIds = [objetivoId];
@@ -350,6 +362,8 @@ async function matriculasConCadena(
     objetivoTipo === 'seccion' ? eq(adminEscolarCursos.id, objetivoId)
     : objetivoTipo === 'grado' ? eq(adminEscolarGrados.id, objetivoId)
     : objetivoTipo === 'servicio' ? eq(adminEscolarGrados.servicioId, objetivoId)
+    // El precio personal cuelga del alumno: su matrícula es la única del objetivo.
+    : objetivoTipo === 'estudiante' ? eq(adminEscolarMatriculas.estudianteId, objetivoId)
     : sql`false`;
   return base.where(and(
     eq(adminEscolarMatriculas.teamId, teamId),

@@ -6,6 +6,7 @@ import {
   adminEscolarCursos,
   adminEscolarCargos,
   adminEscolarPagos,
+  adminEscolarConceptosPago,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
@@ -26,14 +27,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const {
     periodoId, cursoId, documentoListaId, fechaInscripcion, estado, codigoMatricula, notas,
-    becaTipo, becaValor, becaMotivo,
+    becaTipo, becaValor, becaMotivo, conceptoMensualidadId,
   } = await req.json();
   const matriculaId = parseInt(id, 10);
-  const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado })
+  const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado, conceptosIds: adminEscolarMatriculas.conceptosIds })
     .from(adminEscolarMatriculas)
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
     .limit(1);
   if (!actual) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+
+  /**
+   * La GENERACIÓN del alumno (concepto de mensualidad). Es su ubicación —lo que
+   * la ficha muestra como «1ra/2da/3ra…»—, NO su precio: el importe sigue
+   * saliendo de la tarifa/monto propio. Cambiarla reescribe `conceptosIds` para
+   * dejar SOLO esta mensualidad (más los conceptos que no son mensualidad, que
+   * se conservan), y fija `conceptoMensualidadId`. Así se elige la generación y
+   * el precio personal en un mismo sitio, sin arrastrar la tarifa de la generación.
+   */
+  let generacionSet: { conceptoMensualidadId: number; conceptosIds: number[] } | null = null;
+  if (conceptoMensualidadId !== undefined && conceptoMensualidadId !== null) {
+    const nuevoId = Number(conceptoMensualidadId);
+    const [concepto] = await db
+      .select({ id: adminEscolarConceptosPago.id, tipo: adminEscolarConceptosPago.tipo })
+      .from(adminEscolarConceptosPago)
+      .where(and(eq(adminEscolarConceptosPago.id, nuevoId), eq(adminEscolarConceptosPago.teamId, teamId)))
+      .limit(1);
+    if (!concepto || concepto.tipo !== 'mensualidad') {
+      return NextResponse.json({ error: 'La generación debe ser un concepto de mensualidad del colegio.' }, { status: 400 });
+    }
+    // Conserva los conceptos que NO son mensualidad; reemplaza la mensualidad
+    // vieja (cualquiera) por la elegida, sin duplicar.
+    const idsActuales = (actual.conceptosIds ?? []).map(Number);
+    const mensualidadIds = new Set(
+      (await db.select({ id: adminEscolarConceptosPago.id })
+        .from(adminEscolarConceptosPago)
+        .where(and(eq(adminEscolarConceptosPago.teamId, teamId), eq(adminEscolarConceptosPago.tipo, 'mensualidad'))))
+        .map((c) => c.id),
+    );
+    const noMensualidad = idsActuales.filter((cid) => !mensualidadIds.has(cid));
+    generacionSet = { conceptoMensualidadId: nuevoId, conceptosIds: [nuevoId, ...noMensualidad] };
+  }
 
   // Validar período/curso (si vienen) contra el team.
   if (periodoId !== undefined) {
@@ -115,6 +148,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           // El motivo se guarda solo si la beca existe: dejarlo suelto tras
           // quitarla deja en la ficha el porqué de algo que ya no está.
           becaMotivo: becaTipoOk ? (String(becaMotivo ?? '').trim() || null) : null,
+        } : {}),
+        ...(generacionSet ? {
+          conceptoMensualidadId: generacionSet.conceptoMensualidadId,
+          conceptosIds:          generacionSet.conceptosIds,
         } : {}),
         updatedAt: new Date(),
       })

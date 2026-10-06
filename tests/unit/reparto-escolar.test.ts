@@ -5,7 +5,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { repartirCobro, ordenarPorVencimiento } from '@/lib/administracion-escolar/reparto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { repartirCobro, repartirCobroEntreHermanos, ordenarPorVencimiento } from '@/lib/administracion-escolar/reparto';
 
 const HOY = '2026-07-20';
 
@@ -105,5 +107,78 @@ describe('repartirCobro — bordes', () => {
   it('un cargo en cero queda pagado', () => {
     const r = repartirCobro([{ id: 7, montoCentavos: 0, fechaVencimiento: null }], 0, HOY);
     expect(r[0]).toMatchObject({ saldo: 0, estado: 'pagado' });
+  });
+});
+
+/**
+ * Una factura, varios hermanos.
+ *
+ * El padre paga la colegiatura de sus dos hijos con una sola factura. Lo cobrado
+ * hay que repartirlo, y lo justo es por hijo: cada uno con la parte que
+ * corresponde a SUS líneas. Antes todo el abono se le iba al primero.
+ *
+ * Pero ese reparto solo existe si la factura dice de quién es cada línea. La
+ * primera versión no tenía salida para la que no lo dice, y al hermano sin
+ * líneas no le daba nada, ni con la factura PAGADA: sobre una copia de
+ * producción, un colegio con 60 facturas familiares ya cobradas pasó 2,023
+ * cargos de «pagado» a «vencido» —RD$8.8 millones de deuda que nadie debía— con
+ * solo abrir el listado de estudiantes.
+ */
+describe('repartirCobroEntreHermanos', () => {
+  // Dos hermanos; el mes de cada uno, 3,700 y 3,500.
+  const ana  = { id: 10, estudianteId: 1, montoCentavos: 3_700_00, fechaVencimiento: '2026-09-30' };
+  const luis = { id: 11, estudianteId: 2, montoCentavos: 3_500_00, fechaVencimiento: '2026-09-30' };
+  const saldos = (r: { id: number; saldo: number }[]) => Object.fromEntries(r.map(x => [x.id, x.saldo]));
+  const estados = (r: { id: number; estado: string }[]) => Object.fromEntries(r.map(x => [x.id, x.estado]));
+
+  it('un solo estudiante: lo mismo que repartirCobro', () => {
+    const cargos = [{ ...enero, estudianteId: 1 }, { ...febrero, estudianteId: 1 }];
+    expect(repartirCobroEntreHermanos(cargos, 150_00, HOY, new Map([[1, 200_00]])))
+      .toEqual(repartirCobro(cargos, 150_00, HOY));
+  });
+
+  it('cada hermano con sus líneas y un abono: a cada uno su parte, no todo al primero', () => {
+    // La factura trae 3,500 de Ana y 3,300 de Luis, y se cobraron 6,600.
+    const r = repartirCobroEntreHermanos([ana, luis], 6_600_00, '2026-10-06', new Map([[1, 3_500_00], [2, 3_300_00]]));
+    expect(saldos(r)).toEqual({ 10: 302_94, 11: 297_06 });
+    expect(estados(r)).toEqual({ 10: 'parcial', 11: 'parcial' });
+    // En cascada, como antes, Ana quedaba saldada y Luis cargaba con todo lo que faltaba.
+    expect(saldos(repartirCobro([ana, luis], 6_600_00, '2026-10-06'))).toEqual({ 10: 0, 11: 600_00 });
+  });
+
+  it('factura PAGADA sin beneficiario en las líneas: los dos quedan pagados', () => {
+    const r = repartirCobroEntreHermanos([ana, luis], 7_200_00, '2026-10-06', new Map(), { facturaSaldada: true });
+    expect(saldos(r)).toEqual({ 10: 0, 11: 0 });
+    expect(estados(r)).toEqual({ 10: 'pagado', 11: 'pagado' });
+  });
+
+  it('factura PAGADA que solo identifica a un hermano: el otro también queda pagado', () => {
+    const r = repartirCobroEntreHermanos([ana, luis], 7_200_00, '2026-10-06', new Map([[1, 3_700_00]]), { facturaSaldada: true });
+    expect(estados(r)).toEqual({ 10: 'pagado', 11: 'pagado' });
+  });
+
+  it('abono a una factura que no dice de quién es cada línea: la cascada de siempre', () => {
+    const r = repartirCobroEntreHermanos([ana, luis], 4_000_00, '2026-10-06', new Map());
+    expect(r).toEqual(repartirCobro([ana, luis], 4_000_00, '2026-10-06'));
+    expect(saldos(r)).toEqual({ 10: 0, 11: 3_200_00 });
+  });
+
+  it('factura PAGADA con las líneas de los dos: los dos pagados', () => {
+    const r = repartirCobroEntreHermanos([ana, luis], 6_800_00, '2026-10-06', new Map([[1, 3_500_00], [2, 3_300_00]]), { facturaSaldada: true });
+    expect(estados(r)).toEqual({ 10: 'pagado', 11: 'pagado' });
+  });
+
+  it('factura anulada: cada cargo recupera su saldo y se desliga', () => {
+    const r = repartirCobroEntreHermanos([ana, luis], 6_600_00, '2026-10-06', new Map([[1, 3_500_00], [2, 3_300_00]]), { facturaAnulada: true });
+    expect(saldos(r)).toEqual({ 10: 3_700_00, 11: 3_500_00 });
+    expect(r.every(x => x.desvincular)).toBe(true);
+  });
+
+  it('la sincronización usa esta función, no una copia suya', () => {
+    // Si alguien vuelve a escribir el reparto dentro de la consulta, las pruebas
+    // de arriba dejan de proteger lo que de verdad corre.
+    const consulta = readFileSync(join(__dirname, '..', '..', 'lib', 'administracion-escolar', 'queries.ts'), 'utf8');
+    expect(consulta).toMatch(/const calculados = repartirCobroEntreHermanos\(/);
+    expect(consulta).not.toMatch(/facturaSaldada: saldada && sub > 0/);
   });
 });

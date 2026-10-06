@@ -125,7 +125,7 @@ function moduloDeRuta(pathname: string): ModuleKey {
 const PLACEHOLDER: Record<ModuleKey, string> = {
   facturacion:    'Buscar facturas, clientes, productos…',
   pos:            'Buscar productos, ventas, clientes…',
-  escolar:        'Buscar estudiantes, familias, facturas…',
+  escolar:        'Buscar estudiante, padre, cédula o RNC…',
   administracion: 'Buscar usuarios, clientes, facturas…',
   nomina:         'Buscar empleados, corridas de nómina…',
   contabilidad:   'Buscar libro diario, reportes, facturas…',
