@@ -50,6 +50,20 @@ interface Curso {
 }
 
 interface Concepto { id: number; nombre: string; tipo: string; activo: boolean; }
+/** Una línea de la revisión previa: a quién se le crearía el cargo y a quién no. */
+interface DetalleGeneracion {
+  estudianteId: number;
+  matriculaId: number;
+  nombre: string;
+  codigo: string | null;
+  resultado: 'crear' | 'creado' | 'duplicado';
+}
+interface Revision {
+  creados: number;
+  omitidos: number;
+  total: number;
+  detalles: DetalleGeneracion[];
+}
 interface Matricula { id: number; estudianteId: number; periodoId: number; cursoId: number; estado: string; }
 interface Estudiante { id: number; nombres: string; apellidos: string; }
 
@@ -94,6 +108,97 @@ function toCentavos(value: string): number {
   return Math.round(n * 100);
 }
 
+/**
+ * La revisión del cargo en lote: a quién se le va a crear, y a quién no.
+ *
+ * Es lo que faltaba para poder cobrar algo eventual —la excursión, el día de
+ * cine— sin miedo. Antes el filtro llegaba hasta la sección y el botón escribía
+ * la deuda de golpe: el único modo de saber a quién le había caído era mirar
+ * el listado después. Aquí se ve antes, se desmarca al que no va, y lo que se
+ * crea es exactamente lo marcado.
+ *
+ * Los duplicados salen en la lista en gris y sin casilla: no se les puede
+ * marcar, porque ya tienen ese cargo en ese mes. Enseñarlos —en vez de
+ * esconderlos— es lo que responde la pregunta de verdad, que no es «¿a cuántos
+ * se les creó?» sino «¿y a Fulano, por qué no?».
+ */
+function RevisionLote({ revision, seleccion, onSeleccion, query, onQuery, montoCentavos }: {
+  revision: Revision;
+  seleccion: Set<number>;
+  onSeleccion: (s: Set<number>) => void;
+  query: string;
+  onQuery: (q: string) => void;
+  montoCentavos: number;
+}) {
+  const q = query.trim().toLowerCase();
+  const visibles = q
+    ? revision.detalles.filter((d) => `${d.nombre} ${d.codigo ?? ''}`.toLowerCase().includes(q))
+    : revision.detalles;
+  const marcables = revision.detalles.filter((d) => d.resultado !== 'duplicado');
+  const todosMarcados = marcables.length > 0 && marcables.every((d) => seleccion.has(d.estudianteId));
+
+  function alternar(id: number) {
+    const siguiente = new Set(seleccion);
+    if (siguiente.has(id)) siguiente.delete(id); else siguiente.add(id);
+    onSeleccion(siguiente);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm">
+        <span className="text-gray-600">
+          <span className="font-semibold text-gray-900">{seleccion.size}</span> marcado(s) de {revision.total}
+          {revision.omitidos > 0 && (
+            <span className="text-gray-500"> · {revision.omitidos} ya lo tienen</span>
+          )}
+        </span>
+        <span className="font-medium text-gray-900">{fmtDOP(seleccion.size * montoCentavos)}</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+          <Input className="pl-8" placeholder="Buscar en la lista…" value={query}
+            onChange={(e) => onQuery(e.target.value)} />
+        </div>
+        <Button type="button" variant="outline" size="sm"
+          onClick={() => onSeleccion(todosMarcados
+            ? new Set()
+            : new Set(marcables.map((d) => d.estudianteId)))}>
+          {todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
+        </Button>
+      </div>
+
+      <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200">
+        {visibles.length === 0 ? (
+          <p className="px-3 py-4 text-sm text-gray-500">Ningún alumno con ese nombre.</p>
+        ) : visibles.map((d) => {
+          const duplicado = d.resultado === 'duplicado';
+          return (
+            <label key={d.estudianteId}
+              className={`flex items-center gap-2.5 border-b border-gray-100 px-3 py-2 last:border-b-0 ${
+                duplicado ? 'bg-gray-50' : 'cursor-pointer hover:bg-gray-50'}`}>
+              <input type="checkbox" className="h-4 w-4 rounded border-gray-300"
+                disabled={duplicado}
+                checked={seleccion.has(d.estudianteId)}
+                onChange={() => alternar(d.estudianteId)} />
+              <span className="min-w-0 flex-1">
+                <span className={`block truncate text-sm ${duplicado ? 'text-gray-400' : 'text-gray-900'}`}>
+                  {d.nombre}
+                </span>
+                {d.codigo && <span className="block text-xs text-gray-400">{d.codigo}</span>}
+              </span>
+              {duplicado && (
+                <Badge variant="outline" className="shrink-0 text-gray-400">Ya lo tiene</Badge>
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function estadoBadge(estado: string, saldoCentavos: number) {
   if (estado === 'pagado') return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
   if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial · {fmtDOP(saldoCentavos)}</Badge>;
@@ -129,6 +234,17 @@ export default function CargosClient() {
   const [saving, setSaving] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ creados: number; omitidos: number; total: number } | null>(null);
+  /**
+   * La revisión antes de crear: quién recibe el cargo y quién se omite.
+   *
+   * El botón creaba deuda sobre cuatrocientas matrículas a ciegas y el
+   * resultado se leía DESPUÉS, cuando ya estaba puesta. Ahora el primer botón
+   * solo lee (dryRun) y el segundo escribe lo que se ve marcado.
+   */
+  const [revision, setRevision] = useState<Revision | null>(null);
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
+  const [revisando, setRevisando] = useState(false);
+  const [queryRevision, setQueryRevision] = useState('');
 
   /**
    * El botón «Cargos del mes» se quitó de esta pantalla.
@@ -267,10 +383,18 @@ export default function CargosClient() {
     });
     setResultado(null);
     setOpError(null);
+    limpiarRevision();
     setOpen(true);
   }
 
-  async function handleGenerar() {
+  /** Cambiar cualquier dato del cargo invalida lo revisado: se vuelve a pedir. */
+  function limpiarRevision() {
+    setRevision(null);
+    setSeleccion(new Set());
+    setQueryRevision('');
+  }
+
+  async function handleRevisar() {
     const montoCentavos = toCentavos(form.monto);
     if (!form.periodoId || !form.conceptoId || !form.anio || montoCentavos <= 0) {
       setOpError('Período, concepto, año y monto son obligatorios');
@@ -278,6 +402,45 @@ export default function CargosClient() {
     }
     if (conceptoSeleccionado?.tipo === 'mensualidad' && !form.mes) {
       setOpError('Selecciona el mes de la mensualidad');
+      return;
+    }
+    setRevisando(true);
+    setOpError(null);
+    setResultado(null);
+    try {
+      const res = await fetch('/api/administracion-escolar/cargos/generar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dryRun: true,
+          periodoId: Number.parseInt(form.periodoId),
+          cursoId: form.cursoId === 'todos' ? null : Number.parseInt(form.cursoId),
+          conceptoId: Number.parseInt(form.conceptoId),
+          mes: form.mes ? Number.parseInt(form.mes) : null,
+          anio: Number.parseInt(form.anio),
+          montoCentavos,
+          fechaVencimiento: form.fechaVencimiento || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo revisar');
+      setRevision(data as Revision);
+      // Vienen marcados los que pueden recibirlo. Los duplicados no se marcan:
+      // marcarlos sugeriría que se les va a cobrar otra vez.
+      setSeleccion(new Set(
+        (data.detalles as DetalleGeneracion[]).filter((d) => d.resultado === 'crear').map((d) => d.estudianteId),
+      ));
+    } catch (e: unknown) {
+      setOpError(e instanceof Error ? e.message : 'No se pudo revisar');
+    } finally {
+      setRevisando(false);
+    }
+  }
+
+  async function handleGenerar() {
+    const montoCentavos = toCentavos(form.monto);
+    if (seleccion.size === 0) {
+      setOpError('No hay ningún alumno marcado');
       return;
     }
     setSaving(true);
@@ -295,11 +458,15 @@ export default function CargosClient() {
           anio: Number.parseInt(form.anio),
           montoCentavos,
           fechaVencimiento: form.fechaVencimiento || null,
+          // Lo que se marcó en la revisión, no el filtro: un cobro eventual
+          // casi nunca es «toda la sección», es la lista de los que van.
+          estudianteIds: [...seleccion],
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error generando cargos');
       setResultado(data);
+      limpiarRevision();
       await cargarCargos();
       await cargarCatalogos();
     } catch (e: unknown) {
@@ -408,7 +575,7 @@ export default function CargosClient() {
               <Plus className="h-4 w-4 mr-2" />Cargo individual
             </Button>
             <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirGenerar} disabled={loading || sinCatalogos}>
-              <Plus className="h-4 w-4 mr-2" />Generar cargos
+              <Plus className="h-4 w-4 mr-2" />Cargo a varios alumnos
             </Button>
           </div>
         )}
@@ -529,10 +696,10 @@ export default function CargosClient() {
       </Card>
 
       <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) setOpen(false); }}>
-        <DialogContent className="max-w-lg">
-          <ModalHeader title="Generar cargos masivos"
-            subtitle="Crea el mismo cargo para todas las matrículas del filtro." />
-          <div className="space-y-4 px-6 py-4">
+        <DialogContent className="max-w-2xl">
+          <ModalHeader title="Cargo a varios alumnos"
+            subtitle="El mismo cargo para un grupo: la excursión, el día de cine, la evaluación del período." />
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-4">
             {opError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>}
             {resultado && (
               <div className="bg-zero-50 border border-zero-200 text-zero-800 text-sm rounded-lg p-3">
@@ -546,6 +713,7 @@ export default function CargosClient() {
                 <NativeSelect value={form.periodoId} onChange={(e) => {
                   const periodo = periodos.find((p) => String(p.id) === e.target.value);
                   const siguiente = mesInicial(periodo);
+                  limpiarRevision();
                   setForm((f) => ({
                     ...f,
                     periodoId: e.target.value,
@@ -567,7 +735,7 @@ export default function CargosClient() {
               cursos={cursosActivos}
               periodoId={Number(form.periodoId) || null}
               valor={form.cursoId}
-              onChange={(v) => setForm((f) => ({ ...f, cursoId: v || 'todos' }))}
+              onChange={(v) => { limpiarRevision(); setForm((f) => ({ ...f, cursoId: v || 'todos' })); }}
             />
 
             <div className="space-y-1.5">
@@ -580,6 +748,7 @@ export default function CargosClient() {
                 value={form.conceptoId}
                 onConceptoCreado={() => void cargarCatalogos()}
                 onChange={(id) => {
+                  limpiarRevision();
                   const concepto = conceptos.find((c) => String(c.id) === id);
                   const siguiente = mesInicial(periodoForm);
                   setForm((f) => ({
@@ -595,12 +764,12 @@ export default function CargosClient() {
 
             {conceptoSeleccionado?.tipo === 'mensualidad' ? (
               <MesAcademicoSelect periodo={periodoForm} meses={mesesForm} mes={form.mes} anio={form.anio}
-                onChange={(seleccion) => setForm((f) => ({ ...f, mes: String(seleccion.mes), anio: String(seleccion.anio) }))} />
+                onChange={(elegido) => { limpiarRevision(); setForm((f) => ({ ...f, mes: String(elegido.mes), anio: String(elegido.anio) })); }} />
             ) : (
               <div className="space-y-1.5">
                 <Label>Año *</Label>
                 <Input type="number" value={form.anio}
-                  onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} />
+                  onChange={(e) => { limpiarRevision(); setForm((f) => ({ ...f, anio: e.target.value })); }} />
               </div>
             )}
 
@@ -608,7 +777,7 @@ export default function CargosClient() {
               <div className="space-y-1.5">
                 <Label>Monto por estudiante (RD$) *</Label>
                 <Input type="number" step="0.01" placeholder="3500.00" value={form.monto}
-                  onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} />
+                  onChange={(e) => { limpiarRevision(); setForm((f) => ({ ...f, monto: e.target.value })); }} />
               </div>
               <div className="space-y-1.5">
                 <Label>Fecha vencimiento</Label>
@@ -617,16 +786,39 @@ export default function CargosClient() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-              Matrículas activas objetivo: <span className="font-semibold text-gray-900">{objetivo}</span>.
-              {' '}Duplicados existentes se omiten automáticamente.
-            </div>
+            {revision === null ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+                Matrículas activas en el filtro: <span className="font-semibold text-gray-900">{objetivo}</span>.
+                {' '}Al revisar verás uno por uno a quién se le crea el cargo, y podrás quitar a los que no van.
+              </div>
+            ) : (
+              <RevisionLote
+                revision={revision}
+                seleccion={seleccion}
+                onSeleccion={setSeleccion}
+                query={queryRevision}
+                onQuery={setQueryRevision}
+                montoCentavos={toCentavos(form.monto)}
+              />
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cerrar</Button>
-            <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGenerar} disabled={saving || objetivo === 0}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Generando...</> : 'Generar cargos'}
-            </Button>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving || revisando}>Cerrar</Button>
+            {revision === null ? (
+              <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleRevisar}
+                disabled={revisando || objetivo === 0}>
+                {revisando
+                  ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Revisando…</>
+                  : 'Revisar antes de crear'}
+              </Button>
+            ) : (
+              <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGenerar}
+                disabled={saving || seleccion.size === 0}>
+                {saving
+                  ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Creando…</>
+                  : `Crear ${seleccion.size} cargo${seleccion.size === 1 ? '' : 's'}`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
