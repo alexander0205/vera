@@ -507,6 +507,26 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                       {estudiante.estado !== 'activo' && (
                         <Badge variant="outline" className="capitalize text-gray-500 shrink-0">{estudiante.estado}</Badge>
                       )}
+                      {/* Editar al ALUMNO: su nombre, su fecha de nacimiento,
+                          su acta, su RNE.
+
+                          Estaba, pero como un texto gris en la esquina de
+                          «Datos adicionales» —una sección plegada, que además
+                          desaparece entera cuando el alumno viene de SIGERD sin
+                          un solo campo lleno—. Quien entraba a corregirle el
+                          nombre a un niño concluía que no se podía.
+
+                          Va pegado al nombre y no al lado de «Editar
+                          responsable»: ahí ya hubo un botón así y se leía como
+                          si editara al padre, que es el bloque que tiene al
+                          lado. */}
+                      {puedeGestionar && (
+                        <Button asChild variant="outline" size="sm" className="shrink-0">
+                          <Link href={`/escolar/estudiantes/${estudiante.id}/editar`}>
+                            <Pencil className="h-4 w-4 mr-1.5" />Editar estudiante
+                          </Link>
+                        </Button>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       <InfoChip k="Código" v={estudiante.codigo ?? '—'} />
@@ -1276,10 +1296,11 @@ function FichaAdicional({ estudiante, puedeGestionar }: { estudiante: Estudiante
           )}
         </button>
         {puedeGestionar && (
-          <Link href={`/escolar/estudiantes/${estudiante.id}/editar`}
-            className="shrink-0 text-xs font-medium text-gray-400 transition-colors hover:text-zero-600">
-            Editar ficha
-          </Link>
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link href={`/escolar/estudiantes/${estudiante.id}/editar`}>
+              <Pencil className="h-4 w-4 mr-1.5" />Editar ficha
+            </Link>
+          </Button>
         )}
       </div>
       {abierto && (
