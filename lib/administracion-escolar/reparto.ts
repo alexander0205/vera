@@ -75,3 +75,49 @@ export function repartirCobro(
     return { id: c.id, saldo, estado: estadoDe(c, saldo, aplicado, hoy), desvincular: false };
   });
 }
+
+/** Un cargo y el alumno al que pertenece. */
+export interface CargoDeHijo extends CargoParaReparto {
+  estudianteId: number;
+}
+
+/**
+ * Reparto de una factura que cubre cargos de varios hermanos.
+ *
+ * Cuando la factura dice de quién es cada línea, cada hijo se salda SOLO con la
+ * parte de lo cobrado que corresponde a las suyas (proporcional a su subtotal),
+ * para no acreditarle a un niño el pago del hermano. `subtotalPorHijo` es ese
+ * subtotal, por alumno.
+ *
+ * Pero eso solo se puede hacer si la factura lo dice de TODOS. Hay facturas
+ * —las que no llevan `dependienteId` en sus líneas, o las de un alumno sin
+ * beneficiario enlazado— donde a algún hermano no se le encuentra ninguna
+ * línea. Ahí no hay con qué repartir, y se hace lo de siempre: la factura
+ * entera contra todos sus cargos.
+ *
+ * Sin esa salida el hermano sin líneas no recibía nada, ni con la factura
+ * PAGADA. Probado sobre una copia de producción: un colegio con 60 facturas
+ * familiares ya cobradas pasaba 2,023 cargos de «pagado» a «vencido» con solo
+ * abrir el listado de estudiantes.
+ *
+ * Con un solo estudiante —el caso común— es `repartirCobro` sin más.
+ */
+export function repartirCobroEntreHermanos(
+  cargos: CargoDeHijo[],
+  cobrado: number,
+  hoy: string,
+  subtotalPorHijo: ReadonlyMap<number, number>,
+  opts: { facturaAnulada?: boolean; facturaSaldada?: boolean } = {},
+): SaldoCalculado[] {
+  const hijos = [...new Set(cargos.map(c => c.estudianteId))];
+  const todosConLineas = hijos.every(e => (subtotalPorHijo.get(e) ?? 0) > 0);
+  if (hijos.length <= 1 || !todosConLineas || opts.facturaAnulada) {
+    return repartirCobro(cargos, cobrado, hoy, opts);
+  }
+
+  const total = hijos.reduce((s, e) => s + (subtotalPorHijo.get(e) ?? 0), 0);
+  return hijos.flatMap(e => {
+    const parte = Math.round((cobrado * (subtotalPorHijo.get(e) ?? 0)) / total);
+    return repartirCobro(cargos.filter(c => c.estudianteId === e), parte, hoy, { facturaSaldada: opts.facturaSaldada });
+  });
+}
