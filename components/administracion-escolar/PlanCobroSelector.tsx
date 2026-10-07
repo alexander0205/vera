@@ -26,6 +26,13 @@ interface LineaPlan {
   conceptoId: number; nombre: string; tipo: string;
   admiteBeca: boolean; montoCentavos: number; origen: string;
   cuotas: CuotaPlan[]; totalCentavos: number; omitidas: number;
+  /**
+   * El producto con el que se facturaría esta línea, ya resuelto por la cadena
+   * de tarifas. Viaja hasta aquí porque el precio propio se guarda ANTES de que
+   * exista la matrícula, y sin ella el servidor no tiene de dónde heredarlo:
+   * la tarifa nacería sin producto y se rechazaría (regla R2).
+   */
+  productId: number | null;
 }
 
 const fmtRD = (centavos: number) =>
@@ -67,7 +74,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio, onPreci
    * se ofrece editarlos: la ficha del alumno ya tiene «Configuración mensual»
    * y no todas las pantallas que matriculan saben persistirlos.
    */
-  onPrecios?: (precios: { conceptoId: number; montoCentavos: number }[]) => void;
+  onPrecios?: (precios: { conceptoId: number; montoCentavos: number; productId: number | null }[]) => void;
 }) {
   const [plan, setPlan] = useState<LineaPlan[]>([]);
   const [planCargando, setPlanCargando] = useState(false);
@@ -150,7 +157,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio, onPreci
         const propio = propios.get(l.conceptoId);
         return propio == null || propio === l.montoCentavos
           ? []
-          : [{ conceptoId: l.conceptoId, montoCentavos: propio }];
+          : [{ conceptoId: l.conceptoId, montoCentavos: propio, productId: l.productId }];
       }));
   }, [plan, propios, marcados, onPrecios]);
 
@@ -325,8 +332,9 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio, onPreci
                   {propios.size > 0 && (
                     <p className="border-t border-gray-100 px-3 pb-2.5 pt-2 text-xs text-amber-800">
                       {propios.size === 1 ? 'Un concepto lleva' : `${propios.size} conceptos llevan`} precio
-                      propio de este alumno. Se guarda al matricular y es el mismo que luego aparece en
-                      «Configuración mensual» de su ficha; la tarifa del grado no cambia para nadie más.
+                      propio de este alumno: queda como su tarifa y es la que usarán sus cargos de cada mes.
+                      La tarifa del grado no cambia para nadie más. Déjalo bien ahora — para un servicio
+                      mensual como la sala de tareas, este es el único sitio donde se escribe.
                     </p>
                   )}
                 </>

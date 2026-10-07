@@ -165,7 +165,9 @@ export function MatriculaDialog({
    * matricularlo. Se guardan como tarifa personal ANTES de crear la matrícula
    * —ver `guardar()`— porque el alta recalcula el plan en el servidor.
    */
-  const [preciosPropios, setPreciosPropios] = useState<{ conceptoId: number; montoCentavos: number }[]>([]);
+  const [preciosPropios, setPreciosPropios] = useState<
+    { conceptoId: number; montoCentavos: number; productId: number | null }[]
+  >([]);
   const [cargosActuales, setCargosActuales] = useState<CargoMatricula[]>([]);
   const [cargosCargando, setCargosCargando] = useState(false);
   /**
@@ -325,6 +327,22 @@ export function MatriculaDialog({
     } finally { setGuardandoCat(false); }
   }
 
+  /**
+   * Deshace los precios propios que se alcanzaron a escribir.
+   *
+   * Silencioso: ya se le va a enseñar al usuario el error de verdad —el que
+   * impidió matricular— y encadenarle un segundo mensaje sobre una limpieza
+   * interna no le dice nada que pueda hacer. Para un precio de alumno el
+   * borrado solo quita la tarifa, no toca cargos.
+   */
+  async function revertirPrecios(ids: number[]) {
+    for (const id of ids) {
+      try {
+        await fetch(`/api/administracion-escolar/concepto-precios?id=${id}`, { method: 'DELETE' });
+      } catch { /* el error que importa es el otro */ }
+    }
+  }
+
   async function guardar() {
     if (!form.estudianteId || !form.periodoId || !form.cursoId) {
       setError('Estudiante, período y curso son obligatorios'); return;
@@ -344,6 +362,15 @@ export function MatriculaDialog({
        * `devengar: false` porque la deuda la crea el alta un instante después;
        * pedirla aquí la duplicaría.
        */
+      /**
+       * Los precios ya escritos, para poder deshacerlos.
+       *
+       * Van antes que la matrícula, así que si la matrícula falla —el alumno ya
+       * tenía una, el curso cambió— el precio se quedaría puesto sobre un
+       * estudiante que nadie acabó de matricular, cambiándole lo que paga sin
+       * que nadie lo decidiera. Se revierten.
+       */
+      const preciosEscritos: number[] = [];
       if (!editando && preciosPropios.length > 0) {
         for (const p of preciosPropios) {
           const r = await fetch('/api/administracion-escolar/concepto-precios', {
@@ -355,15 +382,22 @@ export function MatriculaDialog({
               objetivoTipo: 'estudiante',
               objetivoId:   Number(form.estudianteId),
               monto:        p.montoCentavos / 100,
+              // El producto del plan, explícito: sin matrícula todavía, el
+              // servidor no puede heredarlo de la tarifa que cubre al alumno y
+              // rechazaría la tarifa por nacer sin producto. El plan ya lo trae
+              // resuelto por la misma cadena, así que se manda tal cual.
+              ...(p.productId != null ? { productId: p.productId } : {}),
               devengar:     false,
             }),
           });
+          const d = await r.json().catch(() => ({}));
           if (!r.ok) {
-            const d = await r.json().catch(() => ({}));
             // Se corta aquí a propósito: seguir crearía la matrícula con la
             // tarifa del grado y el precio escrito se perdería en silencio.
+            await revertirPrecios(preciosEscritos);
             throw new Error(d.error ?? 'No se pudo guardar el precio propio del alumno');
           }
+          if (d.precio?.id) preciosEscritos.push(d.precio.id as number);
         }
       }
 
@@ -394,7 +428,10 @@ export function MatriculaDialog({
         },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error guardando la matrícula');
+      if (!res.ok) {
+        await revertirPrecios(preciosEscritos);
+        throw new Error(data.error ?? 'Error guardando la matrícula');
+      }
       onSaved();
       onClose();
     } catch (e: unknown) {
