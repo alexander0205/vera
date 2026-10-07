@@ -2492,7 +2492,9 @@ function TarifaEstudianteDialog({
       ]);
       const activos = ((cs.conceptos ?? []) as (ConceptoLite & { activo?: boolean })[])
         .filter((c) => c.activo !== false);
-      // La mensualidad se maneja arriba (beca): aquí van los DEMÁS conceptos.
+      // Su mensualidad -la de su generación- se maneja arriba (beca). Aquí van
+      // los demás conceptos; `conceptosElegibles` le añade las OTRAS
+      // mensualidades, que son servicios aparte (sala de tareas, guardería).
       setConceptos(activos.filter((c) => c.tipo !== 'mensualidad'));
       // Las mensualidades son las generaciones elegibles.
       setGeneraciones(activos.filter((c) => c.tipo === 'mensualidad'));
@@ -2500,6 +2502,31 @@ function TarifaEstudianteDialog({
     } catch { /* la sección queda vacía; la de mensualidad sigue usable */ }
   }, [periodoId]);
   useEffect(() => { if (open) void cargarOtros(); }, [open, cargarOtros]);
+
+  /**
+   * Lo que se le puede poner precio propio aquí.
+   *
+   * Un colegio tiene varias mensualidades: la de su generación —que es su
+   * colegiatura, y cuyo importe se pone arriba con «Monto propio»— y las de los
+   * servicios que no todos toman, como la sala de tareas o la guardería. Esas
+   * segundas quedaban fuera de las dos listas: ni eran su generación ni eran
+   * «otro concepto», así que el precio de la sala de tareas solo se podía
+   * escribir al matricular y no había dónde corregirlo después.
+   *
+   * Se excluye la generación elegida para no tener dos sitios peleando por la
+   * misma cifra: esa se cambia arriba.
+   */
+  const conceptosElegibles = useMemo(
+    () => [...conceptos, ...generaciones.filter((g) => String(g.id) !== generacionSel)],
+    [conceptos, generaciones, generacionSel],
+  );
+  const esMensualidad = (id: string) => generaciones.some((g) => String(g.id) === id);
+
+  // Si se cambia la generación a la mensualidad que se estaba editando abajo,
+  // se suelta: ya no es «otro concepto», es su colegiatura.
+  useEffect(() => {
+    if (conceptoSel && conceptoSel === generacionSel) { setConceptoSel(''); setPrecioOtro(''); }
+  }, [generacionSel, conceptoSel]);
 
   // El precio personal ya puesto para el concepto elegido, si existe.
   const precioPersonal = precios.find(
@@ -2676,24 +2703,42 @@ function TarifaEstudianteDialog({
           {/* ── Precio personal de OTRO concepto (uniforme, actividad…) ─────── */}
           <div className="mt-2 border-t border-gray-100 pt-3">
             <p className="text-sm font-medium text-gray-800">Precio personal de otro concepto</p>
-            <p className="mb-2 text-xs text-gray-500">Solo para este alumno, sin cambiar el precio de los demás.</p>
+            <p className="mb-2 text-xs text-gray-500">
+              Solo para este alumno, sin cambiar el precio de los demás. Incluye los servicios
+              mensuales que no son su colegiatura —sala de tareas, guardería—: aquí se corrige
+              lo que se puso al matricular.
+            </p>
             {errorOtro && <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{errorOtro}</div>}
             <div className="space-y-1">
               <Label className="text-xs">Concepto</Label>
               <NativeSelect value={conceptoSel} onChange={(e) => setConceptoSel(e.target.value)}>
                 <option value="">Elige un concepto…</option>
-                {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                {conceptosElegibles.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.nombre}{c.tipo === 'mensualidad' ? ' — cada mes' : ''}
+                  </option>
+                ))}
               </NativeSelect>
             </div>
 
             {conceptoSel && (
               <div className="mt-2 space-y-2">
                 <div className="space-y-1">
-                  <Label className="text-xs">Precio para este alumno (RD$)</Label>
+                  <Label className="text-xs">
+                    {esMensualidad(conceptoSel)
+                      ? 'Precio para este alumno, por mes (RD$)'
+                      : 'Precio para este alumno (RD$)'}
+                  </Label>
                   <Input type="number" step="0.01" value={precioOtro}
                     onChange={(e) => setPrecioOtro(e.target.value)} placeholder="0.00" />
                   {precioPersonal && (
                     <p className="text-[11px] text-gray-400">Ya tiene un precio personal puesto. Cámbialo o quítalo.</p>
+                  )}
+                  {esMensualidad(conceptoSel) && (
+                    <p className="text-[11px] text-gray-500">
+                      Es lo que pagará cada mes por este servicio. Los cargos que ya estén creados
+                      conservan su importe: esos se corrigen uno a uno en la matrícula.
+                    </p>
                   )}
                 </div>
 
