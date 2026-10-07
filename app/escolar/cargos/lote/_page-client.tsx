@@ -12,7 +12,7 @@ import { ConceptoPicker } from '@/components/administracion-escolar/ConceptoPick
 import { fmtDOP } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
-import { ArrowLeft, Check, Loader2, Search, Users } from 'lucide-react';
+import { ArrowLeft, Check, Loader2, Plus, Search, Users } from 'lucide-react';
 
 /**
  * Cobrarle lo mismo a un grupo: la excursión, el día de cine, la evaluación
@@ -87,6 +87,9 @@ function toCentavos(value: string): number {
 export default function CargoLoteClient() {
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
+  // Crear el concepto toca el CATÁLOGO del colegio, no solo la deuda de este
+  // mes: va con el permiso de configurar, como en Configuración → Conceptos.
+  const puedeConfigurar = permissions.includes('administracion-escolar:configurar');
 
   const [periodos, setPeriodos] = useState<Periodo[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
@@ -108,6 +111,17 @@ export default function CargoLoteClient() {
   const [revisando, setRevisando] = useState(false);
   const [creando, setCreando] = useState(false);
   const [resultado, setResultado] = useState<{ creados: number; omitidos: number; total: number } | null>(null);
+  /**
+   * Inventar el cobro aquí mismo: nombre y precio.
+   *
+   * Lo que se cobra de esto no está en ningún catálogo cuando hace falta —«día
+   * de cine, cien pesos», decidido el lunes para el viernes—, y mandar a la
+   * secretaria a Configuración → Conceptos a darlo de alta, volver, y recordar
+   * cuál era, es el motivo por el que estos cobros terminaban en una libreta.
+   */
+  const [nuevoNombre, setNuevoNombre] = useState<string | null>(null);
+  const [nuevoPrecio, setNuevoPrecio] = useState('');
+  const [creandoConcepto, setCreandoConcepto] = useState(false);
 
   const cargarCatalogos = useCallback(async () => {
     setCargandoCat(true);
@@ -226,6 +240,42 @@ export default function CargoLoteClient() {
     }
   }
 
+  async function crearConcepto() {
+    const nombre = (nuevoNombre ?? '').trim();
+    if (!nombre) { setError('Ponle un nombre al cobro'); return; }
+    const precioCentavos = toCentavos(nuevoPrecio);
+    setCreandoConcepto(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/administracion-escolar/conceptos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // 'otro' y no 'mensualidad': esto es un cobro suelto. El tipo decide la
+        // frecuencia —la mensualidad nace mensual y generaría once cuotas— y
+        // decide también en qué pestaña de la ficha aparece el cargo.
+        body: JSON.stringify({ nombre, tipo: 'otro' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo crear el concepto');
+      const creado: Concepto = data.concepto;
+      setConceptos((lista) => [...lista, creado]);
+      limpiarRevision();
+      // Queda elegido y con su precio puesto: escribirlo dos veces es la forma
+      // de que el cargo salga con un monto distinto del que se acaba de decir.
+      setForm((f) => ({
+        ...f,
+        conceptoId: String(creado.id),
+        mes: '',
+        ...(precioCentavos > 0 ? { monto: String(precioCentavos / 100) } : {}),
+      }));
+      setNuevoNombre(null);
+      setNuevoPrecio('');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No se pudo crear el concepto');
+    } finally {
+      setCreandoConcepto(false);
+    }
+  }
+
   const visibles = useMemo(() => {
     if (!revision) return [];
     const q = query.trim().toLowerCase();
@@ -312,7 +362,55 @@ export default function CargoLoteClient() {
           />
 
           <div className="space-y-1.5">
-            <Label>Concepto *</Label>
+            <div className="flex items-baseline justify-between gap-2">
+              <Label>Concepto *</Label>
+              {puedeConfigurar && nuevoNombre === null && (
+                <button type="button" onClick={() => setNuevoNombre('')}
+                  className="text-xs font-medium text-zero-600 hover:text-zero-800">
+                  + Crear uno nuevo
+                </button>
+              )}
+            </div>
+
+            {/* Nombre y precio, y ya está cobrando. El precio no se guarda como
+                tarifa del concepto —una tarifa cuelga de un servicio o un
+                grado, y esto no es de ninguno— sino que queda puesto como monto
+                por estudiante, que es lo que se va a cobrar. */}
+            {nuevoNombre !== null && (
+              <div className="space-y-2 rounded-lg border border-zero-200 bg-zero-50/60 p-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Nombre del cobro</Label>
+                  <Input autoFocus placeholder="Ej: Día de cine" value={nuevoNombre}
+                    onChange={(e) => setNuevoNombre(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); void crearConcepto(); }
+                      if (e.key === 'Escape') { e.preventDefault(); setNuevoNombre(null); }
+                    }} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Precio por estudiante (RD$)</Label>
+                  <Input type="number" step="0.01" placeholder="100.00" value={nuevoPrecio}
+                    onChange={(e) => setNuevoPrecio(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void crearConcepto(); } }} />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="bg-zero-600 hover:bg-zero-700"
+                    onClick={() => void crearConcepto()} disabled={creandoConcepto}>
+                    {creandoConcepto
+                      ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Creando…</>
+                      : <><Plus className="mr-1.5 h-4 w-4" />Crear y usarlo</>}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={creandoConcepto}
+                    onClick={() => { setNuevoNombre(null); setNuevoPrecio(''); }}>
+                    Cancelar
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Queda en el catálogo del colegio como cobro suelto, listo para volver a usarlo.
+                </p>
+              </div>
+            )}
+
             <ConceptoPicker
               conceptos={conceptosActivos}
               value={form.conceptoId}
