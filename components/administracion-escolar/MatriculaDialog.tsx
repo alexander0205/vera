@@ -160,6 +160,12 @@ export function MatriculaDialog({
    * ya existe los cargos están hechos y volver a ofrecerlos invita a duplicarlos.
    */
   const [conceptos, setConceptos] = useState<number[]>([]);
+  /**
+   * Los conceptos cuyo precio se escribió a mano para ESTE alumno, al
+   * matricularlo. Se guardan como tarifa personal ANTES de crear la matrícula
+   * —ver `guardar()`— porque el alta recalcula el plan en el servidor.
+   */
+  const [preciosPropios, setPreciosPropios] = useState<{ conceptoId: number; montoCentavos: number }[]>([]);
   const [cargosActuales, setCargosActuales] = useState<CargoMatricula[]>([]);
   const [cargosCargando, setCargosCargando] = useState(false);
   /**
@@ -325,6 +331,42 @@ export function MatriculaDialog({
     }
     setSaving(true); setError(null);
     try {
+      /**
+       * Los precios propios van PRIMERO, antes de crear la matrícula.
+       *
+       * El alta no se fía de los montos que mande el navegador: recalcula el
+       * plan en el servidor (ver app/api/administracion-escolar/matriculas).
+       * Si el precio personal se guardara después, los cargos ya estarían
+       * hechos con la tarifa del grado y habría que corregirlos uno a uno —
+       * justo el paseo que esto venía a quitar. Guardándolo antes, el servidor
+       * lo resuelve él solo: la tarifa de alumno gana en la cadena.
+       *
+       * `devengar: false` porque la deuda la crea el alta un instante después;
+       * pedirla aquí la duplicaría.
+       */
+      if (!editando && preciosPropios.length > 0) {
+        for (const p of preciosPropios) {
+          const r = await fetch('/api/administracion-escolar/concepto-precios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conceptoId:   p.conceptoId,
+              periodoId:    Number(form.periodoId),
+              objetivoTipo: 'estudiante',
+              objetivoId:   Number(form.estudianteId),
+              monto:        p.montoCentavos / 100,
+              devengar:     false,
+            }),
+          });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            // Se corta aquí a propósito: seguir crearía la matrícula con la
+            // tarifa del grado y el precio escrito se perdería en silencio.
+            throw new Error(d.error ?? 'No se pudo guardar el precio propio del alumno');
+          }
+        }
+      }
+
       const res = await fetch(
         editando
           ? `/api/administracion-escolar/matriculas/${matricula.id}`
@@ -519,6 +561,9 @@ export function MatriculaDialog({
                 cursoId={form.cursoId}
                 desde={form.fechaInscripcion || hoy()}
                 onCambio={setConceptos}
+                // Poner el precio propio es configurar tarifas, no matricular:
+                // sin ese permiso la fila se enseña igual, pero sin editor.
+                onPrecios={puedeGestionar ? setPreciosPropios : undefined}
               />
             )}
 
