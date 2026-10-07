@@ -2837,6 +2837,7 @@ export default function NuevaFacturaForm({
                 montoFmt: `RD$ ${(parseFloat(l.valor || '0') || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
               }))}
             procesando={loading}
+            sentido={esGasto ? 'pago' : 'cobro'}
             onCancel={() => setConfirmMetodo(null)}
             onConfirm={() => {
               const pend = confirmMetodo;
