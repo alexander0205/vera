@@ -161,6 +161,14 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
   );
 
   /**
+   * Si la tabla lleva columna de acción.
+   *
+   * Solo cuando se puede cobrar: sin eso sería una columna vacía quitándole
+   * ancho al concepto, que es lo que de verdad se lee.
+   */
+  const conCobro = Boolean(puedePagos && onCobrar);
+
+  /**
    * El año escolar que se está mirando, para TODA la familia.
    *
    * Estaba dentro de la tarjeta de cada hijo, uno por hijo. Pero un año
@@ -442,9 +450,12 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                 ) : (
                   <Box sx={{
                     display: 'grid',
-                    gridTemplateColumns: puedeFacturar
-                      ? '30px minmax(140px, 1fr) 92px 92px 108px'
-                      : 'minmax(150px, 1fr) 92px 92px 108px',
+                    gridTemplateColumns: [
+                      puedeFacturar ? '30px' : null,
+                      puedeFacturar ? 'minmax(140px, 1fr)' : 'minmax(150px, 1fr)',
+                      '92px 92px 108px',
+                      conCobro ? '88px' : null,
+                    ].filter(Boolean).join(' '),
                     mt: 1.5,
                   }}>
                     {puedeFacturar && <Box sx={ENCABEZADO} />}
@@ -452,6 +463,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Vence</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'center' }}>Estado</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Monto</Box>
+                    {conCobro && <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Acción</Box>}
 
                     {cargosVisibles.map((f) => {
                       const sePuede = puedeFacturar && marcable(f);
@@ -500,43 +512,6 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                                 </Box>
                               </Link>
                             )}
-                            {/*
-                              Cobrar el mes sin salir de la familia.
-
-                              Un mes vencido YA tiene factura, así que nunca le
-                              sale la casilla de facturar y lo único que había
-                              era el icono del documento: se llegaba a la
-                              factura, pero «ver» y «cobrar» no son lo mismo y
-                              nadie daba con el segundo paso. El padre llama
-                              diciendo que ya pagó y la secretaria está mirando
-                              esta pantalla, no la ficha del hijo.
-
-                              Va APARTE del icono del documento y no encima: el
-                              📄 sigue siendo mirar la factura.
-
-                              Abre el PagoModal aquí mismo, el de Cuentas por
-                              cobrar —el mismo que usa la ficha del alumno—, y
-                              no lleva a la pantalla de la factura: allí no se
-                              anota un pago recibido (su botón de cobro genera
-                              un LINK de pago para mandárselo al padre, que es
-                              otra cosa, y su panel derecho remite de vuelta a
-                              Cuentas por cobrar).
-                            */}
-                            {puedePagos && onCobrar && f.ecfDocumentId != null && f.saldoCentavos > 0 && (
-                              <Box
-                                component="button"
-                                type="button"
-                                onClick={() => onCobrar(f.ecfDocumentId!)}
-                                title={`Registrar el pago de ${tituloFila(f)}`}
-                                sx={{
-                                  display: 'inline-flex', alignItems: 'center', flexShrink: 0,
-                                  p: 0, border: 0, background: 'none', cursor: 'pointer',
-                                  color: '#0F7A4A', '&:hover': { color: '#0A5C37' },
-                                }}
-                              >
-                                <Wallet size={13} />
-                              </Box>
-                            )}
                           </Box>
                           <Box sx={{ ...CELDA, textAlign: 'right', fontSize: '0.78125rem', color: '#6B7280', fontVariantNumeric: 'tabular-nums' }}>
                             {f.fechaVencimiento ? fmtFechaCorta(f.fechaVencimiento) : '—'}
@@ -547,6 +522,50 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                           <Box sx={{ ...CELDA, textAlign: 'right', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                             {fmtDOP(f.montoCentavos)}
                           </Box>
+                          {/*
+                            Cobrar el mes sin salir de la familia.
+
+                            Un mes vencido YA tiene factura, así que nunca le
+                            sale la casilla de facturar, y lo único que había
+                            en su fila era el icono del documento: se llegaba a
+                            la factura, pero «ver» y «cobrar» no son lo mismo y
+                            nadie daba con el segundo paso. El padre llama
+                            diciendo que ya pagó y la secretaria está mirando
+                            esta pantalla, no la ficha del hijo.
+
+                            Es un botón con la palabra y en columna propia, no
+                            un icono pegado al concepto: ahí se leía como parte
+                            del nombre y había que adivinar qué hacía.
+
+                            Abre el PagoModal de Cuentas por cobrar aquí mismo
+                            —el que usa la ficha del alumno— y no lleva a la
+                            pantalla de la factura: allí no se anota un pago
+                            recibido (su botón de cobro genera un LINK de pago
+                            para mandárselo al padre, que es otra cosa, y su
+                            panel derecho remite de vuelta a Cuentas por cobrar).
+                          */}
+                          {conCobro && (
+                            <Box sx={{ ...CELDA, display: 'flex', justifyContent: 'flex-end' }}>
+                              {f.ecfDocumentId != null && f.saldoCentavos > 0 && (
+                                <Box
+                                  component="button"
+                                  type="button"
+                                  onClick={() => onCobrar!(f.ecfDocumentId!)}
+                                  title={`Registrar el pago de ${tituloFila(f)}`}
+                                  sx={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                                    px: 1, py: 0.375, cursor: 'pointer',
+                                    fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.4,
+                                    color: '#0F7A4A', bgcolor: '#E8F6EF',
+                                    border: '1px solid #BFE6D4', borderRadius: '6px',
+                                    '&:hover': { bgcolor: '#D7EFE3', borderColor: '#9BD8BE' },
+                                  }}
+                                >
+                                  <Wallet size={12} />Cobrar
+                                </Box>
+                              )}
+                            </Box>
+                          )}
                         </Fila>
                       );
                     })}
@@ -580,6 +599,9 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                       }}>
                         {fmtDOP(totalCargos)}
                       </Box>
+                      {/* La columna de acción no suma nada: va vacía para que
+                          el total siga cayendo bajo «Monto» y no se corra. */}
+                      {conCobro && <Box />}
                     </Box>
                   </Box>
                 )}
