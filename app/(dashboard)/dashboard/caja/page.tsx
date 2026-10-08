@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { DetalleTurno } from '@/components/caja/DetalleTurno';
 import { toast } from 'sonner';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { METODO_PAGO_LABELS as METODO_LABELS, METODOS_PAGO, esEfectivo } from '@/lib/pagos/metodos';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -134,7 +134,11 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const montoNum = parseFloat(monto.replace(',', '.'));
+    // La coma es separador de MILES, que es como el sistema escribe el dinero
+    // («RD$2,800.00»). Leída como decimal, un movimiento de «1,100» entraba
+    // como RD$1.10 y el turno cerraba descuadrado sin que nadie supiera por qué.
+    const centavos = parseDOPaCentavos(monto);
+    const montoNum = centavos == null ? NaN : centavos / 100;
     if (!montoNum || montoNum <= 0) { toast.error('Monto inválido'); return; }
 
     setLoading(true);
@@ -248,7 +252,9 @@ function ModalCierre({ turno, desglose, ventasPorMetodo, onClose, onCerrado }: {
   const [obs, setObs]         = useState('');
   const [loading, setLoading] = useState(false);
 
-  const contadoNum  = parseFloat(contado.replace(',', '.')) || 0;
+  // Lo contado en la gaveta. Misma lectura de coma que el resto del dinero:
+  // «2,800» son dos mil ochocientos, no dos con ochenta.
+  const contadoNum  = (parseDOPaCentavos(contado) ?? 0) / 100;
   const esperadoDOP = desglose.esperado / 100;
   const diferencia  = contadoNum - esperadoDOP;
   const hasDiff     = contado !== '' && Math.abs(Math.round(diferencia * 100)) > 0;
@@ -440,7 +446,10 @@ export default function CajaPage() {
 
   async function abrirTurno(e: React.FormEvent) {
     e.preventDefault();
-    const monto = parseFloat(montoApertura.replace(',', '.'));
+    // Cero vale: se abre turno con la gaveta vacía. Lo que no vale es leer
+    // «1,100» de fondo de caja como RD$1.10.
+    const centavosApertura = parseDOPaCentavos(montoApertura);
+    const monto = centavosApertura == null ? NaN : centavosApertura / 100;
     if (isNaN(monto) || monto < 0) { toast.error('Monto inválido'); return; }
 
     setAbriendo(true);
