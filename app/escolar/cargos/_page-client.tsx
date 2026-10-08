@@ -17,7 +17,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { ConceptoPicker } from '@/components/administracion-escolar/ConceptoPicker';
 import { Paginador } from '@/components/ui/paginador';
 import { ModalHeader } from '@/components/ui/modal-header';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { AlertTriangle, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
@@ -87,10 +87,15 @@ function perteneceMes(periodo: Periodo | undefined, mes: string, anio: string) {
     .some((m) => m.mes === Number(mes) && m.anio === Number(anio));
 }
 
+/**
+ * Lo tecleado, en centavos. 0 si no sirve — quien llama ya exige > 0.
+ *
+ * Va por `parseDOPaCentavos` porque aqui la coma es separador de MILES, que es
+ * como este sistema escribe el dinero («RD$2,800.00»). Leida como decimal,
+ * escribir «1,100» creaba el cargo por RD$1.10.
+ */
 function toCentavos(value: string): number {
-  const n = Number.parseFloat(value.replace(',', '.'));
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100);
+  return parseDOPaCentavos(value) ?? 0;
 }
 
 function estadoBadge(estado: string, saldoCentavos: number) {

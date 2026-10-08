@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { parseDOPaCentavos } from '@/lib/utils/format';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
@@ -39,9 +40,14 @@ const NOMBRE_MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
 
 function hoy() { return new Date().toISOString().slice(0, 10); }
 
+/**
+ * Lo tecleado, en centavos. 0 si no sirve — quien llama ya exige > 0.
+ *
+ * La coma es separador de MILES, que es como este sistema escribe el dinero
+ * («RD$2,800.00»). Leída como decimal, «1,100» creaba el cargo por RD$1.10.
+ */
 function montoACentavos(valor: string) {
-  const monto = Number.parseFloat(valor.replace(',', '.'));
-  return Number.isFinite(monto) ? Math.round(monto * 100) : 0;
+  return parseDOPaCentavos(valor) ?? 0;
 }
 
 // Rango [primer día, último día] del mes, en ISO. El calendario de vencimiento

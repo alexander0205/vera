@@ -28,7 +28,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -1038,7 +1038,9 @@ function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matricu
       .catch(() => setConceptos([]));
   }, [open, soloTipo]);
 
-  const montoCentavos = Math.round((parseFloat(monto.replace(',', '.')) || 0) * 100);
+  // La coma es separador de MILES, que es como este sistema escribe el dinero
+  // («RD$2,800.00»). Leída como decimal, «1,100» creaba el cargo por RD$1.10.
+  const montoCentavos = parseDOPaCentavos(monto) ?? 0;
 
   function toggleMes(key: string) {
     setMesesCargo((prev) => {
@@ -2553,8 +2555,10 @@ function TarifaEstudianteDialog({
         toast.success('Quitado: vuelve al precio normal del concepto.');
         return;
       }
-      const n = Number(precioOtro.replace(',', '.'));
-      if (!precioOtro.trim() || !Number.isFinite(n) || n < 0) { setErrorOtro('Escribe el precio.'); return; }
+      // Mismo criterio de coma que el resto del dinero: miles, no decimal.
+      const centavosOtro = parseDOPaCentavos(precioOtro);
+      if (centavosOtro == null) { setErrorOtro('Escribe el precio.'); return; }
+      const n = centavosOtro / 100;
       const res = await fetch('/api/administracion-escolar/concepto-precios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2585,7 +2589,17 @@ function TarifaEstudianteDialog({
     if (modo === 'normal') {
       body = { becaTipo: null };
     } else {
-      const n = Number(valor.replace(',', '.'));
+      /**
+       * El mismo campo guarda dos cosas, y la coma no significa lo mismo en
+       * cada una: en un MONTO es separador de miles («1,100» son mil cien
+       * pesos, que es como lo escribe el sistema), y en un PORCENTAJE es
+       * decimal («12,5» es doce y medio). Leerlo todo igual convertía mil cien
+       * pesos de beca en uno con diez.
+       */
+      const centavosBeca = modo === 'monto' ? parseDOPaCentavos(valor) : null;
+      const n = modo === 'monto'
+        ? (centavosBeca == null ? NaN : centavosBeca / 100)
+        : Number(valor.replace(',', '.'));
       if (!Number.isFinite(n) || n <= 0) {
         setError(modo === 'monto' ? 'Escribe el monto mensual.' : 'Escribe el porcentaje de descuento.');
         return;

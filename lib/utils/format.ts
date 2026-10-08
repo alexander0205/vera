@@ -130,8 +130,13 @@ export function fmtDOP(centavos: number): string {
  * porque es la única, no hay punto, y deja una o dos cifras detrás. Con tres
  * detrás («1,100») manda la lectura de miles.
  *
- * NOTA: por el resto del repo sigue habiendo `replace(',', '.')` suelto, con
- * el mismo defecto. Son anteriores a esto; migrarlos aquí es tarea aparte.
+ * Todo el dinero del módulo escolar pasa ya por aquí. Fuera de él quedan
+ * cuatro campos de dinero con `replace(',', '.')` suelto y el mismo defecto
+ * —los tres de `caja/page.tsx` y el de `ModalAbrirCaja`—, anteriores a esto y
+ * sin tocar para no meter otro módulo en un cambio escolar.
+ *
+ * Los demás `replace(',', '.')` del repo NO son dinero: horas, porcentajes y
+ * cantidades. Ahí la coma sí es el decimal y leerla así es correcto.
  */
 export function parseDOPaCentavos(texto: string): number | null {
   const limpio = texto.trim().replace(/\s/g, '');
