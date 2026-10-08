@@ -42,7 +42,17 @@ interface Cuenta {
   moraNotas?:           { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' }[];
   vencida:              boolean;
   diasVencido:          number;
+  /**
+   * Nombre del CONTACTO. La emisión recurrente guarda `clientId` sin razón
+   * social del comprador, así que facturas con un padre conocido detrás se
+   * leían «Consumidor final». Es solo el nombre que se enseña, no el titular
+   * fiscal.
+   */
+  clienteRazonSocial:   string | null;
 }
+
+/** El nombre que se enseña en la lista, en el mismo orden en todas partes. */
+const nombreCuenta = (c: Cuenta) => c.razonSocialComprador ?? c.clienteRazonSocial;
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -92,7 +102,7 @@ export default function CuentasPorCobrarPage() {
     const q = (filterValues.cliente ?? '').trim().toLowerCase();
     if (q) {
       rows = rows.filter(c =>
-        (c.razonSocialComprador ?? 'consumidor final').toLowerCase().includes(q) ||
+        (nombreCuenta(c) ?? 'consumidor final').toLowerCase().includes(q) ||
         (c.rncComprador ?? '').toLowerCase().includes(q),
       );
     }
@@ -146,16 +156,28 @@ export default function CuentasPorCobrarPage() {
       id: 'cliente',
       header: 'Cliente',
       sortable: true,
-      sortAccessor: c => c.razonSocialComprador ?? '',
+      sortAccessor: c => nombreCuenta(c) ?? '',
       // Una línea por celda: el RNC tiene su propia columna. Apilarlo debajo en
       // gris chico obliga a leer cada fila en vez de barrerlas con la vista.
-      render: c => (
+      render: c => {
         // "Consumidor Final" no es un cliente al que llamar: se escribe apagado
         // para que los nombres reales —los que se cobran— destaquen solos.
-        c.razonSocialComprador
-          ? <p className="max-w-[150px] truncate text-xs text-gray-900" title={c.razonSocialComprador}>{c.razonSocialComprador}</p>
-          : <p className="text-xs italic text-gray-400">Consumidor final</p>
-      ),
+        // Pero antes de rendirse, el nombre del contacto: una factura con
+        // `clientId` tiene dueño conocido, y llamarla «Consumidor final» hacía
+        // ilocalizable al padre que debe el mes.
+        const nombre = nombreCuenta(c);
+        if (!nombre) return <p className="text-xs italic text-gray-400">Consumidor final</p>;
+        return (
+          <p
+            className={`max-w-[150px] truncate text-xs ${c.razonSocialComprador ? 'text-gray-900' : 'text-gray-600'}`}
+            title={c.razonSocialComprador
+              ? nombre
+              : `${nombre} — nombre del contacto; la factura no guardó razón social del comprador`}
+          >
+            {nombre}
+          </p>
+        );
+      },
     },
     {
       id: 'rnc',
@@ -395,7 +417,7 @@ export default function CuentasPorCobrarPage() {
         // veces. El desglose de mora sigue a un chevron de distancia, y
         // también está dentro del panel.
         onRowClick={c => setDetalle(c)}
-        groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
+        groupBy={agrupar ? (c => nombreCuenta(c) ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
           const venc = rows.filter(c => c.vencida).length;
