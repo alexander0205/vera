@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import useSWR, { mutate as revalidar } from 'swr';
 import {
   AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, Download,
@@ -22,6 +24,16 @@ import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { DetalleResponsable } from '@/lib/administracion-escolar/responsables';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
+import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+
+/**
+ * Fuera del paquete inicial: esta ficha se abre muchas veces al día y el
+ * diálogo de cobro, pocas. Mismo criterio que en la ficha del alumno.
+ */
+const PagoModal = dynamic(
+  () => import('@/components/cuentas-por-cobrar/PagoModal').then((m) => m.PagoModal),
+  { ssr: false },
+);
 
 /**
  * La ficha completa de una familia.
@@ -80,6 +92,38 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   // en Facturación. Sin las dos, las casillas no se pintan.
   const puedeFacturar = permissions.includes('administracion-escolar:pagos')
     && permissions.includes('facturas:crear');
+  /** Cobrar NO es facturar: anotar un pago no necesita poder emitir documentos. */
+  const puedePagos = permissions.includes('administracion-escolar:pagos');
+
+  /**
+   * Cobro sin salir de la familia.
+   *
+   * Un mes vencido ya tiene factura, así que nunca le sale la casilla de
+   * facturar y desde aquí no había forma de anotar el pago: había que irse a
+   * la ficha del hijo o a Cuentas por cobrar. Pero el padre llama una vez y
+   * pregunta por los dos hijos, y esta es la pantalla que se tiene delante.
+   *
+   * Es el mismo PagoModal de Cuentas por cobrar, con los mismos datos: el
+   * cobro sigue viviendo en la factura, aquí solo se abre la puerta.
+   */
+  const [pagoCuenta, setPagoCuenta] = useState<Cuenta | null>(null);
+  const [cargandoPago, setCargandoPago] = useState(false);
+  const abrirPago = useCallback(async (ecfDocumentId: number) => {
+    setCargandoPago(true);
+    try {
+      const res = await fetch(`/api/cuentas-por-cobrar/${ecfDocumentId}`);
+      const json = await res.json();
+      if (!res.ok || !json.cuenta) {
+        toast.error(json.error ?? 'No se pudo cargar la factura para cobrar');
+        return;
+      }
+      setPagoCuenta(json.cuenta);
+    } catch {
+      toast.error('No se pudo cargar la factura para cobrar');
+    } finally {
+      setCargandoPago(false);
+    }
+  }, []);
 
   /**
    * El cajón de facturar vive en la URL, no en un `useState`.
@@ -392,6 +436,32 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         </Box>
       </Paper>
 
+      {/* Cobro in-place: mismo modal de Cuentas por cobrar, sin salir de la
+          familia. Al guardar se refrescan las DOS consultas, por lo mismo que
+          el cajón de factura: la cabecera saca la deuda de una y los meses de
+          otra, y refrescar solo una deja las cifras de arriba diciendo una
+          cosa y la fila del mes otra. */}
+      {cargandoPago && !pagoCuenta && (
+        <Box sx={{
+          position: 'fixed', inset: 0, zIndex: 1400,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          bgcolor: 'rgba(0,0,0,0.2)',
+        }}>
+          <CircularProgress size={32} />
+        </Box>
+      )}
+      {pagoCuenta && (
+        <PagoModal
+          cuenta={pagoCuenta}
+          onClose={() => setPagoCuenta(null)}
+          onSuccess={() => {
+            setPagoCuenta(null);
+            void revalidar(`/api/administracion-escolar/responsables/${clientId}`);
+            void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
+          }}
+        />
+      )}
+
       <FacturaDrawer
         abierto={cajon != null}
         onCerrar={() => {
@@ -527,6 +597,8 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
       <PeriodosDeLaFamilia
         clientId={clientId}
         puedeFacturar={puedeFacturar}
+        puedePagos={puedePagos}
+        onCobrar={abrirPago}
         // «Facturar juntos» va al mismo sitio que «Adelantar»: el formulario
         // completo por la derecha, con esos cargos ya cargados. Antes abría el
         // diálogo rápido, que es otra pantalla con otras reglas — y sobre todo

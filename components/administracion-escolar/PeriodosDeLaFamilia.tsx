@@ -30,7 +30,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
-import { CalendarDays, ChevronDown, FileText, Receipt, Zap } from 'lucide-react';
+import { CalendarDays, ChevronDown, FileText, Receipt, Wallet, Zap } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -143,9 +143,13 @@ function Fila({ children, resaltada = false }: { children: React.ReactNode; resa
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFacturarPrevisto }: {
+export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = false, onCobrar, onFacturar, onFacturarPrevisto }: {
   clientId: number;
   puedeFacturar: boolean;
+  /** Puede anotar cobros. Habilita el atajo de cobrar en los meses que deben. */
+  puedePagos?: boolean;
+  /** Abre el cobro de esa factura. Sin esto, el atajo no se dibuja. */
+  onCobrar?: (ecfDocumentId: number) => void;
   /** Recibe los cargos marcados de todos los hijos, para una sola factura. */
   onFacturar: (cargoIds: number[]) => void;
   /** Una cuota que todavía no es cargo: se crea al confirmar, no al abrir. */
@@ -495,6 +499,43 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
                                   <FileText size={13} />
                                 </Box>
                               </Link>
+                            )}
+                            {/*
+                              Cobrar el mes sin salir de la familia.
+
+                              Un mes vencido YA tiene factura, así que nunca le
+                              sale la casilla de facturar y lo único que había
+                              era el icono del documento: se llegaba a la
+                              factura, pero «ver» y «cobrar» no son lo mismo y
+                              nadie daba con el segundo paso. El padre llama
+                              diciendo que ya pagó y la secretaria está mirando
+                              esta pantalla, no la ficha del hijo.
+
+                              Va APARTE del icono del documento y no encima: el
+                              📄 sigue siendo mirar la factura.
+
+                              Abre el PagoModal aquí mismo, el de Cuentas por
+                              cobrar —el mismo que usa la ficha del alumno—, y
+                              no lleva a la pantalla de la factura: allí no se
+                              anota un pago recibido (su botón de cobro genera
+                              un LINK de pago para mandárselo al padre, que es
+                              otra cosa, y su panel derecho remite de vuelta a
+                              Cuentas por cobrar).
+                            */}
+                            {puedePagos && onCobrar && f.ecfDocumentId != null && f.saldoCentavos > 0 && (
+                              <Box
+                                component="button"
+                                type="button"
+                                onClick={() => onCobrar(f.ecfDocumentId!)}
+                                title={`Registrar el pago de ${tituloFila(f)}`}
+                                sx={{
+                                  display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+                                  p: 0, border: 0, background: 'none', cursor: 'pointer',
+                                  color: '#0F7A4A', '&:hover': { color: '#0A5C37' },
+                                }}
+                              >
+                                <Wallet size={13} />
+                              </Box>
                             )}
                           </Box>
                           <Box sx={{ ...CELDA, textAlign: 'right', fontSize: '0.78125rem', color: '#6B7280', fontVariantNumeric: 'tabular-nums' }}>
