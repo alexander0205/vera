@@ -11,7 +11,7 @@ import { BuscadorSelect, type OpcionBuscador } from '@/components/ui/buscador-se
 import { SelectorCurso, type CursoOpcion } from '@/components/administracion-escolar/SelectorCurso';
 import { PlanCobroSelector } from '@/components/administracion-escolar/PlanCobroSelector';
 import { Check, Loader2, Pencil, Plus, X } from 'lucide-react';
-import { fmtFechaCorta } from '@/lib/utils/format';
+import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 /**
@@ -761,8 +761,12 @@ function CargosDeLaMatricula({ cargos, cargando, editable, onGuardado }: {
   }
 
   async function guardar(c: CargoMatricula) {
-    const centavos = Math.round(Number(valor.replace(',', '.')) * 100);
-    if (!Number.isFinite(centavos) || centavos < 0) { setError('Escribe un monto válido'); return; }
+    const centavos = parseDOPaCentavos(valor);
+    // Cero no es corregir un precio: el cargo saldría con saldo 0 y el servidor
+    // lo marcaría «pagado» sin que entrara un peso. El backend también lo
+    // rechaza; aquí se dice antes y con el consejo al lado.
+    if (centavos == null) { setError('Escribe un monto válido'); return; }
+    if (centavos === 0) { setError('El monto tiene que ser mayor que cero. Si no se va a cobrar, anula el cargo.'); return; }
     if (centavos === c.montoCentavos) { setEditandoId(null); return; }
     setGuardando(true); setError(null);
     try {

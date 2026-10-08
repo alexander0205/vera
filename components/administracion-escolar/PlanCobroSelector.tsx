@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { fmtFechaCorta } from '@/lib/utils/format';
+import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 
 /**
@@ -171,37 +171,13 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
       }));
   }, [plan, propios, marcados, onPrecios]);
 
-  /**
-   * Lee un importe escrito a mano y lo devuelve en centavos. `null` si no es
-   * un número usable.
-   *
-   * La coma es el separador de MILES, no el decimal: así es como el propio
-   * sistema escribe el dinero —«RD$2,800.00»— y así lo teclea quien copia lo
-   * que ve. Se trataba al revés, así que escribir «1,100» guardaba RD$1.10:
-   * mil pesos menos al mes, sin un solo aviso.
-   *
-   * La excepción es cuando la coma hace de decimal a la europea («1100,50»):
-   * se reconoce porque es la única, no hay punto, y deja una o dos cifras
-   * detrás. Con tres cifras detrás («1,100») manda la lectura de miles.
-   */
-  function aCentavos(texto: string): number | null {
-    const limpio = texto.trim().replace(/\s/g, '');
-    if (!limpio) return null;
-    const decimalEuropeo = /^-?\d+,\d{1,2}$/.test(limpio);
-    const normalizado = decimalEuropeo ? limpio.replace(',', '.') : limpio.replace(/,/g, '');
-    if (!/^-?\d*\.?\d*$/.test(normalizado)) return null;
-    const n = Number(normalizado);
-    if (!Number.isFinite(n) || n < 0) return null;
-    return Math.round(n * 100);
-  }
-
   function abrirPrecio(l: LineaPlan) {
     setEditandoId(l.conceptoId);
     setBorrador(((propios.get(l.conceptoId) ?? l.montoCentavos) / 100).toFixed(2));
   }
 
   function guardarPrecio(l: LineaPlan) {
-    const centavos = aCentavos(borrador);
+    const centavos = parseDOPaCentavos(borrador);
     if (centavos == null) return;
     setPropios((m) => {
       const n = new Map(m);

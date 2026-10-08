@@ -119,6 +119,32 @@ export function fmtDOP(centavos: number): string {
 }
 
 /**
+ * Lee un importe escrito a mano y lo devuelve en centavos. `null` si no sirve.
+ *
+ * Es la vuelta de `fmtDOP`, y por eso lee la coma como separador de MILES: el
+ * sistema escribe el dinero «RD$2,800.00» y así lo teclea quien copia lo que
+ * ve en pantalla. Tratarla como decimal convertía «1,100» en RD$1.10 — mil
+ * pesos menos, sin un solo aviso.
+ *
+ * La excepción es la coma decimal a la europea («1100,50»): se reconoce
+ * porque es la única, no hay punto, y deja una o dos cifras detrás. Con tres
+ * detrás («1,100») manda la lectura de miles.
+ *
+ * NOTA: por el resto del repo sigue habiendo `replace(',', '.')` suelto, con
+ * el mismo defecto. Son anteriores a esto; migrarlos aquí es tarea aparte.
+ */
+export function parseDOPaCentavos(texto: string): number | null {
+  const limpio = texto.trim().replace(/\s/g, '');
+  if (!limpio) return null;
+  const decimalEuropeo = /^\d+,\d{1,2}$/.test(limpio);
+  const normalizado = decimalEuropeo ? limpio.replace(',', '.') : limpio.replace(/,/g, '');
+  if (!/^\d*\.?\d*$/.test(normalizado) || normalizado === '.' ) return null;
+  const n = Number(normalizado);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
+/**
  * Cola del código interno de un comprobante, para listados.
  * `FA-2026-CAND-Q3YY7-000446` → `Q3YY7-000446`.
  *
