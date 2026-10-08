@@ -110,9 +110,21 @@ async function editarImporte(
 
   if (body.montoCentavos !== undefined) {
     const nuevo = Number(body.montoCentavos);
-    if (!Number.isInteger(nuevo) || nuevo < 0) {
+    /**
+     * Cero no vale, y no es lo mismo que negativo.
+     *
+     * Un cargo en cero sale de aquí con `saldo = 0`, y el estado se calcula del
+     * saldo, así que quedaba marcado **pagado sin que entrara un peso** — un
+     * mes que nadie volverá a cobrar porque ya no aparece debiendo. Y se
+     * llegaba sin querer: el campo del monto vacío manda `''`, que `Number()`
+     * convierte en 0 y `Number.isInteger(0)` da por bueno.
+     *
+     * Un cargo que no se va a cobrar se ANULA, que deja constancia de quién y
+     * cuándo. Ponerlo en cero lo disfraza de cobrado.
+     */
+    if (!Number.isInteger(nuevo) || nuevo <= 0) {
       return NextResponse.json(
-        { error: 'El monto tiene que ser un número entero de centavos, y no negativo.' },
+        { error: 'El monto tiene que ser mayor que cero. Si este cargo no se va a cobrar, anúlalo en vez de ponerlo en cero.' },
         { status: 400 },
       );
     }
