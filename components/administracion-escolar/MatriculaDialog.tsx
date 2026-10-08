@@ -597,6 +597,9 @@ export function MatriculaDialog({
                 periodoId={form.periodoId}
                 cursoId={form.cursoId}
                 desde={form.fechaInscripcion || hoy()}
+                // Para que la vista previa aplique la tarifa PERSONAL del
+                // alumno, si ya tenía una de un año anterior.
+                estudianteId={Number(form.estudianteId) || null}
                 onCambio={setConceptos}
                 // Poner el precio propio es configurar tarifas, no matricular:
                 // sin ese permiso la fila se enseña igual, pero sin editor.

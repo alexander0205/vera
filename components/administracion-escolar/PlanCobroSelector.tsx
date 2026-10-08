@@ -62,11 +62,18 @@ function resumenCuotas(l: LineaPlan): string {
   return `${vigentes.length} cuotas${monto} · desde ${fmtFechaCorta(referencia)}`;
 }
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio, onPrecios }: {
+export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
   desde: string;
+  /**
+   * El alumno, si ya existe. Sirve para que la vista previa aplique su tarifa
+   * PERSONAL y no la del grado: al re-matricular a alguien que ya tiene un
+   * precio propio, sin esto la pantalla enseñaba un importe y la matrícula
+   * nacía con otro.
+   */
+  estudianteId?: number | null;
   /** Los conceptos marcados, cada vez que cambian. */
   onCambio: (conceptosIds: number[]) => void;
   /**
@@ -99,6 +106,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio, onPreci
     setPlanCargando(true);
     setPlanError(null);
     const params = new URLSearchParams({ periodoId, cursoId, desde });
+    if (estudianteId) params.set('estudianteId', String(estudianteId));
     fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
       .then(async (res) => {
         const data = await res.json();
@@ -121,7 +129,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio, onPreci
       .catch((e) => { if (vigente) setPlanError(e instanceof Error ? e.message : 'Error'); })
       .finally(() => { if (vigente) setPlanCargando(false); });
     return () => { vigente = false; };
-  }, [periodoId, cursoId, desde]);
+  }, [periodoId, cursoId, desde, estudianteId]);
 
   useEffect(() => { onCambio([...marcados]); }, [marcados, onCambio]);
 
