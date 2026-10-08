@@ -261,7 +261,15 @@ export const ROLES: RoleDef[] = [
       // Los cargos escolares se cobran con facturas y los tutores son
       // contactos: necesita verlos, aunque no entre al módulo de Facturación.
       'clientes:ver', 'clientes:gestionar',
-      'facturas:ver',
+      // Cobrar un cargo escolar registra un pago contra la factura, y ese
+      // endpoint pide `facturas:crear`. Sin él, la ficha enseñaba el botón de
+      // cobro y al guardar respondía «Sin permiso» — el rol cuyo trabajo ES
+      // cobrar el colegio no podía cobrar.
+      'facturas:ver', 'facturas:crear',
+      // Todo cobro pasa por un turno de caja, incluido aprobar el comprobante
+      // que sube el padre. Sin `caja:operar` no puede abrir el suyo, así que
+      // no podría cobrar nada en una empresa con el módulo de caja encendido.
+      'caja:ver', 'caja:operar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
       'modulo:escolar', 'modulo:administracion',
     ],
