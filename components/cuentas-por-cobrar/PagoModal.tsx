@@ -33,6 +33,13 @@ export interface Cuenta {
   fechaLimitePago:      string | null;
   rncComprador:         string | null;
   razonSocialComprador: string | null;
+  /**
+   * Nombre del CONTACTO. La emisión recurrente guarda `clientId` y deja vacía
+   * la razón social del comprador, así que sin esto una factura con padre
+   * conocido se lee «Consumidor final» y no hay a quién llamar. Opcional: no
+   * todas las pantallas que arman una `Cuenta` lo traen.
+   */
+  clienteRazonSocial?:  string | null;
   emailComprador:       string | null;
   estado:               string;
   montoTotal:           number;
@@ -51,6 +58,17 @@ export interface Cuenta {
   vencida:              boolean;
   diasVencido:          number;
 }
+
+/**
+ * El nombre que se enseña de una cuenta, en el mismo orden en todas partes.
+ *
+ * Vive aquí, junto al tipo, porque la lista, el panel de detalle y el modal de
+ * cobro son la misma pantalla para quien la usa: que la fila diga el nombre del
+ * padre y el panel que se abre al pulsarla diga «Consumidor final» se lee como
+ * que el sistema perdió el dato.
+ */
+export const nombreDeCuenta = (c: Pick<Cuenta, 'razonSocialComprador' | 'clienteRazonSocial'>) =>
+  c.razonSocialComprador ?? c.clienteRazonSocial ?? null;
 
 interface LineaFactura {
   nombreItem?: string;
@@ -186,7 +204,7 @@ export function PagoModal({
     }
   }
 
-  const cliente = cuenta.razonSocialComprador ?? 'Consumidor final';
+  const cliente = nombreDeCuenta(cuenta) ?? 'Consumidor final';
   const docRef  = cuenta.codigo || cuenta.encf || `Factura #${cuenta.id}`;
 
   return (
