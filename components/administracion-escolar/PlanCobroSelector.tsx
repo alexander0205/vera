@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
@@ -99,6 +99,8 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
   /** El concepto cuyo precio se está escribiendo, y el texto a medio teclear. */
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [borrador, setBorrador] = useState('');
+  /** Se va a Cancelar o pulsó Escape: el blur no debe aplicar lo escrito. */
+  const cancelando = useRef(false);
 
   useEffect(() => {
     if (!periodoId || !cursoId) { setPlan([]); setPlanError(null); return; }
@@ -169,14 +171,38 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
       }));
   }, [plan, propios, marcados, onPrecios]);
 
+  /**
+   * Lee un importe escrito a mano y lo devuelve en centavos. `null` si no es
+   * un número usable.
+   *
+   * La coma es el separador de MILES, no el decimal: así es como el propio
+   * sistema escribe el dinero —«RD$2,800.00»— y así lo teclea quien copia lo
+   * que ve. Se trataba al revés, así que escribir «1,100» guardaba RD$1.10:
+   * mil pesos menos al mes, sin un solo aviso.
+   *
+   * La excepción es cuando la coma hace de decimal a la europea («1100,50»):
+   * se reconoce porque es la única, no hay punto, y deja una o dos cifras
+   * detrás. Con tres cifras detrás («1,100») manda la lectura de miles.
+   */
+  function aCentavos(texto: string): number | null {
+    const limpio = texto.trim().replace(/\s/g, '');
+    if (!limpio) return null;
+    const decimalEuropeo = /^-?\d+,\d{1,2}$/.test(limpio);
+    const normalizado = decimalEuropeo ? limpio.replace(',', '.') : limpio.replace(/,/g, '');
+    if (!/^-?\d*\.?\d*$/.test(normalizado)) return null;
+    const n = Number(normalizado);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 100);
+  }
+
   function abrirPrecio(l: LineaPlan) {
     setEditandoId(l.conceptoId);
     setBorrador(((propios.get(l.conceptoId) ?? l.montoCentavos) / 100).toFixed(2));
   }
 
   function guardarPrecio(l: LineaPlan) {
-    const centavos = Math.round(Number(borrador.replace(',', '.')) * 100);
-    if (!Number.isFinite(centavos) || centavos < 0) return;
+    const centavos = aCentavos(borrador);
+    if (centavos == null) return;
     setPropios((m) => {
       const n = new Map(m);
       // Volver a la tarifa del grado es quitar la excepción, no guardar el
@@ -273,7 +299,25 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
                                   onChange={(e) => setBorrador(e.target.value)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') { e.preventDefault(); guardarPrecio(base); }
-                                    if (e.key === 'Escape') setEditandoId(null);
+                                    if (e.key === 'Escape') { cancelando.current = true; setEditandoId(null); }
+                                  }}
+                                  /*
+                                    Lo escrito se aplica al salir del campo.
+
+                                    Antes solo contaba «Aplicar»: quien escribía
+                                    el precio y pulsaba directo «Crear
+                                    matrícula» creaba la matrícula con la tarifa
+                                    del grado y su número se perdía sin aviso.
+                                    Pulsar fuera ya es salir del campo, así que
+                                    el guardado del diálogo lo recoge.
+
+                                    Salvo si se va a Cancelar o se pulsó Escape:
+                                    `onMouseDown` corre antes que el blur, así
+                                    que para entonces la bandera ya está puesta.
+                                  */
+                                  onBlur={() => {
+                                    if (cancelando.current) { cancelando.current = false; return; }
+                                    guardarPrecio(base);
                                   }}
                                   className="h-7 w-28 rounded border border-gray-300 px-2 text-sm tabular-nums focus:border-zero-500 focus:outline-none"
                                 />
@@ -281,7 +325,9 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
                                   className="rounded bg-zero-600 px-2 py-1 text-xs font-medium text-white hover:bg-zero-700">
                                   Aplicar
                                 </button>
-                                <button type="button" onClick={() => setEditandoId(null)}
+                                <button type="button"
+                                  onMouseDown={() => { cancelando.current = true; }}
+                                  onClick={() => setEditandoId(null)}
                                   className="px-1.5 py-1 text-xs text-gray-500 hover:text-gray-700">
                                   Cancelar
                                 </button>
