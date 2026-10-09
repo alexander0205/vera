@@ -159,16 +159,19 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
 
         {/* Devengado */}
         <Text style={S.seccionTitulo}>Ingresos</Text>
-        <View style={S.fila}>
-          <Text style={S.filaLabel}>
-            {data.etiquetaDevengado ? data.etiquetaDevengado : data.horasTexto
-              ? `Pago por horas (${data.horasTexto})`
-              : `Salario del período${data.diasPagados != null && data.diasPeriodo != null && data.diasPagados < data.diasPeriodo
-                ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
-                : ''}`}
-          </Text>
-          <Text style={S.filaMonto}>{fmt(data.bruto - (data.ingresosExtra ?? []).reduce((t, x) => t + x.monto, 0))}</Text>
-        </View>
+        {/* En una liquidación todo el pago son conceptos: la fila del salario en cero no se enseña. */}
+        {data.bruto - (data.ingresosExtra ?? []).reduce((t, x) => t + x.monto, 0) > 0.005 || (data.ingresosExtra ?? []).length === 0 ? (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>
+              {data.etiquetaDevengado ? data.etiquetaDevengado : data.horasTexto
+                ? `Pago por horas (${data.horasTexto})`
+                : `Salario del período${data.diasPagados != null && data.diasPeriodo != null && data.diasPagados < data.diasPeriodo
+                  ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
+                  : ''}`}
+            </Text>
+            <Text style={S.filaMonto}>{fmt(data.bruto - (data.ingresosExtra ?? []).reduce((t, x) => t + x.monto, 0))}</Text>
+          </View>
+        ) : null}
         {(data.ingresosExtra ?? []).map((x, i) => (
           <View key={`ing-${i}`} style={S.fila}>
             <Text style={S.filaLabel}>{x.nombre}</Text>

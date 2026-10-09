@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { empleados, nominaCorridas, nominaHoras, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
 import { frecuenciaDeTipo, normalizarTipoCorrida } from '@/lib/nomina/corrida';
 import { conceptosDeCorrida } from '@/lib/nomina/conceptos-db';
+import { revertirLiquidacionDeCorrida } from '@/lib/nomina/liquidacion-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +82,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (corrida.estado !== 'borrador') {
     return NextResponse.json({ error: 'Solo se puede eliminar una corrida en borrador' }, { status: 409 });
   }
+
+  // Borrar la liquidación devuelve al empleado a como estaba (activo, sin fecha de salida).
+  if (corrida.tipo === 'liquidacion') await revertirLiquidacionDeCorrida(auth.teamId, id);
 
   // Las líneas caen por ON DELETE CASCADE.
   await db.delete(nominaCorridas).where(eq(nominaCorridas.id, id));

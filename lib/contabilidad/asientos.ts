@@ -1241,6 +1241,25 @@ export async function generarAsientoNomina(
   };
   if (sumas.brutoCents <= 0) return { creado: false, motivo: 'sin-monto' };
   sumas.conceptos = await conceptosParaAsiento(teamId, corridaId);
+  // Lo que se paga contra una reserva (cesantía, vacaciones, regalía por pagar) usa lo que haya acumulado,
+  // sin pasarse: lo que falta va al gasto. Una cuenta compartida por varios conceptos se reparte en orden.
+  if (cfg.provisionarNomina) {
+    const disponible = new Map<number, number>();
+    for (const k of sumas.conceptos) {
+      if (!k.reservaCuentaId || k.tipo !== 'ingreso') continue;
+      if (!disponible.has(k.reservaCuentaId)) {
+        const [saldo] = await db.execute(sql`
+          SELECT COALESCE(sum(l.haber_cents - l.debe_cents), 0)::bigint AS saldo
+          FROM contabilidad_asiento_lineas l JOIN contabilidad_asientos a ON a.id = l.asiento_id
+          WHERE l.team_id = ${teamId} AND l.cuenta_id = ${k.reservaCuentaId} AND a.fecha <= ${String(f.fecha)}::date
+        `) as unknown as { saldo: unknown }[];
+        disponible.set(k.reservaCuentaId, Math.max(0, Number(saldo?.saldo ?? 0)));
+      }
+      const queda = disponible.get(k.reservaCuentaId)!;
+      k.reservaUsadaCents = Math.min(k.montoCents, queda);
+      disponible.set(k.reservaCuentaId, queda - k.reservaUsadaCents);
+    }
+  }
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };

@@ -4013,7 +4013,8 @@ export const nominaCorridas = pgTable('nomina_corridas', {
   pagadaEn:    timestamp('pagada_en'),
 }, (t) => [
   index('nomina_corridas_team_idx').on(t.teamId),
-  uniqueIndex('nomina_corridas_inicio_uniq').on(t.teamId, t.tipo, t.fechaInicio),
+  // Varias liquidaciones pueden caer el mismo día (migración 0189): el único no aplica a ese tipo.
+  uniqueIndex('nomina_corridas_inicio_uniq').on(t.teamId, t.tipo, t.fechaInicio).where(sql`${t.tipo} <> 'liquidacion'`),
   index('nomina_corridas_team_rango_idx').on(t.teamId, t.fechaInicio, t.fechaFin),
 ]);
 
@@ -4151,6 +4152,32 @@ export const nominaPagos = pgTable('nomina_pagos', {
   index('nomina_pagos_corrida_idx').on(t.teamId, t.corridaId),
 ]);
 
+/**
+ * Liquidación de un empleado que sale (migración 0189): el cálculo y cómo estaba
+ * el empleado antes, para restaurarlo si se borra el borrador.
+ */
+export const nominaLiquidaciones = pgTable('nomina_liquidaciones', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  empleadoId:  integer('empleado_id').notNull().references(() => empleados.id),
+  corridaId:   integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  fechaIngreso: date('fecha_ingreso').notNull(),
+  fechaSalida:  date('fecha_salida').notNull(),
+  motivo:       varchar('motivo', { length: 30 }).notNull(),
+  mesesServicio: integer('meses_servicio').notNull(),
+  salarioMensualCents: bigint('salario_mensual_cents', { mode: 'number' }).notNull(),
+  salarioDiarioCents:  bigint('salario_diario_cents', { mode: 'number' }).notNull(),
+  totalCents:   bigint('total_cents', { mode: 'number' }).notNull(),
+  componentes:  jsonb('componentes').notNull(),
+  estadoPrevio: varchar('estado_previo', { length: 20 }).notNull(),
+  fechaSalidaPrevia: date('fecha_salida_previa'),
+  createdBy:    integer('created_by').references(() => users.id),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_liquidaciones_empleado_uniq').on(t.empleadoId),
+  index('nomina_liquidaciones_team_idx').on(t.teamId, t.fechaSalida),
+]);
+
 export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
 export type NewNominaCorrida = typeof nominaCorridas.$inferInsert;
 export type NominaObligacion    = typeof nominaObligaciones.$inferSelect;
@@ -4243,6 +4270,8 @@ export const nominaLineaConceptos = pgTable('nomina_linea_conceptos', {
   pedidoCents: bigint('pedido_cents', { mode: 'number' }).notNull(),
   cotizaTss:  boolean('cotiza_tss').notNull().default(false),
   cuentaId:   integer('cuenta_id').references(() => contabilidadCuentas.id),
+  /** Pasivo de provisión contra el que se paga primero, hasta donde alcance la reserva (migración 0189). */
+  reservaCuentaId: integer('reserva_cuenta_id').references(() => contabilidadCuentas.id),
   comentario: varchar('comentario', { length: 300 }),
 }, (t) => [
   index('nomina_linea_conceptos_linea_idx').on(t.lineaId),

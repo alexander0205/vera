@@ -187,6 +187,7 @@ export async function conceptosParaAsiento(teamId: number, corridaId: number): P
   const filas = await db
     .select({
       cuentaId: nominaLineaConceptos.cuentaId,
+      reservaCuentaId: nominaLineaConceptos.reservaCuentaId,
       tipo: nominaLineaConceptos.tipo,
       nombre: sql<string>`min(${nominaLineaConceptos.nombre})`,
       montoCents: sql<number>`sum(${nominaLineaConceptos.montoCents})::bigint`,
@@ -197,13 +198,14 @@ export async function conceptosParaAsiento(teamId: number, corridaId: number): P
       eq(nominaLineaConceptos.corridaId, corridaId),
       isNotNull(nominaLineaConceptos.cuentaId),
     ))
-    .groupBy(nominaLineaConceptos.cuentaId, nominaLineaConceptos.tipo);
+    .groupBy(nominaLineaConceptos.cuentaId, nominaLineaConceptos.reservaCuentaId, nominaLineaConceptos.tipo);
   return filas
     .filter((f) => f.cuentaId !== null && Number(f.montoCents) > 0)
     .map((f) => ({
       cuentaId: f.cuentaId as number,
       tipo: f.tipo as 'ingreso' | 'descuento',
       nombre: f.nombre,
+      reservaCuentaId: f.reservaCuentaId,
       montoCents: Number(f.montoCents),
     }));
 }

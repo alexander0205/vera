@@ -8,7 +8,7 @@
 
 import { and, eq, inArray, like, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { empleados, nominaCorridas, nominaLineas } from '@/lib/db/schema';
+import { empleados, nominaCorridas, nominaLineas, nominaLiquidaciones } from '@/lib/db/schema';
 import { calcularNominaEmpleado } from '@/lib/nomina/calculo';
 import { tasasDelAnio } from '@/lib/config/nomina-tasas';
 import { ajustesNomina } from '@/lib/nomina/ajustes-db';
@@ -23,6 +23,37 @@ export type GenerarRegaliaResultado =
 /** Año calendario válido para una regalía: de 2000 al actual (la del año que viene aún no se devenga). */
 export function anioRegaliaValido(anio: unknown, hoy: string): anio is number {
   return typeof anio === 'number' && Number.isInteger(anio) && anio >= 2000 && anio <= Number(hoy.slice(0, 4));
+}
+
+/**
+ * Lo devengado por empleado y mes ('YYYY-MM') en las nóminas aprobadas del año. No cuenta
+ * las regalías ni las liquidaciones: solo las corridas de sueldo.
+ */
+export async function devengadoPorEmpleadoYMes(teamId: number, empleadoIds: number[], anio: number): Promise<Map<number, Record<string, number>>> {
+  const porEmpleado = new Map<number, Record<string, number>>();
+  if (empleadoIds.length === 0) return porEmpleado;
+  const devengado = await db
+    .select({
+      empleadoId: nominaLineas.empleadoId,
+      mes: nominaCorridas.periodo,
+      bruto: sql<number>`sum(${nominaLineas.brutoCents})::bigint`,
+    })
+    .from(nominaLineas)
+    .innerJoin(nominaCorridas, eq(nominaCorridas.id, nominaLineas.corridaId))
+    .where(and(
+      eq(nominaLineas.teamId, teamId),
+      inArray(nominaCorridas.estado, ['aprobada', 'pagada']),
+      inArray(nominaCorridas.tipo, TIPOS_REGULARES_SQL),
+      like(nominaCorridas.periodo, `${anio}-%`),
+      inArray(nominaLineas.empleadoId, empleadoIds),
+    ))
+    .groupBy(nominaLineas.empleadoId, nominaCorridas.periodo);
+  for (const d of devengado) {
+    const m = porEmpleado.get(d.empleadoId) ?? {};
+    m[d.mes] = Number(d.bruto);
+    porEmpleado.set(d.empleadoId, m);
+  }
+  return porEmpleado;
 }
 
 export async function generarCorridaRegalia(input: {
@@ -41,33 +72,16 @@ export async function generarCorridaRegalia(input: {
   const inicio = `${anio}-01-01`;
   const fin = `${anio}-12-31`;
   const todos = await db.select().from(empleados).where(eq(empleados.teamId, teamId));
+  // Quien se liquidó ese año ya cobró su regalía proporcional en la liquidación.
+  const liquidados = new Set((await db
+    .select({ empleadoId: nominaLiquidaciones.empleadoId })
+    .from(nominaLiquidaciones)
+    .where(and(eq(nominaLiquidaciones.teamId, teamId), like(sql`${nominaLiquidaciones.fechaSalida}::text`, `${anio}-%`)))).map((l) => l.empleadoId));
   // Trabajó algún día del año: ingresó antes de que termine y no salió antes de que empiece.
-  const candidatos = todos.filter((e) => (!e.fechaIngreso || e.fechaIngreso <= fin) && (!e.fechaSalida || e.fechaSalida >= inicio));
+  const candidatos = todos.filter((e) => !liquidados.has(e.id) && (!e.fechaIngreso || e.fechaIngreso <= fin) && (!e.fechaSalida || e.fechaSalida >= inicio));
   if (candidatos.length === 0) return { creada: false, motivo: 'sin-empleados' };
 
-  // Lo devengado por empleado y mes, de las nóminas ya aprobadas del año (no las regalías ni liquidaciones).
-  const devengado = await db
-    .select({
-      empleadoId: nominaLineas.empleadoId,
-      mes: nominaCorridas.periodo,
-      bruto: sql<number>`sum(${nominaLineas.brutoCents})::bigint`,
-    })
-    .from(nominaLineas)
-    .innerJoin(nominaCorridas, eq(nominaCorridas.id, nominaLineas.corridaId))
-    .where(and(
-      eq(nominaLineas.teamId, teamId),
-      inArray(nominaCorridas.estado, ['aprobada', 'pagada']),
-      inArray(nominaCorridas.tipo, TIPOS_REGULARES_SQL),
-      like(nominaCorridas.periodo, `${anio}-%`),
-      inArray(nominaLineas.empleadoId, candidatos.map((e) => e.id)),
-    ))
-    .groupBy(nominaLineas.empleadoId, nominaCorridas.periodo);
-  const porEmpleado = new Map<number, Record<string, number>>();
-  for (const d of devengado) {
-    const m = porEmpleado.get(d.empleadoId) ?? {};
-    m[d.mes] = Number(d.bruto);
-    porEmpleado.set(d.empleadoId, m);
-  }
+  const porEmpleado = await devengadoPorEmpleadoYMes(teamId, candidatos.map((e) => e.id), anio);
 
   const ajustes = await ajustesNomina(teamId, fin);
   const tasas = tasasDelAnio(anio);

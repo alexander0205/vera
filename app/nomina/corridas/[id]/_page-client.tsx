@@ -200,6 +200,8 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const { corrida, lineas } = data;
   const obligaciones = data.obligaciones ?? [];
   const b = BADGE[corrida.estado] ?? BADGE.borrador;
+  // La regalía y la liquidación no provisionan nada ni se arman con los conceptos de la ficha.
+  const esEspecial = corrida.tipo === 'regalia' || corrida.tipo === 'liquidacion';
   // Provisiones del período (regalía/vacaciones/cesantía): estimación lineal
   // sobre el bruto de cada línea. No se descuenta al empleado; es costo futuro.
   const prov = provisionesDeLineas(lineas);
@@ -447,7 +449,12 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         </div>
       )}
 
-      {corrida.estado === 'borrador' && (
+      {corrida.estado === 'borrador' && corrida.tipo === 'liquidacion' && (
+        <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-liquidacion">
+          Al registrar esta liquidación el empleado quedó de baja. Si la borras, vuelve a estar activo.
+        </p>
+      )}
+      {corrida.estado === 'borrador' && !esEspecial && (
         <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-conceptos-borrador">
           Los incentivos, descuentos y préstamos salen de la ficha de cada empleado (botón de monedas en{' '}
           <Link href="/nomina/empleados" className="font-medium underline">Empleados</Link>). Para cambiarlos en esta corrida,
@@ -492,6 +499,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       </div>
 
       {/* Provisiones del período (regalía, vacaciones, cesantía) */}
+      {!esEspecial && (
       <Card className="mb-5">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
@@ -512,6 +520,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Resumen de la autodeterminación TSS (aprobada) */}
       {corrida.estado !== 'borrador' && puedePagar && previewTSS && (

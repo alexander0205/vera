@@ -76,7 +76,9 @@ export type AuditAction =
   // Nómina: una carga masiva de empleados cambia salarios y cuentas de banco de golpe.
   | 'NOMINA_EMPLEADOS_IMPORTADOS'
   // Contabilidad: transferencias, cargos, depósitos y retiros de banco.
-  | 'CONTABILIDAD_MOVIMIENTO_BANCARIO';
+  | 'CONTABILIDAD_MOVIMIENTO_BANCARIO'
+  // Nómina: una liquidación da de baja al empleado y genera un pago grande.
+  | 'NOMINA_LIQUIDACION_CREADA';
 
 export interface AuditParams {
   teamId:    number;

@@ -39,6 +39,10 @@ export interface ConceptoAsiento {
   tipo: 'ingreso' | 'descuento';
   montoCents: number;
   nombre: string;
+  /** Ingreso que se paga primero contra una reserva (vacaciones, regalía o cesantía por pagar). */
+  reservaCuentaId?: number | null;
+  /** Cuánto de `montoCents` sale de esa reserva (lo que alcance); el resto va a `cuentaId`. */
+  reservaUsadaCents?: number;
 }
 
 /**
@@ -120,7 +124,13 @@ export function lineasDevengoNomina(s: SumasCorrida, c: CuentasNomina): LineaAsi
   const sumaDescuentos = descuentos.reduce((t, x) => t + x.montoCents, 0);
   return sinCeros([
     { cuentaId: c.gastoSueldos, debeCents: s.brutoCents - sumaIngresos, haberCents: 0, descripcion: 'Sueldos del período' },
-    ...ingresos.map((x) => ({ cuentaId: x.cuentaId, debeCents: x.montoCents, haberCents: 0, descripcion: x.nombre })),
+    ...ingresos.flatMap((x) => {
+      const reserva = x.reservaCuentaId && x.reservaUsadaCents ? Math.max(0, Math.min(x.reservaUsadaCents, x.montoCents)) : 0;
+      return [
+        ...(reserva > 0 ? [{ cuentaId: x.reservaCuentaId as number, debeCents: reserva, haberCents: 0, descripcion: `${x.nombre} (se usa la reserva)` }] : []),
+        { cuentaId: x.cuentaId, debeCents: x.montoCents - reserva, haberCents: 0, descripcion: x.nombre },
+      ];
+    }),
     ...gastoDeAportes(s, c),
     ...retencionesDelEmpleado(s, c),
     { cuentaId: c.isr, debeCents: 0, haberCents: s.isrCents, descripcion: 'ISR de asalariados por pagar (DGII)' },

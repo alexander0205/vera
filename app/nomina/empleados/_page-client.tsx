@@ -15,7 +15,7 @@ import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   Users, Search, Loader2, IdCard, Phone, Briefcase,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, FileSpreadsheet, HandCoins, HeartPulse, Clock, Copy,
+  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, FileSpreadsheet, HandCoins, LogOut, HeartPulse, Clock, Copy,
 } from 'lucide-react';
 import {
   Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA,
@@ -28,6 +28,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const router = useRouter();
   const { can } = usePermissions();
   const puedeGestionar = can('empleados:gestionar');
+  const puedeCorrer = can('nomina:correr');
   const { data, isLoading, mutate } = useSWR<{ empleados: Empleado[] }>('/api/nomina/empleados', fetcher);
 
   const [busca, setBusca] = useState('');
@@ -64,6 +65,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const irContrato = (id: number) => router.push(`/nomina/empleados/${id}/contrato`);
   const irDependientes = (id: number) => router.push(`/nomina/empleados/${id}/dependientes`);
   const irConceptos = (id: number) => router.push(`/nomina/empleados/${id}/conceptos`);
+  const irLiquidar = (id: number) => router.push(`/nomina/empleados/${id}/liquidar`);
 
   function pedirEnlace(e: Empleado) {
     setEnlaceUrl(null);
@@ -241,6 +243,11 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                   <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes" title="Dependientes del seguro de salud">
                     <HeartPulse className="h-4 w-4" />
                   </Button>
+                  {puedeCorrer && esActivo(e.estado) && (
+                    <Button variant="ghost" size="icon" onClick={() => irLiquidar(e.id)} aria-label="Liquidar" title="Dar de baja y liquidar (preaviso, cesantía, vacaciones, regalía)">
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  )}
                   {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
                     <Button variant="ghost" size="icon" onClick={() => pedirEnlace(e)} aria-label="Enlace de horas" title="Enlace para que registre sus horas">
                       <Clock className="h-4 w-4" />
