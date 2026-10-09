@@ -55,6 +55,9 @@ export async function GET(req: NextRequest) {
       saldoCentavos: adminEscolarCargos.saldoCentavos,
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
       estado: adminEscolarCargos.estado,
+      // Para saber si el cargo todavía se puede corregir: con factura detrás, el
+      // importe que vale es el del e-CF.
+      ecfDocumentId: adminEscolarCargos.ecfDocumentId,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarEstudiantes, and(

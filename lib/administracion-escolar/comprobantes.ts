@@ -356,6 +356,15 @@ export async function previsualizarAprobacion(
  */
 export async function aprobarComprobante(
   teamId: number, id: number, usuarioId: number, ajustes: AjustesAprobacion = {},
+  /**
+   * El turno de caja al que se ata el cobro, cuando la empresa usa caja.
+   *
+   * Sin esto el dinero entraba sin cuadre: el pago quedaba registrado contra la
+   * factura pero fuera de todo cierre, así que al contar la gaveta no aparecía
+   * por ningún lado. Lo resuelve el llamador, que es quien tiene al usuario y
+   * puede exigirle turno abierto (ver la ruta POST).
+   */
+  turnoCajaId: number | null = null,
 ): Promise<ResultadoAprobacion> {
   /**
    * Se reclama ANTES de tocar dinero, no después.
@@ -411,6 +420,7 @@ export async function aprobarComprobante(
         fechaPago: fecha,
         notas: `Comprobante #${c.id} aprobado`,
         createdBy: usuarioId,
+        turnoCajaId,
       });
     }
 

@@ -122,7 +122,9 @@ export async function GET(req: NextRequest) {
     const g = gestion.get(c.id);
     ws.addRow({
       codigo:      c.codigo ?? c.encf,
-      cliente:     c.razonSocialComprador ?? 'Consumidor Final',
+      // Misma cascada que la pantalla: el nombre del contacto cuando la factura
+      // no guardó razón social del comprador.
+      cliente:     c.razonSocialComprador ?? c.clienteRazonSocial ?? 'Consumidor Final',
       rnc:         c.rncComprador ?? '',
       emision:     c.fechaEmision,
       vence:       c.fechaLimitePago ?? '',

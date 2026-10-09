@@ -10,9 +10,47 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, count, inArray } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
+
+/**
+ * Una matrícula con lo que hace falta para editarla: su curso, su estado y los
+ * conceptos recurrentes que se le están cobrando.
+ *
+ * El listado (`GET /matriculas`) no trae `conceptosIds` —son cientos de filas y
+ * nadie los mira ahí—, así que el diálogo de edición no tenía de dónde sacar
+ * qué se le cobra a ESTE alumno todos los meses.
+ */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
+  const { id } = await params;
+  const matriculaId = parseInt(id, 10);
+  if (!Number.isFinite(matriculaId)) {
+    return NextResponse.json({ error: 'Matrícula no válida' }, { status: 400 });
+  }
+
+  const [row] = await db.select({
+      id: adminEscolarMatriculas.id,
+      estudianteId: adminEscolarMatriculas.estudianteId,
+      periodoId: adminEscolarMatriculas.periodoId,
+      cursoId: adminEscolarMatriculas.cursoId,
+      documentoListaId: adminEscolarMatriculas.documentoListaId,
+      fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
+      estado: adminEscolarMatriculas.estado,
+      codigoMatricula: adminEscolarMatriculas.codigoMatricula,
+      notas: adminEscolarMatriculas.notas,
+      conceptosIds: adminEscolarMatriculas.conceptosIds,
+      conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
+    })
+    .from(adminEscolarMatriculas)
+    .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
+    .limit(1);
+  if (!row) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+  return NextResponse.json({ matricula: row });
+}
 
 /**
  * Edita una matrícula existente (período, curso, fecha de inscripción, estado,
@@ -28,6 +66,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const {
     periodoId, cursoId, documentoListaId, fechaInscripcion, estado, codigoMatricula, notas,
     becaTipo, becaValor, becaMotivo, conceptoMensualidadId,
+    conceptosIds,
   } = await req.json();
   const matriculaId = parseInt(id, 10);
   const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado, conceptosIds: adminEscolarMatriculas.conceptosIds })
@@ -35,6 +74,51 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
     .limit(1);
   if (!actual) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+
+  /**
+   * Los conceptos RECURRENTES de la matrícula: lo que se le va a ir cobrando
+   * mes a mes además de la colegiatura —la sala de tareas, el transporte, el
+   * comedor—. Es la lista que lee el devengo; añadir uno aquí hace que sus
+   * cuotas aparezcan en el plan y se vuelvan deuda cuando llegue su mes.
+   *
+   * Solo se podía elegir al matricular. Quitar uno no borra lo ya cargado: deja
+   * de generarse hacia adelante, y los cargos viejos se anulan donde se anulan.
+   */
+  let conceptosSet: number[] | null = null;
+  if (Array.isArray(conceptosIds)) {
+    const pedidos = [...new Set(conceptosIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    /**
+     * Vaciar la lista entera no se acepta sin decirlo.
+     *
+     * El diálogo manda SIEMPRE `conceptosIds`, así que un guardado hecho antes
+     * de que la lista terminara de cargar —o con el GET caído— mandaba `[]` y
+     * se llevaba por delante todo lo que se le cobra al alumno cada mes. El
+     * devengo deja de generarle cuotas y nadie se entera hasta que el padre no
+     * recibe la factura.
+     *
+     * Quitar conceptos uno a uno sigue valiendo: lo que se rechaza es pasar de
+     * tener a no tener ninguno de golpe. Para dejar a un alumno sin cobro
+     * recurrente se anula la matrícula, que deja constancia.
+     */
+    if (pedidos.length === 0 && (actual.conceptosIds ?? []).length > 0) {
+      return NextResponse.json(
+        { error: 'No se puede dejar la matrícula sin ningún concepto. Si el alumno ya no se cobra, anula la matrícula.' },
+        { status: 400 },
+      );
+    }
+    if (pedidos.length > 0) {
+      const existentes = await db.select({ id: adminEscolarConceptosPago.id })
+        .from(adminEscolarConceptosPago)
+        .where(and(
+          eq(adminEscolarConceptosPago.teamId, teamId),
+          inArray(adminEscolarConceptosPago.id, pedidos),
+        ));
+      if (existentes.length !== pedidos.length) {
+        return NextResponse.json({ error: 'Alguno de los conceptos no es de este colegio.' }, { status: 404 });
+      }
+    }
+    conceptosSet = pedidos;
+  }
 
   /**
    * La GENERACIÓN del alumno (concepto de mensualidad). Es su ubicación —lo que
@@ -57,7 +141,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     // Conserva los conceptos que NO son mensualidad; reemplaza la mensualidad
     // vieja (cualquiera) por la elegida, sin duplicar.
-    const idsActuales = (actual.conceptosIds ?? []).map(Number);
+    const idsActuales = (conceptosSet ?? actual.conceptosIds ?? []).map(Number);
     const mensualidadIds = new Set(
       (await db.select({ id: adminEscolarConceptosPago.id })
         .from(adminEscolarConceptosPago)
@@ -134,6 +218,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const [row] = await db.update(adminEscolarMatriculas)
       .set({
+        ...(conceptosSet && !generacionSet ? { conceptosIds: conceptosSet } : {}),
         ...(periodoId !== undefined ? { periodoId: Number(periodoId) } : {}),
         ...(cursoId !== undefined ? { cursoId: Number(cursoId) } : {}),
         ...(documentoListaId !== undefined
@@ -157,6 +242,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       })
       .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
       .returning();
+
     return NextResponse.json({ matricula: row });
   } catch (err: unknown) {
     // Choque con el índice parcial: ya hay otra matrícula activa en ese período.

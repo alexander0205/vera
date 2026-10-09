@@ -39,6 +39,16 @@ export type Permission =
   | 'facturas:precio-editar'
   // Pagos recibidos (módulo de cobros)
   | 'pagos:ver'
+  /**
+   * Anotar un cobro contra una factura.
+   *
+   * Existe aparte de `facturas:crear` porque cobrar no es facturar, y ese
+   * permiso abre mucho más: crear facturas, planes recurrentes, compras. Un
+   * rol que solo cobra —el personal del colegio— no debería poder encender
+   * una recurrente. Los endpoints de cobro aceptan cualquiera de los dos, así
+   * que quien ya factura sigue cobrando igual sin tocar su rol.
+   */
+  | 'pagos:registrar'
   // Alerta double-check del método de pago: tener el permiso = la alerta se pide
   // al cobrar. El admin la activa asignándolo a un rol (Equipo → Permisos).
   | 'pagos:alerta-metodo'
@@ -147,7 +157,7 @@ export const ROLES: RoleDef[] = [
     invitable:   false,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
-      'pagos:ver', 'pagos:adjunto-eliminar',
+      'pagos:ver', 'pagos:registrar', 'pagos:adjunto-eliminar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -173,7 +183,7 @@ export const ROLES: RoleDef[] = [
     invitable:   true,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
-      'pagos:ver', 'pagos:adjunto-eliminar',
+      'pagos:ver', 'pagos:registrar', 'pagos:adjunto-eliminar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -198,6 +208,7 @@ export const ROLES: RoleDef[] = [
     invitable:   true,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
+      'pagos:registrar',
       // facturas:editar y facturas:anular NO incluidos — debe pedirle al admin
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
@@ -261,7 +272,20 @@ export const ROLES: RoleDef[] = [
       // Los cargos escolares se cobran con facturas y los tutores son
       // contactos: necesita verlos, aunque no entre al módulo de Facturación.
       'clientes:ver', 'clientes:gestionar',
-      'facturas:ver',
+      // Cobrar un cargo escolar registra un pago contra la factura. Sin
+      // permiso para eso, la ficha enseñaba el botón de cobro y al guardar
+      // respondía «Sin permiso» — el rol cuyo trabajo ES cobrar el colegio no
+      // podía cobrar.
+      //
+      // Va con `pagos:registrar` y NO con `facturas:crear`: ese último no
+      // tiene puerta de módulo, así que le abriría crear facturas, compras y
+      // —peor— planes recurrentes, que es justo lo que duplicó la mensualidad
+      // de un colegio entero. Este rol dice «no entra a Facturación».
+      'facturas:ver', 'pagos:registrar',
+      // Todo cobro pasa por un turno de caja, incluido aprobar el comprobante
+      // que sube el padre. Sin `caja:operar` no puede abrir el suyo, así que
+      // no podría cobrar nada en una empresa con el módulo de caja encendido.
+      'caja:ver', 'caja:operar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
       'modulo:escolar', 'modulo:administracion',
     ],
@@ -296,6 +320,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   ]},
   { module: 'Pagos', icon: 'Wallet', permissions: [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },
+    { key: 'pagos:registrar', label: 'Registrar un cobro en una factura' },
     { key: 'pagos:alerta-metodo', label: 'Alerta double-check de método de pago' },
     { key: 'pagos:adjunto-eliminar', label: 'Eliminar comprobantes de pago' },
   ]},

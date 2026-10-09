@@ -17,6 +17,7 @@ export async function GET() {
       nombre: adminEscolarTutores.nombre,
       documento: adminEscolarTutores.documento,
       telefono: adminEscolarTutores.telefono,
+      whatsapp: adminEscolarTutores.whatsapp,
       email: adminEscolarTutores.email,
       direccion: adminEscolarTutores.direccion,
       imagen: adminEscolarTutores.imagen,
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
-  const { nombre, documento, telefono, email, direccion, clientId, imagen } = await req.json();
+  const { nombre, documento, telefono, whatsapp, email, direccion, clientId, imagen } = await req.json();
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
   // clientId opcional: si viene, debe pertenecer al team.
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest) {
     nombre: nombre.trim(),
     documento: documento?.trim() || null,
     telefono: telefono?.trim() || null,
+    // El numero por el que se le escribe de verdad. La columna existia y
+    // ningun endpoint la leia ni la escribia: el formulario lo pedia y se
+    // perdia en el camino, asi que al tutor nunca se le podia avisar.
+    whatsapp: whatsapp?.trim() || null,
     email: email?.trim() || null,
     direccion: direccion?.trim() || null,
     imagen: imagen || null,

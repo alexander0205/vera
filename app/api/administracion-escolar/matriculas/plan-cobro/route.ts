@@ -28,10 +28,24 @@ export async function GET(req: NextRequest) {
   const becaValorCrudo = Number(q.get('becaValor'));
   const becaValor = Number.isFinite(becaValorCrudo) && q.get('becaValor') ? becaValorCrudo : null;
 
+  /**
+   * El alumno, cuando se sabe cuál es.
+   *
+   * Esta pantalla también se usa para re-matricular a alguien que ya existe, y
+   * ese alumno puede tener tarifa PERSONAL de algún concepto. Sin mandarlo, la
+   * vista previa enseñaba la tarifa del grado y el alta otra cosa. Es opcional
+   * a propósito: al dar de alta a un alumno nuevo todavía no hay id, y entonces
+   * no hay excepción individual que aplicar.
+   */
+  const estudianteIdCrudo = Number(q.get('estudianteId'));
+  const estudianteId = Number.isInteger(estudianteIdCrudo) && estudianteIdCrudo > 0
+    ? estudianteIdCrudo
+    : null;
+
   const ctx = await contextoDeSeccion(auth.teamId, periodoId, cursoId, {
     tipo: becaTipo,
     valor: becaValor,
-  });
+  }, estudianteId);
   if (!ctx) return NextResponse.json({ error: 'Curso no encontrado' }, { status: 404 });
 
   const lineas = await armarPlanDeCobro(auth.teamId, ctx, desde);

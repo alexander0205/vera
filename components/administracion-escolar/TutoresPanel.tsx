@@ -122,6 +122,8 @@ export function TutoresPanel({
   const [modoNuevo, setModoNuevo]     = useState(true);
   const [tutorSeleccionado, setTutorSeleccionado] = useState('');
   const [nuevo, setNuevo]             = useState(EMPTY_NUEVO);
+  /** Cómo abrió el diálogo de edición: lo que siga igual no se manda al guardar. */
+  const [nuevoAlAbrir, setNuevoAlAbrir] = useState<typeof EMPTY_NUEVO | null>(null);
   const [relacion, setRelacion]       = useState('tutor');
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
@@ -153,6 +155,7 @@ export function TutoresPanel({
     setModoNuevo(disponibles.length === 0);
     setTutorSeleccionado('');
     setNuevo(EMPTY_NUEVO);
+    setNuevoAlAbrir(null);
     setRelacion('tutor');
     setError(null); setImgError(null);
     setShowForm(true);
@@ -160,10 +163,12 @@ export function TutoresPanel({
 
   function abrirEdicion(v: TutorVinculo) {
     setEditVinculo(v);
-    setNuevo({
+    const alAbrir = {
       nombre: v.nombre, documento: v.documento ?? '', telefono: v.telefono ?? '',
       whatsapp: v.whatsapp ?? '', email: v.email ?? '', direccion: '', imagen: v.imagen ?? '',
-    });
+    };
+    setNuevo(alAbrir);
+    setNuevoAlAbrir(alAbrir);
     setRelacion(v.relacion);
     setError(null); setImgError(null);
     setShowForm(true);
@@ -184,10 +189,20 @@ export function TutoresPanel({
       if (editVinculo) {
         // Editar datos del tutor (afecta al tutor en todo el sistema).
         if (!nuevo.nombre.trim()) throw new Error('El nombre del tutor es obligatorio');
+        // Solo lo que se tocó. El diálogo no siempre abre con todo lo que el
+        // tutor tiene guardado: la dirección no tiene campo y un tutor traído
+        // de SIGERD al borrador llega sin WhatsApp ni correo. Mandar el
+        // formulario entero escribía esos vacíos encima de lo guardado; el
+        // PATCH deja como está toda clave que no viene.
+        const cambios = Object.fromEntries(
+          (Object.keys(nuevo) as (keyof typeof nuevo)[])
+            .filter((k) => !nuevoAlAbrir || nuevo[k] !== nuevoAlAbrir[k])
+            .map((k) => [k, nuevo[k]]),
+        );
         const res = await fetch(`/api/administracion-escolar/tutores/${editVinculo.tutorId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nuevo),
+          body: JSON.stringify(cambios),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'Error actualizando tutor');

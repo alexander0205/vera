@@ -8,6 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Loader2, Wallet } from 'lucide-react';
+import { parseDOPaCentavos } from '@/lib/utils/format';
 
 interface Terminal { id: number; nombre: string; }
 
@@ -48,7 +49,10 @@ export function ModalAbrirCaja({ open, onClose, onOpened }: {
   }, [open]);
 
   async function abrir() {
-    const montoNum = parseFloat(monto.replace(',', '.'));
+    // Cero vale: se abre con la gaveta vacía. Lo que no vale es leer «1,100»
+    // de fondo de caja como RD$1.10 — la coma aquí es separador de miles.
+    const centavos = parseDOPaCentavos(monto);
+    const montoNum = centavos == null ? NaN : centavos / 100;
     if (isNaN(montoNum) || montoNum < 0) { setError('Monto de apertura inválido'); return; }
     setAbriendo(true); setError(null);
     try {

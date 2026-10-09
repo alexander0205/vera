@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { fmtFechaCorta } from '@/lib/utils/format';
+import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 
 /**
@@ -26,6 +26,13 @@ interface LineaPlan {
   conceptoId: number; nombre: string; tipo: string;
   admiteBeca: boolean; montoCentavos: number; origen: string;
   cuotas: CuotaPlan[]; totalCentavos: number; omitidas: number;
+  /**
+   * El producto con el que se facturaría esta línea, ya resuelto por la cadena
+   * de tarifas. Viaja hasta aquí porque el precio propio se guarda ANTES de que
+   * exista la matrícula, y sin ella el servidor no tiene de dónde heredarlo:
+   * la tarifa nacería sin producto y se rechazaría (regla R2).
+   */
+  productId: number | null;
 }
 
 const fmtRD = (centavos: number) =>
@@ -55,18 +62,45 @@ function resumenCuotas(l: LineaPlan): string {
   return `${vigentes.length} cuotas${monto} · desde ${fmtFechaCorta(referencia)}`;
 }
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
+export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
   desde: string;
+  /**
+   * El alumno, si ya existe. Sirve para que la vista previa aplique su tarifa
+   * PERSONAL y no la del grado: al re-matricular a alguien que ya tiene un
+   * precio propio, sin esto la pantalla enseñaba un importe y la matrícula
+   * nacía con otro.
+   */
+  estudianteId?: number | null;
   /** Los conceptos marcados, cada vez que cambian. */
   onCambio: (conceptosIds: number[]) => void;
+  /**
+   * Los precios propios de este alumno, cada vez que cambian. Sin esta prop no
+   * se ofrece editarlos: la ficha del alumno ya tiene «Configuración mensual»
+   * y no todas las pantallas que matriculan saben persistirlos.
+   */
+  onPrecios?: (precios: { conceptoId: number; montoCentavos: number; productId: number | null }[]) => void;
 }) {
   const [plan, setPlan] = useState<LineaPlan[]>([]);
   const [planCargando, setPlanCargando] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
+  /**
+   * Lo que paga ESTE alumno, cuando no es lo que paga su grado.
+   *
+   * No todos pagan lo mismo por sala de tareas: el acuerdo se cierra con la
+   * madre delante, al matricular. Hasta ahora había que crear la matrícula con
+   * la tarifa general e ir después a corregirla a la ficha, y entre una cosa y
+   * otra quedaba un precio equivocado con sus cargos ya hechos.
+   */
+  const [propios, setPropios] = useState<Map<number, number>>(new Map());
+  /** El concepto cuyo precio se está escribiendo, y el texto a medio teclear. */
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [borrador, setBorrador] = useState('');
+  /** Se va a Cancelar o pulsó Escape: el blur no debe aplicar lo escrito. */
+  const cancelando = useRef(false);
 
   useEffect(() => {
     if (!periodoId || !cursoId) { setPlan([]); setPlanError(null); return; }
@@ -74,6 +108,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
     setPlanCargando(true);
     setPlanError(null);
     const params = new URLSearchParams({ periodoId, cursoId, desde });
+    if (estudianteId) params.set('estudianteId', String(estudianteId));
     fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
       .then(async (res) => {
         const data = await res.json();
@@ -88,18 +123,77 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
         // la excepción se sabe con el alumno delante, no al configurar el
         // concepto meses antes.
         setMarcados(new Set(lineas.map((l) => l.conceptoId)));
+        // Cambió el curso o la fecha: el plan es otro y los precios escritos
+        // para el anterior no tienen por qué valer aquí.
+        setPropios(new Map());
+        setEditandoId(null);
       })
       .catch((e) => { if (vigente) setPlanError(e instanceof Error ? e.message : 'Error'); })
       .finally(() => { if (vigente) setPlanCargando(false); });
     return () => { vigente = false; };
-  }, [periodoId, cursoId, desde]);
+  }, [periodoId, cursoId, desde, estudianteId]);
 
   useEffect(() => { onCambio([...marcados]); }, [marcados, onCambio]);
+
+  /**
+   * El plan como quedaría con los precios propios puestos.
+   *
+   * Un precio propio es el de CADA cuota, no el del año: sala de tareas a 1,100
+   * son 1,100 al mes. Se reescriben las cuotas vivas y se recalcula el total,
+   * para que lo que se enseña abajo sea lo que el alumno va a deber de verdad.
+   */
+  const planEfectivo = useMemo(() => {
+    if (propios.size === 0) return plan;
+    return plan.map((l) => {
+      const propio = propios.get(l.conceptoId);
+      if (propio == null) return l;
+      const cuotas = l.cuotas.map((c) => (c.omitida ? c : { ...c, montoCentavos: propio }));
+      return {
+        ...l,
+        montoCentavos: propio,
+        cuotas,
+        totalCentavos: cuotas.reduce((s, c) => s + (c.omitida ? 0 : c.montoCentavos), 0),
+      };
+    });
+  }, [plan, propios]);
+
+  // Solo los que de verdad cambian algo: si alguien escribe el mismo precio que
+  // ya tenía, no hay excepción que guardar.
+  useEffect(() => {
+    if (!onPrecios) return;
+    onPrecios(plan
+      .filter((l) => marcados.has(l.conceptoId))
+      .flatMap((l) => {
+        const propio = propios.get(l.conceptoId);
+        return propio == null || propio === l.montoCentavos
+          ? []
+          : [{ conceptoId: l.conceptoId, montoCentavos: propio, productId: l.productId }];
+      }));
+  }, [plan, propios, marcados, onPrecios]);
+
+  function abrirPrecio(l: LineaPlan) {
+    setEditandoId(l.conceptoId);
+    setBorrador(((propios.get(l.conceptoId) ?? l.montoCentavos) / 100).toFixed(2));
+  }
+
+  function guardarPrecio(l: LineaPlan) {
+    const centavos = parseDOPaCentavos(borrador);
+    if (centavos == null) return;
+    setPropios((m) => {
+      const n = new Map(m);
+      // Volver a la tarifa del grado es quitar la excepción, no guardar el
+      // mismo número como si fuera propio.
+      if (centavos === l.montoCentavos) n.delete(l.conceptoId);
+      else n.set(l.conceptoId, centavos);
+      return n;
+    });
+    setEditandoId(null);
+  }
 
   const resumenPlan = useMemo(() => {
     // La misma regla con la que se crean los cargos al guardar: lo que se ve
     // aquí es lo que queda. Se compara la EMISIÓN, igual que el devengo.
-    const { ahora, despues } = cuotasAlMatricular(plan, marcados, desde);
+    const { ahora, despues } = cuotasAlMatricular(planEfectivo, marcados, desde);
     const ahoraCentavos = sumaCentavos(ahora);
     const despuesCentavos = sumaCentavos(despues);
     return {
@@ -107,7 +201,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
       despues: despuesCentavos, despuesCargos: despues.length,
       total: ahoraCentavos + despuesCentavos,
     };
-  }, [plan, marcados, desde]);
+  }, [planEfectivo, marcados, desde]);
 
   if (!cursoId) return null;
 
@@ -130,38 +224,115 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
                 </p>
               ) : (
                 <>
-                  {plan.map((l) => {
+                  {planEfectivo.map((l) => {
                     const activo = marcados.has(l.conceptoId);
+                    const base = plan.find((p) => p.conceptoId === l.conceptoId)!;
+                    const esPropio = propios.has(l.conceptoId);
+                    // La beca ya es un descuento sobre la tarifa; dejar escribir
+                    // además un precio propio pone dos mecanismos a pelear por
+                    // la misma cifra. Se edita la beca donde se puso la beca.
+                    const puedeEditar = !!onPrecios && activo && l.origen !== 'beca';
                     return (
-                      <label key={l.conceptoId}
-                        className="flex cursor-pointer gap-2.5 border-b border-gray-100 px-3 py-2.5 last:border-b-0 hover:bg-gray-50">
-                        <input type="checkbox" checked={activo}
-                          onChange={() => setMarcados((s) => {
-                            const n = new Set(s);
-                            if (n.has(l.conceptoId)) n.delete(l.conceptoId); else n.add(l.conceptoId);
-                            return n;
-                          })}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-zero-600" />
-                        <span className={`min-w-0 flex-1 ${activo ? '' : 'opacity-50'}`}>
-                          <span className="flex justify-between gap-2">
-                            <span className="text-sm text-gray-900">{l.nombre}</span>
-                            <span className="whitespace-nowrap text-sm font-medium text-gray-900">
-                              {fmtRD(l.totalCentavos)}
+                      <div key={l.conceptoId}
+                        className="border-b border-gray-100 px-3 py-2.5 last:border-b-0 hover:bg-gray-50">
+                        <label className="flex cursor-pointer gap-2.5">
+                          <input type="checkbox" checked={activo}
+                            onChange={() => setMarcados((s) => {
+                              const n = new Set(s);
+                              if (n.has(l.conceptoId)) n.delete(l.conceptoId); else n.add(l.conceptoId);
+                              return n;
+                            })}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-zero-600" />
+                          <span className={`min-w-0 flex-1 ${activo ? '' : 'opacity-50'}`}>
+                            <span className="flex justify-between gap-2">
+                              <span className="text-sm text-gray-900">{l.nombre}</span>
+                              <span className="whitespace-nowrap text-sm font-medium text-gray-900">
+                                {fmtRD(l.totalCentavos)}
+                              </span>
                             </span>
+                            <span className="mt-0.5 block text-xs text-gray-500">{resumenCuotas(l)}</span>
+                            {l.origen === 'beca' && (
+                              <span className="mt-1 inline-block rounded bg-zero-50 px-2 py-0.5 text-[11px] text-zero-700">
+                                con beca
+                              </span>
+                            )}
+                            {l.omitidas > 0 && (
+                              <span className="mt-1 block text-xs text-amber-700">
+                                se omiten {l.omitidas} cuota(s) emitida(s) antes de su entrada
+                              </span>
+                            )}
                           </span>
-                          <span className="mt-0.5 block text-xs text-gray-500">{resumenCuotas(l)}</span>
-                          {l.origen === 'beca' && (
-                            <span className="mt-1 inline-block rounded bg-zero-50 px-2 py-0.5 text-[11px] text-zero-700">
-                              con beca
-                            </span>
-                          )}
-                          {l.omitidas > 0 && (
-                            <span className="mt-1 block text-xs text-amber-700">
-                              se omiten {l.omitidas} cuota(s) emitida(s) antes de su entrada
-                            </span>
-                          )}
-                        </span>
-                      </label>
+                        </label>
+
+                        {puedeEditar && (
+                          <div className="mt-1.5 pl-[26px]">
+                            {editandoId === l.conceptoId ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-gray-500">RD$</span>
+                                <input
+                                  type="text" inputMode="decimal" autoFocus
+                                  value={borrador}
+                                  onChange={(e) => setBorrador(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); guardarPrecio(base); }
+                                    if (e.key === 'Escape') { cancelando.current = true; setEditandoId(null); }
+                                  }}
+                                  /*
+                                    Lo escrito se aplica al salir del campo.
+
+                                    Antes solo contaba «Aplicar»: quien escribía
+                                    el precio y pulsaba directo «Crear
+                                    matrícula» creaba la matrícula con la tarifa
+                                    del grado y su número se perdía sin aviso.
+                                    Pulsar fuera ya es salir del campo, así que
+                                    el guardado del diálogo lo recoge.
+
+                                    Salvo si se va a Cancelar o se pulsó Escape:
+                                    `onMouseDown` corre antes que el blur, así
+                                    que para entonces la bandera ya está puesta.
+                                  */
+                                  onBlur={() => {
+                                    if (cancelando.current) { cancelando.current = false; return; }
+                                    guardarPrecio(base);
+                                  }}
+                                  className="h-7 w-28 rounded border border-gray-300 px-2 text-sm tabular-nums focus:border-zero-500 focus:outline-none"
+                                />
+                                <button type="button" onClick={() => guardarPrecio(base)}
+                                  className="rounded bg-zero-600 px-2 py-1 text-xs font-medium text-white hover:bg-zero-700">
+                                  Aplicar
+                                </button>
+                                <button type="button"
+                                  onMouseDown={() => { cancelando.current = true; }}
+                                  onClick={() => setEditandoId(null)}
+                                  className="px-1.5 py-1 text-xs text-gray-500 hover:text-gray-700">
+                                  Cancelar
+                                </button>
+                                <span className="text-xs text-gray-400">por cuota</span>
+                              </div>
+                            ) : esPropio ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
+                                  precio propio · {fmtRD(l.montoCentavos)} por cuota
+                                </span>
+                                <button type="button" onClick={() => abrirPrecio(base)}
+                                  className="text-xs text-zero-700 hover:underline">Cambiar</button>
+                                <button type="button"
+                                  onClick={() => setPropios((m) => {
+                                    const n = new Map(m); n.delete(l.conceptoId); return n;
+                                  })}
+                                  className="text-xs text-gray-500 hover:text-gray-700">
+                                  Volver a {fmtRD(base.montoCentavos)}
+                                </button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => abrirPrecio(base)}
+                                className="text-xs text-gray-500 hover:text-zero-700 hover:underline">
+                                {fmtRD(l.montoCentavos)} por cuota · poner otro precio para este alumno
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                   <div className="bg-gray-50 px-3 py-2.5">
@@ -188,6 +359,14 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, onCambio }: {
                       : `Se generan ${resumenPlan.ahoraCargos} cargo(s) pendientes. No se cobra nada ahora.`}
                     {resumenPlan.despues > 0 && ' Las demás cuotas se generan cuando llega su fecha.'}
                   </p>
+                  {propios.size > 0 && (
+                    <p className="border-t border-gray-100 px-3 pb-2.5 pt-2 text-xs text-amber-800">
+                      {propios.size === 1 ? 'Un concepto lleva' : `${propios.size} conceptos llevan`} precio
+                      propio de este alumno: queda como su tarifa y es la que usarán sus cargos de cada mes.
+                      La tarifa del grado no cambia para nadie más. Déjalo bien ahora — para un servicio
+                      mensual como la sala de tareas, este es el único sitio donde se escribe.
+                    </p>
+                  )}
                 </>
               )}
             </div>

@@ -28,7 +28,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Send, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -623,32 +623,51 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <PeriodoStat
-          icon={Receipt}
-          label="Facturado"
-          value={fmtDOP(facturadoCentavos)}
-          detail={porFacturarCentavos > 0
-            ? <span className="font-medium text-amber-700">Por facturar {fmtDOP(porFacturarCentavos)}</span>
-            : 'Todo facturado'}
-          tone="blue" />
-        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
-        <PeriodoStat
-          icon={AlertTriangle}
-          label="Pendiente"
-          value={fmtDOP(saldo)}
-          // Rojo solo si hay algo emitido sin cobrar. Si todo lo que se debe
-          // está aún «Sin facturar», la tarjeta no alarma: lo que toca es
-          // emitir, no perseguir un pago. Ver criterio del MD de facturas.
-          detail={
-            saldoPorCobrar > 0 && saldoPorFacturar > 0
-              ? `Por cobrar ${fmtDOP(saldoPorCobrar)} · por facturar ${fmtDOP(saldoPorFacturar)}`
-              : saldoPorCobrar > 0 ? 'Saldo por cobrar'
-              : saldoPorFacturar > 0 ? 'Aún por facturar'
-              : 'Sin deuda'
-          }
-          tone={saldoPorCobrar > 0 ? 'red' : 'gray'}
-        />
+      {/* Las cuatro cifras del año, que antes eran cuatro tarjetas sueltas.
+
+          «Facturado RD$9,200» arriba del todo, al lado de «Pendiente
+          RD$33,800», se leía como si al alumno le hubieran facturado nueve mil
+          y debiera treinta y tres mil más: dos números del mismo tamaño que se
+          miden contra cosas distintas —uno contra lo emitido, el otro contra lo
+          cobrado—. El colegio preguntaba «¿pero entonces cuánto es el año?», y
+          esa cifra no estaba en ninguna parte.
+
+          Ahora hay UNA cuenta —el total del año— partida en los tres estados
+          por los que pasa un peso: cobrado, facturado sin cobrar, y todavía sin
+          factura. Suman el total, así que se pueden comprobar con el dedo. */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="flex items-center gap-2 text-xs font-medium text-gray-600">
+              <Receipt className="h-4 w-4 text-gray-500" />Total del año escolar
+            </span>
+            <span className="text-xl font-semibold text-gray-900">{fmtDOP(total)}</span>
+          </div>
+
+          {/* La barra es la misma cuenta, dibujada: lo verde ya entró, lo rojo
+              se persigue, lo ámbar ni siquiera se ha emitido. */}
+          <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-gray-100">
+            <div className="bg-emerald-500" style={{ width: parte(pagado, total) }} />
+            <div className="bg-red-500" style={{ width: parte(saldoPorCobrar, total) }} />
+            <div className="bg-amber-400" style={{ width: parte(saldoPorFacturar, total) }} />
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <TramoAnual color="bg-emerald-500" label="Pagado" monto={pagado}
+              pie="ya entró el dinero" total={total} />
+            <TramoAnual color="bg-red-500" label="Por cobrar" monto={saldoPorCobrar}
+              pie="facturado y sin pagar" total={total} />
+            <TramoAnual color="bg-amber-400" label="Por facturar" monto={saldoPorFacturar}
+              pie="aún sin factura emitida" total={total} />
+          </div>
+
+          <p className="mt-3 border-t border-gray-100 pt-2.5 text-xs text-gray-500">
+            Lleva <b className="font-medium text-gray-700">{fmtDOP(facturadoCentavos)}</b> facturados de{' '}
+            {fmtDOP(total)}. Lo que falta son cargos del año que todavía no se han emitido:
+            se deben, pero lo que toca con ellos es facturarlos.
+          </p>
+        </div>
+
         <PeriodoStat
           icon={CalendarDays}
           label="Próximo vencimiento"
@@ -1019,7 +1038,9 @@ function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matricu
       .catch(() => setConceptos([]));
   }, [open, soloTipo]);
 
-  const montoCentavos = Math.round((parseFloat(monto.replace(',', '.')) || 0) * 100);
+  // La coma es separador de MILES, que es como este sistema escribe el dinero
+  // («RD$2,800.00»). Leída como decimal, «1,100» creaba el cargo por RD$1.10.
+  const montoCentavos = parseDOPaCentavos(monto) ?? 0;
 
   function toggleMes(key: string) {
     setMesesCargo((prev) => {
@@ -1110,6 +1131,41 @@ function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matricu
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Lo que ocupa un tramo en la barra del año. Sin año, no hay barra. */
+function parte(centavos: number, total: number): string {
+  if (total <= 0 || centavos <= 0) return '0%';
+  return `${(centavos / total) * 100}%`;
+}
+
+/**
+ * Un tramo del año, con su color, su importe y qué significa en una línea.
+ *
+ * El pie no decora: «Por cobrar» y «Por facturar» se parecen demasiado escritos
+ * —el colegio los leía como dos formas de decir lo mismo— y la diferencia entre
+ * perseguir un pago y emitir un documento es justo la que decide qué se hace
+ * esta semana.
+ */
+function TramoAnual({ color, label, monto, pie, total }: {
+  color: string;
+  label: string;
+  monto: number;
+  pie: string;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.round((monto / total) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${color}`} />
+        <span className="text-xs font-medium text-gray-600">{label}</span>
+        <span className="text-xs text-gray-400">{pct}%</span>
+      </div>
+      <p className="mt-1 text-base font-semibold text-gray-900">{fmtDOP(monto)}</p>
+      <p className="text-xs text-gray-500">{pie}</p>
+    </div>
   );
 }
 
@@ -2438,7 +2494,9 @@ function TarifaEstudianteDialog({
       ]);
       const activos = ((cs.conceptos ?? []) as (ConceptoLite & { activo?: boolean })[])
         .filter((c) => c.activo !== false);
-      // La mensualidad se maneja arriba (beca): aquí van los DEMÁS conceptos.
+      // Su mensualidad -la de su generación- se maneja arriba (beca). Aquí van
+      // los demás conceptos; `conceptosElegibles` le añade las OTRAS
+      // mensualidades, que son servicios aparte (sala de tareas, guardería).
       setConceptos(activos.filter((c) => c.tipo !== 'mensualidad'));
       // Las mensualidades son las generaciones elegibles.
       setGeneraciones(activos.filter((c) => c.tipo === 'mensualidad'));
@@ -2446,6 +2504,31 @@ function TarifaEstudianteDialog({
     } catch { /* la sección queda vacía; la de mensualidad sigue usable */ }
   }, [periodoId]);
   useEffect(() => { if (open) void cargarOtros(); }, [open, cargarOtros]);
+
+  /**
+   * Lo que se le puede poner precio propio aquí.
+   *
+   * Un colegio tiene varias mensualidades: la de su generación —que es su
+   * colegiatura, y cuyo importe se pone arriba con «Monto propio»— y las de los
+   * servicios que no todos toman, como la sala de tareas o la guardería. Esas
+   * segundas quedaban fuera de las dos listas: ni eran su generación ni eran
+   * «otro concepto», así que el precio de la sala de tareas solo se podía
+   * escribir al matricular y no había dónde corregirlo después.
+   *
+   * Se excluye la generación elegida para no tener dos sitios peleando por la
+   * misma cifra: esa se cambia arriba.
+   */
+  const conceptosElegibles = useMemo(
+    () => [...conceptos, ...generaciones.filter((g) => String(g.id) !== generacionSel)],
+    [conceptos, generaciones, generacionSel],
+  );
+  const esMensualidad = (id: string) => generaciones.some((g) => String(g.id) === id);
+
+  // Si se cambia la generación a la mensualidad que se estaba editando abajo,
+  // se suelta: ya no es «otro concepto», es su colegiatura.
+  useEffect(() => {
+    if (conceptoSel && conceptoSel === generacionSel) { setConceptoSel(''); setPrecioOtro(''); }
+  }, [generacionSel, conceptoSel]);
 
   // El precio personal ya puesto para el concepto elegido, si existe.
   const precioPersonal = precios.find(
@@ -2472,8 +2555,10 @@ function TarifaEstudianteDialog({
         toast.success('Quitado: vuelve al precio normal del concepto.');
         return;
       }
-      const n = Number(precioOtro.replace(',', '.'));
-      if (!precioOtro.trim() || !Number.isFinite(n) || n < 0) { setErrorOtro('Escribe el precio.'); return; }
+      // Mismo criterio de coma que el resto del dinero: miles, no decimal.
+      const centavosOtro = parseDOPaCentavos(precioOtro);
+      if (centavosOtro == null) { setErrorOtro('Escribe el precio.'); return; }
+      const n = centavosOtro / 100;
       const res = await fetch('/api/administracion-escolar/concepto-precios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2504,7 +2589,17 @@ function TarifaEstudianteDialog({
     if (modo === 'normal') {
       body = { becaTipo: null };
     } else {
-      const n = Number(valor.replace(',', '.'));
+      /**
+       * El mismo campo guarda dos cosas, y la coma no significa lo mismo en
+       * cada una: en un MONTO es separador de miles («1,100» son mil cien
+       * pesos, que es como lo escribe el sistema), y en un PORCENTAJE es
+       * decimal («12,5» es doce y medio). Leerlo todo igual convertía mil cien
+       * pesos de beca en uno con diez.
+       */
+      const centavosBeca = modo === 'monto' ? parseDOPaCentavos(valor) : null;
+      const n = modo === 'monto'
+        ? (centavosBeca == null ? NaN : centavosBeca / 100)
+        : Number(valor.replace(',', '.'));
       if (!Number.isFinite(n) || n <= 0) {
         setError(modo === 'monto' ? 'Escribe el monto mensual.' : 'Escribe el porcentaje de descuento.');
         return;
@@ -2622,24 +2717,42 @@ function TarifaEstudianteDialog({
           {/* ── Precio personal de OTRO concepto (uniforme, actividad…) ─────── */}
           <div className="mt-2 border-t border-gray-100 pt-3">
             <p className="text-sm font-medium text-gray-800">Precio personal de otro concepto</p>
-            <p className="mb-2 text-xs text-gray-500">Solo para este alumno, sin cambiar el precio de los demás.</p>
+            <p className="mb-2 text-xs text-gray-500">
+              Solo para este alumno, sin cambiar el precio de los demás. Incluye los servicios
+              mensuales que no son su colegiatura —sala de tareas, guardería—: aquí se corrige
+              lo que se puso al matricular.
+            </p>
             {errorOtro && <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{errorOtro}</div>}
             <div className="space-y-1">
               <Label className="text-xs">Concepto</Label>
               <NativeSelect value={conceptoSel} onChange={(e) => setConceptoSel(e.target.value)}>
                 <option value="">Elige un concepto…</option>
-                {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                {conceptosElegibles.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.nombre}{c.tipo === 'mensualidad' ? ' — cada mes' : ''}
+                  </option>
+                ))}
               </NativeSelect>
             </div>
 
             {conceptoSel && (
               <div className="mt-2 space-y-2">
                 <div className="space-y-1">
-                  <Label className="text-xs">Precio para este alumno (RD$)</Label>
+                  <Label className="text-xs">
+                    {esMensualidad(conceptoSel)
+                      ? 'Precio para este alumno, por mes (RD$)'
+                      : 'Precio para este alumno (RD$)'}
+                  </Label>
                   <Input type="number" step="0.01" value={precioOtro}
                     onChange={(e) => setPrecioOtro(e.target.value)} placeholder="0.00" />
                   {precioPersonal && (
                     <p className="text-[11px] text-gray-400">Ya tiene un precio personal puesto. Cámbialo o quítalo.</p>
+                  )}
+                  {esMensualidad(conceptoSel) && (
+                    <p className="text-[11px] text-gray-500">
+                      Es lo que pagará cada mes por este servicio. Los cargos que ya estén creados
+                      conservan su importe: esos se corrigen uno a uno en la matrícula.
+                    </p>
                   )}
                 </div>
 

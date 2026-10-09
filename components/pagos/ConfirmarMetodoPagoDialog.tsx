@@ -20,6 +20,12 @@ interface Props {
   onConfirm: () => void;
   /** Deshabilita el botón confirmar mientras procesa. */
   procesando?: boolean;
+  /**
+   * Sentido del dinero. 'cobro' (por defecto) = entra a la caja (venta, POS).
+   * 'pago' = sale de la caja (gasto, compra): aquí el texto no puede decir
+   * "cobrar" o el usuario cree que el sistema le está sumando ese efectivo.
+   */
+  sentido?: 'cobro' | 'pago';
 }
 
 /**
@@ -30,8 +36,15 @@ interface Props {
  * poner el MÉTODO al frente, grande, para que el cajero no cobre efectivo por
  * tarjeta (o viceversa) por inercia. Fuente de métodos: lib/pagos/metodos.
  */
-export function ConfirmarMetodoPagoDialog({ lineas, onCancel, onConfirm, procesando = false }: Props) {
+export function ConfirmarMetodoPagoDialog({
+  lineas,
+  onCancel,
+  onConfirm,
+  procesando = false,
+  sentido = 'cobro',
+}: Props) {
   const dividido = lineas.length > 1;
+  const esPago = sentido === 'pago';
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
@@ -50,7 +63,9 @@ export function ConfirmarMetodoPagoDialog({ lineas, onCancel, onConfirm, procesa
           </span>
           <div>
             <p className="text-sm font-semibold text-gray-900">Confirma el método de pago</p>
-            <p className="text-[11px] text-gray-500">Revisa que sea el correcto antes de cobrar.</p>
+            <p className="text-[11px] text-gray-500">
+              Revisa que sea el correcto antes de {esPago ? 'pagar' : 'cobrar'}.
+            </p>
           </div>
         </div>
 
@@ -67,6 +82,9 @@ export function ConfirmarMetodoPagoDialog({ lineas, onCancel, onConfirm, procesa
           {dividido && (
             <p className="text-[11px] text-gray-400">Pago dividido en {lineas.length} métodos.</p>
           )}
+          {esPago && (
+            <p className="text-[11px] text-gray-500">Este dinero <b>sale</b> de la caja.</p>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -81,11 +99,11 @@ export function ConfirmarMetodoPagoDialog({ lineas, onCancel, onConfirm, procesa
           </Button>
           <Button
             type="button"
-            className="flex-1 bg-green-600 hover:bg-green-700"
+            className={`flex-1 ${esPago ? 'bg-gray-900 hover:bg-gray-800' : 'bg-green-600 hover:bg-green-700'}`}
             onClick={onConfirm}
             disabled={procesando}
           >
-            {procesando ? 'Procesando…' : 'Sí, cobrar'}
+            {procesando ? 'Procesando…' : esPago ? 'Sí, pagar' : 'Sí, cobrar'}
           </Button>
         </div>
       </div>

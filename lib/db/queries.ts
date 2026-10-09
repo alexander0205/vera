@@ -755,6 +755,12 @@ export async function getCuentasPorCobrar(
         d.fecha_emision AS fecha_emision_ts,
         d.rnc_comprador, d.razon_social_comprador, d.email_comprador,
         d.client_id, d.estado, d.monto_total, d.total_itbis,
+        -- El nombre del CONTACTO, para cuando la factura no guardó el del
+        -- comprador. La emisión recurrente graba client_id y deja
+        -- razon_social_comprador vacío, así que facturas con un padre conocido
+        -- detrás se leían «Consumidor final» y no había a quién llamar. El
+        -- campo fiscal no se toca: esto es solo el nombre que se enseña.
+        (SELECT cl.razon_social FROM clients cl WHERE cl.id = d.client_id) AS cliente_razon_social,
         -- fecha_limite_pago es varchar(10); ''::date lanza en Postgres, así que
         -- se normaliza a NULL una sola vez y el resto compara contra esto.
         NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_date,
@@ -834,6 +840,11 @@ export async function getCuentasPorCobrar(
           ? sql`AND (
               coalesce(d.razon_social_comprador, '') ILIKE ${'%' + opts.search.trim() + '%'}
               OR coalesce(d.rnc_comprador, '') ILIKE ${'%' + opts.search.trim() + '%'}
+              -- También por el nombre del contacto: en las facturas sin razón
+              -- social guardada es el ÚNICO nombre que la fila enseña, y
+              -- buscarlo no encontraba nada.
+              OR coalesce((SELECT cl.razon_social FROM clients cl WHERE cl.id = d.client_id), '')
+                 ILIKE ${'%' + opts.search.trim() + '%'}
             )`
           : sql``}
     ),
@@ -880,6 +891,7 @@ export async function getCuentasPorCobrar(
     estado: string; monto_total: number; total_itbis: number;
     pagado: string; mora_saldo: string; nc_aplicado: string;
     saldo_factura: string; saldo: string; vencida: boolean; dias_vencido: number;
+    cliente_razon_social: string | null;
   }
 
   const [rowsRaw, totalesRaw] = await Promise.all([
@@ -967,6 +979,7 @@ export async function getCuentasPorCobrar(
     fechaLimitePago:      r.fecha_limite_pago,
     rncComprador:         r.rnc_comprador,
     razonSocialComprador: r.razon_social_comprador,
+    clienteRazonSocial:   r.cliente_razon_social,
     emailComprador:       r.email_comprador,
     clientId:             r.client_id,
     estado:               r.estado,

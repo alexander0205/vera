@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { nombre, documento, telefono, email, direccion, clientId, imagen } = await req.json();
+  const { nombre, documento, telefono, whatsapp, email, direccion, clientId, imagen } = await req.json();
 
   // clientId: null desvincula; si viene un id, debe pertenecer al team.
   if (clientId !== undefined && clientId !== null) {
@@ -24,6 +24,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(nombre !== undefined ? { nombre: nombre.trim() } : {}),
       ...(documento !== undefined ? { documento: documento?.trim() || null } : {}),
       ...(telefono !== undefined ? { telefono: telefono?.trim() || null } : {}),
+      // Por donde se le escribe de verdad. Se perdia: el formulario lo mandaba
+      // y aqui no se leia, asi que editar un tutor nunca guardaba su WhatsApp.
+      ...(whatsapp !== undefined ? { whatsapp: whatsapp?.trim() || null } : {}),
       ...(email !== undefined ? { email: email?.trim() || null } : {}),
       ...(direccion !== undefined ? { direccion: direccion?.trim() || null } : {}),
       ...(clientId !== undefined ? { clientId } : {}),
