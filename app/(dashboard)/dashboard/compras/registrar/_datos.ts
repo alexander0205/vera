@@ -61,7 +61,7 @@ export async function contextoRegistro(
         inicial = r.inicial;
         avisosCaptura = r.avisos;
       } else {
-        avisosCaptura = ['No se pudo leer la factura: complétala mirando la foto.'];
+        avisosCaptura = ['No se pudo leer la factura: complétala mirando el comprobante.'];
       }
     }
   }

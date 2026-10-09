@@ -12,15 +12,17 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { BuscadorSelect, type OpcionBuscador } from '@/components/ui/buscador-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/components/ui/dialog';
 import { toast } from '@/lib/toast';
 import { pesosACentavos } from '@/lib/nomina/montos';
 import {
-  analizarIdentificacion, analizarNcf, erroresCompra, itbisAlCostoPorDefecto, resumirCompra,
+  analizarIdentificacion, analizarNcf, cuadrarConComprobante, erroresCompra, itbisAlCostoPorDefecto, resumirCompra,
   sugerirRetenciones, totalizarLineas, CONCEPTOS_RETENCION, TIPOS_BIENES_606, TIPOS_RETENCION_ISR,
   type ConceptoRetencion, type TasaItbis, type TipoProveedor,
 } from '@/lib/compras/fiscal';
 import { CATEGORIAS_COMPRA, categoriaCompra, tipo606Dominante } from '@/lib/compras/categorias';
 import type { LineaEcfRecibido } from '@/lib/compras/ecf-xml';
+import { SubirComprobante } from '@/components/compras/subir-comprobante';
 import { ArrowLeft, Loader2, Plus, Trash2, AlertTriangle, CheckCircle2, Info, ShoppingCart, Receipt } from 'lucide-react';
 
 export interface ContextoRegistro {
@@ -165,6 +167,9 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const [itbisAlCosto, setItbisAlCosto] = useState('');
   const enPesos = (cents: number | null | undefined) => (cents ? (cents / 100).toFixed(2) : '');
   const [isc, setIsc] = useState(enPesos(ini?.iscCents));
+  // Lo que dice el papel. Arranca con el total leído del e-CF o de la foto, que
+  // es justo el que hay que contrastar con lo que suman las líneas.
+  const [totalImpreso, setTotalImpreso] = useState(enPesos(ini?.montoTotalCents));
   const [otros, setOtros] = useState(enPesos(ini?.otrosImpuestosCents));
   const [propina, setPropina] = useState(enPesos(ini?.propinaCents));
   const [conceptoManual, setConceptoManual] = useState<ConceptoRetencion | ''>('');
@@ -236,6 +241,11 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
     propinaCents: aCentavos(propina) ?? 0,
   };
   const resumen = resumirCompra(totales.baseCents, imp);
+  const totalImpresoCents = aCentavos(totalImpreso) ?? 0;
+  const cuadre = totalImpresoCents > 0 ? cuadrarConComprobante(resumen.totalCents, totalImpresoCents) : null;
+  const faltaPct = cuadre && cuadre.estado !== 'cuadra' && totales.baseCents > 0
+    ? (Math.abs(cuadre.diferenciaCents) / totales.baseCents) * 100
+    : null;
   const tipo606Auto = tipo606Dominante(lineasCalc.map((x, i) => ({ tipo606: x.l.tipo === 'producto' ? '09' : x.cat?.tipo606 ?? '02', baseCents: totales.lineas[i].baseCents })));
   const tipo606Final = (tipo606 || tipo606Auto) as keyof typeof TIPOS_BIENES_606;
 
@@ -438,9 +448,18 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
             </ul>
           )}
         </div>
-      ) : ini && (
+      ) : ini ? (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800" data-testid="aviso-ecf-recibido">
           <Info className="mt-0.5 h-4 w-4 shrink-0" /> Datos tomados del e-CF recibido. Revisa la categoría de cada línea y las retenciones.
+        </div>
+      ) : esGasto && (
+        // Antes de empezar a teclear: si el comprobante está en el ordenador,
+        // se lee y el formulario sale relleno.
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3" data-testid="ofrecer-subir">
+          <p className="text-sm text-muted-foreground">
+            ¿Tienes el PDF o la foto de la factura? Súbela y se rellena sola.
+          </p>
+          <SubirComprobante etiqueta="Subir comprobante" />
         </div>
       )}
 
@@ -657,17 +676,53 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
               <h2 className="text-base font-semibold">3 · Impuestos y retenciones</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="isc">ISC</Label>
+                  <Label htmlFor="isc">ISC <span className="font-normal text-muted-foreground">(RD$)</span></Label>
                   <Input id="isc" value={isc} onChange={(e) => setIsc(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                  <p className="text-xs text-muted-foreground">
+                    Selectivo al consumo: telecomunicaciones, seguros, bebidas, tabaco. Escribe el <strong>monto en pesos</strong>, no el porcentaje.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="otros-impuestos">Otros impuestos y tasas</Label>
+                  <Label htmlFor="otros-impuestos">Otros impuestos y tasas <span className="font-normal text-muted-foreground">(RD$)</span></Label>
                   <Input id="otros-impuestos" value={otros} onChange={(e) => setOtros(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                  <p className="text-xs text-muted-foreground">
+                    Lo demás que cobra el comprobante: la contribución del 2 % de telecomunicaciones, tasas municipales… También el <strong>monto</strong>.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="propina">Propina legal (10 %)</Label>
+                  <Label htmlFor="propina">Propina legal <span className="font-normal text-muted-foreground">(RD$)</span></Label>
                   <Input id="propina" value={propina} onChange={(e) => setPropina(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                  <p className="text-xs text-muted-foreground">Solo bares y restaurantes. No es ITBIS.</p>
                 </div>
+              </div>
+
+              {/* Cuadre con el papel. Una factura de internet trae ITBIS del 18 %,
+                  ISC del 10 % y contribución del 2 %: con solo el ITBIS el total
+                  salía por debajo del impreso y nada lo decía. */}
+              <div className="space-y-1.5 rounded-lg border p-3" data-testid="cuadre-comprobante">
+                <Label htmlFor="total-impreso">Total impreso en el comprobante <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+                <Input id="total-impreso" className="sm:max-w-56" value={totalImpreso} onChange={(e) => setTotalImpreso(e.target.value)}
+                  inputMode="decimal" placeholder="0.00" />
+                {cuadre === null ? (
+                  <p className="text-xs text-muted-foreground">
+                    Cópialo del papel y se compara con lo que suma este registro. Así no se escapa un impuesto sin anotar.
+                  </p>
+                ) : cuadre.estado === 'cuadra' ? (
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700" data-testid="cuadre-ok">
+                    <CheckCircle2 className="h-4 w-4" /> Cuadra con el comprobante.
+                  </p>
+                ) : (
+                  <p className="flex items-start gap-1.5 text-xs text-amber-700" data-testid="cuadre-difiere">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      {cuadre.estado === 'falta'
+                        ? `Faltan ${pesos(cuadre.diferenciaCents)} para llegar al total impreso.`
+                        : `Este registro suma ${pesos(-cuadre.diferenciaCents)} de más que el total impreso.`}
+                      {faltaPct !== null && ` Es el ${faltaPct.toFixed(1)} % del monto sin impuestos: búscalo con ese nombre en el comprobante.`}
+                      {' '}Lo que no es ITBIS va en «ISC» o en «Otros impuestos y tasas», en pesos.
+                    </span>
+                  </p>
+                )}
               </div>
 
               <div className="rounded-lg bg-muted/40 p-3 text-sm">
@@ -811,11 +866,25 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                 <Fila k="ISC, otros y propina" v={pesos(imp.iscCents + imp.otrosImpuestosCents + imp.propinaCents)} />
               )}
               <Fila k="Total del comprobante" v={pesos(resumen.totalCents)} fuerte />
+              {cuadre && cuadre.estado !== 'cuadra' && (
+                <p className="text-xs text-amber-700" data-testid="resumen-cuadre">
+                  El papel dice {pesos(totalImpresoCents)}: {cuadre.estado === 'falta' ? 'faltan' : 'sobran'} {pesos(Math.abs(cuadre.diferenciaCents))}.
+                </p>
+              )}
               {itbisRetenidoCents > 0 && <Fila k="ITBIS retenido" v={`−${pesos(itbisRetenidoCents)}`} tenue />}
               {isrRetenidoCents > 0 && <Fila k="ISR retenido" v={`−${pesos(isrRetenidoCents)}`} tenue />}
               <Fila k={formaPago === 'contado' ? 'Pagas al proveedor' : 'Le debes al proveedor'} v={pesos(resumen.netoAPagarCents)} fuerte />
               <div className="space-y-1 border-t pt-2 text-xs text-muted-foreground">
                 <p>ITBIS que adelantas: <span className="font-medium text-foreground" data-testid="itbis-adelantar">{pesos(resumen.itbisPorAdelantarCents)}</span></p>
+                {resumen.itbisPorAdelantarCents === 0 && totales.itbisCents > 0 && (
+                  <p data-testid="motivo-sin-adelanto">
+                    {!ncfInfo.daCreditoItbis && ncfInfo.valido
+                      ? `Un comprobante de ${ncfInfo.nombre.toLowerCase()} no da crédito: el ITBIS se suma al gasto.`
+                      : contexto.regimenItbis !== 'gravado'
+                        ? 'Tu empresa está como exenta de ITBIS, así que el de las compras va al gasto en vez de adelantarse. Se cambia en Contabilidad › Configuración.'
+                        : 'Lo llevaste entero al costo en el paso 3.'}
+                  </p>
+                )}
                 {resumen.retencionesCents > 0 && <p>Retenciones a pagar a la DGII: <span className="font-medium text-foreground">{pesos(resumen.retencionesCents)}</span></p>}
                 <p>606: {ncfInfo.valido && !ncfInfo.reporta606 ? 'no se reporta' : `tipo ${tipo606Final} · ${TIPOS_BIENES_606[tipo606Final]}`}</p>
               </div>
@@ -861,26 +930,88 @@ function Fila({ k, v, fuerte, tenue }: { k: string; v: string; fuerte?: boolean;
   );
 }
 
-/** Las fotos de la factura al lado del formulario: se registra mirándolas. */
+/**
+ * El comprobante al lado del formulario: se registra mirándolo.
+ *
+ * El PDF se enseña, no se enlaza. Un enlace obliga a saltar a otra pestaña y
+ * volver por cada dato que se comprueba, que es justo lo que este panel viene a
+ * evitar; y el archivo ya está autorizado y servido por la misma sesión, así
+ * que no hay nada que ganar escondiéndolo.
+ *
+ * En la columna cabe la hoja entera pero no la letra pequeña, así que al
+ * tocarla se abre a pantalla casi completa, que es donde de verdad se comprueba
+ * un NCF o un importe. El enlace a una pestaña aparte sigue para descargarla.
+ */
 function FotosCaptura({ captura }: { captura: NonNullable<ContextoRegistro['captura']> }) {
   const url = (archivoId: number) => `/api/gastos/capturas/${captura.id}/archivos/${archivoId}`;
+  const varios = captura.archivos.length > 1;
+  const [ampliado, setAmpliado] = useState<{ id: number; mime: string; n: number } | null>(null);
+  const esPdf = ampliado?.mime === 'application/pdf';
+
   return (
-    <Card>
-      <CardContent className="space-y-2 p-3" data-testid="fotos-captura">
-        <p className="px-1 text-xs font-medium text-muted-foreground">
-          Factura fotografiada{captura.subidoPor ? ` · la envió ${captura.subidoPor}` : ''}
-        </p>
-        {captura.archivos.map((a, i) => a.mime === 'application/pdf' ? (
-          <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" className="block rounded-md border p-3 text-sm text-zero-700 underline">
-            Ver PDF {captura.archivos.length > 1 ? i + 1 : ''}
-          </a>
-        ) : (
-          <a key={a.id} href={url(a.id)} target="_blank" rel="noreferrer" title="Abrir en grande">
-            {/* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */}
-            <img src={url(a.id)} alt={`Foto ${i + 1} de la factura`} className="max-h-[70vh] w-full rounded-md border object-contain" />
-          </a>
-        ))}
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardContent className="space-y-2 p-3" data-testid="fotos-captura">
+          <p className="px-1 text-xs font-medium text-muted-foreground">
+            Comprobante{captura.subidoPor ? ` · lo envió ${captura.subidoPor}` : ''}
+          </p>
+          {captura.archivos.map((a, i) => (
+            <div key={a.id} className="space-y-1">
+              <button type="button" onClick={() => setAmpliado({ id: a.id, mime: a.mime, n: i + 1 })}
+                title="Verlo en grande" data-testid={`ampliar-${a.id}`}
+                className="group relative block w-full cursor-zoom-in overflow-hidden rounded-md border bg-muted">
+                {a.mime === 'application/pdf' ? (
+                  /* iframe y no object: el CSP de la app trae `object-src 'none'`
+                     y deja pasar `frame-src 'self'`. `pointer-events-none` para
+                     que el clic sea de este botón y no se lo quede el visor del
+                     PDF, que si no se traga el gesto y nunca amplía.
+
+                     El alto sale de la proporción de un folio, no de la pantalla:
+                     a lo ancho de la columna cabe la hoja entera, y con una
+                     altura fija sobraba medio panel de fondo oscuro del visor. Se
+                     toma la proporción carta, la más corta de las dos que se usan
+                     aquí, porque una hoja A4 dentro solo pide un pelín de scroll
+                     mientras que al revés vuelve la franja negra. */
+                  <iframe src={`${url(a.id)}#toolbar=0&navpanes=0&view=FitH`} tabIndex={-1}
+                    className="pointer-events-none aspect-[17/22] w-full"
+                    title={`PDF ${i + 1} del comprobante`} />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */
+                  <img src={url(a.id)} alt={`Foto ${i + 1} del comprobante`}
+                    className="max-h-[70vh] w-full object-contain" />
+                )}
+                <span className="pointer-events-none absolute inset-0 hidden items-end justify-center bg-gradient-to-t from-black/50 to-transparent pb-2 text-xs font-medium text-white group-hover:flex">
+                  Ver en grande
+                </span>
+              </button>
+              <a href={url(a.id)} target="_blank" rel="noreferrer"
+                className="block px-1 text-xs text-zero-700 underline">
+                Abrir{varios ? ` el ${i + 1}` : ''} en una pestaña
+              </a>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Dialog open={ampliado !== null} onOpenChange={(o) => !o && setAmpliado(null)}>
+        <DialogContent className="max-w-[92vw] sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              Comprobante{ampliado && varios ? ` · ${ampliado.n} de ${captura.archivos.length}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            {ampliado && (esPdf ? (
+              <iframe src={`${url(ampliado.id)}#view=FitH`} className="h-[78vh] w-full rounded-md border bg-muted"
+                title="Comprobante en grande" />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API */
+              <img src={url(ampliado.id)} alt="Comprobante en grande"
+                className="max-h-[78vh] w-full rounded-md object-contain" />
+            ))}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
