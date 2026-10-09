@@ -163,10 +163,12 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const router = useRouter();
 
   const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
+  // Con empleados marcados, el archivo del banco y la constancia de efectivo se limitan a ellos.
+  const parametroLineas = sel.size > 0 ? `&lineas=${[...sel].join(',')}` : '';
   const conceptosPorLinea = new Map<number, ConceptoLinea[]>();
   for (const c of data?.conceptos ?? []) conceptosPorLinea.set(c.lineaId, [...(conceptosPorLinea.get(c.lineaId) ?? []), c]);
   const { data: preview } = useSWR<PreviewDispersion>(
-    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}` : null,
+    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}${parametroLineas}` : null,
     fetcher,
   );
   const { data: previewTSS } = useSWR<PreviewTSS>(
@@ -232,7 +234,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   async function descargarDispersion() {
     setDescargando(true);
     try {
-      const res = await fetch(`/api/nomina/corridas/${id}/dispersion?formato=${formato}`);
+      const res = await fetch(`/api/nomina/corridas/${id}/dispersion?formato=${formato}${parametroLineas}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? 'No se pudo generar el archivo');
@@ -397,7 +399,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               </NativeSelect>
               <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="shrink-0 gap-1.5 whitespace-nowrap">
                 {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Descargar dispersión
+                Descargar dispersión{sel.size > 0 ? ` (${sel.size})` : ''}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/api/nomina/corridas/${id}/constancia${parametroLineas ? `?${parametroLineas.slice(1)}` : ''}`, '_blank', 'noopener')}
+                className="shrink-0 gap-1.5 whitespace-nowrap"
+                title="Hoja con una línea de firma por empleado, para pagos en efectivo"
+              >
+                <FileText className="h-4 w-4" />
+                Constancia de efectivo{sel.size > 0 ? ` (${sel.size})` : ''}
               </Button>
               <Button variant="outline" onClick={descargarTSS} disabled={descargandoTSS} className="shrink-0 gap-1.5 whitespace-nowrap" title="Autodeterminación de la TSS (CSV)">
                 {descargandoTSS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
