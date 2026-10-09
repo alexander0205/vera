@@ -1,4 +1,5 @@
 import 'server-only';
+import type { PDFParse } from 'pdf-parse';
 
 /**
  * Las imágenes que lleva dentro un PDF.
@@ -18,6 +19,28 @@ import 'server-only';
  * Quedarse sin imágenes nunca es un error: la IA lee la factura igual.
  */
 
+/**
+ * pdf.js no arranca solo fuera del navegador.
+ *
+ * Nada más cargarse hace `new DOMMatrix()`, que en Node no existe, y se lo pide
+ * a `@napi-rs/canvas` con un `require` que arma en tiempo de ejecución. El
+ * trazado de Next no ve ese `require`, así que la librería no viaja con la
+ * función: en local —con todo `node_modules` delante— y en las pruebas
+ * funciona, y en Vercel `import('pdf-parse')` revienta con «DOMMatrix is not
+ * defined» antes de abrir ningún PDF.
+ *
+ * `pdf-parse/worker` existe para esto: importa `@napi-rs/canvas` a la vista
+ * —y entonces sí se copia, con su binario—, pone esos globales y deja cargado
+ * el worker. Tiene que ir ANTES que `pdf-parse`.
+ *
+ * Se trae solo cuando hay un PDF que mirar, no al cargar el módulo: es pdf.js
+ * entero, y el resto de lectores de aquí no lo necesitan.
+ */
+async function cargarPdfParse(): Promise<typeof PDFParse> {
+  await import('pdf-parse/worker');
+  return (await import('pdf-parse')).PDFParse;
+}
+
 /** Un PDF trae logos, firmas y sellos; el timbre está entre los primeros. */
 const MAX_IMAGENES = 12;
 
@@ -29,12 +52,12 @@ const MAX_IMAGENES = 12;
 const MAX_PAGINAS = 4;
 
 export async function imagenesDePdf(buffer: Buffer): Promise<Buffer[]> {
-  // pdf-parse carga pdf.js entero: se trae solo cuando hay un PDF que mirar, no
-  // al cargar el módulo, que es lo que hacen el resto de lectores de aquí.
-  const { PDFParse } = await import('pdf-parse');
-  let parser: InstanceType<typeof PDFParse> | null = null;
+  let parser: PDFParse | null = null;
   try {
-    parser = new PDFParse({ data: new Uint8Array(buffer) });
+    // Dentro del `try`: si la librería no carga, la factura sigue su camino
+    // hacia la lectura con IA en vez de quedarse «complétala a mano».
+    const Lector = await cargarPdfParse();
+    parser = new Lector({ data: new Uint8Array(buffer) });
     const salida: Buffer[] = [];
     const { pages } = await parser.getImage({ first: MAX_PAGINAS });
     for (const pagina of pages) {
@@ -77,10 +100,10 @@ const PAGINAS_PINTADAS = 1;
  * cuando lo barato no encontró nada, y después de haber respondido.
  */
 export async function pintarPrimeraPagina(buffer: Buffer): Promise<Buffer | null> {
-  const { PDFParse } = await import('pdf-parse');
-  let parser: InstanceType<typeof PDFParse> | null = null;
+  let parser: PDFParse | null = null;
   try {
-    parser = new PDFParse({ data: new Uint8Array(buffer) });
+    const Lector = await cargarPdfParse();
+    parser = new Lector({ data: new Uint8Array(buffer) });
     const { pages } = await parser.getScreenshot({ first: PAGINAS_PINTADAS, scale: ESCALA_PAGINA });
     const base64 = pages[0]?.dataUrl?.split(',')[1];
     return base64 ? Buffer.from(base64, 'base64') : null;
