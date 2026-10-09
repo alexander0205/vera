@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pencil } from 'lucide-react';
 import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 
@@ -325,10 +325,18 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
                                 </button>
                               </div>
                             ) : (
-                              <button type="button" onClick={() => abrirPrecio(base)}
-                                className="text-xs text-gray-500 hover:text-zero-700 hover:underline">
-                                {fmtRD(l.montoCentavos)} por cuota · poner otro precio para este alumno
-                              </button>
+                              // El precio y la acción van separados, y la acción con
+                              // forma de botón: como una sola línea gris no se leía
+                              // como algo que se pudiera pulsar, y quien matriculaba
+                              // no encontraba dónde poner el monto de ese alumno.
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs text-gray-600">{fmtRD(l.montoCentavos)} por cuota</span>
+                                <button type="button" onClick={() => abrirPrecio(base)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-zero-200 bg-white px-2 py-1 text-xs font-medium text-zero-700 hover:bg-zero-50">
+                                  <Pencil className="h-3 w-3" aria-hidden />
+                                  Cambiar precio para este alumno
+                                </button>
+                              </div>
                             )}
                           </div>
                         )}
