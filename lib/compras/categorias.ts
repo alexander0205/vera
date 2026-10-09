@@ -32,6 +32,7 @@ export const CATEGORIAS_COMPRA: CategoriaCompra[] = [
   { clave: 'representacion', label: 'Gastos de representación', tipo606: '05', cuentaCodigo: '6116', esServicio: true, concepto: 'otros_servicios', ejemplo: 'Almuerzos de negocios, atenciones a clientes' },
   { clave: 'seguros', label: 'Seguros', tipo606: '11', cuentaCodigo: '6115', esServicio: true, concepto: 'otros_servicios', ejemplo: 'Pólizas de vehículos, local, responsabilidad civil' },
   { clave: 'financieros', label: 'Comisiones bancarias e intereses', tipo606: '07', cuentaCodigo: '6117', esServicio: true, concepto: 'otros_servicios', ejemplo: 'Cargos del banco, intereses de préstamos' },
+  { clave: 'atencion_empleados', label: 'Atención y beneficios al empleado', tipo606: '01', cuentaCodigo: '6119', esServicio: true, concepto: 'otros_servicios', ejemplo: 'Almuerzo del equipo, gratificación, celebración del personal' },
   { clave: 'personal', label: 'Gastos de personal', tipo606: '01', cuentaCodigo: '6101', esServicio: true, concepto: 'otros_servicios', ejemplo: 'Uniformes, capacitación, refrigerios del personal' },
   { clave: 'costo_venta', label: 'Insumos del costo de venta', tipo606: '09', cuentaCodigo: '5101', esServicio: false, concepto: 'bienes', ejemplo: 'Materia prima que no llevas en inventario' },
   { clave: 'activo_fijo', label: 'Compra de activo fijo', tipo606: '10', cuentaCodigo: '1201', esServicio: false, concepto: 'bienes', ejemplo: 'Computadoras, mobiliario, vehículos' },

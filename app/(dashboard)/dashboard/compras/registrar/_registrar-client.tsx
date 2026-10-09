@@ -179,6 +179,11 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const [metodoPago, setMetodoPago] = useState(ini?.metodoPago ?? 'transferencia');
   // '' = la cuenta del método, que es como funcionaba antes de poder elegirla.
   const [cuentaSalida, setCuentaSalida] = useState('');
+  // Pago mixto: cuánto se paga con cada método y de qué caja o banco sale cada parte.
+  const [partes, setPartes] = useState<{ key: number; metodo: string; cuenta: string; monto: string }[]>([
+    { key: 1, metodo: 'efectivo', cuenta: '', monto: '' },
+    { key: 2, metodo: 'transferencia', cuenta: '', monto: '' },
+  ]);
   const [fechaPago, setFechaPago] = useState(contexto.hoy);
   const [fechaVencimiento, setFechaVencimiento] = useState(ini?.fechaVencimiento ?? '');
   const [notas, setNotas] = useState('');
@@ -285,6 +290,13 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   if (!ncfInfo.daCreditoItbis && ncfInfo.valido && alCostoCents < totales.itbisCents) problemas.push(`El ITBIS de un comprobante de ${ncfInfo.nombre.toLowerCase()} va completo al costo`);
   problemas.push(...erroresCompra({ baseCents: totales.baseCents, imp, formaPago, fechaPago: formaPago === 'contado' ? fechaPago : null }));
   if (isrRetenidoCents > 0 && !isrTipoFinal) problemas.push('Elige el tipo de retención de ISR');
+  const esMixto = formaPago === 'contado' && metodoPago === 'mixto';
+  const partesCents = partes.map((p) => aCentavos(p.monto));
+  const restanteMixto = resumen.netoAPagarCents - partesCents.reduce<number>((s, c) => s + (c ?? 0), 0);
+  if (esMixto) {
+    if (partesCents.some((c) => c === null || c <= 0)) problemas.push('Pago mixto: escribe el monto de cada parte');
+    else if (restanteMixto !== 0) problemas.push(`Pago mixto: ${restanteMixto > 0 ? 'faltan' : 'sobran'} ${pesos(Math.abs(restanteMixto))} para llegar a lo que se paga`);
+  }
 
   function setLinea(key: number, patch: Partial<Linea>) {
     setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -335,7 +347,10 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           propinaCents: imp.propinaCents,
           formaPago,
           metodoPago,
-          cuentaSalidaId: formaPago === 'contado' && cuentaSalida ? Number(cuentaSalida) : null,
+          cuentaSalidaId: formaPago === 'contado' && !esMixto && cuentaSalida ? Number(cuentaSalida) : null,
+          pagosMixtos: esMixto
+            ? partes.map((p, i) => ({ metodo: p.metodo, cuentaSalidaId: p.cuenta ? Number(p.cuenta) : null, montoCents: partesCents[i] ?? 0 }))
+            : null,
           fechaPago: formaPago === 'contado' ? fechaPago : null,
           fechaVencimiento: formaPago === 'credito' ? fechaVencimiento || null : null,
           almacenId: almacenId ? Number(almacenId) : null,
@@ -757,6 +772,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                         <option value="cheque">Cheque</option>
                         <option value="tarjeta">Tarjeta</option>
                         <option value="deposito">Depósito</option>
+                        <option value="mixto">Mixto (varios métodos)</option>
                       </NativeSelect>
                     </div>
                     <div className="space-y-1.5">
@@ -771,7 +787,42 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </div>
                 )}
               </div>
-              {formaPago === 'contado' && contexto.cuentasSalida.length > 0 && (
+              {esMixto && (
+                <div className="space-y-2 rounded-md border p-3" data-testid="pago-mixto">
+                  <Label>Cómo se pagó</Label>
+                  {partes.map((p, i) => (
+                    <div key={p.key} className="grid grid-cols-12 items-center gap-2">
+                      <NativeSelect className="col-span-3" aria-label={`Método de la parte ${i + 1}`} value={p.metodo}
+                        onChange={(e) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, metodo: e.target.value } : x)))}>
+                        <option value="efectivo">Efectivo</option>
+                        <option value="transferencia">Transferencia</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="tarjeta">Tarjeta</option>
+                        <option value="deposito">Depósito</option>
+                      </NativeSelect>
+                      <NativeSelect className="col-span-5" aria-label={`Cuenta de la parte ${i + 1}`} value={p.cuenta}
+                        onChange={(e) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, cuenta: e.target.value } : x)))}>
+                        <option value="">Cuenta del método (por defecto)</option>
+                        {contexto.cuentasSalida.map((c) => <option key={c.id} value={String(c.id)}>{c.codigo} · {c.nombre}</option>)}
+                      </NativeSelect>
+                      <Input className="col-span-3" inputMode="decimal" placeholder="0.00" aria-label={`Monto de la parte ${i + 1}`} value={p.monto}
+                        onChange={(e) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, monto: e.target.value } : x)))} />
+                      <button type="button" className="col-span-1 text-muted-foreground hover:text-destructive disabled:opacity-30" aria-label={`Quitar la parte ${i + 1}`}
+                        disabled={partes.length <= 2} onClick={() => setPartes((ps) => ps.filter((x) => x.key !== p.key))}>×</button>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between text-sm">
+                    <Button type="button" variant="outline" size="sm" disabled={partes.length >= 6}
+                      onClick={() => setPartes((ps) => [...ps, { key: Math.max(...ps.map((x) => x.key)) + 1, metodo: 'transferencia', cuenta: '', monto: restanteMixto > 0 ? (restanteMixto / 100).toFixed(2) : '' }])}>
+                      + Agregar parte
+                    </Button>
+                    <span data-testid="restante-mixto" className={restanteMixto === 0 && resumen.netoAPagarCents > 0 ? 'text-emerald-700' : 'text-amber-700'}>
+                      {restanteMixto === 0 && resumen.netoAPagarCents > 0 ? 'Cuadra ✓' : restanteMixto > 0 ? `Faltan ${pesos(restanteMixto)}` : `Sobran ${pesos(-restanteMixto)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {formaPago === 'contado' && !esMixto && contexto.cuentasSalida.length > 0 && (
                 <div className="space-y-1.5">
                   <Label htmlFor="cuenta-salida">Sale de</Label>
                   <NativeSelect

@@ -75,6 +75,8 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // entra al banco, pero deja un crédito fiscal a favor: es un activo, no un
   // menor ingreso — la venta fue por el total.
   { codigo: '1107', nombre: 'Retenciones por cobrar',      tipo: 'activo', imputable: true },
+  // Avances de sueldo y préstamos a empleados: el descuento de nómina los va saldando.
+  { codigo: '1108', nombre: 'Cuentas por cobrar a empleados', tipo: 'activo', imputable: true },
   // Activo no corriente: los bienes de larga vida y su depreciación (Nivel 4.2).
   { codigo: '12',   nombre: 'Activo no corriente',          tipo: 'activo', imputable: false },
   { codigo: '1201', nombre: 'Activos fijos',                tipo: 'activo', imputable: true },
@@ -173,6 +175,8 @@ export const CATALOGO_BASE: CuentaBase[] = [
   { codigo: '6116', nombre: 'Gastos de representación',           tipo: 'gasto', imputable: true },
   { codigo: '6117', nombre: 'Gastos financieros y comisiones bancarias', tipo: 'gasto', imputable: true },
   { codigo: '6118', nombre: 'Publicidad y mercadeo',              tipo: 'gasto', imputable: true },
+  // Un almuerzo o una gratificación al equipo: beneficio del empleado que no pasa por la nómina.
+  { codigo: '6119', nombre: 'Atención y beneficios al empleado',  tipo: 'gasto', imputable: true },
 ];
 
 /**
@@ -295,4 +299,6 @@ export const CODIGO = {
   gastoRegalia:       '6106',
   gastoVacaciones:    '6107',
   gastoCesantia:      '6108',
+  cuentaPorCobrarEmpleados: '1108',
+  atencionEmpleados:  '6119',
 } as const;

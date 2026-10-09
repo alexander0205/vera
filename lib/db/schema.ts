@@ -1529,6 +1529,8 @@ export const comprasLocales = pgTable('compras_locales', {
   estadoPago:       varchar('estado_pago', { length: 12 }).notNull().default('PENDIENTE'),
   /** De qué cuenta salió el dinero; NULL = la del método (migración 0183). */
   cuentaSalidaId:   integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
+  /** Pago mixto: [{ metodo, cuentaSalidaId, montoCents }] (migración 0188). NULL = un solo método. */
+  pagosMixtos:      jsonb('pagos_mixtos'),
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 

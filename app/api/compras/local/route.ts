@@ -50,6 +50,12 @@ const compraSchema = z.object({
   metodoPago: z.enum(METODOS_PAGO_COMPRA).default('efectivo'),
   /** Cuenta de la que sale el dinero; null = la del método de pago. */
   cuentaSalidaId: z.number().int().positive().nullable().optional(),
+  /** Con metodoPago 'mixto': las partes del pago (suman lo que se paga). */
+  pagosMixtos: z.array(z.object({
+    metodo: z.string().max(20),
+    cuentaSalidaId: z.number().int().positive().nullable().optional(),
+    montoCents: z.number().int().positive(),
+  })).max(10).nullable().optional(),
   fechaPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   almacenId: z.number().int().positive().nullable().optional(),

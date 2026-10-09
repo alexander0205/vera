@@ -62,7 +62,7 @@ export const FORMAS_PAGO_606 = {
 export type FormaPago606 = keyof typeof FORMAS_PAGO_606;
 
 /** Métodos con los que se registra el pago de una compra. */
-export const METODOS_PAGO_COMPRA = ['efectivo', 'transferencia', 'cheque', 'tarjeta', 'deposito'] as const;
+export const METODOS_PAGO_COMPRA = ['efectivo', 'transferencia', 'cheque', 'tarjeta', 'deposito', 'mixto'] as const;
 export type MetodoPagoCompra = (typeof METODOS_PAGO_COMPRA)[number];
 
 export function formaPago606(formaPago: string, metodo: string | null | undefined): FormaPago606 {

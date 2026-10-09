@@ -36,6 +36,11 @@ export interface ParametrosAsientoCompra {
     isrRetenido: number | null;
     /** Caja o banco si es de contado; cuentas por pagar si es a crédito. */
     contrapartida: number;
+    /**
+     * Pago mixto: cada parte a su caja o banco. Si viene, su suma tiene que ser
+     * lo que se paga (total − retenciones) y reemplaza a `contrapartida`.
+     */
+    contrapartidas?: { cuentaId: number; cents: number; descripcion?: string }[];
   };
 }
 
@@ -89,9 +94,20 @@ export function partidasAsientoCompra(p: ParametrosAsientoCompra): LineaAsiento[
   if (p.isrRetenidoCents > 0) {
     lineas.push({ cuentaId: p.cuentas.isrRetenido!, debeCents: 0, haberCents: p.isrRetenidoCents, descripcion: 'ISR retenido al proveedor (IR-17)' });
   }
-  lineas.push({
-    cuentaId: p.cuentas.contrapartida, debeCents: 0, haberCents: total - retenciones,
-    descripcion: p.esContado ? 'Pago al proveedor' : 'Deuda con el proveedor',
-  });
+  const partes = p.esContado ? p.cuentas.contrapartidas : undefined;
+  if (partes && partes.length > 0 && partes.reduce((s, x) => s + x.cents, 0) === total - retenciones) {
+    // Una línea por cuenta: dos partes que salen de la misma caja se ven como una.
+    const porCuenta = new Map<number, { cents: number; descripcion: string }>();
+    for (const x of partes) {
+      const previo = porCuenta.get(x.cuentaId);
+      porCuenta.set(x.cuentaId, { cents: (previo?.cents ?? 0) + x.cents, descripcion: previo ? 'Pago al proveedor (mixto)' : (x.descripcion ?? 'Pago al proveedor (mixto)') });
+    }
+    for (const [cuentaId, v] of porCuenta) lineas.push({ cuentaId, debeCents: 0, haberCents: v.cents, descripcion: v.descripcion });
+  } else {
+    lineas.push({
+      cuentaId: p.cuentas.contrapartida, debeCents: 0, haberCents: total - retenciones,
+      descripcion: p.esContado ? 'Pago al proveedor' : 'Deuda con el proveedor',
+    });
+  }
   return lineas.filter((l) => l.debeCents > 0 || l.haberCents > 0);
 }

@@ -23,6 +23,7 @@ import {
 } from './fiscal';
 import { categoriaCompra, tipo606Dominante } from './categorias';
 import { repartir } from './asiento-compra';
+import { validarPartes, type ParteMixta } from './pago-mixto';
 
 export class CompraError extends Error {
   constructor(message: string, public status = 400, public codigo?: string, public compraId?: number) {
@@ -65,6 +66,8 @@ export interface RegistroCompra {
   metodoPago: MetodoPagoCompra;
   /** De qué cuenta salió el dinero; null = la del método de pago. */
   cuentaSalidaId?: number | null;
+  /** Con `metodoPago: 'mixto'`: cuánto se pagó con cada método y de qué caja o banco. */
+  pagosMixtos?: { metodo: string; cuentaSalidaId?: number | null; montoCents: number }[] | null;
   fechaPago?: string | null;
   fechaVencimiento?: string | null;
   almacenId?: number | null;
@@ -143,7 +146,10 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   const fechaVencimiento = r.formaPago === 'credito' && r.fechaVencimiento && esFechaYMD(r.fechaVencimiento) ? r.fechaVencimiento : null;
   if (fechaVencimiento && fechaVencimiento < r.fecha) throw new CompraError('El vencimiento no puede ser anterior al comprobante');
   // A crédito todavía no sale dinero: la cuenta se elige al pagar.
-  const cuentaSalidaId = r.formaPago === 'contado' ? (r.cuentaSalidaId ?? null) : null;
+  const mixto = r.metodoPago === 'mixto';
+  if (mixto && r.formaPago !== 'contado') throw new CompraError('El pago mixto solo aplica a lo que se paga de contado', 400, 'pagosMixtos');
+  // En un pago mixto cada parte lleva su cuenta: no hay una sola.
+  const cuentaSalidaId = r.formaPago === 'contado' && !mixto ? (r.cuentaSalidaId ?? null) : null;
   if (cuentaSalidaId) {
     const { cuentas } = await cuentasDeSalida(teamId);
     if (!cuentas.some((c) => c.id === cuentaSalidaId)) {
@@ -208,6 +214,14 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   if (r.isrRetenidoCents > 0 && !esTipoRetencionIsr(isrTipo)) throw new CompraError('Elige el tipo de retención de ISR');
   const resumen = resumirCompra(t.baseCents, imp);
   if (!Number.isSafeInteger(resumen.totalCents)) throw new CompraError('Monto fuera de rango');
+  // El reparto del pago mixto tiene que sumar exactamente lo que se paga: total menos retenciones.
+  let pagosMixtos: ParteMixta[] | null = null;
+  if (mixto) {
+    const { cuentas } = await cuentasDeSalida(teamId);
+    const v = validarPartes(r.pagosMixtos, resumen.totalCents - r.itbisRetenidoCents - r.isrRetenidoCents, new Set(cuentas.map((c) => c.id)));
+    if (!v.ok) throw new CompraError(v.error, 400, 'pagosMixtos');
+    pagosMixtos = v.partes;
+  }
   if (!info.reporta606) avisos.push(`Un comprobante de ${info.nombre.toLowerCase()} no sustenta gasto deducible ni va al 606`);
 
   const tipoBienes606 = esTipoBienes606(r.tipoBienes606)
@@ -241,6 +255,7 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
       formaPago: r.formaPago,
       metodoPago: r.metodoPago,
       cuentaSalidaId,
+      pagosMixtos,
       fechaPago,
       fechaVencimiento,
       estadoPago: r.formaPago === 'contado' ? 'PAGADA' : 'PENDIENTE',

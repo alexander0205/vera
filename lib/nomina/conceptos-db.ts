@@ -4,10 +4,10 @@
  * aplicado en cada línea y, al aprobar, baja el saldo de los préstamos.
  */
 
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
-  empleadoConceptos, empleadoPrestamos, nominaConceptos, nominaLineaConceptos,
+  contabilidadCuentas, empleadoConceptos, empleadoPrestamos, nominaConceptos, nominaLineaConceptos,
 } from '@/lib/db/schema';
 import {
   aConceptoAplicable, aplicaEnCorrida, CODIGO_PRESTAMO, CONCEPTOS_SEMILLA, cuotaPrestamo,
@@ -22,9 +22,24 @@ export async function catalogoConceptos(teamId: number, ejecutor: Ejecutor = db)
   const leer = () => ejecutor.select().from(nominaConceptos).where(eq(nominaConceptos.teamId, teamId));
   let filas = await leer();
   if (filas.length === 0) {
+    // Los avances y préstamos se saldan contra «cuentas por cobrar a empleados»: si la empresa
+    // ya tiene esa cuenta (1108 del catálogo base o una del contador), se enlaza sola.
+    const [porCobrar] = await ejecutor
+      .select({ id: contabilidadCuentas.id })
+      .from(contabilidadCuentas)
+      .where(and(
+        eq(contabilidadCuentas.teamId, teamId), eq(contabilidadCuentas.tipo, 'activo'),
+        eq(contabilidadCuentas.imputable, true), eq(contabilidadCuentas.activa, true),
+        or(eq(contabilidadCuentas.codigo, '1108'), ilike(contabilidadCuentas.nombre, '%por cobrar%empleado%')),
+      ))
+      .orderBy(sql`(${contabilidadCuentas.codigo} = '1108') desc`, contabilidadCuentas.codigo)
+      .limit(1);
     await ejecutor
       .insert(nominaConceptos)
-      .values(CONCEPTOS_SEMILLA.map((c) => ({ teamId, ...c })))
+      .values(CONCEPTOS_SEMILLA.map((c) => ({
+        teamId, ...c,
+        cuentaId: porCobrar && (c.codigo === 'avance' || c.codigo === CODIGO_PRESTAMO) ? porCobrar.id : null,
+      })))
       .onConflictDoNothing();
     filas = await leer();
   }
