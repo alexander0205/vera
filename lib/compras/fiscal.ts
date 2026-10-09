@@ -409,7 +409,16 @@ export function erroresCompra(p: { baseCents: number; imp: ImpuestosCompra; form
   const valores = [imp.itbisFacturadoCents, imp.itbisAlCostoCents, imp.itbisRetenidoCents, imp.isrRetenidoCents, imp.iscCents, imp.otrosImpuestosCents, imp.propinaCents];
   if (valores.some((v) => !Number.isSafeInteger(v) || v < 0)) e.push('Los impuestos no pueden ser negativos');
   if (p.baseCents <= 0) e.push('El comprobante no tiene monto');
-  if (imp.itbisAlCostoCents > imp.itbisFacturadoCents) e.push('El ITBIS llevado al costo no puede pasar del ITBIS facturado');
+  if (imp.itbisAlCostoCents > imp.itbisFacturadoCents) {
+    // Se confunde con el total de impuestos del comprobante y se teclea aquí.
+    // El mensaje dice qué es este campo y dónde va lo que no es ITBIS.
+    e.push(
+      'El ITBIS llevado al costo es la parte del ITBIS facturado que no se adelanta, '
+      + 'así que no puede pasar de él. Si lo que anotas es otro impuesto del comprobante '
+      + '(ISC, contribución al desarrollo de las telecomunicaciones…), va en «ISC» o en '
+      + '«Otros impuestos y tasas»',
+    );
+  }
   if (imp.itbisRetenidoCents > imp.itbisFacturadoCents) e.push('No se puede retener más ITBIS del facturado');
   if (imp.isrRetenidoCents > p.baseCents) e.push('La retención de ISR no puede pasar del monto sin impuestos');
   if ((imp.itbisRetenidoCents > 0 || imp.isrRetenidoCents > 0) && p.formaPago === 'contado' && !p.fechaPago) {
@@ -485,4 +494,35 @@ export function lineaFormato606(c: CompraPara606, rncEmpresa: string): string {
     opcional(c.propinaCents),                    // 22 propina legal
     c.formaPago,                                 // 23 forma de pago
   ].join('|');
+}
+
+// ─── Cuadre con el comprobante impreso ───────────────────────────────────────
+
+/**
+ * Cuánto se puede separar lo capturado del total impreso sin que sea un error:
+ * un peso. El proveedor redondea cada línea a su manera y aplicar la tasa al
+ * total casi nunca devuelve el último centavo.
+ */
+export const TOLERANCIA_CUADRE_CENTS = 100;
+
+export interface Cuadre {
+  estado: 'cuadra' | 'falta' | 'sobra';
+  /** Impreso − capturado. Positivo: falta algo por capturar. */
+  diferenciaCents: number;
+}
+
+/**
+ * Compara el total que sale del formulario con el que está impreso en el
+ * comprobante.
+ *
+ * Existe porque un comprobante trae impuestos que no son ITBIS —el ISC del
+ * 10 % y la contribución del 2 % de una factura de telecomunicaciones, por
+ * ejemplo— y sin este contraste el formulario cerraba por un total más bajo
+ * que el papel sin decir nada. La diferencia no se reparte sola: quien
+ * registra decide en qué campo va, porque de eso depende el 606 y el asiento.
+ */
+export function cuadrarConComprobante(totalCapturadoCents: number, totalImpresoCents: number): Cuadre {
+  const diferenciaCents = totalImpresoCents - totalCapturadoCents;
+  if (Math.abs(diferenciaCents) <= TOLERANCIA_CUADRE_CENTS) return { estado: 'cuadra', diferenciaCents };
+  return { estado: diferenciaCents > 0 ? 'falta' : 'sobra', diferenciaCents };
 }

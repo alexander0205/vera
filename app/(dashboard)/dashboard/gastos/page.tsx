@@ -24,12 +24,15 @@ import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { rangoDelMes } from '@/lib/nomina/periodos';
-import { listarCompras, listarGastosEcf } from '@/lib/compras/consultas';
+import { listarCompras, listarGastosEcf, resumenGastos } from '@/lib/compras/consultas';
 import { analizarNcf } from '@/lib/compras/fiscal';
 import { NuevoGasto } from './_nuevo-gasto';
 import { SelectorMes } from './_selector-mes';
 import { EnlaceFotos } from './_enlace-fotos';
+import { SubirComprobante } from '@/components/compras/subir-comprobante';
 import { BandejaCapturas } from './_bandeja-capturas';
+import { PaginadorGastos } from './_paginador';
+import { compararGastos, paginaDe } from '@/lib/compras/orden-gastos';
 import { listarCapturas } from '@/lib/compras/captura/consultas';
 
 const METODO_LABEL: Record<string, string> = {
@@ -39,6 +42,9 @@ const METODO_LABEL: Record<string, string> = {
 
 interface Fila {
   key: string;
+  /** De qué tabla sale y con qué id: con eso se ordena igual que la consulta. */
+  fuente: 'r' | 'e';
+  id: number;
   fecha: string;
   proveedor: string;
   rnc: string | null;
@@ -96,27 +102,41 @@ function Tarjeta({ titulo, valor, sub, destacado }: { titulo: string; valor: str
   );
 }
 
-export default async function GastosPage({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
+/** Cuántos gastos por página. Lo bastante para una pantalla, no para la base. */
+const POR_PAGINA = 50;
+
+export default async function GastosPage({ searchParams }: { searchParams: Promise<{ mes?: string; p?: string }> }) {
   await requirePermission('facturas:ver');
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/dashboard');
 
   const hoy = hoyRD();
   const sp = await searchParams;
-  const mes = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : hoy.slice(0, 7);
-  const { inicio, fin } = rangoDelMes(mes);
+  // Sin `mes` se enseñan todos. Antes el mes actual era el valor por defecto y
+  // un gasto de otro mes no aparecía, como si no se hubiera guardado.
+  const mes = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : null;
+  const rango = mes ? rangoDelMes(mes) : null;
+  const inicio = rango?.inicio;
+  const fin = rango?.fin;
+  const pagina = Math.max(1, Number(sp.p) || 1);
 
-  const [registrados, emitidos, porRevisar] = await Promise.all([
-    listarCompras(teamId, { clase: 'gasto', desde: inicio, hasta: fin }),
-    listarGastosEcf(teamId, inicio, fin),
+  // De cada fuente se piden solo las filas que hacen falta para llegar al final
+  // de esta página. Se juntan y se ordenan aquí porque son dos tablas
+  // distintas; pedir el rango entero para enseñar cincuenta filas era lo que
+  // había que evitar.
+  const hastaFila = pagina * POR_PAGINA;
+  const [registrados, emitidos, porRevisar, resumen] = await Promise.all([
+    listarCompras(teamId, { clase: 'gasto', desde: inicio, hasta: fin, limit: hastaFila }),
+    listarGastosEcf(teamId, inicio, fin, hastaFila),
     listarCapturas(teamId, ['procesando', 'por_revisar']),
+    resumenGastos(teamId, { desde: inicio, hasta: fin }),
   ]);
 
   const filas: Fila[] = [
     ...registrados.map((g): Fila => {
       const info = analizarNcf(g.ncf);
       return {
-        key: `r${g.id}`, fecha: g.fecha, proveedor: g.proveedorNombre ?? 'Sin proveedor', rnc: g.proveedorRnc,
+        key: `r${g.id}`, fuente: 'r', id: g.id, fecha: g.fecha, proveedor: g.proveedorNombre ?? 'Sin proveedor', rnc: g.proveedorRnc,
         comprobante: g.ncf, tipo: info.valido ? `${info.nombre}` : 'Comprobante', categoria: g.categoriaLabel ?? '—',
         href: `/dashboard/compras/local/${g.id}`, anulado: g.estado === 'anulada', borrador: false,
         pagado: g.saldoCents === 0, saldoCents: g.saldoCents, metodo: g.formaPago === 'contado' ? g.metodoPago : null, cuenta: null,
@@ -124,7 +144,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       };
     }),
     ...emitidos.map((g): Fila => ({
-      key: `e${g.id}`, fecha: g.fecha, proveedor: g.proveedor || 'Sin proveedor', rnc: g.rncProveedor,
+      key: `e${g.id}`, fuente: 'e', id: g.id, fecha: g.fecha, proveedor: g.proveedor || 'Sin proveedor', rnc: g.rncProveedor,
       comprobante: g.encf && !g.encf.startsWith('BOR') ? g.encf : g.ncfProveedor,
       tipo: g.tipoEcf === '47' ? 'Pago al exterior (e47)' : 'Gasto menor (e43)', categoria: g.categoriaGasto || '—',
       href: g.estado === 'BORRADOR' ? `/dashboard/facturas/${g.id}/editar` : `/dashboard/facturas/${g.id}`,
@@ -132,16 +152,16 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       pagado: g.saldoCents === 0, saldoCents: g.saldoCents,
       metodo: g.pagoMetodo, cuenta: g.pagoCuenta, retencionesCents: g.totalRetenciones, montoCents: g.montoTotal,
     })),
-  ].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  ].sort(compararGastos);
 
-  const vivas = filas.filter((f) => !f.anulado);
-  const total = vivas.reduce((s, f) => s + f.montoCents, 0);
-  const porPagar = vivas.reduce((s, f) => s + (f.pagado ? 0 : f.saldoCents), 0);
-  const retenciones = vivas.reduce((s, f) => s + f.retencionesCents, 0);
-  const adelantar = registrados.filter((g) => g.estado === 'registrada').reduce((s, g) => s + g.itbisAdelantarCents, 0);
-  const porCategoria = [...vivas.reduce((m, f) => m.set(f.categoria, (m.get(f.categoria) ?? 0) + f.montoCents), new Map<string, number>())]
-    .sort((a, b) => b[1] - a[1]);
-  const borradores = emitidos.filter((g) => g.estado === 'BORRADOR').length;
+  // Lo que toca a esta página, ya mezcladas las dos fuentes.
+  const pagadas = paginaDe(filas, pagina, POR_PAGINA);
+
+  // Las tarjetas salen del agregado, no de las filas que se ven: sumar la
+  // página daría el gasto de cincuenta filas y lo llamaría el total.
+  const { totalCents: total, porPagarCents: porPagar, retencionesCents: retenciones,
+    itbisPorAdelantarCents: adelantar, borradores, cantidad, vivas, porCategoria } = resumen;
+  const paginas = Math.max(1, Math.ceil(cantidad / POR_PAGINA));
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -155,6 +175,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <SelectorMes mes={mes} hoy={hoy} />
           <EnlaceFotos />
+          <SubirComprobante />
           <NuevoGasto />
         </Box>
       </Box>
@@ -162,7 +183,8 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       <BandejaCapturas inicial={porRevisar} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }} data-testid="resumen-gastos">
-        <Tarjeta titulo="Gastado en el mes" valor={fmtDOP(total)} sub={`${vivas.length} gasto${vivas.length === 1 ? '' : 's'}`} destacado />
+        <Tarjeta titulo={mes ? 'Gastado en el mes' : 'Gastado en total'} valor={fmtDOP(total)}
+          sub={`${vivas} gasto${vivas === 1 ? '' : 's'}`} destacado />
         <Tarjeta titulo="ITBIS por adelantar" valor={fmtDOP(adelantar)} sub="De facturas con crédito fiscal" />
         <Tarjeta titulo="Retenciones" valor={fmtDOP(retenciones)} sub="A pagar a la DGII" />
         <Tarjeta titulo="Por pagar" valor={fmtDOP(porPagar)} sub="Gastos a crédito" />
@@ -170,10 +192,10 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
 
       {porCategoria.length > 0 && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }} data-testid="gastos-por-categoria">
-          {porCategoria.map(([cat, monto]) => (
-            <Box key={cat} sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.75, px: 1.25, py: 0.5, borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#fff' }}>
-              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{cat}</Typography>
-              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, color: '#111827' }}>{fmtDOP(monto)}</Typography>
+          {porCategoria.map(({ categoria, totalCents }) => (
+            <Box key={categoria ?? 'sin'} sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.75, px: 1.25, py: 0.5, borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#fff' }}>
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{categoria ?? 'Sin categoría'}</Typography>
+              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, color: '#111827' }}>{fmtDOP(totalCents)}</Typography>
             </Box>
           ))}
         </Box>
@@ -187,10 +209,10 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       )}
 
       <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', bgcolor: '#fff' }}>
-        {filas.length === 0 ? (
+        {pagadas.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 6, color: '#9ca3af' }}>
             <Receipt size={28} />
-            <Typography sx={{ fontSize: '0.875rem' }}>No hay gastos en este mes</Typography>
+            <Typography sx={{ fontSize: '0.875rem' }}>{mes ? 'No hay gastos en este mes' : 'Todavía no hay gastos'}</Typography>
           </Box>
         ) : (
           <Box sx={{ overflowX: 'auto' }}>
@@ -207,7 +229,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filas.map((f) => {
+                {pagadas.map((f) => {
                   const color = f.anulado ? '#9ca3af' : '#374151';
                   return (
                     <TableRow key={f.key} sx={{
@@ -234,6 +256,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
             </Table>
           </Box>
         )}
+        <PaginadorGastos pagina={pagina} paginas={paginas} total={cantidad} porPagina={POR_PAGINA} mes={mes} />
       </Box>
     </Box>
   );

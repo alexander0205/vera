@@ -1,6 +1,7 @@
 import 'server-only';
 import { generateText, Output, type LanguageModel } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { CATEGORIAS_COMPRA } from '../categorias';
 import { esquemaLecturaIa, type LecturaIa } from './datos';
 
@@ -13,7 +14,11 @@ import { esquemaLecturaIa, type LecturaIa } from './datos';
  *   · **Vercel AI Gateway**: en Vercel autentica solo con el token OIDC del
  *     despliegue (hay que habilitarlo en el proyecto); en local, con
  *     AI_GATEWAY_API_KEY.
- *   · **Llave de Anthropic** (ANTHROPIC_API_KEY): para probar sin gateway.
+ *   · **Llave del proveedor** (GOOGLE_GENERATIVE_AI_API_KEY, ANTHROPIC_API_KEY):
+ *     se habla directo con él, sin pasar por el gateway. Es el camino para
+ *     probar la lectura en local antes de tener gateway, y el que queda si el
+ *     gateway se cae. Ojo con el plan gratuito de Google AI Studio: entrena con
+ *     lo que se le manda, así que ahí no van facturas de un cliente.
  *
  * Sin ninguna de las dos no se llama a nadie: el QR del e-CF sigue leyéndose y
  * lo demás queda para completarlo mirando la foto.
@@ -42,16 +47,19 @@ const porGateway = () => Boolean(process.env.AI_GATEWAY_API_KEY || process.env.V
 function comoModelo(id: string): LanguageModel | null {
   if (!id) return null;
   if (porGateway()) return id;
-  // Sin gateway solo se puede llamar a Anthropic, con su llave: para ese camino
-  // hay que pedir un modelo suyo en CAPTURA_IA_MODELO o en el respaldo.
+  // Sin gateway se llama al proveedor directamente, con su llave. El id lleva
+  // delante quién lo sirve —`google/gemini-2.5-flash-lite`— y es el mismo que
+  // usa el gateway, así que cambiar de camino no obliga a tocar la config.
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY && id.startsWith('google/')) return google(id.slice('google/'.length));
   if (process.env.ANTHROPIC_API_KEY && id.startsWith('anthropic/')) return anthropic(id.slice('anthropic/'.length));
   return null;
 }
 
 /**
- * El modelo con el que leer, o null si no hay forma de llamarlo. Con una llave
- * suelta de Anthropic —sin gateway— el principal no se puede llamar, así que
- * entra el respaldo: es lo que hace que funcione poniendo solo ANTHROPIC_API_KEY.
+ * El modelo con el que leer, o null si no hay forma de llamarlo. Cuando la
+ * llave suelta que hay no sirve para el principal —una de Anthropic con un
+ * modelo de Google delante— entra el respaldo, y por eso basta con poner una
+ * sola llave para que esto funcione.
  */
 export const modeloCaptura = (): LanguageModel | null => comoModelo(MODELO) ?? comoModelo(RESPALDO);
 
@@ -59,11 +67,13 @@ export const iaDisponible = (): boolean => modeloCaptura() !== null;
 
 const CATALOGO = CATEGORIAS_COMPRA.map((c) => `  ${c.clave}: ${c.label} — ${c.ejemplo}`).join('\n');
 
-const INSTRUCCIONES = `Eres asistente contable en República Dominicana. Lees la foto de la factura de un PROVEEDOR (algo que la empresa compró) y devuelves sus datos tal como están impresos, para registrarla sin teclear nada.
+const INSTRUCCIONES = `Eres asistente contable en República Dominicana. Lees la factura de un PROVEEDOR (algo que la empresa compró) —puede ser la foto del papel o el PDF que mandó el proveedor— y devuelves sus datos tal como están impresos, para registrarla sin teclear nada.
 - El RNC o cédula que interesa es el de quien VENDE (el emisor), no el del comprador.
 - NCF: B + 2 dígitos + 8 dígitos (B0100000123). e-NCF: E + 2 dígitos + 10 dígitos (E310000000045). Cópialo exacto.
 - Montos en pesos como números, sin símbolo ni separador de miles.
 - ITBIS es el impuesto (18 % o 16 %). La propina legal (10 %) es de restaurantes; no la sumes al ITBIS.
+- Una factura puede traer impuestos que NO son ITBIS, y cada uno va en su campo: el selectivo al consumo (ISC) en "isc"; lo demás —la contribución al desarrollo de las telecomunicaciones (CDT, 2 %), tasas municipales, recargos fiscales— en "otrosImpuestos". Nunca los metas dentro del ITBIS ni dentro del subtotal: una factura de internet suele llevar ITBIS 18 %, ISC 10 % y CDT 2 %, y los tres por separado.
+- subtotal + itbis + isc + otrosImpuestos + propina tiene que dar el total impreso. Si no da, vuelve a mirar: algún impuesto está en el campo equivocado.
 - precioUnitario va SIN ITBIS. En muchos recibos (supermercados) la columna de valor ya incluye el ITBIS y el ITBIS sale en otra columna: réstaselo.
 - Los recibos de caja (supermercados, tiendas, farmacias) imprimen arriba el RNC del comercio, la autorización de la DGII («Res DGII: 02-2009  Del: 02/02/2009», «AUTORIZADO POR DGII»), la fecha y hora de la venta («09/08/22 10:09:38») y luego «NIF:… NCF:…». Cada cosa va en su campo: la resolución y su fecha en resolucionDgii y fechaResolucionDgii; la fecha de la venta en fecha; lo que sigue a «NCF:» en ncf; el NIF en nif. El RNC es el número que sigue a «RNC», aunque la foto corte la palabra.
 - Fecha de emisión: la de la venta, que suele ir junto a la hora; nunca la de la resolución DGII. En RD las fechas van día/mes/año; un año de dos cifras es 20XX.
@@ -72,6 +82,7 @@ const INSTRUCCIONES = `Eres asistente contable en República Dominicana. Lees la
 - Fecha de emisión en formato YYYY-MM-DD.
 - tipoProveedor: rst solo si la factura dice Régimen Simplificado de Tributación; exterior si el proveedor es de otro país.
 - metodoPago solo si la factura dice con qué se pagó.
+- formaPago: manda lo que diga el pie de la factura. «Al contado», «de contado» o un recibo marcado «Pagado» es contado, aunque arriba haya una fecha de vencimiento: muchas facturas de aquí la imprimen por formulario, a veces con años de margen, y no significa que se deba. Solo es credito si dice crédito o a plazo, o si el recibo está pendiente.
 - clase: "compra" solo si es mercancía o materia prima que ESTA empresa revende o usa para producir lo que vende; "gasto" si se consume en la operación (servicios, combustible, comida, artículos de higiene o limpieza, papelería de oficina, reparaciones...). Si dudas, "gasto".
 - Clasifica el gasto con UNA de estas claves, la que mejor lo describa:
 ${CATALOGO}
@@ -106,7 +117,7 @@ async function leerCon(modelo: LanguageModel, archivos: { buffer: Buffer; mime: 
           type: 'text',
           text: [
             ctx.empresa ? `La empresa que compró es ${ctx.empresa}.` : '',
-            archivos.length > 1 ? `La factura ocupa ${archivos.length} fotos, en orden.` : 'Esta es la factura.',
+            archivos.length > 1 ? `La factura ocupa ${archivos.length} archivos, en orden.` : 'Esta es la factura.',
           ].filter(Boolean).join(' '),
         },
         ...archivos.map((a) => ({ type: 'file' as const, mediaType: a.mime, data: a.buffer })),

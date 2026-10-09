@@ -79,17 +79,21 @@ export function BandejaCapturas({ inicial }: { inicial: FilaCaptura[] }) {
       <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900">
         <Camera className="h-4 w-4 text-amber-600" /> Facturas por revisar
         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{capturas.length}</span>
-        <span className="font-normal text-gray-500">— llegaron por el enlace de fotos; todavía no están registradas.</span>
+        <span className="font-normal text-gray-500">— llegaron por el enlace de fotos o se subieron aquí; todavía no están registradas.</span>
       </h2>
       <div className="space-y-2">
         {capturas.map((c) => {
           const d = c.datos;
           const foto = c.archivos.find((a) => a.mime.startsWith('image/'));
+          // Un PDF no da miniatura, pero se abre igual: el enlace va al primer
+          // archivo haya o no imagen.
+          const abrir = foto ?? c.archivos[0];
           const procesando = c.estado === 'procesando';
           const esCompra = d?.clase === 'compra';
           return (
             <div key={c.id} className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:flex-row sm:items-center" data-testid={`captura-${c.id}`}>
-              <a href={foto ? `/api/gastos/capturas/${c.id}/archivos/${foto.id}` : undefined} target="_blank" rel="noreferrer"
+              <a href={abrir ? `/api/gastos/capturas/${c.id}/archivos/${abrir.id}` : undefined} target="_blank" rel="noreferrer"
+                title={abrir && !foto ? 'Ver el PDF' : undefined}
                 className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-gray-50">
                 {foto
                   // eslint-disable-next-line @next/next/no-img-element -- binario privado servido por la API
