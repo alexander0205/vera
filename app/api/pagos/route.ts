@@ -3,6 +3,7 @@ import { getUser, getTeamIdForUser, registrarPago, getPagosDocumento } from '@/l
 import { getTurnoAbierto } from '@/lib/caja/core';
 import { faltaComprobanteExigido } from '@/lib/pagos/adjuntos';
 import { labelMetodo } from '@/lib/pagos/metodos';
+import { enviarFacturaAlResponsableEnSegundoPlano } from '@/lib/administracion-escolar/factura-al-padre';
 
 /**
  * Pagos de una factura — usa el ledger `pagos_recibidos` (source of truth).
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
       createdBy:     user.id,
       turnoCajaId,
     });
+    enviarFacturaAlResponsableEnSegundoPlano(teamId, Number(ecfDocumentId));
     return NextResponse.json(result.pago, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar pago' }, { status: 422 });

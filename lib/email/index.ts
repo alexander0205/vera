@@ -554,10 +554,15 @@ export async function sendInvoiceEmail(opts: {
   saldoCts:       number;
   emisor:         EmisorEmail;
   pdfBuffer:      Buffer;
+  /** Página pública de la factura (con su recibo). Sale como botón bajo la tabla. */
+  enlace?:        string | null;
+  /** El correo sale porque se recibió un pago: lo dice, en vez del «se emitió». */
+  pagoRecibido?:  boolean;
 }) {
   const {
     email, encf, codigo, fechaEmision,
     clienteNombre, montoTotalCts, saldoCts, emisor, pdfBuffer,
+    enlace = null, pagoRecibido = false,
   } = opts;
 
   const referencia = codigo ?? encf;
@@ -577,7 +582,7 @@ export async function sendInvoiceEmail(opts: {
       <div style="padding:28px;">
         <p style="margin:0 0 18px;color:#374151;font-size:15px;">
           ${clienteNombre ? `Estimado/a <strong>${escapeHtml(clienteNombre)}</strong>,` : 'Estimado/a cliente,'}
-          adjuntamos el comprobante <strong>${escapeHtml(referencia)}</strong> en formato PDF.
+          ${pagoRecibido ? 'recibimos tu pago. Adjuntamos' : 'adjuntamos'} el comprobante <strong>${escapeHtml(referencia)}</strong> en formato PDF.
         </p>
         <table style="width:100%;border-collapse:collapse;">
           ${fila('Comprobante', escapeHtml(referencia))}
@@ -588,8 +593,11 @@ export async function sendInvoiceEmail(opts: {
             ? fila('Estado', '<span style="color:#15803d;">Pagada</span>')
             : fila('Pendiente', `<span style="color:#b45309;">DOP ${montoDOP(saldoCts)}</span>`)}
         </table>
+        ${enlace ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(enlace)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;">Ver mi factura</a></p>` : ''}
       </div>
-      ${pieEmisor(emisor, `Recibes este correo porque se emitió este documento a tu nombre.`)}
+      ${pieEmisor(emisor, pagoRecibido
+        ? `Recibes este correo porque se registró un pago a tu nombre.`
+        : `Recibes este correo porque se emitió este documento a tu nombre.`)}
     </div>`;
 
   const attachments: Attachment[] = [{ filename: `${referencia}.pdf`, content: pdfBuffer }];

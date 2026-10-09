@@ -31,7 +31,7 @@ import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/pl
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
-import { pesos, enLetra } from '@/lib/administracion-escolar/avisos';
+import { pesos, enLetra, conEnlaces, urlDeFacturaEnLink } from '@/lib/administracion-escolar/avisos';
 
 /** Uno por cargo cada 24 horas. Ver `esperaRestante`. */
 const HORAS_ENTRE_AVISOS = 24;
@@ -183,8 +183,10 @@ async function armarAviso(
       })
     : [];
 
-  const textoLibre = `Hoy venció el cobro de ${fila.concepto} de ${estudiante}: ${pesos(fila.saldoCentavos)}.`
-    + `\n\nPaga o sube tu comprobante aquí: ${enlace}`;
+  const textoLibre = conEnlaces(
+    `Hoy venció el cobro de ${fila.concepto} de ${estudiante}: ${pesos(fila.saldoCentavos)}.`,
+    { factura: urlDeFacturaEnLink(enlace, fila.ecfDocumentId), familia: enlace },
+  );
 
   return {
     destino,

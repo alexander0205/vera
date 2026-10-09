@@ -26,6 +26,7 @@ import {
 } from '@/lib/db/schema';
 import { registrarPago } from '@/lib/db/queries';
 import { sincronizarSaldosDesdeFacturas } from './queries';
+import { enviarFacturaAlResponsableEnSegundoPlano } from './factura-al-padre';
 import { leerComprobante } from '@/lib/storage/comprobantes';
 import type { CargoDelComprobante, MoraDelComprobante } from '@/lib/db/schema';
 
@@ -416,6 +417,12 @@ export async function aprobarComprobante(
 
     // Baja el saldo de los cargos desde lo que acaba de entrar en las facturas.
     if (plan.destinos.length > 0) await sincronizarSaldosDesdeFacturas(teamId);
+
+    // Ya entró el dinero: al padre le llega su factura. Una por factura tocada,
+    // aunque el comprobante haya partido el monto en varios destinos.
+    for (const facturaId of new Set(plan.destinos.map((d) => d.facturaId))) {
+      enviarFacturaAlResponsableEnSegundoPlano(teamId, facturaId);
+    }
 
     return {
       aplicadoCentavos: plan.aplicadoCentavos,

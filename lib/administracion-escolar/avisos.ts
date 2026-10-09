@@ -319,6 +319,32 @@ export function redactar(p: AvisoPendiente, colegio: string): { largo: string; c
   };
 }
 
+/** El enlace de la familia, acotado a UNA factura: `/pagar/{token}?f={id}`. */
+export function urlDeFacturaEnLink(urlFamilia: string, facturaId: number): string {
+  return `${urlFamilia}?f=${facturaId}`;
+}
+
+/**
+ * Pega los enlaces al texto largo del aviso.
+ *
+ * El de la factura va primero: es la del aviso, la que el padre quiere abrir.
+ * El de la familia queda debajo para el que tiene varios hijos y prefiere
+ * transferir una sola vez. Sin factura emitida no hay nada que ver ni que
+ * cobrar, y el texto sale sin enlaces; con el enlace de la familia solo, se
+ * conserva la frase de siempre.
+ */
+export function conEnlaces(
+  largo: string,
+  enlaces: { factura: string | null; familia: string | null },
+): string {
+  const { factura, familia } = enlaces;
+  if (factura && familia) {
+    return `${largo}\n\nVer tu factura: ${factura}\nTodo lo pendiente de tu familia: ${familia}`;
+  }
+  if (familia) return `${largo}\n\nPaga o sube tu comprobante aquí: ${familia}`;
+  return largo;
+}
+
 export interface EnvioHecho {
   cargoId: number; aviso: Aviso; canal: Canal; destino: string | null;
   ok: boolean; error?: string;
@@ -463,7 +489,11 @@ export async function despachar(
           enlaces.set(p.fila.clientId, link);
         }
         enlace = link;
-        conEnlace = `${largo}\n\nPaga o sube tu comprobante aquí: ${link}`;
+        // `?f=` lleva a la factura de este aviso (y a su recibo una vez pagada).
+        conEnlace = conEnlaces(largo, {
+          factura: urlDeFacturaEnLink(link, p.fila.ecfDocumentId),
+          familia: link,
+        });
       } catch (err) {
         // Que no se pueda crear el enlace no puede impedir el aviso: el padre
         // prefiere enterarse de que debe, aunque sea sin botón.
