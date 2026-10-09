@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarRange, CheckCircle2, FileWarning,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarRange, CheckCircle2, Download, FileWarning,
   Loader2, RefreshCw, TrendingUp, Users, Wallet, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -194,6 +194,16 @@ export default function DashboardEscolarClient() {
               ))}
             </NativeSelect>
           </div>
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={`/api/administracion-escolar/dashboard/exportar?mes=${filtros.mes ?? caja.mes}&periodoId=${d.periodoId}`}
+              download
+              title={`Excel con lo cobrado por método, lo pendiente y lo atrasado de ${nombreDeMes(filtros.mes ?? caja.mes)}`}
+              data-testid="exportar-mes"
+            >
+              <Download className="mr-1.5 h-4 w-4" />Excel del mes
+            </a>
+          </Button>
           <Button variant="outline" size="sm" onClick={() => mutate()} disabled={cargando}>
             {cargando
               ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Calculando…</>
