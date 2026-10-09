@@ -434,6 +434,11 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
         <p className="mt-1 text-sm text-muted-foreground">
           El comprobante que te dio el proveedor. Con él se arma la línea del 606, el ITBIS que adelantas, las retenciones y el asiento.
         </p>
+        <p className="mt-1 text-sm text-muted-foreground" data-testid="ayuda-compra-gasto">
+          {esGasto
+            ? <>Un <strong>gasto</strong> es lo que cuesta operar: combustible, luz, alquiler, reparaciones. Si lo que compraste es mercancía o materiales que usas para producir o vender, regístralo como <Link href="/dashboard/compras/registrar" className="underline">compra</Link>.</>
+            : <>Una <strong>compra</strong> es la mercancía o los materiales con los que produces o vendes (suben el inventario o el costo de venta). Combustible, luz o alquiler son <Link href="/dashboard/compras/registrar?clase=gasto" className="underline">gastos</Link>. La categoría de cada línea decide a qué cuenta va.</>}
+        </p>
       </div>
       {contexto.avisoEcf && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -641,18 +646,21 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                       {g.clave !== 'inventario' && g.clave !== 'sin' && contexto.cuentasGasto.length > 0 && (
                         <span className="flex items-center gap-1">
                           · va a
-                          <NativeSelect aria-label={`Cuenta contable de ${g.label}`} data-testid={`cuenta-${g.clave}`} value={g.cuentaId}
-                            style={{ width: 'auto', height: 26, fontSize: 12, paddingLeft: 6, paddingRight: 2 }}
-                            onChange={(e) => setLineas((ls) => ls.map((l) => (
-                              l.tipo === 'concepto' && l.categoria === g.clave ? { ...l, cuentaId: e.target.value } : l
-                            )))}>
-                            <option value="">
-                              {porDefecto ? `${porDefecto.cuenta.codigo} ${porDefecto.cuenta.nombre}` : 'sin cuenta en el catálogo'}
-                            </option>
-                            {contexto.cuentasGasto.filter((c) => c.id !== porDefecto?.cuenta.id).map((c) => (
-                              <option key={c.id} value={c.id}>{c.codigo} {c.nombre}</option>
-                            ))}
-                          </NativeSelect>
+                          <span className="inline-block w-[22rem] max-w-full align-middle" data-testid={`cuenta-${g.clave}`}>
+                            <BuscadorSelect
+                              id={`cuenta-${g.clave}`}
+                              value={g.cuentaId === '' ? '__defecto' : g.cuentaId}
+                              onChange={(v) => setLineas((ls) => ls.map((l) => (
+                                l.tipo === 'concepto' && l.categoria === g.clave ? { ...l, cuentaId: v === '__defecto' ? '' : v } : l
+                              )))}
+                              placeholder="Busca la cuenta por código o nombre…"
+                              vacio="Ninguna cuenta coincide"
+                              opciones={[
+                                { valor: '__defecto', etiqueta: porDefecto ? `${porDefecto.cuenta.codigo} ${porDefecto.cuenta.nombre} (la de siempre)` : 'Sin cuenta en el catálogo' },
+                                ...contexto.cuentasGasto.filter((c) => c.id !== porDefecto?.cuenta.id).map((c) => ({ valor: String(c.id), etiqueta: `${c.codigo} ${c.nombre}` })),
+                              ]}
+                            />
+                          </span>
                         </span>
                       )}
                     </div>
