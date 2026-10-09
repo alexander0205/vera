@@ -148,3 +148,58 @@ describe('asiento con conceptos de cuenta propia', () => {
     expect(ls.find((x) => x.cuentaId === 2101)).toBeUndefined();
   });
 });
+
+import { cuotasDePrestamo, fechaRazonable, limpiarTexto, parseMontoPesos } from '@/lib/nomina/conceptos';
+
+describe('parseMontoPesos (errores humanos al teclear)', () => {
+  const cents = (v: unknown) => { const r = parseMontoPesos(v); return r.ok ? r.cents : r.error; };
+  it('acepta pesos como número o texto', () => {
+    expect(cents(2500)).toBe(250_000);
+    expect(cents('2500')).toBe(250_000);
+    expect(cents('19.99')).toBe(1999);
+    expect(cents(' 1,500.50 ')).toBe(150_050);
+    expect(cents('RD$ 3,000')).toBe(300_000);
+    expect(cents(0.1 + 0.2)).toBe(30);
+  });
+  it('rechaza lo ambiguo o sin sentido', () => {
+    for (const v of ['12,50', '1,5', 'abc', '', '  ', '1e3', '-5', '0', 0, -1, NaN, Infinity, null, undefined, true, [5], {}, '0.001', '1.234', '1,50,0']) {
+      expect(typeof cents(v)).toBe('string');
+    }
+  });
+  it('no deja pasar de 100 millones ni desbordar', () => {
+    expect(cents(100_000_000)).toBe(10_000_000_000);
+    expect(typeof cents(100_000_000.01)).toBe('string');
+    expect(typeof cents(1e17)).toBe('string');
+    expect(typeof cents('99999999999999999999')).toBe('string');
+  });
+});
+
+describe('limpiarTexto', () => {
+  it('quita NUL y controles, colapsa espacios y recorta', () => {
+    expect(limpiarTexto('a\u0000b\u0007c', 50)).toBe('abc');
+    expect(limpiarTexto('  hola \n\t mundo  ', 50)).toBe('hola mundo');
+    expect(limpiarTexto('x'.repeat(500), 300)).toHaveLength(300);
+  });
+  it('no-texto o vacío → null; conserva acentos y emoji', () => {
+    for (const v of [null, undefined, 5, {}, [], '', '   ', '\u0000']) expect(limpiarTexto(v, 10)).toBeNull();
+    expect(limpiarTexto('ñandú 💰', 20)).toBe('ñandú 💰');
+  });
+});
+
+describe('fechaRazonable', () => {
+  it('solo fechas reales entre 2000 y 2100', () => {
+    expect(fechaRazonable('2026-12-31')).toBe(true);
+    expect(fechaRazonable('2028-02-29')).toBe(true);
+    for (const v of ['2026-02-30', '2027-02-29', '9999-12-31', '0001-01-01', '1999-12-31', '2101-01-01', 'hoy', '', null, 20260101, '2026-1-1', '2026-13-01']) {
+      expect(fechaRazonable(v)).toBe(false);
+    }
+  });
+});
+
+describe('cuotasDePrestamo', () => {
+  it('redondea hacia arriba', () => {
+    expect(cuotasDePrestamo(1000, 300)).toBe(4);
+    expect(cuotasDePrestamo(1000, 1000)).toBe(1);
+    expect(cuotasDePrestamo(100_000_000, 1)).toBe(100_000_000);
+  });
+});

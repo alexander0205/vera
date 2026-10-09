@@ -192,3 +192,66 @@ export async function conceptosParaAsiento(teamId: number, corridaId: number): P
       montoCents: Number(f.montoCents),
     }));
 }
+
+export interface AjustePrestamo {
+  prestamoId: number;
+  empleado: string;
+  pedidoCents: number;
+  aplicadoCents: number;
+}
+
+/**
+ * Antes de aprobar: lo que el borrador descontaba por un préstamo puede haber
+ * dejado de ser cierto —el préstamo se canceló, o otro borrador (de otro mes,
+ * generado antes) ya se llevó parte del saldo—. Se baja cada descuento a lo que
+ * el préstamo todavía admite y se devuelve la diferencia al neto del empleado,
+ * en la línea y en los totales de la corrida. Así nunca se cobra de más ni
+ * queda un saldo negativo. Debe correr ANTES del asiento.
+ */
+export async function reconciliarPrestamosDeCorrida(teamId: number, corridaId: number): Promise<AjustePrestamo[]> {
+  const filas = await db
+    .select({
+      id: nominaLineaConceptos.id,
+      lineaId: nominaLineaConceptos.lineaId,
+      prestamoId: nominaLineaConceptos.prestamoId,
+      montoCents: nominaLineaConceptos.montoCents,
+      saldoCents: empleadoPrestamos.saldoCents,
+      estado: empleadoPrestamos.estado,
+      nombre: sql<string>`(select nombre from nomina_lineas where id = ${nominaLineaConceptos.lineaId})`,
+    })
+    .from(nominaLineaConceptos)
+    .innerJoin(empleadoPrestamos, eq(empleadoPrestamos.id, nominaLineaConceptos.prestamoId))
+    .where(and(
+      eq(nominaLineaConceptos.teamId, teamId),
+      eq(nominaLineaConceptos.corridaId, corridaId),
+      isNotNull(nominaLineaConceptos.prestamoId),
+    ))
+    .orderBy(nominaLineaConceptos.id);
+
+  const disponible = new Map<number, number>();
+  const ajustes: AjustePrestamo[] = [];
+  for (const f of filas) {
+    const pid = f.prestamoId as number;
+    if (!disponible.has(pid)) disponible.set(pid, f.estado === 'activo' ? f.saldoCents : 0);
+    const queda = disponible.get(pid)!;
+    const aplicado = Math.min(f.montoCents, queda);
+    disponible.set(pid, queda - aplicado);
+    const delta = f.montoCents - aplicado;
+    if (delta <= 0) continue;
+
+    await db.update(nominaLineaConceptos).set({ montoCents: aplicado }).where(eq(nominaLineaConceptos.id, f.id));
+    await db.execute(sql`
+      UPDATE nomina_lineas
+         SET otras_deducciones_cents = otras_deducciones_cents - ${delta},
+             total_deducciones_cents = total_deducciones_cents - ${delta},
+             neto_cents = neto_cents + ${delta}
+       WHERE id = ${f.lineaId} AND team_id = ${teamId}`);
+    await db.execute(sql`
+      UPDATE nomina_corridas
+         SET total_deducciones_cents = total_deducciones_cents - ${delta},
+             total_neto_cents = total_neto_cents + ${delta}
+       WHERE id = ${corridaId} AND team_id = ${teamId}`);
+    ajustes.push({ prestamoId: pid, empleado: f.nombre, pedidoCents: f.montoCents, aplicadoCents: aplicado });
+  }
+  return ajustes;
+}

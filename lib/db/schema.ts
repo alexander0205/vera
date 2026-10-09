@@ -4192,6 +4192,10 @@ export const empleadoConceptos = pgTable('empleado_conceptos', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('empleado_conceptos_team_empleado_idx').on(t.teamId, t.empleadoId),
+  // Un doble clic o dos pestañas no duplican un incentivo: lo idéntico y activo es único.
+  uniqueIndex('empleado_conceptos_activo_uniq')
+    .on(t.empleadoId, t.conceptoId, t.montoCents, t.fijo, t.desde, sql`coalesce(${t.hasta}, '9999-12-31'::date)`)
+    .where(sql`${t.activo}`),
 ]);
 
 /** Avance o préstamo a un empleado, descontado por cuotas hasta saldarse. */
@@ -4212,6 +4216,9 @@ export const empleadoPrestamos = pgTable('empleado_prestamos', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('empleado_prestamos_team_empleado_idx').on(t.teamId, t.empleadoId, t.estado),
+  uniqueIndex('empleado_prestamos_activo_uniq')
+    .on(t.empleadoId, t.montoCents, t.cuotaCents, t.desde)
+    .where(sql`${t.estado} = 'activo' and ${t.saldoCents} = ${t.montoCents}`),
 ]);
 
 /** Lo que se aplicó en una línea de corrida. Snapshot: no cambia si se edita la asignación. */

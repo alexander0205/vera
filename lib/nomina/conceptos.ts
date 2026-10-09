@@ -187,3 +187,59 @@ export function aplicarConceptos(
 
   return { desglose: d, aplicados, noAplicadoCents: noAplicado };
 }
+
+// ─── Validación de lo que escribe una persona ────────────────────────────────
+
+/** Tope de un monto por corrida o de un préstamo: 100 millones de pesos. */
+export const MONTO_MAX_CENTS = 10_000_000_000;
+/** Un préstamo no puede necesitar más cuotas que estas (unos 20 años quincenales). */
+export const CUOTAS_MAX = 520;
+/** Conceptos y préstamos activos por empleado; más que esto es casi seguro un error. */
+export const MAX_ACTIVOS_POR_EMPLEADO = 50;
+
+export type MontoParseado = { ok: true; cents: number } | { ok: false; error: string };
+
+/**
+ * Pesos escritos por una persona → centavos enteros. Solo número o texto; el
+ * texto admite coma de miles («1,500.00») pero no coma decimal («12,50» es
+ * ambiguo) ni más de dos decimales (0.001 no es un monto). Positivo y con tope.
+ */
+export function parseMontoPesos(v: unknown, nombre = 'El monto'): MontoParseado {
+  let n: number;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string') {
+    const t = v.trim().replace(/^RD\$\s*/i, '');
+    if (!/^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(t)) {
+      return { ok: false, error: /\.\d{3,}$/.test(t) ? `${nombre} no puede tener más de dos decimales` : `${nombre} no es un número válido` };
+    }
+    n = Number(t.replace(/,/g, ''));
+  } else return { ok: false, error: `${nombre} no es un número válido` };
+
+  if (!Number.isFinite(n)) return { ok: false, error: `${nombre} no es un número válido` };
+  const cents = Math.round(n * 100);
+  if (Math.abs(n * 100 - cents) > 1e-6) return { ok: false, error: `${nombre} no puede tener más de dos decimales` };
+  if (cents <= 0) return { ok: false, error: `${nombre} debe ser mayor que cero` };
+  if (cents > MONTO_MAX_CENTS) return { ok: false, error: `${nombre} no puede pasar de RD$100,000,000` };
+  return { ok: true, cents };
+}
+
+/** Texto libre de una persona: sin caracteres de control (el NUL rompe la base), recortado. */
+export function limpiarTexto(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const t = v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+  return t === '' ? null : t;
+}
+
+/** Una fecha 'YYYY-MM-DD' real y razonable (2000–2100): 9999-12-31 es casi seguro un error. */
+export function fechaRazonable(v: unknown): v is string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [a, m, d] = v.split('-').map(Number);
+  if (a < 2000 || a > 2100) return false;
+  const f = new Date(Date.UTC(a, m - 1, d));
+  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
+}
+
+/** Cuántas cuotas necesita un préstamo. */
+export const cuotasDePrestamo = (montoCents: number, cuotaCents: number) =>
+  cuotaCents > 0 ? Math.ceil(montoCents / cuotaCents) : Infinity;

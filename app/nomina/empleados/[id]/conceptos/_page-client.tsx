@@ -227,7 +227,7 @@ export default function ConceptosEmpleadoClient({ id }: { id: string }) {
             ) : (
               asignaciones.map((a) => (
                 <div key={a.id} className={`flex items-center gap-3 rounded-md border p-2.5 ${vigente(a) ? '' : 'opacity-60'}`}>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium">{a.nombre}</span>
                       <Badge variant={a.tipo === 'ingreso' ? 'default' : 'secondary'}>{a.tipo === 'ingreso' ? 'Ingreso' : 'Descuento'}</Badge>
@@ -263,7 +263,7 @@ export default function ConceptosEmpleadoClient({ id }: { id: string }) {
             ) : (
               prestamos.map((p) => (
                 <div key={p.id} className={`flex items-center gap-3 rounded-md border p-2.5 ${p.estado === 'activo' ? '' : 'opacity-60'}`}>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium">{pesos(p.montoCents)}</span>
                       <Badge variant={p.estado === 'activo' ? 'default' : 'outline'}>

@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS empleado_conceptos (
   created_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS empleado_conceptos_team_empleado_idx ON empleado_conceptos (team_id, empleado_id);
+-- Un doble clic o dos pestañas no duplican un incentivo: lo idéntico y activo es único.
+CREATE UNIQUE INDEX IF NOT EXISTS empleado_conceptos_activo_uniq
+  ON empleado_conceptos (empleado_id, concepto_id, monto_cents, fijo, desde, coalesce(hasta, '9999-12-31'::date))
+  WHERE activo;
 
 CREATE TABLE IF NOT EXISTS empleado_prestamos (
   id           SERIAL PRIMARY KEY,
@@ -50,6 +54,10 @@ CREATE TABLE IF NOT EXISTS empleado_prestamos (
   created_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS empleado_prestamos_team_empleado_idx ON empleado_prestamos (team_id, empleado_id, estado);
+-- Mismo candado para préstamos recién registrados (aún sin cuotas descontadas).
+CREATE UNIQUE INDEX IF NOT EXISTS empleado_prestamos_activo_uniq
+  ON empleado_prestamos (empleado_id, monto_cents, cuota_cents, desde)
+  WHERE estado = 'activo' AND saldo_cents = monto_cents;
 
 CREATE TABLE IF NOT EXISTS nomina_linea_conceptos (
   id           SERIAL PRIMARY KEY,

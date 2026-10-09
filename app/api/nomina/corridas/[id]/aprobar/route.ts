@@ -5,7 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { nominaCorridas } from '@/lib/db/schema';
 import { generarAsientoNomina, generarAsientoProvisionNomina } from '@/lib/contabilidad/asientos';
 import { crearObligacionesCorrida } from '@/lib/nomina/obligaciones-db';
-import { descontarPrestamosDeCorrida } from '@/lib/nomina/conceptos-db';
+import { descontarPrestamosDeCorrida, reconciliarPrestamosDeCorrida } from '@/lib/nomina/conceptos-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +34,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'La corrida ya fue aprobada' }, { status: 409 });
   }
 
+  // Un préstamo cancelado, o ya cobrado por otro borrador, no se descuenta de más.
+  const ajustesPrestamos = await reconciliarPrestamosDeCorrida(auth.teamId, id);
+
   // El asiento es opcional: si la contabilidad está apagada, la corrida se
   // aprueba igual y queda sin asientoId (motivo 'contabilidad-apagada').
   const asiento = await generarAsientoNomina(auth.teamId, id, auth.user.id);
@@ -58,5 +61,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .where(eq(nominaCorridas.id, id))
     .returning();
 
-  return NextResponse.json({ corrida: actualizada, asiento, provision });
+  return NextResponse.json({ corrida: actualizada, asiento, provision, ajustesPrestamos });
 }

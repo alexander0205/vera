@@ -56,7 +56,7 @@ export function ConceptosNomina() {
         <div className="text-xs font-medium text-muted-foreground">{titulo}</div>
         {filas.map((c) => (
           <div key={c.id} className="flex flex-col gap-2 rounded-md border p-2.5 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <span className="text-sm font-medium">{c.nombre}</span>
               {tipo === 'ingreso' && (
                 <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">

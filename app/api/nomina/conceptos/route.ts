@@ -4,17 +4,33 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { contabilidadCuentas, nominaConceptos } from '@/lib/db/schema';
 import { catalogoConceptos } from '@/lib/nomina/conceptos-db';
+import { limpiarTexto } from '@/lib/nomina/conceptos';
 
 export const dynamic = 'force-dynamic';
 
-/** La cuenta, solo si es del team. */
-async function cuentaDelTeam(teamId: number, cuentaId: number) {
+/**
+ * ¿Sirve esta cuenta para el concepto? Es del team, está activa, recibe apuntes y
+ * es del tipo que el concepto necesita: un ingreso (incentivo, comisión) se
+ * DEBITA a un gasto; un descuento (avance, seguro) se ACREDITA a un activo (por
+ * cobrar al empleado) o a un pasivo. Devuelve el motivo si no sirve.
+ */
+async function validarCuenta(teamId: number, cuentaId: unknown, tipo: 'ingreso' | 'descuento'): Promise<string | null> {
+  if (typeof cuentaId !== 'number' || !Number.isSafeInteger(cuentaId)) return 'Cuenta contable inválida';
   const [c] = await db
-    .select({ id: contabilidadCuentas.id })
+    .select({ tipo: contabilidadCuentas.tipo, imputable: contabilidadCuentas.imputable, activa: contabilidadCuentas.activa })
     .from(contabilidadCuentas)
     .where(and(eq(contabilidadCuentas.id, cuentaId), eq(contabilidadCuentas.teamId, teamId)))
     .limit(1);
-  return c ?? null;
+  if (!c) return 'Cuenta contable inválida';
+  if (!c.activa) return 'Esa cuenta está desactivada';
+  if (!c.imputable) return 'Esa cuenta es un grupo: elige una cuenta de detalle que reciba apuntes';
+  const buenos = tipo === 'ingreso' ? ['gasto', 'costo'] : ['activo', 'pasivo'];
+  if (!buenos.includes(c.tipo)) {
+    return tipo === 'ingreso'
+      ? 'Un ingreso del empleado va a una cuenta de gasto (por ejemplo, incentivos o comisiones)'
+      : 'Un descuento va a una cuenta de activo (por cobrar al empleado) o de pasivo';
+  }
+  return null;
 }
 
 /** GET /api/nomina/conceptos — el catálogo de ingresos y descuentos de la empresa. */
@@ -34,20 +50,21 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
 
-  const nombre = String(body.nombre ?? '').trim().slice(0, 120);
+  const nombre = limpiarTexto(body.nombre, 120);
   const tipo = body.tipo === 'ingreso' || body.tipo === 'descuento' ? body.tipo : null;
   if (!nombre) return NextResponse.json({ error: 'El nombre es obligatorio' }, { status: 400 });
   if (!tipo) return NextResponse.json({ error: 'El tipo debe ser ingreso o descuento' }, { status: 400 });
 
-  const cuentaId = body.cuentaId == null ? null : Number(body.cuentaId);
-  if (cuentaId !== null && (!Number.isInteger(cuentaId) || !(await cuentaDelTeam(auth.teamId, cuentaId)))) {
-    return NextResponse.json({ error: 'Cuenta contable inválida' }, { status: 400 });
+  const cuentaId = body.cuentaId == null ? null : body.cuentaId;
+  if (cuentaId !== null) {
+    const motivo = await validarCuenta(auth.teamId, cuentaId, tipo);
+    if (motivo) return NextResponse.json({ error: motivo }, { status: 400 });
   }
 
   const codigo = `propio-${Date.now().toString(36)}`;
   const [fila] = await db
     .insert(nominaConceptos)
-    .values({ teamId: auth.teamId, codigo, nombre, tipo, cotizaTss: tipo === 'ingreso' && body.cotizaTss === true, cuentaId })
+    .values({ teamId: auth.teamId, codigo, nombre, tipo, cotizaTss: tipo === 'ingreso' && body.cotizaTss === true, cuentaId: cuentaId as number | null })
     .returning();
   return NextResponse.json({ concepto: fila }, { status: 201 });
 }
@@ -58,8 +75,8 @@ export async function PATCH(req: Request) {
   if (!auth.ok) return auth.response;
 
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
-  const id = Number(body?.id);
-  if (!body || !Number.isInteger(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  const id = typeof body?.id === 'number' ? body.id : NaN;
+  if (!body || !Number.isSafeInteger(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const [actual] = await db
     .select()
@@ -69,15 +86,17 @@ export async function PATCH(req: Request) {
   if (!actual) return NextResponse.json({ error: 'Concepto no encontrado' }, { status: 404 });
 
   const cambios: Partial<typeof nominaConceptos.$inferInsert> = {};
-  if (typeof body.nombre === 'string' && body.nombre.trim()) cambios.nombre = body.nombre.trim().slice(0, 120);
+  const nombreNuevo = limpiarTexto(body.nombre, 120);
+  if (nombreNuevo) cambios.nombre = nombreNuevo;
   if (typeof body.activo === 'boolean') cambios.activo = body.activo;
   if (typeof body.cotizaTss === 'boolean' && actual.tipo === 'ingreso') cambios.cotizaTss = body.cotizaTss;
   if ('cuentaId' in body) {
-    const cuentaId = body.cuentaId == null ? null : Number(body.cuentaId);
-    if (cuentaId !== null && (!Number.isInteger(cuentaId) || !(await cuentaDelTeam(auth.teamId, cuentaId)))) {
-      return NextResponse.json({ error: 'Cuenta contable inválida' }, { status: 400 });
+    const cuentaId = body.cuentaId == null ? null : body.cuentaId;
+    if (cuentaId !== null) {
+      const motivo = await validarCuenta(auth.teamId, cuentaId, actual.tipo as 'ingreso' | 'descuento');
+      if (motivo) return NextResponse.json({ error: motivo }, { status: 400 });
     }
-    cambios.cuentaId = cuentaId;
+    cambios.cuentaId = cuentaId as number | null;
   }
   if (Object.keys(cambios).length === 0) return NextResponse.json({ error: 'Nada que cambiar' }, { status: 400 });
 

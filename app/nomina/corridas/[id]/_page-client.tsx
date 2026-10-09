@@ -214,6 +214,11 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       if (!res.ok) throw new Error(j.error ?? 'No se pudo aprobar');
       const contable = textoAsiento(j.asiento);
       toast.success(contable ? `Corrida aprobada · ${contable}` : 'Corrida aprobada');
+      // Un préstamo cancelado, o ya cobrado por otro borrador, no se descuenta de más.
+      const ajustes = Array.isArray(j.ajustesPrestamos) ? j.ajustesPrestamos : [];
+      if (ajustes.length > 0) {
+        toast.warning(`Se ajustó el descuento de préstamo de ${ajustes.length} empleado${ajustes.length === 1 ? '' : 's'}: ya estaba cancelado o cobrado. Revisa la columna «Otros desc.».`);
+      }
       await mutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -655,7 +660,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                       <div className="font-medium">{l.nombre}</div>
                       {l.cargo && <div className="text-xs text-muted-foreground">{l.cargo}</div>}
                       {(conceptosPorLinea.get(l.id) ?? []).map((c) => (
-                        <div key={c.id} className={`text-xs ${c.tipo === 'ingreso' ? 'text-emerald-700' : 'text-muted-foreground'}`} data-testid="concepto-linea">
+                        <div key={c.id} className={`text-xs [overflow-wrap:anywhere] ${c.tipo === 'ingreso' ? 'text-emerald-700' : 'text-muted-foreground'}`} data-testid="concepto-linea">
                           {c.tipo === 'ingreso' ? '+' : '−'}{pesos(c.montoCents)} {c.nombre}
                           {c.montoCents < c.pedidoCents && (
                             <span className="text-amber-700"> (se pidió {pesos(c.pedidoCents)}; el neto no alcanzó)</span>
