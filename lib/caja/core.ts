@@ -268,6 +268,8 @@ export async function registrarMovimiento(input: {
   motivo?: string | null;
   origen?: 'SISTEMA' | 'SUPERVISOR';
   createdBy?: number;
+  /** Documento (gasto/compra) que originó la salida, para reconciliarla al editar. */
+  ecfDocumentId?: number | null;
 }) {
   if (!TIPOS_MOVIMIENTO.includes(input.tipo)) {
     throw new Error(`Tipo de movimiento inválido: ${input.tipo}`);
@@ -290,6 +292,7 @@ export async function registrarMovimiento(input: {
     .values({
       teamId:        input.teamId,
       turnoId:       input.turnoId,
+      ecfDocumentId: input.ecfDocumentId ?? null,
       tipo:          input.tipo,
       montoCentavos: input.montoCentavos,
       metodo:        input.metodo ?? 'efectivo',

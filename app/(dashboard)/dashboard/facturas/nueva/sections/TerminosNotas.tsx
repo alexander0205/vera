@@ -1,6 +1,8 @@
 'use client';
 
-import { Label } from '@/components/ui/label';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
 
 interface TerminosProps {
   terminosCondiciones: string;
@@ -12,38 +14,44 @@ interface NotasProps {
   setNotas: (v: string) => void;
 }
 
-/**
- * Inline term/condition editor — rendered inside an AccordionSection by
- * the parent. No wrapping card; the accordion provides the chrome.
- */
 export function Terminos({ terminosCondiciones, setTerminos }: TerminosProps) {
   return (
-    <div>
-      <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Términos y condiciones</Label>
-      <textarea
-        className="w-full min-h-[100px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+    <Box>
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.75 }}>Términos y condiciones</Typography>
+      <TextField
+        multiline
+        minRows={4}
+        fullWidth
+        size="small"
         placeholder="Ej: Pago en cuenta corriente 000000001..."
         value={terminosCondiciones}
         onChange={(e) => setTerminos(e.target.value)}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
       />
-    </div>
+    </Box>
   );
 }
 
 export function Notas({ notas, setNotas }: NotasProps) {
   return (
-    <div>
-      <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Notas</Label>
-      <textarea
-        className="w-full min-h-[100px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+    <Box>
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.75 }}>Notas</Typography>
+      <TextField
+        multiline
+        minRows={4}
+        fullWidth
+        size="small"
         placeholder="Notas internas o para el cliente..."
         value={notas}
         onChange={(e) => setNotas(e.target.value)}
-        maxLength={500}
+        slotProps={{ htmlInput: { maxLength: 500 } }}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
       />
       {notas.length > 0 && (
-        <p className="text-xs text-gray-600 mt-1 text-right">{notas.length}/500</p>
+        <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', mt: 0.5, textAlign: 'right' }}>
+          {notas.length}/500
+        </Typography>
       )}
-    </div>
+    </Box>
   );
 }

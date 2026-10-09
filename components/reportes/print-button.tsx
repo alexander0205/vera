@@ -13,7 +13,7 @@ export function PrintButton() {
     <button
       type="button"
       onClick={() => window.print()}
-      className="inline-flex items-center gap-2 px-4 py-2 border border-teal-600 text-teal-700 hover:bg-teal-50 rounded-lg text-sm font-medium transition-colors shrink-0"
+      className="inline-flex items-center gap-2 px-4 py-2 border border-zero-600 text-zero-700 hover:bg-zero-50 rounded-lg text-sm font-medium transition-colors shrink-0"
     >
       <Printer className="h-4 w-4" />
       Imprimir / PDF

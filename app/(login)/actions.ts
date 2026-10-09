@@ -16,7 +16,7 @@ import {
   ActivityType,
   invitations
 } from '@/lib/db/schema';
-import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
+import { comparePasswords, hashPassword, setSession, clearSession } from '@/lib/auth/session';
 import { seedSystemRoles } from '@/lib/auth/permissions';
 import { redirect } from 'next/navigation';
 import { cookies, headers } from 'next/headers';
@@ -27,24 +27,10 @@ import {
   validatedActionWithUser
 } from '@/lib/auth/middleware';
 import { rateLimit } from '@/lib/rate-limit';
-
-async function logActivity(
-  teamId: number | null | undefined,
-  userId: number,
-  type: ActivityType,
-  ipAddress?: string
-) {
-  if (teamId === null || teamId === undefined) {
-    return;
-  }
-  const newActivity: NewActivityLog = {
-    teamId,
-    userId,
-    action: type,
-    ipAddress: ipAddress || ''
-  };
-  await db.insert(activityLogs).values(newActivity);
-}
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { darDeAlta } from '@/lib/auth/alta';
+import { logActivity } from '@/lib/db/actividad';
+import { mandarVerificacion } from '@/lib/auth/verificacion';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255).trim().toLowerCase(),
@@ -75,7 +61,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   if (userWithTeam.length === 0) {
     return {
-      error: 'Invalid email or password. Please try again.',
+      error: 'Correo o contraseña incorrectos. Intenta de nuevo.',
       email,
       password
     };
@@ -90,7 +76,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   if (!isPasswordValid) {
     return {
-      error: 'Invalid email or password. Please try again.',
+      error: 'Correo o contraseña incorrectos. Intenta de nuevo.',
       email,
       password
     };
@@ -145,130 +131,53 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 });
 
 const signUpSchema = z.object({
+  name: z.string().trim().min(1, 'Escribe tu nombre completo.').max(100),
   email: z.string().email().trim().toLowerCase(),
   password: z.string().min(8),
+  terms: z.string().optional().refine(
+    (v) => v === 'on',
+    { message: 'Debes aceptar los Términos y Condiciones y el Tratamiento de tus datos personales.' },
+  ),
   inviteId: z.string().optional(), // legacy (integer id) — kept for compat
   inviteToken: z.string().optional(), // new secure token
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteId, inviteToken } = data;
+  const { name, email, password, inviteId, inviteToken } = data;
 
   // Rate limit signup by IP — 5/min — defensa contra creación masiva de cuentas
   const reqHeadersSignup = await headers();
   const ipSignup = reqHeadersSignup.get('x-forwarded-for') ?? 'unknown';
   const rlSignup = rateLimit(`signup:${ipSignup}`, 5, 60_000);
   if (!rlSignup.allowed) {
-    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', email, password };
+    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', name, email, password };
   }
 
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  if (existingUser.length > 0) {
-    return {
-      error: 'Failed to create user. Please try again.',
-      email,
-      password
-    };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  const newUser: NewUser = {
+  // El alta es la MISMA que la de Google (lib/auth/alta.ts): crear usuario,
+  // resolver invitación o empresa nueva, sembrar roles y apuntar la bitácora.
+  // Escrita dos veces, el día que se arregle un fallo en una la otra se queda
+  // con él.
+  const alta = await darDeAlta({
+    name,
     email,
-    passwordHash,
-    platformRole: 'member', // Solo el seed crea platform admins
-  };
+    passwordHash: await hashPassword(password),
+    inviteId,
+    inviteToken,
+  });
 
-  const [createdUser] = await db.insert(users).values(newUser).returning();
+  // `name` también, no solo email y contraseña: la pantalla lo repinta con
+  // `state.name` y sin devolverlo el campo volvía vacío en cada fallo. Fallar
+  // el registro y encima tener que reescribir el nombre es el momento en que
+  // la gente se va.
+  if (!alta.ok) return { error: alta.error, name, email, password };
 
-  if (!createdUser) {
-    return {
-      error: 'Failed to create user. Please try again.',
-      email,
-      password
-    };
-  }
+  const { usuario: createdUser, equipo: createdTeam } = alta;
+  await setSession(createdUser);
 
-  let teamId: number;
-  let userRole: string;
-  let createdTeam: typeof teams.$inferSelect | null = null;
-
-  if (inviteToken || inviteId) {
-    // Check if there's a valid invitation — prefer token, fall back to legacy id
-    // Also enforce expiresAt > now (no aceptar invitaciones expiradas)
-    const [invitation] = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          inviteToken
-            ? eq(invitations.token, inviteToken)
-            : eq(invitations.id, parseInt(inviteId!)),
-          eq(invitations.email, email),
-          eq(invitations.status, 'pending'),
-          gt(invitations.expiresAt, new Date()),
-        )
-      )
-      .limit(1);
-
-    if (invitation) {
-      teamId = invitation.teamId;
-      userRole = invitation.role;
-
-      await db
-        .update(invitations)
-        .set({ status: 'accepted' })
-        .where(eq(invitations.id, invitation.id));
-
-      await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-
-      [createdTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, teamId))
-        .limit(1);
-    } else {
-      return { error: 'Invalid or expired invitation.', email, password };
-    }
-  } else {
-    // Create a new team if there's no invitation
-    const newTeam: NewTeam = {
-      name: `${email}'s Team`
-    };
-
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
-
-    if (!createdTeam) {
-      return {
-        error: 'Failed to create team. Please try again.',
-        email,
-        password
-      };
-    }
-
-    teamId = createdTeam.id;
-    userRole = 'owner';
-
-    await seedSystemRoles(teamId);
-    await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-  }
-
-  const newTeamMember: NewTeamMember = {
-    userId: createdUser.id,
-    teamId: teamId,
-    role: userRole
-  };
-
-  await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
-    logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    setSession(createdUser)
-  ]);
+  // Quien entra con contraseña todavía no ha demostrado que el correo es suyo,
+  // así que se le manda el enlace y el muro lo para hasta que lo abra. Por
+  // Google esto no pasa: llega verificado de origen.
+  await mandarVerificacion(createdUser);
 
   const redirectTo = formData.get('redirect') as string | null;
   if (redirectTo === 'checkout') {
@@ -276,8 +185,9 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  // Sin plan seleccionado → ir directo a pricing para elegir plan de prueba
-  redirect('/pricing?welcome=1');
+  // A la sala de espera del correo. De ahí, cuando verifique, sale al
+  // onboarding — no a la parrilla de ocho planes a ver si adivina.
+  redirect('/verifica-tu-correo');
 });
 
 export async function signOut() {
@@ -286,7 +196,7 @@ export async function signOut() {
     const userWithTeam = await getUserWithTeam(user.id);
     await logActivity(userWithTeam?.teamId, user.id, ActivityType.SIGN_OUT);
   }
-  (await cookies()).delete('session');
+  await clearSession();
 }
 
 const updatePasswordSchema = z.object({
@@ -310,7 +220,7 @@ export const updatePassword = validatedActionWithUser(
         currentPassword,
         newPassword,
         confirmPassword,
-        error: 'Current password is incorrect.'
+        error: 'La contraseña actual es incorrecta.'
       };
     }
 
@@ -319,7 +229,7 @@ export const updatePassword = validatedActionWithUser(
         currentPassword,
         newPassword,
         confirmPassword,
-        error: 'New password must be different from the current password.'
+        error: 'La nueva contraseña debe ser distinta de la actual.'
       };
     }
 
@@ -328,7 +238,7 @@ export const updatePassword = validatedActionWithUser(
         currentPassword,
         newPassword,
         confirmPassword,
-        error: 'New password and confirmation password do not match.'
+        error: 'La nueva contraseña y su confirmación no coinciden.'
       };
     }
 
@@ -362,7 +272,7 @@ export const deleteAccount = validatedActionWithUser(
     if (!isPasswordValid) {
       return {
         password,
-        error: 'Incorrect password. Account deletion failed.'
+        error: 'Contraseña incorrecta. No se eliminó la cuenta.'
       };
     }
 
@@ -394,14 +304,14 @@ export const deleteAccount = validatedActionWithUser(
         );
     }
 
-    (await cookies()).delete('session');
+    await clearSession();
     redirect('/sign-in');
   }
 );
 
 const updateAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
-  email: z.string().email('Invalid email address')
+  email: z.string().email('Correo electrónico inválido')
 });
 
 export const updateAccount = validatedActionWithUser(
@@ -419,107 +329,13 @@ export const updateAccount = validatedActionWithUser(
   }
 );
 
-const removeTeamMemberSchema = z.object({
-  memberId: z.number()
-});
-
-export const removeTeamMember = validatedActionWithUser(
-  removeTeamMemberSchema,
-  async (data, _, user) => {
-    const { memberId } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
-    }
-
-    await db
-      .delete(teamMembers)
-      .where(
-        and(
-          eq(teamMembers.id, memberId),
-          eq(teamMembers.teamId, userWithTeam.teamId)
-        )
-      );
-
-    await logActivity(
-      userWithTeam.teamId,
-      user.id,
-      ActivityType.REMOVE_TEAM_MEMBER
-    );
-
-    return { success: 'Team member removed successfully' };
-  }
-);
-
-const inviteTeamMemberSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  role: z.enum(['member', 'owner'])
-});
-
-export const inviteTeamMember = validatedActionWithUser(
-  inviteTeamMemberSchema,
-  async (data, _, user) => {
-    const { email, role } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
-
-    if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
-    }
-
-    const existingMember = await db
-      .select()
-      .from(users)
-      .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
-      .where(
-        and(eq(users.email, email), eq(teamMembers.teamId, userWithTeam.teamId))
-      )
-      .limit(1);
-
-    if (existingMember.length > 0) {
-      return { error: 'User is already a member of this team' };
-    }
-
-    // Check if there's an existing invitation
-    const existingInvitation = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.email, email),
-          eq(invitations.teamId, userWithTeam.teamId),
-          eq(invitations.status, 'pending')
-        )
-      )
-      .limit(1);
-
-    if (existingInvitation.length > 0) {
-      return { error: 'An invitation has already been sent to this email' };
-    }
-
-    // Create a new invitation
-    const { randomBytes } = await import('crypto');
-    const invToken = randomBytes(32).toString('hex');
-    const invExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await db.insert(invitations).values({
-      teamId: userWithTeam.teamId,
-      email,
-      role,
-      invitedBy: user.id,
-      status: 'pending',
-      token: invToken,
-      expiresAt: invExpiresAt,
-    });
-
-    await logActivity(
-      userWithTeam.teamId,
-      user.id,
-      ActivityType.INVITE_TEAM_MEMBER
-    );
-
-    // TODO: Send invitation email and include ?inviteId={id} to sign-up URL
-    // await sendInvitationEmail(email, userWithTeam.team.name, role)
-
-    return { success: 'Invitation sent successfully' };
-  }
-);
+// removeTeamMember (server action legacy) eliminado, igual que inviteTeamMember.
+// No lo llamaba ninguna pantalla, pero seguía exportado: un server action
+// exportado es un endpoint HTTP con su propio id, exista o no una UI que lo
+// use. Y este no comprobaba NADA más allá de haber iniciado sesión — cualquier
+// miembro podía sacar a cualquier otro de su empresa, incluido el único
+// propietario, saltándose los dos frenos que sí tiene el camino bueno.
+//
+// Quitar miembros va por DELETE /api/equipo/miembros/[id]: solo el owner saca a
+// otros, cada quien puede salirse a sí mismo, y no deja borrar al único owner.
+// Los admin de plataforma usan eliminarMiembro en /admin/empresas/[id].

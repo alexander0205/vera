@@ -22,9 +22,15 @@ export type ItemsAction =
   | { type: 'UPDATE';   id: number; field: keyof ItemLinea; value: string | number | null }
   | { type: 'UPDATE_BENEFICIARIO'; id: number; dependienteId: number | null; dependienteNombre: string }
   | { type: 'CLEAR_BENEFICIARIOS' }
-  | { type: 'APPLY_PRODUCTO'; idx: number; patch: Partial<ItemLinea> & { productoId: number } }
+  /**
+   * `productoId` puede venir vacío: una cuota del plan cuyo concepto no tiene
+   * producto vinculado se factura igual, con su nombre y su precio. Antes el
+   * tipo lo exigía y obligaba a inventar un id.
+   */
+  | { type: 'APPLY_PRODUCTO'; idx: number; patch: Partial<ItemLinea> & { productoId?: number } }
   | { type: 'APPLY_LISTA_PORC'; porcentaje: number }
   | { type: 'FORCE_EXENTO' }
+  | { type: 'FORCE_EXENTO_SIN_PRODUCTO' }
   | { type: 'RESET' };
 
 export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea[] {
@@ -57,6 +63,11 @@ export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea
     }
     case 'FORCE_EXENTO':
       return state.map(i => ({ ...i, tasaItbis: 'exento' as const }));
+    case 'FORCE_EXENTO_SIN_PRODUCTO':
+      // Solo las líneas SIN producto (manuales/en blanco). Las que traen
+      // producto conservan la tasa que resolvió la tarifa, para no pisar lo que
+      // el colegio configuró (un uniforme con ITBIS se factura con su ITBIS).
+      return state.map(i => i.productoId ? i : { ...i, tasaItbis: 'exento' as const });
     case 'RESET':
       return [itemVacio()];
     default:

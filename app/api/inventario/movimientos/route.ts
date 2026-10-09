@@ -32,12 +32,17 @@ export async function GET(req: NextRequest) {
   const params     = new URL(req.url).searchParams;
   const productoId = params.get('productoId') ? parseInt(params.get('productoId')!) : null;
   const tipo       = params.get('tipo');
+  const almacenId  = params.get('almacenId') ? parseInt(params.get('almacenId')!) : null;
   const limit      = Math.min(parseInt(params.get('limit') ?? '50'), 200);
   const offset     = parseInt(params.get('offset') ?? '0');
 
   const conditions = [eq(inventoryMovements.teamId, teamId)];
   if (productoId) conditions.push(eq(inventoryMovements.productoId, productoId));
   if (tipo)       conditions.push(eq(inventoryMovements.tipo, tipo));
+  // Movimientos de UN almacén (el POS solo muestra los de su terminal). Los
+  // anteriores a la migración 0094 tienen almacen_id NULL y quedan fuera: ese
+  // dato nunca se registró, no se puede adivinar a cuál pertenecían.
+  if (almacenId) conditions.push(eq(inventoryMovements.almacenId, almacenId));
 
   const rows = await db
     .select({

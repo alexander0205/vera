@@ -7,15 +7,18 @@ import {
   teams,
   users,
   clients,
+  products,
   sequences,
   ecfDocuments,
   pagosRecibidos,
+  adminEscolarCuentasBanco,
+  cajaTurnos,
 } from './schema';
 import { cookies } from 'next/headers';
 import { unstable_cache } from 'next/cache';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
-import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { calcularEstadoPago, retencionesQueSaldan } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 import { pRango, pVentaValida, pNotaCredito, pVentaEstados } from '@/lib/reportes/shared';
 
@@ -125,7 +128,10 @@ export async function getActivityLogs() {
     .limit(10);
 }
 
-export async function getTeamForUser() {
+// React.cache: getTeamForUser se llama en el SWR fallback del root layout Y en
+// varias páginas por request. Sin cache era 1 query pesada (carga todos los
+// miembros del team) por cada llamada. Ahora se resuelve una sola vez por request.
+export const getTeamForUser = cache(async () => {
   const user = await getUser();
   if (!user) {
     return null;
@@ -156,8 +162,57 @@ export async function getTeamForUser() {
     }
   });
 
-  return result?.team || null;
-}
+  if (result?.team) return result.team;
+
+  /**
+   * El admin de plataforma no es miembro del team en el que entró.
+   *
+   * `getTeamIdForUser` ya lo contempla —le deja activar cualquier empresa sin
+   * membresía— pero esto salía de `team_members`, así que devolvía null y
+   * quien lo llamaba lo leía como «no hay sesión». En `/escolar` eso era un
+   * `redirect('/sign-in')`: el admin entraba a un colegio ajeno y la pantalla
+   * le decía que iniciara sesión, con la sesión intacta. Se veía como un
+   * deslogueo y no lo era — las demás rutas del módulo cargaban bien porque
+   * pasan por `getTeamIdForUser`.
+   *
+   * Sin este bloque, las dos funciones responden cosas distintas sobre el
+   * mismo team activo, y cuál de las dos use cada pantalla decide si el admin
+   * puede entrar. Eso no es una regla, es una casualidad.
+   */
+  if (user.platformRole === 'admin') {
+    return (await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
+      with: {
+        teamMembers: {
+          with: {
+            user: { columns: { id: true, name: true, email: true } },
+          },
+        },
+      },
+    })) ?? null;
+  }
+
+  return null;
+});
+
+/**
+ * Rol del usuario en el team activo (clave de team_members.role).
+ * React.cache: api-guard, page-guard, /api/user y los helpers de módulos
+ * consultaban esto por separado en cada request — ahora es 1 sola query.
+ * Devuelve null si no hay sesión/team o el usuario no es miembro.
+ */
+export const getTeamRoleForUser = cache(async (): Promise<string | null> => {
+  const user = await getUser();
+  if (!user) return null;
+  const teamId = await getTeamIdForUser();
+  if (!teamId) return null;
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+  return m?.role ?? null;
+});
 
 // ─── EmiteDO queries ──────────────────────────────────────────────────────────
 
@@ -165,7 +220,17 @@ export async function getTeamForUser() {
 export const getTeamIdForUser = cache(async (): Promise<number | null> => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie?.value) return null;
-  const sessionData = await verifyToken(sessionCookie.value);
+  // Mismo caso que en `getUser`: una cookie firmada con otro secreto, o
+  // manipulada, hace LANZAR a `verifyToken`. `getUser` ya lo atajaba y esta no,
+  // y como `requirePermission` pide las dos a la vez con `Promise.all`, bastaba
+  // esta para que TODA ruta protegida respondiera 500 sin cuerpo en vez de 401.
+  // El proxy no la limpia en `/api`: su matcher excluye esas rutas.
+  let sessionData: Awaited<ReturnType<typeof verifyToken>> | null = null;
+  try {
+    sessionData = await verifyToken(sessionCookie.value);
+  } catch {
+    return null;
+  }
   if (!sessionData?.user?.id) return null;
 
   // Platform admin → puede activar cualquier team sin membership check
@@ -218,6 +283,21 @@ export const getTeamIdForUser = cache(async (): Promise<number | null> => {
 });
 
 /** Retorna todos los teams del usuario (admin → todos los teams) */
+/**
+ * URL al logo en vez del logo embebido.
+ *
+ * `teams.logo` es un data URI guardado inline (hasta ~800 KB por empresa).
+ * Traerlo en este listado hacía que `/api/empresa/list` arrastrara ~1.6 MB
+ * desde Neon en cada carga — medido: 63s, contra 108ms sin esa columna. Como
+ * los consumidores lo usan siempre como `<img src={...}>`, cambiar el data URI
+ * por la ruta que lo sirve no les cambia nada, pero saca el blob del camino.
+ */
+const logoUrl = sql<string | null>`
+  case when ${teams.logo} is not null
+       then '/api/empresa/' || ${teams.id}::text || '/logo'
+  end
+`.as('logo');
+
 export async function getUserTeams() {
   const user = await getUser();
   if (!user) return [];
@@ -235,7 +315,7 @@ export async function getUserTeams() {
         subscriptionStatus: teams.subscriptionStatus,
         createdAt: teams.createdAt,
         role: sql<string>`'admin'`.as('role'),
-        logo: teams.logo,
+        logo: logoUrl,
         cajaHabilitada: teams.cajaHabilitada,
         posHabilitado: teams.posHabilitado,
         habilitacionCompletadoAt: teams.habilitacionCompletadoAt,
@@ -280,8 +360,18 @@ export async function getDashboardStats(teamId: number) {
 async function computeDashboardStats(teamId: number) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const seisMesesAtras = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const noAnulado = sql`${ecfDocuments.estado} <> 'ANULADO'`;
+  // Ingreso = solo ventas. Compras/gastos (41/43/47) es dinero que sale, no que
+  // entra: no debe inflar los montos de ingreso ni el ranking de clientes.
+  const soloIngreso = sql`${ecfDocuments.tipoEcf} NOT IN ('41', '43', '47')`;
 
-  const [facturasTotal, facturasMes, montoMesRows, secuenciasRows, teamRow] =
+  const [
+    facturasTotal, facturasMes, montoMesRows, montoMesAnteriorRows,
+    secuenciasRows, teamRow, serieMesesRows, porTipoRows, topClientesRows,
+    clientesRows, productosRows,
+  ] =
     await Promise.all([
       // Total de documentos
       db
@@ -302,13 +392,18 @@ async function computeDashboardStats(teamId: number) {
       db
         .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
         .from(ecfDocuments)
-        .where(
-          and(
-            eq(ecfDocuments.teamId, teamId),
-            gte(ecfDocuments.createdAt, startOfMonth),
-            sql`${ecfDocuments.estado} <> 'ANULADO'`
-          )
-        ),
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth), noAnulado, soloIngreso)),
+      // Ingresos del mes anterior — referencia para el % de variación.
+      db
+        .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
+        .from(ecfDocuments)
+        .where(and(
+          eq(ecfDocuments.teamId, teamId),
+          gte(ecfDocuments.createdAt, startOfPrevMonth),
+          lt(ecfDocuments.createdAt, startOfMonth),
+          noAnulado,
+          soloIngreso,
+        )),
       // Secuencias disponibles
       db
         .select()
@@ -320,6 +415,52 @@ async function computeDashboardStats(teamId: number) {
         .from(teams)
         .where(eq(teams.id, teamId))
         .limit(1),
+      // Serie de ingresos de los últimos 6 meses (incluye el actual) — alimenta
+      // el mini-gráfico de tendencia del panel.
+      db
+        .select({
+          mes:   sql<string>`to_char(date_trunc('month', ${ecfDocuments.createdAt}), 'YYYY-MM')`,
+          monto: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, seisMesesAtras), noAnulado, soloIngreso))
+        .groupBy(sql`date_trunc('month', ${ecfDocuments.createdAt})`)
+        .orderBy(sql`date_trunc('month', ${ecfDocuments.createdAt})`),
+      // Desglose por tipo de comprobante, este mes.
+      db
+        .select({
+          tipo:  ecfDocuments.tipoEcf,
+          count: count(),
+          monto: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth), noAnulado))
+        .groupBy(ecfDocuments.tipoEcf)
+        .orderBy(desc(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0)`)),
+      // Top 5 clientes del mes por monto facturado.
+      db
+        .select({
+          cliente: ecfDocuments.razonSocialComprador,
+          rnc:     ecfDocuments.rncComprador,
+          monto:   sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+          count:   count(),
+        })
+        .from(ecfDocuments)
+        .where(and(
+          eq(ecfDocuments.teamId, teamId),
+          gte(ecfDocuments.createdAt, startOfMonth),
+          noAnulado,
+          soloIngreso,
+          sql`${ecfDocuments.razonSocialComprador} is not null and ${ecfDocuments.razonSocialComprador} <> ''`,
+        ))
+        .groupBy(ecfDocuments.razonSocialComprador, ecfDocuments.rncComprador)
+        .orderBy(desc(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0)`))
+        .limit(5),
+      // Los dos de abajo son para los PRIMEROS PASOS, no para el panel con
+      // datos: una empresa recién creada necesita saber qué le falta, y lo que
+      // le falta es exactamente tener con qué facturar y a quién.
+      db.select({ total: count() }).from(clients).where(eq(clients.teamId, teamId)),
+      db.select({ total: count() }).from(products).where(eq(products.teamId, teamId)),
     ]);
 
   const secuenciasDisponibles = secuenciasRows.reduce((acc, s) => {
@@ -327,14 +468,29 @@ async function computeDashboardStats(teamId: number) {
     return acc + Math.max(0, disponibles);
   }, 0);
 
+  const montoMesCentavos = Number(montoMesRows[0]?.total ?? 0);
+  const montoMesAnteriorCentavos = Number(montoMesAnteriorRows[0]?.total ?? 0);
+  const variacionMes = montoMesAnteriorCentavos > 0
+    ? ((montoMesCentavos - montoMesAnteriorCentavos) / montoMesAnteriorCentavos) * 100
+    : null; // sin base del mes anterior no hay % que mostrar, no es 0% de verdad
+
   return {
     facturasTotal: facturasTotal[0]?.total ?? 0,
     facturasMes: facturasMes[0]?.total ?? 0,
-    montoMesCentavos: Number(montoMesRows[0]?.total ?? 0),
+    montoMesCentavos,
+    montoMesAnteriorCentavos,
+    variacionMes,
     secuenciasDisponibles,
     plan: teamRow[0]?.planName ?? 'Gratis',
     rnc: teamRow[0]?.rnc ?? null,
     tieneCertificado: !!teamRow[0]?.certP12Ciphered,
+    serieMeses: serieMesesRows.map(r => ({ mes: r.mes, montoCentavos: Number(r.monto) })),
+    porTipo: porTipoRows.map(r => ({ tipo: r.tipo, count: r.count, montoCentavos: Number(r.monto) })),
+    topClientes: topClientesRows.map(r => ({
+      cliente: r.cliente ?? 'Sin nombre', rnc: r.rnc, montoCentavos: Number(r.monto), count: r.count,
+    })),
+    clientes:  clientesRows[0]?.total ?? 0,
+    productos: productosRows[0]?.total ?? 0,
   };
 }
 
@@ -505,129 +661,260 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
 
 // ─── EmiteDO — Cuentas por cobrar (AR) ────────────────────────────────────────
 
+/** Orden de la cartera. Whitelist — nunca interpolar entrada del usuario. */
+export type OrdenCartera = 'reciente' | 'antiguo' | 'monto' | 'vencimiento';
+
+const ORDEN_CARTERA_SQL: Record<OrdenCartera, string> = {
+  reciente:    'fecha_emision_ts DESC',
+  antiguo:     'fecha_emision_ts ASC',
+  monto:       'saldo DESC',
+  // Vencidas primero y las más atrasadas arriba; las que no vencen, al final.
+  vencimiento: 'vencida DESC, fecha_limite_date ASC NULLS LAST',
+};
+
 /**
- * Lista cuentas por cobrar: facturas crédito con saldo pendiente > 0.
+ * Cubetas de antigüedad de la cartera.
  *
- * Reglas:
- * - Solo tipo de pago = 2 (crédito) con estado emitido (no BORRADOR/RECHAZADO).
- * - saldo = montoTotal - SUM(pagosRecibidos.montoCentavos)
- * - Filtros opcionales: clientId, soloVencidas (fechaLimitePago < hoy y saldo > 0).
+ * `porVencer` = todavía no vence (incluye las que no tienen fecha límite).
+ * El resto son días de atraso cumplidos. Los cortes son los del plan:
+ * 1-30, 31-60, 61-90 y más de 90.
+ */
+export type CubetaAntiguedad = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
+
+export const CUBETAS_ANTIGUEDAD: CubetaAntiguedad[] =
+  ['porVencer', 'd1a30', 'd31a60', 'd61a90', 'd90mas'];
+
+/** Predicado SQL de cada cubeta, sobre las columnas del CTE `cartera`. */
+const CUBETA_SQL: Record<CubetaAntiguedad, string> = {
+  porVencer: 'NOT vencida',
+  d1a30:     'vencida AND dias_vencido BETWEEN 1 AND 30',
+  d31a60:    'vencida AND dias_vencido BETWEEN 31 AND 60',
+  d61a90:    'vencida AND dias_vencido BETWEEN 61 AND 90',
+  d90mas:    'vencida AND dias_vencido > 90',
+};
+
+export interface CuentasPorCobrarOpts {
+  clientId?:     number;
+  soloVencidas?: boolean;
+  docId?:        number;
+  limit?:        number;
+  offset?:       number;
+  /** Texto libre sobre razón social o RNC del comprador. */
+  search?:       string;
+  /** 'factura' → con saldo de factura; 'nota-debito' → con mora pendiente. */
+  tipoDoc?:      'factura' | 'nota-debito';
+  /** 'vencidas' | 'al-dia' — filtra por estado de vencimiento. */
+  estado?:       'vencidas' | 'al-dia';
+  /** Restringe a una cubeta de antigüedad. */
+  cubeta?:       CubetaAntiguedad;
+  orden?:        OrdenCartera;
+}
+
+/**
+ * Lista cuentas por cobrar: facturas con saldo pendiente > 0.
+ *
+ * El saldo se calcula EN SQL (antes se calculaba en JS después del fetch, así
+ * que el LIMIT recortaba antes de descartar las filas con saldo 0 y la cartera
+ * se truncaba en silencio). Eso permite filtrar, ordenar y paginar en servidor,
+ * y que los totales cubran TODA la cartera filtrada, no solo la página.
+ *
+ * Fórmula (ver docs/contabilidad-paso1-logica-saldo.md):
+ *   saldoFactura = max(0, montoTotal − pagado − ncAplicado)
+ *   saldo        = saldoFactura + moraSaldo
+ *
+ * `hoy` sale de Postgres en zona RD (`now() AT TIME ZONE 'America/Santo_Domingo'`):
+ * el corte del día es medianoche en RD y no en UTC.
  */
 export async function getCuentasPorCobrar(
   teamId: number,
-  opts: { clientId?: number; soloVencidas?: boolean; limit?: number; offset?: number } = {},
+  opts: CuentasPorCobrarOpts = {},
 ) {
-  const hoy = new Date().toISOString().slice(0, 10);
-  // Techo al dataset (antes cargaba toda la cartera abierta sin límite).
-  const limit  = Math.min(opts.limit ?? 2000, 2000);
+  const limit  = Math.min(Math.max(opts.limit ?? 2000, 1), 2000);
   const offset = Math.max(opts.offset ?? 0, 0);
+  const ordenSql = ORDEN_CARTERA_SQL[opts.orden ?? 'reciente'] ?? ORDEN_CARTERA_SQL.reciente;
 
-  const rows = await db
-    .select({
-      id:                   ecfDocuments.id,
-      encf:                 ecfDocuments.encf,
-      codigo:               ecfDocuments.codigo,
-      tipoEcf:              ecfDocuments.tipoEcf,
-      fechaEmision:         ecfDocuments.fechaEmision,
-      fechaLimitePago:      ecfDocuments.fechaLimitePago,
-      rncComprador:         ecfDocuments.rncComprador,
-      razonSocialComprador: ecfDocuments.razonSocialComprador,
-      emailComprador:       ecfDocuments.emailComprador,
-      clientId:             ecfDocuments.clientId,
-      estado:               ecfDocuments.estado,
-      montoTotal:           ecfDocuments.montoTotal,
-      totalItbis:           ecfDocuments.totalItbis,
-      // Subquery correlacionada: usar nombre literal de tabla en lugar de
-      // ${ecfDocuments.id} para evitar que Drizzle lo trate como parámetro
-      // (caso real: todos los rows devolvían el mismo SUM del primer id).
-      pagado: sql<number>`coalesce((
-        SELECT SUM(monto_centavos) FROM pagos_recibidos
-        WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
-      ), 0)`,
-      // Saldo combinado de las ND de mora atadas a esta factura
-      // (mora_origen_id = factura.id, no anuladas, saldo > 0). Subquery
-      // correlacionada con nombres literales de tabla para evitar el bug de
-      // parámetro de Drizzle (mismo patrón que `pagado` arriba).
-      moraSaldo: sql<number>`coalesce((
-        SELECT SUM(nd.monto_total - coalesce((
-          SELECT SUM(monto_centavos) FROM pagos_recibidos
-          WHERE pagos_recibidos.ecf_document_id = nd.id
-        ), 0))
-        FROM ecf_documents AS nd
-        WHERE nd.mora_origen_id = ecf_documents.id
-          AND nd.estado != 'ANULADO'
-          AND (nd.monto_total - coalesce((
-            SELECT SUM(monto_centavos) FROM pagos_recibidos
-            WHERE pagos_recibidos.ecf_document_id = nd.id
-          ), 0)) > 0
-      ), 0)`,
-      // Crédito aplicado por Notas de Crédito (tipo 34) vinculadas a esta
-      // factura (por origen_documento_id o por ncf_modificado = encf real).
-      // Reduce el saldo cobrable. Mismo patrón de subquery correlacionada.
-      ncAplicado: sql<number>`coalesce((
-        SELECT SUM(nc.monto_total) FROM ecf_documents nc
-        WHERE nc.team_id = ecf_documents.team_id
-          AND nc.tipo_ecf = '34'
-          -- Solo NCs del modelo viejo reducen la factura; las nuevas generan
-          -- saldo a favor del cliente (credito_generado_cents IS NOT NULL).
-          AND nc.credito_generado_cents IS NULL
-          AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
-          -- Código 2 (Corrige texto) no afecta el saldo (sin efecto monetario).
-          AND nc.codigo_modificacion IS DISTINCT FROM 2
-          AND (
-            nc.origen_documento_id = ecf_documents.id
-            OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf)
-          )
-      ), 0)`,
-    })
-    .from(ecfDocuments)
-    .where(and(
-      eq(ecfDocuments.teamId, teamId),
-      // AR = toda factura con saldo pendiente, sin importar el estado de emisión
-      // (e-CF emitido, sin-ncf o borrador con cobro en curso). estado_pago captura
-      // crédito sin pagar, contado sin cobrar y parciales. PAGADA/ANULADA/GRATUITA/
-      // USO quedan fuera vía estado_pago. Solo se excluyen ANULADO/RECHAZADO (no
-      // cobrables).
-      // La factura entra si su CAPITAL sigue pendiente/parcial, O si su capital
-      // ya está pagado pero le queda una ND de mora sin saldar. Sin este OR, una
-      // factura con capital pagado (estado_pago='PAGADA') y mora pendiente
-      // desaparecía de AR y su ND de mora también (por moraOrigenId IS NULL),
-      // dejando la mora invisible.
-      sql`(
-        ${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')
-        OR EXISTS (
-          SELECT 1 FROM ecf_documents nd
-          WHERE nd.mora_origen_id = ecf_documents.id
+  // Fecha calendario de HOY en RD, resuelta por Postgres.
+  const hoyRdSql = sql`(now() AT TIME ZONE 'America/Santo_Domingo')::date`;
+
+  // ── CTE compartido entre la página de resultados y los totales ──────────────
+  // Se arma una sola vez y se reusa en las dos consultas para que no puedan
+  // divergir (que los totales midan algo distinto de lo que lista la tabla).
+  const cte = sql`
+    WITH base AS (
+      SELECT
+        d.id, d.encf, d.codigo, d.tipo_ecf, d.fecha_limite_pago,
+        -- db.execute crudo NO parsea timestamp a Date: devuelve el string de pg
+        -- ('2026-06-28 00:00:00'), y fmtFechaCorta parte por 'T' → salía
+        -- "28 00:00:00/06/2026". Se entrega ya como YYYY-MM-DD.
+        -- fecha_emision es timestamp SIN zona que guarda la hora-pared RD, así
+        -- que NO lleva AT TIME ZONE: convertirla correría el día.
+        to_char(d.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
+        -- El timestamp crudo se conserva solo para ordenar: sobre el texto
+        -- YYYY-MM-DD el orden sería cronológico igual, pero empataría todas las
+        -- facturas del mismo día al perder la hora.
+        d.fecha_emision AS fecha_emision_ts,
+        d.rnc_comprador, d.razon_social_comprador, d.email_comprador,
+        d.client_id, d.estado, d.monto_total, d.total_itbis,
+        -- fecha_limite_pago es varchar(10); ''::date lanza en Postgres, así que
+        -- se normaliza a NULL una sola vez y el resto compara contra esto.
+        NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_date,
+        coalesce((
+          SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
+          WHERE p.ecf_document_id = d.id
+        ), 0) AS pagado,
+        -- Saldo combinado de las ND de mora atadas a esta factura.
+        coalesce((
+          SELECT SUM(nd.monto_total - coalesce((
+            SELECT SUM(p2.monto_centavos) FROM pagos_recibidos p2
+            WHERE p2.ecf_document_id = nd.id
+          ), 0))
+          FROM ecf_documents AS nd
+          WHERE nd.mora_origen_id = d.id
             AND nd.estado != 'ANULADO'
             AND (nd.monto_total - coalesce((
-              SELECT SUM(monto_centavos) FROM pagos_recibidos
-              WHERE pagos_recibidos.ecf_document_id = nd.id
+              SELECT SUM(p3.monto_centavos) FROM pagos_recibidos p3
+              WHERE p3.ecf_document_id = nd.id
             ), 0)) > 0
+        ), 0) AS mora_saldo,
+        -- Crédito aplicado por NC (tipo 34) del modelo viejo. Las NC nuevas
+        -- generan saldo a favor del cliente y no reducen la factura.
+        coalesce((
+          SELECT SUM(nc.monto_total) FROM ecf_documents nc
+          WHERE nc.team_id = d.team_id
+            AND nc.tipo_ecf = '34'
+            AND nc.credito_generado_cents IS NULL
+            AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+            -- Código 2 (corrige texto) no tiene efecto monetario.
+            AND nc.codigo_modificacion IS DISTINCT FROM 2
+            AND (
+              nc.origen_documento_id = d.id
+              OR (d.encf LIKE 'E%' AND nc.ncf_modificado = d.encf)
+            )
+        ), 0) AS nc_aplicado
+      FROM ecf_documents d
+      WHERE d.team_id = ${teamId}
+        -- AR = toda factura con saldo pendiente, sin importar el estado de
+        -- emisión (e-CF emitido, sin-ncf o borrador con cobro en curso).
+        -- PAGADA/ANULADA/GRATUITA/USO quedan fuera vía estado_pago.
+        -- Entra si su CAPITAL sigue pendiente/parcial, O si el capital ya está
+        -- pagado pero le queda una ND de mora sin saldar. Sin este OR, una
+        -- factura pagada con mora pendiente desaparecía de la cartera, y su ND
+        -- de mora también (por mora_origen_id IS NULL): la mora se volvía
+        -- invisible.
+        AND (
+          d.estado_pago IN ('PENDIENTE', 'PARCIAL')
+          OR EXISTS (
+            SELECT 1 FROM ecf_documents nd
+            WHERE nd.mora_origen_id = d.id
+              AND nd.estado != 'ANULADO'
+              AND (nd.monto_total - coalesce((
+                SELECT SUM(monto_centavos) FROM pagos_recibidos
+                WHERE pagos_recibidos.ecf_document_id = nd.id
+              ), 0)) > 0
+          )
         )
-      )`,
-      sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
-      // NOTA: aquí vivía un filtro que excluía los BORRADOR con e-NCF real
-      // (`NOT (estado='BORRADOR' AND encf ~ '^E[0-9]{12}$')`, commit 3ffe6a9),
-      // asumiendo que solo podían ser la reserva de un intento de emisión
-      // fallido ya re-facturado con otro número. La premisa no se sostiene:
-      // escondía facturas reales sin reemplazo — incluidas algunas con cobros
-      // parciales registrados en pagos_recibidos, que un fantasma nunca tendría.
-      // El caso que motivó el filtro (doble deuda por re-facturación) hoy lo
-      // cubre la condición de arriba: el intento fallido queda ANULADO.
-      // Las ND de mora ya NO son cuentas propias: se agrupan dentro de su
-      // factura padre. Solo listamos facturas raíz (mora_origen_id IS NULL).
-      sql`${ecfDocuments.moraOrigenId} IS NULL`,
-      // Las Notas de Crédito (tipo 34) no son cuentas por cobrar: acreditan
-      // contra su factura padre (restadas vía ncAplicado).
-      sql`${ecfDocuments.tipoEcf} != '34'`,
-      opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
-    ))
-    .orderBy(desc(ecfDocuments.fechaEmision))
-    .limit(limit)
-    .offset(offset);
+        AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+        -- NOTA: aquí vivía un filtro que excluía los BORRADOR con e-NCF real
+        -- (NOT estado='BORRADOR' AND encf con formato e-NCF), asumiendo que
+        -- solo podían ser la reserva de un intento de emisión fallido ya
+        -- re-facturado con otro número. La premisa no se sostiene: escondía
+        -- facturas reales sin reemplazo —algunas con cobros parciales ya
+        -- registrados, que un fantasma nunca tendría—. El caso que lo motivó
+        -- lo cubre la condición de arriba: el intento fallido queda ANULADO.
+        -- Las ND de mora no son cuentas propias: se agrupan en su factura padre.
+        AND d.mora_origen_id IS NULL
+        -- Las NC no son cuentas por cobrar: acreditan contra su factura padre.
+        AND d.tipo_ecf != '34'
+        -- Compras/gastos (41/43/47) no son ventas ni cuentas por cobrar: son
+        -- dinero que sale, no que se espera cobrar.
+        AND d.tipo_ecf NOT IN ('41', '43', '47')
+        ${opts.clientId ? sql`AND d.client_id = ${opts.clientId}` : sql``}
+        ${opts.docId ? sql`AND d.id = ${opts.docId}` : sql``}
+        ${opts.search?.trim()
+          ? sql`AND (
+              coalesce(d.razon_social_comprador, '') ILIKE ${'%' + opts.search.trim() + '%'}
+              OR coalesce(d.rnc_comprador, '') ILIKE ${'%' + opts.search.trim() + '%'}
+            )`
+          : sql``}
+    ),
+    calc AS (
+      SELECT b.*,
+        GREATEST(0, b.monto_total - b.pagado - b.nc_aplicado) AS saldo_factura,
+        GREATEST(0, b.monto_total - b.pagado - b.nc_aplicado) + b.mora_saldo AS saldo,
+        (
+          b.fecha_limite_date IS NOT NULL
+          AND b.fecha_limite_date < ${hoyRdSql}
+          AND GREATEST(0, b.monto_total - b.pagado - b.nc_aplicado) > 0
+        ) AS vencida
+      FROM base b
+    ),
+    cartera AS (
+      SELECT c.*,
+        CASE WHEN c.vencida
+          THEN (${hoyRdSql} - c.fecha_limite_date)
+          ELSE 0
+        END AS dias_vencido
+      FROM calc c
+      -- Filas con saldo combinado > 0 (factura o mora pendiente). Esto ANTES
+      -- del LIMIT es lo que arregla el truncado silencioso.
+      WHERE c.saldo > 0
+        ${opts.soloVencidas || opts.estado === 'vencidas' ? sql`AND c.vencida` : sql``}
+        ${opts.estado === 'al-dia' ? sql`AND NOT c.vencida` : sql``}
+        ${opts.tipoDoc === 'factura' ? sql`AND c.saldo_factura > 0` : sql``}
+        ${opts.tipoDoc === 'nota-debito' ? sql`AND c.mora_saldo > 0` : sql``}
+    ),
+    -- La cubeta se aplica APARTE de \`cartera\`: el desglose de antigüedad se
+    -- calcula sobre \`cartera\` (sin cubeta) para que al elegir una las demás
+    -- sigan mostrando su monto y se pueda volver. La lista y los totales de
+    -- arriba sí usan \`filtrada\`.
+    filtrada AS (
+      SELECT * FROM cartera
+      ${opts.cubeta ? sql`WHERE ${sql.raw(CUBETA_SQL[opts.cubeta])}` : sql``}
+    )`;
 
-  // Lista de ND de mora (id, codigo, saldo>0) por factura padre, para distribuir
-  // el pago en el frontend/desglose. Un solo query agrupado en memoria.
+  interface CarteraRow {
+    id: number; encf: string; codigo: string | null; tipo_ecf: string;
+    fecha_emision: string; fecha_limite_pago: string | null;
+    rnc_comprador: string | null; razon_social_comprador: string | null;
+    email_comprador: string | null; client_id: number | null;
+    estado: string; monto_total: number; total_itbis: number;
+    pagado: string; mora_saldo: string; nc_aplicado: string;
+    saldo_factura: string; saldo: string; vencida: boolean; dias_vencido: number;
+  }
+
+  const [rowsRaw, totalesRaw] = await Promise.all([
+    db.execute(sql`
+      ${cte}
+      SELECT * FROM filtrada
+      ORDER BY ${sql.raw(ordenSql)}
+      LIMIT ${limit} OFFSET ${offset}
+    `),
+    // Totales sobre TODA la cartera filtrada, no solo la página visible. El
+    // desglose por antigüedad va sobre `cartera` (sin la cubeta activa).
+    db.execute(sql`
+      ${cte}
+      SELECT
+        (SELECT coalesce(SUM(saldo), 0)                    FROM filtrada) AS pendiente,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE vencida), 0) FROM filtrada) AS vencido,
+        (SELECT COUNT(*)                                   FROM filtrada) AS count,
+        (SELECT COUNT(*) FILTER (WHERE vencida)            FROM filtrada) AS count_vencidas,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.porVencer)}), 0) FROM cartera) AS ant_por_vencer,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d1a30)}),     0) FROM cartera) AS ant_d1a30,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d31a60)}),    0) FROM cartera) AS ant_d31a60,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d61a90)}),    0) FROM cartera) AS ant_d61a90,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d90mas)}),    0) FROM cartera) AS ant_d90mas,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.porVencer)}) FROM cartera) AS cnt_por_vencer,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d1a30)})     FROM cartera) AS cnt_d1a30,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d31a60)})    FROM cartera) AS cnt_d31a60,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d61a90)})    FROM cartera) AS cnt_d61a90,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d90mas)})    FROM cartera) AS cnt_d90mas
+    `),
+  ]);
+
+  const rows = rowsRaw as unknown as CarteraRow[];
+
+  // Lista de ND de mora (id, código, saldo>0) por factura padre, para desglosar
+  // el cobro en el frontend. Solo para las filas de esta página.
   const facturaIds = rows.map(r => r.id);
   const moraNotasPorFactura = new Map<number, {
     id: number; codigo: string | null; montoTotal: number; saldo: number;
@@ -661,7 +948,6 @@ export async function getCuentasPorCobrar(
       const saldoNd = m.montoTotal - pagadoNd;
       if (saldoNd <= 0 || m.moraOrigenId == null) continue;
       const arr = moraNotasPorFactura.get(m.moraOrigenId) ?? [];
-      // Solo entran NDs con saldo > 0 → estado PENDIENTE (sin pagos) o PARCIAL.
       arr.push({
         id: m.id, codigo: m.codigo, montoTotal: m.montoTotal, saldo: saldoNd,
         estado: pagadoNd > 0 ? 'PARCIAL' : 'PENDIENTE',
@@ -671,50 +957,51 @@ export async function getCuentasPorCobrar(
     }
   }
 
-  const enriquecidas = rows
-    .map(r => {
-      const pagado = Number(r.pagado);
-      const ncAplicado = Number(r.ncAplicado);
-      // saldoFactura = montoTotal − pagado − NC aplicadas (saldo SOLO de la
-      // factura, nunca negativo: NC sobre factura ya pagada = crédito a favor
-      // del cliente, no deuda negativa en AR).
-      const saldoFactura = Math.max(0, r.montoTotal - pagado - ncAplicado);
-      const moraSaldo = Number(r.moraSaldo);
-      // saldo = saldoFactura + moraSaldo → TOTAL combinado que se cobra.
-      const saldo = saldoFactura + moraSaldo;
-      const vencida = !!r.fechaLimitePago && r.fechaLimitePago < hoy && saldoFactura > 0;
-      const diasVencido = vencida && r.fechaLimitePago
-        ? Math.floor((new Date(hoy).getTime() - new Date(r.fechaLimitePago).getTime()) / 86400000)
-        : 0;
-      const moraNotas = moraNotasPorFactura.get(r.id) ?? [];
-      return {
-        ...r,
-        pagado,
-        ncAplicado,
-        saldoFactura,
-        moraSaldo,
-        saldo,
-        moraNotas,
-        vencida,
-        diasVencido,
-      };
-    })
-    // Mantener filas con saldo combinado > 0 (factura o mora pendiente).
-    .filter(r => r.saldo > 0)
-    .filter(r => !opts.soloVencidas || r.vencida);
+  // pg devuelve numeric/bigint como string — normalizar a number en el borde.
+  const cuentas = rows.map(r => ({
+    id:                   r.id,
+    encf:                 r.encf,
+    codigo:               r.codigo,
+    tipoEcf:              r.tipo_ecf,
+    fechaEmision:         r.fecha_emision,
+    fechaLimitePago:      r.fecha_limite_pago,
+    rncComprador:         r.rnc_comprador,
+    razonSocialComprador: r.razon_social_comprador,
+    emailComprador:       r.email_comprador,
+    clientId:             r.client_id,
+    estado:               r.estado,
+    montoTotal:           Number(r.monto_total),
+    totalItbis:           Number(r.total_itbis),
+    pagado:               Number(r.pagado),
+    ncAplicado:           Number(r.nc_aplicado),
+    saldoFactura:         Number(r.saldo_factura),
+    moraSaldo:            Number(r.mora_saldo),
+    saldo:                Number(r.saldo),
+    vencida:              r.vencida,
+    diasVencido:          Number(r.dias_vencido),
+    moraNotas:            moraNotasPorFactura.get(r.id) ?? [],
+  }));
 
-  // Totales agregados sobre el saldo combinado (factura + mora).
-  const totalPendiente = enriquecidas.reduce((s, r) => s + r.saldo, 0);
-  const totalVencido   = enriquecidas.filter(r => r.vencida).reduce((s, r) => s + r.saldo, 0);
+  const t = (totalesRaw as unknown as Array<Record<string, string>>)[0];
+  const n = (k: string) => Number(t?.[k] ?? 0);
 
   return {
-    cuentas: enriquecidas,
+    cuentas,
     totales: {
-      pendiente: totalPendiente,
-      vencido:   totalVencido,
-      count:     enriquecidas.length,
-      countVencidas: enriquecidas.filter(r => r.vencida).length,
+      pendiente:     n('pendiente'),
+      vencido:       n('vencido'),
+      count:         n('count'),
+      countVencidas: n('count_vencidas'),
     },
+    /** Distribución por antigüedad de TODA la cartera filtrada, ignorando la
+     *  cubeta activa: así las tarjetas siguen mostrando su monto al elegir una. */
+    antiguedad: {
+      porVencer: { saldo: n('ant_por_vencer'), count: n('cnt_por_vencer') },
+      d1a30:     { saldo: n('ant_d1a30'),      count: n('cnt_d1a30')      },
+      d31a60:    { saldo: n('ant_d31a60'),     count: n('cnt_d31a60')     },
+      d61a90:    { saldo: n('ant_d61a90'),     count: n('cnt_d61a90')     },
+      d90mas:    { saldo: n('ant_d90mas'),     count: n('cnt_d90mas')     },
+    } satisfies Record<CubetaAntiguedad, { saldo: number; count: number }>,
   };
 }
 
@@ -728,6 +1015,26 @@ export async function getCuentasPorCobrar(
  *
  * Retorna: filas + totales (monto total, conteo) + desglose por método.
  */
+/** Producto/servicio (dedup) de la factura de un pago, para el filtro por producto. */
+function productosDeLineas(lineasJson: string | null): { id: number; nombre: string; servicio: boolean }[] {
+  if (!lineasJson) return [];
+  let arr: unknown;
+  try { arr = JSON.parse(lineasJson); } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  const map = new Map<number, { id: number; nombre: string; servicio: boolean }>();
+  for (const raw of arr) {
+    const l = raw as Record<string, unknown>;
+    const id = Number(l.productoId);
+    if (!Number.isInteger(id) || id <= 0 || map.has(id)) continue;
+    map.set(id, {
+      id,
+      nombre: String(l.nombreItem ?? l.nombre ?? 'Ítem'),
+      servicio: String(l.indicadorBienoServicio ?? '').trim() === '2',
+    });
+  }
+  return [...map.values()];
+}
+
 export async function getPagosListado(
   teamId: number,
   opts: { desde?: string; hasta?: string; metodo?: string; limit?: number; offset?: number } = {},
@@ -755,6 +1062,17 @@ export async function getPagosListado(
       notas:        pagosRecibidos.notas,
       createdAt:    pagosRecibidos.createdAt,
       turnoCajaId:  pagosRecibidos.turnoCajaId,
+      // A qué cuadre de caja pertenece el cobro.
+      //
+      // El id del turno ya viajaba, pero no le dice nada a nadie: lo que el
+      // cajero reconoce es el número de cierre («CC-2026-000013») y la fecha en
+      // que abrió. Sin esto, para saber en qué cuadre cayó un pago había que
+      // consultar la base — y esa pregunta aparece cada vez que una caja no
+      // cuadra. Un cobro sin turno es uno hecho fuera de la caja (desde
+      // Facturación), y eso también hay que poder distinguirlo.
+      turnoNumeroCierre: cajaTurnos.numeroCierre,
+      turnoAperturaAt:   cajaTurnos.aperturaAt,
+      turnoEstado:       cajaTurnos.estado,
       notaCreditoId: pagosRecibidos.notaCreditoId,
       // Documento al que se aplicó el pago.
       docId:        ecfDocuments.id,
@@ -767,6 +1085,11 @@ export async function getPagosListado(
       clientId:     ecfDocuments.clientId,
       cliente:      ecfDocuments.razonSocialComprador,
       rncComprador: ecfDocuments.rncComprador,
+      // Origen de la venta: `tipo_orden` con valor (mostrador/para-llevar…) = POS;
+      // NULL = emitida desde Facturación. `lineas_json` para el filtro por
+      // producto/servicio (se procesa aquí y NO se envía al cliente).
+      tipoOrden:    ecfDocuments.tipoOrden,
+      lineasJson:   ecfDocuments.lineasJson,
       // Usuario que registró el pago.
       registradoPor: users.name,
       registradoPorEmail: users.email,
@@ -780,6 +1103,7 @@ export async function getPagosListado(
     .from(pagosRecibidos)
     .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
     .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
+    .leftJoin(cajaTurnos, eq(pagosRecibidos.turnoCajaId, cajaTurnos.id))
     .where(and(...filtros))
     .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id))
     .limit(limit)
@@ -792,16 +1116,23 @@ export async function getPagosListado(
   }
 
   const pagos = rows.map(r => {
+    // `lineas_json` se procesa aquí (productos del pago) y no se envía crudo: una
+    // sola factura ya pesa más que toda la página.
+    const { lineasJson, tipoOrden, ...rest } = r;
     // Enviado a DGII: la DGII devuelve trackId al recibir el e-CF, o el doc
     // quedó en un estado de envío. Excluye sin-ncf/históricas/borradores.
     const enviadoDgii =
       r.docTrackId != null ||
       ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(r.docEstado ?? '');
     return {
-      ...r,
+      ...rest,
       monto: Number(r.montoCentavos),
       enviadoDgii,
       pagosDelDoc: r.docId != null ? (pagosPorDoc.get(r.docId) ?? 1) : 1,
+      // Origen para el filtro POS/Facturación.
+      origen: (tipoOrden ? 'pos' : 'facturacion') as 'pos' | 'facturacion',
+      // Productos/servicios de la factura (dedup) para el filtro por producto.
+      productos: productosDeLineas(lineasJson),
     };
   });
 
@@ -871,6 +1202,7 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
       montoTotal: ecfDocuments.montoTotal,
       encf:       ecfDocuments.encf,
       tipoEcf:    ecfDocuments.tipoEcf,
+      totalRetenciones: ecfDocuments.totalRetenciones,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
@@ -885,6 +1217,7 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
     ? calcularEstadoPago({
         estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal,
         totalPagado: sum, totalNotasCredito: ncAplicado,
+        totalRetenciones: retencionesQueSaldan(doc.tipoEcf, doc.totalRetenciones),
       })
     : 'PENDIENTE';
 
@@ -901,6 +1234,34 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
   return sum;
 }
 
+/**
+ * De unos ids de cuenta bancaria, cuáles son de ESTE equipo.
+ *
+ * El id viaja desde el navegador, así que sin comprobarlo se podría atar un
+ * cobro a la cuenta de otra empresa —y con ella saldría en su reporte de
+ * «cuánto entró por esta cuenta»—. Un id ajeno no revienta el cobro: se guarda
+ * como null y queda la etiqueta en `cuenta`, porque tumbar un pago legítimo por
+ * esto sería peor que perder una referencia.
+ */
+async function cuentasBancoDelEquipo(
+  teamId: number,
+  ids: (number | null | undefined)[],
+): Promise<Set<number>> {
+  const pedidos = [...new Set(
+    ids.filter((x): x is number => typeof x === 'number' && x > 0),
+  )];
+  if (pedidos.length === 0) return new Set();
+
+  const filas = await db
+    .select({ id: adminEscolarCuentasBanco.id })
+    .from(adminEscolarCuentasBanco)
+    .where(and(
+      eq(adminEscolarCuentasBanco.teamId, teamId),
+      inArray(adminEscolarCuentasBanco.id, pedidos),
+    ));
+  return new Set(filas.map(f => f.id));
+}
+
 export async function registrarPago(input: {
   teamId:        number;
   ecfDocumentId: number;
@@ -908,6 +1269,7 @@ export async function registrarPago(input: {
   metodo:        string;
   referencia?:   string | null;
   cuenta?:       string | null;
+  cuentaBancoId?: number | null;
   fechaPago:     string; // YYYY-MM-DD
   notas?:        string | null;
   turnoCajaId?:  number | null;
@@ -926,6 +1288,7 @@ export async function registrarPago(input: {
       metodo:        input.metodo,
       referencia:    input.referencia ?? null,
       cuenta:        input.cuenta ?? null,
+      cuentaBancoId: input.cuentaBancoId ?? null,
       notas:         input.notas ?? null,
     }],
   });
@@ -958,6 +1321,8 @@ export async function registrarPagosSplit(input: {
     metodo:        string;
     referencia?:   string | null;
     cuenta?:       string | null;
+    /** Cuenta de la empresa a la que entró. Se valida que sea SUYA. */
+    cuentaBancoId?: number | null;
     notas?:        string | null;
   }>;
 }) {
@@ -1006,6 +1371,10 @@ export async function registrarPagosSplit(input: {
     throw new Error(`Monto excede saldo pendiente (RD$${(saldo / 100).toFixed(2)})`);
   }
 
+  const cuentasPropias = await cuentasBancoDelEquipo(
+    input.teamId, input.pagos.map(p => p.cuentaBancoId),
+  );
+
   const pagos = await db.insert(pagosRecibidos).values(
     input.pagos.map(p => ({
       teamId:        input.teamId,
@@ -1014,6 +1383,7 @@ export async function registrarPagosSplit(input: {
       metodo:        p.metodo,
       referencia:    p.referencia ?? null,
       cuenta:        p.cuenta ?? null,
+      cuentaBancoId: cuentasPropias.has(p.cuentaBancoId ?? -1) ? p.cuentaBancoId! : null,
       fechaPago:     input.fechaPago,
       notas:         p.notas ?? null,
       turnoCajaId:   input.turnoCajaId ?? null,
@@ -1056,6 +1426,8 @@ export async function registrarPagoFacturaConMora(input: {
     metodo:        string;
     referencia?:   string | null;
     cuenta?:       string | null;
+    /** Cuenta de la empresa a la que entró. Se valida que sea SUYA. */
+    cuentaBancoId?: number | null;
     notas?:        string | null;
     /** NC consumida (metodo='nota_credito'). Voucher de uso único. */
     notaCreditoId?: number | null;
@@ -1134,6 +1506,7 @@ export async function registrarPagoFacturaConMora(input: {
     metodo:        string;
     referencia:    string | null;
     cuenta:        string | null;
+    cuentaBancoId: number | null;
     notas:         string | null;
     notaCreditoId: number | null;
   };
@@ -1157,6 +1530,7 @@ export async function registrarPagoFacturaConMora(input: {
         metodo:        linea.metodo,
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
+        cuentaBancoId: linea.cuentaBancoId ?? null,
         notas:         linea.notas ?? null,
         notaCreditoId: ncId,
       });
@@ -1176,6 +1550,7 @@ export async function registrarPagoFacturaConMora(input: {
         metodo:        linea.metodo,
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
+        cuentaBancoId: linea.cuentaBancoId ?? null,
         notas:         linea.notas ?? null,
         notaCreditoId: ncId,
       });
@@ -1187,6 +1562,9 @@ export async function registrarPagoFacturaConMora(input: {
 
   let filasInsertadas: { id: number }[] = [];
   if (inserts.length > 0) {
+    const cuentasPropias = await cuentasBancoDelEquipo(
+      input.teamId, inserts.map(i => i.cuentaBancoId),
+    );
     filasInsertadas = await db.insert(pagosRecibidos).values(
       inserts.map(i => ({
         teamId:        input.teamId,
@@ -1196,6 +1574,7 @@ export async function registrarPagoFacturaConMora(input: {
         notaCreditoId: i.notaCreditoId,
         referencia:    i.referencia,
         cuenta:        i.cuenta,
+        cuentaBancoId: cuentasPropias.has(i.cuentaBancoId ?? -1) ? i.cuentaBancoId : null,
         fechaPago:     input.fechaPago,
         notas:         i.notas,
         turnoCajaId:   input.turnoCajaId ?? null,

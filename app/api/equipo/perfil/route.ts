@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { getTeamModules } from '@/lib/auth/modules';
 import { METODO_PAGO_VALUES } from '@/lib/pagos/metodos';
 
 const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
@@ -19,6 +20,9 @@ const schema = z.object({
                        .regex(/^\d{9}$|^\d{11}$/, 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)')
                        .optional(),
   direccion:         z.string().max(500).optional(),
+  // Representante legal — obliga el contrato laboral estructurado (Ley 16-92 art. 24).
+  nombreRepresentante: z.string().max(255).optional().or(z.literal('')),
+  cedulaRepresentante: z.string().max(11).optional().or(z.literal('')),
   provincia:         z.string().max(100).optional().or(z.literal('')),
   municipio:         z.string().max(100).optional().or(z.literal('')),
   telefono:          z.string().max(30).optional(),
@@ -105,6 +109,8 @@ export async function POST(req: NextRequest) {
     ...(data.nombreComercial   !== undefined && { nombreComercial: data.nombreComercial }),
     ...(data.rnc               !== undefined && { rnc: data.rnc }),
     ...(data.direccion         !== undefined && { direccion: data.direccion }),
+    ...(data.nombreRepresentante !== undefined && { nombreRepresentante: data.nombreRepresentante || null }),
+    ...(data.cedulaRepresentante !== undefined && { cedulaRepresentante: data.cedulaRepresentante || null }),
     ...(data.provincia         !== undefined && { provincia: data.provincia || null }),
     ...(data.municipio         !== undefined && { municipio: data.municipio || null }),
     ...(data.telefono          !== undefined && { telefono: data.telefono } as any),
@@ -142,6 +148,18 @@ export async function POST(req: NextRequest) {
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
+  // Sync legacy → módulos: el toggle self-service de POS también actualiza
+  // modulosHabilitados (fuente que lee lib/auth/modules.ts) durante la
+  // transición. Cuando el billing por módulo mande, este toggle desaparece.
+  if (data.posHabilitado !== undefined) {
+    const [t] = await db.select({ mods: teams.modulosHabilitados }).from(teams).where(eq(teams.id, teamId)).limit(1);
+    const current = Array.isArray(t?.mods) ? (t!.mods as string[]) : [];
+    const next = data.posHabilitado
+      ? Array.from(new Set([...current, 'pos']))
+      : current.filter(m => m !== 'pos');
+    await db.update(teams).set({ modulosHabilitados: next }).where(eq(teams.id, teamId));
+  }
+
   return NextResponse.json({ ok: true });
 }
 
@@ -152,18 +170,27 @@ export async function GET(_req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const [[team], [member]] = await Promise.all([
+  const [[team], [member], modulosEfectivos] = await Promise.all([
     db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers)
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1),
+    // El toggle POS de esta pantalla lee la columna legacy `pos_habilitado`, que
+    // el onboarding nunca escribe: cuando el plan elegido ya incluye POS el
+    // acceso a /pos sale de `getTeamModules` (plan → módulos), no de esa columna,
+    // así que el toggle salía apagado con el módulo activo. Reflejar el estado
+    // efectivo: encendido si lo enciende la columna legacy O el plan.
+    getTeamModules(teamId),
   ]);
+  const posEfectivo = team.posHabilitado || modulosEfectivos.includes('pos');
 
   return NextResponse.json({
     razonSocial:       team.razonSocial,
     nombreComercial:   team.nombreComercial,
     rnc:               team.rnc,
     direccion:         team.direccion,
+    nombreRepresentante: team.nombreRepresentante,
+    cedulaRepresentante: team.cedulaRepresentante,
     provincia:         team.provincia,
     municipio:         team.municipio,
     telefono:          (team as any).telefono,
@@ -191,8 +218,8 @@ export async function GET(_req: NextRequest) {
     cajaLimiteHoras:       team.cajaLimiteHoras,
     cajaAvisoMinutos:      team.cajaAvisoMinutos,
     cajaGraciaHoras:       team.cajaGraciaHoras,
-    // Módulo POS
-    posHabilitado:         team.posHabilitado,
+    // Módulo POS — estado efectivo (columna legacy o módulo del plan)
+    posHabilitado:         posEfectivo,
     posEscolarHabilitado:  team.posEscolarHabilitado,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)

@@ -1,9 +1,12 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
 import { X } from 'lucide-react';
 import { RETENCIONES_PREDEFINIDAS } from '../utils/types';
 import type { Retencion } from '../utils/types';
@@ -29,8 +32,9 @@ export function RetencionesSection({
 
   if (retenciones.length === 0) {
     return (
-      <div className="flex justify-end">
-        <button
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Box
+          component="button"
           type="button"
           onClick={() => {
             const predef = RETENCIONES_PREDEFINIDAS[0];
@@ -40,84 +44,171 @@ export function RetencionesSection({
               tipo: predef.tipo, monto: parseFloat((base2 * predef.porcentaje / 100).toFixed(2)), manual: false,
             }]);
           }}
-          className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 py-2 -my-2">
+          sx={{
+            fontSize: '0.875rem',
+            color: '#3658e1',
+            fontWeight: 500,
+            bgcolor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            py: 1,
+            my: -1,
+            '&:hover': { color: '#2a45c4' },
+          }}
+        >
           + Agregar Retención
-        </button>
-      </div>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <div className="bg-gray-50/40 rounded-lg p-3 mt-3">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Retenciones</p>
-      <div className="space-y-3 md:space-y-2">
+    <Box sx={{ bgcolor: 'rgba(249,250,251,0.6)', borderRadius: '8px', p: 1.5, mt: 1.5 }}>
+      <Typography
+        variant="caption"
+        sx={{ fontWeight: 500, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', mb: 1.5 }}
+      >
+        Retenciones
+      </Typography>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {retenciones.map((ret, idx) => (
-          <div key={idx} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
-            <span className="text-xs md:text-sm text-gray-600 md:w-24 md:shrink-0 uppercase tracking-wide md:tracking-normal md:normal-case">Retención</span>
-            <div className="flex items-center gap-2 md:contents">
-              <Select
-                value={`${ret.id}__${idx}`}
-                onValueChange={(val) => {
-                  const predef = RETENCIONES_PREDEFINIDAS.find(r => r.id === val.split('__')[0]);
-                  if (!predef) return;
-                  const base2 = predef.tipo === 'itbis' ? totalesItbis : totalesSubtotal;
-                  setRetenciones(prev => prev.map((r, i) => i === idx ? {
-                    ...r,
-                    id: predef.id,
-                    nombre: predef.nombre,
-                    porcentaje: predef.porcentaje,
-                    tipo: predef.tipo,
-                    monto: parseFloat((base2 * predef.porcentaje / 100).toFixed(2)),
-                    manual: false,
-                  } : r));
-                }}
-              >
-                <SelectTrigger className="h-10 md:h-9 text-sm flex-1 md:max-w-xs">
-                  <SelectValue placeholder="Seleccionar retención..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <div className="px-2 py-1 text-xs font-semibold text-gray-600 uppercase">ITBIS</div>
+          <Box
+            key={idx}
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              alignItems: { md: 'center' },
+              gap: { xs: 1, md: 1.5 },
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'text.secondary',
+                textTransform: { xs: 'uppercase', md: 'none' },
+                letterSpacing: { xs: '0.08em', md: 'normal' },
+                width: { md: 96 },
+                flexShrink: { md: 0 },
+              }}
+            >
+              Retención
+            </Typography>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: { xs: 'nowrap' }, flexGrow: 1 }}>
+              <FormControl size="small" sx={{ flexGrow: 1, maxWidth: { md: 320 } }}>
+                <Select
+                  value={`${ret.id}__${idx}`}
+                  onChange={(e) => {
+                    const val = e.target.value as string;
+                    const predef = RETENCIONES_PREDEFINIDAS.find(r => r.id === val.split('__')[0]);
+                    if (!predef) return;
+                    const base2 = predef.tipo === 'itbis' ? totalesItbis : totalesSubtotal;
+                    setRetenciones(prev => prev.map((r, i) => i === idx ? {
+                      ...r,
+                      id: predef.id,
+                      nombre: predef.nombre,
+                      porcentaje: predef.porcentaje,
+                      tipo: predef.tipo,
+                      monto: parseFloat((base2 * predef.porcentaje / 100).toFixed(2)),
+                      manual: false,
+                    } : r));
+                  }}
+                  sx={{
+                    fontSize: '0.875rem',
+                    '& .MuiOutlinedInput-notchedOutline': { borderRadius: '8px' },
+                  }}
+                >
+                  <MenuItem disabled sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', opacity: 1 }}>
+                    ITBIS
+                  </MenuItem>
                   {RETENCIONES_PREDEFINIDAS.filter(r => r.tipo === 'itbis').map(r => (
-                    <SelectItem key={r.id} value={`${r.id}__${idx}`}>
-                      {r.nombre} — {r.porcentaje}% <span className="text-xs text-gray-600 ml-1">({r.descripcion})</span>
-                    </SelectItem>
+                    <MenuItem key={r.id} value={`${r.id}__${idx}`} sx={{ fontSize: '0.875rem' }}>
+                      {r.nombre} — {r.porcentaje}%{' '}
+                      <Typography component="span" variant="caption" sx={{ color: 'text.secondary', ml: 0.5 }}>
+                        ({r.descripcion})
+                      </Typography>
+                    </MenuItem>
                   ))}
-                  <div className="px-2 py-1 text-xs font-semibold text-gray-600 uppercase border-t mt-1">ISR</div>
+                  <MenuItem disabled sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', borderTop: '1px solid', borderColor: 'divider', mt: 0.5, opacity: 1 }}>
+                    ISR
+                  </MenuItem>
                   {RETENCIONES_PREDEFINIDAS.filter(r => r.tipo === 'isr').map(r => (
-                    <SelectItem key={r.id} value={`${r.id}__${idx}`}>
+                    <MenuItem key={r.id} value={`${r.id}__${idx}`} sx={{ fontSize: '0.875rem' }}>
                       {r.nombre} — {r.porcentaje}%
-                    </SelectItem>
+                    </MenuItem>
                   ))}
-                </SelectContent>
-              </Select>
-              <div className="relative w-32 md:w-36 shrink-0">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-600">RD$</span>
-                <Input
-                  type="number" inputMode="decimal" min={0} step={0.01}
-                  className="h-10 md:h-9 text-sm pl-9 text-right"
+                </Select>
+              </FormControl>
+
+              <Box sx={{ position: 'relative', width: { xs: 128, md: 144 }, flexShrink: 0 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    position: 'absolute',
+                    left: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'text.secondary',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  RD$
+                </Typography>
+                <TextField
+                  type="number"
+                  size="small"
                   placeholder="0.00"
                   value={ret.monto || ''}
                   onChange={(e) => setRetenciones(prev => prev.map((r, i) => i === idx ? { ...r, monto: parseFloat(e.target.value) || 0, manual: true } : r))}
+                  slotProps={{
+                    htmlInput: { inputMode: 'decimal', min: 0, step: 0.01, style: { paddingLeft: 36, textAlign: 'right', fontSize: '0.875rem' } },
+                  }}
+                  sx={{
+                    width: '100%',
+                    '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                  }}
                 />
-              </div>
-              <button
+              </Box>
+
+              <IconButton
                 type="button"
                 onClick={() => setRetenciones(prev => prev.filter((_, i) => i !== idx))}
                 aria-label="Eliminar retención"
-                className="text-gray-400 hover:text-red-500 p-2 -m-1"
+                size="small"
+                sx={{ color: 'grey.400', '&:hover': { color: 'error.main' } }}
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+                <X size={16} />
+              </IconButton>
+            </Box>
+          </Box>
         ))}
-      </div>
-      <button
+      </Box>
+
+      <Box
+        component="button"
         type="button"
         onClick={addRetencion}
-        className="mt-2 text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 py-2 -my-1">
+        sx={{
+          mt: 1,
+          fontSize: '0.875rem',
+          color: '#3658e1',
+          fontWeight: 500,
+          bgcolor: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          py: 1,
+          my: -0.5,
+          '&:hover': { color: '#2a45c4' },
+        }}
+      >
         + Agregar Retención
-      </button>
-    </div>
+      </Box>
+    </Box>
   );
 }

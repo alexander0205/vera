@@ -133,9 +133,9 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       </div>
       <button
         onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-        className="ml-3 shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-teal-600 transition-colors"
+        className="ml-3 shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-zero-600 transition-colors"
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? <Check className="h-3.5 w-3.5 text-zero-500" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
     </div>
   );
@@ -159,7 +159,7 @@ function DgiiField({ label, value, span, required = true, isUrl = false, disable
       <div className={`flex items-center border rounded-md overflow-hidden ${
         disabled
           ? 'border-gray-200 bg-gray-50'
-          : 'border-gray-300 bg-white focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-400'
+          : 'border-gray-300 bg-white focus-within:ring-2 focus-within:ring-zero-500/20 focus-within:border-zero-400'
       }`}>
         {isUrl && (
           <span className="shrink-0 px-3 py-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200 select-none">
@@ -169,10 +169,10 @@ function DgiiField({ label, value, span, required = true, isUrl = false, disable
         <span className={`flex-1 px-3 py-2 text-sm truncate min-w-0 ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>{value}</span>
         <button
           onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-          className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-teal-50 text-gray-400 hover:text-teal-600 transition-colors"
+          className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-zero-50 text-gray-400 hover:text-zero-600 transition-colors"
           title="Copiar"
         >
-          {copied ? <Check className="h-4 w-4 text-teal-500" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-4 w-4 text-zero-500" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
     </div>
@@ -184,11 +184,11 @@ function CopyField({ label, value, span }: { label: string; value: string; span?
   return <DgiiField label={label} value={value} span={span} required={false} />;
 }
 
-function InfoBox({ color, title, children }: { color: 'blue'|'amber'|'teal'|'red'; title: string; children: React.ReactNode }) {
+function InfoBox({ color, title, children }: { color: 'blue'|'amber'|'zero'|'red'; title: string; children: React.ReactNode }) {
   const cls = {
     blue:  'border-blue-200 bg-blue-50 text-blue-800',
     amber: 'border-amber-200 bg-amber-50 text-amber-800',
-    teal:  'border-teal-200 bg-teal-50 text-teal-800',
+    zero:  'border-zero-200 bg-zero-50 text-zero-800',
     red:   'border-red-200 bg-red-50 text-red-800',
   }[color];
   return (
@@ -212,7 +212,7 @@ function NavFooter({
         : <div />}
       {onNext && (
         <Button onClick={onNext} disabled={nextDisabled || nextLoading}
-          className="bg-teal-600 hover:bg-teal-700 disabled:opacity-40 px-8 gap-1.5">
+          className="bg-zero-600 hover:bg-zero-700 disabled:opacity-40 px-8 gap-1.5">
           {nextLoading && <Loader2 className="h-4 w-4 animate-spin" />}
           {nextLabel} {!nextLoading && <ChevronRight className="h-4 w-4" />}
         </Button>
@@ -248,7 +248,7 @@ function HelpPopover({ content, link, linkText }: {
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-label="Más información"
-        className="h-5 w-5 rounded-full border border-gray-300 bg-white text-gray-400 hover:border-teal-400 hover:text-teal-600 flex items-center justify-center text-[11px] font-bold leading-none transition-colors"
+        className="h-5 w-5 rounded-full border border-gray-300 bg-white text-gray-400 hover:border-zero-400 hover:text-zero-600 flex items-center justify-center text-[11px] font-bold leading-none transition-colors"
       >
         ?
       </button>
@@ -259,7 +259,7 @@ function HelpPopover({ content, link, linkText }: {
           <p className="text-xs text-gray-600 leading-relaxed">{content}</p>
           {link && (
             <a href={link} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-semibold">
+              className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-semibold">
               <ExternalLink className="h-3 w-3" />{linkText ?? 'Ver en DGII'}
             </a>
           )}
@@ -308,7 +308,7 @@ function DgiiScreenshot({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-700 hover:underline underline-offset-2"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-zero-600 hover:text-zero-700 hover:underline underline-offset-2"
       >
         <ImageIcon className="h-3.5 w-3.5" />
         {label}
@@ -325,8 +325,8 @@ function DgiiScreenshot({
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
               <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-teal-50 flex items-center justify-center">
-                  <ImageIcon className="h-4 w-4 text-teal-600" />
+                <div className="h-7 w-7 rounded-lg bg-zero-50 flex items-center justify-center">
+                  <ImageIcon className="h-4 w-4 text-zero-600" />
                 </div>
                 <p className="text-sm font-semibold text-gray-800">Portal DGII</p>
               </div>
@@ -396,18 +396,21 @@ function WaitForDgii({
   }, [simulateSeconds]);
 
   if (done) {
+    // El panel va en verde porque anuncia que el paso salió bien —igual que
+    // los de «Envío exitoso» más abajo—; el botón sí es de marca, porque es
+    // la acción.
     return (
-      <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-6 space-y-5">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 space-y-5">
         <div className="flex items-start gap-3">
-          <div className="h-11 w-11 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
-            <CheckCircle className="h-5 w-5 text-teal-600" />
+          <div className="h-11 w-11 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+            <CheckCircle className="h-5 w-5 text-emerald-600" />
           </div>
           <div>
             <p className="text-base font-bold text-gray-900">{successTitle}</p>
             <p className="text-sm text-gray-600 mt-1 leading-relaxed">{successDescription}</p>
           </div>
         </div>
-        <Button onClick={onComplete} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+        <Button onClick={onComplete} className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
           Continuar <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -479,8 +482,8 @@ function EtapasHero() {
         className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-teal-50 flex items-center justify-center">
-            <ImageIcon className="h-4 w-4 text-teal-600" />
+          <div className="h-7 w-7 rounded-lg bg-zero-50 flex items-center justify-center">
+            <ImageIcon className="h-4 w-4 text-zero-600" />
           </div>
           <div className="text-left">
             <p className="text-sm font-semibold text-gray-800">Las 3 etapas oficiales de la DGII</p>
@@ -509,7 +512,10 @@ function StatusPill({ status }: { status: EcfSendStatus }) {
   if (status === 'idle') return null;
   const map: Partial<Record<EcfSendStatus, { cls: string; label: string }>> = {
     sending:     { cls: 'bg-blue-100 text-blue-700',   label: 'Enviando…' },
-    aceptado:    { cls: 'bg-teal-100 text-teal-700',   label: 'Aceptado' },
+    // Verde y no el azul de la marca: aquí el color dice «salió bien», y en
+    // esta lista los otros tres estados también hablan por su color. Pintar
+    // «Aceptado» de marca lo dejaría indistinguible de «Enviando…».
+    aceptado:    { cls: 'bg-emerald-100 text-emerald-700', label: 'Aceptado' },
     rechazado:   { cls: 'bg-red-100 text-red-700',     label: 'Rechazado' },
     condicional: { cls: 'bg-amber-100 text-amber-700', label: 'Acep. condicional' },
     proceso:     { cls: 'bg-gray-100 text-gray-600',   label: 'En proceso' },
@@ -547,29 +553,29 @@ function PhaseListItems({ phase, completed, onJump, onSelect }: {
               // top = borde inferior real del círculo (py-2 8px + mt-0.5 2px + 30px alto = 40px);
               // con un valor menor la línea queda dibujada por encima, cruzando el círculo.
               <div className={`absolute left-[23px] top-10 w-0.5 h-[calc(100%-4px)]
-                ${isDone ? 'bg-teal-400' : 'bg-gray-200'}`} />
+                ${isDone ? 'bg-zero-400' : 'bg-gray-200'}`} />
             )}
             <button
               onClick={() => { if (isLocked) return; onJump(p.id); onSelect?.(); }}
               disabled={isLocked}
               className={`w-full flex items-start gap-3 px-2 py-2 rounded-xl text-left transition-colors mb-1
-                ${isCurrent ? 'bg-teal-50' : isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                ${isCurrent ? 'bg-zero-50' : isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
             >
               <div className={`h-[30px] w-[30px] rounded-full flex items-center justify-center shrink-0 border-2 mt-0.5 transition-all
-                ${isDone    ? 'bg-teal-600 border-teal-600 text-white'
-                : isCurrent ? 'bg-white border-teal-600 text-teal-600'
+                ${isDone    ? 'bg-zero-600 border-zero-600 text-white'
+                : isCurrent ? 'bg-white border-zero-600 text-zero-600'
                 : 'bg-white border-gray-200 text-gray-400'}`}>
                 {isDone ? <Check className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">{p.id + 1}</span>}
               </div>
               <div className="pt-0.5 min-w-0">
                 <p className={`text-sm font-semibold leading-tight
-                  ${isCurrent ? 'text-gray-900' : isDone ? 'text-teal-700' : 'text-gray-400'}`}>
+                  ${isCurrent ? 'text-gray-900' : isDone ? 'text-zero-700' : 'text-gray-400'}`}>
                   {p.label}
                 </p>
                 {isCurrent && (
                   <div className="mt-1.5 space-y-0.5">
                     {p.sub.map(s => (
-                      <p key={s} className="text-xs text-teal-600 leading-snug">· {s}</p>
+                      <p key={s} className="text-xs text-zero-600 leading-snug">· {s}</p>
                     ))}
                   </div>
                 )}
@@ -680,7 +686,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
 
   if (loading) return (
     <div className="flex items-center justify-center h-72">
-      <Loader2 className="h-7 w-7 animate-spin text-teal-500" />
+      <Loader2 className="h-7 w-7 animate-spin text-zero-500" />
     </div>
   );
 
@@ -697,7 +703,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
               <Input value={perfil.rnc ?? ''} disabled className="bg-gray-50 text-gray-500 text-sm" />
               <p className="text-xs text-gray-400 mt-1">
                 Para cambiar el RNC ve a{' '}
-                <Link href="/dashboard/configuracion" className="text-teal-600 hover:underline">Configuración</Link>
+                <Link href="/dashboard/configuracion" className="text-zero-600 hover:underline">Configuración</Link>
               </p>
             </div>
             <div>
@@ -744,16 +750,16 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
             </p>
 
             {certListo ? (
-              <div className="rounded-xl border border-teal-200 bg-teal-50 p-4 space-y-2">
+              <div className="rounded-xl border border-zero-200 bg-zero-50 p-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-teal-500 shrink-0" />
-                  <p className="text-sm font-semibold text-teal-800">Certificado activo</p>
+                  <CheckCircle className="h-4 w-4 text-zero-500 shrink-0" />
+                  <p className="text-sm font-semibold text-zero-800">Certificado activo</p>
                 </div>
-                {certInfo?.titular && <p className="text-xs text-teal-700">{certInfo.titular}</p>}
+                {certInfo?.titular && <p className="text-xs text-zero-700">{certInfo.titular}</p>}
                 {certInfo?.vencimiento && (
-                  <p className="text-xs text-teal-600">Vence: {certInfo.vencimiento}</p>
+                  <p className="text-xs text-zero-600">Vence: {certInfo.vencimiento}</p>
                 )}
-                <button className="text-xs text-teal-600 underline underline-offset-2"
+                <button className="text-xs text-zero-600 underline underline-offset-2"
                   onClick={() => setCertInfo({ tieneCertificado: false })}>
                   Reemplazar certificado
                 </button>
@@ -767,20 +773,20 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                     onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                     onClick={() => fileInputRef.current?.click()}
                     className={`rounded-xl border-2 border-dashed cursor-pointer flex flex-col items-center gap-2 py-8 px-4 text-center transition-colors
-                      ${dragging ? 'border-teal-400 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}`}
+                      ${dragging ? 'border-zero-400 bg-zero-50' : 'border-gray-200 hover:border-zero-300 hover:bg-gray-50'}`}
                   >
-                    <CloudUpload className={`h-8 w-8 ${dragging ? 'text-teal-500' : 'text-gray-400'}`} />
+                    <CloudUpload className={`h-8 w-8 ${dragging ? 'text-zero-500' : 'text-gray-400'}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Arrastra tu certificado aquí</p>
                       <button type="button" onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                        className="text-xs text-teal-600 hover:underline mt-0.5">
+                        className="text-xs text-zero-600 hover:underline mt-0.5">
                         o selecciona el archivo .p12 / .pfx
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-                    <FileKey className="h-4 w-4 text-teal-600 shrink-0" />
+                    <FileKey className="h-4 w-4 text-zero-600 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
                       <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
@@ -816,7 +822,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                 )}
 
                 <Button onClick={handleUploadCert} disabled={!file || !password || uploadingCert}
-                  className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-40" size="sm">
+                  className="w-full bg-zero-600 hover:bg-zero-700 disabled:opacity-40" size="sm">
                   {uploadingCert
                     ? <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />Guardando…</>
                     : <><KeyRound className="h-3.5 w-3.5 mr-2" />Guardar certificado</>}
@@ -943,19 +949,19 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
             <div className="flex flex-col items-center gap-1 shrink-0">
               <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
+                ${i < sub  ? 'bg-zero-600 border-zero-600 text-white'
+                : i === sub ? 'bg-white border-zero-600 text-zero-600'
                 :             'bg-white border-gray-200 text-gray-400'}`}>
                 {i < sub ? <Check className="h-3 w-3" /> : i + 1}
               </div>
               <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
+                ${i === sub ? 'text-zero-700' : i < sub ? 'text-zero-500' : 'text-gray-400'}`}>
                 {label.replace(/^\d+\.\s/, '')}
               </span>
             </div>
             {i < STEPS.length - 1 && (
               <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
+                ${i < sub ? 'bg-zero-400' : 'bg-gray-200'}`} />
             )}
           </div>
         ))}
@@ -966,10 +972,10 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
         <div className="space-y-5">
 
           {/* 1 — CTA principal: abrir portal */}
-          <div className="rounded-xl border border-teal-200 bg-teal-50 px-5 py-4 flex items-center justify-between gap-4">
+          <div className="rounded-xl border border-zero-200 bg-zero-50 px-5 py-4 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-teal-900">Abre el portal DGII y crea tu postulación</p>
-              <p className="text-xs text-teal-700 mt-0.5">
+              <p className="text-sm font-semibold text-zero-900">Abre el portal DGII y crea tu postulación</p>
+              <p className="text-xs text-zero-700 mt-0.5">
                 Sección <strong>Emisor Electrónico → CREAR POSTULACIÓN</strong>.
                 Copia los datos de abajo y haz clic en <strong>"Generar archivo"</strong>.
               </p>
@@ -978,7 +984,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
               href="https://ecf.dgii.gov.do/testecf/contribuyentes"
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors"
+              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zero-600 hover:bg-zero-700 text-white text-sm font-semibold transition-colors"
             >
               Abrir portal <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -1039,10 +1045,10 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
 
           {/* Paso 1: Cargar Formulario de Postulación */}
           <div className={`rounded-xl border p-5 space-y-4 transition-all
-            ${xmlFile ? 'border-teal-200' : 'border-gray-200'}`}>
+            ${xmlFile ? 'border-zero-200' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${xmlFile ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                ${xmlFile ? 'bg-zero-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {xmlFile ? <Check className="h-3.5 w-3.5" /> : '1'}
               </div>
               <p className="text-sm font-semibold text-gray-800">Cargar el Formulario de Postulación</p>
@@ -1051,7 +1057,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             {!xmlFile ? (
               <div
                 onClick={() => xmlInputRef.current?.click()}
-                className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
+                className="rounded-xl border-2 border-dashed border-gray-200 hover:border-zero-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
               >
                 <Upload className="h-7 w-7 text-gray-400" />
                 <div>
@@ -1061,7 +1067,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
               </div>
             ) : (
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-                <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+                <FileText className="h-4 w-4 text-zero-600 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{xmlFile.name}</p>
                   <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
@@ -1080,23 +1086,23 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
 
           {/* Paso 2: Aplicar Firma Digital */}
           <div className={`rounded-xl border p-5 space-y-4 transition-all
-            ${signed ? 'border-teal-200' : !xmlFile ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
+            ${signed ? 'border-zero-200' : !xmlFile ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${signed ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                ${signed ? 'bg-zero-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {signed ? <Check className="h-3.5 w-3.5" /> : '2'}
               </div>
               <p className="text-sm font-semibold text-gray-800">Aplicar Firma Digital</p>
             </div>
             {!signed ? (
               <Button onClick={handleFirmar} disabled={!xmlFile || signing}
-                className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+                className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
                 {signing
                   ? <><Loader2 className="h-4 w-4 animate-spin" />Aplicando Firma Digital…</>
                   : <><FileSignature className="h-4 w-4" />Aplicar Firma Digital</>}
               </Button>
             ) : (
-              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-800">
+              <div className="flex items-center gap-2 bg-zero-50 border border-zero-200 rounded-lg p-3 text-zero-800">
                 <CheckCircle className="h-4 w-4 shrink-0" />
                 <p className="text-sm font-medium">Firma Digital aplicada correctamente</p>
               </div>
@@ -1111,10 +1117,10 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
 
           {/* Paso 3: Descargar Formulario firmado */}
           <div className={`rounded-xl border p-5 space-y-4 transition-all
-            ${downloaded ? 'border-teal-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
+            ${downloaded ? 'border-zero-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${downloaded ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                ${downloaded ? 'bg-zero-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {downloaded ? <Check className="h-3.5 w-3.5" /> : '3'}
               </div>
               <p className="text-sm font-semibold text-gray-800">Descargar Formulario firmado</p>
@@ -1167,7 +1173,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
               type="checkbox"
               checked={uploadConfirmed}
               onChange={e => handleConfirmarSubida(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500"
             />
             <span className="text-sm text-gray-700">
               Realicé el Envío de archivo de declaración jurada firmado en el portal DGII
@@ -1458,7 +1464,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
           {!file ? (
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
+              className="rounded-xl border-2 border-dashed border-gray-200 hover:border-zero-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
             >
               <Upload className="h-7 w-7 text-gray-400" />
               <div>
@@ -1468,7 +1474,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             </div>
           ) : (
             <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-              <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+              <FileText className="h-4 w-4 text-zero-600 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
                 <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
@@ -1487,7 +1493,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               type="checkbox"
               checked={showSkipEncfs}
               onChange={e => setShowSkipEncfs(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+              className="h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500"
             />
             <span className="text-xs text-gray-600">Excluir e-NCFs específicos</span>
           </label>
@@ -1522,7 +1528,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               </p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button onClick={() => reemitirRun(dupRunId)} disabled={reemitting || deleting}
-                  className="flex-1 bg-teal-600 hover:bg-teal-700 gap-2" size="sm">
+                  className="flex-1 bg-zero-600 hover:bg-zero-700 gap-2" size="sm">
                   {reemitting
                     ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Re-emitiendo…</>
                     : <><RefreshCw className="h-3.5 w-3.5" />Continuar esa corrida</>}
@@ -1537,7 +1543,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             </div>
           ) : (
             <Button onClick={handleUpload} disabled={!file || uploading}
-              className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+              className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
               {uploading
                 ? <><Loader2 className="h-4 w-4 animate-spin" />Procesando…</>
                 : <><Upload className="h-4 w-4" />Procesar Set de Pruebas</>}
@@ -1627,7 +1633,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
       <div className="rounded-xl border border-gray-200 p-5 space-y-3">
         <a
           href={`/api/habilitacion/set-pruebas/runs/${runId}/manual-upload/zip`}
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+          className="w-full bg-zero-600 hover:bg-zero-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
         >
           <Download className="h-4 w-4" /> Descargar ZIP Facturas &lt; RD$250K
         </a>
@@ -1645,7 +1651,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             type="checkbox"
             checked={confirmedUpload}
             onChange={e => setConfirmedUpload(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500"
           />
           <span className="text-sm text-blue-900">
             Confirmo que subí las facturas al portal DGII
@@ -1827,7 +1833,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
         {!file ? (
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
+            className="rounded-xl border-2 border-dashed border-gray-200 hover:border-zero-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
           >
             <Upload className="h-7 w-7 text-gray-400" />
             <div>
@@ -1837,7 +1843,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
           </div>
         ) : (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-            <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+            <FileText className="h-4 w-4 text-zero-600 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
               <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
@@ -1856,7 +1862,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
             type="checkbox"
             checked={showSecShift}
             onChange={e => setShowSecShift(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+            className="h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500"
           />
           <span className="text-xs text-gray-600">Shift selectivo de fecha</span>
         </label>
@@ -1884,7 +1890,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
         )}
 
         <Button onClick={handleUpload} disabled={!file || uploading}
-          className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+          className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
           <Upload className="h-4 w-4" />Procesar Aprobaciones
         </Button>
       </div>
@@ -2099,7 +2105,7 @@ function PhaseSimulacion({ onComplete, onBack }: { onComplete: () => void; onBac
         <div className="rounded-xl border border-gray-200 p-5 space-y-3">
           <a
             href={`/api/habilitacion/set-pruebas/runs/${runId}/manual-upload/zip`}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+            className="w-full bg-zero-600 hover:bg-zero-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
           >
             <Download className="h-4 w-4" /> Descargar ZIP Facturas &lt; RD$250K
           </a>
@@ -2158,7 +2164,7 @@ function PhaseSimulacion({ onComplete, onBack }: { onComplete: () => void; onBac
         )}
 
         <Button onClick={handleStart} disabled={starting}
-          className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+          className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
           {starting
             ? <><Loader2 className="h-4 w-4 animate-spin" />Iniciando…</>
             : <><FlaskConical className="h-4 w-4" />Iniciar simulación (29 casos)</>}
@@ -2224,7 +2230,7 @@ function PhaseRepresentacionSimulacion({ onComplete, onBack }: { onComplete: () 
         <p className="text-sm font-semibold text-gray-800">Descargar representaciones (PDF)</p>
         <a
           href={`/api/habilitacion/set-pruebas/runs/${runId}/package?pdfOnly=true`}
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+          className="w-full bg-zero-600 hover:bg-zero-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
         >
           <Download className="h-4 w-4" /> Descargar PDFs
         </a>
@@ -2370,7 +2376,7 @@ function PhasePortalStep({ stepId, onComplete, onBack }: { stepId: number; onCom
 
       <div className="space-y-3">
         <div className="flex items-start gap-2.5">
-          <span className="shrink-0 h-6 w-6 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center">1</span>
+          <span className="shrink-0 h-6 w-6 rounded-full bg-zero-100 text-zero-700 text-xs font-bold flex items-center justify-center">1</span>
           <p className="text-sm text-gray-700 flex-1">{info.accion}</p>
         </div>
         <div className="flex items-start gap-2.5">
@@ -2466,7 +2472,7 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
       </div>
 
       <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 p-4">
-        <Lock className="h-4 w-4 text-teal-500 shrink-0" />
+        <Lock className="h-4 w-4 text-zero-500 shrink-0" />
         <p className="text-sm text-gray-700">
           Todos los endpoints usan <strong>HTTPS / TLS 1.2+</strong> con certificado SSL válido.
         </p>
@@ -2474,7 +2480,7 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
 
       <label className="flex items-start gap-3 cursor-pointer">
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600" />
+          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zero-600" />
         <span className="text-sm text-gray-700">
           Registré las 3 URLs en el portal DGII y di clic en CONFIRMAR URLs
         </span>
@@ -2567,19 +2573,19 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
             <div className="flex flex-col items-center gap-1 shrink-0">
               <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
+                ${i < sub  ? 'bg-zero-600 border-zero-600 text-white'
+                : i === sub ? 'bg-white border-zero-600 text-zero-600'
                 :             'bg-white border-gray-200 text-gray-400'}`}>
                 {i < sub ? <Check className="h-3 w-3" /> : i + 1}
               </div>
               <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
+                ${i === sub ? 'text-zero-700' : i < sub ? 'text-zero-500' : 'text-gray-400'}`}>
                 {label}
               </span>
             </div>
             {i < STEPS.length - 1 && (
               <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
+                ${i < sub ? 'bg-zero-400' : 'bg-gray-200'}`} />
             )}
           </div>
         ))}
@@ -2601,11 +2607,11 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </InfoBox>
 
           {/* Step 1 */}
-          <div className={`rounded-xl border p-5 space-y-4 ${xmlFile ? 'border-teal-200' : 'border-gray-200'}`}>
+          <div className={`rounded-xl border p-5 space-y-4 ${xmlFile ? 'border-zero-200' : 'border-gray-200'}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                  ${xmlFile ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                  ${xmlFile ? 'bg-zero-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                   {xmlFile ? <Check className="h-3.5 w-3.5" /> : '1'}
                 </div>
                 <p className="text-sm font-semibold text-gray-800">Subir XML generado por la DGII</p>
@@ -2620,7 +2626,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
 
             {!xmlFile ? (
               <div onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-6 px-4 text-center transition-colors">
+                className="rounded-xl border-2 border-dashed border-gray-200 hover:border-zero-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-6 px-4 text-center transition-colors">
                 <Upload className="h-7 w-7 text-gray-400" />
                 <div>
                   <p className="text-sm font-medium text-gray-700">XML de declaración jurada</p>
@@ -2629,7 +2635,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
               </div>
             ) : (
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-                <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+                <FileText className="h-4 w-4 text-zero-600 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{xmlFile.name}</p>
                   <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
@@ -2645,23 +2651,23 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </div>
 
           {/* Step 2 */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all ${signed ? 'border-teal-200' : !xmlFile ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
+          <div className={`rounded-xl border p-5 space-y-4 transition-all ${signed ? 'border-zero-200' : !xmlFile ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${signed ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                ${signed ? 'bg-zero-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {signed ? <Check className="h-3.5 w-3.5" /> : '2'}
               </div>
               <p className="text-sm font-semibold text-gray-800">Firmar con certificado P12</p>
             </div>
             {!signed ? (
-              <Button onClick={handleFirmar} disabled={!xmlFile || signing} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+              <Button onClick={handleFirmar} disabled={!xmlFile || signing} className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
                 {signing
                   ? <><Loader2 className="h-4 w-4 animate-spin" />Firmando declaración jurada…</>
                   : <><FileSignature className="h-4 w-4" />Firmar declaración jurada</>}
               </Button>
             ) : (
               <div className="flex gap-2">
-                <div className="flex-1 flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-800">
+                <div className="flex-1 flex items-center gap-2 bg-zero-50 border border-zero-200 rounded-lg p-3 text-zero-800">
                   <CheckCircle className="h-4 w-4" />
                   <p className="text-sm font-medium">Firmado · RSA-SHA256</p>
                 </div>
@@ -2679,10 +2685,10 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </div>
 
           {/* Step 3 */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all ${enviado ? 'border-teal-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
+          <div className={`rounded-xl border p-5 space-y-4 transition-all ${enviado ? 'border-zero-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${enviado ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                ${enviado ? 'bg-zero-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {enviado ? <Check className="h-3.5 w-3.5" /> : '3'}
               </div>
               <p className="text-sm font-semibold text-gray-800">Enviar al portal DGII</p>
@@ -2693,7 +2699,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
                 checked={enviado}
                 disabled={!signed}
                 onChange={e => handleConfirmarEnvio(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500"
               />
               <span className="text-sm text-gray-700">
                 Subí el XML firmado en el portal DGII ("Enviar archivo")
@@ -2747,13 +2753,13 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
   return (
     <div className="space-y-5">
 
-      <div className="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white p-6">
+      <div className="rounded-2xl border border-zero-200 bg-gradient-to-br from-zero-50 to-white p-6">
         <div className="flex items-start gap-4">
-          <div className="h-14 w-14 rounded-2xl bg-teal-600 flex items-center justify-center shrink-0 shadow-sm">
+          <div className="h-14 w-14 rounded-2xl bg-zero-600 flex items-center justify-center shrink-0 shadow-sm">
             <PartyPopper className="h-7 w-7 text-white" />
           </div>
           <div>
-            <p className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-1">Paso 15 · Finalizado</p>
+            <p className="text-xs font-bold text-zero-600 uppercase tracking-widest mb-1">Paso 15 · Finalizado</p>
             <h3 className="text-xl font-bold text-gray-900">¡Tu habilitación está completa!</h3>
             <p className="text-sm text-gray-600 mt-2 leading-relaxed">
               Has completado exitosamente el proceso de certificación como Facturador Electrónico.
@@ -2781,25 +2787,25 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
           href="https://www.dgii.gov.do/ofv/login.aspx"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors group"
+          className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-zero-300 hover:bg-zero-50/50 transition-colors group"
         >
-          <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-            <ExternalLink className="h-4 w-4 text-teal-600" />
+          <div className="h-10 w-10 rounded-xl bg-zero-50 flex items-center justify-center shrink-0">
+            <ExternalLink className="h-4 w-4 text-zero-600" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900">Ir a la OFV</p>
             <p className="text-xs text-gray-500 truncate">Oficina Virtual de la DGII</p>
           </div>
-          <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+          <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-zero-600 group-hover:translate-x-0.5 transition-all shrink-0" />
         </a>
 
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-teal-200 bg-teal-50">
-          <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center shrink-0">
-            <Zap className="h-4 w-4 text-teal-600" />
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-zero-200 bg-zero-50">
+          <div className="h-10 w-10 rounded-xl bg-zero-100 flex items-center justify-center shrink-0">
+            <Zap className="h-4 w-4 text-zero-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-teal-900">Zero ya está en producción</p>
-            <p className="text-xs text-teal-700">Cada factura que emitas será real ante DGII</p>
+            <p className="text-sm font-semibold text-zero-900">Zero ya está en producción</p>
+            <p className="text-xs text-zero-700">Cada factura que emitas será real ante DGII</p>
           </div>
         </div>
       </div>
@@ -2809,7 +2815,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
           type="checkbox"
           checked={acknowledged}
           onChange={e => setAcknowledged(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
+          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-zero-600"
         />
         <span className="text-sm text-gray-700">
           Entiendo que desde ahora cada e-CF que emita en Zero es <strong>real</strong> y se envía
@@ -2833,8 +2839,8 @@ function PhaseListo() {
   return (
     <div className="space-y-8 py-4">
       <div className="flex flex-col items-center text-center space-y-4">
-        <div className="h-20 w-20 rounded-full bg-teal-100 flex items-center justify-center">
-          <Rocket className="h-10 w-10 text-teal-600" />
+        <div className="h-20 w-20 rounded-full bg-zero-100 flex items-center justify-center">
+          <Rocket className="h-10 w-10 text-zero-600" />
         </div>
         <div>
           <h3 className="text-2xl font-bold text-gray-900">¡Habilitación completada!</h3>
@@ -2853,8 +2859,8 @@ function PhaseListo() {
           { icon: CheckCircle, label: 'Producción',    desc: 'En línea' },
         ].map(item => (
           <div key={item.label} className="rounded-xl border border-gray-200 p-4 text-center space-y-2">
-            <div className="h-9 w-9 rounded-full bg-teal-50 flex items-center justify-center mx-auto">
-              <item.icon className="h-4 w-4 text-teal-600" />
+            <div className="h-9 w-9 rounded-full bg-zero-50 flex items-center justify-center mx-auto">
+              <item.icon className="h-4 w-4 text-zero-600" />
             </div>
             <p className="text-xs font-semibold text-gray-900">{item.label}</p>
             <p className="text-xs text-gray-400">{item.desc}</p>
@@ -2864,7 +2870,7 @@ function PhaseListo() {
 
       <div className="flex flex-col sm:flex-row gap-3">
         <Link href="/dashboard/facturas/nueva" className="flex-1">
-          <Button className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+          <Button className="w-full bg-zero-600 hover:bg-zero-700 gap-2">
             <ArrowRight className="h-4 w-4" /> Emitir primera factura
           </Button>
         </Link>
@@ -2892,14 +2898,14 @@ function IntroModal({ onStart }: { onStart: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
 
-        <div className="bg-gradient-to-r from-teal-600 to-teal-500 px-10 py-8">
-          <p className="text-xs font-semibold text-teal-100 uppercase tracking-widest mb-2">
+        <div className="bg-gradient-to-r from-zero-600 to-zero-500 px-10 py-8">
+          <p className="text-xs font-semibold text-zero-100 uppercase tracking-widest mb-2">
             Comprobantes Fiscales Electrónicos · DGII
           </p>
           <h2 className="text-3xl font-bold text-white leading-snug">
             Activa tu facturación electrónica
           </h2>
-          <p className="text-base text-teal-100 mt-2">
+          <p className="text-base text-zero-100 mt-2">
             Zero te guía paso a paso por el proceso de habilitación ante la DGII.
           </p>
         </div>
@@ -2928,8 +2934,8 @@ function IntroModal({ onStart }: { onStart: () => void }) {
                 },
               ].map(item => (
                 <div key={item.n} className="flex items-center gap-3">
-                  <div className="h-7 w-7 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-teal-600">{item.n}</span>
+                  <div className="h-7 w-7 rounded-full bg-zero-50 border border-zero-200 flex items-center justify-center shrink-0">
+                    <span className="text-sm font-bold text-zero-600">{item.n}</span>
                   </div>
                   <p className="text-base text-gray-700 flex-1">{item.text}</p>
                   <HelpPopover content={item.help} link={item.link} linkText={item.linkText} />
@@ -2938,7 +2944,7 @@ function IntroModal({ onStart }: { onStart: () => void }) {
             </div>
 
             <Button onClick={handleStart} size="lg"
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold text-base py-3">
+              className="w-full bg-zero-600 hover:bg-zero-700 text-white font-semibold text-base py-3">
               Comenzar →
             </Button>
           </div>
@@ -2973,7 +2979,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8 text-center">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-teal-600 mb-4">
+        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-zero-600 mb-4">
           <CheckCircle className="h-7 w-7 text-white" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900">¡Datos listos!</h2>
@@ -2986,17 +2992,17 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
         <button
           onClick={() => setSelected('asistido')}
           className={`w-full text-left rounded-2xl border-2 p-5 transition-all group
-            ${selected === 'asistido' ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}`}
+            ${selected === 'asistido' ? 'border-zero-500 bg-zero-50' : 'border-gray-200 hover:border-zero-300 hover:bg-gray-50'}`}
         >
           <div className="flex items-start gap-4">
             <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-colors
-              ${selected === 'asistido' ? 'bg-teal-500' : 'bg-teal-100 group-hover:bg-teal-200'}`}>
-              <Zap className={`h-5 w-5 ${selected === 'asistido' ? 'text-white' : 'text-teal-600'}`} />
+              ${selected === 'asistido' ? 'bg-zero-500' : 'bg-zero-100 group-hover:bg-zero-200'}`}>
+              <Zap className={`h-5 w-5 ${selected === 'asistido' ? 'text-white' : 'text-zero-600'}`} />
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <p className="text-base font-bold text-gray-900">Zero gestiona todo por mí</p>
-                <span className="text-[11px] font-bold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-bold bg-zero-100 text-zero-700 px-2 py-0.5 rounded-full">
                   Recomendado
                 </span>
               </div>
@@ -3006,7 +3012,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
               </p>
             </div>
             <div className={`h-5 w-5 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center transition-colors
-              ${selected === 'asistido' ? 'border-teal-500 bg-teal-500' : 'border-gray-300'}`}>
+              ${selected === 'asistido' ? 'border-zero-500 bg-zero-500' : 'border-gray-300'}`}>
               {selected === 'asistido' && <Check className="h-3 w-3 text-white" />}
             </div>
           </div>
@@ -3015,11 +3021,11 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
         <button
           onClick={() => setSelected('manual')}
           className={`w-full text-left rounded-2xl border-2 p-5 transition-all group
-            ${selected === 'manual' ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}`}
+            ${selected === 'manual' ? 'border-zero-500 bg-zero-50' : 'border-gray-200 hover:border-zero-300 hover:bg-gray-50'}`}
         >
           <div className="flex items-start gap-4">
             <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-colors
-              ${selected === 'manual' ? 'bg-teal-500' : 'bg-gray-100 group-hover:bg-gray-200'}`}>
+              ${selected === 'manual' ? 'bg-zero-500' : 'bg-gray-100 group-hover:bg-gray-200'}`}>
               <FileText className={`h-5 w-5 ${selected === 'manual' ? 'text-white' : 'text-gray-500'}`} />
             </div>
             <div className="flex-1">
@@ -3030,7 +3036,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
               </p>
             </div>
             <div className={`h-5 w-5 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center transition-colors
-              ${selected === 'manual' ? 'border-teal-500 bg-teal-500' : 'border-gray-300'}`}>
+              ${selected === 'manual' ? 'border-zero-500 bg-zero-500' : 'border-gray-300'}`}>
               {selected === 'manual' && <Check className="h-3 w-3 text-white" />}
             </div>
           </div>
@@ -3076,7 +3082,7 @@ function StageCredencial({
   return (
     <div className="max-w-md mx-auto space-y-6">
       <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-teal-600 mb-2">
+        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-zero-600 mb-2">
           <Zap className="h-7 w-7 text-white" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900">Acceso al portal DGII</h2>
@@ -3148,7 +3154,7 @@ function StageCredencial({
         onClick={handleConfirm}
         disabled={!password || !telefono || loading}
         size="lg"
-        className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-40 font-semibold"
+        className="w-full bg-zero-600 hover:bg-zero-700 disabled:opacity-40 font-semibold"
       >
         {loading
           ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Verificando acceso…</>
@@ -3156,7 +3162,7 @@ function StageCredencial({
       </Button>
 
       <div className="flex items-start gap-2.5 bg-gray-50 rounded-xl p-4 border border-gray-100">
-        <Shield className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
+        <Shield className="h-4 w-4 text-zero-500 shrink-0 mt-0.5" />
         <p className="text-xs text-gray-500 leading-relaxed">
           Tus credenciales se usan <strong>una sola vez</strong> y se eliminan de nuestros
           sistemas de inmediato tras completar el proceso. Conexión cifrada TLS 1.3.
@@ -3382,7 +3388,7 @@ export default function HabilitacionPage() {
           {stage === 'requisito' && (
             <div className="max-w-3xl mx-auto">
               <div className="mb-6">
-                <p className="text-xs font-semibold text-teal-600 uppercase tracking-wider mb-1">
+                <p className="text-xs font-semibold text-zero-600 uppercase tracking-wider mb-1">
                   Paso previo
                 </p>
                 <h2 className="text-xl font-bold text-gray-900">Tu empresa y certificado digital</h2>
@@ -3432,7 +3438,7 @@ export default function HabilitacionPage() {
                           <button
                             type="button"
                             onClick={() => setPhase(PHASES.length)}
-                            className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 mb-3"
+                            className="flex items-center gap-1 text-xs font-medium text-zero-600 hover:text-zero-700 mb-3"
                           >
                             <ChevronRight className="h-3 w-3 rotate-180" /> Volver al resumen
                           </button>
@@ -3447,7 +3453,7 @@ export default function HabilitacionPage() {
                             <ChevronRight className={`md:hidden h-3 w-3 transition-transform ${showMobileNav ? 'rotate-90' : ''}`} />
                           </button>
                           <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                            <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500"
+                            <div className="bg-zero-500 h-1.5 rounded-full transition-all duration-500"
                               style={{ width: `${(completed.size / PHASES.length) * 100}%` }} />
                           </div>
                           <span className="shrink-0">{Math.round((completed.size / PHASES.length) * 100)}%</span>
@@ -3465,7 +3471,7 @@ export default function HabilitacionPage() {
                         <div className="flex items-center gap-2">
                           <h2 className="text-xl font-bold text-gray-900">{PHASE_TITLES[phase]}</h2>
                           {mode === 'asistido' && (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-zero-100 text-zero-700 px-2 py-0.5 rounded-full">
                               <Zap className="h-3 w-3" /> Asistido
                             </span>
                           )}

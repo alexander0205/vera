@@ -19,6 +19,7 @@ import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { getDgiiReadiness } from '@/lib/ecf/readiness';
 import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
@@ -28,7 +29,7 @@ import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
-import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -116,7 +117,7 @@ export async function POST(
     // no tiene la excepción de habilitación — el Set de Pruebas nunca pasa por
     // aquí, emite directo contra /api/ecf/emitir.
     const ambiente = await getAmbienteTenant(teamId);
-    if (ambiente !== 'Produccion') {
+    if (!(await puedeEmitirADgii(teamId))) {
       return NextResponse.json(
         { error: mensajeAmbienteNoProduccion(ambiente), ambiente },
         { status: 403 },
@@ -167,6 +168,28 @@ export async function POST(
     if (!team?.rnc) {
       return NextResponse.json(
         { error: 'RNC no configurado. Completa el perfil de tu empresa.' },
+        { status: 422 },
+      );
+    }
+
+    // ── Gate DGII ─────────────────────────────────────────────────────────────
+    // Esta ruta también manda a la DGII, así que exige lo mismo que
+    // /api/ecf/emitir: empresa lista Y ambiente 'Produccion' confirmado. Antes
+    // solo validaba el RNC, y era la vía para mandar un e-CF a la DGII desde un
+    // ambiente de pruebas saltándose el gate del motor principal.
+    const readiness = await getDgiiReadiness(teamId, u?.platformRole);
+    if (!readiness.ready) {
+      const enPruebas = readiness.ambienteConfirmado && !readiness.enProduccion;
+      return NextResponse.json(
+        {
+          error: enPruebas
+            ? `Tu empresa está en ambiente de pruebas de la DGII (${readiness.ambiente}). No se puede enviar esta factura hasta que la DGII apruebe el paso a Producción.`
+            : !readiness.ambienteConfirmado && readiness.registradaEcfApi
+              ? 'No se pudo confirmar con la DGII que tu empresa esté en Producción. Intenta de nuevo en un momento.'
+              : 'Tu empresa aún no está conectada a la DGII. Completa la habilitación para emitir e-CF.',
+          code: enPruebas ? 'DGII_NO_PRODUCCION' : 'DGII_NO_LISTA',
+          detalles: readiness,
+        },
         { status: 422 },
       );
     }

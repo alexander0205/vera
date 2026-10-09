@@ -3,12 +3,35 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Search, AlertTriangle, ExternalLink, Download, Loader2, ChevronDown, Printer,
+  Search, ExternalLink, Download, Printer,
 } from 'lucide-react';
 import {
   ESTADO_NCF_META, VEREDICTO_META, ESTADOS_ERROR,
   type EstadoNcf, type Veredicto,
 } from '@/lib/contabilidad/estados';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import Alert from '@mui/material/Alert';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import CircularProgress from '@mui/material/CircularProgress';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 
 // El tipo de fila viaja por JSON desde la API; se declara aquí para no importar
 // la capa de datos (que arrastraría drizzle y el cliente de ecf-api al bundle).
@@ -47,6 +70,11 @@ const TIPOS = [
   { value: '47', label: '47 — Pago exterior' },
 ];
 
+/** Oculta el bloque al imprimir (equivalente MUI del antiguo `print:hidden`). */
+const NO_PRINT = { '@media print': { display: 'none' } } as const;
+
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
+
 function dop(cents: number | null) {
   if (cents == null) return '—';
   return (cents / 100).toLocaleString('es-DO', { style: 'currency', currency: 'DOP' });
@@ -69,7 +97,6 @@ export function ConsultaNcfClient() {
   const [filas, setFilas] = useState<FilaConsulta[] | null>(null);
   const [resumen, setResumen] = useState<ResumenConsulta | null>(null);
   const [soloProblemas, setSoloProblemas] = useState(false);
-  const [ayudaAbierta, setAyudaAbierta] = useState(false);
   const [titulo, setTitulo] = useState('');
 
   async function consultar(e: React.FormEvent) {
@@ -122,80 +149,90 @@ export function ConsultaNcfClient() {
   }
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* ── Buscador ─────────────────────────────────────────────────────── */}
-      <form onSubmit={consultar} className="bg-white border border-gray-200 rounded-xl p-4 print:hidden">
-        <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
-          {(['rango', 'encf'] as const).map(m => (
-            <button key={m} type="button" onClick={() => setModo(m)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                modo === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-              {m === 'rango' ? 'Revisar un rango' : 'Buscar un comprobante'}
-            </button>
-          ))}
-        </div>
+      <Box component="form" onSubmit={consultar} sx={{ ...CARD, p: 2, ...NO_PRINT }}>
+        <Tabs
+          value={modo}
+          onChange={(_, v: 'rango' | 'encf') => setModo(v)}
+          sx={{ mb: 2 }}
+        >
+          <Tab value="rango" label="Revisar un rango" />
+          <Tab value="encf" label="Buscar un comprobante" />
+        </Tabs>
 
         {modo === 'rango' ? (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-gray-500">Tipo de comprobante</span>
-              <select value={tipo} onChange={e => setTipo(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[210px] bg-white">
-                {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-gray-500">Del número</span>
-              <input type="number" min={1} value={desde} onChange={e => setDesde(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-gray-500">Al número</span>
-              <input type="number" min={1} value={hasta} onChange={e => setHasta(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28" />
-            </label>
-            <button type="submit" disabled={cargando}
-              className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg">
-              {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5 }}>
+            <FormControl size="small" sx={{ minWidth: 210 }}>
+              <InputLabel id="tipo-label">Tipo de comprobante</InputLabel>
+              <Select
+                labelId="tipo-label"
+                label="Tipo de comprobante"
+                value={tipo}
+                onChange={e => setTipo(e.target.value)}
+              >
+                {TIPOS.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Del número" type="number" value={desde}
+              onChange={e => setDesde(e.target.value)}
+              slotProps={{ htmlInput: { min: 1 } }}
+              sx={{ width: 120 }}
+            />
+            <TextField
+              label="Al número" type="number" value={hasta}
+              onChange={e => setHasta(e.target.value)}
+              slotProps={{ htmlInput: { min: 1 } }}
+              sx={{ width: 120 }}
+            />
+            <Button
+              type="submit" variant="contained" disabled={cargando}
+              startIcon={cargando
+                ? <CircularProgress size={16} color="inherit" />
+                : <Search style={{ width: 16, height: 16 }} />}
+              sx={{ px: 2, py: 1 }}
+            >
               Revisar
-            </button>
-          </div>
+            </Button>
+          </Box>
         ) : (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-gray-500">Número de comprobante</span>
-              <input value={encf} onChange={e => setEncf(e.target.value)} placeholder="E320000000094"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono w-56" />
-            </label>
-            <button type="submit" disabled={cargando || !encf.trim()}
-              className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg">
-              {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5 }}>
+            <TextField
+              label="Número de comprobante" value={encf}
+              onChange={e => setEncf(e.target.value)}
+              placeholder="E320000000094"
+              sx={{ width: 240, '& input': { fontFamily: 'monospace' } }}
+            />
+            <Button
+              type="submit" variant="contained" disabled={cargando || !encf.trim()}
+              startIcon={cargando
+                ? <CircularProgress size={16} color="inherit" />
+                : <Search style={{ width: 16, height: 16 }} />}
+              sx={{ px: 2, py: 1 }}
+            >
               Buscar
-            </button>
-          </div>
+            </Button>
+          </Box>
         )}
-        <p className="text-xs text-gray-400 mt-3">
+        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 1.5 }}>
           Aparecen todos los números del rango, incluidos los que nunca se usaron — con la explicación de qué pasó con cada uno.
-        </p>
-      </form>
+        </Typography>
+      </Box>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4 flex gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> {error}
-        </div>
-      )}
+      {error && <Alert severity="error">{error}</Alert>}
 
       {/* ── Resumen en lenguaje de contabilidad ──────────────────────────── */}
       {resumen && filas && (
         <>
-          <div className="hidden print:block mb-3">
-            <h2 className="text-lg font-bold">{titulo}</h2>
-            <p className="text-xs text-gray-500">
+          <Box sx={{ display: 'none', mb: 1.5, '@media print': { display: 'block' } }}>
+            <Typography component="h2" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>{titulo}</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
               Consultado el {new Date().toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'long' })}
-            </p>
-          </div>
+            </Typography>
+          </Box>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
             <Tarjeta label="Sí se declaran" valor={porVeredicto('declarar')}
                      nota="Válidos en la DGII" tono="ok" />
             <Tarjeta label="No se declaran" valor={porVeredicto('no-declarar')}
@@ -204,10 +241,10 @@ export function ConsultaNcfClient() {
                      nota="Esperando respuesta de la DGII" tono="warn" />
             <Tarjeta label="Hay que revisar" valor={porVeredicto('revisar')}
                      nota="Requieren atención de soporte" tono={porVeredicto('revisar') > 0 ? 'error' : 'muted'} />
-          </div>
+          </Box>
 
           {/* Frase de cierre — la respuesta corta */}
-          <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-sm text-teal-900">
+          <Alert severity="info" icon={false} sx={{ bgcolor: '#eef2fe', border: '1px solid #c7d2fc', color: '#24377d' }}>
             De los <strong>{resumen.total.toLocaleString('es-DO')}</strong> números revisados,{' '}
             <strong>{porVeredicto('declarar').toLocaleString('es-DO')}</strong> son comprobantes válidos que van en tu declaración.
             {porVeredicto('no-declarar') > 0 && (
@@ -216,134 +253,163 @@ export function ConsultaNcfClient() {
             {porVeredicto('revisar') > 0 && (
               <> Y <strong>{porVeredicto('revisar')}</strong> necesitan revisión — avísale a soporte.</>
             )}
-          </div>
+          </Alert>
         </>
       )}
 
       {/* ── Ayuda ─────────────────────────────────────────────────────────── */}
       {filas && (
-        <div className="bg-white border border-gray-200 rounded-xl print:hidden">
-          <button onClick={() => setAyudaAbierta(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            ¿Qué significa cada resultado?
-            <ChevronDown className={`w-4 h-4 transition-transform ${ayudaAbierta ? 'rotate-180' : ''}`} />
-          </button>
-          {ayudaAbierta && (
-            <div className="px-4 pb-4 grid sm:grid-cols-2 gap-3 border-t border-gray-100 pt-3">
+        <Accordion disableGutters elevation={0} sx={{ ...CARD, ...NO_PRINT, '&:before': { display: 'none' } }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+              ¿Qué significa cada resultado?
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ borderTop: '1px solid #f3f4f6', pt: 1.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 1.5 }}>
               {(Object.keys(ESTADO_NCF_META) as EstadoNcf[]).map(k => {
                 const m = ESTADO_NCF_META[k];
                 return (
-                  <div key={k} className="text-sm">
-                    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border mb-1 ${VEREDICTO_META[m.veredicto].cls}`}>
-                      {m.label}
-                    </span>
-                    <p className="text-gray-600">{m.queSignifica}</p>
-                    <p className="text-gray-400 text-xs mt-0.5">{m.queHacer}</p>
-                  </div>
+                  <Box key={k}>
+                    <ChipVeredicto veredicto={m.veredicto} label={m.label} />
+                    <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.5 }}>{m.queSignifica}</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>{m.queHacer}</Typography>
+                  </Box>
                 );
               })}
-            </div>
-          )}
-        </div>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
       )}
 
       {/* ── Resultados ────────────────────────────────────────────────────── */}
       {filas && (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-gray-900">
+        <Box sx={{ ...CARD, overflow: 'hidden' }}>
+          <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+            <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
               {visibles.length.toLocaleString('es-DO')} comprobante{visibles.length === 1 ? '' : 's'}
-            </h3>
-            <div className="flex items-center gap-4 print:hidden">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-                <input type="checkbox" checked={soloProblemas} onChange={e => setSoloProblemas(e.target.checked)}
-                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
-                Ver solo los que tuvieron problema
-              </label>
-              <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 font-medium">
-                <Printer className="w-4 h-4" /> Imprimir
-              </button>
-              <button onClick={exportarCsv} disabled={!visibles.length}
-                className="inline-flex items-center gap-1.5 text-sm text-teal-600 hover:text-teal-800 disabled:opacity-40 font-medium">
-                <Download className="w-4 h-4" /> Excel
-              </button>
-            </div>
-          </div>
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ...NO_PRINT }}>
+              <FormControlLabel
+                control={<Checkbox size="small" checked={soloProblemas} onChange={e => setSoloProblemas(e.target.checked)} />}
+                label="Ver solo los que tuvieron problema"
+                slotProps={{ typography: { sx: { fontSize: '0.875rem', color: '#4b5563' } } }}
+                sx={{ mr: 0 }}
+              />
+              <Button
+                size="small" color="inherit" onClick={() => window.print()}
+                startIcon={<Printer style={{ width: 16, height: 16 }} />}
+                sx={{ color: '#6b7280', '&:hover': { color: '#374151' } }}
+              >
+                Imprimir
+              </Button>
+              <Button
+                size="small" onClick={exportarCsv} disabled={!visibles.length}
+                startIcon={<Download style={{ width: 16, height: 16 }} />}
+              >
+                Excel
+              </Button>
+            </Box>
+          </Box>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[880px]">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <tr>
-                  <th className="px-4 py-2.5 text-left">Comprobante</th>
-                  <th className="px-4 py-2.5 text-left">¿Se declara?</th>
-                  <th className="px-4 py-2.5 text-left">Resultado</th>
-                  <th className="px-4 py-2.5 text-left">Fecha</th>
-                  <th className="px-4 py-2.5 text-left">Cliente</th>
-                  <th className="px-4 py-2.5 text-right">Monto</th>
-                  <th className="px-4 py-2.5 text-left">Qué pasó</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 880 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Comprobante</TableCell>
+                  <TableCell>¿Se declara?</TableCell>
+                  <TableCell>Resultado</TableCell>
+                  <TableCell>Fecha</TableCell>
+                  <TableCell>Cliente</TableCell>
+                  <TableCell align="right">Monto</TableCell>
+                  <TableCell>Qué pasó</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {visibles.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                    {soloProblemas ? 'Ningún comprobante con problemas en este rango. Todo en orden ✅' : 'Sin resultados.'}
-                  </td></tr>
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ py: 5, textAlign: 'center', color: '#9ca3af' }}>
+                      {soloProblemas ? 'Ningún comprobante con problemas en este rango. Todo en orden ✅' : 'Sin resultados.'}
+                    </TableCell>
+                  </TableRow>
                 ) : visibles.map(f => {
                   const m = ESTADO_NCF_META[f.estado];
-                  const v = VEREDICTO_META[m.veredicto];
                   return (
-                    <tr key={f.encf} className="hover:bg-gray-50 align-top">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-900 whitespace-nowrap">{f.encf}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${v.cls}`}>
-                          {v.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{m.label}</td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fecha(f.fecha)}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {f.cliente ?? <span className="text-gray-300">—</span>}
-                        {f.rncComprador && <span className="block text-xs text-gray-400 font-mono">{f.rncComprador}</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-gray-700 whitespace-nowrap">{dop(f.montoTotal)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 max-w-sm">
-                        <p>{f.motivo ?? m.queSignifica}</p>
-                        <p className="text-gray-400 mt-0.5">{m.queHacer}</p>
-                        <div className="flex flex-wrap gap-3 mt-1.5 print:hidden">
+                    <TableRow key={f.encf} sx={{ verticalAlign: 'top' }}>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#111827', whiteSpace: 'nowrap' }}>{f.encf}</TableCell>
+                      <TableCell>
+                        <ChipVeredicto veredicto={m.veredicto} label={VEREDICTO_META[m.veredicto].label} />
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{m.label}</TableCell>
+                      <TableCell sx={{ color: '#6b7280', whiteSpace: 'nowrap' }}>{fecha(f.fecha)}</TableCell>
+                      <TableCell>
+                        {f.cliente ?? <Box component="span" sx={{ color: '#d1d5db' }}>—</Box>}
+                        {f.rncComprador && (
+                          <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', fontFamily: 'monospace' }}>{f.rncComprador}</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{dop(f.montoTotal)}</TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', color: '#4b5563', maxWidth: 384 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{f.motivo ?? m.queSignifica}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>{m.queHacer}</Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 0.75, ...NO_PRINT }}>
                           {f.documentoId && (
-                            <Link href={`/dashboard/facturas/${f.documentoId}`} className="text-teal-600 hover:underline font-medium">
-                              Ver factura
+                            <Link href={`/dashboard/facturas/${f.documentoId}`} style={{ textDecoration: 'none' }}>
+                              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#3658e1', '&:hover': { textDecoration: 'underline' } }}>
+                                Ver factura
+                              </Typography>
                             </Link>
                           )}
                           {f.urlVerificacion && (
-                            <a href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-teal-600 hover:underline font-medium">
-                              Verificar en la DGII <ExternalLink className="w-3 h-3" />
-                            </a>
+                            <Box
+                              component="a" href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
+                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 500, color: '#3658e1', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              Verificar en la DGII <ExternalLink style={{ width: 12, height: 12 }} />
+                            </Box>
                           )}
-                        </div>
-                      </td>
-                    </tr>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </TableBody>
+            </Table>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
+  );
+}
+
+/** Chip de veredicto con los colores declarados en la taxonomía de estados. */
+function ChipVeredicto({ veredicto, label }: { veredicto: Veredicto; label: string }) {
+  const v = VEREDICTO_META[veredicto];
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-block', fontSize: '0.75rem', fontWeight: 600,
+        px: 1, py: 0.25, borderRadius: '9999px', whiteSpace: 'nowrap',
+        bgcolor: v.bg, color: v.fg, border: `1px solid ${v.border}`,
+      }}
+    >
+      {label}
+    </Box>
   );
 }
 
 function Tarjeta({
   label, valor, nota, tono,
 }: { label: string; valor: number; nota: string; tono: 'ok' | 'warn' | 'error' | 'muted' }) {
-  const cls = { ok: 'text-emerald-600', warn: 'text-amber-600', error: 'text-red-600', muted: 'text-gray-400' }[tono];
+  const color = { ok: '#059669', warn: '#d97706', error: '#dc2626', muted: '#9ca3af' }[tono];
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`text-2xl font-bold tabular-nums ${cls}`}>{valor.toLocaleString('es-DO')}</p>
-      <p className="text-[11px] text-gray-400 mt-0.5">{nota}</p>
-    </div>
+    <Box sx={{ ...CARD, p: 2 }}>
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 0.5 }}>{label}</Typography>
+      <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+        {valor.toLocaleString('es-DO')}
+      </Typography>
+      <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af', mt: 0.25 }}>{nota}</Typography>
+    </Box>
   );
 }

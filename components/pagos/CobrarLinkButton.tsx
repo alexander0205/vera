@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { PAGOS_ONLINE_ENABLED } from '@/lib/config/pagos-online';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -39,6 +40,14 @@ export function CobrarLinkButton({ ecfDocumentId, cotizacionId, telefonoCliente,
   const [providers, setProviders] = useState<string[]>([]);
   const [choosing, setChoosing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // El apagado va acá y no en cada pantalla: este botón lo montan la factura,
+  // la cotización y la barra de acciones al emitir, y esconderlo en tres sitios
+  // dejaría el cuarto encendido. Ver lib/config/pagos-online.ts.
+  //
+  // Los hooks van ARRIBA de este return: React exige que se llamen siempre en
+  // el mismo orden, y salir antes de declararlos rompe el componente cuando la
+  // bandera cambie entre renders.
 
   const PROVIDER_LABELS: Record<string, string> = {
     cardnet: 'CardNet', azul: 'Azul', simulador: 'Simulador (pruebas)',
@@ -132,6 +141,9 @@ export function CobrarLinkButton({ ecfDocumentId, cotizacionId, telefonoCliente,
   const waHref = link
     ? `https://wa.me/${(telefonoCliente ?? '').replace(/\D/g, '')}?text=${encodeURIComponent(`Puedes pagar aquí: ${link.url}`)}`
     : '#';
+
+  // Después de todos los hooks, nunca antes.
+  if (!PAGOS_ONLINE_ENABLED) return null;
 
   return (
     <>

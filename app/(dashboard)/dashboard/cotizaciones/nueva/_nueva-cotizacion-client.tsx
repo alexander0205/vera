@@ -13,7 +13,7 @@ const NuevaCotizacionForm = dynamic(() => import('./NuevaCotizacionForm'), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center min-h-[400px]">
-      <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
     </div>
   ),
 });

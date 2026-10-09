@@ -39,6 +39,10 @@ async function seed() {
       razonSocial: TEST_CONTRIBUYENTE.razonSocial,
       nombreComercial: 'Yisrael Technology',
       direccion: TEST_CONTRIBUYENTE.direccion,
+      // Plan de prueba: sin esto el límite de docs del plan Gratis bloquea
+      // la emisión (403) antes de llegar a la lógica que los E2E validan.
+      planName: 'negocio',
+      subscriptionStatus: 'trialing',
     })
     .returning();
 
@@ -49,6 +53,25 @@ async function seed() {
   });
 
   console.log(`✓ Empresa creada: ${team.name} (RNC: ${team.rnc})`);
+
+  // ─── Usuario owner NO platform-admin (para E2E del dashboard) ─────────────
+  // El platform admin redirige a /admin al entrar; los tests del dashboard
+  // necesitan un usuario normal dueño de la empresa.
+  const [ownerUser] = await db
+    .insert(users)
+    .values({
+      name: 'Owner EmiteDO',
+      email: 'owner@emitedo.test',
+      passwordHash,                 // mismo password: Admin1234!
+      platformRole: 'member',
+    })
+    .returning();
+  await db.insert(teamMembers).values({
+    teamId: team.id,
+    userId: ownerUser.id,
+    role: 'owner',
+  });
+  console.log('✓ Usuario owner creado: owner@emitedo.test / Admin1234!');
 
   // ─── Cliente de prueba ────────────────────────────────────────────────────
   const clientesData = [

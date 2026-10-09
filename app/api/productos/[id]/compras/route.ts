@@ -62,6 +62,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     .where(and(
       eq(comprasLocales.teamId, teamId),
       eq(comprasLocalesItems.productoId, prodId),
+      // Una compra anulada devolvió su existencia: ya no es historia de costo.
+      eq(comprasLocales.estado, 'registrada'),
     ))
     .orderBy(desc(comprasLocales.fecha), desc(comprasLocales.id))
     .limit(limit)

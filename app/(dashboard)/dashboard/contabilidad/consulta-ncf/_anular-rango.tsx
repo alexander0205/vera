@@ -289,7 +289,7 @@ export function AnularRangoPanel() {
                               <Link
                                 href={`/dashboard/facturas/${b.documentoId}`}
                                 target="_blank"
-                                className="font-medium text-teal-600 hover:underline"
+                                className="font-medium text-zero-600 hover:underline"
                               >
                                 Ver factura
                               </Link>
@@ -298,7 +298,7 @@ export function AnularRangoPanel() {
                               <Link
                                 href={`/dashboard/notas-credito/nueva?padreId=${b.documentoId}`}
                                 target="_blank"
-                                className="font-medium text-teal-600 hover:underline"
+                                className="font-medium text-zero-600 hover:underline"
                               >
                                 Emitir nota de crédito
                               </Link>
@@ -307,7 +307,7 @@ export function AnularRangoPanel() {
                               <a
                                 href={b.urlVerificacion}
                                 target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 font-medium text-teal-600 hover:underline"
+                                className="inline-flex items-center gap-1 font-medium text-zero-600 hover:underline"
                               >
                                 Verificar en la DGII <ExternalLink className="w-3 h-3" />
                               </a>

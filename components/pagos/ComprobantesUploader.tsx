@@ -12,10 +12,10 @@
  * quedan colgando de la factura. Se ven en su detalle y se pueden borrar ahí.
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { Loader2, Plus, Camera, X, FileText, AlertTriangle, Upload } from 'lucide-react';
-import { comprimirImagen } from '@/lib/utils/comprimir-imagen';
+import { useState, useCallback } from 'react';
+import { X, FileText, AlertTriangle, Upload } from 'lucide-react';
 import ComprobanteVisor from '@/components/pagos/ComprobanteVisor';
+import { ZonaArchivo, useSoltarArchivos } from '@/components/shared/ZonaArchivo';
 
 export interface AdjuntoSubido {
   id:          number;
@@ -26,11 +26,36 @@ export interface AdjuntoSubido {
   tieneThumb?: boolean;
 }
 
+/**
+ * Un archivo elegido antes de que exista la factura.
+ *
+ * Al CREAR una factura con su pago todavía no hay `docId` —lo asigna el
+ * servidor— así que no hay nada a lo que colgar el comprobante. En vez de
+ * negarle la subida a la secretaria hasta que guarde, el archivo se queda en
+ * memoria y sube en cuanto la factura nace, con `subirPendientes`.
+ *
+ * El `id` es negativo a propósito: comparte la lista con los ya subidos, que
+ * llevan id real y positivo, y así la galería se pinta con un solo bucle.
+ */
+export interface Pendiente {
+  id:         number;
+  archivo:    File;
+  /** objectURL para la miniatura; null en PDF. Se revoca al quitarlo. */
+  previewUrl: string | null;
+}
+
 interface Props {
-  docId:            number;
+  /**
+   * La factura a la que se cuelgan. `null` = todavía no existe (creación):
+   * los archivos se acumulan en `pendientes` y suben después.
+   */
+  docId:            number | null;
   /** Ids ya subidos. El padre los manda al registrar el pago. */
   adjuntos:         AdjuntoSubido[];
   onChange:         (adjuntos: AdjuntoSubido[]) => void;
+  /** Solo en modo diferido (`docId === null`). */
+  pendientes?:      Pendiente[];
+  onPendientesChange?: (pendientes: Pendiente[]) => void;
   disabled?:        boolean;
   /** El método elegido exige comprobante: cambia el copy y marca el bloque. */
   obligatorio?:     boolean;
@@ -40,7 +65,39 @@ interface Props {
   compacto?:        boolean;
 }
 
-const ACEPTA = 'image/jpeg,image/png,image/webp,application/pdf';
+/**
+ * Sube a la factura recién creada los archivos que esperaban en memoria.
+ *
+ * Devuelve los que lograron subir. NO lanza: la factura ya está creada y
+ * emitida, y tumbar ese flujo porque una foto no subió sería cambiar un
+ * problema pequeño por uno grande. Lo que no suba se puede adjuntar después
+ * desde el detalle de la factura, que es justo para lo que sirve esa tarjeta.
+ */
+export async function subirPendientes(
+  docId: number,
+  pendientes: Pendiente[],
+): Promise<{ subidos: AdjuntoSubido[]; fallidos: number }> {
+  const subidos: AdjuntoSubido[] = [];
+  let fallidos = 0;
+
+  for (const p of pendientes) {
+    try {
+      const fd = new FormData();
+      fd.append('docId', String(docId));
+      fd.append('archivo', p.archivo);
+      const res  = await fetch('/api/pagos/adjuntos', { method: 'POST', body: fd });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { fallidos++; continue; }
+      subidos.push(json.adjunto);
+    } catch {
+      fallidos++;
+    } finally {
+      if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+    }
+  }
+
+  return { subidos, fallidos };
+}
 
 function kb(bytes: number): string {
   return bytes < 1024 * 1024
@@ -49,30 +106,42 @@ function kb(bytes: number): string {
 }
 
 export default function ComprobantesUploader({
-  docId, adjuntos, onChange, disabled = false, obligatorio = false, max = 5, compacto = false,
+  docId, adjuntos, onChange, pendientes = [], onPendientesChange,
+  disabled = false, obligatorio = false, max = 5, compacto = false,
 }: Props) {
   const [subiendo, setSubiendo]     = useState(false);
   const [viendo, setViendo]         = useState<number | null>(null);
   const [error, setError]           = useState<string | null>(null);
-  const [arrastrando, setArrastrando] = useState(false);
-  const inputArchivo = useRef<HTMLInputElement>(null);
-  const inputCamara  = useRef<HTMLInputElement>(null);
-  // dragenter/dragleave también disparan al pasar sobre los hijos. Sin llevar
-  // la cuenta, el resaltado parpadea al mover el mouse por dentro de la zona.
-  const profundidadDrag = useRef(0);
-
-  const lleno = adjuntos.length >= max;
+  const diferido = docId === null;
+  const lleno = adjuntos.length + pendientes.length >= max;
   const aceptaSoltar = !disabled && !lleno && !subiendo;
 
-  const subir = useCallback(async (files: FileList | File[] | null) => {
-    if (!files?.length) return;
+  // Los archivos llegan ya comprimidos de `ZonaArchivo`: una foto de celular
+  // pesa 3–8 MB y el body de una función de Vercel topa en 4.5 MB.
+  const subir = useCallback(async (files: File[]) => {
+    if (!files.length) return;
     setError(null);
+
+    const sitio = max - adjuntos.length - pendientes.length;
+    if (sitio <= 0) return;
+
+    // Sin factura todavía: se guardan en memoria y suben al crearla.
+    if (diferido) {
+      const nuevos: Pendiente[] = files.slice(0, sitio).map((archivo, i) => ({
+        // Negativo y decreciente: no puede chocar con un id real.
+        id: -(pendientes.length + i + 1),
+        archivo,
+        previewUrl: archivo.type.startsWith('image/') ? URL.createObjectURL(archivo) : null,
+      }));
+      onPendientesChange?.([...pendientes, ...nuevos]);
+      return;
+    }
+
     setSubiendo(true);
 
     const nuevos: AdjuntoSubido[] = [];
     try {
-      for (const original of Array.from(files).slice(0, max - adjuntos.length)) {
-        const archivo = await comprimirImagen(original);
+      for (const archivo of files.slice(0, sitio)) {
         const fd = new FormData();
         fd.append('docId', String(docId));
         fd.append('archivo', archivo);
@@ -88,80 +157,31 @@ export default function ComprobantesUploader({
       if (nuevos.length) onChange([...adjuntos, ...nuevos]);
     } finally {
       setSubiendo(false);
-      if (inputArchivo.current) inputArchivo.current.value = '';
-      if (inputCamara.current)  inputCamara.current.value  = '';
     }
-  }, [adjuntos, docId, max, onChange]);
-
-  // Pegar con ⌘V / Ctrl+V. Es el camino más corto del flujo real: la captura de
-  // la app del banco va al portapapeles y de ahí al comprobante, sin pasar por
-  // guardar el archivo. El listener es de documento porque el evento `paste`
-  // llega al elemento con foco, y en un modal casi nunca es esta zona.
-  useEffect(() => {
-    if (!aceptaSoltar) return;
-    const onPaste = (e: ClipboardEvent) => {
-      const archivos = Array.from(e.clipboardData?.files ?? []);
-      if (!archivos.length) return;
-      // Si además hay texto y el foco está en un campo, el pegado es suyo:
-      // copiar una referencia bancaria no debe subir nada.
-      const hayTexto = (e.clipboardData?.getData('text') ?? '') !== '';
-      const destino  = e.target as HTMLElement | null;
-      if (hayTexto && destino?.closest('input, textarea, [contenteditable]')) return;
-      e.preventDefault();
-      subir(archivos);
-    };
-    document.addEventListener('paste', onPaste);
-    return () => document.removeEventListener('paste', onPaste);
-  }, [aceptaSoltar, subir]);
+  }, [adjuntos, docId, diferido, max, onChange, onPendientesChange, pendientes]);
 
   async function quitar(id: number) {
+    // Id negativo = todavía no subió: solo hay que soltar el objectURL.
+    if (id < 0) {
+      const fuera = pendientes.find(p => p.id === id);
+      if (fuera?.previewUrl) URL.revokeObjectURL(fuera.previewUrl);
+      onPendientesChange?.(pendientes.filter(p => p.id !== id));
+      return;
+    }
     onChange(adjuntos.filter(a => a.id !== id));
     // Si el usuario no tiene permiso de borrar, el archivo queda en la factura
     // pero fuera de este pago. No es un error que valga la pena mostrar.
     await fetch(`/api/pagos/adjuntos/${id}`, { method: 'DELETE' }).catch(() => {});
   }
 
-  // ── Arrastrar y soltar ────────────────────────────────────────────────────
-  // Solo reacciona cuando lo que se arrastra son archivos: arrastrar texto o un
-  // link dentro del formulario no debe encender la zona.
-  const traeArchivos = (e: React.DragEvent) => e.dataTransfer.types.includes('Files');
-
-  function onDragEnter(e: React.DragEvent) {
-    if (!aceptaSoltar || !traeArchivos(e)) return;
-    e.preventDefault();
-    profundidadDrag.current += 1;
-    setArrastrando(true);
-  }
-
-  function onDragOver(e: React.DragEvent) {
-    if (!aceptaSoltar || !traeArchivos(e)) return;
-    // Sin esto el navegador abre el archivo soltado en la pestaña y se pierde
-    // el formulario con lo que el usuario llevaba escrito.
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  }
-
-  function onDragLeave(e: React.DragEvent) {
-    if (!aceptaSoltar) return;
-    e.preventDefault();
-    profundidadDrag.current -= 1;
-    if (profundidadDrag.current <= 0) {
-      profundidadDrag.current = 0;
-      setArrastrando(false);
-    }
-  }
-
-  function onDrop(e: React.DragEvent) {
-    if (!aceptaSoltar) return;
-    e.preventDefault();
-    profundidadDrag.current = 0;
-    setArrastrando(false);
-    const archivos = Array.from(e.dataTransfer.files);
-    if (archivos.length) subir(archivos);
-  }
+  // Se puede soltar sobre la tarjeta entera, no solo sobre el botón de 70px.
+  const { arrastrando, handlers } = useSoltarArchivos(
+    (files) => subir(Array.from(files)),
+    !disabled && !lleno && !subiendo,
+  );
 
   const marco = arrastrando
-    ? 'border-teal-500 bg-teal-50 border-dashed'
+    ? 'border-zero-500 bg-zero-50 border-dashed'
     : obligatorio
       ? 'border-amber-300 bg-amber-50/60'
       : 'border-gray-200 bg-gray-50/60';
@@ -170,9 +190,33 @@ export default function ComprobantesUploader({
   // en una pestaña, donde el navegador usa su propio visor: zoom, buscar,
   // imprimir y guardar salen gratis, y no hay que reimplementar nada.
   const esImagen = (a: AdjuntoSubido) => a.mime.startsWith('image/');
+
+  /**
+   * Subidos y pendientes en una sola lista, para pintarlos con un solo bucle.
+   * Los pendientes traen `previewUrl` porque no tienen endpoint del que sacar
+   * la miniatura: todavía no existen en el servidor.
+   */
+  type Item = AdjuntoSubido & { previewUrl?: string | null };
+  const items: Item[] = [
+    ...adjuntos,
+    ...pendientes.map(p => ({
+      id:          p.id,
+      nombre:      p.archivo.name,
+      mime:        p.archivo.type,
+      tamanoBytes: p.archivo.size,
+      previewUrl:  p.previewUrl,
+    })),
+  ];
+
+  // El visor pide las imágenes al servidor, así que solo entran las ya subidas.
   const imagenes = adjuntos.filter(esImagen);
 
-  function abrir(a: AdjuntoSubido) {
+  function abrir(a: Item) {
+    if (a.id < 0) {
+      // Pendiente: se abre el objectURL, que es lo único que existe de él.
+      if (a.previewUrl) window.open(a.previewUrl, '_blank', 'noopener');
+      return;
+    }
     if (esImagen(a)) {
       setViendo(imagenes.findIndex(i => i.id === a.id));
       return;
@@ -183,15 +227,12 @@ export default function ComprobantesUploader({
   return (
     <div
       className={`relative rounded-lg border transition-colors ${marco} p-3`}
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      {...handlers}
     >
       {arrastrando && (
-        <div className="absolute inset-0 z-10 rounded-lg bg-teal-50/90 flex flex-col items-center justify-center gap-1 pointer-events-none">
-          <Upload className="h-5 w-5 text-teal-600" />
-          <span className="text-xs font-medium text-teal-700">Suelta aquí el comprobante</span>
+        <div className="absolute inset-0 z-10 rounded-lg bg-zero-50/90 flex flex-col items-center justify-center gap-1 pointer-events-none">
+          <Upload className="h-5 w-5 text-zero-600" />
+          <span className="text-xs font-medium text-zero-700">Suelta aquí el comprobante</span>
         </div>
       )}
 
@@ -207,7 +248,7 @@ export default function ComprobantesUploader({
       </div>
 
       <div className="flex gap-2 flex-wrap items-start">
-        {adjuntos.map(a => (
+        {items.map(a => (
           <div key={a.id} className="flex flex-col gap-1 w-[70px] group">
             <div className="relative h-[64px] w-[70px] rounded-lg border border-gray-200 bg-white overflow-hidden">
               <button
@@ -222,7 +263,7 @@ export default function ComprobantesUploader({
                   // `size=thumb` trae ~5 KB en vez del original completo. El
                   // binario sale del proxy con sesión; no hay URL pública.
                   <img
-                    src={`/api/pagos/adjuntos/${a.id}?size=thumb`}
+                    src={a.previewUrl ?? `/api/pagos/adjuntos/${a.id}?size=thumb`}
                     alt={a.nombre}
                     loading="lazy"
                     decoding="async"
@@ -256,43 +297,15 @@ export default function ComprobantesUploader({
         ))}
 
         {!lleno && !disabled && (
-          <>
-            <button
-              type="button"
-              onClick={() => inputArchivo.current?.click()}
-              disabled={subiendo}
-              title="Elegir archivo (o arrastra, o pega con Ctrl+V)"
-              className="h-[64px] w-[70px] rounded-lg border border-dashed border-teal-300 bg-white text-teal-600 flex flex-col items-center justify-center gap-1 hover:bg-teal-50 disabled:opacity-50"
-            >
-              {subiendo
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <><Plus className="h-4 w-4" /><span className="text-[9px]">Subir</span></>}
-            </button>
-
-            {/* `capture` hace que en el celular abra la cámara en vez del
-                explorador de archivos. En escritorio el browser lo ignora. */}
-            <button
-              type="button"
-              onClick={() => inputCamara.current?.click()}
-              disabled={subiendo}
-              title="Tomar foto con la cámara"
-              className="h-[64px] w-[70px] rounded-lg border border-dashed border-teal-300 bg-white text-teal-600 flex flex-col items-center justify-center gap-1 hover:bg-teal-50 disabled:opacity-50 sm:hidden"
-            >
-              <Camera className="h-4 w-4" />
-              <span className="text-[9px]">Foto</span>
-            </button>
-          </>
+          <ZonaArchivo
+            variante="compacta"
+            multiple
+            pegar
+            ocupado={subiendo}
+            onArchivos={subir}
+          />
         )}
       </div>
-
-      <input
-        ref={inputArchivo} type="file" accept={ACEPTA} multiple hidden
-        onChange={e => subir(e.target.files)}
-      />
-      <input
-        ref={inputCamara} type="file" accept="image/*" capture="environment" hidden
-        onChange={e => subir(e.target.files)}
-      />
 
       {error && (
         <div className="flex items-start gap-1.5 mt-2 text-[11px] text-red-700">

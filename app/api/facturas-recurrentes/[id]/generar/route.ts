@@ -46,24 +46,33 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!fr) return NextResponse.json({ error: 'Factura recurrente no encontrada' }, { status: 404 });
 
   // Permitir generar incluso si está pausada/finalizada (es disparo manual para probar)
-  // pero no generar si está en un estado inesperado
-  const result = await generarFacturaDeRecurrente(fr, { periodo });
+  // pero no generar si está en un estado inesperado. Try/catch para que un error
+  // inesperado devuelva JSON (y no un 500 con body vacío → "Error de conexión").
+  try {
+    const result = await generarFacturaDeRecurrente(fr, { periodo });
 
-  if (!result.ok) {
-    if (result.reason === 'no_sequence') {
-      return NextResponse.json(
-        { error: 'No hay secuencia disponible para el tipo de comprobante configurado en esta factura recurrente.' },
-        { status: 409 },
-      );
+    if (!result.ok) {
+      if (result.reason === 'no_sequence') {
+        return NextResponse.json(
+          { error: 'No hay secuencia disponible para el tipo de comprobante configurado en esta factura recurrente.' },
+          { status: 409 },
+        );
+      }
+      if (result.reason === 'already_generated') {
+        return NextResponse.json(
+          { error: 'Ya existe una factura para ese período.' },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: result.reason }, { status: 500 });
     }
-    if (result.reason === 'already_generated') {
-      return NextResponse.json(
-        { error: 'Ya existe una factura para ese período.' },
-        { status: 409 },
-      );
-    }
-    return NextResponse.json({ error: result.reason }, { status: 500 });
+
+    return NextResponse.json({ ok: true, documentoId: result.documentoId, encf: result.encf });
+  } catch (e) {
+    console.error('[facturas-recurrentes/generar] error inesperado', e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Error inesperado al generar la factura' },
+      { status: 500 },
+    );
   }
-
-  return NextResponse.json({ ok: true, documentoId: result.documentoId, encf: result.encf });
 }

@@ -1,52 +1,56 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Avatar as AvatarPrimitive } from "radix-ui";;
+import * as React from 'react';
+import MuiAvatar from '@mui/material/Avatar';
 
-import { cn } from "@/lib/utils";
+interface AvatarProps {
+  className?: string;
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}
 
-function Avatar({
-  className,
-  ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Root>) {
+interface AvatarImageProps {
+  src?: string;
+  alt?: string;
+  className?: string;
+}
+
+interface AvatarFallbackProps {
+  className?: string;
+  children?: React.ReactNode;
+}
+
+function Avatar({ className, children, style }: AvatarProps) {
   return (
-    <AvatarPrimitive.Root
-      data-slot="avatar"
-      className={cn(
-        "relative flex size-8 shrink-0 overflow-hidden rounded-full",
-        className
-      )}
-      {...props}
+    <div
+      className={['relative flex h-8 w-8 shrink-0 overflow-hidden rounded-full', className].filter(Boolean).join(' ')}
+      style={style}
+    >
+      {children}
+    </div>
+  );
+}
+
+function AvatarImage({ src, alt = '', className }: AvatarImageProps) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={['aspect-square h-full w-full object-cover', className].filter(Boolean).join(' ')}
     />
   );
 }
 
-function AvatarImage({
-  className,
-  ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+function AvatarFallback({ className, children }: AvatarFallbackProps) {
   return (
-    <AvatarPrimitive.Image
-      data-slot="avatar-image"
-      className={cn("aspect-square size-full", className)}
-      {...props}
-    />
-  );
-}
-
-function AvatarFallback({
-  className,
-  ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
-  return (
-    <AvatarPrimitive.Fallback
-      data-slot="avatar-fallback"
-      className={cn(
-        "bg-muted flex size-full items-center justify-center rounded-full",
-        className
-      )}
-      {...props}
-    />
+    <div
+      className={[
+        'flex h-full w-full items-center justify-center rounded-full bg-gray-100 text-gray-600 text-xs font-semibold',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
+      {children}
+    </div>
   );
 }
 

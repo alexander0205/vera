@@ -4,6 +4,8 @@ import { facturasRecurrentes } from '@/lib/db/schema';
 import { and, eq, lte, isNull, or } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { generarFacturaDeRecurrente } from '@/lib/cobranza/recurrente';
+import { equiposConProcesosVivos } from '@/lib/suscripcion/procesos';
+import { AL_CANCELAR } from '@/lib/config/suscripcion';
 
 // This endpoint is called by a cron job (e.g., Vercel Cron or external cron)
 // Protect it with a secret token in the Authorization header
@@ -30,9 +32,21 @@ export async function GET(req: NextRequest) {
       )
     );
 
+  // Una recurrente emite sola todos los meses: sin este filtro, una empresa
+  // que canceló en enero nos sigue generando comprobantes fiscales a su
+  // nombre en junio. No se les toca el estado —siguen 'activa'— para que al
+  // reactivar la suscripción vuelvan a correr sin restaurar nada.
+  const vivos = AL_CANCELAR.pausarRecurrentes
+    ? await equiposConProcesosVivos(dueTodayInvoices.map(fr => fr.teamId))
+    : null;
+
   const results = [];
 
   for (const fr of dueTodayInvoices) {
+    if (vivos && !vivos.has(fr.teamId)) {
+      results.push({ id: fr.id, status: 'skip', reason: 'suscripción sin plan activo' });
+      continue;
+    }
     try {
       const result = await generarFacturaDeRecurrente(fr);
       if (!result.ok) {

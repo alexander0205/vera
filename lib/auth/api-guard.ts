@@ -11,12 +11,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import { teamMembers } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { userHasModule, type ModuleKey } from '@/lib/auth/modules';
+import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 
 type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
@@ -31,27 +30,82 @@ export interface AuthErr {
   response: NextResponse;
 }
 
-export async function requirePermission(permission: Permission): Promise<AuthOk | AuthErr> {
-  const user = await getUser();
+export interface GuardOpts {
+  /**
+   * Exige además que la suscripción esté viva. Va en las rutas que CREAN
+   * VALOR: emitir, cobrar, matricular, sumar un usuario.
+   *
+   * Es opt-in y no automático a propósito — aplicarlo siempre gatearía también
+   * los GET, y quien está en solo-lectura tiene que poder consultar su cartera
+   * y bajarse su información. Ese es justamente el trato: ve todo, no crea
+   * nada. Ver lib/suscripcion/guard.ts.
+   */
+  escritura?: boolean;
+}
+
+export async function requirePermission(
+  permission: Permission,
+  opts: GuardOpts = {},
+): Promise<AuthOk | AuthErr> {
+  /**
+   * Los tres a la vez, no en fila.
+   *
+   * `getUser`, `getTeamIdForUser` y `getTeamRoleForUser` van memoizados por
+   * request (React.cache) pero se encadenaban: cada uno esperaba al anterior
+   * para hacer SU viaje a la base. Contra Neon eso son tres idas y vueltas de
+   * red antes de tocar el dato que la ruta viene a buscar — y todas las rutas
+   * del módulo pasan por aquí. Internamente cada uno vuelve a pedir los
+   * anteriores, pero eso ya sale de la caché de la request.
+   */
+  const [user, teamId, teamRole] = await Promise.all([
+    getUser(),
+    getTeamIdForUser(),
+    getTeamRoleForUser(),
+  ]);
+
   if (!user) {
     return { ok: false, response: NextResponse.json({ error: 'No autenticado' }, { status: 401 }) };
   }
-
-  const teamId = await getTeamIdForUser();
   if (!teamId) {
     return { ok: false, response: NextResponse.json({ error: 'Sin empresa configurada' }, { status: 403 }) };
   }
-
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-  const teamRole = m?.role ?? null;
 
   if (!(await userCanForTeam(teamId, user.platformRole, teamRole, permission))) {
     return { ok: false, response: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };
   }
 
+  if (opts.escritura) {
+    const bloqueo = await bloquearSiSoloLectura(teamId);
+    if (bloqueo) return { ok: false, response: bloqueo };
+  }
+
   return { ok: true, user, teamId, teamRole };
+}
+
+/**
+ * Como requirePermission, pero además exige acceso al módulo del producto
+ * (empresa con módulo activo ∩ permiso modulo:* del rol). Para endpoints
+ * que pertenecen a un módulo comercializable (ej. todo /api/pos → 'pos').
+ */
+export async function requireModuleAndPermission(
+  mod: ModuleKey,
+  permission: Permission,
+  opts: GuardOpts = {},
+): Promise<AuthOk | AuthErr> {
+  const auth = await requirePermission(permission, opts);
+  if (!auth.ok) return auth;
+
+  // El permiso ya se comprobó arriba; esto solo añade «¿el colegio tiene el
+  // módulo?». Comparte la caché de la request con lo anterior, así que no
+  // vuelve a preguntar los roles.
+  if (!(await userHasModule(auth.teamId, auth.user.platformRole, auth.teamRole, mod))) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Módulo no disponible', code: 'MODULO_NO_DISPONIBLE', modulo: mod },
+        { status: 403 },
+      ),
+    };
+  }
+  return auth;
 }

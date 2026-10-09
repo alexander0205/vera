@@ -16,8 +16,13 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Loader2, Building2, User, AlertCircle, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Search, Building2, User, AlertCircle, X } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
+import CircularProgress from '@mui/material/CircularProgress';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -55,7 +60,7 @@ function esRncDigitos(v: string) { return /^\d{2,9}$/.test(v.trim()); }
 export function RncSearch({
   onSelect, value, onClear,
   placeholder = 'Buscar RNC, Cédula o razón social…',
-  className = '', showSyncHint = true,
+  showSyncHint = true,
 }: RncSearchProps) {
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState<RncResult[]>([]);
@@ -194,131 +199,180 @@ export function RncSearch({
   // ── Dropdown (portal) ─────────────────────────────────────────────────────
 
   const dropdown = open && dropRect ? (
-    <div
+    <Box
       ref={dropRef}
-      style={{
+      sx={{
         position: 'fixed',
         top:   dropRect.bottom + 4,
         left:  dropRect.left,
         width: dropRect.width,
         zIndex: 9999,
         pointerEvents: 'auto',
+        bgcolor: '#fff',
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+        maxHeight: 288,
+        overflow: 'auto',
       }}
-      className="bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-auto"
     >
       {results.length === 0 && noData ? (
-        <div className="px-4 py-4 text-center">
-          <p className="text-sm text-gray-500 mb-1">No se encontraron resultados en el padrón DGII</p>
+        <Box sx={{ px: 2, py: 2, textAlign: 'center' }}>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 0.5 }}>No se encontraron resultados en el padrón DGII</Typography>
           {puedeUsarManual && (
-            <button
+            <Box
+              component="button"
               type="button"
-              className="mt-1 mb-2 inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-teal-100 transition-colors"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => usarManual(valorManual)}>
+              onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+              onClick={() => usarManual(valorManual)}
+              sx={{
+                mt: 0.5, mb: 1, display: 'inline-flex', alignItems: 'center', gap: 0.75,
+                borderRadius: '8px', bgcolor: '#eef2fe', px: 1.5, py: 0.75, fontSize: '0.875rem',
+                fontWeight: 500, color: '#2a45c4', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'background-color 0.15s', '&:hover': { bgcolor: '#e0e7fd' },
+              }}
+            >
               Usar «{valorManual}» de todos modos
-            </button>
+            </Box>
           )}
           {showSyncHint && (
-            <p className="text-xs text-gray-400">
+            <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
               ¿Padrón vacío?{' '}
-              <button
+              <Box
+                component="button"
                 type="button"
-                className="text-teal-600 underline"
                 onClick={async () => {
                   setOpen(false);
                   alert('Sincronizando padrón DGII, esto puede tomar 1-2 minutos…');
                   await fetch('/api/rnc/sync', { method: 'POST' });
                   alert('¡Listo! Vuelve a buscar el RNC o nombre.');
-                }}>
+                }}
+                sx={{
+                  color: '#3658e1', textDecoration: 'underline', border: 'none', bgcolor: 'transparent',
+                  p: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
+                }}
+              >
                 Sincronizar ahora
-              </button>
-            </p>
+              </Box>
+            </Typography>
           )}
-        </div>
+        </Box>
       ) : (
         results.map((r) => (
-          <button
+          <Box
+            component="button"
             key={r.rnc}
             type="button"
-            className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
             onClick={() => select(r)}
+            sx={{
+              display: 'block', width: '100%', textAlign: 'left', px: 2, py: 1.5,
+              border: 'none', borderBottom: '1px solid #f9fafb', bgcolor: 'transparent',
+              cursor: 'pointer', fontFamily: 'inherit', transition: 'background-color 0.15s',
+              '&:last-child': { borderBottom: 'none' },
+              '&:hover': { bgcolor: '#f9fafb' },
+            }}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex items-start gap-2">
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+              <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                 {r.tipo === 'cedula'
-                  ? <User className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
-                  : <Building2 className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                  ? <User style={{ width: 16, height: 16, color: '#9ca3af', flexShrink: 0, marginTop: 2 }} />
+                  : <Building2 style={{ width: 16, height: 16, color: '#9ca3af', flexShrink: 0, marginTop: 2 }} />
                 }
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {r.nombreComercial || r.nombre}
-                  </p>
+                  </Typography>
                   {r.tipo === 'cedula' && r.nombre !== 'Persona física' && (
-                    <p className="text-xs text-gray-400">Persona física</p>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Persona física</Typography>
                   )}
                   {r.tipo === 'rnc' && r.nombreComercial && r.nombreComercial !== r.nombre && (
-                    <p className="text-xs text-gray-500 truncate">{r.nombre}</p>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</Typography>
                   )}
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="font-mono text-xs text-gray-500">{r.rnc}</p>
+                </Box>
+              </Box>
+              <Box sx={{ flexShrink: 0, textAlign: 'right' }}>
+                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280' }}>{r.rnc}</Typography>
                 {r.tipo === 'rnc' && r.estado !== '2' && (
-                  <span className="text-[10px] text-amber-600 flex items-center gap-0.5 justify-end mt-0.5">
-                    <AlertCircle className="h-3 w-3" />{r.estadoLabel}
-                  </span>
+                  <Box component="span" sx={{ fontSize: '10px', color: '#d97706', display: 'flex', alignItems: 'center', gap: 0.25, justifyContent: 'flex-end', mt: 0.25 }}>
+                    <AlertCircle style={{ width: 12, height: 12 }} />{r.estadoLabel}
+                  </Box>
                 )}
                 {r.tipo === 'cedula' && (
-                  <span className={`text-[10px] flex items-center gap-0.5 justify-end mt-0.5 ${
-                    r.estadoLabel === 'Verificado' ? 'text-emerald-600' : 'text-gray-400'
-                  }`}>
+                  <Box component="span" sx={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: 0.25, justifyContent: 'flex-end', mt: 0.25, color: r.estadoLabel === 'Verificado' ? '#059669' : '#9ca3af' }}>
                     {r.estadoLabel}
-                  </span>
+                  </Box>
                 )}
-              </div>
-            </div>
-          </button>
+              </Box>
+            </Box>
+          </Box>
         ))
       )}
-    </div>
+    </Box>
   ) : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div ref={wrapperRef} className={`relative ${className}`}>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-        <Input
-          className="pl-8 pr-8 h-9 text-sm"
-          placeholder={placeholder}
-          value={query}
-          onChange={(e) => handleInput(e.target.value)}
-          onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
-          onBlur={() => {
-            setTimeout(() => {
-              setOpen(false);
-              // Restaurar el texto al valor seleccionado si el usuario no eligió otro.
-              setQuery(value ?? '');
-            }, 200);
-          }}
-        />
-        {loading ? (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-400" />
-        ) : query.trim() ? (
-          <button
-            type="button"
-            aria-label="Borrar"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={clear}>
-            <X className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-      </div>
+    <Box ref={wrapperRef} sx={{ position: 'relative' }}>
+      <TextField
+        fullWidth
+        size="small"
+        placeholder={placeholder}
+        value={query}
+        onChange={(e) => handleInput(e.target.value)}
+        onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+        /**
+         * Escape cierra el desplegable, y ahí se queda.
+         *
+         * Este campo es el PRIMERO del formulario de cliente, y el desplegable
+         * de la DGII tapa lo que viene debajo. El usuario pulsa Escape para
+         * quitarlo de en medio —lo natural— y antes esa tecla subía hasta el
+         * diálogo que lo contenía y se llevaba la ficha entera con todo lo
+         * tecleado. Ese era el «se cierra solo» que reportaban las familias.
+         *
+         * Con el desplegable cerrado no se detiene nada: el segundo Escape
+         * sigue llegando a quien lo hospede, que es lo que se espera.
+         */
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && open) {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
+        onBlur={() => {
+          setTimeout(() => {
+            setOpen(false);
+            // Restaurar el texto al valor seleccionado si el usuario no eligió otro.
+            setQuery(value ?? '');
+          }, 200);
+        }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search style={{ width: 14, height: 14, color: '#9ca3af' }} />
+              </InputAdornment>
+            ),
+            endAdornment: loading ? (
+              <CircularProgress size={14} sx={{ color: '#9ca3af' }} />
+            ) : query.trim() ? (
+              <IconButton
+                aria-label="Borrar"
+                size="small"
+                onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+                onClick={clear}
+                sx={{ p: 0.25, color: '#9ca3af', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}
+              >
+                <X style={{ width: 14, height: 14 }} />
+              </IconButton>
+            ) : null,
+          },
+        }}
+      />
 
       {typeof document !== 'undefined' && dropdown && createPortal(dropdown, document.body)}
-    </div>
+    </Box>
   );
 }

@@ -33,6 +33,12 @@ export interface GenerarCodigoFacturaOpts {
   userId?: number | null;
   tipoEcf: string;
   fecha?: Date;
+  // Datos ya cargados por el caller → evitan re-consultar teams/users (2 round-
+  // trips a Neon). Si se omiten, se consultan como antes. El nombre de empresa
+  // se pasa pre-resuelto (razonSocial ?? nombreComercial ?? name).
+  empNombre?: string | null;
+  usrNombre?: string | null;
+  usrEmail?: string | null;
 }
 
 // Sufijos legales a ignorar al derivar las iniciales de un nombre.
@@ -105,27 +111,38 @@ export async function generarCodigoFactura(
   const tipo = tipoCodigo(tipoEcf);
 
   // ── EMP: iniciales de la empresa ───────────────────────────────────────────
-  const [team] = await executor
-    .select({
-      razonSocial:     teams.razonSocial,
-      nombreComercial: teams.nombreComercial,
-      name:            teams.name,
-    })
-    .from(teams)
-    .where(eq(teams.id, teamId))
-    .limit(1);
-
-  const nombreEmpresa = team?.razonSocial ?? team?.nombreComercial ?? team?.name ?? null;
+  // Si el caller ya trae el nombre (hot path del cobro), no re-consultar teams.
+  let nombreEmpresa: string | null;
+  if (opts.empNombre !== undefined) {
+    nombreEmpresa = opts.empNombre;
+  } else {
+    const [team] = await executor
+      .select({
+        razonSocial:     teams.razonSocial,
+        nombreComercial: teams.nombreComercial,
+        name:            teams.name,
+      })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    nombreEmpresa = team?.razonSocial ?? team?.nombreComercial ?? team?.name ?? null;
+  }
   const emp = inicialesDe(nombreEmpresa, 'XX');
 
   // ── USR: iniciales del usuario ─────────────────────────────────────────────
   let usr = 'SY';
   if (userId != null) {
-    const [u] = await executor
-      .select({ name: users.name, email: users.email })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    // Igual que arriba: si el caller ya trae nombre/email, no re-consultar users.
+    let u: { name: string | null; email: string | null } | undefined;
+    if (opts.usrNombre !== undefined || opts.usrEmail !== undefined) {
+      u = { name: opts.usrNombre ?? null, email: opts.usrEmail ?? null };
+    } else {
+      [u] = await executor
+        .select({ name: users.name, email: users.email })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+    }
 
     if (u?.name) {
       usr = inicialesDe(u.name, 'SY');

@@ -3,7 +3,8 @@
  * locales con RNC). Categoría fija → sin selector de tipo.
  */
 import { Suspense } from 'react';
-import { Loader2 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 import { getEmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 import NuevaFacturaFormClient from '@/app/(dashboard)/dashboard/facturas/nueva/_nueva-factura-client';
 import { requirePermission } from '@/lib/auth/page-guard';
@@ -14,9 +15,9 @@ export default async function NuevaCompraPage() {
 
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
+      </Box>
     }>
       <NuevaFacturaFormClient initialPerfil={perfil} categoriaFija="compras" />
     </Suspense>

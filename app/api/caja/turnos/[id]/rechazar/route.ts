@@ -12,6 +12,7 @@ import { rechazarCierre } from '@/lib/caja/core';
 import { db } from '@/lib/db/drizzle';
 import { users, teams } from '@/lib/db/schema';
 import { sendCajaCierreRechazadoEmail } from '@/lib/email';
+import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 const schema = z.object({ motivo: z.string().min(1).max(500) });
 
@@ -89,6 +90,6 @@ async function notificarCajeroCierreRechazado(
     numeroCierre: turno.numeroCierre ?? `Turno #${turno.id}`,
     motivo,
     teamName,
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
+    appUrl: baseDeEnlaces(),
   });
 }

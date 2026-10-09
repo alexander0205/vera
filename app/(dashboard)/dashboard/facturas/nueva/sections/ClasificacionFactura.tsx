@@ -11,10 +11,11 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import { Tags } from 'lucide-react';
 
 interface Valor { id: number; valor: string; }
@@ -73,55 +74,66 @@ export function ClasificacionFactura({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Tags className="h-4 w-4 text-gray-400" />
-        <Label className="text-sm font-semibold text-gray-700">Clasificación</Label>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Tags style={{ width: 16, height: 16, color: '#9ca3af' }} />
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>Clasificación</Typography>
+      </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
         {maestros.map((m) => {
           const sel = valsOf(m.id);
           return (
-            <div key={m.id} className="space-y-1.5">
-              <Label className="text-xs text-gray-500">{m.nombre}</Label>
+            <Box key={m.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{m.nombre}</Typography>
               {m.multiple ? (
                 m.valores.length === 0 ? (
-                  <p className="text-xs text-gray-300">Sin valores definidos.</p>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#d1d5db' }}>Sin valores definidos.</Typography>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
                     {m.valores.map((v) => {
                       const on = sel.includes(v.id);
                       return (
-                        <button
+                        <Box
                           key={v.id}
+                          component="button"
                           type="button"
                           onClick={() => toggleMulti(m.id, v.id)}
-                          className={`text-sm rounded-full px-3 py-1 border transition ${
-                            on ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:border-teal-400'
-                          }`}
+                          sx={{
+                            fontSize: '0.875rem',
+                            borderRadius: '9999px',
+                            px: 1.5,
+                            py: 0.5,
+                            border: '1px solid',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            bgcolor: on ? '#3658e1' : '#fff',
+                            color: on ? '#fff' : '#4b5563',
+                            borderColor: on ? '#3658e1' : '#d1d5db',
+                            '&:hover': { borderColor: on ? '#3658e1' : '#8193f5' },
+                          }}
                         >
                           {v.valor}
-                        </button>
+                        </Box>
                       );
                     })}
-                  </div>
+                  </Box>
                 )
               ) : (
-                <Select
-                  value={sel.length ? String(sel[0]) : NONE}
-                  onValueChange={(val) => setSingle(m.id, val === NONE ? null : parseInt(val))}
-                >
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>— Ninguno —</SelectItem>
-                    {m.valores.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.valor}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <FormControl size="small" fullWidth>
+                  <Select
+                    value={sel.length ? String(sel[0]) : NONE}
+                    onChange={(e) => setSingle(m.id, e.target.value === NONE ? null : parseInt(e.target.value))}
+                    sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+                  >
+                    <MenuItem value={NONE}>— Ninguno —</MenuItem>
+                    {m.valores.map((v) => <MenuItem key={v.id} value={String(v.id)}>{v.valor}</MenuItem>)}
+                  </Select>
+                </FormControl>
               )}
-            </div>
+            </Box>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

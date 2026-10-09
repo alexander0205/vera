@@ -51,6 +51,18 @@ export function esTipoVentaFiscal(codigo: string): boolean {
   return (TIPOS_VENTA_FISCAL as readonly string[]).includes(codigo);
 }
 
+/**
+ * Comprobantes que registran dinero que SALE, no ventas: 41 (compras), 43
+ * (gastos menores) y 47 (pagos al exterior). No son ingresos ni cuentas por
+ * cobrar; sirven para excluirlos de listados/métricas de venta y para dar al
+ * efectivo del gasto el trato de salida de caja (no de cobro).
+ */
+export const TIPOS_COMPRA_GASTO = ['41', '43', '47'] as const;
+
+export function esTipoCompraGasto(codigo: string): boolean {
+  return (TIPOS_COMPRA_GASTO as readonly string[]).includes(codigo);
+}
+
 export function esTipoEcfRecurrenteValido(codigo: unknown): boolean {
   return typeof codigo === 'string'
     && (TIPOS_ECF_RECURRENTES as readonly string[]).includes(codigo);

@@ -160,7 +160,7 @@ export function PayClient(props: Props) {
 const styles: Record<string, React.CSSProperties> = {
   wrap:   { minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: 16, fontFamily: 'system-ui, sans-serif' },
   card:   { width: '100%', maxWidth: 380, background: '#fff', borderRadius: 16, boxShadow: '0 10px 40px rgba(0,0,0,.08)', padding: 28, textAlign: 'center' },
-  badge:  { display: 'inline-block', fontSize: 13, fontWeight: 600, color: '#0d9488', background: '#f0fdfa', padding: '4px 12px', borderRadius: 999, marginBottom: 16 },
+  badge:  { display: 'inline-block', fontSize: 13, fontWeight: 600, color: '#3658e1', background: '#eef2fe', padding: '4px 12px', borderRadius: 999, marginBottom: 16 },
   rncNeg: { fontSize: 12, color: '#94a3b8', marginTop: -10, marginBottom: 10 },
   label:  { fontSize: 15, fontWeight: 700, color: '#334155' },
   fecha:  { fontSize: 12, color: '#94a3b8', marginTop: 2 },
@@ -176,7 +176,7 @@ const styles: Record<string, React.CSSProperties> = {
   montoLabel: { fontSize: 12, color: '#94a3b8', marginTop: 18, textTransform: 'uppercase', letterSpacing: '.05em' },
   monto:  { fontSize: 40, fontWeight: 800, color: '#0f172a', margin: '4px 0 24px' },
   btn:    { width: '100%', padding: '14px 16px', borderRadius: 12, fontSize: 16, fontWeight: 700, border: 'none', cursor: 'pointer', marginBottom: 10 },
-  btnPay: { background: '#0d9488', color: '#fff' },
+  btnPay: { background: '#3658e1', color: '#fff' },
   btnOk:  { background: '#16a34a', color: '#fff' },
   btnGhost:{ background: '#f1f5f9', color: '#475569' },
   status: { padding: '14px', borderRadius: 12, fontWeight: 700, fontSize: 16 },

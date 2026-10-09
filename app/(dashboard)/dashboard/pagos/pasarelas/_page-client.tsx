@@ -111,7 +111,7 @@ export default function PasarelasClient() {
     <div className="max-w-3xl mx-auto p-4 space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Link2 className="h-6 w-6 text-teal-600" /> Pasarelas de pago
+          <Link2 className="h-6 w-6 text-zero-600" /> Pasarelas de pago
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Conecta una pasarela para generar <b>links de pago</b> de tus facturas y cotizaciones.
@@ -203,7 +203,7 @@ function ProviderCard({ providerKey, label, hint, current, onSaved }: {
         {/* Tutorial: cómo sacar la cuenta y qué necesita el negocio */}
         {tuto && (
           <details className="rounded-lg border border-slate-200 bg-slate-50/60">
-            <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-teal-700 flex items-center gap-2">
+            <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-zero-700 flex items-center gap-2">
               <HelpCircle className="h-4 w-4" /> ¿Cómo obtener tu cuenta de {label}?
             </summary>
             <div className="px-4 pb-3 pt-1 text-sm text-slate-600 space-y-2">
@@ -218,7 +218,7 @@ function ProviderCard({ providerKey, label, hint, current, onSaved }: {
               <div className="flex flex-wrap gap-3 pt-1">
                 {tuto.links.map((l) => (
                   <a key={l.url} href={l.url} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-teal-700 hover:underline">
+                    className="inline-flex items-center gap-1 text-zero-700 hover:underline">
                     <ExternalLink className="h-3.5 w-3.5" /> {l.label}
                   </a>
                 ))}

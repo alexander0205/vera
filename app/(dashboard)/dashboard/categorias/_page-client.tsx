@@ -1,20 +1,23 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  FolderOpen, Plus, Pencil, Trash2, Loader2, AlertTriangle,
-} from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import { FolderOpen, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Categoria {
   id: number;
@@ -24,6 +27,7 @@ interface Categoria {
 }
 
 const EMPTY_FORM = { nombre: '', descripcion: '' };
+const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
 
 export default function CategoriasPage() {
   const [categorias, setCategorias]     = useState<Categoria[]>([]);
@@ -50,202 +54,165 @@ export default function CategoriasPage() {
   useEffect(() => { cargar(); }, [cargar]);
 
   function abrirNuevo() {
-    setEditTarget(null);
-    setForm(EMPTY_FORM);
-    setOpError(null);
-    setShowForm(true);
+    setEditTarget(null); setForm(EMPTY_FORM); setOpError(null); setShowForm(true);
   }
 
   function abrirEdicion(c: Categoria) {
-    setEditTarget(c);
-    setForm({ nombre: c.nombre, descripcion: c.descripcion ?? '' });
-    setOpError(null);
-    setShowForm(true);
+    setEditTarget(c); setForm({ nombre: c.nombre, descripcion: c.descripcion ?? '' }); setOpError(null); setShowForm(true);
   }
 
   async function handleGuardar() {
-    if (!form.nombre.trim()) {
-      setOpError('El nombre es obligatorio');
-      return;
-    }
-    setSaving(true);
-    setOpError(null);
+    if (!form.nombre.trim()) { setOpError('El nombre es obligatorio'); return; }
+    setSaving(true); setOpError(null);
     try {
       const url    = editTarget ? `/api/categorias/${editTarget.id}` : '/api/categorias';
       const method = editTarget ? 'PUT' : 'POST';
-      const res    = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const data   = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
-      setShowForm(false);
-      cargar();
+      setShowForm(false); cargar();
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error guardando');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   async function handleEliminar() {
     if (!deleteTarget) return;
-    setDeleting(true);
-    setOpError(null);
+    setDeleting(true); setOpError(null);
     try {
       const res  = await fetch(`/api/categorias/${deleteTarget.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error eliminando');
-      setDeleteTarget(null);
-      cargar();
+      setDeleteTarget(null); cargar();
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error eliminando');
-    } finally {
-      setDeleting(false);
-    }
+    } finally { setDeleting(false); }
   }
 
   return (
-    <section className="p-6 space-y-6">
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Categorías de Productos</h1>
-          <p className="text-sm text-gray-500 mt-1">Organiza tu catálogo por categorías</p>
-        </div>
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-          <Plus className="h-4 w-4 mr-2" />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Categorías de Productos</Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>Organiza tu catálogo por categorías</Typography>
+        </Box>
+        <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nueva categoría
         </Button>
-      </div>
+      </Box>
 
-      {/* Tabla */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FolderOpen className="h-4 w-4" />
+      <Box sx={cardSx}>
+        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FolderOpen size={16} color="#6b7280" />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>
             {loading ? 'Cargando…' : `${categorias.length} categoría${categorias.length !== 1 ? 's' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : categorias.length === 0 ? (
-            <div className="text-center py-16">
-              <FolderOpen className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">Sin categorías registradas</p>
-              <p className="text-sm text-gray-400 mt-1">
-                Crea categorías para organizar mejor tu catálogo de productos
-              </p>
-              <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
-                <Plus className="h-4 w-4 mr-1" />Nueva categoría
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+          </Typography>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress size={36} sx={{ color: '#3658e1' }} />
+          </Box>
+        ) : categorias.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8 }}>
+            <FolderOpen size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+            <Typography sx={{ color: '#6b7280', fontWeight: 500 }}>Sin categorías registradas</Typography>
+            <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>Crea categorías para organizar mejor tu catálogo de productos</Typography>
+            <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />} onClick={abrirNuevo}
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+              Nueva categoría
+            </Button>
+          </Box>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ '& th': { fontWeight: 600, color: '#6b7280', fontSize: '0.75rem', bgcolor: '#f9fafb', borderBottom: '1px solid #f3f4f6' } }}>
+                <TableCell>Nombre</TableCell>
+                <TableCell>Descripción</TableCell>
+                <TableCell>Fecha</TableCell>
+                <TableCell align="right">Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {categorias.map(c => (
+                <TableRow key={c.id} sx={{ '&:hover': { bgcolor: '#f9fafb' }, '& td': { borderBottom: '1px solid #f3f4f6' } }}>
+                  <TableCell><Typography variant="body2" sx={{ fontWeight: 600, color: '#111827' }}>{c.nombre}</Typography></TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
+                      {c.descripcion ?? <span style={{ color: '#d1d5db' }}>—</span>}
+                    </Typography>
+                  </TableCell>
+                  <TableCell><Typography variant="body2" sx={{ color: '#6b7280' }}>{new Date(c.createdAt).toLocaleDateString('es-DO')}</Typography></TableCell>
+                  <TableCell align="right">
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <IconButton size="small" onClick={() => abrirEdicion(c)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                        <Pencil size={16} />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => { setDeleteTarget(c); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categorias.map((c) => (
-                  <TableRow key={c.id} className="hover:bg-gray-50">
-                    <TableCell className="font-medium text-gray-900">{c.nombre}</TableCell>
-                    <TableCell className="text-sm text-gray-500 max-w-xs truncate">
-                      {c.descripcion ?? <span className="text-gray-300">—</span>}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-500">
-                      {new Date(c.createdAt).toLocaleDateString('es-DO')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => abrirEdicion(c)}>
-                          <Pencil className="h-4 w-4 text-gray-500" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(c); setOpError(null); }}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Box>
 
       {/* Modal: Crear / Editar */}
-      <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? 'Editar categoría' : 'Nueva categoría'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <div className="space-y-1.5">
-              <Label>Nombre *</Label>
-              <Input
-                placeholder="Ej: Servicios Digitales"
-                value={form.nombre}
-                onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Descripción</Label>
-              <Textarea
-                placeholder="Descripción opcional de la categoría…"
-                rows={3}
-                value={form.descripcion}
-                onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving}>
-              {saving
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
-                : (editTarget ? 'Guardar cambios' : 'Crear categoría')}
-            </Button>
-          </DialogFooter>
+      <Dialog open={showForm} onClose={() => { if (!saving) setShowForm(false); }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 440 } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>
+          {editTarget ? 'Editar categoría' : 'Nueva categoría'}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pb: 1 }}>
+          {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
+          <TextField label="Nombre *" size="small" fullWidth placeholder="Ej: Servicios Digitales"
+            value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, mt: 1 }} />
+          <TextField label="Descripción" size="small" fullWidth multiline rows={3}
+            placeholder="Descripción opcional de la categoría…"
+            value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setShowForm(false)} disabled={saving}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
+          <Button variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
+            startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+            {saving ? 'Guardando…' : editTarget ? 'Guardar cambios' : 'Crear categoría'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Modal: Confirmar eliminación */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar categoría?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar la categoría <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Los productos asignados a esta categoría no se verán afectados.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+      <Dialog open={!!deleteTarget} onClose={() => { if (!deleting) setDeleteTarget(null); }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 360 } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>¿Eliminar categoría?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          {opError && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>{opError}</Alert>}
+          <Typography variant="body2" sx={{ color: '#374151', mb: 2 }}>
+            Vas a eliminar la categoría <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
+          </Typography>
+          <Alert severity="warning" icon={<AlertTriangle size={16} />} sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+            Los productos asignados a esta categoría no se verán afectados.
+          </Alert>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setDeleteTarget(null)} disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
+          <Button variant="contained" disableElevation color="error" onClick={handleEliminar} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </section>
+
+    </Box>
   );
 }

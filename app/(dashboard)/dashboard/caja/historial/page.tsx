@@ -3,6 +3,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Wallet, CheckCircle, AlertTriangle, Loader2, Printer } from 'lucide-react';
 import { fmtDOP } from '@/lib/utils/format';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import MuiButton from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface TurnoHistorial {
   id: number;
@@ -21,8 +32,7 @@ interface TurnoHistorial {
 
 function fmtDatetime(iso: string) {
   return new Date(iso).toLocaleString('es-DO', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
 
@@ -34,18 +44,15 @@ function duracion(desde: string, hasta: string | null) {
 }
 
 export default function HistorialPage() {
-  const [loading, setLoading]   = useState(true);
-  const [turnos, setTurnos]     = useState<TurnoHistorial[]>([]);
-  const [total, setTotal]       = useState(0);
-  const [page, setPage]         = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [turnos, setTurnos]   = useState<TurnoHistorial[]>([]);
+  const [total, setTotal]     = useState(0);
+  const [page, setPage]       = useState(1);
   const limit = 20;
 
   const fetchHistorial = useCallback(async () => {
     setLoading(true);
-    const sp = new URLSearchParams({
-      limit: String(limit),
-      offset: String((page - 1) * limit),
-    });
+    const sp = new URLSearchParams({ limit: String(limit), offset: String((page - 1) * limit) });
     const res = await fetch(`/api/caja/historial?${sp}`).catch(() => null);
     if (res?.ok) {
       const data = await res.json();
@@ -60,166 +67,169 @@ export default function HistorialPage() {
   const pages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <section className="p-4 sm:p-6 space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Historial de caja</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Turnos cerrados y aprobados</p>
-      </div>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1100 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Historial de caja</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>Turnos cerrados y aprobados</Typography>
+      </Box>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-        </div>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress size={36} color="primary" />
+        </Box>
       ) : turnos.length === 0 ? (
-        <div className="bg-gray-50 rounded-2xl border border-gray-200 p-12 text-center space-y-2">
-          <Wallet className="h-10 w-10 text-gray-300 mx-auto" />
-          <p className="font-semibold text-gray-600">Sin turnos cerrados aún</p>
-          <p className="text-sm text-gray-400">Los turnos aparecerán aquí una vez cerrados y aprobados.</p>
-        </div>
+        <Box sx={{ bgcolor: 'grey.50', borderRadius: '16px', border: '1px solid #e5e7eb', py: 8, textAlign: 'center' }}>
+          <Wallet style={{ width: 40, height: 40, color: '#d1d5db', margin: '0 auto 12px' }} />
+          <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.secondary' }}>Sin turnos cerrados aún</Typography>
+          <Typography variant="body2" sx={{ color: 'text.disabled', mt: 0.5 }}>Los turnos aparecerán aquí una vez cerrados y aprobados.</Typography>
+        </Box>
       ) : (
         <>
           {/* Tabla desktop */}
-          <div className="hidden md:block bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cierre</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cajero</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Apertura</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Duración</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Esperado</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Contado</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Diferencia</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', display: { xs: 'none', md: 'block' }, mb: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  {['Cierre', 'Cajero', 'Apertura', 'Duración', 'Esperado', 'Contado', 'Diferencia'].map(h => (
+                    <TableCell key={h} align={['Esperado', 'Contado', 'Diferencia'].includes(h) ? 'right' : 'left'}
+                      sx={{ fontWeight: 700, fontSize: '0.6875rem', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em', py: 1.5 }}>
+                      {h}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {turnos.map(t => {
                   const diff = t.diferenciaCentavos ?? 0;
                   return (
-                    <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3">
-                        <p className="font-mono text-xs text-gray-600">{t.numeroCierre ?? `#${t.id}`}</p>
+                    <TableRow key={t.id} sx={{ '&:hover': { bgcolor: 'grey.50' } }}>
+                      <TableCell sx={{ py: 1.5 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', display: 'block' }}>
+                          {t.numeroCierre ?? `#${t.id}`}
+                        </Typography>
                         {t.aprobadoAt && (
-                          <p className="text-xs text-gray-400 mt-0.5">{fmtDatetime(t.aprobadoAt)}</p>
+                          <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block' }}>{fmtDatetime(t.aprobadoAt)}</Typography>
                         )}
-                        <button
+                        <MuiButton size="small" variant="text" color="primary"
+                          startIcon={<Printer style={{ width: 11, height: 11 }} />}
                           onClick={() => window.open(`/caja/imprimir/${t.id}`, '_blank')}
-                          className="mt-1 inline-flex items-center gap-1 text-[11px] text-teal-600 hover:text-teal-700 hover:underline"
-                        >
-                          <Printer className="h-3 w-3" /> Imprimir
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-800 truncate max-w-[140px]">{t.cajero ?? t.cajeroEmail}</p>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                        {fmtDatetime(t.aperturaAt)}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
-                        {duracion(t.aperturaAt, t.aprobadoAt)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
-                        {fmtDOP(t.montoEsperadoCentavos ?? 0)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
-                        {fmtDOP(t.efectivoContadoCentavos ?? 0)}
-                      </td>
-                      <td className="px-5 py-3 text-right">
+                          sx={{ textTransform: 'none', fontSize: '0.6875rem', p: '2px 4px', minWidth: 0, mt: 0.25 }}>
+                          Imprimir
+                        </MuiButton>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+                          {t.cajero ?? t.cajeroEmail}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                          {fmtDatetime(t.aperturaAt)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {duracion(t.aperturaAt, t.aprobadoAt)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}>
+                          {fmtDOP(t.montoEsperadoCentavos ?? 0)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}>
+                          {fmtDOP(t.efectivoContadoCentavos ?? 0)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
                         {diff === 0 ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                            <CheckCircle className="h-3.5 w-3.5" /> Cuadra
-                          </span>
+                          <Chip label="Cuadra" size="small" icon={<CheckCircle style={{ width: 10, height: 10 }} />}
+                            sx={{ bgcolor: '#ecfdf5', color: '#065f46', height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }} />
                         ) : (
-                          <span className={`inline-flex items-center gap-1 text-xs font-semibold tabular-nums ${diff > 0 ? 'text-sky-700' : 'text-red-700'}`}>
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            {diff > 0 ? '+' : ''}{fmtDOP(diff)}
-                          </span>
+                          <Chip
+                            label={`${diff > 0 ? '+' : ''}${fmtDOP(diff)}`}
+                            size="small"
+                            icon={<AlertTriangle style={{ width: 10, height: 10 }} />}
+                            sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 },
+                              ...(diff > 0 ? { bgcolor: '#eff6ff', color: '#1d4ed8' } : { bgcolor: '#fef2f2', color: '#991b1b' }) }}
+                          />
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Card>
 
           {/* Cards mobile */}
-          <div className="md:hidden space-y-3">
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1.5, mb: 2 }}>
             {turnos.map(t => {
               const diff = t.diferenciaCentavos ?? 0;
               return (
-                <div key={t.id} className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">{t.cajero ?? t.cajeroEmail}</p>
-                      <p className="text-xs font-mono text-gray-400 mt-0.5">{t.numeroCierre ?? `#${t.id}`}</p>
-                      <button
-                        onClick={() => window.open(`/caja/imprimir/${t.id}`, '_blank')}
-                        className="mt-1 inline-flex items-center gap-1 text-xs text-teal-600 hover:underline"
-                      >
-                        <Printer className="h-3 w-3" /> Imprimir
-                      </button>
-                    </div>
-                    {diff === 0 ? (
-                      <CheckCircle className="h-5 w-5 text-emerald-500" />
-                    ) : (
-                      <AlertTriangle className={`h-5 w-5 ${diff > 0 ? 'text-sky-500' : 'text-red-500'}`} />
+                <Card key={t.id} elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+                  <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{t.cajero ?? t.cajeroEmail}</Typography>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', display: 'block' }}>{t.numeroCierre ?? `#${t.id}`}</Typography>
+                        <MuiButton size="small" variant="text" color="primary" startIcon={<Printer style={{ width: 10, height: 10 }} />}
+                          onClick={() => window.open(`/caja/imprimir/${t.id}`, '_blank')}
+                          sx={{ textTransform: 'none', fontSize: '0.6875rem', p: '2px 4px', minWidth: 0, mt: 0.25 }}>
+                          Imprimir
+                        </MuiButton>
+                      </Box>
+                      {diff === 0
+                        ? <CheckCircle style={{ width: 20, height: 20, color: '#34d399' }} />
+                        : <AlertTriangle style={{ width: 20, height: 20, color: diff > 0 ? '#3b82f6' : '#ef4444' }} />}
+                    </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                      {[
+                        { label: 'Esperado', value: fmtDOP(t.montoEsperadoCentavos ?? 0) },
+                        { label: 'Contado', value: fmtDOP(t.efectivoContadoCentavos ?? 0) },
+                        { label: 'Apertura', value: fmtDatetime(t.aperturaAt) },
+                        { label: 'Duración', value: duracion(t.aperturaAt, t.aprobadoAt) },
+                      ].map(item => (
+                        <Box key={item.label}>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{item.label}</Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary' }}>{item.value}</Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                    {diff !== 0 && (
+                      <Box sx={{ px: 1.5, py: 1, borderRadius: '8px', ...(diff > 0 ? { bgcolor: '#eff6ff', color: '#1d4ed8' } : { bgcolor: '#fef2f2', color: '#991b1b' }) }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                          Diferencia: {diff > 0 ? '+' : ''}{fmtDOP(diff)}
+                          {t.cierreObs && <Box component="span" sx={{ fontWeight: 400, opacity: 0.75 }}> — {t.cierreObs}</Box>}
+                        </Typography>
+                      </Box>
                     )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-xs text-gray-500">Esperado</p>
-                      <p className="font-bold tabular-nums">{fmtDOP(t.montoEsperadoCentavos ?? 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Contado</p>
-                      <p className="font-bold tabular-nums">{fmtDOP(t.efectivoContadoCentavos ?? 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Apertura</p>
-                      <p className="text-xs text-gray-700">{fmtDatetime(t.aperturaAt)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Duración</p>
-                      <p className="text-xs text-gray-700">{duracion(t.aperturaAt, t.aprobadoAt)}</p>
-                    </div>
-                  </div>
-                  {diff !== 0 && (
-                    <div className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${diff > 0 ? 'bg-sky-50 text-sky-700' : 'bg-red-50 text-red-700'}`}>
-                      Diferencia: {diff > 0 ? '+' : ''}{fmtDOP(diff)}
-                      {t.cierreObs && <span className="font-normal ml-1 opacity-75">— {t.cierreObs}</span>}
-                    </div>
-                  )}
-                </div>
+                  </Box>
+                </Card>
               );
             })}
-          </div>
+          </Box>
 
           {/* Paginación */}
           {pages > 1 && (
-            <div className="flex items-center justify-between text-sm text-gray-600">
-              <span>{total} turnos en total</span>
-              <div className="flex gap-2">
-                <button
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => p - 1)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>{total} turnos en total</Typography>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <MuiButton variant="outlined" size="small" disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+                  sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider' }}>
                   Anterior
-                </button>
-                <span className="px-3 py-1.5 text-gray-500">{page} / {pages}</span>
-                <button
-                  disabled={page >= pages}
-                  onClick={() => setPage(p => p + 1)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
+                </MuiButton>
+                <Typography variant="body2" sx={{ color: 'text.secondary', px: 1 }}>{page} / {pages}</Typography>
+                <MuiButton variant="outlined" size="small" disabled={page >= pages} onClick={() => setPage(p => p + 1)}
+                  sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider' }}>
                   Siguiente
-                </button>
-              </div>
-            </div>
+                </MuiButton>
+              </Box>
+            </Box>
           )}
         </>
       )}
-    </section>
+    </Box>
   );
 }

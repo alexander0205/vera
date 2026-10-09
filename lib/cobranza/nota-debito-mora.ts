@@ -390,6 +390,10 @@ async function getOrCreateMoraProducto(teamId: number, createdBy: number | null)
         precio:      0,            // monto dinámico por factura; sin precio fijo de catálogo
         esMora:      true,
         activo:      'true',
+        // Explícito aunque hoy el default de la columna ya sea false: este
+        // producto nació visible en la grilla del POS y llegó a facturarse desde
+        // una caja por RD$0.00. Que se lea acá y no en el DDL.
+        visiblePos:  false,
         createdBy,
       })
       .returning({ id: products.id });

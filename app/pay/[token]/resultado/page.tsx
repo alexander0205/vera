@@ -54,5 +54,5 @@ const S: Record<string, React.CSSProperties> = {
   monto:{ fontSize: 32, fontWeight: 800, color: '#0f172a', margin: '8px 0' },
   ref:  { fontSize: 13, color: '#64748b', marginBottom: 8 },
   msg:  { fontSize: 14, color: '#475569', marginTop: 8 },
-  link: { display: 'inline-block', marginTop: 12, color: '#0d9488', fontWeight: 600, textDecoration: 'none' },
+  link: { display: 'inline-block', marginTop: 12, color: '#3658e1', fontWeight: 600, textDecoration: 'none' },
 };

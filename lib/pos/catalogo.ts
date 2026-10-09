@@ -5,11 +5,19 @@
  * aparece donde tiene stock asignado (fila en product_almacen_stock del almacén
  * de la terminal). Los productos sin control de inventario aparecen siempre.
  * Excluye lo no vendible en mostrador vía products.visible_pos.
+ *
+ * Y excluye SIEMPRE el servicio de mora, mire lo que mire `visible_pos`. No es
+ * una preferencia del comerciante: su precio de catálogo es 0 porque el monto
+ * lo calcula `lib/cobranza/nota-debito-mora.ts` por factura vencida, así que
+ * tocarlo en la caja no cobra la mora — emite un comprobante fiscal de cero
+ * pesos. Lo que no se puede hacer bien no se ofrece; dejarlo como interruptor
+ * apagable solo garantiza que algún día alguien lo encienda «para probar».
  */
 
 import { and, eq, asc, desc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { products, productAlmacenStock, listasPrecios_items, categorias } from '@/lib/db/schema';
+import { compararParaCaja } from '@/lib/pos/agotado';
 
 export interface ProductoPos {
   id:                   number;
@@ -87,6 +95,7 @@ export async function getCatalogoPos(
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
       eq(products.visiblePos, true),
+      eq(products.esMora, false),
       // Aparece si: no controla inventario, tiene stock de producto en este
       // almacén, o tiene alguna variante con stock asignado en este almacén.
       sql`(${products.controlaInventario} = false
@@ -97,9 +106,12 @@ export async function getCatalogoPos(
               WHERE pv.product_id = ${products.id} AND pvas.almacen_id = ${almacenId}
            ))`,
     ))
+    // El orden definitivo se termina abajo: «agotado» depende del stock de las
+    // variantes en ESTE almacén, que es una subconsulta — ordenar por ella en
+    // SQL obligaría a repetirla en el ORDER BY. Aquí se deja el criterio base.
     .orderBy(desc(products.posFavorito), asc(products.nombre));
 
-  return rows.map((r) => {
+  const catalogo = rows.map((r) => {
     const variantAtributos = (r.variantAtributos as { nombre: string; valores: string[] }[] | null) ?? [];
     const tieneVariantes = variantAtributos.length > 0;
     return {
@@ -124,4 +136,6 @@ export async function getCatalogoPos(
       variantAtributos,
     };
   });
+
+  return catalogo.sort(compararParaCaja);
 }

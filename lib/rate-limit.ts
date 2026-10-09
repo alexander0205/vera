@@ -36,6 +36,11 @@ export function rateLimit(
   maxRequests = 10,
   windowMs = 60_000,
 ): { allowed: boolean; remaining: number; reset: number } {
+  // Bypass para suites E2E locales (muchos logins desde la misma IP).
+  // NUNCA setear en producción.
+  if (process.env.DISABLE_RATE_LIMIT === '1') {
+    return { allowed: true, remaining: maxRequests, reset: Date.now() + windowMs };
+  }
   const now   = Date.now();
   const entry = store.get(key);
 

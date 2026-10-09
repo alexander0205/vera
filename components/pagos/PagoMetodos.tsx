@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
 import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
+import { useCuentasBanco } from '@/lib/hooks/useCuentasBanco';
 
 // Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
 export { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -18,7 +20,14 @@ export { METODOS_PAGO } from '@/lib/pagos/metodos';
 export interface PagoLinea {
   metodo: string;      // ver lib/pagos/metodos — fuente única de métodos
   valor: string;       // DOP como string (input controlado)
-  cuenta?: string;     // cuenta bancaria (opcional)
+  cuenta?: string;     // etiqueta de la cuenta, tal como se vio (opcional)
+  /**
+   * La cuenta de la EMPRESA a la que entró, por referencia. `cuenta` guarda el
+   * nombre del día del cobro —y sirve para «Caja general», «Otro» y el
+   * histórico—; esto es lo que sobrevive a que renombren la cuenta y lo que
+   * permite agrupar un reporte por cuenta de verdad. Ver migración 0173.
+   */
+  cuentaBancoId?: number | null;
   referencia?: string; // opcional
   notaCreditoId?: number | null; // NC consumida si metodo='nota_credito'
 }
@@ -32,14 +41,33 @@ export interface NotaCreditoDisponible {
   montoCents: number;
 }
 
-/** Cuentas bancarias sugeridas (igual que en las pantallas originales). */
-const CUENTAS_BANCARIAS: MetodoOption[] = [
+/**
+ * Cuentas de reserva, para la empresa que todavía no cargó las suyas.
+ *
+ * Eran la lista ENTERA hasta ahora: cinco nombres quemados que no tenían nada
+ * que ver con los bancos reales de nadie. Se quedan solo como red — si la
+ * empresa tiene cuentas cargadas manda esa lista, y si no, al menos hay algo
+ * que elegir en vez de un desplegable vacío.
+ *
+ * Los valores son los mismos slugs de siempre (`bhd`, `popular`…) porque en
+ * producción ya hay pagos guardados con ellos y no se van a huerfanizar.
+ */
+const CUENTAS_RESERVA: MetodoOption[] = [
   { value: 'caja',        label: 'Caja general' },
   { value: 'banreservas', label: 'Banreservas' },
   { value: 'popular',     label: 'Banco Popular' },
   { value: 'bhd',         label: 'BHD' },
   { value: 'otro',        label: 'Otro' },
 ];
+
+/**
+ * Métodos en los que el dinero cae en una cuenta concreta.
+ *
+ * Para estos el campo de cuenta se abre SOLO, sin tener que descubrir el enlace
+ * «+ Cuenta». No es cosmético: en producción hay 809 transferencias y 9 dicen a
+ * qué banco entraron. El campo existía; lo que no existía era encontrarlo.
+ */
+const METODOS_CON_BANCO = new Set(['transferencia', 'deposito']);
 
 interface PagoMetodosProps {
   lineas: PagoLinea[];
@@ -75,6 +103,18 @@ export function pagosValidos(lineas: PagoLinea[], total: number, yaPagado = 0): 
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
+/** Etiqueta compacta reutilizable (antes shadcn <Label> con clases uppercase). */
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography
+      component="label"
+      sx={{ display: 'block', fontSize: '10px', color: '#6b7280', textTransform: 'uppercase' }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
 /**
  * Repeater de pago multi-método, 100% controlado por props.
  * Empieza siempre con (al menos) 1 línea — 1 línea = pago normal.
@@ -106,7 +146,51 @@ export function PagoMetodos({
   // siempre se usan: se ocultan tras un link "+ ..." para no saturar el form.
   const [verCuenta, setVerCuenta]         = useState<Set<number>>(new Set());
   const [verReferencia, setVerReferencia] = useState<Set<number>>(new Set());
-  const cuentaVisible = (i: number, l: PagoLinea) => !!l.cuenta || verCuenta.has(i);
+  // En transferencia y depósito el campo se abre solo: preguntar a qué cuenta
+  // entró el dinero es la mitad del registro, no un extra que haya que buscar.
+  const cuentaVisible = (i: number, l: PagoLinea) =>
+    !!l.cuenta || verCuenta.has(i) || METODOS_CON_BANCO.has(l.metodo);
+
+  /**
+   * Las cuentas que se ofrecen: las de la empresa si las tiene cargadas, y si
+   * no la lista de reserva.
+   *
+   * Se guardan las DOS cosas. La etiqueta en `cuenta`, porque el historial, el
+   * cuadre y el PDF la leen tal cual sin resolver ninguna referencia —y porque
+   * «Caja general» u «Otro» no son cuentas de nadie—. Y el id en
+   * `cuentaBancoId`, que es lo que sobrevive a un renombre y lo que permite
+   * agrupar de verdad. Ver migración 0173.
+   */
+  const { cuentas } = useCuentasBanco();
+  /**
+   * El `value` de una cuenta real es `banco:<id>`, no su etiqueta: dos cuentas
+   * pueden llamarse igual, y del prefijo se saca la referencia que se guarda.
+   * Las de reserva conservan sus slugs de siempre («caja», «otro», «bhd»),
+   * que es lo que hay guardado en producción.
+   */
+  const opcionesCuenta: MetodoOption[] = cuentas.length > 0
+    ? [
+        ...cuentas.map(c => ({ value: `banco:${c.id}`, label: c.etiqueta })),
+        { value: 'caja', label: 'Caja general' },
+        { value: 'otro', label: 'Otro' },
+      ]
+    : CUENTAS_RESERVA;
+
+  /** El valor guardado de una línea, traducido al `value` de la lista. */
+  function valorSeleccionado(l: PagoLinea): string {
+    if (l.cuentaBancoId) return `banco:${l.cuentaBancoId}`;
+    return l.cuenta ?? '';
+  }
+
+  /** Al elegir: se guardan la etiqueta (lo que se vio) y la referencia. */
+  function elegirCuenta(i: number, value: string) {
+    const opcion = opcionesCuenta.find(o => o.value === value);
+    const id = value.startsWith('banco:') ? Number(value.slice(6)) : null;
+    setLinea(i, {
+      cuenta: opcion?.label ?? value,
+      cuentaBancoId: Number.isInteger(id) && id! > 0 ? id : null,
+    });
+  }
   const refVisible    = (i: number, l: PagoLinea) => !!l.referencia || verReferencia.has(i);
   const toggleSet = (set: Set<number>, i: number) => {
     const next = new Set(set); next.add(i); return next;
@@ -134,52 +218,70 @@ export function PagoMetodos({
     n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
-    <div className="space-y-2">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {lineas.map((l, i) => (
-        <div
+        <Box
           key={i}
-          className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5 space-y-2"
+          sx={{
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb',
+            bgcolor: 'rgba(249,250,251,0.6)',
+            p: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+          }}
         >
           {/* Fila 1: método (ocupa todo) + quitar */}
-          <div className="flex items-end gap-2">
-            <div className="flex-1 min-w-0">
-              <Label className="text-[10px] text-gray-500 uppercase">Método</Label>
+          <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <FieldLabel>Método</FieldLabel>
               <Select
+                size="small"
+                fullWidth
                 value={l.metodo}
-                onValueChange={(v) => setLinea(i, {
-                  metodo: v,
-                  // Al cambiar de/hacia 'nota_credito' limpiar la NC y el monto.
-                  ...(v === METODO_NOTA_CREDITO ? { valor: '', notaCreditoId: null } : { notaCreditoId: null }),
-                })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setLinea(i, {
+                    metodo: v,
+                    // Al cambiar de/hacia 'nota_credito' limpiar la NC y el monto.
+                    ...(v === METODO_NOTA_CREDITO ? { valor: '', notaCreditoId: null } : { notaCreditoId: null }),
+                  });
+                }}
                 disabled={disabled}
+                sx={{ mt: 0.5 }}
               >
-                <SelectTrigger className="mt-1 h-9 text-sm w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {metodosUI.map(m => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                  ))}
-                </SelectContent>
+                {metodosUI.map(m => (
+                  <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+                ))}
               </Select>
-            </div>
+            </Box>
 
             {lineas.length > 1 && (
-              <Button
-                type="button" size="sm" variant="outline"
-                className="h-9 px-2 text-red-500 border-red-200 hover:bg-red-50 shrink-0"
+              <IconButton
+                type="button"
                 onClick={() => quitarLinea(i)}
                 disabled={disabled}
                 title="Quitar método"
                 aria-label="Quitar método"
+                sx={{
+                  flexShrink: 0,
+                  height: 36,
+                  borderRadius: '8px',
+                  border: '1px solid #fecaca',
+                  color: '#ef4444',
+                  '&:hover': { bgcolor: '#fef2f2', borderColor: '#fecaca' },
+                }}
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Trash2 style={{ width: 16, height: 16 }} />
+              </IconButton>
             )}
-          </div>
+          </Box>
 
           {/* Selector de Nota de crédito — buscable por código de NC o de factura */}
           {l.metodo === METODO_NOTA_CREDITO && (
-            <div className="min-w-0">
-              <Label className="text-[10px] text-gray-500 uppercase">Nota de crédito</Label>
+            <Box sx={{ minWidth: 0 }}>
+              <FieldLabel>Nota de crédito</FieldLabel>
               <NotaCreditoPicker
                 notas={notasCredito ?? []}
                 valueId={l.notaCreditoId ?? null}
@@ -194,113 +296,167 @@ export function PagoMetodos({
                   setLinea(i, { notaCreditoId: nc.id, valor: (aplicar / 100).toFixed(2) });
                 }}
               />
-            </div>
+            </Box>
           )}
 
           {/* Fila 2: monto + cuenta (cuenta solo si se reveló) */}
-          <div className={`grid gap-2 ${showCuenta && cuentaVisible(i, l) && l.metodo !== METODO_NOTA_CREDITO ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <div className="min-w-0">
-              <Label className="text-[10px] text-gray-500 uppercase">Monto</Label>
-              <div className="relative mt-1">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">RD$</span>
-                <Input
-                  type="number" inputMode="decimal" min={0} step={0.01}
-                  className="h-9 text-sm pl-9 w-full"
-                  placeholder="0.00"
-                  value={l.valor}
-                  onChange={(e) => setLinea(i, { valor: e.target.value })}
-                  disabled={disabled || l.metodo === METODO_NOTA_CREDITO}
-                />
-              </div>
-            </div>
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 1,
+              gridTemplateColumns: showCuenta && cuentaVisible(i, l) && l.metodo !== METODO_NOTA_CREDITO ? '1fr 1fr' : '1fr',
+            }}
+          >
+            <Box sx={{ minWidth: 0 }}>
+              <FieldLabel>Monto</FieldLabel>
+              <TextField
+                type="number"
+                size="small"
+                fullWidth
+                placeholder="0.00"
+                value={l.valor}
+                onChange={(e) => setLinea(i, { valor: e.target.value })}
+                disabled={disabled || l.metodo === METODO_NOTA_CREDITO}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Box component="span" sx={{ fontSize: '10px', color: '#6b7280' }}>RD$</Box>
+                      </InputAdornment>
+                    ),
+                  },
+                  htmlInput: { inputMode: 'decimal', min: 0, step: 0.01 },
+                }}
+                sx={{ mt: 0.5 }}
+              />
+            </Box>
 
-            {showCuenta && cuentaVisible(i, l) && (
-              <div className="min-w-0">
-                <Label className="text-[10px] text-gray-500 uppercase">Cuenta</Label>
+            {showCuenta && cuentaVisible(i, l) && l.metodo !== METODO_NOTA_CREDITO && (
+              <Box sx={{ minWidth: 0 }}>
+                <FieldLabel>{METODOS_CON_BANCO.has(l.metodo) ? 'Banco' : 'Cuenta'}</FieldLabel>
                 <Select
-                  value={l.cuenta ?? ''}
-                  onValueChange={(v) => setLinea(i, { cuenta: v })}
+                  size="small"
+                  fullWidth
+                  displayEmpty
+                  value={valorSeleccionado(l)}
+                  onChange={(e) => elegirCuenta(i, e.target.value)}
                   disabled={disabled}
+                  // Un valor guardado que ya no está en la lista —una cuenta
+                  // desactivada, o los slugs viejos— se muestra tal cual en vez
+                  // de dejar el campo en blanco y borrarlo al guardar.
+                  renderValue={(selected) => selected
+                    ? (opcionesCuenta.find(c => c.value === selected)?.label
+                       // Una cuenta desactivada, o un slug viejo: se enseña la
+                       // etiqueta guardada en vez de dejar el campo en blanco.
+                       ?? l.cuenta ?? String(selected))
+                    : <Box component="span" sx={{ color: '#9ca3af' }}>—</Box>}
+                  sx={{ mt: 0.5 }}
                 >
-                  <SelectTrigger className="mt-1 h-9 text-sm w-full">
-                    <SelectValue placeholder="—" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CUENTAS_BANCARIAS.map(c => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  {opcionesCuenta.map(c => (
+                    <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                  ))}
                 </Select>
-              </div>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* Fila 3: referencia (solo si se reveló) */}
           {showReferencia && refVisible(i, l) && (
-            <div className="min-w-0">
-              <Label className="text-[10px] text-gray-500 uppercase">Referencia</Label>
-              <Input
+            <Box sx={{ minWidth: 0 }}>
+              <FieldLabel>Referencia</FieldLabel>
+              <TextField
                 type="text"
-                className="mt-1 h-9 text-sm w-full"
+                size="small"
+                fullWidth
                 placeholder="Opcional"
-                maxLength={100}
                 value={l.referencia ?? ''}
                 onChange={(e) => setLinea(i, { referencia: e.target.value })}
                 disabled={disabled}
+                slotProps={{ htmlInput: { maxLength: 100 } }}
+                sx={{ mt: 0.5 }}
               />
-            </div>
+            </Box>
           )}
 
           {/* Links opcionales: agregar cuenta / referencia */}
           {!disabled && ((showCuenta && !cuentaVisible(i, l)) || (showReferencia && !refVisible(i, l))) && (
-            <div className="flex gap-3">
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
               {showCuenta && !cuentaVisible(i, l) && (
-                <button
+                <Box
+                  component="button"
                   type="button"
                   onClick={() => setVerCuenta(s => toggleSet(s, i))}
-                  className="text-[11px] text-gray-400 hover:text-teal-700"
+                  sx={{
+                    border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
+                    '&:hover': { color: '#2a45c4' },
+                  }}
                 >
                   + Cuenta
-                </button>
+                </Box>
               )}
               {showReferencia && !refVisible(i, l) && (
-                <button
+                <Box
+                  component="button"
                   type="button"
                   onClick={() => setVerReferencia(s => toggleSet(s, i))}
-                  className="text-[11px] text-gray-400 hover:text-teal-700"
+                  sx={{
+                    border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
+                    '&:hover': { color: '#2a45c4' },
+                  }}
                 >
                   + Referencia
-                </button>
+                </Box>
               )}
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
       ))}
 
-      <div className="flex items-center justify-between pt-1">
-        <button
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 0.5 }}>
+        <Box
+          component="button"
           type="button"
           onClick={agregarLinea}
           disabled={disabled}
-          className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:text-teal-800 disabled:opacity-40"
+          sx={{
+            display: 'inline-flex', alignItems: 'center', gap: 0.5,
+            border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.75rem', fontWeight: 500, color: '#2a45c4',
+            '&:hover': { color: '#253a9e' },
+            '&:disabled': { opacity: 0.4, cursor: 'default' },
+          }}
         >
-          <Plus className="h-3.5 w-3.5" /> Agregar otro método
-        </button>
-        <button
+          <Plus style={{ width: 14, height: 14 }} /> Agregar otro método
+        </Box>
+        <Box
+          component="button"
           type="button"
           onClick={repartirResto}
           disabled={disabled || restoCents <= 0}
-          className="text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-40"
+          sx={{
+            border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.75rem', fontWeight: 500, color: '#6b7280',
+            '&:hover': { color: '#374151' },
+            '&:disabled': { opacity: 0.4, cursor: 'default' },
+          }}
         >
           Repartir resto
-        </button>
-      </div>
+        </Box>
+      </Box>
 
-      <div className={`rounded-lg p-2.5 text-xs flex justify-between ${excede ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-700'}`}>
+      <Box
+        sx={{
+          borderRadius: '8px', p: '10px', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between',
+          bgcolor: excede ? '#fef2f2' : '#f9fafb',
+          color: excede ? '#b91c1c' : '#374151',
+        }}
+      >
         <span>Suma: <strong>RD$ {fmt(suma)}</strong></span>
         <span>{excede ? 'Excede el total' : `Resto: RD$ ${fmt(resto)}`}</span>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -330,10 +486,11 @@ function NotaCreditoPicker({
     : '';
 
   return (
-    <div className="relative mt-1">
-      <Input
+    <Box sx={{ position: 'relative', mt: 0.5 }}>
+      <TextField
         type="text"
-        className="h-9 text-sm w-full"
+        size="small"
+        fullWidth
         placeholder="Buscar por código de NC o de factura…"
         value={open ? query : labelSel}
         disabled={disabled}
@@ -342,25 +499,37 @@ function NotaCreditoPicker({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && (
-        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <Box
+          sx={{
+            position: 'absolute', zIndex: 50, mt: 0.5, width: '100%', maxHeight: 224, overflow: 'auto',
+            borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#fff',
+            boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)',
+          }}
+        >
           {filtradas.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-gray-400">Sin notas de crédito que coincidan</div>
+            <Box sx={{ px: 1.5, py: 1, fontSize: '0.75rem', color: '#9ca3af' }}>Sin notas de crédito que coincidan</Box>
           ) : filtradas.map(n => (
-            <button
+            <Box
+              component="button"
               key={n.id}
               type="button"
-              className="w-full text-left px-3 py-2 text-sm hover:bg-teal-50 flex justify-between gap-2"
-              onMouseDown={(e) => { e.preventDefault(); onSelect(n); setOpen(false); setQuery(''); }}
+              onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onSelect(n); setOpen(false); setQuery(''); }}
+              sx={{
+                width: '100%', textAlign: 'left', px: 1.5, py: 1, fontSize: '0.875rem',
+                display: 'flex', justifyContent: 'space-between', gap: 1,
+                border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+                '&:hover': { bgcolor: '#eef2fe' },
+              }}
             >
-              <span className="min-w-0">
-                <span className="font-medium">{n.codigo ?? `NC #${n.id}`}</span>
-                {n.facturaCodigo && <span className="text-gray-500"> · factura {n.facturaCodigo}</span>}
-              </span>
-              <span className="text-gray-700 whitespace-nowrap">RD${fmt(n.montoCents / 100)}</span>
-            </button>
+              <Box component="span" sx={{ minWidth: 0 }}>
+                <Box component="span" sx={{ fontWeight: 500 }}>{n.codigo ?? `NC #${n.id}`}</Box>
+                {n.facturaCodigo && <Box component="span" sx={{ color: '#6b7280' }}> · factura {n.facturaCodigo}</Box>}
+              </Box>
+              <Box component="span" sx={{ color: '#374151', whiteSpace: 'nowrap' }}>RD${fmt(n.montoCents / 100)}</Box>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

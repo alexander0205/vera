@@ -1,10 +1,14 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
 
@@ -34,90 +38,186 @@ export function PagoRecibido({
   pagoValor, setPagoValor,
 }: Props) {
   const { openProximamente, dialog } = useProximamenteDialog();
+
   return (
-    <div className="space-y-4">
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={pagoRecibido}
-          onChange={(e) => setPagoRecibido(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-        />
-        <span className="text-sm text-gray-700">Registrar un pago recibido en esta factura</span>
-      </label>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={pagoRecibido}
+            onChange={(e) => setPagoRecibido(e.target.checked)}
+            size="small"
+            sx={{
+              color: 'grey.400',
+              '&.Mui-checked': { color: '#3658e1' },
+              '&:hover': { bgcolor: 'rgba(13,148,136,0.06)' },
+            }}
+          />
+        }
+        label={
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Registrar un pago recibido en esta factura
+          </Typography>
+        }
+        sx={{ mx: 0 }}
+      />
 
       {pagoRecibido && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Numeración</Label>
-            <Select defaultValue="recibo">
-              <SelectTrigger className="mt-1 h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recibo">Recibo de caja</SelectItem>
-                <SelectItem value="orden">Orden de pago</SelectItem>
-              </SelectContent>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              lg: 'repeat(5, 1fr)',
+            },
+            gap: 1.5,
+          }}
+        >
+          {/* Numeración */}
+          <FormControl size="small">
+            <InputLabel sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Numeración
+            </InputLabel>
+            <Select
+              defaultValue="recibo"
+              label="Numeración"
+              sx={{
+                fontSize: '0.875rem',
+                '& .MuiOutlinedInput-notchedOutline': { borderRadius: '8px' },
+              }}
+            >
+              <MenuItem value="recibo" sx={{ fontSize: '0.875rem' }}>Recibo de caja</MenuItem>
+              <MenuItem value="orden" sx={{ fontSize: '0.875rem' }}>Orden de pago</MenuItem>
             </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha</Label>
-            <Input
-              type="date"
-              className="mt-1 h-9 text-sm"
-              value={pagoFecha}
-              onChange={(e) => setPagoFecha(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Cuenta bancaria</Label>
-            <Input
-              className="mt-1 h-9 text-sm"
-              placeholder="Seleccionar"
-              value={pagoCuenta}
-              onChange={(e) => setPagoCuenta(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Método de pago</Label>
-            <Select value={pagoMetodo} onValueChange={setPagoMetodo}>
-              <SelectTrigger className="mt-1 h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {METODOS_PAGO.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
+          </FormControl>
+
+          {/* Fecha */}
+          <TextField
+            type="date"
+            size="small"
+            label="Fecha"
+            value={pagoFecha}
+            onChange={(e) => setPagoFecha(e.target.value)}
+            slotProps={{
+              inputLabel: {
+                shrink: true,
+                sx: { fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' },
+              },
+              htmlInput: { style: { fontSize: '0.875rem' } },
+            }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+
+          {/* Cuenta bancaria */}
+          <TextField
+            size="small"
+            label="Cuenta bancaria"
+            placeholder="Seleccionar"
+            value={pagoCuenta}
+            onChange={(e) => setPagoCuenta(e.target.value)}
+            slotProps={{
+              inputLabel: {
+                sx: { fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' },
+              },
+              htmlInput: { style: { fontSize: '0.875rem' } },
+            }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+
+          {/* Método de pago */}
+          <FormControl size="small">
+            <InputLabel sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Método de pago
+            </InputLabel>
+            <Select
+              value={pagoMetodo}
+              onChange={(e) => setPagoMetodo(e.target.value)}
+              label="Método de pago"
+              sx={{
+                fontSize: '0.875rem',
+                '& .MuiOutlinedInput-notchedOutline': { borderRadius: '8px' },
+              }}
+            >
+              {METODOS_PAGO.map((m) => (
+                <MenuItem key={m.value} value={m.value} sx={{ fontSize: '0.875rem' }}>
+                  {m.label}
+                </MenuItem>
+              ))}
             </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Valor</Label>
-            <div className="relative mt-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-600 font-medium">RD$</span>
-              <Input
-                type="number" inputMode="decimal" min={0} step={0.01}
-                className="h-9 text-sm pl-10"
-                placeholder="0.00"
-                value={pagoValor}
-                onChange={(e) => setPagoValor(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
+          </FormControl>
+
+          {/* Valor */}
+          <Box sx={{ position: 'relative' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                position: 'absolute',
+                left: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'text.secondary',
+                fontWeight: 500,
+                zIndex: 1,
+                pointerEvents: 'none',
+                fontSize: '0.75rem',
+                lineHeight: 1,
+              }}
+            >
+              RD$
+            </Typography>
+            <TextField
+              type="number"
+              size="small"
+              label="Valor"
+              placeholder="0.00"
+              value={pagoValor}
+              onChange={(e) => setPagoValor(e.target.value)}
+              slotProps={{
+                inputLabel: {
+                  sx: { fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' },
+                },
+                htmlInput: {
+                  inputMode: 'decimal',
+                  min: 0,
+                  step: 0.01,
+                  style: { paddingLeft: 40, fontSize: '0.875rem' },
+                },
+              }}
+              sx={{
+                width: '100%',
+                '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+              }}
+            />
+          </Box>
+        </Box>
       )}
+
       {pagoRecibido && (
-        <div className="mt-3">
-          <button
+        <Box sx={{ mt: 0.5 }}>
+          <Box
+            component="button"
             type="button"
             onClick={() => openProximamente('Pagos múltiples (tarjeta + efectivo)')}
-            className="text-teal-600 hover:text-teal-800 text-xs font-medium flex items-center gap-1"
+            sx={{
+              fontSize: '0.75rem',
+              color: '#3658e1',
+              fontWeight: 500,
+              bgcolor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              p: 0,
+              '&:hover': { color: '#2a45c4' },
+            }}
           >
             + Agregar otro método de pago (split payment)
-          </button>
-        </div>
+          </Box>
+        </Box>
       )}
       {dialog}
-    </div>
+    </Box>
   );
 }

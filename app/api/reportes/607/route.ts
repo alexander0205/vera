@@ -36,7 +36,19 @@ import { NextRequest } from 'next/server';
 import { getTeamIdForUser, getTeamProfile } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
-import { and, eq, gte, lt, inArray } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray, getTableColumns } from 'drizzle-orm';
+
+/**
+ * Todas las columnas del documento menos las que pesan.
+ *
+ * Este reporte recorre meses enteros de facturas y solo necesita importes,
+ * fechas y NCF, pero traía además el XML original, el firmado y el JSON de
+ * líneas de cada una. Se excluyen por nombre en vez de enumerar lo que se usa,
+ * para que añadir un campo al reporte no obligue a tocar esto.
+ */
+const { xmlOriginal: _xo, xmlFirmado: _xf, lineasJson: _lj, ...columnasLigeras } =
+  getTableColumns(ecfDocuments);
+
 
 // Tipos de e-CF de ventas/emisiones
 const TIPOS_607 = ['31', '32', '33', '34', '44', '45', '46'];
@@ -78,7 +90,7 @@ export async function GET(req: NextRequest) {
 
   const [team, docs] = await Promise.all([
     getTeamProfile(teamId),
-    db.select().from(ecfDocuments).where(
+    db.select(columnasLigeras).from(ecfDocuments).where(
       and(
         eq(ecfDocuments.teamId, teamId),
         inArray(ecfDocuments.tipoEcf, TIPOS_607),

@@ -1,11 +1,21 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Upload, Loader2, CheckCircle2, AlertTriangle, FileText } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import { Upload, CheckCircle2, AlertTriangle, FileText } from 'lucide-react';
 import type { ImportResult, ImportRow, RowAction } from '@/lib/import/csv';
 
 export interface ImportColumn {
@@ -31,10 +41,10 @@ interface ImportModalProps {
   onDone?: () => void;
 }
 
-const ACTION_STYLE: Record<RowAction, string> = {
-  create: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  update: 'bg-amber-50 text-amber-700 border-amber-200',
-  skip:   'bg-gray-100 text-gray-500 border-gray-200',
+const ACTION_STYLE: Record<RowAction, { bgcolor: string; color: string; borderColor: string }> = {
+  create: { bgcolor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' },
+  update: { bgcolor: '#fffbeb', color: '#b45309', borderColor: '#fde68a' },
+  skip:   { bgcolor: '#f3f4f6', color: '#6b7280', borderColor: '#e5e7eb' },
 };
 
 const ACTION_LABEL: Record<RowAction, string> = {
@@ -42,6 +52,26 @@ const ACTION_LABEL: Record<RowAction, string> = {
   update: 'Actualiza',
   skip:   'Omitir',
 };
+
+const TH_SX = {
+  textAlign: 'left',
+  px: 1.5,
+  py: 1,
+  fontSize: '0.6875rem',
+  fontWeight: 600,
+  color: '#6b7280',
+  textTransform: 'uppercase',
+  bgcolor: '#f9fafb',
+  borderBottom: '1px solid #e5e7eb',
+} as const;
+
+const TD_SX = {
+  px: 1.5,
+  py: 0.75,
+  fontSize: '0.75rem',
+  color: '#374151',
+  borderBottom: '1px solid #f3f4f6',
+} as const;
 
 export function ImportModal({
   open, onClose, endpoint, title, accept = '.csv', columns, helpText, onDone,
@@ -104,143 +134,177 @@ export function ImportModal({
   const willImport = preview ? preview.created + preview.updated : 0;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: '48rem', width: '100%', maxHeight: '85vh' } } as object }}
+    >
+      <DialogTitle sx={{ fontWeight: 600, fontSize: '1.125rem' }}>{title}</DialogTitle>
 
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column' }}>
         {/* Resultado final */}
         {done ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
-            <CheckCircle2 className="h-12 w-12 text-emerald-500" />
-            <p className="text-lg font-semibold text-gray-900">Importación completada</p>
-            <p className="text-sm text-gray-600">
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4, gap: 1.5, textAlign: 'center' }}>
+            <CheckCircle2 style={{ width: 48, height: 48, color: '#10b981' }} />
+            <Typography sx={{ fontSize: '1.125rem', fontWeight: 600, color: '#111827' }}>Importación completada</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>
               {done.created} creados · {done.updated} actualizados · {done.skipped} omitidos
-            </p>
+            </Typography>
             {done.errors.length > 0 && (
-              <p className="text-xs text-amber-600">{done.errors.length} con advertencias</p>
+              <Typography sx={{ fontSize: '0.75rem', color: '#d97706' }}>{done.errors.length} con advertencias</Typography>
             )}
-          </div>
+          </Box>
         ) : (
-          <div className="flex-1 overflow-y-auto space-y-4">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {/* Selector de archivo */}
-            <div
-              className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-2 cursor-pointer hover:border-teal-300 hover:bg-teal-50/30 transition-colors"
+            <Box
               onClick={() => fileRef.current?.click()}
+              sx={{
+                border: '2px dashed #e5e7eb',
+                borderRadius: '12px',
+                p: 3,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1,
+                cursor: 'pointer',
+                transition: 'border-color 0.15s, background-color 0.15s',
+                '&:hover': { borderColor: '#a5b4f9', bgcolor: 'rgba(240,253,250,0.3)' },
+              }}
             >
-              <Upload className="h-7 w-7 text-gray-400" />
-              <p className="text-sm font-medium text-gray-700">
+              <Upload style={{ width: 28, height: 28, color: '#9ca3af' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
                 {file ? file.name : 'Haz clic para seleccionar un archivo'}
-              </p>
-              {helpText && <p className="text-xs text-gray-400 text-center">{helpText}</p>}
+              </Typography>
+              {helpText && <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>{helpText}</Typography>}
               <input
                 ref={fileRef}
                 type="file"
                 accept={accept}
-                className="hidden"
+                style={{ display: 'none' }}
                 onChange={(e) => onPick(e.target.files?.[0] ?? null)}
               />
-            </div>
+            </Box>
 
             {busy && !preview && (
-              <div className="flex items-center justify-center gap-2 py-6 text-gray-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Analizando archivo…</span>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 3, color: '#6b7280' }}>
+                <CircularProgress size={16} sx={{ color: 'inherit' }} />
+                <Typography sx={{ fontSize: '0.875rem' }}>Analizando archivo…</Typography>
+              </Box>
             )}
 
             {error && (
-              <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: '8px', bgcolor: '#fef2f2', border: '1px solid #fecaca', px: 1.5, py: 1, fontSize: '0.875rem', color: '#b91c1c' }}>
+                <AlertTriangle style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
+                <Box component="span">{error}</Box>
+              </Box>
             )}
 
             {/* Vista previa */}
             {preview && (
               <>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <Chip className="bg-emerald-50 text-emerald-700 border-emerald-200">{preview.created} nuevos</Chip>
-                  <Chip className="bg-amber-50 text-amber-700 border-amber-200">{preview.updated} actualizar</Chip>
-                  <Chip className="bg-gray-100 text-gray-500 border-gray-200">{preview.skipped} omitir</Chip>
-                  <Chip className="bg-blue-50 text-blue-700 border-blue-200">{preview.total} total</Chip>
-                </div>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  <Chip size="small" label={`${preview.created} nuevos`} sx={{ height: 22, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }} />
+                  <Chip size="small" label={`${preview.updated} actualizar`} sx={{ height: 22, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }} />
+                  <Chip size="small" label={`${preview.skipped} omitir`} sx={{ height: 22, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }} />
+                  <Chip size="small" label={`${preview.total} total`} sx={{ height: 22, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }} />
+                </Box>
 
                 {preview.errors.length > 0 && (
-                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700 space-y-0.5 max-h-28 overflow-y-auto">
-                    {preview.errors.slice(0, 30).map((e, i) => <div key={i}>• {e}</div>)}
-                    {preview.errors.length > 30 && <div>… y {preview.errors.length - 30} más</div>}
-                  </div>
+                  <Box sx={{ borderRadius: '8px', bgcolor: '#fffbeb', border: '1px solid #fde68a', px: 1.5, py: 1, fontSize: '0.75rem', color: '#b45309', maxHeight: 112, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                    {preview.errors.slice(0, 30).map((e, i) => <Box key={i}>• {e}</Box>)}
+                    {preview.errors.length > 30 && <Box>… y {preview.errors.length - 30} más</Box>}
+                  </Box>
                 )}
 
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="max-h-72 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="text-left px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase">#</th>
-                          <th className="text-left px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase">Acción</th>
+                <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                  <Box sx={{ maxHeight: 288, overflowY: 'auto' }}>
+                    <Table size="small" stickyHeader sx={{ '& td, & th': { borderColor: '#f3f4f6' } }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={TH_SX}>#</TableCell>
+                          <TableCell sx={TH_SX}>Acción</TableCell>
                           {columns.map((c) => (
-                            <th key={c.key} className="text-left px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase">{c.label}</th>
+                            <TableCell key={c.key} sx={TH_SX}>{c.label}</TableCell>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
                         {preview.rows.slice(0, 200).map((r: ImportRow<Record<string, unknown>>, i) => (
-                          <tr key={i} className={r.action === 'skip' ? 'opacity-60' : ''}>
-                            <td className="px-3 py-1.5 text-xs text-gray-400 font-mono">{r.ref}</td>
-                            <td className="px-3 py-1.5">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${ACTION_STYLE[r.action]}`}>
-                                {ACTION_LABEL[r.action]}
-                              </span>
-                              {r.reason && <span className="ml-1 text-[10px] text-gray-400">{r.reason}</span>}
-                            </td>
+                          <TableRow key={i} sx={{ opacity: r.action === 'skip' ? 0.6 : 1 }}>
+                            <TableCell sx={{ ...TD_SX, color: '#9ca3af', fontFamily: 'monospace' }}>{r.ref}</TableCell>
+                            <TableCell sx={TD_SX}>
+                              <Chip
+                                size="small"
+                                label={ACTION_LABEL[r.action]}
+                                sx={{
+                                  height: 18,
+                                  fontSize: '0.625rem',
+                                  fontWeight: 500,
+                                  border: '1px solid',
+                                  ...ACTION_STYLE[r.action],
+                                  '& .MuiChip-label': { px: 0.75 },
+                                }}
+                              />
+                              {r.reason && <Box component="span" sx={{ ml: 0.5, fontSize: '0.625rem', color: '#9ca3af' }}>{r.reason}</Box>}
+                            </TableCell>
                             {columns.map((c) => (
-                              <td key={c.key} className="px-3 py-1.5 text-gray-700 truncate max-w-[180px]">
+                              <TableCell key={c.key} sx={{ ...TD_SX, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {c.format ? c.format(r.data[c.key]) : fmt(r.data[c.key])}
-                              </td>
+                              </TableCell>
                             ))}
-                          </tr>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      </TableBody>
+                    </Table>
+                  </Box>
                   {preview.rows.length > 200 && (
-                    <div className="bg-gray-50 px-3 py-1.5 text-[11px] text-gray-400 border-t">
+                    <Box sx={{ bgcolor: '#f9fafb', px: 1.5, py: 0.75, fontSize: '0.6875rem', color: '#9ca3af', borderTop: '1px solid #e5e7eb' }}>
                       Mostrando 200 de {preview.rows.length} filas
-                    </div>
+                    </Box>
                   )}
-                </div>
+                </Box>
               </>
             )}
-          </div>
+          </Box>
         )}
-
-        <DialogFooter>
-          {done ? (
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleClose}>Cerrar</Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={handleClose} disabled={busy}>Cancelar</Button>
-              <Button
-                className="bg-teal-600 hover:bg-teal-700"
-                onClick={onConfirm}
-                disabled={busy || !preview || willImport === 0}
-              >
-                {busy && preview ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                Importar {willImport > 0 ? `(${willImport})` : ''}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        {done ? (
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={handleClose}
+            sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+          >
+            Cerrar
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="outlined"
+              onClick={handleClose}
+              disabled={busy}
+              sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', '&:hover': { borderColor: '#d1d5db', bgcolor: 'transparent' } }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="contained"
+              disableElevation
+              onClick={onConfirm}
+              disabled={busy || !preview || willImport === 0}
+              startIcon={busy && preview ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : <FileText style={{ width: 16, height: 16 }} />}
+              sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e180', color: '#fff' } }}
+            >
+              Importar {willImport > 0 ? `(${willImport})` : ''}
+            </Button>
+          </>
+        )}
+      </DialogActions>
     </Dialog>
   );
-}
-
-function Chip({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={`px-2 py-0.5 rounded-full border font-medium ${className}`}>{children}</span>;
 }
 
 function fmt(v: unknown): string {

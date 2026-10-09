@@ -1,10 +1,13 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import CircularProgress from '@mui/material/CircularProgress';
 import { Loader2 } from 'lucide-react';
 import { updateAccount } from '@/app/(login)/actions';
 import { User } from '@/lib/db/schema';
@@ -25,97 +28,66 @@ type AccountFormProps = {
   emailValue?: string;
 };
 
-function AccountForm({
-  state,
-  nameValue = '',
-  emailValue = ''
-}: AccountFormProps) {
+function AccountForm({ state, nameValue = '', emailValue = '' }: AccountFormProps) {
   return (
     <>
-      <div>
-        <Label htmlFor="name" className="mb-2">
-          Name
-        </Label>
-        <Input
-          id="name"
-          name="name"
-          placeholder="Enter your name"
-          defaultValue={state.name || nameValue}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="email" className="mb-2">
-          Email
-        </Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          placeholder="Enter your email"
-          defaultValue={emailValue}
-          required
-        />
-      </div>
+      <MuiTextField
+        id="name" name="name" label="Nombre" placeholder="Ingresa tu nombre"
+        defaultValue={state.name || nameValue} required size="small" fullWidth
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+      />
+      <MuiTextField
+        id="email" name="email" type="email" label="Email" placeholder="Ingresa tu email"
+        defaultValue={emailValue} required size="small" fullWidth
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+      />
     </>
   );
 }
 
 function AccountFormWithData({ state }: { state: ActionState }) {
   const { data: user } = useSWR<User>('/api/user', fetcher);
-  return (
-    <AccountForm
-      state={state}
-      nameValue={user?.name ?? ''}
-      emailValue={user?.email ?? ''}
-    />
-  );
+  return <AccountForm state={state} nameValue={user?.name ?? ''} emailValue={user?.email ?? ''} />;
 }
 
 export default function GeneralPage() {
-  const [state, formAction, isPending] = useActionState<ActionState, FormData>(
-    updateAccount,
-    {}
-  );
+  const [state, formAction, isPending] = useActionState<ActionState, FormData>(updateAccount, {});
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium text-gray-900 mb-6">
-        General Settings
-      </h1>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 600 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 3 }}>
+        Configuración general
+      </Typography>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Account Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" action={formAction}>
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+        <CardContent sx={{ p: '20px !important' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', mb: 2.5 }}>
+            Información de la cuenta
+          </Typography>
+          <Box component="form" action={formAction} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Suspense fallback={<AccountForm state={state} />}>
               <AccountFormWithData state={state} />
             </Suspense>
             {state.error && (
-              <p className="text-red-500 text-sm">{state.error}</p>
+              <Typography variant="body2" sx={{ color: 'error.main' }}>{state.error}</Typography>
             )}
             {state.success && (
-              <p className="text-green-500 text-sm">{state.success}</p>
+              <Typography variant="body2" sx={{ color: 'success.main' }}>{state.success}</Typography>
             )}
-            <Button
+            <MuiButton
               type="submit"
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              variant="contained"
+              color="primary"
+              disableElevation
               disabled={isPending}
+              startIcon={isPending ? <CircularProgress size={16} color="inherit" /> : undefined}
+              sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, alignSelf: 'flex-start' }}
             >
-              {isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save Changes'
-              )}
-            </Button>
-          </form>
+              {isPending ? 'Guardando...' : 'Guardar cambios'}
+            </MuiButton>
+          </Box>
         </CardContent>
       </Card>
-    </section>
+    </Box>
   );
 }

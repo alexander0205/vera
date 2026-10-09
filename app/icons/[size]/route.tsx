@@ -1,7 +1,8 @@
 import { ImageResponse } from 'next/og';
+import { Isotipo, AZUL_ZERO } from '@/lib/marca/isotipo';
 
-// Íconos PWA generados con ImageResponse (sin binarios). Marca Zero:
-// cuadro teal-600 con "Z" blanca.
+// Íconos PWA generados con ImageResponse (sin binarios): el isotipo de Zero
+// en blanco sobre el azul corporativo.
 const SIZES: Record<string, number> = { '192': 192, '512': 512 };
 
 export const dynamic = 'force-static';
@@ -26,14 +27,10 @@ export async function GET(
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0d9488',
-          color: '#ffffff',
-          fontSize: px * 0.6,
-          fontWeight: 800,
-          fontFamily: 'sans-serif',
+          background: AZUL_ZERO,
         }}
       >
-        Z
+        <Isotipo size={px * 0.72} />
       </div>
     ),
     { width: px, height: px }

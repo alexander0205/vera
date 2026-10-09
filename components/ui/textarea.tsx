@@ -1,18 +1,37 @@
-import * as React from "react"
+'use client';
 
-import { cn } from "@/lib/utils"
+import * as React from 'react';
+import MuiTextField from '@mui/material/TextField';
 
-function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
+type TextareaProps = Omit<React.ComponentProps<'textarea'>, 'ref'>;
+
+function Textarea({
+  className, value, defaultValue, onChange, placeholder,
+  disabled, required, id, name, rows, maxLength, ...htmlInputProps
+}: TextareaProps) {
   return (
-    <textarea
-      data-slot="textarea"
-      className={cn(
-        "flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40",
-        className
-      )}
-      {...props}
+    <MuiTextField
+      multiline
+      rows={rows}
+      placeholder={placeholder}
+      value={value}
+      defaultValue={defaultValue}
+      onChange={onChange as React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement>}
+      disabled={disabled}
+      required={required}
+      id={id}
+      name={name}
+      fullWidth
+      size="small"
+      sx={{
+        '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+        '& .MuiOutlinedInput-input': { fontSize: '0.875rem' },
+      }}
+      slotProps={{
+        htmlInput: { ...htmlInputProps, maxLength, className },
+      }}
     />
-  )
+  );
 }
 
-export { Textarea }
+export { Textarea };

@@ -1,15 +1,24 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Tooltip from '@mui/material/Tooltip';
 import { Info, X } from 'lucide-react';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
-import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
+import { renderProductoOption } from '@/components/productos/ProductoOption';
 import { LineaMaestros } from './LineaMaestros';
 import { calcularMontoItem } from '../utils/calculos';
 import { TASA_ITBIS } from '../utils/types';
@@ -24,33 +33,109 @@ interface DependienteOpt {
 /** Ancho del dropdown de productos — más ancho que la celda para layout tipo tabla. */
 const PRODUCTO_DROPDOWN_W = 460;
 
-/** Fila del dropdown de productos: código (referencia) · nombre + descripción · precio/ITBIS. */
-function renderProductoOption(p: Producto) {
+/**
+ * sx de los inputs numéricos de la línea. Las flechas del spinner se ocultan:
+ * en una tabla de factura invitan a errores de un clic y roban ancho a la celda.
+ */
+const inputNumeroSx = {
+  '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' },
+  '& input[type=number]': { MozAppearance: 'textfield' },
+  '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+};
+
+/**
+ * Número de la línea: se ve como texto y se vuelve campo al hacer clic.
+ *
+ * Con una caja de input por celda, «Precio» y «Cantidad» pedían el ancho del
+ * borde más el relleno más el número, y en una factura de colegio con quince
+ * líneas eso son quince rectángulos que nadie está editando. Sin la caja las
+ * columnas se aprietan y el ancho sobrante se va a «Producto», que es donde
+ * hace falta.
+ *
+ * Es SIEMPRE el mismo input, solo que sin borde ni fondo mientras no tenga el
+ * foco. La primera versión cambiaba un `button` por un `TextField` al hacer
+ * clic y el foco se perdía en la carrera: el botón se desmontaba, el navegador
+ * mandaba el foco al contenedor y el input recién montado se cerraba solo. Sin
+ * intercambio no hay carrera, y de paso el cursor cae donde se hizo clic.
+ */
+function CeldaNumero({
+  valor, onChange, alinear, formatear, soloLectura, etiqueta,
+}: {
+  valor: number;
+  onChange: (n: number) => void;
+  alinear: 'right' | 'center';
+  /** Cómo se lee en reposo. Con el foco puesto siempre se ve el número crudo. */
+  formatear: (n: number) => string;
+  soloLectura?: boolean;
+  etiqueta: string;
+}) {
+  const [enfocado, setEnfocado] = useState(false);
+  // Lo que había al entrar, para deshacer con Escape. El cambio se aplica tecla
+  // a tecla —el total se recalcula en vivo—, así que sin esto no hay a qué
+  // volver.
+  const [valorPrevio, setValorPrevio] = useState(valor);
+
   return (
-    <div className="grid grid-cols-[5rem_1fr] items-start gap-x-3 gap-y-0.5">
-      <span
-        className="font-mono text-xs text-gray-500 truncate pt-0.5"
-        title={p.referencia ?? undefined}
-      >
-        {p.referencia || '—'}
-      </span>
-      <p className="min-w-0 font-medium truncate">{p.nombre}</p>
-      {p.descripcion && (
-        <p
-          className="col-span-2 min-w-0 truncate text-xs text-gray-500"
-          title={p.descripcion}
-        >
-          {p.descripcion}
-        </p>
-      )}
-    </div>
+    <TextField
+      size="small"
+      fullWidth
+      // Texto y no `type="number"`: en un input numérico `select()` no hace
+      // nada, así que lo tecleado se pegaba detrás del número anterior en vez
+      // de reemplazarlo. El valor se sanea en onChange.
+      type="text"
+      value={enfocado ? String(valor || '') : formatear(valor)}
+      onFocus={(e) => {
+        if (soloLectura) return;
+        setValorPrevio(valor);
+        setEnfocado(true);
+        // En el siguiente cuadro: ahora mismo el campo todavía muestra el
+        // número formateado, y seleccionarlo aquí se perdería al repintar.
+        const el = e.currentTarget;
+        requestAnimationFrame(() => el.select());
+      }}
+      onChange={(e) => {
+        // Se quitan los separadores de millar por si pegan un importe copiado.
+        // En es-DO la coma separa miles y el punto los decimales, igual que el
+        // formato que devuelve `toLocaleString` aquí al lado.
+        const n = parseFloat(e.target.value.replace(/,/g, ''));
+        onChange(Number.isFinite(n) && n >= 0 ? n : 0);
+      }}
+      onBlur={() => setEnfocado(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+        if (e.key === 'Escape') { onChange(valorPrevio); e.currentTarget.blur(); }
+      }}
+      slotProps={{
+        input: { readOnly: soloLectura },
+        htmlInput: { 'aria-label': etiqueta, inputMode: 'decimal', style: { textAlign: alinear } },
+      }}
+      sx={{
+        '& .MuiOutlinedInput-root': {
+          borderRadius: '8px',
+          fontSize: '0.875rem',
+          bgcolor: 'transparent',
+          transition: 'background-color .15s',
+          '& fieldset': { borderColor: 'transparent' },
+          '&:hover': soloLectura ? undefined : { bgcolor: '#f3f4f6' },
+          '&:hover fieldset': { borderColor: soloLectura ? 'transparent' : '#e5e7eb' },
+          '&.Mui-focused': { bgcolor: 'transparent' },
+          '&.Mui-focused fieldset': { borderColor: '#3658e1' },
+        },
+        '& .MuiOutlinedInput-input': { color: '#374151', cursor: soloLectura ? 'default' : 'text' },
+      }}
+    />
   );
 }
+
+/** Fila del dropdown de productos: código (referencia) · nombre + descripción · precio/ITBIS. */
+// Se mudó a components/productos/ProductoOption.tsx: ahora también lo usa el
+// ajuste de inventario, y dos copias del mismo dibujo se separan solas.
 
 interface Props {
   items: ItemLinea[];
   regla: TipoEcfRegla | undefined;
-  buscarProductos: (q: string) => Promise<Producto[]>;
+  buscarProductos: (q: string, dependienteId?: number | null) => Promise<Producto[]>;
   onSelectProducto: (idx: number, p: Producto) => void;
   /** Texto libre sin match → crear producto en DB y seleccionarlo. */
   onCrearProductoLibre: (idx: number, texto: string) => void;
@@ -62,450 +147,834 @@ interface Props {
   /** Estado lifted al padre — controla visibilidad de columnas Referencia/Descripción */
   showReferencia: boolean;
   showDescripcion: boolean;
+  /**
+   * Esconde la columna de impuesto y deja todas las líneas en exento.
+   *
+   * Para los colegios: la enseñanza está exenta de ITBIS, así que el selector
+   * es una casilla que solo se puede equivocar. Ojo — se OCULTA y se FUERZA a
+   * la vez, nunca solo una de las dos: un impuesto que no se ve pero sí se
+   * envía es peor que uno visible y mal puesto.
+   */
+  ocultarItbis?: boolean;
+  /**
+   * Muestra la columna de descuento por línea.
+   *
+   * Apagada por defecto: la mayoría de las facturas no llevan descuento y la
+   * casilla vacía en cada renglón robaba ancho a lo que sí se escribe. Se
+   * enciende desde «Columnas», junto a Referencia y Descripción.
+   */
+  showDescuento?: boolean;
+  /** Esconde «Agregar Conduce»: un colegio no despacha mercancía con conduce. */
+  ocultarConduce?: boolean;
   /** Lista de dependientes del cliente seleccionado. Vacía = no mostrar columna. */
   dependientes: DependienteOpt[];
   /**
-   * Sin el permiso `facturas:precio-editar` el precio y el descuento quedan en
+   * Sin el permiso `facturas:precio-editar`, el precio y el descuento quedan en
    * solo lectura y no se pueden abrir líneas libres: se factura con lo que trae
-   * el producto del catálogo. El servidor lo vuelve a validar al guardar.
+   * el producto del catálogo. El servidor lo vuelve a validar al guardar — esto
+   * es la mitad visible, no el candado.
    */
   bloquearPrecios?: boolean;
+  /** Ajusta texto para compra/gasto sin quitar asociación opcional a inventario. */
+  modoGasto?: boolean;
 }
 
 
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
-  showReferencia, showDescripcion, dependientes, bloquearPrecios = false,
+  showReferencia, showDescripcion, dependientes, bloquearPrecios = false, modoGasto = false,
+  ocultarItbis = false,
+  showDescuento = false,
+  ocultarConduce = false,
 }: Props) {
-  // Clases del input bloqueado: gris y sin cursor de texto, para que se lea
-  // como "no te toca" y no como "está roto".
-  const bloqueado = bloquearPrecios ? ' bg-gray-50 text-gray-500 cursor-not-allowed' : '';
   const { openProximamente, dialog } = useProximamenteDialog();
   const hasDeps = dependientes.length > 0;
+  const etiquetaDetalle = modoGasto ? 'Descripción / producto' : 'Producto / servicio';
+  const placeholderDetalle = modoGasto ? 'Describe gasto o busca producto de inventario...' : 'Buscar producto o servicio...';
+  const crearLabel = modoGasto ? 'Crear producto para inventario' : 'Nuevo producto';
+
+  /**
+   * Ancho de cada columna en píxeles — salvo Producto, que no lleva ninguno.
+   *
+   * Con `table-layout: fixed`, la columna sin ancho se queda con todo el
+   * espacio sobrante. Antes todas iban en porcentaje y sumaban ~76%: el 24%
+   * restante se lo comía la última columna (la de la X), así que la tabla
+   * terminaba con una franja en blanco a la derecha mientras «Producto» se
+   * quedaba estrecho y «RD$ 5,000.00» se partía en dos líneas.
+   */
+  const W = {
+    // Más ancha de lo que pide el texto suelto: ahora que el nombre envuelve,
+    // a 190px «ALISA PAOLA FERRERAS CONCEPCION» caía en tres renglones y
+    // estiraba la fila entera. A 230 entra en dos.
+    beneficiario: 230,
+    referencia: 120,
+    // Precio, cantidad y total ya no llevan caja de input —son texto—, así que
+    // se les quitó el ancho que pedía el borde. Lo que sobra se lo lleva
+    // «Producto», que es la columna que de verdad lo necesita.
+    precio: 96,
+    descuento: 80,
+    impuesto: 130,
+    descripcion: 200,
+    cantidad: 76,
+    total: 122,
+    accion: 40,
+  } as const;
+
+  // Debajo de esto la tabla scrollea en horizontal en vez de estrujarse. Es la
+  // suma de lo fijo más lo mínimo que necesita el buscador de producto.
+  const minWidth =
+    190 +
+    (hasDeps ? W.beneficiario : 0) +
+    (showReferencia ? W.referencia : 0) +
+    W.precio +
+    (showDescuento ? W.descuento : 0) +
+    (ocultarItbis ? 0 : W.impuesto) +
+    (showDescripcion ? W.descripcion : 0) +
+    W.cantidad + W.total + W.accion;
+
+  const headerSx = {
+    fontWeight: 600,
+    color: '#6b7280',
+    fontSize: '0.75rem',
+    bgcolor: '#f9fafb',
+    py: 1.5,
+    px: 1,
+    lineHeight: 1.4,
+  };
+
   return (
-    <div>
+    <Box>
       {/* ───────── MOBILE: card list (< md) ───────── */}
-      <div className="md:hidden divide-y divide-gray-100 -mx-4 md:-mx-5">
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mx: -2 }}>
         {items.map((item, idx) => (
-          <div key={item.id} className="p-4 space-y-3 bg-white">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          <Box
+            key={item.id}
+            sx={{
+              p: 2,
+              bgcolor: '#fff',
+              borderBottom: '1px solid #f3f4f6',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1.5,
+            }}
+          >
+            {/* Row header */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography
+                sx={{
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
                 Línea {idx + 1}
-              </span>
+              </Typography>
               {items.length > 1 && (
-                <button
-                  type="button"
+                <IconButton
+                  size="small"
                   onClick={() => onRemoveItem(item.id)}
                   aria-label={`Eliminar línea ${idx + 1}`}
-                  className="text-gray-400 hover:text-red-500 p-2 -m-2 transition-colors"
+                  sx={{ color: '#d1d5db', '&:hover': { color: '#ef4444' } }}
                 >
-                  <X className="h-5 w-5" />
-                </button>
+                  <X size={20} />
+                </IconButton>
               )}
-            </div>
+            </Box>
 
             {/* Beneficiario — mobile */}
             {hasDeps && (
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                  Beneficiario <span className="text-red-500 ml-0.5">*</span>
-                </Label>
-                <select
-                  className="h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
+                  Beneficiario <Box component="span" sx={{ color: '#ef4444', ml: '2px' }}>*</Box>
+                </Typography>
+                <Select
+                  size="small"
+                  fullWidth
+                  displayEmpty
                   value={item.dependienteId ?? ''}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (!val) {
                       onSelectBeneficiario(item.id, null, '');
                     } else {
-                      const id = parseInt(val, 10);
+                      const id = parseInt(String(val), 10);
                       const dep = dependientes.find(d => d.id === id);
                       onSelectBeneficiario(item.id, id, dep ? `${dep.nombre} ${dep.apellido}` : '');
                     }
                   }}
+                  sx={{ borderRadius: '8px' }}
                 >
-                  <option value="">— Beneficiario —</option>
+                  <MenuItem value=""><em>— Beneficiario —</em></MenuItem>
                   {dependientes.map(d => (
-                    <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                    <MenuItem key={d.id} value={d.id}>{d.nombre} {d.apellido}</MenuItem>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Box>
             )}
 
-            <div>
-              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                Producto / servicio
-              </Label>
+            {/* Producto */}
+            <Box>
+              <Typography
+                component="label"
+                sx={{
+                  display: 'block',
+                  fontSize: '0.7rem',
+                  color: '#4b5563',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  mb: 0.5,
+                }}
+              >
+                {etiquetaDetalle}
+              </Typography>
               <Autocomplete<Producto>
-                placeholder="Buscar producto o servicio..."
+                placeholder={placeholderDetalle}
                 value={item.nombreItem}
-                onSearch={buscarProductos}
+                onSearch={(q) => buscarProductos(q, item.dependienteId)}
                 onSelect={(p) => onSelectProducto(idx, p)}
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
-                createLabel="Nuevo producto"
+                createLabel={crearLabel}
+                onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
               />
               <LineaMaestros productoId={item.productoId} />
-            </div>
+            </Box>
 
             {showReferencia && (
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Referencia
-                </Label>
-                <Input
-                  className="h-11 text-sm"
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
                   placeholder="Ref."
                   value={item.referencia}
                   onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                  slotProps={{ htmlInput: { style: { height: '2.75rem', boxSizing: 'border-box' } } }}
                 />
-              </div>
+              </Box>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+            {/* Precio + Cantidad */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Precio
-                </Label>
-                <Input
-                  type="number" inputMode="decimal" min={0} step={0.01}
-                  value={item.precioUnitarioItem || ''}
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
+                  type="number"
                   placeholder="0.00"
-                  readOnly={bloquearPrecios}
+                  value={item.precioUnitarioItem || ''}
                   title={bloquearPrecios ? 'Tu rol no puede cambiar el precio del producto' : undefined}
                   onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                  className={"h-11 text-sm text-right" + bloqueado + "  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
+                  sx={inputNumeroSx}
+                  slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal', style: { textAlign: 'right' } , readOnly: bloquearPrecios } }}
                 />
-              </div>
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+              </Box>
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Cantidad
-                </Label>
-                <Input
-                  type="number" inputMode="decimal" min={0.01} step="any"
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
+                  type="number"
                   value={item.cantidadItem}
                   onChange={(e) => {
                     const n = parseFloat(e.target.value);
                     onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                   }}
-                  className="h-11 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  sx={inputNumeroSx}
+                  slotProps={{ htmlInput: { min: 0.01, step: 'any', inputMode: 'decimal', style: { textAlign: 'center' } } }}
                 />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                  Descuento %
-                </Label>
-                <div className="relative">
-                  <Input
-                    type="number" inputMode="decimal" min={0} max={100} step={0.1}
-                    value={item.descuentoPct || ''}
-                    placeholder="0"
-                    readOnly={bloquearPrecios}
-                    onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                    className={"h-11" + bloqueado + "  text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
-                  />
-                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                  Impuesto
-                </Label>
-                <Select
-                  value={item.tasaItbis}
-                  onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                  disabled={bloquearPrecios || (regla !== undefined && !regla.permiteItbis)}
+            {/* Descuento + Impuesto. Si no va ninguno de los dos, el bloque
+                entero desaparece en vez de dejar una rejilla vacía. */}
+            {(showDescuento || !ocultarItbis) && (
+            <Box sx={{ display: 'grid', gridTemplateColumns: showDescuento && !ocultarItbis ? '1fr 1fr' : '1fr', gap: 1.5 }}>
+              {showDescuento && (
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
                 >
-                  <SelectTrigger className="h-11 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(regla === undefined || regla.permiteItbis)
-                      ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
-                      : <SelectItem value="exento">Exento</SelectItem>
-                    }
-                  </SelectContent>
+                  Descuento %
+                </Typography>
+                <Box sx={{ position: 'relative' }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    type="number"
+                    placeholder="0"
+                    value={item.descuentoPct || ''}
+                      title={bloquearPrecios ? 'Tu rol no puede aplicar descuentos' : undefined}
+                    onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
+                    sx={inputNumeroSx}
+                    slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, inputMode: 'decimal', style: { textAlign: 'center', paddingRight: '1.5rem' }, readOnly: bloquearPrecios } }}
+                  />
+                  <Typography
+                    sx={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      fontSize: '0.75rem',
+                      color: '#6b7280',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    %
+                  </Typography>
+                </Box>
+              </Box>
+              )}
+              {!ocultarItbis && (
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
+                  Impuesto
+                </Typography>
+                <Select
+                  size="small"
+                  fullWidth
+                  value={item.tasaItbis}
+                  onChange={(e) => onUpdateItem(item.id, 'tasaItbis', e.target.value)}
+                  disabled={regla !== undefined && !regla.permiteItbis}
+                  sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+                >
+                  {(regla === undefined || regla.permiteItbis)
+                    ? TASA_ITBIS.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)
+                    : <MenuItem value="exento">Exento</MenuItem>
+                  }
                 </Select>
-              </div>
-            </div>
+              </Box>
+              )}
+            </Box>
+            )}
 
             {showDescripcion && (
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Descripción
-                </Label>
-                <textarea
-                  className="w-full min-h-[60px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                </Typography>
+                <TextField
+                  multiline
+                  fullWidth
+                  minRows={2}
                   placeholder="Descripción..."
                   value={item.descripcionItem}
                   onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      '& fieldset': { borderColor: '#e5e7eb' },
+                      '&:hover fieldset': { borderColor: '#9ca3af' },
+                      '&.Mui-focused fieldset': { borderColor: '#3658e1' },
+                    },
+                  }}
                 />
-              </div>
+              </Box>
             )}
 
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Total</span>
-              <span className="text-base font-semibold text-gray-900">
+            {/* Total row */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                pt: 1,
+                borderTop: '1px solid #f3f4f6',
+              }}
+            >
+              <Typography sx={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Total
+              </Typography>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
                 RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ───────── DESKTOP: table (≥ md) ───────── */}
-      <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
-        {/* min-w dinámico — solo expandir cuando hay opcionales visibles */}
-        <table className={`w-full border-collapse table-fixed ${
-          hasDeps && showReferencia && showDescripcion ? 'min-w-[960px]' :
-          hasDeps && (showReferencia || showDescripcion) ? 'min-w-[860px]' :
-          hasDeps ? 'min-w-[740px]' :
-          showReferencia && showDescripcion ? 'min-w-[820px]' :
-          (showReferencia || showDescripcion) ? 'min-w-[720px]' :
-          'min-w-[600px]'
-        }`}>
-          <colgroup>
-            {/* Beneficiario */}
-            {hasDeps && <col className="w-[16%]" />}
-            {/* Producto */}
-            <col className={
-              hasDeps && showReferencia && showDescripcion ? 'w-[16%]' :
-              hasDeps && (showReferencia || showDescripcion) ? 'w-[18%]' :
-              hasDeps ? 'w-[22%]' :
-              showReferencia && showDescripcion ? 'w-[22%]' :
-              showReferencia ? 'w-[28%]' :
-              showDescripcion ? 'w-[22%]' :
-              'w-[32%]'
-            } />
-            {/* Referencia */}
-            {showReferencia && <col className="w-[10%]" />}
-            {/* Precio */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[10%]' :
-              (showReferencia || showDescripcion) ? 'w-[12%]' :
-              'w-[14%]'
-            } />
-            {/* Desc % */}
-            <col className="w-[8%]" />
-            {/* Impuesto */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[10%]' :
-              (showReferencia || showDescripcion) ? 'w-[12%]' :
-              'w-[14%]'
-            } />
-            {/* Descripción */}
-            {showDescripcion && <col className="w-[16%]" />}
-            {/* Cantidad */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[10%]' :
-              (showReferencia || showDescripcion) ? 'w-[12%]' :
-              'w-[14%]'
-            } />
-            {/* Total */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[12%]' :
-              (showReferencia || showDescripcion) ? 'w-[14%]' :
-              'w-[16%]'
-            } />
-            {/* Action */}
-            <col className="w-10" />
-          </colgroup>
-          <thead>
-            <tr className="border-b-2 border-gray-200 bg-gray-50">
+      <Box
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          overflowX: 'auto',
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb',
+        }}
+      >
+        <Table
+          size="small"
+          sx={{
+            width: '100%',
+            minWidth,
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed',
+            '& th': { fontWeight: 600, color: '#6b7280', fontSize: '0.75rem', bgcolor: '#f9fafb' },
+          }}
+        >
+          <TableHead>
+            <TableRow sx={{ borderBottom: '2px solid #e5e7eb' }}>
               {hasDeps && (
-                <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">
-                  Beneficiario <span className="text-red-500 ml-0.5">*</span>
-                </th>
+                <TableCell sx={{ ...headerSx, textAlign: 'left', width: W.beneficiario }}>
+                  Beneficiario <Box component="span" sx={{ color: '#ef4444', ml: '2px' }}>*</Box>
+                </TableCell>
               )}
-              <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">
-                <span className="inline-flex items-center gap-1">
-                  Producto
-                  <Tooltip text="DGII #84 · nombreItem · máx 80 caracteres">
-                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'left',
+                  // Sin ancho a propósito: esta es la columna que absorbe el
+                  // sobrante y estira la tabla hasta el borde.
+                }}
+              >
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                  {modoGasto ? 'Detalle' : 'Producto'}
+                  <Tooltip title="DGII #84 · nombreItem · máx 80 caracteres" arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
+                      <Info size={12} aria-hidden="true" />
+                    </Box>
                   </Tooltip>
-                </span>
-              </th>
-              {showReferencia && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Referencia</th>}
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3">
-                <span className="inline-flex items-center gap-1">
+                </Box>
+              </TableCell>
+              {showReferencia && (
+                <TableCell sx={{ ...headerSx, textAlign: 'left', width: W.referencia }}>Referencia</TableCell>
+              )}
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'right',
+                  width: W.precio,
+                }}
+              >
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
                   Precio
-                  <Tooltip text="DGII #94 · precioUnitarioItem">
-                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  <Tooltip title="DGII #94 · precioUnitarioItem" arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
+                      <Info size={12} aria-hidden="true" />
+                    </Box>
                   </Tooltip>
-                </span>
-              </th>
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3">Desc %</th>
-              <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Impuesto</th>
-              {showDescripcion && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Descripción</th>}
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3">
-                <span className="inline-flex items-center gap-1">
+                </Box>
+              </TableCell>
+              {showDescuento && (
+                <TableCell sx={{ ...headerSx, textAlign: 'center', width: W.descuento }}>Desc %</TableCell>
+              )}
+              {!ocultarItbis && (
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'left',
+                  width: W.impuesto,
+                }}
+              >
+                Impuesto
+              </TableCell>
+              )}
+              {showDescripcion && (
+                <TableCell sx={{ ...headerSx, textAlign: 'left', width: W.descripcion }}>Descripción</TableCell>
+              )}
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'center',
+                  width: W.cantidad,
+                }}
+              >
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, justifyContent: 'center' }}>
                   Cantidad
-                  <Tooltip text="DGII #91 · cantidadItem">
-                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  <Tooltip title="DGII #91 · cantidadItem" arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
+                      <Info size={12} aria-hidden="true" />
+                    </Box>
                   </Tooltip>
-                </span>
-              </th>
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3">Total</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+                </Box>
+              </TableCell>
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'right',
+                  width: W.total,
+                }}
+              >
+                Total
+              </TableCell>
+              <TableCell sx={{ ...headerSx, width: W.accion }} />
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {items.map((item, idx) => (
-              <tr key={item.id} className="border-b border-gray-50 align-top group">
+              <TableRow
+                key={item.id}
+                sx={{
+                  borderBottom: '1px solid #f9fafb',
+                  verticalAlign: 'top',
+                  '&:hover .remove-btn': { opacity: 1 },
+                }}
+              >
                 {/* Beneficiario cell — desktop */}
                 {hasDeps && (
-                  <td className="px-2 py-2">
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  <TableCell sx={{ px: 1, py: 1 }}>
+                    <Select
+                      size="small"
+                      fullWidth
+                      displayEmpty
                       value={item.dependienteId ?? ''}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (!val) {
                           onSelectBeneficiario(item.id, null, '');
                         } else {
-                          const id = parseInt(val, 10);
+                          const id = parseInt(String(val), 10);
                           const dep = dependientes.find(d => d.id === id);
                           onSelectBeneficiario(item.id, id, dep ? `${dep.nombre} ${dep.apellido}` : '');
                         }
                       }}
+                      sx={{
+                        borderRadius: '8px',
+                        fontSize: '0.875rem',
+                        // Sin esto MUI corta el nombre con puntos suspensivos.
+                        // «ALISA PAOLA FE…» no dice a cuál hija se le está
+                        // cobrando, que es justo lo único que esta columna
+                        // tiene que decir.
+                        '& .MuiSelect-select': {
+                          whiteSpace: 'normal',
+                          overflow: 'visible',
+                          textOverflow: 'clip',
+                          lineHeight: 1.3,
+                          py: 1,
+                        },
+                      }}
                     >
-                      <option value="">— Beneficiario —</option>
+                      <MenuItem value=""><em>— Beneficiario —</em></MenuItem>
                       {dependientes.map(d => (
-                        <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                        <MenuItem key={d.id} value={d.id} sx={{ whiteSpace: 'normal' }}>
+                          {d.nombre} {d.apellido}
+                        </MenuItem>
                       ))}
-                    </select>
-                  </td>
+                    </Select>
+                  </TableCell>
                 )}
-                <td className="px-4 py-2">
+
+                {/* Producto */}
+                <TableCell sx={{ px: 1, py: 1 }}>
                   <Autocomplete<Producto>
-                    placeholder="Buscar producto o servicio..."
+                    placeholder={placeholderDetalle}
                     value={item.nombreItem}
-                    onSearch={buscarProductos}
+                    onSearch={(q) => buscarProductos(q, item.dependienteId)}
                     onSelect={(p) => onSelectProducto(idx, p)}
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
-                    createLabel="Nuevo producto"
+                    createLabel={crearLabel}
+                    onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
+                    // El nombre del producto identifica la línea: cortado a
+                    // «Manuales Caligrafias…» no se sabe cuál manual es.
+                    multilinea
                   />
+                  {/*
+                    Dónde está matriculado el alumno, debajo del concepto.
+
+                    Va en `descripcionItem`, que es su sitio —viaja al PDF—,
+                    pero esa columna está apagada por defecto: sin esto, en el
+                    cajón del colegio la línea decía «Pago de colegiatura —
+                    Septiembre 2026» y el grado no se veía por ninguna parte.
+                    Si la columna está encendida no se repite.
+                  */}
+                  {!showDescripcion && item.descripcionItem.trim() && (
+                    <Typography
+                      title={item.descripcionItem}
+                      sx={{
+                        mt: 0.25, fontSize: '0.6875rem', color: 'text.secondary',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.descripcionItem}
+                    </Typography>
+                  )}
                   <LineaMaestros productoId={item.productoId} />
-                </td>
+                </TableCell>
+
+                {/* Referencia */}
                 {showReferencia && (
-                  <td className="px-2 py-2">
-                    <Input
-                      className="h-9 text-sm"
+                  <TableCell sx={{ px: 1, py: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
                       placeholder="Ref."
                       value={item.referencia}
                       onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
                     />
-                  </td>
+                  </TableCell>
                 )}
-                <td className="px-2 py-2">
-                  <Input
-                    type="number" min={0} step={0.01}
-                    value={item.precioUnitarioItem || ''}
-                    placeholder="0.00"
-                    readOnly={bloquearPrecios}
-                    title={bloquearPrecios ? 'Tu rol no puede cambiar el precio del producto' : undefined}
-                    onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                    className={"h-9 text-sm text-right" + bloqueado + "  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
+
+                {/* Precio */}
+                <TableCell sx={{ px: 1, py: 1 }}>
+                  <CeldaNumero
+                    valor={item.precioUnitarioItem}
+                    onChange={(n) => onUpdateItem(item.id, 'precioUnitarioItem', n)}
+                    alinear="right"
+                    formatear={(n) => n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    soloLectura={bloquearPrecios}
+                    etiqueta={`Precio línea ${idx + 1}`}
                   />
-                </td>
-                <td className="px-2 py-2">
-                  <div className="relative">
-                    <Input
-                      type="number" min={0} max={100} step={0.1}
-                      value={item.descuentoPct || ''}
+                </TableCell>
+
+                {/* Descuento % */}
+                {showDescuento && (
+                <TableCell sx={{ px: 1, py: 1 }}>
+                  <Box sx={{ position: 'relative' }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      type="number"
                       placeholder="0"
-                      readOnly={bloquearPrecios}
+                      value={item.descuentoPct || ''}
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                      className={"h-9 text-sm text-center pr-6" + bloqueado + "  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
+                      sx={inputNumeroSx}
+                      slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, style: { textAlign: 'center', paddingRight: '1.25rem' }, readOnly: bloquearPrecios } }}
                     />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
-                  </div>
-                </td>
-                <td className="px-2 py-2">
+                    <Typography
+                      sx={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: '0.75rem',
+                        color: '#6b7280',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      %
+                    </Typography>
+                  </Box>
+                </TableCell>
+                )}
+
+                {/* Impuesto — se omite entero cuando el emisor está exento. */}
+                {!ocultarItbis && (
+                <TableCell sx={{ px: 1, py: 1 }}>
                   <Select
+                    size="small"
+                    fullWidth
                     value={item.tasaItbis}
-                    onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                    disabled={bloquearPrecios || (regla !== undefined && !regla.permiteItbis)}
+                    onChange={(e) => onUpdateItem(item.id, 'tasaItbis', e.target.value)}
+                    disabled={regla !== undefined && !regla.permiteItbis}
+                    sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
                   >
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(regla === undefined || regla.permiteItbis)
-                        ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
-                        : <SelectItem value="exento">Exento</SelectItem>
-                      }
-                    </SelectContent>
+                    {(regla === undefined || regla.permiteItbis)
+                      ? TASA_ITBIS.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)
+                      : <MenuItem value="exento">Exento</MenuItem>
+                    }
                   </Select>
-                </td>
+                </TableCell>
+                )}
+
+                {/* Descripción */}
                 {showDescripcion && (
-                  <td className="px-2 py-2">
-                    <textarea
-                      className="w-full h-[68px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                  <TableCell sx={{ px: 1, py: 1 }}>
+                    <TextField
+                      multiline
+                      fullWidth
                       placeholder="Descripción..."
                       value={item.descripcionItem}
                       onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '8px',
+                          fontSize: '0.875rem',
+                          minHeight: 68,
+                          alignItems: 'flex-start',
+                          '& fieldset': { borderColor: '#e5e7eb' },
+                          '&:hover fieldset': { borderColor: '#9ca3af' },
+                          '&.Mui-focused fieldset': { borderColor: '#3658e1' },
+                        },
+                        '& .MuiInputBase-inputMultiline': { resize: 'none' },
+                      }}
                     />
-                  </td>
+                  </TableCell>
                 )}
-                <td className="px-2 py-2">
-                  <Input
-                    type="number" min={0.01} step="any"
-                    value={item.cantidadItem}
-                    onChange={(e) => {
-                      const n = parseFloat(e.target.value);
-                      // permitir 0 explícito, NaN/blank → 0; submit valida > 0
-                      onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
-                    }}
-                    className="h-9 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+
+                {/* Cantidad */}
+                <TableCell sx={{ px: 1, py: 1 }}>
+                  {/* 0 explícito se permite al escribir; el submit valida > 0. */}
+                  <CeldaNumero
+                    valor={item.cantidadItem}
+                    onChange={(n) => onUpdateItem(item.id, 'cantidadItem', n)}
+                    alinear="center"
+                    formatear={(n) => n.toLocaleString('es-DO', { maximumFractionDigits: 4 })}
+                    etiqueta={`Cantidad línea ${idx + 1}`}
                   />
-                </td>
-                <td className="px-2 py-2 text-right">
-                  <div className="h-9 flex items-center justify-end text-sm font-medium text-gray-700">
-                    RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </div>
-                </td>
-                <td className="px-2 py-2">
+                </TableCell>
+
+                {/* Total */}
+                <TableCell sx={{ px: 1, py: 1, textAlign: 'right' }}>
+                  <Box sx={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', whiteSpace: 'nowrap' }}>
+                      RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+                </TableCell>
+
+                {/* Action */}
+                <TableCell sx={{ px: 1, py: 1 }}>
                   {items.length > 1 && (
-                    <button
-                      type="button"
+                    <IconButton
+                      size="small"
+                      className="remove-btn"
                       onClick={() => onRemoveItem(item.id)}
                       aria-label={`Eliminar línea ${idx + 1}`}
-                      className="text-gray-300 hover:text-red-400 p-1 mt-1 transition-colors opacity-0 group-hover:opacity-100">
-                      <X className="h-4 w-4" />
-                    </button>
+                      sx={{
+                        color: '#d1d5db',
+                        opacity: 0,
+                        mt: 0.5,
+                        transition: 'color 0.15s, opacity 0.15s',
+                        '&:hover': { color: '#f87171' },
+                      }}
+                    >
+                      <X size={16} />
+                    </IconButton>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Box>
 
-      <div className="pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
-        <button
+      {/* Footer actions */}
+      <Box
+        sx={{
+          pt: 1.5,
+          mt: 0.5,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1.5,
+          borderTop: '1px solid #f9fafb',
+        }}
+      >
+        <Button
           type="button"
+          variant="text"
+          disableElevation
           onClick={onAddItem}
-          className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
+          sx={{
+            textTransform: 'none',
+            color: '#3658e1',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            py: 1,
+            my: -1,
+            '&:hover': { color: '#2a45c4', bgcolor: 'transparent' },
+          }}
+        >
           + Agregar línea
-        </button>
-        <button
+        </Button>
+        {!ocultarConduce && (
+        <Button
           type="button"
+          variant="text"
+          disableElevation
           onClick={() => openProximamente('Agregar Conduce')}
-          className="text-gray-500 hover:text-teal-700 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
+          sx={{
+            textTransform: 'none',
+            color: '#6b7280',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            py: 1,
+            my: -1,
+            '&:hover': { color: '#2a45c4', bgcolor: 'transparent' },
+          }}
+        >
           + Agregar Conduce
-        </button>
-      </div>
+        </Button>
+        )}
+      </Box>
       {dialog}
-    </div>
+    </Box>
   );
 }
