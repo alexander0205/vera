@@ -17,7 +17,7 @@ import { rangoLegible } from '@/lib/nomina/periodos';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { toast } from '@/lib/toast';
-import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark, Trash2, RefreshCw } from 'lucide-react';
 
 interface Corrida {
   id: number;
@@ -158,6 +158,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const [descargandoTSS, setDescargandoTSS] = useState(false);
   const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
   const [borrar, setBorrar] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
   const [borrando, setBorrando] = useState(false);
   // Candado de las operaciones que mueven dinero o estado. Un ref y no estado de
   // React: entre la respuesta y el re-render el botón volvía a habilitarse un
@@ -340,6 +341,25 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     }
   }
 
+  /** Vuelve a calcular el borrador con lo que hay hoy (conceptos, préstamos, ausencias, horas, salarios). */
+  async function recalcular() {
+    if (ocupadoRef.current) return;
+    ocupadoRef.current = true;
+    setRecalculando(true);
+    try {
+      const res = await fetch(`/api/nomina/corridas/${id}/recalcular`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo recalcular');
+      toast.success(j.antesNetoCents === j.totalNetoCents ? 'Recalculado: sin cambios' : 'Borrador recalculado con los datos de hoy');
+      await mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      ocupadoRef.current = false;
+      setRecalculando(false);
+    }
+  }
+
   /** Un borrador todavía no tiene efecto contable: se puede borrar entero. */
   async function borrarBorrador() {
     if (ocupadoRef.current) return;
@@ -392,6 +412,11 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
           )}
           {corrida.estado === 'borrador' && puedeCorrer && (
             <>
+              {corrida.tipo !== 'regalia' && corrida.tipo !== 'liquidacion' && (
+                <Button variant="outline" onClick={recalcular} disabled={recalculando} className="gap-1.5" title="Vuelve a calcular con los conceptos, ausencias y salarios de hoy">
+                  {recalculando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Recalcular
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setBorrar(true)} className="gap-1.5 text-red-600 hover:text-red-700">
                 <Trash2 className="h-4 w-4" /> Borrar borrador
               </Button>

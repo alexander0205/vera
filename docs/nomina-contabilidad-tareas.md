@@ -130,3 +130,7 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 ## Despliegue
 
 Migraciones 0185–0191 solo aplicadas en local: hay que correrlas en producción antes de desplegar (0185 conceptos, 0186 cuenta de pago, 0187 conciliación, 0188 pago mixto, 0189 liquidaciones, 0190 ausencias, 0191 solicitudes de pago).
+
+## Recalcular borrador
+
+`POST /api/nomina/corridas/[id]/recalcular` (botón «Recalcular» en el borrador): vuelve a calcular con conceptos, préstamos, ausencias, horas y salarios de hoy, sin borrar y recrear. Solo corridas de salario en borrador (regalía y liquidación se rehacen con su formulario). Cierra las notas de «borrador con datos viejos» de ausencias y conceptos.
