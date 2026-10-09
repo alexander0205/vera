@@ -89,7 +89,7 @@ export default function AusenciasEmpleadoClient({ id }: { id: string }) {
         <p className="mt-1 text-sm text-muted-foreground">
           {empleado ? `${nombreCompleto(empleado)}. ` : ''}
           Las faltas y licencias sin pago se descuentan del salario de la corrida (por los días que cubren). La licencia con pago se
-          anota y se paga completa. Las corridas ya creadas no cambian: si hay un borrador de ese período, bórralo y vuélvelo a crear.
+          anota y se paga completa. Las corridas ya creadas no cambian: si hay un borrador de ese período, ábrelo y pulsa «Recalcular».
         </p>
       </div>
 
