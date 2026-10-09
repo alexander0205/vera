@@ -69,7 +69,7 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 
 ## 3. Importación de empleados 🟠
 
-- [ ] 3.1 Cargar el Excel de empleados que Lisandro ya tiene (salarios, incentivos fijos, cuenta de banco). Plantilla Excel + importador masivo `app/api/nomina/empleados/importar`. El de escolar (`importar-escolar`) trae empleados pero **no salarios** (gobernanza no los guarda) — hay que pedir el Excel de salarios.
+- [x] 3.1 (hecho — ver `docs/nomina-importar-empleados-pruebas.md`: plantilla descargable con los empleados, vista previa, todo o nada, llave = cédula, incentivo fijo incluido; falta pedirle a Lisandro el Excel con salarios) Cargar el Excel de empleados que Lisandro ya tiene (salarios, incentivos fijos, cuenta de banco). Plantilla Excel + importador masivo `app/api/nomina/empleados/importar`. El de escolar (`importar-escolar`) trae empleados pero **no salarios** (gobernanza no los guarda) — hay que pedir el Excel de salarios.
 - [ ] 3.2 Tras Darián cerrar estudiantes/costos/facturas en gobernanza (panorama hoy en cero), importar personal desde SIGERD y completar salarios con el Excel.
 - [ ] 3.3 Detectar si un empleado ya trabaja en otro colegio (Dolores lo mencionó en SIGERD; fuera de alcance de Vera, solo anotar).
 

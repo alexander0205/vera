@@ -15,7 +15,7 @@ import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   Users, Search, Loader2, IdCard, Phone, Briefcase,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, HandCoins, HeartPulse, Clock, Copy,
+  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, FileSpreadsheet, HandCoins, HeartPulse, Clock, Copy,
 } from 'lucide-react';
 import {
   Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA,
@@ -59,6 +59,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   // Alta, edición y contrato viven en su propia página (no modal): cerrar por
   // accidente no borra lo tecleado (pedido de Alex).
   const irNuevo = () => router.push('/nomina/empleados/nuevo');
+  const irImportar = () => router.push('/nomina/empleados/importar');
   const irEditar = (id: number) => router.push(`/nomina/empleados/${id}/editar`);
   const irContrato = (id: number) => router.push(`/nomina/empleados/${id}/contrato`);
   const irDependientes = (id: number) => router.push(`/nomina/empleados/${id}/dependientes`);
@@ -137,6 +138,9 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                 <GraduationCap className="h-4 w-4" /> Importar del colegio
               </Button>
             )}
+            <Button variant="outline" onClick={irImportar} className="gap-1.5">
+              <FileSpreadsheet className="h-4 w-4" /> Importar desde Excel
+            </Button>
             <Button onClick={irNuevo} className="gap-1.5">
               <Plus className="h-4 w-4" /> Nuevo empleado
             </Button>

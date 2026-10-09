@@ -72,7 +72,9 @@ export type AuditAction =
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
-  | 'CONTABILIDAD_CATALOGO_IMPORTADO';
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Nómina: una carga masiva de empleados cambia salarios y cuentas de banco de golpe.
+  | 'NOMINA_EMPLEADOS_IMPORTADOS';
 
 export interface AuditParams {
   teamId:    number;
