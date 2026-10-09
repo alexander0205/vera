@@ -88,8 +88,8 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 - [x] 4.7 **Reporte de pagos en efectivo por rango** (Dolores lo pide: "cuánto he pagado en efectivo en agosto"). ✅ reporte de efectivo por rango (c931db38)
 - [x] 4.8 **Gastos de beneficio al empleado** (almuerzo, atención): cuenta de gasto "atención al empleado" ubicada en el grupo de gastos de personal; no pasa por nómina. Añadir al catálogo base y a categorías de gasto. ✅ atención al empleado en catálogo y categorías (8587d63d)
 - [x] 4.9 **Importar catálogo de cuentas por Excel** (Dolores/contable lo ofrece): plantilla + importador en `app/contabilidad/cuentas`; exportar también. Pedir su archivo. ✅ importar/exportar catálogo por Excel
-- [ ] 4.10 **Solicitud de pago a proveedores + aprobación** (flujo: secretaria arma lista de pagos de la quincena, dueño aprueba según saldo disponible). Requiere roles y estado `solicitado→aprobado→pagado`. 🟡 Dolores ni lo usa; baja prioridad.
-- [ ] 4.11 **Escaneo de factura de gasto** reparte contra ítems/bien-servicio y cuenta contable. Hoy toma foto y llena datos del proveedor; falta la distribución por cuenta. 🟡 (Lisandro la dio por limitada.)
+- [x] 4.10 ✅ (hecho: migración 0191, `lib/contabilidad/solicitudes-pago.ts`, sección «Solicitudes de pago» en Cuentas por pagar; pide `contabilidad:gestionar`, aprueba/rechaza `contabilidad:configurar`; muestra lo disponible en caja y bancos; no se puede pedir más que el saldo libre; un solo pago aunque se pulse varias veces) **Solicitud de pago a proveedores + aprobación** (flujo: secretaria arma lista de pagos de la quincena, dueño aprueba según saldo disponible). Requiere roles y estado `solicitado→aprobado→pagado`. 🟡 Dolores ni lo usa; baja prioridad.
+- [x] 4.11 ✅ (ya cubierto: la IA clasifica cada línea y el registro agrupa por categoría → cuenta contable editable, ver 4.12) **Escaneo de factura de gasto** reparte contra ítems/bien-servicio y cuenta contable. Hoy toma foto y llena datos del proveedor; falta la distribución por cuenta. 🟡 (Lisandro la dio por limitada.)
 - [x] 4.12 **Filtrar el catálogo de bienes/servicios DGII** en la factura de gasto ("que se vea más fácil de buscar"). ✅ selector buscable de cuenta por categoría (ad375940)
 - [x] 4.13 **Compras vs. gastos** (materiales de operación → compra/costo; combustible → gasto): revisar que el registro deje elegir y asiente en la cuenta correcta; añadir ayuda en pantalla. ✅ ayuda compra vs gasto en pantalla (ad375940)
 
@@ -129,4 +129,4 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 
 ## Despliegue
 
-Migraciones 0185–0190 solo aplicadas en local: hay que correrlas en producción antes de desplegar (0185 conceptos, 0186 cuenta de pago, 0187 conciliación, 0188 pago mixto, 0189 liquidaciones, 0190 ausencias).
+Migraciones 0185–0191 solo aplicadas en local: hay que correrlas en producción antes de desplegar (0185 conceptos, 0186 cuenta de pago, 0187 conciliación, 0188 pago mixto, 0189 liquidaciones, 0190 ausencias, 0191 solicitudes de pago).

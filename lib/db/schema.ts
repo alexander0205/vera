@@ -1602,6 +1602,28 @@ export const pagosProveedores = pgTable('pagos_proveedores', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('pagos_proveedores_team_compra_idx').on(t.teamId, t.compraId)]);
 
+/** Pedido de pago a un proveedor que el dueño aprueba antes de que se pague. */
+export const pagosSolicitudes = pgTable('pagos_solicitudes', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  compraId: integer('compra_id').notNull().references(() => comprasLocales.id),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  metodo: varchar('metodo', { length: 30 }).notNull(),
+  cuentaSalidaId: integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
+  nota: varchar('nota', { length: 300 }),
+  /** 'solicitado' | 'aprobado' | 'rechazado' | 'cancelado' | 'pagando' | 'pagado'. */
+  estado: varchar('estado', { length: 12 }).notNull().default('solicitado'),
+  solicitadaPor: integer('solicitada_por').references(() => users.id),
+  solicitadaAt: timestamp('solicitada_at').notNull().defaultNow(),
+  resueltaPor: integer('resuelta_por').references(() => users.id),
+  resueltaAt: timestamp('resuelta_at'),
+  motivo: varchar('motivo', { length: 300 }),
+  pagoId: integer('pago_id').references(() => pagosProveedores.id),
+}, (t) => [
+  index('pagos_solicitudes_team_estado_idx').on(t.teamId, t.estado, t.solicitadaAt),
+  index('pagos_solicitudes_compra_idx').on(t.compraId),
+]);
+
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 
 export const listasPrecios = pgTable('listas_precios', {
