@@ -13,6 +13,7 @@ import {
 } from '@/lib/nomina/calculo';
 import { aplicarConceptos, type ConceptoAplicable, type ConceptoAplicado } from '@/lib/nomina/conceptos';
 import type { TasasNomina } from '@/lib/config/nomina-tasas';
+import { diasAusentes, type RangoAusente } from '@/lib/nomina/ausencias';
 import { calcularProvisionesPeriodo } from '@/lib/nomina/provisiones';
 import type { ResumenHoras } from '@/lib/nomina/horas';
 import {
@@ -124,6 +125,8 @@ export interface EmpleadoParaCorrida {
   pagoPorHoras?: ResumenHoras | null;
   /** Ingresos y descuentos que le tocan en ESTA corrida (incentivos, préstamos…). */
   conceptos?: ConceptoAplicable[];
+  /** Faltas y licencias sin pago: días que no se le pagan. */
+  ausencias?: RangoAusente[];
 }
 
 /** Lo que la corrida toma de la empresa y del período, igual para todos. */
@@ -188,13 +191,15 @@ const nombreCompleto = (e: EmpleadoParaCorrida) =>
   [e.nombres, e.apellidos].filter(Boolean).join(' ').trim();
 
 /**
- * Días del rango en que estuvo contratado. Quien está de baja sin fecha de
+ * Días del rango en que estuvo contratado y no faltó (faltas y licencias sin
+ * pago no se pagan). Quien está de baja sin fecha de
  * salida no cobra: no hay forma de saber hasta cuándo trabajó.
  */
 export function diasPagables(e: EmpleadoParaCorrida, r: Rango): number {
   if (e.estado !== 'activo' && !e.fechaSalida) return 0;
   const parte = interseccion(r, e.fechaIngreso ?? null, e.fechaSalida ?? null);
-  return parte ? diasDelRango(parte) : 0;
+  if (!parte) return 0;
+  return Math.max(0, diasDelRango(parte) - diasAusentes(parte.inicio, parte.fin, e.ausencias));
 }
 
 interface Pedazo {

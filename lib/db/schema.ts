@@ -4254,6 +4254,24 @@ export const empleadoPrestamos = pgTable('empleado_prestamos', {
     .where(sql`${t.estado} = 'activo' and ${t.saldoCents} = ${t.montoCents}`),
 ]);
 
+/** Faltas y licencias: las que no se pagan restan días a la corrida. */
+export const nominaAusencias = pgTable('nomina_ausencias', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  /** 'falta' | 'licencia_sin_pago' | 'licencia_con_pago'. */
+  tipo:       varchar('tipo', { length: 20 }).notNull(),
+  desde:      date('desde').notNull(),
+  hasta:      date('hasta').notNull(),
+  comentario: varchar('comentario', { length: 300 }),
+  activo:     boolean('activo').notNull().default(true),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_ausencias_team_empleado_idx').on(t.teamId, t.empleadoId, t.desde),
+  uniqueIndex('nomina_ausencias_activa_uniq').on(t.empleadoId, t.tipo, t.desde, t.hasta).where(sql`${t.activo}`),
+]);
+
 /** Lo que se aplicó en una línea de corrida. Snapshot: no cambia si se edita la asignación. */
 export const nominaLineaConceptos = pgTable('nomina_linea_conceptos', {
   id:         serial('id').primaryKey(),
