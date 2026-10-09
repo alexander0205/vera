@@ -1086,6 +1086,24 @@ async function cuentaSalidaFondos(teamId: number, metodo: string, elegidaId: num
   return cuentaPorCodigo(teamId, metodo === 'efectivo' ? '1101' : '1102');
 }
 
+/**
+ * La cuenta de la que sale un pago de nómina, de la más específica a la más
+ * general: la elegida en ese pago; la de por defecto de nómina (caja para el
+ * efectivo, banco para transferencia y cheque); la del método de pago, como
+ * funcionaba antes. Una cuenta que ya no sirve (desactivada, o que nunca pudo
+ * soltar dinero) se salta.
+ */
+async function cuentaSalidaNomina(teamId: number, metodo: string, elegidaId: number | null): Promise<number | null> {
+  const elegida = await cuentaElegidaDeSalida(teamId, elegidaId);
+  if (elegida) return elegida;
+  const cfg = await getConfig(teamId);
+  const defecto = await cuentaElegidaDeSalida(
+    teamId,
+    metodo === 'efectivo' ? cfg.cuentaNominaPagoEfectivoId : cfg.cuentaNominaPagoBancoId,
+  );
+  return defecto ?? cuentaSalidaFondos(teamId, metodo);
+}
+
 /** Lo que viene de la base como columna nullable: BIGINT/INTEGER o null. */
 const numeroONull = (v: unknown): number | null => (v == null ? null : Number(v) || null);
 
@@ -1209,7 +1227,7 @@ export async function generarAsientoPagoNominaObligacion(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT o.destino, o.monto_cents AS "monto",
+    SELECT o.destino, o.monto_cents AS "monto", o.cuenta_salida_id AS "cuentaSalidaId",
            o.parte_retenciones_cents AS "retenciones", o.parte_aportes_cents AS "aportes",
            to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
            c.descripcion,
@@ -1222,6 +1240,7 @@ export async function generarAsientoPagoNominaObligacion(
   const o = (filas as unknown as {
     destino: string; monto: string | number; retenciones: string | number; aportes: string | number;
     fecha: string; descripcion: string; infotep: string | number; afpEmpleado: string | number;
+    cuentaSalidaId: number | null;
   }[])[0];
   if (!o) return { creado: false, motivo: 'no-es-gasto' };
   const monto = Number(o.monto);
@@ -1229,7 +1248,7 @@ export async function generarAsientoPagoNominaObligacion(
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
-  const salida = await cuentaSalidaFondos(teamId, metodo);
+  const salida = await cuentaSalidaNomina(teamId, metodo, o.cuentaSalidaId == null ? null : Number(o.cuentaSalidaId));
   if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
 
   const lineas = lineasPagoObligacion({
@@ -1266,20 +1285,20 @@ export async function generarAsientoPagoSueldos(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT p.monto_cents AS monto, p.metodo, p.lineas,
+    SELECT p.monto_cents AS monto, p.metodo, p.lineas, p.cuenta_salida_id AS "cuentaSalidaId",
            to_char(p.fecha, 'YYYY-MM-DD') AS fecha, c.descripcion
     FROM nomina_pagos p
     JOIN nomina_corridas c ON c.id = p.corrida_id AND c.team_id = p.team_id
     WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
   `);
-  const p = (filas as unknown as { monto: string | number; metodo: string; lineas: number; fecha: string; descripcion: string }[])[0];
+  const p = (filas as unknown as { monto: string | number; metodo: string; lineas: number; fecha: string; descripcion: string; cuentaSalidaId: number | null }[])[0];
   if (!p) return { creado: false, motivo: 'no-es-gasto' };
   const monto = Number(p.monto);
   if (monto <= 0) return { creado: false, motivo: 'sin-monto' };
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
-  const salida = await cuentaSalidaFondos(teamId, p.metodo);
+  const salida = await cuentaSalidaNomina(teamId, p.metodo, p.cuentaSalidaId == null ? null : Number(p.cuentaSalidaId));
   if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
 
   const asientoId = await insertarAsiento(

@@ -152,6 +152,9 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const [pagandoObl, setPagandoObl] = useState<number | null>(null);
   const [metodoObl, setMetodoObl] = useState<'efectivo' | 'transferencia' | 'cheque'>('transferencia');
   const [metodoEmp, setMetodoEmp] = useState<'efectivo' | 'transferencia' | 'cheque'>('transferencia');
+  // De qué caja o banco sale el pago; vacío = la de por defecto de la nómina.
+  const [cuentaEmp, setCuentaEmp] = useState('');
+  const [cuentaObl, setCuentaObl] = useState('');
   const [descargandoTSS, setDescargandoTSS] = useState(false);
   const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
   const [borrar, setBorrar] = useState(false);
@@ -171,6 +174,17 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}${parametroLineas}` : null,
     fetcher,
   );
+  const { data: dCuentas } = useSWR<{ cuentas: { id: number; codigo: string; nombre: string }[]; efectivoId: number | null; bancoId: number | null }>(
+    yaAprobada && puedePagar ? '/api/nomina/cuentas-pago' : null,
+    fetcher,
+  );
+  const cuentasPago = dCuentas?.cuentas ?? [];
+  /** «Por defecto (Caja)» según el método: efectivo sale de la caja, lo demás del banco. */
+  const textoCuentaPorDefecto = (metodo: string) => {
+    const id = metodo === 'efectivo' ? dCuentas?.efectivoId : dCuentas?.bancoId;
+    const c = cuentasPago.find((x) => x.id === id);
+    return c ? `Por defecto: ${c.nombre}` : 'Cuenta por defecto';
+  };
   const { data: previewTSS } = useSWR<PreviewTSS>(
     yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/tss?preview=1` : null,
     fetcher,
@@ -285,7 +299,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     setPagandoEmp(true);
     try {
       const res = await fetch(`/api/nomina/corridas/${id}/pagar-empleados`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...cuerpo, metodo: metodoEmp }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...cuerpo, metodo: metodoEmp, ...(cuentaEmp ? { cuentaSalidaId: Number(cuentaEmp) } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo registrar el pago');
@@ -309,7 +323,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     setPagandoObl(oblId);
     try {
       const res = await fetch(`/api/nomina/corridas/${id}/obligaciones/${oblId}/pagar`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metodo: metodoObl }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metodo: metodoObl, ...(cuentaObl ? { cuentaSalidaId: Number(cuentaObl) } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo registrar el pago');
@@ -556,6 +570,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     <option value="efectivo">Efectivo</option>
                     <option value="cheque">Cheque</option>
                   </NativeSelect>
+                  <NativeSelect
+                  aria-label="Caja o banco de donde sale el pago"
+                  value={cuentaObl}
+                  onChange={(e) => setCuentaObl(e.target.value)}
+                  style={{ width: 'auto', height: 32 }}
+                  title="Caja o banco de donde sale el dinero"
+                >
+                  <option value="">{textoCuentaPorDefecto(metodoObl)}</option>
+                  {cuentasPago.map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>)}
+                </NativeSelect>
                 </div>
               )}
             </div>
@@ -613,6 +637,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                   <option value="transferencia">Transferencia</option>
                   <option value="efectivo">Efectivo</option>
                   <option value="cheque">Cheque</option>
+                </NativeSelect>
+                <NativeSelect
+                  aria-label="Caja o banco de donde sale el pago"
+                  value={cuentaEmp}
+                  onChange={(e) => setCuentaEmp(e.target.value)}
+                  style={{ width: 'auto', height: 32 }}
+                  title="Caja o banco de donde sale el dinero"
+                >
+                  <option value="">{textoCuentaPorDefecto(metodoEmp)}</option>
+                  {cuentasPago.map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>)}
                 </NativeSelect>
               </div>
             )}

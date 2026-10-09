@@ -6,6 +6,7 @@ import { nominaCorridas, nominaObligaciones } from '@/lib/db/schema';
 import { generarAsientoPagoNominaObligacion } from '@/lib/contabilidad/asientos';
 import { refrescarEstadoCorrida } from '@/lib/nomina/obligaciones-db';
 import { asegurarDevengoCorrida } from '@/lib/nomina/contabilidad-db';
+import { validarCuentaSalida } from '@/lib/nomina/cuenta-pago-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,8 @@ type Metodo = (typeof METODOS)[number];
 /**
  * POST /api/nomina/corridas/[id]/obligaciones/[oblId]/pagar — marca una
  * obligación (TSS/DGII) como pagada y, si la contabilidad está activa, genera el
- * asiento que salda el pasivo. Body opcional: { metodo: 'efectivo'|'transferencia'|'cheque' }.
+ * asiento que salda el pasivo. Body opcional: { metodo: 'efectivo'|'transferencia'|'cheque',
+ * cuentaSalidaId } — la caja o el banco de donde salió el dinero.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; oblId: string }> }) {
   const auth = await requireModuleAndPermission('nomina', 'nomina:pagar');
@@ -49,6 +51,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const body = await req.json().catch(() => ({}));
   const metodo: Metodo = METODOS.includes(body?.metodo) ? body.metodo : 'efectivo';
+  const cuenta = await validarCuentaSalida(auth.teamId, body?.cuentaSalidaId);
+  if (!cuenta.ok) return NextResponse.json({ error: cuenta.error }, { status: 400 });
+  // La cuenta se guarda antes del asiento: es de donde el asiento la lee.
+  await db.update(nominaObligaciones).set({ cuentaSalidaId: cuenta.id }).where(eq(nominaObligaciones.id, oblId));
 
   // Asiento de pago (opcional: si la contabilidad está apagada, se salda igual
   // sin asiento). El devengo va antes: si la corrida se aprobó con la contabilidad

@@ -4091,6 +4091,8 @@ export const nominaObligaciones = pgTable('nomina_obligaciones', {
   asientoId:   integer('asiento_id').references(() => contabilidadAsientos.id),
   /** 'efectivo' | 'transferencia' | 'cheque': para asentar el pago después si hacía falta. */
   metodoPago:  varchar('metodo_pago', { length: 20 }),
+  /** Caja o banco de donde salió el pago. Null = la de por defecto. */
+  cuentaSalidaId: integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('nomina_obligaciones_corrida_destino_uniq').on(t.corridaId, t.destino),
@@ -4139,6 +4141,8 @@ export const nominaPagos = pgTable('nomina_pagos', {
   montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
   lineas:     integer('lineas').notNull().default(0),
   asientoId:  integer('asiento_id').references(() => contabilidadAsientos.id),
+  /** Caja o banco de donde salió el dinero. Null = la de por defecto (config de nómina o del método). */
+  cuentaSalidaId: integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
   createdBy:  integer('created_by').references(() => users.id),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [

@@ -15,6 +15,7 @@ import {
 } from '@/lib/config/nomina-tasas';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { ConceptosNomina } from './_conceptos';
+import { CuentasPagoNomina } from './_cuentas-pago';
 
 interface Programacion {
   activa: boolean;
@@ -330,6 +331,8 @@ export default function ConfiguracionClient() {
           </p>
         </CardContent>
       </Card>
+
+      <CuentasPagoNomina />
 
       <ConceptosNomina />
 

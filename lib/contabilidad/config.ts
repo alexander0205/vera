@@ -90,6 +90,9 @@ export interface ConfigContable {
   cuentaProvVacacionesPagarId: number | null;
   cuentaProvCesantiaGastoId:   number | null;
   cuentaProvCesantiaPagarId:   number | null;
+  /** Nómina — de qué caja sale un pago en efectivo, y de qué banco uno por transferencia o cheque. */
+  cuentaNominaPagoEfectivoId:  number | null;
+  cuentaNominaPagoBancoId:     number | null;
   /** Nivel 4.3 — tratamiento del ITBIS pagado en compras. */
   regimenItbis:       RegimenItbis;
 }
@@ -110,6 +113,7 @@ const CONFIG_VACIA: ConfigContable = {
   cuentaProvRegaliaGastoId: null, cuentaProvRegaliaPagarId: null,
   cuentaProvVacacionesGastoId: null, cuentaProvVacacionesPagarId: null,
   cuentaProvCesantiaGastoId: null, cuentaProvCesantiaPagarId: null,
+  cuentaNominaPagoEfectivoId: null, cuentaNominaPagoBancoId: null,
   regimenItbis: 'exento',
 };
 
@@ -161,6 +165,8 @@ export const getConfig = cache(async function getConfig(teamId: number): Promise
            cuenta_prov_vacaciones_pagar_id AS "cuentaProvVacacionesPagarId",
            cuenta_prov_cesantia_gasto_id   AS "cuentaProvCesantiaGastoId",
            cuenta_prov_cesantia_pagar_id   AS "cuentaProvCesantiaPagarId",
+           cuenta_nomina_pago_efectivo_id  AS "cuentaNominaPagoEfectivoId",
+           cuenta_nomina_pago_banco_id     AS "cuentaNominaPagoBancoId",
            regimen_itbis          AS "regimenItbis"
     FROM contabilidad_config
     WHERE team_id = ${teamId}
@@ -295,6 +301,8 @@ export interface GuardarConfigInput {
   cuentaProvVacacionesPagarId?: number | null;
   cuentaProvCesantiaGastoId?:   number | null;
   cuentaProvCesantiaPagarId?:   number | null;
+  cuentaNominaPagoEfectivoId?:  number | null;
+  cuentaNominaPagoBancoId?:     number | null;
   regimenItbis?:       RegimenItbis;
 }
 
@@ -343,6 +351,8 @@ export async function guardarConfig(
     cuentaProvVacacionesPagarId: 'cuenta_prov_vacaciones_pagar_id',
     cuentaProvCesantiaGastoId:   'cuenta_prov_cesantia_gasto_id',
     cuentaProvCesantiaPagarId:   'cuenta_prov_cesantia_pagar_id',
+    cuentaNominaPagoEfectivoId:  'cuenta_nomina_pago_efectivo_id',
+    cuentaNominaPagoBancoId:     'cuenta_nomina_pago_banco_id',
     regimenItbis:       'regimen_itbis',
   };
 
