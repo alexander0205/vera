@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -373,7 +374,7 @@ export function EmpleadoWizard({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {porHoras ? (
                   <Campo label="Tarifa por hora (RD$)">
-                    <Input value={form.tarifaHora} onChange={(e) => set('tarifaHora')(e.target.value)} inputMode="decimal" placeholder="250.00" />
+                    <MoneyInput value={form.tarifaHora} onChange={set('tarifaHora')} placeholder="250.00" />
                     {tarifaInvalida ? (
                       <p className="text-xs text-red-600">Escribe solo el monto, por ejemplo 250.00</p>
                     ) : (
@@ -382,7 +383,7 @@ export function EmpleadoWizard({
                   </Campo>
                 ) : (
                   <Campo label="Salario mensual (RD$)">
-                    <Input value={form.salarioBase} onChange={(e) => set('salarioBase')(e.target.value)} inputMode="decimal" placeholder="35,000.00" />
+                    <MoneyInput value={form.salarioBase} onChange={set('salarioBase')} placeholder="35,000.00" />
                     {salarioInvalido && (
                       <p className="text-xs text-red-600">Escribe solo el monto, por ejemplo 35,000.00</p>
                     )}

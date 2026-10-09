@@ -12,6 +12,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
+import { limpiarMonto, mascaraMonto } from '@/lib/utils/monto-mascara';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
 import type { ListadoSolicitudes, SolicitudPago } from '@/lib/contabilidad/solicitudes-pago';
 
@@ -176,7 +177,7 @@ function Solicitar({ compra, cuentasSalida, onCerrar, onCreada }: { compra: Comp
       <DialogTitle>Solicitar pago a proveedor</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2, minWidth: 360 }}>
         <Typography sx={{ fontSize: 13, color: '#6b7280' }}>{compra.proveedorNombre ?? 'Proveedor sin nombre'} · {compra.referencia ?? `#${compra.id}`} · saldo {fmtDOP(compra.saldo)}</Typography>
-        <TextField label="Monto (RD$)" value={monto} onChange={(e) => setMonto(e.target.value)} slotProps={{ htmlInput: { inputMode: 'decimal' } }} />
+        <TextField label="Monto (RD$)" value={mascaraMonto(monto)} onChange={(e) => setMonto(limpiarMonto(e.target.value))} slotProps={{ htmlInput: { inputMode: 'decimal' } }} />
         <TextField select label="Método" value={metodo} onChange={(e) => setMetodo(e.target.value)}>
           {METODOS_PAGO.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
         </TextField>

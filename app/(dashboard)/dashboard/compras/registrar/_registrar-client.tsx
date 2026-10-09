@@ -7,6 +7,7 @@ import useSWR, { mutate as mutarSWR } from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -615,8 +616,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                       </div>
                       <div>
                         <span className={rotuloTelefono} aria-hidden>Costo s/ITBIS</span>
-                        <Input aria-label={`Costo unitario de la línea ${i + 1}`} value={x.l.costo} onChange={(e) => setLinea(x.l.key, { costo: e.target.value })}
-                          inputMode="decimal" placeholder="0.00" style={{ ...campoTabla, textAlign: 'right' }} />
+                        <MoneyInput aria-label={`Costo unitario de la línea ${i + 1}`} value={x.l.costo} onChange={(v) => setLinea(x.l.key, { costo: v })}
+                          style={{ ...campoTabla, textAlign: 'right' }} />
                       </div>
                       <div>
                         <span className={rotuloTelefono} aria-hidden>ITBIS</span>
@@ -681,15 +682,15 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="isc">ISC</Label>
-                  <Input id="isc" value={isc} onChange={(e) => setIsc(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                  <MoneyInput id="isc" value={isc} onChange={setIsc} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="otros-impuestos">Otros impuestos y tasas</Label>
-                  <Input id="otros-impuestos" value={otros} onChange={(e) => setOtros(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                  <MoneyInput id="otros-impuestos" value={otros} onChange={setOtros} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="propina">Propina legal (10 %)</Label>
-                  <Input id="propina" value={propina} onChange={(e) => setPropina(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                  <MoneyInput id="propina" value={propina} onChange={setPropina} />
                 </div>
               </div>
 
@@ -703,7 +704,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </label>
                 </div>
                 {alCostoManual ? (
-                  <Input aria-label="ITBIS llevado al costo" className="mt-2" value={itbisAlCosto} onChange={(e) => setItbisAlCosto(e.target.value)} inputMode="decimal" />
+                  <MoneyInput aria-label="ITBIS llevado al costo" className="mt-2" value={itbisAlCosto} onChange={setItbisAlCosto} />
                 ) : (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {totales.itbisCents === 0 ? 'Sin ITBIS facturado.'
@@ -738,13 +739,13 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="itbis-retenido">ITBIS retenido</Label>
-                    <Input id="itbis-retenido" value={retencionManual ? itbisRetenido : aTexto(sugerida.itbisRetenidoCents)} readOnly={!retencionManual}
-                      onChange={(e) => setItbisRetenido(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                    <MoneyInput id="itbis-retenido" value={retencionManual ? itbisRetenido : aTexto(sugerida.itbisRetenidoCents)} readOnly={!retencionManual}
+                      onChange={setItbisRetenido} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="isr-retenido">ISR retenido</Label>
-                    <Input id="isr-retenido" value={retencionManual ? isrRetenido : aTexto(sugerida.isrRetenidoCents)} readOnly={!retencionManual}
-                      onChange={(e) => setIsrRetenido(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                    <MoneyInput id="isr-retenido" value={retencionManual ? isrRetenido : aTexto(sugerida.isrRetenidoCents)} readOnly={!retencionManual}
+                      onChange={setIsrRetenido} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="isr-tipo">Tipo de retención ISR</Label>
@@ -813,8 +814,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                         <option value="">Cuenta del método (por defecto)</option>
                         {contexto.cuentasSalida.map((c) => <option key={c.id} value={String(c.id)}>{c.codigo} · {c.nombre}</option>)}
                       </NativeSelect>
-                      <Input className="col-span-3" inputMode="decimal" placeholder="0.00" aria-label={`Monto de la parte ${i + 1}`} value={p.monto}
-                        onChange={(e) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, monto: e.target.value } : x)))} />
+                      <MoneyInput className="col-span-3" aria-label={`Monto de la parte ${i + 1}`} value={p.monto}
+                        onChange={(v) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, monto: v } : x)))} />
                       <button type="button" className="col-span-1 text-muted-foreground hover:text-destructive disabled:opacity-30" aria-label={`Quitar la parte ${i + 1}`}
                         disabled={partes.length <= 2} onClick={() => setPartes((ps) => ps.filter((x) => x.key !== p.key))}>×</button>
                     </div>

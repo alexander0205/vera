@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -155,7 +156,7 @@ export default function BancosClient() {
                 <div className="text-lg font-semibold tabular-nums">{libro.pendientes.cantidad}</div>
                 <div className="text-xs text-muted-foreground">+{pesos(libro.pendientes.entradasCents)} / −{pesos(libro.pendientes.salidasCents)}</div></div>
               <Campo label="Saldo según tu estado de cuenta">
-                <Input value={saldoBanco} onChange={(e) => setSaldoBanco(e.target.value)} inputMode="decimal" placeholder="0.00" aria-label="Saldo del banco" />
+                <MoneyInput value={saldoBanco} onChange={setSaldoBanco} aria-label="Saldo del banco" />
               </Campo>
               <div>
                 <div className="text-xs text-muted-foreground">Diferencia</div>
@@ -290,7 +291,7 @@ function FormMovimiento({ bancos, cuentaInicial, onCerrar, onGuardado }: {
         </Campo>
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Fecha *"><Input type="date" value={f.fecha} onChange={(e) => set({ fecha: e.target.value })} aria-label="Fecha del movimiento" /></Campo>
-          <Campo label="Monto (RD$) *"><Input value={f.monto} onChange={(e) => set({ monto: e.target.value })} inputMode="decimal" placeholder="0.00" aria-label="Monto" /></Campo>
+          <Campo label="Monto (RD$) *"><MoneyInput value={f.monto} onChange={(v) => set({ monto: v })} aria-label="Monto" /></Campo>
         </div>
         {tipo === 'transferencia' ? (
           <div className="grid grid-cols-2 gap-3">

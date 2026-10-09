@@ -9,6 +9,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -607,8 +608,8 @@ export default function CargosClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Monto por estudiante (RD$) *</Label>
-                <Input type="number" step="0.01" placeholder="3500.00" value={form.monto}
-                  onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} />
+                <MoneyInput placeholder="3,500.00" value={form.monto}
+                  onChange={(v) => setForm((f) => ({ ...f, monto: v }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Fecha vencimiento</Label>
@@ -729,8 +730,8 @@ export default function CargosClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Monto (RD$) *</Label>
-                <Input type="number" step="0.01" placeholder="3500.00" value={formInd.monto}
-                  onChange={(e) => setFormInd((f) => ({ ...f, monto: e.target.value }))} />
+                <MoneyInput placeholder="3,500.00" value={formInd.monto}
+                  onChange={(v) => setFormInd((f) => ({ ...f, monto: v }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Fecha vencimiento</Label>

@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -169,7 +170,7 @@ export default function ConceptosEmpleadoClient({ id }: { id: string }) {
                   </NativeSelect>
                 </Campo>
                 <Campo label="Monto por corrida (RD$) *">
-                  <Input value={fc.monto} onChange={(e) => setFc({ ...fc, monto: e.target.value })} inputMode="decimal" placeholder="0.00" />
+                  <MoneyInput value={fc.monto} onChange={(v) => setFc({ ...fc, monto: v })} aria-label="Monto por corrida" />
                 </Campo>
                 <Campo label="Se repite">
                   <NativeSelect value={fc.fijo ? 'fijo' : 'una'} onChange={(e) => setFc({ ...fc, fijo: e.target.value === 'fijo' })}>
@@ -200,10 +201,10 @@ export default function ConceptosEmpleadoClient({ id }: { id: string }) {
               <div className="text-sm font-medium">Nuevo préstamo o avance</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Campo label="Monto prestado (RD$) *">
-                  <Input value={fp.monto} onChange={(e) => setFp({ ...fp, monto: e.target.value })} inputMode="decimal" placeholder="0.00" />
+                  <MoneyInput value={fp.monto} onChange={(v) => setFp({ ...fp, monto: v })} aria-label="Monto prestado" />
                 </Campo>
                 <Campo label="Cuota por corrida (RD$) *">
-                  <Input value={fp.cuota} onChange={(e) => setFp({ ...fp, cuota: e.target.value })} inputMode="decimal" placeholder="0.00" />
+                  <MoneyInput value={fp.cuota} onChange={(v) => setFp({ ...fp, cuota: v })} aria-label="Cuota por corrida" />
                 </Campo>
                 <Campo label="Se empieza a descontar desde *">
                   <Input type="date" value={fp.desde} onChange={(e) => setFp({ ...fp, desde: e.target.value })} />
