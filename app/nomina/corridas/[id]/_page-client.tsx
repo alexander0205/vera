@@ -44,6 +44,7 @@ interface Linea {
   afpEmpleadoCents: number;
   sfsEmpleadoCents: number;
   isrCents: number;
+  otrasDeduccionesCents: number;
   totalDeduccionesCents: number;
   netoCents: number;
   totalPatronalCents: number;
@@ -62,6 +63,15 @@ interface Linea {
   /** Quien cobra por hora: sus horas aprobadas del período. */
   horasDetalle: ResumenHoras | null;
   pagada: boolean;
+}
+interface ConceptoLinea {
+  id: number;
+  lineaId: number;
+  tipo: 'ingreso' | 'descuento';
+  nombre: string;
+  montoCents: number;
+  pedidoCents: number;
+  comentario: string | null;
 }
 interface Obligacion {
   id: number;
@@ -133,7 +143,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const { can } = usePermissions();
   const puedeCorrer = can('nomina:correr');
   const puedePagar = can('nomina:pagar');
-  const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[]; obligaciones: Obligacion[]; horasPendientes?: number }>(`/api/nomina/corridas/${id}`, fetcher);
+  const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[]; obligaciones: Obligacion[]; conceptos?: ConceptoLinea[]; horasPendientes?: number }>(`/api/nomina/corridas/${id}`, fetcher);
   const [confirmar, setConfirmar] = useState(false);
   const [aprobando, setAprobando] = useState(false);
   const [descargando, setDescargando] = useState(false);
@@ -153,6 +163,8 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const router = useRouter();
 
   const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
+  const conceptosPorLinea = new Map<number, ConceptoLinea[]>();
+  for (const c of data?.conceptos ?? []) conceptosPorLinea.set(c.lineaId, [...(conceptosPorLinea.get(c.lineaId) ?? []), c]);
   const { data: preview } = useSWR<PreviewDispersion>(
     yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}` : null,
     fetcher,
@@ -405,6 +417,14 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         </div>
       )}
 
+      {corrida.estado === 'borrador' && (
+        <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-conceptos-borrador">
+          Los incentivos, descuentos y préstamos salen de la ficha de cada empleado (botón de monedas en{' '}
+          <Link href="/nomina/empleados" className="font-medium underline">Empleados</Link>). Para cambiarlos en esta corrida,
+          ajústalos allá, borra este borrador y vuelve a generarlo.
+        </p>
+      )}
+
       {/* Aviso: empleados sin cuenta de banco que quedan fuera de la dispersión */}
       {corrida.estado === 'aprobada' && preview && preview.incompletos.length > 0 && (
         <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
@@ -614,6 +634,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                   <th className="px-3 py-2 text-right font-medium">AFP</th>
                   <th className="px-3 py-2 text-right font-medium">SFS</th>
                   <th className="px-3 py-2 text-right font-medium">ISR</th>
+                  <th className="px-3 py-2 text-right font-medium">Otros desc.</th>
                   <th className="px-3 py-2 text-right font-medium">Neto</th>
                   {aprobada && <th className="px-3 py-2 text-center font-medium">Pago</th>}
                   <th className="px-3 py-2 text-right font-medium">Volante</th>
@@ -633,6 +654,14 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     <td className="min-w-[13rem] px-3 py-2">
                       <div className="font-medium">{l.nombre}</div>
                       {l.cargo && <div className="text-xs text-muted-foreground">{l.cargo}</div>}
+                      {(conceptosPorLinea.get(l.id) ?? []).map((c) => (
+                        <div key={c.id} className={`text-xs ${c.tipo === 'ingreso' ? 'text-emerald-700' : 'text-muted-foreground'}`} data-testid="concepto-linea">
+                          {c.tipo === 'ingreso' ? '+' : '−'}{pesos(c.montoCents)} {c.nombre}
+                          {c.montoCents < c.pedidoCents && (
+                            <span className="text-amber-700"> (se pidió {pesos(c.pedidoCents)}; el neto no alcanzó)</span>
+                          )}
+                        </div>
+                      ))}
                       {l.horasDetalle ? (
                         <div className="text-xs text-muted-foreground" data-testid="detalle-horas">
                           {totalHorasTexto(l.horasDetalle)} h a {pesos(l.horasDetalle.tarifaHoraCents)} en {l.horasDetalle.dias} día{l.horasDetalle.dias === 1 ? '' : 's'}
@@ -664,6 +693,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                       )}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{pesos(l.isrCents)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{l.otrasDeduccionesCents > 0 ? pesos(l.otrasDeduccionesCents) : '—'}</td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums">{pesos(l.netoCents)}</td>
                     {aprobada && (
                       <td className="px-3 py-2 text-center">

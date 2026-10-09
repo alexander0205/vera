@@ -15,7 +15,7 @@ import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   Users, Search, Loader2, IdCard, Phone, Briefcase,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, HeartPulse, Clock, Copy,
+  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, HandCoins, HeartPulse, Clock, Copy,
 } from 'lucide-react';
 import {
   Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA,
@@ -62,6 +62,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const irEditar = (id: number) => router.push(`/nomina/empleados/${id}/editar`);
   const irContrato = (id: number) => router.push(`/nomina/empleados/${id}/contrato`);
   const irDependientes = (id: number) => router.push(`/nomina/empleados/${id}/dependientes`);
+  const irConceptos = (id: number) => router.push(`/nomina/empleados/${id}/conceptos`);
 
   function pedirEnlace(e: Empleado) {
     setEnlaceUrl(null);
@@ -229,6 +230,9 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                 <div className="flex flex-shrink-0 gap-1">
                   <Button variant="ghost" size="icon" onClick={() => irContrato(e.id)} aria-label="Contrato" title="Contrato">
                     <FileText className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => irConceptos(e.id)} aria-label="Ingresos y descuentos" title="Incentivos, descuentos y préstamos">
+                    <HandCoins className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes" title="Dependientes del seguro de salud">
                     <HeartPulse className="h-4 w-4" />

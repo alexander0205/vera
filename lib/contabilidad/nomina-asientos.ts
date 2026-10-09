@@ -26,6 +26,19 @@ export interface SumasCorrida {
   infotepCents: number;
   /** El desglose, para mandar cada concepto a su cuenta. Falta → todo junto. */
   detalle?: DetalleTss;
+  /**
+   * Ingresos y descuentos variables que tienen cuenta PROPIA. Los que no la
+   * tienen no se listan: siguen dentro de `brutoCents` (sueldos) y de
+   * `otrasDeduccionesCents` (otras deducciones por pagar).
+   */
+  conceptos?: ConceptoAsiento[];
+}
+
+export interface ConceptoAsiento {
+  cuentaId: number;
+  tipo: 'ingreso' | 'descuento';
+  montoCents: number;
+  nombre: string;
 }
 
 /**
@@ -100,12 +113,19 @@ function fusionar(lineas: LineaAsiento[], general: string): LineaAsiento[] {
  * Cuadra porque bruto = neto + deducciones.
  */
 export function lineasDevengoNomina(s: SumasCorrida, c: CuentasNomina): LineaAsiento[] {
+  const propios = (tipo: ConceptoAsiento['tipo']) => (s.conceptos ?? []).filter((x) => x.tipo === tipo && x.montoCents > 0);
+  const ingresos = propios('ingreso');
+  const descuentos = propios('descuento');
+  const sumaIngresos = ingresos.reduce((t, x) => t + x.montoCents, 0);
+  const sumaDescuentos = descuentos.reduce((t, x) => t + x.montoCents, 0);
   return sinCeros([
-    { cuentaId: c.gastoSueldos, debeCents: s.brutoCents, haberCents: 0, descripcion: 'Sueldos del período' },
+    { cuentaId: c.gastoSueldos, debeCents: s.brutoCents - sumaIngresos, haberCents: 0, descripcion: 'Sueldos del período' },
+    ...ingresos.map((x) => ({ cuentaId: x.cuentaId, debeCents: x.montoCents, haberCents: 0, descripcion: x.nombre })),
     ...gastoDeAportes(s, c),
     ...retencionesDelEmpleado(s, c),
     { cuentaId: c.isr, debeCents: 0, haberCents: s.isrCents, descripcion: 'ISR de asalariados por pagar (DGII)' },
-    { cuentaId: c.otrasDeducciones, debeCents: 0, haberCents: s.otrasDeduccionesCents, descripcion: 'Otras deducciones por pagar' },
+    { cuentaId: c.otrasDeducciones, debeCents: 0, haberCents: s.otrasDeduccionesCents - sumaDescuentos, descripcion: 'Otras deducciones por pagar' },
+    ...descuentos.map((x) => ({ cuentaId: x.cuentaId, debeCents: 0, haberCents: x.montoCents, descripcion: x.nombre })),
     { cuentaId: c.aportesTss, debeCents: 0, haberCents: s.aportesTssCents, descripcion: 'Aportes patronales TSS por pagar' },
     { cuentaId: c.infotep, debeCents: 0, haberCents: s.infotepCents, descripcion: 'INFOTEP por pagar' },
     { cuentaId: c.sueldosPorPagar, debeCents: 0, haberCents: s.netoCents, descripcion: 'Sueldos por pagar' },

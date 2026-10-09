@@ -31,28 +31,28 @@ Leyenda: 🔴 pedido explícito y bloquea uso real · 🟠 pedido, importante ·
 Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna pantalla ni tabla lo alimenta**; no hay forma de cargar un préstamo, avance, incentivo o bono. Es el pedido más fuerte de la reunión.
 
 **Modelo (migración nueva, siguiente número tras `0184`)**
-- [ ] Tabla `nomina_conceptos` (catálogo por empresa): `tipo` ingreso|descuento, `codigo`, `nombre`, `cuentaId` (cuenta contable propia), `cotizaTss` bool, `gravaIsr` bool, `activo`.
+- [x] Tabla `nomina_conceptos` (catálogo por empresa): `tipo` ingreso|descuento, `codigo`, `nombre`, `cuentaId` (cuenta contable propia), `cotizaTss` bool, `gravaIsr` bool, `activo`.
   - Ingresos semilla: Salario, Incentivo, Comisión, Vacaciones pagadas, Horas extra, Otros ingresos (bono/gratificación).
   - Descuentos semilla: Cuenta por cobrar empleado (avance/préstamo), Seguro médico adicional, Daños/Rotura, Otros descuentos.
-- [ ] Tabla `empleado_conceptos` (asignación): `empleadoId`, `conceptoId`, `montoCents`, `fijo` bool, `desde`, `hasta`, `comentario`. Fijo = se repite cada corrida (incentivo fijo mensual); no fijo = una sola corrida.
-- [ ] Tabla `nomina_linea_conceptos` (snapshot por línea de corrida): concepto, monto, comentario. Así la historia no cambia si se edita la asignación.
-- [ ] Préstamos/avances: `empleado_prestamos` (monto total, cuota, saldo, cuotas restantes). Cada corrida descuenta la cuota y baja el saldo; al llegar a 0 se cierra. Dolores: "avance a sueldo / préstamo → cuentas por cobrar".
+- [x] Tabla `empleado_conceptos` (asignación): `empleadoId`, `conceptoId`, `montoCents`, `fijo` bool, `desde`, `hasta`, `comentario`. Fijo = se repite cada corrida (incentivo fijo mensual); no fijo = una sola corrida.
+- [x] Tabla `nomina_linea_conceptos` (snapshot por línea de corrida): concepto, monto, comentario. Así la historia no cambia si se edita la asignación.
+- [x] Préstamos/avances: `empleado_prestamos` (monto total, cuota, saldo, cuotas restantes). Cada corrida descuenta la cuota y baja el saldo; al llegar a 0 se cierra. Dolores: "avance a sueldo / préstamo → cuentas por cobrar".
 
 **Cálculo (`lib/nomina/calculo.ts`, `corrida.ts`)**
-- [ ] Sumar ingresos adicionales al bruto con flag de si cotizan TSS / gravan ISR (decisión legal: incentivos y comisiones sí cotizan y gravan; confirmar con el contable de Vera antes de fijar defaults).
-- [ ] Sustituir el `otrasDeduccionesCents` suelto por la suma de descuentos del empleado en ese período; el descuento nunca debe dejar el neto negativo (tope o aviso).
-- [ ] Tests: ampliar `tests/unit/nomina-calculo.test.ts` y `nomina-corrida.test.ts` (ingreso que cotiza, descuento tope, préstamo que se salda).
+- [x] Sumar ingresos adicionales al bruto con flag de si cotizan TSS / gravan ISR (decisión legal: incentivos y comisiones sí cotizan y gravan; confirmar con el contable de Vera antes de fijar defaults).
+- [x] Sustituir el `otrasDeduccionesCents` suelto por la suma de descuentos del empleado en ese período; el descuento nunca debe dejar el neto negativo (tope o aviso).
+- [x] Tests (`tests/unit/nomina-conceptos.test.ts`): ampliar `tests/unit/nomina-calculo.test.ts` y `nomina-corrida.test.ts` (ingreso que cotiza, descuento tope, préstamo que se salda).
 
 **Contabilidad (`nomina-asientos.ts`)**
-- [ ] Cada concepto asienta en **su** cuenta: ingresos → gasto (p. ej. incentivos), descuentos → cuenta por cobrar empleados (préstamo) o la cuenta que elija.
-- [ ] Config: `cuenta por cobrar a empleados`, `gasto incentivos`, `gasto comisiones`, `gasto vacaciones` en `contabilidad/configuracion` (Dolores: "a qué cuenta va vacaciones / tipos de incentivo").
-- [ ] Test de cuadre en `contabilidad-nomina-asientos.test.ts` con conceptos mezclados.
+- [x] Cada concepto asienta en **su** cuenta: ingresos → gasto (p. ej. incentivos), descuentos → cuenta por cobrar empleados (préstamo) o la cuenta que elija.
+- [x] Config (panel «Ingresos y descuentos» en `nomina/configuracion`, una cuenta por concepto; no hay cuentas sueltas): `cuenta por cobrar a empleados`, `gasto incentivos`, `gasto comisiones`, `gasto vacaciones` en `contabilidad/configuracion` (Dolores: "a qué cuenta va vacaciones / tipos de incentivo").
+- [x] Test de cuadre en `contabilidad-nomina-asientos.test.ts` con conceptos mezclados.
 
 **UI**
-- [ ] Pestaña "Conceptos" en `app/nomina/empleados/[id]/` (ingresos y descuentos, fecha inicio/fin, fijo/no fijo, comentario).
-- [ ] En el borrador de corrida (`corridas/[id]`): editar variaciones por empleado antes de aprobar ("este mes le doy un bono / un descuento").
-- [ ] API: `app/api/nomina/conceptos`, `.../empleados/[id]/conceptos`, `.../prestamos`.
-- [ ] Volante PDF: sección "Ingresos" con cada concepto y "Otros descuentos" desglosados con su comentario (hoy es una sola línea).
+- [x] Página «Ingresos y descuentos» (`empleados/[id]/conceptos`) en `app/nomina/empleados/[id]/` (ingresos y descuentos, fecha inicio/fin, fijo/no fijo, comentario).
+- [~] En el borrador de corrida: hoy se ven los conceptos y la columna «Otros desc.»; para cambiarlos se ajusta la ficha, se borra el borrador y se regenera. Falta editar dentro del borrador.
+- [x] API: `app/api/nomina/conceptos`, `.../empleados/[id]/conceptos`, `.../prestamos`.
+- [x] Volante PDF: sección "Ingresos" con cada concepto y "Otros descuentos" desglosados con su comentario (hoy es una sola línea).
 
 ---
 

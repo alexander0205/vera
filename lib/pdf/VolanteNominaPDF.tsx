@@ -43,6 +43,10 @@ export interface VolanteNominaData {
   dependientesAdicionales:         number;
   dependientesAdicionalesCantidad: number;
   otrasDeducciones: number;
+  /** Ingresos adicionales (incentivos, comisiones…) que ya van dentro del bruto. */
+  ingresosExtra?: { nombre: string; monto: number }[];
+  /** Descuentos con nombre (avance, préstamo, seguro…) que ya van dentro de otras deducciones. */
+  descuentosDetalle?: { nombre: string; monto: number; comentario?: string | null }[];
   totalDeducciones: number;
   neto:             number;
   // Informativo (aportes de la empresa)
@@ -159,8 +163,14 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
                 ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
                 : ''}`}
           </Text>
-          <Text style={S.filaMonto}>{fmt(data.bruto)}</Text>
+          <Text style={S.filaMonto}>{fmt(data.bruto - (data.ingresosExtra ?? []).reduce((t, x) => t + x.monto, 0))}</Text>
         </View>
+        {(data.ingresosExtra ?? []).map((x, i) => (
+          <View key={`ing-${i}`} style={S.fila}>
+            <Text style={S.filaLabel}>{x.nombre}</Text>
+            <Text style={S.filaMonto}>{fmt(x.monto)}</Text>
+          </View>
+        ))}
         <View style={S.filaTotal}>
           <Text style={S.filaTotalLabel}>Total devengado</Text>
           <Text style={S.filaTotalMonto}>{fmt(data.bruto)}</Text>
@@ -188,10 +198,16 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
             <Text style={S.filaMonto}>-{fmt(data.dependientesAdicionales)}</Text>
           </View>
         ) : null}
-        {data.otrasDeducciones > 0 ? (
+        {(data.descuentosDetalle ?? []).map((x, i) => (
+          <View key={`desc-${i}`} style={S.fila}>
+            <Text style={S.filaLabel}>{x.comentario ? `${x.nombre} (${x.comentario})` : x.nombre}</Text>
+            <Text style={S.filaMonto}>-{fmt(x.monto)}</Text>
+          </View>
+        ))}
+        {data.otrasDeducciones - (data.descuentosDetalle ?? []).reduce((t, x) => t + x.monto, 0) > 0.004 ? (
           <View style={S.fila}>
             <Text style={S.filaLabel}>Otras deducciones</Text>
-            <Text style={S.filaMonto}>-{fmt(data.otrasDeducciones)}</Text>
+            <Text style={S.filaMonto}>-{fmt(data.otrasDeducciones - (data.descuentosDetalle ?? []).reduce((t, x) => t + x.monto, 0))}</Text>
           </View>
         ) : null}
         <View style={S.filaTotal}>

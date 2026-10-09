@@ -24,6 +24,7 @@ import {
   users,
   cotizaciones,
   nominaLineas,
+  nominaLineaConceptos,
   nominaCorridas,
   nominaContratos,
 } from '@/lib/db/schema';
@@ -552,6 +553,10 @@ export async function generarVolanteNominaPdf(opts: {
   if (!row) return null;
   const { linea, corrida, team } = row;
   const c = (n: number) => n / 100;
+  const conceptos = await db
+    .select()
+    .from(nominaLineaConceptos)
+    .where(and(eq(nominaLineaConceptos.lineaId, linea.id), eq(nominaLineaConceptos.teamId, teamId)));
 
   const data: VolanteNominaData = {
     emisor: {
@@ -577,6 +582,12 @@ export async function generarVolanteNominaPdf(opts: {
     dependientesAdicionales:         c(linea.dependientesAdicionalesCents),
     dependientesAdicionalesCantidad: linea.dependientesAdicionales,
     otrasDeducciones: c(linea.otrasDeduccionesCents),
+    ingresosExtra: conceptos
+      .filter((x) => x.tipo === 'ingreso' && x.montoCents > 0)
+      .map((x) => ({ nombre: x.nombre, monto: c(x.montoCents) })),
+    descuentosDetalle: conceptos
+      .filter((x) => x.tipo === 'descuento' && x.montoCents > 0)
+      .map((x) => ({ nombre: x.nombre, monto: c(x.montoCents), comentario: x.comentario })),
     totalDeducciones: c(linea.totalDeduccionesCents),
     neto:             c(linea.netoCents),
     totalPatronal:    c(linea.totalPatronalCents),

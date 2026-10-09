@@ -4152,6 +4152,90 @@ export type NewNominaObligacion = typeof nominaObligaciones.$inferInsert;
 export type NominaLinea      = typeof nominaLineas.$inferSelect;
 export type NewNominaLinea   = typeof nominaLineas.$inferInsert;
 
+// ─── Nómina — Conceptos variables (ingresos y descuentos por empleado) ───────
+// Catálogo por empresa (incentivo, comisión, avance, seguro médico…), lo que
+// cada empleado tiene asignado, sus préstamos con saldo y el snapshot de lo que
+// se aplicó en cada línea de corrida. Ver lib/nomina/conceptos.ts.
+
+/** Catálogo de la empresa. Se siembra la primera vez que se lee. */
+export const nominaConceptos = pgTable('nomina_conceptos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  codigo:    varchar('codigo', { length: 40 }).notNull(),
+  nombre:    varchar('nombre', { length: 120 }).notNull(),
+  /** 'ingreso' | 'descuento'. */
+  tipo:      varchar('tipo', { length: 12 }).notNull(),
+  /** Ingresos: entra a la base de TSS e ISR. */
+  cotizaTss: boolean('cotiza_tss').notNull().default(false),
+  /** Cuenta contable propia. Null = sueldos (ingreso) / otras deducciones por pagar (descuento). */
+  cuentaId:  integer('cuenta_id').references(() => contabilidadCuentas.id),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_conceptos_team_codigo_uniq').on(t.teamId, t.codigo),
+]);
+
+/** Un concepto asignado a un empleado: fijo (se repite) o de una sola vez. */
+export const empleadoConceptos = pgTable('empleado_conceptos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  conceptoId: integer('concepto_id').notNull().references(() => nominaConceptos.id),
+  /** Monto POR CORRIDA, en centavos. */
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  fijo:       boolean('fijo').notNull().default(false),
+  desde:      date('desde').notNull(),
+  hasta:      date('hasta'),
+  comentario: varchar('comentario', { length: 300 }),
+  activo:     boolean('activo').notNull().default(true),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_conceptos_team_empleado_idx').on(t.teamId, t.empleadoId),
+]);
+
+/** Avance o préstamo a un empleado, descontado por cuotas hasta saldarse. */
+export const empleadoPrestamos = pgTable('empleado_prestamos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  /** Cuota por corrida. */
+  cuotaCents: bigint('cuota_cents', { mode: 'number' }).notNull(),
+  saldoCents: bigint('saldo_cents', { mode: 'number' }).notNull(),
+  /** Primer día desde el que se descuenta. */
+  desde:      date('desde').notNull(),
+  /** 'activo' | 'saldado' | 'cancelado'. */
+  estado:     varchar('estado', { length: 12 }).notNull().default('activo'),
+  comentario: varchar('comentario', { length: 300 }),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_prestamos_team_empleado_idx').on(t.teamId, t.empleadoId, t.estado),
+]);
+
+/** Lo que se aplicó en una línea de corrida. Snapshot: no cambia si se edita la asignación. */
+export const nominaLineaConceptos = pgTable('nomina_linea_conceptos', {
+  id:         serial('id').primaryKey(),
+  lineaId:    integer('linea_id').notNull().references(() => nominaLineas.id, { onDelete: 'cascade' }),
+  corridaId:  integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id),
+  conceptoId: integer('concepto_id').references(() => nominaConceptos.id),
+  prestamoId: integer('prestamo_id').references(() => empleadoPrestamos.id),
+  tipo:       varchar('tipo', { length: 12 }).notNull(),
+  nombre:     varchar('nombre', { length: 120 }).notNull(),
+  /** Lo aplicado (un descuento puede quedar por debajo de lo pedido). */
+  montoCents:  bigint('monto_cents', { mode: 'number' }).notNull(),
+  pedidoCents: bigint('pedido_cents', { mode: 'number' }).notNull(),
+  cotizaTss:  boolean('cotiza_tss').notNull().default(false),
+  cuentaId:   integer('cuenta_id').references(() => contabilidadCuentas.id),
+  comentario: varchar('comentario', { length: 300 }),
+}, (t) => [
+  index('nomina_linea_conceptos_linea_idx').on(t.lineaId),
+  index('nomina_linea_conceptos_corrida_idx').on(t.corridaId),
+]);
+
 // ─── Nómina — Programación automática (corridas por cron) ─────────────────────
 // Config POR EMPRESA de los días de pago. Un cron diario mira esta fila y, si
 // hoy es un día de pago, crea la corrida de esa frecuencia EN BORRADOR (alguien

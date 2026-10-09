@@ -4,6 +4,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaCorridas, nominaHoras, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
 import { frecuenciaDeTipo, normalizarTipoCorrida } from '@/lib/nomina/corrida';
+import { conceptosDeCorrida } from '@/lib/nomina/conceptos-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         ))
     : [{ pendientes: 0 }];
 
-  return NextResponse.json({ corrida, lineas, obligaciones, horasPendientes: pendientes });
+  const conceptos = await conceptosDeCorrida(auth.teamId, id);
+
+  return NextResponse.json({ corrida, lineas, obligaciones, conceptos, horasPendientes: pendientes });
 }
 
 /**

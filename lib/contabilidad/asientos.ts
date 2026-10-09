@@ -29,6 +29,7 @@ import { elegirCuentaGasto } from './cuenta-gasto';
 import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
+import { conceptosParaAsiento } from '@/lib/nomina/conceptos-db';
 import { categoriaCompra, CUENTA_CATEGORIA_GASTO_VIEJA } from '@/lib/compras/categorias';
 import { retencionesDeJson } from '@/lib/compras/formato606';
 import { partidasAsientoCompra, type BaseCuenta } from '@/lib/compras/asiento-compra';
@@ -1176,6 +1177,7 @@ export async function generarAsientoNomina(
     },
   };
   if (sumas.brutoCents <= 0) return { creado: false, motivo: 'sin-monto' };
+  sumas.conceptos = await conceptosParaAsiento(teamId, corridaId);
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };

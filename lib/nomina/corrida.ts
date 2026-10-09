@@ -7,7 +7,11 @@
  * lee los empleados y guarda; aquí solo está la aritmética, para probarla sola.
  */
 
-import { calcularNominaEmpleado, pedazoPeriodo, repartirDesglose, type DesgloseNomina } from '@/lib/nomina/calculo';
+import {
+  calcularNominaEmpleado, pedazoPeriodo, repartirDesglose,
+  type DesgloseNomina, type ParametrosNomina,
+} from '@/lib/nomina/calculo';
+import { aplicarConceptos, type ConceptoAplicable, type ConceptoAplicado } from '@/lib/nomina/conceptos';
 import type { TasasNomina } from '@/lib/config/nomina-tasas';
 import { calcularProvisionesPeriodo } from '@/lib/nomina/provisiones';
 import type { ResumenHoras } from '@/lib/nomina/horas';
@@ -116,6 +120,8 @@ export interface EmpleadoParaCorrida {
    * viene, el bruto sale de aquí y no del salario mensual.
    */
   pagoPorHoras?: ResumenHoras | null;
+  /** Ingresos y descuentos que le tocan en ESTA corrida (incentivos, préstamos…). */
+  conceptos?: ConceptoAplicable[];
 }
 
 /** Lo que la corrida toma de la empresa y del período, igual para todos. */
@@ -158,6 +164,10 @@ export interface LineaCalculada {
   provisionCesantiaCents: number;
   /** Quien cobra por hora: cómo se clasificaron sus horas. Null para los demás. */
   horasDetalle: ResumenHoras | null;
+  /** Conceptos aplicados en la línea (descuentos ya topados por el neto). */
+  conceptos: ConceptoAplicado[];
+  /** Descuentos que no cupieron en el neto de esta corrida. */
+  descuentoNoAplicadoCents: number;
 }
 
 export interface TotalesCorrida {
@@ -187,6 +197,8 @@ export function diasPagables(e: EmpleadoParaCorrida, r: Rango): number {
 
 interface Pedazo {
   desglose: DesgloseNomina;
+  /** El cálculo mensual de donde salió: los conceptos que cotizan se miden contra él. */
+  mensual: ParametrosNomina;
   diasPagados: number;
   diasPeriodo: number;
 }
@@ -222,19 +234,20 @@ function pedazoDelMes(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCorr
   // El mínimo es mensual: quien trabajó parte del mes cotiza sobre esa parte.
   const piso = e.dispensaSalarioMinimo ? 0 : Math.round(((ajustes.pisoCotizableCents ?? 0) * suma((x) => x.pagados)) / suma((x) => x.dias));
 
-  const mensual = calcularNominaEmpleado({
+  const paramsMes: ParametrosNomina = {
     salarioMensualCents: brutoMes,
     tasas,
     pisoCotizableCents: piso,
     srlTasa: ajustes.srlTasa,
     dependientesAdicionales: e.dependientesAdicionales,
     capitaDependienteCents: ajustes.capitaDependienteCents,
-  });
+  };
+  const mensual = calcularNominaEmpleado(paramsMes);
 
   // Se reparte por lo devengado; sin salario, por días (la cápita igual se reparte).
   const peso = (x: (typeof partes)[number]) => (brutoMes > 0 ? x.bruto : x.pagados);
   const desglose = repartirDesglose(mensual, suma(peso, indice), peso(propio), suma(peso));
-  return { desglose, diasPagados: propio.pagados, diasPeriodo: propio.dias };
+  return { desglose, mensual: paramsMes, diasPagados: propio.pagados, diasPeriodo: propio.dias };
 }
 
 /**
@@ -252,19 +265,20 @@ function pedazoDeSemana(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCo
   const semanaCompleta = pedazoPeriodo(salario * 12, semanaDelAnio(p.inicio), 52);
   const bruto = Math.round((semanaCompleta * pagados) / dias);
 
-  const mensual = calcularNominaEmpleado({
+  const paramsMes: ParametrosNomina = {
     salarioMensualCents: salario,
     tasas,
     pisoCotizableCents: e.dispensaSalarioMinimo ? 0 : ajustes.pisoCotizableCents,
     srlTasa: ajustes.srlTasa,
     dependientesAdicionales: e.dependientesAdicionales,
     capitaDependienteCents: ajustes.capitaDependienteCents,
-  });
+  };
+  const mensual = calcularNominaEmpleado(paramsMes);
 
   const desglose = salario > 0
     ? repartirDesglose(mensual, 0, bruto, salario)
     : repartirDesglose(mensual, 0, 12 * pagados, 52 * dias);
-  return { desglose, diasPagados: pagados, diasPeriodo: dias };
+  return { desglose, mensual: paramsMes, diasPagados: pagados, diasPeriodo: dias };
 }
 
 /** Cuántas veces cabe el período en un mes: la base mensual para topes, ISR y mínimo. */
@@ -279,16 +293,18 @@ function pedazoPorHoras(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCo
   const h = e.pagoPorHoras;
   if (!h || h.brutoCents <= 0) return null;
   const mesEquivalente = Math.round(h.brutoCents * periodosPorMes(p.tipo));
-  const mensual = calcularNominaEmpleado({
+  const paramsMes: ParametrosNomina = {
     salarioMensualCents: mesEquivalente,
     tasas,
     pisoCotizableCents: e.dispensaSalarioMinimo ? 0 : ajustes.pisoCotizableCents,
     srlTasa: ajustes.srlTasa,
     dependientesAdicionales: e.dependientesAdicionales,
     capitaDependienteCents: ajustes.capitaDependienteCents,
-  });
+  };
+  const mensual = calcularNominaEmpleado(paramsMes);
   return {
     desglose: repartirDesglose(mensual, 0, h.brutoCents, mesEquivalente),
+    mensual: paramsMes,
     diasPagados: h.dias,
     diasPeriodo: diasDelRango(p),
   };
@@ -320,7 +336,7 @@ export function construirCorrida(
         ? pedazoDeSemana(e, tasas, periodo, ajustes)
         : pedazoDelMes(e, tasas, periodo, ajustes);
     if (!pedazo) continue;
-    const d = pedazo.desglose;
+    const { desglose: d, aplicados, noAplicadoCents } = aplicarConceptos(pedazo.desglose, pedazo.mensual, e.conceptos ?? []);
     // El tope de la regalía son 5 salarios mínimos: el del sector de la empresa.
     const provision = calcularProvisionesPeriodo({
       brutoPeriodoCents: d.brutoCents,
@@ -361,6 +377,8 @@ export function construirCorrida(
       provisionVacacionesCents: provision.vacacionesCents,
       provisionCesantiaCents: provision.cesantiaCents,
       horasDetalle: e.pagoPorHoras ?? null,
+      conceptos: aplicados,
+      descuentoNoAplicadoCents: noAplicadoCents,
     });
 
     totales.totalBrutoCents += d.brutoCents;

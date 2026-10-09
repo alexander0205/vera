@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { nominaCorridas } from '@/lib/db/schema';
 import { generarAsientoNomina, generarAsientoProvisionNomina } from '@/lib/contabilidad/asientos';
 import { crearObligacionesCorrida } from '@/lib/nomina/obligaciones-db';
+import { descontarPrestamosDeCorrida } from '@/lib/nomina/conceptos-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // Provisión (regalía/vac/cesantía): solo si el team activó provisionar en el
   // libro. Best-effort: no rompe la aprobación.
   const provision = await generarAsientoProvisionNomina(auth.teamId, id, auth.user.id);
+
+  // Cada cuota descontada baja el saldo de su préstamo.
+  await descontarPrestamosDeCorrida(auth.teamId, id);
 
   // Las obligaciones al Estado (TSS/DGII) nacen aquí, pendientes de pago.
   await crearObligacionesCorrida(auth.teamId, id);

@@ -21,6 +21,7 @@ import {
   type PeriodoCorrida, type TipoCorrida,
 } from '@/lib/nomina/corrida';
 import { adicionalesPorEmpleado, ajustesNomina } from '@/lib/nomina/ajustes-db';
+import { conceptosParaCorrida, guardarConceptosDeLineas } from '@/lib/nomina/conceptos-db';
 import { rangoDelMes, rangoLegible } from '@/lib/nomina/periodos';
 
 export interface GenerarCorridaInput {
@@ -82,9 +83,10 @@ export async function generarCorrida(input: GenerarCorridaInput): Promise<Genera
   // La cápita es mensual: en la mensual y las quincenas cuenta quien estuvo
   // registrado algún día del mes; en la semanal, algún día de la semana.
   const rangoDependientes = frecuencia === 'semanal' ? periodo : rangoDelMes(periodo.periodo);
-  const [ajustes, dependientes] = await Promise.all([
+  const [ajustes, dependientes, conceptos] = await Promise.all([
     ajustesNomina(teamId, periodo.inicio),
     adicionalesPorEmpleado(teamId, rangoDependientes.inicio, rangoDependientes.fin),
+    conceptosParaCorrida(teamId, filas.map((e) => e.id), periodo.inicio, periodo.fin),
   ]);
 
   // Quien cobra por hora: sus horas aprobadas, desde el lunes de la primera semana
@@ -121,6 +123,7 @@ export async function generarCorrida(input: GenerarCorridaInput): Promise<Genera
       vacacionesDias: e.vacacionesDias,
       // Sin horas aprobadas su resumen trae bruto 0 y la corrida no le hace línea.
       pagoPorHoras: pagoPorHoras.get(e.id),
+      conceptos: conceptos.get(e.id),
     })),
     tasasDelAnio(anioTasas),
     periodo,
@@ -153,9 +156,14 @@ export async function generarCorrida(input: GenerarCorridaInput): Promise<Genera
         })
         .returning();
 
-      await tx.insert(nominaLineas).values(
-        lineas.map((l) => ({ ...l, corridaId: c.id, teamId })),
-      );
+      const guardadas = await tx
+        .insert(nominaLineas)
+        .values(lineas.map(({ conceptos: _c, descuentoNoAplicadoCents: _n, ...l }) => ({ ...l, corridaId: c.id, teamId })))
+        .returning({ id: nominaLineas.id, empleadoId: nominaLineas.empleadoId });
+      const idPorEmpleado = new Map(guardadas.map((g) => [g.empleadoId, g.id]));
+      await guardarConceptosDeLineas(tx, teamId, c.id, lineas.map((l) => ({
+        lineaId: idPorEmpleado.get(l.empleadoId)!, empleadoId: l.empleadoId, conceptos: l.conceptos,
+      })));
       return c;
     });
 
