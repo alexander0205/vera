@@ -176,6 +176,8 @@ export function MatriculaDialog({
    * no trae «conceptosIds» y sin ellos no se sabe qué se le está cobrando.
    */
   const [conceptosMatricula, setConceptosMatricula] = useState<number[]>([]);
+  /** Los que tenía al abrir: lo que no esté aquí es lo que se le está añadiendo ahora. */
+  const [conceptosAlAbrir, setConceptosAlAbrir] = useState<number[]>([]);
   const [conceptosCatalogo, setConceptosCatalogo] = useState<Concepto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -277,7 +279,10 @@ export function MatriculaDialog({
    * catálogo, los conceptos elegidos saldrían como «Concepto 31».
    */
   useEffect(() => {
-    if (!open || !matricula) { setConceptosMatricula([]); setConceptosCatalogo([]); return; }
+    if (!open || !matricula) {
+      setConceptosMatricula([]); setConceptosAlAbrir([]); setConceptosCatalogo([]);
+      return;
+    }
     let vigente = true;
     void Promise.all([
       fetch(`/api/administracion-escolar/matriculas/${matricula.id}`)
@@ -286,7 +291,9 @@ export function MatriculaDialog({
         .then((r) => (r.ok ? r.json() : { conceptos: [] })).catch(() => ({ conceptos: [] })),
     ]).then(([m, c]) => {
       if (!vigente) return;
-      setConceptosMatricula(((m.matricula?.conceptosIds ?? []) as unknown[]).map(Number));
+      const tenia = ((m.matricula?.conceptosIds ?? []) as unknown[]).map(Number);
+      setConceptosMatricula(tenia);
+      setConceptosAlAbrir(tenia);
       setConceptosCatalogo(c.conceptos ?? []);
     });
     return () => { vigente = false; };
@@ -575,6 +582,9 @@ export function MatriculaDialog({
               <ConceptosRecurrentes
                 catalogo={conceptosCatalogo}
                 elegidos={conceptosMatricula}
+                agregados={conceptosMatricula.filter((id) => !conceptosAlAbrir.includes(id))}
+                inscritoDesde={form.fechaInscripcion}
+                estado={form.estado}
                 onCambio={setConceptosMatricula}
                 editable={puedeGestionar}
               />
@@ -661,9 +671,15 @@ function InlineCrear({ value, onChange, onGuardar, onCancelar, saving, placehold
  * Quitar uno no borra nada de lo ya cargado: deja de generarse hacia adelante.
  * Lo viejo se anula desde los cargos, que es donde se ve lo que se debe.
  */
-function ConceptosRecurrentes({ catalogo, elegidos, onCambio, editable }: {
+function ConceptosRecurrentes({ catalogo, elegidos, agregados, inscritoDesde, estado, onCambio, editable }: {
   catalogo: Concepto[];
   elegidos: number[];
+  /** Los que se están añadiendo en esta edición (no los tenía al abrir). */
+  agregados: number[];
+  /** Fecha de inscripción del formulario: desde ahí cobra el devengo. */
+  inscritoDesde: string;
+  /** Estado del formulario: el devengo solo cobra matrículas activas. */
+  estado: string;
   onCambio: (ids: number[]) => void;
   editable: boolean;
 }) {
@@ -724,6 +740,27 @@ function ConceptosRecurrentes({ catalogo, elegidos, onCambio, editable }: {
           <p className="mt-1.5 text-xs text-gray-500">
             Se cobra cada mes según su tarifa. Quitar uno no borra los cargos que ya tiene.
           </p>
+          {/*
+            El devengo arma el plan desde la fecha de inscripción, no desde hoy:
+            un concepto añadido a mitad de año nace con todo lo que ya salió
+            desde entonces. Y no reconoce lo cobrado a mano (esos cargos no
+            llevan cuota), así que lo vuelve a crear. No lo hace al guardar sino
+            en la corrida diaria: quien mira los cargos enseguida no ve nada y
+            se encuentra la deuda al día siguiente.
+
+            Solo se avisa cuando de verdad hay algo hacia atrás: matrícula
+            activa e inscrita antes de hoy. Retirada o anulada no se devenga.
+          */}
+          {agregados.length > 0 && estado === 'activa' && !!inscritoDesde && inscritoDesde < hoy() && (
+            <p role="alert"
+              className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+              Vas a agregar {agregados.map((id) => `«${porId.get(id)?.nombre ?? `Concepto ${id}`}»`).join(', ')}.
+              {' '}No se cobra solo de hoy en adelante: el sistema le cargará también lo que ya salió
+              desde su inscripción ({fmtFechaCorta(inscritoDesde)}), aunque ya se lo hayas cobrado a
+              mano. Los cargos no aparecen al guardar, sino al día siguiente: revísalos entonces y
+              anula los que no correspondan.
+            </p>
+          )}
         </div>
       )}
     </div>
