@@ -63,9 +63,9 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 - [x] 2.3 **Pago selectivo efectivo vs. banco**: las casillas por línea ya existían (pago parcial). Faltaba que el archivo del banco las respetara y no repitiera a quien ya cobró: ahora `dispersion?lineas=…` limita el archivo a lo marcado, excluye a los ya pagados y el botón muestra cuántos van. Flujo: marcar los de banco → descargar archivo → «Marcar pagados» por transferencia; los demás se pagan en efectivo con la constancia.
 - [x] 2.4 **Constancia de pago en efectivo**: `GET /api/nomina/corridas/[id]/constancia` (botón «Constancia de efectivo»): hoja imprimible con línea de firma por empleado pendiente o marcado, total y pie de recibido. Texto escapado y con CSP restrictiva.
 - [x] 2.5 **Método de pago configurable en una sola vez** (hecho: panel «De dónde sale el pago» en `nomina/configuracion` con una caja por defecto para efectivo y un banco para transferencia o cheque; al pagar sueldos o TSS/DGII se puede elegir otra cuenta para ese pago. Orden: la elegida → la de por defecto de nómina → la del método, como antes. Migración 0186.)  Texto original: (Dolores: "se define desde configuración, así como el banco"): caja/banco de origen por defecto del pago de nómina, en `nomina/configuracion`.
-- [ ] 2.6 **Vacaciones como costo de la empresa**: registrar pago de vacaciones (ingreso "Vacaciones" del punto 1) y que consuma la reserva de `provision_vacaciones`. Hoy solo se provisiona.
-- [ ] 2.7 **Regalía pascual**: pantalla/corrida de diciembre que pague la regalía y salde la reserva acumulada (hoy solo se provisiona; no hay corrida tipo regalía). Verificar topes (`topeRegaliaAnualCents`).
-- [ ] 2.8 **Salida de empleado / liquidación**: preaviso + cesantía + vacaciones no tomadas + regalía proporcional ("si ya un empleado sale de la empresa…"). Existe `diasCesantiaGanados`; falta el cálculo y el documento completo. 🟡
+- [x] 2.6 **Vacaciones como costo de la empresa**: registrar pago de vacaciones (ingreso "Vacaciones" del punto 1) y que consuma la reserva de `provision_vacaciones`. Hoy solo se provisiona. ✅ regalía y vacaciones consumen la reserva (commit 8f642e51)
+- [x] 2.7 **Regalía pascual**: pantalla/corrida de diciembre que pague la regalía y salde la reserva acumulada (hoy solo se provisiona; no hay corrida tipo regalía). Verificar topes (`topeRegaliaAnualCents`). ✅ corrida tipo regalía pascual (commit 8f642e51)
+- [x] 2.8 **Salida de empleado / liquidación**: preaviso + cesantía + vacaciones no tomadas + regalía proporcional ("si ya un empleado sale de la empresa…"). Existe `diasCesantiaGanados`; falta el cálculo y el documento completo. 🟡 ✅ liquidación de empleados (commit 44a883f6)
 
 ## 3. Importación de empleados 🟠
 
@@ -77,26 +77,26 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 
 ## 4. Contabilidad / egresos 🟠
 
-- [ ] 4.1 **Efectivo y caja como forma de pago de gastos/facturas de proveedor**: hoy salen efectivo/tarjeta/transferencia; Dolores pide que el catálogo defina las cuentas de pago configurables (Banco BHD, Caja general, Caja chica, Tarjeta de crédito X) y se pueda **mixto**. Hacer la lista dinámica ("cuentas de pago") amarrada a cuentas del catálogo en vez de fija.
-- [ ] 4.2 **Cuentas de pago configurables**: `cuentas_pago` por empresa (nombre, tipo caja|banco|tarjeta, cuenta contable, número). Prerrequisito de 4.3–4.6.
-- [ ] 4.3 **Cargos bancarios** (comisión mensual, 0.15 %/0.20 % por débito) como movimiento propio que asienta en gasto bancario.
-- [ ] 4.4 **Transferencias entre cuentas propias** (banco→banco, caja→banco) sin tocar gasto ni ingreso. Distinguir de transferencia a tercero (pago a proveedor).
-- [ ] 4.5 **Libro banco**: reporte por cuenta y rango de fechas, separado por depósitos/transferencias/retiros y consolidado; imprimible. Dolores concilia a mano con esto.
-- [ ] 4.6 **Conciliación bancaria**: marcar movimiento conciliado vs estado del banco; listar partidas pendientes. Caso real de Dolores: depósitos de padres sin concepto ni factura que hay que identificar después → estado "depósito sin identificar" que luego se asigna a un cliente/cargo. Fase posterior; empezar por 4.5. Los registros son manuales (sin conexión directa al banco).
-- [ ] 4.6b **Pago mixto** en gastos y facturas de proveedor (parte efectivo + parte transferencia/tarjeta), con cada parte a su cuenta de pago. Dolores lo exigió.
-- [ ] 4.6c **Caja general vs. caja chica**: pagos menores salen de caja chica, los grandes de caja general; ambas deben poder elegirse como cuenta de pago. Hoy solo hay caja general.
-- [ ] 4.7 **Reporte de pagos en efectivo por rango** (Dolores lo pide: "cuánto he pagado en efectivo en agosto").
-- [ ] 4.8 **Gastos de beneficio al empleado** (almuerzo, atención): cuenta de gasto "atención al empleado" ubicada en el grupo de gastos de personal; no pasa por nómina. Añadir al catálogo base y a categorías de gasto.
-- [ ] 4.9 **Importar catálogo de cuentas por Excel** (Dolores/contable lo ofrece): plantilla + importador en `app/contabilidad/cuentas`; exportar también. Pedir su archivo.
+- [x] 4.1 **Efectivo y caja como forma de pago de gastos/facturas de proveedor**: hoy salen efectivo/tarjeta/transferencia; Dolores pide que el catálogo defina las cuentas de pago configurables (Banco BHD, Caja general, Caja chica, Tarjeta de crédito X) y se pueda **mixto**. Hacer la lista dinámica ("cuentas de pago") amarrada a cuentas del catálogo en vez de fija. ✅ cuentas de pago dinámicas (commit 8587d63d)
+- [x] 4.2 **Cuentas de pago configurables**: `cuentas_pago` por empresa (nombre, tipo caja|banco|tarjeta, cuenta contable, número). Prerrequisito de 4.3–4.6. ✅ cuentas de pago por empresa
+- [x] 4.3 **Cargos bancarios** (comisión mensual, 0.15 %/0.20 % por débito) como movimiento propio que asienta en gasto bancario. ✅ cargos bancarios (commit c931db38)
+- [x] 4.4 **Transferencias entre cuentas propias** (banco→banco, caja→banco) sin tocar gasto ni ingreso. Distinguir de transferencia a tercero (pago a proveedor). ✅ transferencias entre cuentas propias (c931db38)
+- [x] 4.5 **Libro banco**: reporte por cuenta y rango de fechas, separado por depósitos/transferencias/retiros y consolidado; imprimible. Dolores concilia a mano con esto. ✅ libro banco (c931db38)
+- [x] 4.6 **Conciliación bancaria**: marcar movimiento conciliado vs estado del banco; listar partidas pendientes. Caso real de Dolores: depósitos de padres sin concepto ni factura que hay que identificar después → estado "depósito sin identificar" que luego se asigna a un cliente/cargo. Fase posterior; empezar por 4.5. Los registros son manuales (sin conexión directa al banco). ✅ conciliación bancaria (c931db38)
+- [x] 4.6b **Pago mixto** en gastos y facturas de proveedor (parte efectivo + parte transferencia/tarjeta), con cada parte a su cuenta de pago. Dolores lo exigió. ✅ pago mixto en compras (8587d63d)
+- [x] 4.6c **Caja general vs. caja chica**: pagos menores salen de caja chica, los grandes de caja general; ambas deben poder elegirse como cuenta de pago. Hoy solo hay caja general. ✅ caja general y caja chica como cuentas de pago
+- [x] 4.7 **Reporte de pagos en efectivo por rango** (Dolores lo pide: "cuánto he pagado en efectivo en agosto"). ✅ reporte de efectivo por rango (c931db38)
+- [x] 4.8 **Gastos de beneficio al empleado** (almuerzo, atención): cuenta de gasto "atención al empleado" ubicada en el grupo de gastos de personal; no pasa por nómina. Añadir al catálogo base y a categorías de gasto. ✅ atención al empleado en catálogo y categorías (8587d63d)
+- [x] 4.9 **Importar catálogo de cuentas por Excel** (Dolores/contable lo ofrece): plantilla + importador en `app/contabilidad/cuentas`; exportar también. Pedir su archivo. ✅ importar/exportar catálogo por Excel
 - [ ] 4.10 **Solicitud de pago a proveedores + aprobación** (flujo: secretaria arma lista de pagos de la quincena, dueño aprueba según saldo disponible). Requiere roles y estado `solicitado→aprobado→pagado`. 🟡 Dolores ni lo usa; baja prioridad.
 - [ ] 4.11 **Escaneo de factura de gasto** reparte contra ítems/bien-servicio y cuenta contable. Hoy toma foto y llena datos del proveedor; falta la distribución por cuenta. 🟡 (Lisandro la dio por limitada.)
-- [ ] 4.12 **Filtrar el catálogo de bienes/servicios DGII** en la factura de gasto ("que se vea más fácil de buscar").
-- [ ] 4.13 **Compras vs. gastos** (materiales de operación → compra/costo; combustible → gasto): revisar que el registro deje elegir y asiente en la cuenta correcta; añadir ayuda en pantalla.
+- [x] 4.12 **Filtrar el catálogo de bienes/servicios DGII** en la factura de gasto ("que se vea más fácil de buscar"). ✅ selector buscable de cuenta por categoría (ad375940)
+- [x] 4.13 **Compras vs. gastos** (materiales de operación → compra/costo; combustible → gasto): revisar que el registro deje elegir y asiente en la cuenta correcta; añadir ayuda en pantalla. ✅ ayuda compra vs gasto en pantalla (ad375940)
 
 ## 5. Cobros del colegio (puente con gobernanza) 🟡
 
-- [ ] 5.1 Reporte mensual para el contable: cobrado por tarjeta / transferencia / efectivo, pendiente y pagos parciales, por mes. Dolores lo pide cada mes hoy por correo. Verificar que `administracion-escolar/dashboard.ts` + filtros por mes/concepto/grado (commit c3937825) lo cubren y exportan a Excel.
-- [ ] 5.2 Cuentas por cobrar de un mes que pasan al siguiente: confirmar que el reporte del mes no mezcla saldos viejos.
+- [x] 5.1 Reporte mensual para el contable: cobrado por tarjeta / transferencia / efectivo, pendiente y pagos parciales, por mes. Dolores lo pide cada mes hoy por correo. Verificar que `administracion-escolar/dashboard.ts` + filtros por mes/concepto/grado (commit c3937825) lo cubren y exportan a Excel. ✅ Excel mensual del colegio, botón «Excel del mes» en el panorama (e638fe62)
+- [x] 5.2 Cuentas por cobrar de un mes que pasan al siguiente: confirmar que el reporte del mes no mezcla saldos viejos. ✅ el Excel separa «Meses anteriores» de lo del mes
 - [ ] 5.3 Accesos: crear usuario a Dolores en el sistema (pidió correo; lo hace Lisandro/Vera).
 
 ---
@@ -125,3 +125,8 @@ Hoy `otrasDeduccionesCents` entra al cálculo (`calculo.ts:132`) pero **ninguna 
 4. ¿Pago en efectivo de nómina sale de "Caja general" o de "Caja chica"?
 5. ¿Faltas/licencias: las registra RR.HH. o se calculan por días? ¿Hay licencias pagadas por la TSS?
 6. Excel de empleados con salarios e incentivos de Lisandro (necesario para 3.1).
+
+
+## Despliegue
+
+Migraciones 0185–0190 solo aplicadas en local: hay que correrlas en producción antes de desplegar (0185 conceptos, 0186 cuenta de pago, 0187 conciliación, 0188 pago mixto, 0189 liquidaciones, 0190 ausencias).
