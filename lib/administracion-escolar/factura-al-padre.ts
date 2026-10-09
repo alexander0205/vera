@@ -31,8 +31,6 @@ import {
   ecfDocuments,
 } from '@/lib/db/schema';
 import { teamHasModule } from '@/lib/auth/modules';
-import { sendInvoiceEmail } from '@/lib/email';
-import { generarFacturaPdf } from '@/lib/pdf/generar';
 import { getOCrearLink, urlDelLink } from './link-pago';
 import { urlDeFacturaEnLink } from './avisos';
 
@@ -98,6 +96,15 @@ export async function enviarFacturaAlResponsable(
 
     const destino = elegirDestinatario(resp.email, doc.emailComprador);
     if (!destino) return { enviado: false, motivo: 'sin-correo' };
+
+    // Import perezoso a propósito: `@/lib/email` crea el cliente de Resend al
+    // cargarse y revienta sin RESEND_API_KEY. Este módulo lo importan los
+    // flujos de comprobantes y de pagos, y cargarlo de forma estática
+    // rompería toda prueba o script que los toque sin esa clave.
+    const [{ generarFacturaPdf }, { sendInvoiceEmail }] = await Promise.all([
+      import('@/lib/pdf/generar'),
+      import('@/lib/email'),
+    ]);
 
     const pdf = await generarFacturaPdf({ teamId, docId: ecfDocumentId });
     if (!pdf) return { enviado: false, motivo: 'sin-factura' };
