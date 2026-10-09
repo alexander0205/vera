@@ -6,6 +6,8 @@ import { nominaCorridas } from '@/lib/db/schema';
 import { generarCorrida } from '@/lib/nomina/generar-corrida';
 import { frecuenciaDeTipo, normalizarTipoCorrida, LABEL_TIPO_CORRIDA } from '@/lib/nomina/corrida';
 import { esFechaYMD, rangoLegible } from '@/lib/nomina/periodos';
+import { anioRegaliaValido, generarCorridaRegalia } from '@/lib/nomina/regalia-db';
+import { hoyRD } from '@/lib/utils/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +38,27 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Cuerpo inválido' }, { status: 400 });
+
+  // La regalía pascual es una corrida aparte: una por año, para todos los empleados.
+  if (body.tipo === 'regalia') {
+    const hoy = hoyRD();
+    if (!anioRegaliaValido(body.anio, hoy)) {
+      return NextResponse.json({ error: `El año de la regalía debe estar entre 2000 y ${hoy.slice(0, 4)}` }, { status: 400 });
+    }
+    const pago = String(body.fechaPago ?? '').trim() || null;
+    if (pago !== null && !esFechaYMD(pago)) return NextResponse.json({ error: 'Fecha de pago inválida' }, { status: 400 });
+    const r = await generarCorridaRegalia({
+      teamId: auth.teamId, anio: body.anio, hoy, fechaPago: pago, descripcion: String(body.descripcion ?? ''), userId: auth.user.id,
+    });
+    if (!r.creada) {
+      if (r.motivo === 'ya-existe') {
+        return NextResponse.json({ error: `Ya existe la corrida de regalía pascual de ${body.anio}`, corridaId: r.corridaId ?? null }, { status: 409 });
+      }
+      return NextResponse.json({ error: `Nadie tiene regalía que pagar en ${body.anio}` }, { status: 400 });
+    }
+    const [corrida] = await db.select().from(nominaCorridas).where(eq(nominaCorridas.id, r.corridaId)).limit(1);
+    return NextResponse.json({ corrida, avisos: r.avisos }, { status: 201 });
+  }
 
   const tipo = normalizarTipoCorrida(body.tipo ?? 'mensual');
   if (!tipo) {

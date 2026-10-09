@@ -573,6 +573,8 @@ export async function generarVolanteNominaPdf(opts: {
     diasPagados:  linea.diasPagados,
     diasPeriodo:  linea.diasPeriodo,
     horasTexto:   linea.horasDetalle ? textoHorasVolante(linea.horasDetalle) : null,
+    etiquetaDevengado: corrida.tipo === 'regalia' ? `Regalía pascual ${corrida.fechaInicio.slice(0, 4)} (1/12 de lo devengado)` : corrida.tipo === 'liquidacion' ? 'Liquidación' : null,
+    sinTss: corrida.tipo === 'regalia' || corrida.tipo === 'liquidacion',
     descripcion:  corrida.descripcion,
     fechaPago:    corrida.fechaPago ?? null,
     bruto:            c(linea.brutoCents),

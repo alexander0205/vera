@@ -35,7 +35,7 @@ import { categoriaCompra, CUENTA_CATEGORIA_GASTO_VIEJA } from '@/lib/compras/cat
 import { retencionesDeJson } from '@/lib/compras/formato606';
 import { partidasAsientoCompra, type BaseCuenta } from '@/lib/compras/asiento-compra';
 import {
-  lineasDevengoNomina, lineasPagoObligacion, lineasPagoSueldos, lineasProvisionNomina,
+  lineasDevengoNomina, lineasDevengoRegalia, lineasPagoObligacion, lineasPagoSueldos, lineasProvisionNomina,
   type CuentasNomina, type SumasCorrida,
 } from './nomina-asientos';
 
@@ -1170,7 +1170,7 @@ export async function generarAsientoNomina(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT c.descripcion,
+    SELECT c.descripcion, c.tipo,
            to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
            coalesce(sum(l.bruto_cents), 0)   AS bruto,
            coalesce(sum(l.neto_cents), 0)    AS neto,
@@ -1191,6 +1191,35 @@ export async function generarAsientoNomina(
   `);
   const f = (filas as unknown as Record<string, string | number>[])[0];
   if (!f) return { creado: false, motivo: 'no-es-gasto' };
+
+  // La regalía tiene su propio asiento: sin TSS, y usa la reserva que se fue acumulando.
+  if (f.tipo === 'regalia') {
+    const bruto = Number(f.bruto);
+    if (bruto <= 0) return { creado: false, motivo: 'sin-monto' };
+    const cuentas = await cuentasNomina(teamId);
+    if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
+    const gastoRegalia = cfg.cuentaProvRegaliaGastoId ?? cfg.cuentaProvisionGastoId ?? cuentas.gastoSueldos;
+    const regaliaPorPagar = cfg.provisionarNomina ? (cfg.cuentaProvRegaliaPagarId ?? cfg.cuentaProvisionPorPagarId ?? null) : null;
+    let reservaCents = 0;
+    if (regaliaPorPagar) {
+      const [saldo] = await db.execute(sql`
+        SELECT COALESCE(sum(l.haber_cents - l.debe_cents), 0)::bigint AS saldo
+        FROM contabilidad_asiento_lineas l JOIN contabilidad_asientos a ON a.id = l.asiento_id
+        WHERE l.team_id = ${teamId} AND l.cuenta_id = ${regaliaPorPagar} AND a.fecha <= ${String(f.fecha)}::date
+      `) as unknown as { saldo: unknown }[];
+      reservaCents = Math.max(0, Number(saldo?.saldo ?? 0));
+    }
+    const asientoId = await insertarAsiento(
+      teamId,
+      { fecha: String(f.fecha), concepto: `Nómina · ${f.descripcion}`, origenTipo: 'nomina', origenId: corridaId },
+      lineasDevengoRegalia(
+        { brutoCents: bruto, reservaCents, isrCents: Number(f.isr), netoCents: Number(f.neto) },
+        { gastoRegalia, regaliaPorPagar, isr: cuentas.isr, sueldosPorPagar: cuentas.sueldosPorPagar },
+      ),
+      userId,
+    );
+    return asientoId === null ? { creado: false, motivo: 'ya-tiene-asiento' } : { creado: true, asientoId };
+  }
 
   // Los BIGINT llegan como string desde el SQL crudo: sin Number() las sumas se
   // concatenan y el asiento no cuadra.

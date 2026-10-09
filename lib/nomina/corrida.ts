@@ -32,6 +32,8 @@ export type TipoCorrida = (typeof TIPOS_CORRIDA)[number];
 
 /** Cómo se lee cada tipo en pantalla. «quincenal» a secas es de corridas viejas. */
 export const LABEL_TIPO_CORRIDA: Record<string, string> = {
+  regalia: 'Regalía pascual',
+  liquidacion: 'Liquidación',
   mensual: 'Mensual',
   'quincenal-1': '1ra quincena',
   'quincenal-2': '2da quincena',

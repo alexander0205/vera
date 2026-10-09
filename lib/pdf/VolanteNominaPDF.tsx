@@ -43,6 +43,10 @@ export interface VolanteNominaData {
   dependientesAdicionales:         number;
   dependientesAdicionalesCantidad: number;
   otrasDeducciones: number;
+  /** Regalía, liquidación: el concepto que se paga, en vez de «Salario del período». */
+  etiquetaDevengado?: string | null;
+  /** Regalía y liquidación no llevan AFP ni SFS: se omiten esas filas. */
+  sinTss?: boolean;
   /** Ingresos adicionales (incentivos, comisiones…) que ya van dentro del bruto. */
   ingresosExtra?: { nombre: string; monto: number }[];
   /** Descuentos con nombre (avance, préstamo, seguro…) que ya van dentro de otras deducciones. */
@@ -157,7 +161,7 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
         <Text style={S.seccionTitulo}>Ingresos</Text>
         <View style={S.fila}>
           <Text style={S.filaLabel}>
-            {data.horasTexto
+            {data.etiquetaDevengado ? data.etiquetaDevengado : data.horasTexto
               ? `Pago por horas (${data.horasTexto})`
               : `Salario del período${data.diasPagados != null && data.diasPeriodo != null && data.diasPagados < data.diasPeriodo
                 ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
@@ -178,14 +182,18 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
 
         {/* Deducciones */}
         <Text style={S.seccionTitulo}>Deducciones de ley</Text>
-        <View style={S.fila}>
-          <Text style={S.filaLabel}>AFP (pensión, 2.87%)</Text>
-          <Text style={S.filaMonto}>-{fmt(data.afpEmpleado)}</Text>
-        </View>
-        <View style={S.fila}>
-          <Text style={S.filaLabel}>SFS (salud, 3.04%)</Text>
-          <Text style={S.filaMonto}>-{fmt(data.sfsEmpleado)}</Text>
-        </View>
+        {data.sinTss ? null : (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>AFP (pensión, 2.87%)</Text>
+            <Text style={S.filaMonto}>-{fmt(data.afpEmpleado)}</Text>
+          </View>
+        )}
+        {data.sinTss ? null : (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>SFS (salud, 3.04%)</Text>
+            <Text style={S.filaMonto}>-{fmt(data.sfsEmpleado)}</Text>
+          </View>
+        )}
         <View style={S.fila}>
           <Text style={S.filaLabel}>ISR (retención)</Text>
           <Text style={S.filaMonto}>-{fmt(data.isr)}</Text>

@@ -47,8 +47,9 @@ const BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 
 };
 
 const formInicial = () => ({
-  tipo: 'mensual' as TipoCorrida,
+  tipo: 'mensual' as TipoCorrida | 'regalia',
   periodo: hoyRD().slice(0, 7),
+  anio: hoyRD().slice(0, 4),
   fechaInicio: lunesDeLaSemana(hoyRD()),
   descripcion: '',
   fechaPago: '',
@@ -67,8 +68,11 @@ export default function CorridasClient() {
   const corridas = data?.corridas ?? [];
 
   // Lo que va a pagar la corrida, calculado igual que en el servidor.
-  const periodoForm = periodoDeCorrida(form.tipo, { periodo: form.periodo, fechaInicio: form.fechaInicio });
-  const frecuencia = frecuenciaDeTipo(form.tipo);
+  const esRegalia = form.tipo === 'regalia';
+  const anioNum = Number(form.anio);
+  const anioOk = Number.isInteger(anioNum) && anioNum >= 2000 && anioNum <= Number(hoyRD().slice(0, 4));
+  const periodoForm = form.tipo === 'regalia' ? null : periodoDeCorrida(form.tipo, { periodo: form.periodo, fechaInicio: form.fechaInicio });
+  const frecuencia = form.tipo === 'regalia' ? 'mensual' : frecuenciaDeTipo(form.tipo);
   const { data: dEmpleados } = useSWR<{ empleados?: { estado: string; frecuenciaPago: string }[] }>(
     abierto ? '/api/nomina/empleados' : null, fetcher,
   );
@@ -81,7 +85,9 @@ export default function CorridasClient() {
       const res = await fetch('/api/nomina/corridas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(esRegalia
+          ? { tipo: 'regalia', anio: anioNum, fechaPago: form.fechaPago, descripcion: form.descripcion }
+          : form),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo crear la corrida');
@@ -171,11 +177,17 @@ export default function CorridasClient() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="corrida-tipo" className="text-xs text-muted-foreground">Tipo de corrida</Label>
-                <NativeSelect id="corrida-tipo" value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as TipoCorrida }))}>
+                <NativeSelect id="corrida-tipo" value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as TipoCorrida | 'regalia' }))}>
                   {TIPOS_CORRIDA.map((t) => <option key={t} value={t}>{LABEL_TIPO_CORRIDA[t]}</option>)}
+                  <option value="regalia">Regalía pascual (13.º sueldo)</option>
                 </NativeSelect>
               </div>
-              {form.tipo === 'semanal' ? (
+              {esRegalia ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="corrida-anio" className="text-xs text-muted-foreground">Año</Label>
+                  <Input id="corrida-anio" type="number" min={2000} max={Number(hoyRD().slice(0, 4))} value={form.anio} onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} />
+                </div>
+              ) : form.tipo === 'semanal' ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="corrida-inicio" className="text-xs text-muted-foreground">Semana que empieza el</Label>
                   <Input id="corrida-inicio" type="date" value={form.fechaInicio} onChange={(e) => setForm((f) => ({ ...f, fechaInicio: e.target.value }))} />
@@ -195,14 +207,20 @@ export default function CorridasClient() {
                 <Input
                   id="corrida-descripcion"
                   value={form.descripcion}
-                  placeholder={periodoForm ? `Nómina ${LABEL_TIPO_CORRIDA[form.tipo].toLowerCase()} · ${rangoLegible(periodoForm, { corto: true })}` : 'Nómina'}
+                  placeholder={esRegalia ? `Regalía pascual ${form.anio}` : periodoForm ? `Nómina ${LABEL_TIPO_CORRIDA[form.tipo].toLowerCase()} · ${rangoLegible(periodoForm, { corto: true })}` : 'Nómina'}
                   onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
                 />
               </div>
             </div>
             <p className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm" data-testid="resumen-corrida">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-zero-600" />
-              {periodoForm ? (
+              {esRegalia ? (
+                <span>
+                  Paga la <strong>regalía pascual de {form.anio}</strong> a todos los empleados que trabajaron ese año: la doceava parte
+                  de lo devengado, sin TSS y exenta de ISR hasta 5 salarios mínimos. Se paga a más tardar el 20 de diciembre.
+                  Los meses sin nómina en Zero se estiman con el salario de la ficha.
+                </span>
+              ) : periodoForm ? (
                 <span>
                   Paga del <strong>{rangoLegible(periodoForm)}</strong> a los empleados con pago {frecuencia}
                   {dEmpleados?.empleados && ` (${conEsaFrecuencia} activo${conEsaFrecuencia === 1 ? '' : 's'})`}.
@@ -215,7 +233,7 @@ export default function CorridasClient() {
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAbierto(false)} disabled={creando}>Cancelar</Button>
-            <Button onClick={crear} disabled={creando || !periodoForm} className="gap-1.5">
+            <Button onClick={crear} disabled={creando || (esRegalia ? !anioOk : !periodoForm)} className="gap-1.5">
               {creando && <Loader2 className="h-4 w-4 animate-spin" />}
               Calcular corrida
             </Button>

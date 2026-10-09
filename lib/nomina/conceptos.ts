@@ -56,7 +56,9 @@ export const CONCEPTOS_SEMILLA: ConceptoSemilla[] = [
   { codigo: 'incentivo', nombre: 'Incentivo', tipo: 'ingreso', cotizaTss: true },
   { codigo: 'comision', nombre: 'Comisión', tipo: 'ingreso', cotizaTss: true },
   { codigo: 'horas-extra', nombre: 'Horas extra', tipo: 'ingreso', cotizaTss: true },
-  { codigo: 'vacaciones', nombre: 'Vacaciones pagadas', tipo: 'ingreso', cotizaTss: false },
+  // Pagar vacaciones (o su compensación) es salario: cotiza a la TSS y entra al ISR. Para que el pago
+  // consuma la reserva de vacaciones y no se cuente dos veces como gasto, su cuenta es «Vacaciones por pagar».
+  { codigo: 'vacaciones', nombre: 'Vacaciones pagadas', tipo: 'ingreso', cotizaTss: true },
   { codigo: 'otros-ingresos', nombre: 'Otros ingresos (bono, gratificación)', tipo: 'ingreso', cotizaTss: true },
   { codigo: 'avance', nombre: 'Avance de sueldo / cuenta por cobrar', tipo: 'descuento', cotizaTss: false },
   { codigo: 'prestamo', nombre: 'Préstamo', tipo: 'descuento', cotizaTss: false },

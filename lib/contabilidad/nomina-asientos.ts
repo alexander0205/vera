@@ -132,6 +132,30 @@ export function lineasDevengoNomina(s: SumasCorrida, c: CuentasNomina): LineaAsi
   ]);
 }
 
+/**
+ * Devengo de una corrida de REGALÍA pascual:
+ *
+ *   DEBE  Regalía por pagar (la reserva)   lo que ya se había provisionado, hasta el bruto
+ *   DEBE  Gasto de regalía                 lo que falta: el bruto menos la reserva usada
+ *   HABER ISR de asalariados por pagar     el ISR de lo gravado
+ *   HABER Sueldos por pagar                el neto
+ *
+ * La regalía no lleva TSS ni aportes patronales. Si no hay reserva (la empresa no
+ * provisiona, o ya se gastó), todo va al gasto.
+ */
+export function lineasDevengoRegalia(
+  s: { brutoCents: number; reservaCents: number; isrCents: number; netoCents: number },
+  c: { gastoRegalia: number; regaliaPorPagar: number | null; isr: number; sueldosPorPagar: number },
+): LineaAsiento[] {
+  const reserva = c.regaliaPorPagar === null ? 0 : Math.max(0, Math.min(s.reservaCents, s.brutoCents));
+  return sinCeros([
+    { cuentaId: c.regaliaPorPagar ?? c.gastoRegalia, debeCents: reserva, haberCents: 0, descripcion: 'Regalía pascual: se usa la reserva acumulada' },
+    { cuentaId: c.gastoRegalia, debeCents: s.brutoCents - reserva, haberCents: 0, descripcion: 'Regalía pascual (gasto no provisionado)' },
+    { cuentaId: c.isr, debeCents: 0, haberCents: s.isrCents, descripcion: 'ISR de la regalía por pagar (DGII)' },
+    { cuentaId: c.sueldosPorPagar, debeCents: 0, haberCents: s.netoCents, descripcion: 'Regalía por pagar a los empleados' },
+  ]);
+}
+
 const GASTO_APORTES = 'Aportes patronales (TSS e INFOTEP)';
 const RETENCION_TSS = 'Retenciones TSS por pagar (AFP, SFS, dependientes)';
 

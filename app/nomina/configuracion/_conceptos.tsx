@@ -95,11 +95,12 @@ export function ConceptosNomina() {
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               Elige la cuenta de cada concepto para que el asiento de la nómina lo registre aparte. Los avances y
-              préstamos suelen ir a una cuenta por cobrar a empleados. Se asignan a cada empleado desde su ficha.
+              préstamos suelen ir a una cuenta por cobrar a empleados. Las vacaciones pagadas pueden ir a «Vacaciones por
+              pagar» para consumir la reserva que se acumula cada mes. Se asignan a cada empleado desde su ficha.
               {sinCuentas && ' No tienes acceso al catálogo de cuentas: pídele a quien administra la contabilidad que las asigne.'}
             </span>
           </p>
-          {grupo('ingreso', 'Ingresos', ['gasto', 'costo'])}
+          {grupo('ingreso', 'Ingresos', ['gasto', 'costo', 'pasivo'])}
           {grupo('descuento', 'Descuentos', ['activo', 'pasivo'])}
         </CardContent>
       </Card>

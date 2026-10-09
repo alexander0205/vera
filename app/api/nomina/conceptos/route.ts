@@ -24,10 +24,11 @@ async function validarCuenta(teamId: number, cuentaId: unknown, tipo: 'ingreso' 
   if (!c) return 'Cuenta contable inválida';
   if (!c.activa) return 'Esa cuenta está desactivada';
   if (!c.imputable) return 'Esa cuenta es un grupo: elige una cuenta de detalle que reciba apuntes';
-  const buenos = tipo === 'ingreso' ? ['gasto', 'costo'] : ['activo', 'pasivo'];
+  // Un ingreso se debita a un gasto, o a un pasivo cuando consume una reserva (vacaciones por pagar).
+  const buenos = tipo === 'ingreso' ? ['gasto', 'costo', 'pasivo'] : ['activo', 'pasivo'];
   if (!buenos.includes(c.tipo)) {
     return tipo === 'ingreso'
-      ? 'Un ingreso del empleado va a una cuenta de gasto (por ejemplo, incentivos o comisiones)'
+      ? 'Un ingreso del empleado va a una cuenta de gasto (incentivos, comisiones) o a una reserva por pagar (vacaciones por pagar)'
       : 'Un descuento va a una cuenta de activo (por cobrar al empleado) o de pasivo';
   }
   return null;
