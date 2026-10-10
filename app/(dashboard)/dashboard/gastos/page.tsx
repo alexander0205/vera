@@ -137,7 +137,9 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       const info = analizarNcf(g.ncf);
       return {
         key: `r${g.id}`, fuente: 'r', id: g.id, fecha: g.fecha, proveedor: g.proveedorNombre ?? 'Sin proveedor', rnc: g.proveedorRnc,
-        comprobante: g.ncf, tipo: info.valido ? `${info.nombre}` : 'Comprobante', categoria: g.categoriaLabel ?? '—',
+        // Sin NCF se dice, no se deja un guion: es un gasto sin comprobante fiscal.
+        comprobante: info.sinNcf ? 'Sin NCF' : g.ncf,
+        tipo: info.valido ? `${info.nombre}` : info.sinNcf ? 'No va al 606' : 'Comprobante', categoria: g.categoriaLabel ?? '—',
         href: `/dashboard/compras/local/${g.id}`, anulado: g.estado === 'anulada', borrador: false,
         pagado: g.saldoCents === 0, saldoCents: g.saldoCents, metodo: g.formaPago === 'contado' ? g.metodoPago : null, cuenta: null,
         retencionesCents: g.retencionesCents, montoCents: g.montoTotal,

@@ -16,9 +16,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/
 import { toast } from '@/lib/toast';
 import { pesosACentavos } from '@/lib/nomina/montos';
 import {
-  analizarIdentificacion, analizarNcf, cuadrarConComprobante, erroresCompra, itbisAlCostoPorDefecto, resumirCompra,
-  sugerirRetenciones, totalizarLineas, CONCEPTOS_RETENCION, TIPOS_BIENES_606, TIPOS_RETENCION_ISR,
-  type ConceptoRetencion, type TasaItbis, type TipoProveedor,
+  analizarIdentificacion, analizarNcf, avisoRetencionSinNcf, cuadrarConComprobante, erroresCompra, itbisAlCostoPorDefecto, reglasComprobante,
+  resumirCompra, sugerirRetenciones, totalizarLineas, CONCEPTOS_RETENCION, TIPOS_BIENES_606, TIPOS_RETENCION_ISR,
+  type ConceptoRetencion, type RetencionSugerida, type TasaItbis, type TipoProveedor,
 } from '@/lib/compras/fiscal';
 import { CATEGORIAS_COMPRA, categoriaCompra, tipo606Dominante } from '@/lib/compras/categorias';
 import type { LineaEcfRecibido } from '@/lib/compras/ecf-xml';
@@ -197,6 +197,12 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const cuentaAutomatica = contexto.cuentasSalida.find((c) => c.id === contexto.cuentaSalidaPorMetodo[metodoPago]) ?? null;
   const idInfo = analizarIdentificacion(proveedorRnc);
   const ncfInfo = analizarNcf(ncf);
+  // Qué se exige según haya NCF o no. La misma función decide en el servidor
+  // (lib/compras/registrar.ts): lo que aquí deja guardar, allí se guarda.
+  const reglas = reglasComprobante({
+    clase: contexto.clase, ncf: ncfInfo, tipoProveedor, id: idInfo, nombre: proveedorNombre,
+    conInventario: lineas.some((l) => l.tipo === 'producto'),
+  });
   const lineasCalc = lineas.map((l) => {
     const producto = l.tipo === 'producto' ? productos.find((p) => String(p.id) === l.productoId) : undefined;
     const cat = l.tipo === 'concepto' ? categoriaCompra(l.categoria) : undefined;
@@ -222,11 +228,17 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
     return mejor.concepto;
   })();
   const concepto = conceptoManual || conceptoDerivado;
-  const sugerida = sugerirRetenciones({
+  const sugeridaLegal = sugerirRetenciones({
     tipoProveedor, concepto, fecha: formaPago === 'contado' ? fechaPago || fecha : contexto.hoy,
     baseServiciosCents: totales.baseServiciosCents, baseBienesCents: totales.baseBienesCents,
     itbisCents: totales.itbisCents, itbisServiciosCents: totales.itbisServiciosCents,
   });
+  // Sin NCF ninguna retención se aplica sola: no saldría en el 606 (el único
+  // reporte que las lleva) y le bajaría el pago al proveedor sin que nadie lo
+  // hubiera decidido. Quien de verdad retuvo la anota en «Editar retenciones».
+  const sugerida: RetencionSugerida = reglas.gastoSinNcf
+    ? { itbisRetenidoCents: 0, isrRetenidoCents: 0, isrTipo: null, motivos: [] }
+    : sugeridaLegal;
   const itbisRetenidoCents = retencionManual ? (aCentavos(itbisRetenido) ?? 0) : sugerida.itbisRetenidoCents;
   const isrRetenidoCents = retencionManual ? (aCentavos(isrRetenido) ?? 0) : sugerida.isrRetenidoCents;
   const isrTipoFinal = retencionManual ? (isrTipo ? Number(isrTipo) : null) : sugerida.isrTipo;
@@ -249,12 +261,14 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const tipo606Auto = tipo606Dominante(lineasCalc.map((x, i) => ({ tipo606: x.l.tipo === 'producto' ? '09' : x.cat?.tipo606 ?? '02', baseCents: totales.lineas[i].baseCents })));
   const tipo606Final = (tipo606 || tipo606Auto) as keyof typeof TIPOS_BIENES_606;
 
-  // Al entrar a modo manual se parte de la sugerencia, no de cero.
+  // Al entrar a modo manual se parte de lo que manda la ley, no de cero. También
+  // sin NCF: ahí no se aplica sola, pero quien pulsa «Editar retenciones» es
+  // porque retuvo, y no tiene por qué calcular el porcentaje ni buscar el tipo.
   function pasarRetencionAManual() {
     if (retencionManual) return;
-    setItbisRetenido(aTexto(sugerida.itbisRetenidoCents));
-    setIsrRetenido(aTexto(sugerida.isrRetenidoCents));
-    setIsrTipo(sugerida.isrTipo ? String(sugerida.isrTipo) : '');
+    setItbisRetenido(aTexto(sugeridaLegal.itbisRetenidoCents));
+    setIsrRetenido(aTexto(sugeridaLegal.isrRetenidoCents));
+    setIsrTipo(sugeridaLegal.isrTipo ? String(sugeridaLegal.isrTipo) : '');
     setRetencionManual(true);
   }
 
@@ -283,18 +297,36 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
     ncfInfo.valido ? `/api/compras/local/verificar?ncf=${ncfInfo.ncf}&rnc=${idInfo.limpio}` : null, fetcher,
   );
 
-  const gastoMenor = ncfInfo.tipoBase === '13';
-  const pideRnc = tipoProveedor !== 'exterior' && !gastoMenor;
   const problemas: string[] = [];
-  if (!ncfInfo.valido) problemas.push(ncfInfo.error ?? 'NCF inválido');
-  if (pideRnc && !idInfo.formatoValido) problemas.push('Falta el RNC o la cédula del proveedor');
-  if (!gastoMenor && !proveedorNombre.trim()) problemas.push('Falta el nombre del proveedor');
+  if (reglas.errorNcf) problemas.push(reglas.errorNcf);
+  // Con el NCF vacío el RNC era opcional; al escribirlo deja de serlo. Se dice
+  // por qué, para que no parezca un fallo del formulario.
+  if (reglas.problemaRnc === 'falta') problemas.push(`Falta el RNC o la cédula del proveedor${reglas.va606 ? ': el 606 lo pide' : ''}`);
+  if (reglas.problemaRnc === 'incompleto') problemas.push('El RNC o la cédula no está completo (9 u 11 dígitos): corrígelo o déjalo vacío');
+  if (reglas.faltaNombre) problemas.push('Falta el nombre del proveedor');
   if (ncfInfo.esNota && !analizarNcf(ncfModificado).valido) problemas.push('Falta el NCF que modifica la nota');
   if (lineasCalc.some((x) => !x.valida)) problemas.push('Hay líneas incompletas');
   if (verificacion?.emitido) problemas.push('Ese comprobante lo emitiste en Zero: ya está en el 606');
-  if (!ncfInfo.daCreditoItbis && ncfInfo.valido && alCostoCents < totales.itbisCents) problemas.push(`El ITBIS de un comprobante de ${ncfInfo.nombre.toLowerCase()} va completo al costo`);
+  if (reglas.itbisSinCredito && alCostoCents < totales.itbisCents) {
+    problemas.push(reglas.gastoSinNcf
+      ? 'Sin NCF el ITBIS no da crédito: va completo al costo'
+      : `El ITBIS de un comprobante de ${ncfInfo.nombre.toLowerCase()} va completo al costo`);
+  }
   problemas.push(...erroresCompra({ baseCents: totales.baseCents, imp, formaPago, fechaPago: formaPago === 'contado' ? fechaPago : null }));
   if (isrRetenidoCents > 0 && !isrTipoFinal) problemas.push('Elige el tipo de retención de ISR');
+
+  // Lo que se avisa sin impedir guardar: en ámbar, encima de los problemas.
+  const avisosResumen: string[] = [];
+  if (reglas.gastoSinNcf) {
+    avisosResumen.push('Sin NCF: este gasto se guarda, pero no va al 606 ni da crédito de ITBIS.');
+    // La línea nueva nace con 18 %, que es lo normal con comprobante. Un recibo
+    // sin NCF casi nunca trae ITBIS, y aquí se sumaría al gasto y al pago sin
+    // que nada lo dijera.
+    if (totales.itbisCents > 0) {
+      avisosResumen.push(`Estás sumando ${pesos(totales.itbisCents)} de ITBIS a un gasto sin NCF. Si el comprobante no trae ITBIS, pon sus líneas en «Exento».`);
+    }
+    if (resumen.retencionesCents > 0) avisosResumen.push(avisoRetencionSinNcf(tipoProveedor));
+  }
 
   function setLinea(key: number, patch: Partial<Linea>) {
     setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -322,6 +354,8 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           proveedorRnc: idInfo.limpio || null,
           proveedorNombre: proveedorNombre.trim() || null,
           tipoProveedor,
+          // Vacío en un gasto sin comprobante fiscal: el servidor lo guarda como
+          // «sin NCF». Nunca un NCF de relleno.
           ncf: ncfInfo.ncf,
           ncfModificado: ncfInfo.esNota ? analizarNcf(ncfModificado).ncf : null,
           fecha,
@@ -471,7 +505,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
               <h2 className="text-base font-semibold">1 · Proveedor y comprobante</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="proveedor-rnc">RNC o cédula</Label>
+                  <Label htmlFor="proveedor-rnc">RNC o cédula{reglas.gastoSinNcf && <span className="font-normal text-muted-foreground"> (opcional)</span>}</Label>
                   <Input id="proveedor-rnc" value={proveedorRnc} onChange={(e) => setProveedorRnc(e.target.value)} placeholder="101010101" inputMode="numeric" />
                   {idInfo.formatoValido ? (
                     enPadron
@@ -493,15 +527,21 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </NativeSelect>
                 </div>
                 <div className="space-y-1.5">
+                  {/* Lo de opcional va en la pista de abajo: con «(opcional)» la etiqueta
+                      no cabe en su columna y descuadra la fila. */}
                   <Label htmlFor="ncf">NCF del comprobante</Label>
                   <Input id="ncf" value={ncf} onChange={(e) => setNcf(e.target.value.toUpperCase())} placeholder="B0100000001 o E310000000001" />
-                  {ncf.trim() && (ncfInfo.valido ? (
+                  {ncf.trim() ? (ncfInfo.valido ? (
                     <p className="text-xs text-muted-foreground" data-testid="ncf-info">
                       {ncfInfo.electronico ? 'e-CF' : 'NCF'} de {ncfInfo.nombre.toLowerCase()}
                       {ncfInfo.origen === 'autoemitido' ? ' (lo emite tu empresa)' : ''}
                       {ncfInfo.daCreditoItbis ? ' · da crédito de ITBIS' : ' · el ITBIS no se adelanta'}
                     </p>
-                  ) : <p className="text-xs text-red-600">{ncfInfo.error}</p>)}
+                  ) : <p className="text-xs text-red-600">{ncfInfo.error}</p>) : reglas.gastoSinNcf && (
+                    <p className="text-xs text-muted-foreground" data-testid="ncf-vacio">
+                      Opcional: si la factura no trae NCF, déjalo vacío. Con NCF hace falta también el RNC o la cédula.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="fecha-comprobante">Fecha del comprobante</Label>
@@ -739,6 +779,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                 ) : (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {totales.itbisCents === 0 ? 'Sin ITBIS facturado.'
+                      : reglas.gastoSinNcf ? 'Sin NCF no hay crédito de ITBIS: se suma al gasto.'
                       : !ncfInfo.daCreditoItbis && ncfInfo.valido ? 'Este comprobante no da crédito: el ITBIS se suma al costo.'
                       : contexto.regimenItbis !== 'gravado' ? 'Tu empresa no cobra ITBIS (régimen exento): el ITBIS de las compras va al costo.'
                       : 'Se adelanta completo en el IT-1. Márcalo si una parte no se puede adelantar (proporcionalidad).'}
@@ -755,13 +796,22 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                     </NativeSelect>
                   </div>
                   {retencionManual ? (
-                    <Button variant="outline" size="sm" onClick={() => setRetencionManual(false)}>Usar la sugerida</Button>
+                    // Sin NCF no hay sugerida que usar: volver atrás es quitarlas.
+                    <Button variant="outline" size="sm" onClick={() => setRetencionManual(false)}>{reglas.gastoSinNcf ? 'Quitar las retenciones' : 'Usar la sugerida'}</Button>
                   ) : (
                     <Button variant="ghost" size="sm" onClick={pasarRetencionAManual}>Editar retenciones</Button>
                   )}
                 </div>
                 {!retencionManual ? (
-                  sugerida.motivos.length ? (
+                  reglas.gastoSinNcf ? (
+                    <p className="text-sm text-muted-foreground" data-testid="retencion-sin-ncf">
+                      {/* Que Zero no la descuente no quiere decir que no toque retener:
+                          la obligación nace del pago, no del NCF. */}
+                      En un gasto sin NCF, Zero no descuenta ninguna retención por su cuenta: no saldría en el 606.
+                      {sugeridaLegal.motivos.length > 0 && ` La ley manda retener: ${sugeridaLegal.motivos.join('; ')}.`}
+                      {' '}Si se la retuviste al proveedor, pulsa «Editar retenciones».
+                    </p>
+                  ) : sugerida.motivos.length ? (
                     <ul className="space-y-1 text-sm" data-testid="motivos-retencion">
                       {sugerida.motivos.map((m) => <li key={m} className="flex items-start gap-1.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-zero-600" />{m}</li>)}
                     </ul>
@@ -878,7 +928,9 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                 <p>ITBIS que adelantas: <span className="font-medium text-foreground" data-testid="itbis-adelantar">{pesos(resumen.itbisPorAdelantarCents)}</span></p>
                 {resumen.itbisPorAdelantarCents === 0 && totales.itbisCents > 0 && (
                   <p data-testid="motivo-sin-adelanto">
-                    {!ncfInfo.daCreditoItbis && ncfInfo.valido
+                    {reglas.gastoSinNcf
+                      ? 'Sin NCF no hay crédito de ITBIS: se suma al gasto.'
+                      : !ncfInfo.daCreditoItbis && ncfInfo.valido
                       ? `Un comprobante de ${ncfInfo.nombre.toLowerCase()} no da crédito: el ITBIS se suma al gasto.`
                       : contexto.regimenItbis !== 'gravado'
                         ? 'Tu empresa está como exenta de ITBIS, así que el de las compras va al gasto en vez de adelantarse. Se cambia en Contabilidad › Configuración.'
@@ -886,15 +938,23 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </p>
                 )}
                 {resumen.retencionesCents > 0 && <p>Retenciones a pagar a la DGII: <span className="font-medium text-foreground">{pesos(resumen.retencionesCents)}</span></p>}
-                <p>606: {ncfInfo.valido && !ncfInfo.reporta606 ? 'no se reporta' : `tipo ${tipo606Final} · ${TIPOS_BIENES_606[tipo606Final]}`}</p>
+                <p>606: {reglas.gastoSinNcf || (ncfInfo.valido && !ncfInfo.reporta606) ? 'no se reporta' : `tipo ${tipo606Final} · ${TIPOS_BIENES_606[tipo606Final]}`}</p>
               </div>
-              <div className="space-y-1.5 border-t pt-2">
-                <Label htmlFor="tipo-606" className="text-xs text-muted-foreground">Tipo de bienes y servicios (606)</Label>
-                <NativeSelect id="tipo-606" value={tipo606} onChange={(e) => setTipo606(e.target.value)}>
-                  <option value="">Automático: {tipo606Auto}</option>
-                  {Object.entries(TIPOS_BIENES_606).map(([k, v]) => <option key={k} value={k}>{k} · {v}</option>)}
-                </NativeSelect>
-              </div>
+              {/* Sin NCF no va al 606: el tipo se sigue guardando (lo usa el asiento), pero no se pregunta. */}
+              {!reglas.gastoSinNcf && (
+                <div className="space-y-1.5 border-t pt-2">
+                  <Label htmlFor="tipo-606" className="text-xs text-muted-foreground">Tipo de bienes y servicios (606)</Label>
+                  <NativeSelect id="tipo-606" value={tipo606} onChange={(e) => setTipo606(e.target.value)}>
+                    <option value="">Automático: {tipo606Auto}</option>
+                    {Object.entries(TIPOS_BIENES_606).map(([k, v]) => <option key={k} value={k}>{k} · {v}</option>)}
+                  </NativeSelect>
+                </div>
+              )}
+              {avisosResumen.length > 0 && (
+                <ul className="space-y-1 border-t pt-2 text-xs text-amber-700" data-testid="avisos-resumen">
+                  {avisosResumen.map((a) => <li key={a}>• {a}</li>)}
+                </ul>
+              )}
               {problemas.length > 0 && (
                 <ul className="space-y-1 border-t pt-2 text-xs text-red-600" data-testid="problemas">
                   {[...new Set(problemas)].map((p) => <li key={p}>• {p}</li>)}

@@ -35,6 +35,15 @@ export interface DatosCaptura {
   /** juridica | fisica | informal | rst | exterior: decide las retenciones. */
   tipoProveedor: TipoProveedor | null;
   ncf: string | null;
+  /**
+   * Lo que se leyó como NCF y no pasó la validación (le falta un dígito, un
+   * tipo que no existe). No es un NCF: solo llega al campo del formulario, para
+   * que salga en rojo y alguien lo corrija o lo borre a propósito. Sin esto el
+   * campo abría vacío, y un gasto con el NCF vacío ya se puede guardar: una
+   * factura con comprobante mal leído pasaba por «sin NCF». Opcional porque las
+   * capturas guardadas antes no lo traen.
+   */
+  ncfLeido?: string | null;
   /** YYYY-MM-DD */
   fecha: string | null;
   formaPago: 'contado' | 'credito' | null;
@@ -60,7 +69,7 @@ export interface DatosCaptura {
 }
 
 export const DATOS_VACIOS: DatosCaptura = {
-  clase: null, proveedorRnc: null, proveedorNombre: null, tipoProveedor: null, ncf: null, fecha: null,
+  clase: null, proveedorRnc: null, proveedorNombre: null, tipoProveedor: null, ncf: null, ncfLeido: null, fecha: null,
   formaPago: null, metodoPago: null, categoria: null,
   subtotalCents: null, itbisCents: null, propinaCents: null, iscCents: null, otrosImpuestosCents: null,
   itbisRetenidoCents: null, isrRetenidoCents: null, totalCents: null,
@@ -228,7 +237,8 @@ export function datosDesdeIa(l: LecturaIa, hoy: string = new Date().toISOString(
     ? l.tipoProveedor
     : tipoPorId ?? l.tipoProveedor;
   if (l.esFactura && !id.formatoValido && tipoProveedor !== 'exterior' && tipoProveedor !== 'informal') {
-    avisos.push('No se leyó el RNC del proveedor: escríbelo mirando la foto.');
+    // Sin NCF el RNC ya no es obligatorio: no se manda a escribir lo que quizá no existe.
+    avisos.push('No se leyó el RNC del proveedor: si la factura tiene NCF, escríbelo mirando la foto.');
   }
 
   return {
@@ -237,6 +247,7 @@ export function datosDesdeIa(l: LecturaIa, hoy: string = new Date().toISOString(
     proveedorNombre: l.proveedorNombre?.trim().slice(0, 200) || null,
     tipoProveedor,
     ncf: ncf.valido ? ncf.ncf : null,
+    ncfLeido: ncf.valido ? null : leido.ncf,
     fecha,
     formaPago: l.formaPago,
     metodoPago: l.metodoPago,
@@ -347,6 +358,8 @@ export function combinarDatos(qr: DatosCaptura | null, ia: DatosCaptura | null):
     proveedorRnc: qr.proveedorRnc ?? ia.proveedorRnc,
     proveedorNombre: ia.proveedorNombre ?? qr.proveedorNombre,
     ncf: qr.ncf ?? ia.ncf,
+    // Con el e-NCF exacto del QR, lo que la foto leyó a medias ya no pinta nada.
+    ncfLeido: qr.ncf ? null : ia.ncfLeido ?? null,
     fecha: qr.fecha ?? ia.fecha,
     totalCents: qr.totalCents ?? ia.totalCents,
     timbre: qr.timbre,
@@ -361,6 +374,11 @@ export interface InicialRegistro {
   proveedorRnc: string | null;
   proveedorNombre: string | null;
   tipoProveedor: TipoProveedor | null;
+  /**
+   * Con qué arranca el campo NCF: el leído y validado o, si no lo hubo, lo que
+   * se leyó a medias, para que el formulario lo marque en rojo en vez de abrir
+   * vacío. Vacío de verdad solo cuando no se leyó nada parecido a un NCF.
+   */
   ncf: string | null;
   fecha: string | null;
   formaPago: 'contado' | 'credito';
@@ -413,7 +431,7 @@ export function inicialDesdeCaptura(d: DatosCaptura): { inicial: InicialRegistro
       proveedorRnc: d.proveedorRnc,
       proveedorNombre: d.proveedorNombre,
       tipoProveedor: d.tipoProveedor,
-      ncf: d.ncf,
+      ncf: d.ncf ?? d.ncfLeido ?? null,
       fecha: d.fecha,
       formaPago: d.formaPago ?? 'contado',
       metodoPago: d.metodoPago,

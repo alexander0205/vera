@@ -17,8 +17,8 @@ import { registrarEntradas, revertirEntradas } from '@/lib/inventario/entrada';
 import { esFechaYMD } from '@/lib/nomina/periodos';
 import { hoyRD } from '@/lib/utils/format';
 import {
-  analizarIdentificacion, analizarNcf, erroresCompra, esTasaItbis, esTipoBienes606, esTipoRetencionIsr,
-  itbisAlCostoPorDefecto, resumirCompra, totalizarLineas, METODOS_PAGO_COMPRA, TIPOS_PROVEEDOR,
+  analizarIdentificacion, analizarNcf, avisoRetencionSinNcf, erroresCompra, esTasaItbis, esTipoBienes606, esTipoRetencionIsr,
+  itbisAlCostoPorDefecto, reglasComprobante, resumirCompra, totalizarLineas, METODOS_PAGO_COMPRA, TIPOS_PROVEEDOR,
   type MetodoPagoCompra, type TasaItbis, type TipoProveedor,
 } from './fiscal';
 import { categoriaCompra, tipo606Dominante } from './categorias';
@@ -48,7 +48,8 @@ export interface RegistroCompra {
   proveedorRnc: string | null;
   proveedorNombre: string | null;
   tipoProveedor: TipoProveedor;
-  ncf: string;
+  /** null o vacío: un gasto sin comprobante fiscal (no va al 606 ni da crédito de ITBIS). */
+  ncf: string | null;
   ncfModificado?: string | null;
   fecha: string;
   tipoBienes606?: string | null;
@@ -81,8 +82,11 @@ export interface ResultadoRegistro {
 
 const entero = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 
-/** Si el NCF ya está registrado de ese proveedor, o si es un comprobante que la empresa emitió en Zero. */
-export async function verificarNcf(teamId: number, ncf: string, rnc: string | null) {
+/**
+ * Si el NCF ya está registrado de ese proveedor, o si es un comprobante que la
+ * empresa emitió en Zero. Sin NCF no hay nada que buscar.
+ */
+export async function verificarNcf(teamId: number, ncf: string | null, rnc: string | null) {
   const info = analizarNcf(ncf);
   if (!info.valido) return { info, repetidoId: null as number | null, emitido: false };
   const limpio = analizarIdentificacion(rnc).limpio;
@@ -106,7 +110,17 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
 
   // ── Comprobante ──
   const { info, repetidoId, emitido } = await verificarNcf(teamId, r.ncf, r.proveedorRnc);
-  if (!info.valido) throw new CompraError(info.error ?? 'NCF inválido', 400, 'ncf-invalido');
+  const id = analizarIdentificacion(r.proveedorRnc);
+  const nombre = r.proveedorNombre?.trim() || null;
+  // Las mismas reglas con que el formulario decide si deja pulsar «Registrar».
+  // `clase` viene del cuerpo de la petición: lo que decide si hay mercancía son
+  // las líneas, no la etiqueta. Un «gasto» con productos del inventario pide NCF
+  // como cualquier compra.
+  const reglas = reglasComprobante({
+    clase: r.clase === 'gasto' ? 'gasto' : 'compra', ncf: info, tipoProveedor: r.tipoProveedor, id, nombre,
+    conInventario: Array.isArray(r.lineas) && r.lineas.some((l) => !!l?.productoId),
+  });
+  if (reglas.errorNcf) throw new CompraError(reglas.errorNcf, 400, 'ncf-invalido');
   if (emitido) {
     throw new CompraError(`El ${info.ncf} lo emitiste en Zero: ya cuenta en el 606 y en la contabilidad`, 409, 'ncf-emitido');
   }
@@ -123,14 +137,16 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
 
   // ── Proveedor ──
   const gastoMenor = info.tipoBase === '13';
-  const id = analizarIdentificacion(r.proveedorRnc);
-  if (r.tipoProveedor !== 'exterior' && !gastoMenor) {
-    if (!id.formatoValido) throw new CompraError('Escribe el RNC (9 dígitos) o la cédula (11) del proveedor', 400, 'rnc-invalido');
+  if (reglas.problemaRnc === 'falta') throw new CompraError('Escribe el RNC (9 dígitos) o la cédula (11) del proveedor', 400, 'rnc-invalido');
+  if (reglas.problemaRnc === 'incompleto') {
+    throw new CompraError('El RNC o la cédula no está completo (9 u 11 dígitos): corrígelo o déjalo vacío', 400, 'rnc-invalido');
+  }
+  // Sin NCF el RNC puede venir vacío: entonces no hay dígito que revisar.
+  if (r.tipoProveedor !== 'exterior' && !gastoMenor && id.formatoValido) {
     if (!id.digitoOk) avisos.push('El dígito verificador del RNC o la cédula no cuadra: confírmalo con el comprobante');
     if (id.persona === 'fisica' && r.tipoProveedor === 'juridica') avisos.push('Es una cédula: si el proveedor es persona física le tocan otras retenciones');
   }
-  const nombre = r.proveedorNombre?.trim() || null;
-  if (!nombre && !gastoMenor) throw new CompraError('Escribe el nombre del proveedor', 400, 'proveedor');
+  if (reglas.faltaNombre) throw new CompraError('Escribe el nombre del proveedor', 400, 'proveedor');
 
   // ── Fechas y pago ──
   const hoy = hoyRD();
@@ -199,8 +215,12 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
     otrosImpuestosCents: r.otrosImpuestosCents,
     propinaCents: r.propinaCents,
   };
-  if (!info.daCreditoItbis && itbisAlCosto < t.itbisCents) {
-    throw new CompraError(`El ITBIS de un comprobante de ${info.nombre.toLowerCase()} no se puede adelantar: va completo al costo`);
+  // También sin NCF, y aquí más que en ningún sitio: los reportes cuentan como
+  // crédito todo el ITBIS que no se llevó al costo, sin mirar si hay comprobante.
+  if (reglas.itbisSinCredito && itbisAlCosto < t.itbisCents) {
+    throw new CompraError(reglas.gastoSinNcf
+      ? 'Sin NCF el ITBIS no da crédito: va completo al costo'
+      : `El ITBIS de un comprobante de ${info.nombre.toLowerCase()} no se puede adelantar: va completo al costo`);
   }
   const errores = erroresCompra({ baseCents: t.baseCents, imp, formaPago: r.formaPago, fechaPago });
   if (errores.length) throw new CompraError(errores[0]);
@@ -208,7 +228,15 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   if (r.isrRetenidoCents > 0 && !esTipoRetencionIsr(isrTipo)) throw new CompraError('Elige el tipo de retención de ISR');
   const resumen = resumirCompra(t.baseCents, imp);
   if (!Number.isSafeInteger(resumen.totalCents)) throw new CompraError('Monto fuera de rango');
-  if (!info.reporta606) avisos.push(`Un comprobante de ${info.nombre.toLowerCase()} no sustenta gasto deducible ni va al 606`);
+  if (reglas.gastoSinNcf) {
+    avisos.push('Sin NCF: este gasto se guardó, pero no va al 606 ni da crédito de ITBIS');
+    // Lo retenido solo sale en los campos 12, 17 y 18 del 606 (y en el 609 si es
+    // un e47). Sin NCF queda como deuda con la DGII en el asiento y nada más:
+    // hay que decirlo, con las mismas palabras que el formulario.
+    if (r.itbisRetenidoCents + r.isrRetenidoCents > 0) avisos.push(avisoRetencionSinNcf(r.tipoProveedor));
+  } else if (!info.reporta606) {
+    avisos.push(`Un comprobante de ${info.nombre.toLowerCase()} no sustenta gasto deducible ni va al 606`);
+  }
 
   const tipoBienes606 = esTipoBienes606(r.tipoBienes606)
     ? r.tipoBienes606
@@ -223,8 +251,11 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
       proveedorNombre: nombre,
       tipoProveedor: r.tipoProveedor,
       fecha: r.fecha,
-      referenciaEncf: info.ncf,
+      // NULL y no cadena vacía: el 606 filtra con IS NOT NULL y las pantallas dicen «Sin NCF».
+      referenciaEncf: reglas.gastoSinNcf ? null : info.ncf,
       ncfModificado,
+      // También sin NCF: sin tipo, el asiento lo tomaría por una compra de antes
+      // de la 0180 y adelantaría el ITBIS (lib/contabilidad/asientos.ts).
       tipoBienes606,
       notas: r.notas?.trim() || null,
       itbisCents: t.itbisCents,
@@ -267,7 +298,9 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   const conProducto = lineas.map((l, i) => ({ l, base: t.lineas[i].baseCents })).filter((x) => x.l.productoId);
   if (conProducto.length) {
     const extra = repartir(itbisAlCosto + r.iscCents + r.otrosImpuestosCents + r.propinaCents, lineas.map((_, i) => t.lineas[i].baseCents));
-    await registrarEntradas(teamId, userId, compraId, `Compra #${compraId} — ${info.ncf}`, lineas.flatMap((l, i) => l.productoId ? [{
+    // Sin NCF el motivo no deja el guion colgando.
+    const motivo = [`Compra #${compraId}`, info.ncf].filter(Boolean).join(' — ');
+    await registrarEntradas(teamId, userId, compraId, motivo, lineas.flatMap((l, i) => l.productoId ? [{
       productoId: l.productoId,
       cantidad: l.cantidad,
       almacenId: l.almacenId ?? r.almacenId ?? null,
