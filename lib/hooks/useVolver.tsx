@@ -56,6 +56,15 @@ export function RastreadorDeNavegacion() {
 }
 
 /**
+ * ¿Hay una pantalla nuestra justo detrás en el historial? Para las pantallas
+ * que deciden ellas cómo salir (ver «Editar matrícula»). Como el contador, se
+ * consulta dentro del manejador de un evento, nunca durante el render.
+ */
+export function hayHistorialPropio(): boolean {
+  return navegacionesInternas > 0;
+}
+
+/**
  * Devuelve el manejador del botón de volver. `fallback` es la ruta a la que se
  * cae cuando no hay historial propio: la misma que la pantalla usaba antes, y
  * la que sigue describiendo la etiqueta visible.

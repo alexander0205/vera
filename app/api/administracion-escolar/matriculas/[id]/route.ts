@@ -19,7 +19,7 @@ const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
  * conceptos recurrentes que se le están cobrando.
  *
  * El listado (`GET /matriculas`) no trae `conceptosIds` —son cientos de filas y
- * nadie los mira ahí—, así que el diálogo de edición no tenía de dónde sacar
+ * nadie los mira ahí—, así que «Editar matrícula» no tenía de dónde sacar
  * qué se le cobra a ESTE alumno todos los meses.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -90,7 +90,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     /**
      * Vaciar la lista entera no se acepta sin decirlo.
      *
-     * El diálogo manda SIEMPRE `conceptosIds`, así que un guardado hecho antes
+     * El formulario manda SIEMPRE `conceptosIds`, así que un guardado hecho antes
      * de que la lista terminara de cargar —o con el GET caído— mandaba `[]` y
      * se llevaba por delante todo lo que se le cobra al alumno cada mes. El
      * devengo deja de generarle cuotas y nadie se entera hasta que el padre no
@@ -99,10 +99,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
      * Quitar conceptos uno a uno sigue valiendo: lo que se rechaza es pasar de
      * tener a no tener ninguno de golpe. Para dejar a un alumno sin cobro
      * recurrente se anula la matrícula, que deja constancia.
+     *
+     * El mensaje usa las palabras de «Editar matrícula», que es el único sitio
+     * que manda esta lista: allí se llaman «cobros automáticos», no conceptos, y
+     * lo que se cambia para dejar de cobrar es el estado.
      */
     if (pedidos.length === 0 && (actual.conceptosIds ?? []).length > 0) {
       return NextResponse.json(
-        { error: 'No se puede dejar la matrícula sin ningún concepto. Si el alumno ya no se cobra, anula la matrícula.' },
+        { error: 'No se puede dejar la matrícula sin ningún cobro automático. Si ya no se le va a cobrar, deja la lista como estaba y cambia el estado de la matrícula a Retirada o Anulada.' },
         { status: 400 },
       );
     }

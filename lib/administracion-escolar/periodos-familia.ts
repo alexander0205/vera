@@ -20,6 +20,8 @@ export interface FilaMes {
   cuotaId: number | null;
   conceptoId: number | null;
   concepto: string;
+  /** 'mensualidad', …: con él se sabe si el MES ya tiene factura en otro cargo. */
+  conceptoTipo: string | null;
   mes: number | null;
   anio: number;
   fechaVencimiento: string | null;
@@ -30,12 +32,17 @@ export interface FilaMes {
   ecfDocumentId: number | null;
   encf: string | null;
   codigo: string | null;
+  /** Estado ante la DGII. null sin factura o en un previsto. Sin él «Emitir en DGII» saldría en toda factura. */
+  facturaEstado: string | null;
 }
 
 export interface PeriodoDeHijo {
   matriculaId: number;
   periodoId: number | null;
   periodo: string;
+  /** Inicio y fin del año escolar: los meses que se ofrecen al agregar un cargo. */
+  fechaInicio: string | null;
+  fechaFin: string | null;
   curso: string;
   activo: boolean;
   facturaRecurrenteId: number | null;

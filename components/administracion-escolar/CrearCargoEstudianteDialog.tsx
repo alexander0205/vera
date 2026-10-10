@@ -10,6 +10,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { Loader2 } from 'lucide-react';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
+import { conceptosPorClase } from '@/lib/administracion-escolar/cobros-matricula';
 
 interface Concepto {
   id: number;
@@ -174,7 +175,13 @@ export function CrearCargoEstudianteDialog({
               <Label>Concepto *</Label>
               <NativeSelect value={form.conceptoId} onChange={(e) => setForm((f) => ({ ...f, conceptoId: e.target.value }))}>
                 <option value="" disabled>Seleccionar concepto</option>
-                {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                {/* Por clase: una mensualidad pide además su mes, y mezclada con
+                    los cargos sueltos había que conocer cada concepto para saberlo. */}
+                {conceptosPorClase(conceptos).map((g) => (
+                  <optgroup key={g.titulo} label={g.titulo}>
+                    {g.conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                  </optgroup>
+                ))}
               </NativeSelect>
             </div>
             {concepto?.tipo === 'mensualidad' && (

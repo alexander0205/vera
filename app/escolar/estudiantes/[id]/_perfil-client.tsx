@@ -1,18 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-
-import { ModalHeader } from '@/components/ui/modal-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Ban, Mail, MessageCircle, Receipt, Smartphone, Users } from 'lucide-react';
+import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, Receipt, Smartphone, Users } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
@@ -22,28 +17,16 @@ import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-es
 import { TutoresPanel, type TutorVinculo as TutorPanelVinculo } from '@/components/administracion-escolar/TutoresPanel';
 import { CopiarLinkPago } from '@/components/administracion-escolar/CopiarLinkPago';
 import { ResponsablePagoDialog, type Contacto } from '@/components/administracion-escolar/ResponsablePagoDialog';
+import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 import { DocumentosEstudiante } from '@/components/administracion-escolar/DocumentosEstudiante';
 import { CapturaFoto } from '@/components/fotos/CapturaFoto';
-import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
-import { MatriculaDialog } from '@/components/administracion-escolar/MatriculaDialog';
 import { type CobroDelColegio } from '@/components/administracion-escolar/DetalleCuotaDialog';
-
-import { ReenviarAvisoDialog } from '@/components/administracion-escolar/ReenviarAvisoDialog';
 import { PeriodoDetalle, FacturasSueltas, CanalChip, MESES, AVISO_TEXTO, construirGruposPeriodo, EmptyBox, SimpleTable, type Matricula, type Cargo, type Pago, type PagoSuelto, type FacturaSuelta, type AvisoEnviado, type AvisoProgramado, type PlanesPorMatricula } from '@/components/administracion-escolar/PeriodoDetalle';
-import dynamic from 'next/dynamic';
-import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { useAccionesDeCargo } from '@/components/administracion-escolar/useAccionesDeCargo';
+import {
+  claveFichaEstudiante, rutaDeVueltaALaFicha, rutaEditarMatricula, rutaNuevaMatricula,
+} from '@/lib/administracion-escolar/matricula-pantalla';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
-
-/**
- * El modal de cobro arrastra diecisiete componentes de MUI entre él y su
- * selector de métodos de pago. Importado de forma normal, todo eso viajaba en
- * el paquete inicial de la ficha del estudiante, que se abre muchas veces al
- * día, para un diálogo que se abre pocas. Se carga cuando hace falta.
- */
-const PagoModal = dynamic(
-  () => import('@/components/cuentas-por-cobrar/PagoModal').then((m) => m.PagoModal),
-  { ssr: false },
-);
 
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
@@ -142,7 +125,9 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
    * instante mientras revalida por detrás.
    */
   const { data, error, isLoading, mutate } = useSWR<FichaResp>(
-    `/api/administracion-escolar/estudiantes/${id}/ficha`,
+    // La misma clave que marca como vieja el formulario de la matrícula al
+    // guardar: por eso sale de una función y no se escribe aquí a mano.
+    claveFichaEstudiante(id),
     fetcher,
     // Sin `keepPreviousData`: la clave lleva el id del alumno, y al saltar de un
     // alumno a otro enseñaría la ficha del anterior con el nombre equivocado.
@@ -170,31 +155,16 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   // Pestaña activa en la URL (?tab=…), para que recargar o volver desde una
   // factura caiga donde el usuario estaba.
   const [tab, setTab] = useTabUrl('tab', TABS, 'periodo');
-  const { setParams } = useUrlParams();
+  const { params: urlParams, setParams } = useUrlParams();
 
   /**
-   * El alta manda aquí con `?matricular=1` en cuanto crea al alumno.
+   * Inscribir y «Editar matrícula» son pantallas aparte, no diálogos de esta.
    *
-   * Crear la ficha no lo inscribe en nada: sin matrícula no tiene curso, ni
-   * código, ni plan de cobro. Antes eso se pedía en el propio alta, pero es
-   * decisión de matriculación —período, curso, tarifa— y ahí es donde se hace.
-   * Abrir el diálogo solo evita que el alumno se quede a medias por olvido.
-   *
-   * Solo la primera vez y solo si de verdad no tiene ninguna: recargar la
-   * pantalla de un alumno ya matriculado no debe reabrirlo.
+   * Se les dice a dónde volver: a esta ficha TAL COMO ESTÁ —su pestaña, su
+   * período—, no a su primera pestaña. Lo que traen de vuelta se ve solo: el
+   * formulario marca como vieja la clave de SWR de arriba al guardar.
    */
-  const [matricularPedido, setMatricularPedido] = useState(false);
-  const quiereMatricular = useSearchParams().get('matricular') === '1';
-  useEffect(() => {
-    if (!quiereMatricular || matricularPedido || isLoading) return;
-    setMatricularPedido(true);
-    if ((data?.matriculas.length ?? 0) === 0) setReinscribirAbierto(true);
-  }, [quiereMatricular, matricularPedido, isLoading, data]);
-
-  const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
-  const [matriculaEditar, setMatriculaEditar] = useState<Matricula | null>(null);
-  // Reinscripción: crea una matrícula nueva (período/curso) para el estudiante.
-  const [reinscribirAbierto, setReinscribirAbierto] = useState(false);
+  const volverAqui = rutaDeVueltaALaFicha(id, urlParams.toString());
 
   /**
    * Grupos del filtro de período (uno por matrícula, más los cargos huérfanos).
@@ -216,101 +186,6 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   // recargar devolvía siempre al primero. Por defecto: el primero de la lista.
   const [periodoKey, setPeriodoKey] = useTabUrl('periodo', clavesPeriodo, clavesPeriodo[0] ?? '');
 
-  // Modal de cobro in-place: reutiliza el PagoModal de Cuentas por Cobrar sin
-  // salir del perfil. El flujo de datos es el mismo (registra en la factura).
-  const [pagoCuenta, setPagoCuenta] = useState<Cuenta | null>(null);
-  const [cargandoPago, setCargandoPago] = useState(false);
-  const [aplicandoMoraFacturaId, setAplicandoMoraFacturaId] = useState<number | null>(null);
-  /**
-   * El cargo cuyo aviso se está por reenviar.
-   *
-   * Abre un diálogo en vez de mandar: esto le escribe a una familia real y el
-   * texto cambia según la mora del concepto. Quien pulsa tiene que leer antes
-   * lo que va a salir y a qué número.
-   */
-  const [reenviandoCargoId, setReenviandoCargoId] = useState<number | null>(null);
-  const [cargoAnular, setCargoAnular] = useState<Cargo | null>(null);
-  // La mora se confirma antes de crearla: el cron la aplica solo, y el usuario
-  // tiene que saberlo antes de adelantarse a mano.
-  const [moraFacturaId, setMoraFacturaId] = useState<number | null>(null);
-  const [facturaAnular, setFacturaAnular] = useState<Cargo | null>(null);
-  const [anulandoFactura, setAnulandoFactura] = useState(false);
-  const [anulando, setAnulando] = useState(false);
-
-  // Enviar la factura por correo desde la ficha. El destinatario se trae del
-  // comprador de la factura —que puede no ser el tutor, si se factura a la
-  // empresa del padre— y se deja editable: quien envía tiene que ver a dónde va.
-  /**
-   * La factura que se va a mandar por correo.
-   *
-   * Guarda el DOCUMENTO y no el cargo: el mismo diálogo sirve ahora para las
-   * facturas hechas en Facturación, que no cuelgan de ningún cargo y antes no
-   * se podían mandar desde aquí.
-   */
-  const [correoCargo, setCorreoCargo] = useState<{ ecfDocumentId: number; etiqueta: string } | null>(null);
-  const [correoEmail, setCorreoEmail] = useState('');
-  const [correoCargando, setCorreoCargando] = useState(false);
-  const [enviandoCorreo, setEnviandoCorreo] = useState(false);
-
-  const abrirCorreoFactura = useCallback(async (ecfDocumentId: number, etiqueta: string) => {
-    setCorreoCargo({ ecfDocumentId, etiqueta });
-    setCorreoEmail('');
-    setCorreoCargando(true);
-    try {
-      const res = await fetch(`/api/facturas/${ecfDocumentId}`);
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) setCorreoEmail(data.comprador?.email ?? '');
-    } finally {
-      setCorreoCargando(false);
-    }
-  }, []);
-
-  /** Desde un cargo: se manda su factura, con el concepto en el texto. */
-  const abrirCorreo = useCallback((cargo: Cargo) => {
-    if (!cargo.ecfDocumentId) return;
-    void abrirCorreoFactura(
-      cargo.ecfDocumentId,
-      `${cargo.facturaEncf || cargo.facturaCodigo || 'la factura'} de «${cargo.concepto ?? 'este cargo'}»`,
-    );
-  }, [abrirCorreoFactura]);
-
-  const enviarCorreo = useCallback(async () => {
-    if (!correoCargo || !correoEmail.trim()) return;
-    setEnviandoCorreo(true);
-    try {
-      const res = await fetch(`/api/facturas/${correoCargo.ecfDocumentId}/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: correoEmail.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'No se pudo enviar la factura');
-      toast.success('Factura enviada por correo');
-      setCorreoCargo(null);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo enviar la factura');
-    } finally {
-      setEnviandoCorreo(false);
-    }
-  }, [correoCargo, correoEmail]);
-
-  const abrirPago = useCallback(async (ecfDocumentId: number) => {
-    setCargandoPago(true);
-    try {
-      const res = await fetch(`/api/cuentas-por-cobrar/${ecfDocumentId}`);
-      const json = await res.json();
-      if (!res.ok || !json.cuenta) {
-        toast.error(json.error ?? 'No se pudo cargar la factura para cobrar');
-        return;
-      }
-      setPagoCuenta(json.cuenta);
-    } catch {
-      toast.error('No se pudo cargar la factura para cobrar');
-    } finally {
-      setCargandoPago(false);
-    }
-  }, []);
-
   // La ficha se edita en /escolar/estudiantes/[id]/editar — mismas tarjetas que
   // el alta. Aquí había un formulario en línea de cinco campos que dejaba fuera
   // los veintitrés de la ficha extendida.
@@ -319,6 +194,15 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   // pasa por aquí, y como es una sola clave de SWR no hay forma de que una
   // parte quede vieja y otra nueva.
   const cargar = useCallback(async () => { await mutate(); }, [mutate]);
+
+  // Lo que hace cada acción del menú ⋮ de un cargo —cobrar, mora, vincular,
+  // anular, correo, WhatsApp, ver la factura— y sus diálogos. Vivía aquí, suelto;
+  // ahora es el mismo código que usa la ficha de la familia. Es un hook: va por
+  // encima de los `return` de «cargando» y «no encontrado» de abajo.
+  const { acciones, dialogos } = useAccionesDeCargo({
+    clienteId: estudiante?.responsable?.clientId ?? null,
+    onCambio: cargar,
+  });
 
   // Responsable de pago: el contacto al que se le factura este alumno.
   const [responsableAbierto, setResponsableAbierto] = useState(false);
@@ -374,94 +258,6 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
     setResponsableModo('crear');
     setResponsableAbierto(true);
   }, []);
-
-  // La mora pertenece al motor de facturación: crea una ND tipo 33 sobre la
-  // factura del cargo. El perfil escolar nunca calcula ni persiste mora propia.
-  const aplicarMora = useCallback(async (ecfDocumentId: number) => {
-    setAplicandoMoraFacturaId(ecfDocumentId);
-    try {
-      const res = await fetch(`/api/facturas/${ecfDocumentId}/nota-debito-mora`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 409) {
-        toast.info(data.error ?? 'Ya existe un cargo por mora para esta factura');
-        return;
-      }
-      if (!res.ok) {
-        if (res.status === 422) {
-          toast.error(data.error ?? 'La factura no tiene saldo o el porcentaje de mora es cero');
-          return;
-        }
-        throw new Error(data.error ?? 'No se pudo generar el cargo por mora');
-      }
-      toast.success('Cargo por mora generado');
-      await cargar();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo generar el cargo por mora');
-    } finally {
-      setAplicandoMoraFacturaId(null);
-    }
-  }, [cargar]);
-
-  /**
-   * Anula la FACTURA del cargo, no el cargo.
-   *
-   * Son dos cosas distintas y por eso están separadas en el menú: anular el
-   * cargo dice "esta deuda no existía"; anular la factura dice "el documento
-   * estaba mal". Lo segundo toca el motor de facturación y solo puede hacerlo
-   * quien tenga `facturas:anular`, que el servidor vuelve a comprobar.
-   */
-  const anularFactura = useCallback(async () => {
-    if (!facturaAnular?.ecfDocumentId) return;
-    setAnulandoFactura(true);
-    try {
-      const res = await fetch(`/api/facturas/${facturaAnular.ecfDocumentId}/anular`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'No se pudo anular la factura');
-      toast.success('Factura anulada');
-      setFacturaAnular(null);
-      await cargar();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo anular la factura');
-    } finally {
-      setAnulandoFactura(false);
-    }
-  }, [cargar, facturaAnular]);
-
-  // Anula un cargo puesto por error (soft-delete en el backend). El backend
-  // bloquea (409) los cargos con factura vinculada: hay que desvincular primero.
-  // La confirmación vive en un modal propio (ConfirmarAnularDialog), no en el
-  // window.confirm nativo del navegador.
-  const confirmarAnular = useCallback(async () => {
-    if (!cargoAnular) return;
-    setAnulando(true);
-    try {
-      const res = await fetch(`/api/administracion-escolar/cargos/${cargoAnular.id}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'No se pudo anular el cargo');
-      toast.success('Cargo anulado');
-      setCargoAnular(null);
-      await cargar();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo anular el cargo');
-    } finally {
-      setAnulando(false);
-    }
-  }, [cargar, cargoAnular]);
-
-  /**
-   * Años en los que el alumno YA está matriculado: no se pueden volver a elegir
-   * ni al reinscribir ni al editar. Dos matrículas activas en el mismo período
-   * serían dos cuentas de cobro para un solo alumno.
-   *
-   * Memoizado porque el diálogo lo usa dentro de un efecto: una lista nueva en
-   * cada render le reiniciaría el formulario mientras se escribe. Y va AQUÍ,
-   * por encima de los returns de abajo, porque es un hook — colgado detrás de
-   * un `if` cambia el orden de los hooks entre renders.
-   */
-  const periodosOcupados = useMemo(
-    () => matriculas.filter((m) => m.estado === 'activa').map((m) => m.periodoId),
-    [matriculas],
-  );
 
   if (loading) {
     return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>;
@@ -634,8 +430,10 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
             : <span className="text-sm text-gray-400">Sin períodos matriculados</span>}
           {matriculas.length === 0 ? (
             puedeGestionar && (
-              <Button size="sm" variant="outline" onClick={() => setReinscribirAbierto(true)}>
-                <Plus className="h-4 w-4 mr-1.5" />Inscribir
+              <Button asChild size="sm" variant="outline">
+                <Link href={rutaNuevaMatricula({ estudianteId: estudiante.id, volver: volverAqui })}>
+                  <Plus className="h-4 w-4 mr-1.5" />Inscribir
+                </Link>
               </Button>
             )
           ) : (
@@ -680,8 +478,8 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
           <TabsContent value="periodo" className="pt-4 space-y-5">
             {grupoActivo ? (
               <PeriodoDetalle
-                onReenviarAviso={setReenviandoCargoId}
-                reenviandoCargoId={reenviandoCargoId}
+                onReenviarAviso={acciones.onReenviarAviso}
+                reenviandoCargoId={acciones.reenviandoCargoId}
                 grupo={grupoActivo}
                 planes={planes}
                 cobro={cobro}
@@ -700,19 +498,17 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                   telefono: responsable.telefono ?? responsable.celular,
                 } : null}
                 perfilEmpresa={perfilEmpresa}
-                onRegistrarPago={abrirPago}
-                onAplicarMora={(ecfId) => setMoraFacturaId(ecfId)}
-                onAnularFactura={setFacturaAnular}
-                onEnviarCorreo={abrirCorreo}
-                onEnviarFactura={(id, etiqueta) => void abrirCorreoFactura(id, etiqueta)}
-                aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+                onRegistrarPago={acciones.onRegistrarPago}
+                onAplicarMora={acciones.onAplicarMora}
+                onAnularFactura={acciones.onAnularFactura}
+                onEnviarCorreo={acciones.onEnviarCorreo}
+                onEnviarFactura={acciones.onEnviarFactura}
+                aplicandoMoraFacturaId={acciones.aplicandoMoraFacturaId}
                 onCargoCreado={cargar}
-                onEditarMatricula={(mid) => {
-                  const m = matriculas.find((x) => x.id === mid);
-                  if (m) setMatriculaEditar(m);
-                }}
-                onVincular={setCargoVincularFactura}
-                onAnular={setCargoAnular}
+                onEditarMatricula={(mid) => router.push(rutaEditarMatricula(mid, volverAqui))}
+                onVerFactura={acciones.onVerFactura}
+                onVincular={acciones.onVincular}
+                onAnular={acciones.onAnular}
               />
             ) : facturasSueltas.length > 0 ? (
               /* Sin matrícula pero CON facturas a su nombre. Es el caso del
@@ -811,150 +607,10 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
         </Tabs>
       </div>
 
-      {/* Enseña el aviso ANTES de mandarlo: esto le escribe a una familia
-          real y el texto cambia según la mora del concepto. */}
-      <ReenviarAvisoDialog
-        cargoId={reenviandoCargoId}
-        abierto={reenviandoCargoId != null}
-        onCerrar={() => setReenviandoCargoId(null)}
-        onEnviado={() => mutate()}
-      />
+      {/* Los diálogos de las acciones de un cargo. Una sola vez, y aquí: fuera
+          de las pestañas, para que cambiar de pestaña no los cierre. */}
+      {dialogos}
 
-      {/* El MISMO diálogo que la pantalla de Matriculación. Eran dos, y el de
-          aquí mandaba los conceptos con otro nombre del que lee la API: la
-          matrícula se creaba sin un solo cargo. */}
-      <MatriculaDialog
-        matricula={matriculaEditar}
-        estudianteFijoId={estudiante.id}
-        estudianteFijoNombre={`${estudiante.nombres} ${estudiante.apellidos}`}
-        periodosOcupados={periodosOcupados}
-        open={!!matriculaEditar}
-        onClose={() => setMatriculaEditar(null)}
-        onSaved={cargar}
-      />
-
-      {/* Inscripción / reinscripción: matrícula nueva para este estudiante. */}
-      <MatriculaDialog
-        matricula={null}
-        estudianteFijoId={estudiante.id}
-        estudianteFijoNombre={`${estudiante.nombres} ${estudiante.apellidos}`}
-        periodosOcupados={periodosOcupados}
-        esPrimera={matriculas.length === 0}
-        codigoSugerido={estudiante.codigoRne || estudiante.codigo || ''}
-        open={reinscribirAbierto}
-        onClose={() => setReinscribirAbierto(false)}
-        onSaved={() => { setReinscribirAbierto(false); cargar(); }}
-      />
-
-      {cargoVincularFactura && (
-        <VincularFacturaDialog
-          cargoId={cargoVincularFactura.id}
-          cargoLabel={`${cargoVincularFactura.concepto ?? 'Cargo'}${cargoVincularFactura.mes ? ` ${MESES[cargoVincularFactura.mes]}` : ''}`}
-          cargoSaldoCentavos={cargoVincularFactura.saldoCentavos}
-          clienteId={responsable?.clientId ?? null}
-          open={!!cargoVincularFactura}
-          onClose={() => setCargoVincularFactura(null)}
-          onSaved={cargar}
-        />
-      )}
-
-      {/* Cobro in-place: mismo modal de Cuentas por Cobrar, sin salir del perfil. */}
-      {cargandoPago && !pagoCuenta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-          <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
-        </div>
-      )}
-      {pagoCuenta && (
-        <PagoModal
-          cuenta={pagoCuenta}
-          onClose={() => setPagoCuenta(null)}
-          onSuccess={() => { setPagoCuenta(null); cargar(); }}
-        />
-      )}
-
-      <ConfirmarAnularDialog
-        cargo={cargoAnular}
-        anulando={anulando}
-        onCancel={() => { if (!anulando) setCargoAnular(null); }}
-        onConfirm={confirmarAnular}
-      />
-
-      {/* La mora la aplica un cron cada mañana sobre lo vencido. Hacerlo a mano
-          es adelantarse, no algo distinto, y quien pulsa tiene que saberlo:
-          si no, acaba pensando que sin este botón nadie cobra el recargo. */}
-      <Dialog open={moraFacturaId !== null} onOpenChange={(o) => { if (!o) setMoraFacturaId(null); }}>
-        <DialogContent className="max-w-sm">
-          <ModalHeader
-            title="Generar el cargo por mora ahora"
-            subtitle={
-              'El sistema aplica la mora solo, cada día, a lo que esté vencido y según el porcentaje '
-              + 'configurado. Esto lo adelanta para esta factura: se crea una nota de débito por el recargo. '
-              + 'Si ya existe una, no se duplica.'
-            }
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMoraFacturaId(null)}>Cancelar</Button>
-            <Button onClick={() => { const f = moraFacturaId; setMoraFacturaId(null); if (f) void aplicarMora(f); }}>
-              Generar mora
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!facturaAnular} onOpenChange={(o) => { if (!o && !anulandoFactura) setFacturaAnular(null); }}>
-        <DialogContent className="max-w-sm">
-          <ModalHeader
-            title="Anular la factura"
-            subtitle={facturaAnular
-              ? `Se anula ${facturaAnular.facturaEncf || facturaAnular.facturaCodigo || 'la factura'} `
-                + `de «${facturaAnular.concepto ?? 'este cargo'}». El cargo se queda, y vuelve a estar `
-                + 'pendiente de facturar. Esto no se deshace.'
-              : undefined}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFacturaAnular(null)} disabled={anulandoFactura}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={anularFactura} disabled={anulandoFactura}>
-              {anulandoFactura && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Anular factura
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Enviar la factura por correo. El destinatario llega del comprador de la
-          factura, pero se puede cambiar antes de mandar: el envío sale a nombre
-          del colegio y no debe salir a ciegas. */}
-      <Dialog open={!!correoCargo} onOpenChange={(o) => { if (!o && !enviandoCorreo) setCorreoCargo(null); }}>
-        <DialogContent className="max-w-sm">
-          <ModalHeader
-            title="Enviar factura por correo"
-            subtitle={correoCargo
-              ? `Se envía ${correoCargo.etiqueta} en PDF adjunto.`
-              : undefined}
-          />
-          <div className="space-y-1.5 px-6 py-2">
-            <Label htmlFor="correo-factura">Correo del destinatario</Label>
-            <Input
-              id="correo-factura"
-              type="email"
-              value={correoEmail}
-              placeholder={correoCargando ? 'Buscando el correo…' : 'nombre@correo.com'}
-              onChange={(e) => setCorreoEmail(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCorreoCargo(null)} disabled={enviandoCorreo}>
-              Cancelar
-            </Button>
-            <Button onClick={enviarCorreo} disabled={enviandoCorreo || correoCargando || !correoEmail.trim()}>
-              {enviandoCorreo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Mail className="mr-1.5 h-4 w-4" />Enviar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <ResponsablePagoDialog
         open={responsableAbierto}
         onOpenChange={setResponsableAbierto}
@@ -967,43 +623,6 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
         onActualizado={() => { toast.success('Responsable actualizado'); void cargar(); }}
       />
     </section>
-  );
-}
-
-// Confirmación de anular un cargo, con la estética de la app (Dialog + Button)
-// en vez del window.confirm nativo del navegador.
-function ConfirmarAnularDialog({ cargo, anulando, onCancel, onConfirm }: {
-  cargo: Cargo | null;
-  anulando: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const label = cargo
-    ? `${cargo.concepto ?? 'Cargo'}${cargo.mes ? ` · ${MESES[cargo.mes]} ${cargo.anio}` : ''}`
-    : '';
-  return (
-    <Dialog open={!!cargo} onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
-              <Ban className="h-5 w-5" />
-            </span>
-            <DialogTitle>Anular cargo</DialogTitle>
-          </div>
-        </DialogHeader>
-        <div className="space-y-2 text-sm text-gray-600">
-          <p>Vas a anular <span className="font-medium text-gray-900">{label}</span>{cargo ? <> por <span className="font-medium text-gray-900">{fmtDOP(cargo.montoCentavos)}</span></> : null}.</p>
-          <p>Dejará de contar en la deuda del estudiante. Esta acción no se puede deshacer.</p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={anulando}>Cancelar</Button>
-          <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={onConfirm} disabled={anulando}>
-            {anulando ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Anulando…</> : 'Anular cargo'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -1193,18 +812,20 @@ function ContactoResponsable({ responsable, onArreglar }: {
   responsable: NonNullable<Estudiante['responsable']>;
   onArreglar?: () => void;
 }) {
-  // El mismo orden de preferencia que usa el motor de avisos: el WhatsApp cae
-  // al celular, y el SMS al celular antes que al fijo, que no recibe nada.
+  // La misma regla que usa el motor de avisos (destino-canal.ts): el WhatsApp
+  // sale solo al campo «WhatsApp», y el SMS al celular antes que al fijo, que
+  // no recibe nada.
   const canales = [
-    { key: 'correo', icon: Mail, label: 'Correo', valor: responsable.email?.trim() || null,
+    { key: 'correo', icon: Mail, label: 'Correo', valor: destinoDeContacto(responsable, 'correo'),
       falta: 'Sin correo — pulsa para agregarlo' },
     { key: 'whatsapp', icon: MessageCircle, label: 'WhatsApp',
-      valor: responsable.whatsapp?.trim() || responsable.celular?.trim() || null,
+      valor: destinoDeContacto(responsable, 'whatsapp'),
       // Se nombra el campo que hay que llenar: quien escribía el número en
-      // «Teléfono» veía el icono seguir gris y creía que no se había guardado.
-      falta: 'Sin WhatsApp ni celular — el teléfono fijo no recibe WhatsApp' },
+      // «Teléfono» o en «Celular» veía el icono seguir gris y creía que no se
+      // había guardado.
+      falta: 'Sin WhatsApp — pon el número en el campo «WhatsApp»; el celular y el fijo no se usan para WhatsApp' },
     { key: 'sms', icon: Smartphone, label: 'SMS',
-      valor: responsable.celular?.trim() || responsable.whatsapp?.trim() || null,
+      valor: destinoDeContacto(responsable, 'sms'),
       falta: 'Sin celular — el teléfono fijo no recibe SMS' },
   ] as const;
   const faltan = canales.filter((c) => !c.valor);

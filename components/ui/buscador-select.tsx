@@ -55,7 +55,7 @@ const filtrar = createFilterOptions<OpcionBuscador>({
  * y en lectores de pantalla.
  *
  * La API no cambió: sigue recibiendo y devolviendo el `valor` en texto plano,
- * no el objeto. Es lo que espera el único sitio que lo usa (`MatriculaDialog`)
+ * no el objeto. Es lo que espera el único sitio que lo usa (`MatriculaFormulario`)
  * y lo que hace que encaje con el resto de campos del formulario.
  */
 export function BuscadorSelect({

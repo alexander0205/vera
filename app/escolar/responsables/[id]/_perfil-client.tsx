@@ -1,9 +1,7 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import { useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { toast } from 'sonner';
 import useSWR, { mutate as revalidar } from 'swr';
 import {
   AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, Download,
@@ -21,19 +19,11 @@ import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { EnlacePagoFamilia } from '@/components/administracion-escolar/EnlacePagoFamilia';
 import { PeriodosDeLaFamilia } from '@/components/administracion-escolar/PeriodosDeLaFamilia';
 import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
+import { useAccionesDeCargo } from '@/components/administracion-escolar/useAccionesDeCargo';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { DetalleResponsable } from '@/lib/administracion-escolar/responsables';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
-import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
-
-/**
- * Fuera del paquete inicial: esta ficha se abre muchas veces al día y el
- * diálogo de cobro, pocas. Mismo criterio que en la ficha del alumno.
- */
-const PagoModal = dynamic(
-  () => import('@/components/cuentas-por-cobrar/PagoModal').then((m) => m.PagoModal),
-  { ssr: false },
-);
+import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 
 /**
  * La ficha completa de una familia.
@@ -94,36 +84,8 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
     && permissions.includes('facturas:crear');
   /** Cobrar NO es facturar: anotar un pago no necesita poder emitir documentos. */
   const puedePagos = permissions.includes('administracion-escolar:pagos');
-
-  /**
-   * Cobro sin salir de la familia.
-   *
-   * Un mes vencido ya tiene factura, así que nunca le sale la casilla de
-   * facturar y desde aquí no había forma de anotar el pago: había que irse a
-   * la ficha del hijo o a Cuentas por cobrar. Pero el padre llama una vez y
-   * pregunta por los dos hijos, y esta es la pantalla que se tiene delante.
-   *
-   * Es el mismo PagoModal de Cuentas por cobrar, con los mismos datos: el
-   * cobro sigue viviendo en la factura, aquí solo se abre la puerta.
-   */
-  const [pagoCuenta, setPagoCuenta] = useState<Cuenta | null>(null);
-  const [cargandoPago, setCargandoPago] = useState(false);
-  const abrirPago = useCallback(async (ecfDocumentId: number) => {
-    setCargandoPago(true);
-    try {
-      const res = await fetch(`/api/cuentas-por-cobrar/${ecfDocumentId}`);
-      const json = await res.json();
-      if (!res.ok || !json.cuenta) {
-        toast.error(json.error ?? 'No se pudo cargar la factura para cobrar');
-        return;
-      }
-      setPagoCuenta(json.cuenta);
-    } catch {
-      toast.error('No se pudo cargar la factura para cobrar');
-    } finally {
-      setCargandoPago(false);
-    }
-  }, []);
+  /** Reenviar el aviso de un cargo y anularlo piden gestionar el módulo, como en la ficha del alumno. */
+  const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
 
   /**
    * El cajón de facturar vive en la URL, no en un `useState`.
@@ -160,6 +122,29 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   }, [enCurso]);
 
   const abrirCajon = (valor: string) => setParams({ factura: valor });
+
+  /**
+   * Refresca la ficha después de algo que tocó datos: las DOS consultas, y en
+   * este orden.
+   *
+   * La cabecera saca la deuda de una y los meses de otra; refrescar solo una
+   * deja las cifras de arriba diciendo una cosa y la fila del mes otra.
+   *
+   * Primero `/periodos` y, cuando termina, la cabecera: de las dos, solo
+   * `/periodos` sincroniza los saldos de los cargos con sus facturas. Lanzadas
+   * a la vez, la cabecera puede leer el cargo antes de que el cobro o la
+   * anulación le hayan llegado, y se queda con la deuda de antes.
+   */
+  const refrescar = useCallback(async () => {
+    await revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
+    await revalidar(`/api/administracion-escolar/responsables/${clientId}`);
+  }, [clientId]);
+
+  // Lo que hace cada acción del menú ⋮ de un cargo —cobrar, mora, vincular,
+  // anular, correo, WhatsApp, ver la factura— y sus diálogos: el mismo código
+  // que usa la ficha del alumno. Aquí había una copia solo del cobro. Es un
+  // hook: va por encima de los `return` de «cargando» y «no existe» de abajo.
+  const { acciones, dialogos } = useAccionesDeCargo({ clienteId: clientId, onCambio: refrescar });
 
   const { data, error, isLoading } = useSWR<DetalleResponsable>(
     `/api/administracion-escolar/responsables/${clientId}`, traer,
@@ -294,8 +279,8 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
 
   const canales = [
     { icon: Mail, label: 'Correo', valor: c.email?.trim() || null },
-    { icon: MessageCircle, label: 'WhatsApp', valor: c.whatsapp?.trim() || c.celular?.trim() || null },
-    { icon: Smartphone, label: 'SMS', valor: c.celular?.trim() || c.whatsapp?.trim() || null },
+    { icon: MessageCircle, label: 'WhatsApp', valor: destinoDeContacto(c, 'whatsapp') },
+    { icon: Smartphone, label: 'SMS', valor: destinoDeContacto(c, 'sms') },
   ];
   const sinCanal = canales.every((x) => !x.valor);
 
@@ -436,31 +421,10 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         </Box>
       </Paper>
 
-      {/* Cobro in-place: mismo modal de Cuentas por cobrar, sin salir de la
-          familia. Al guardar se refrescan las DOS consultas, por lo mismo que
-          el cajón de factura: la cabecera saca la deuda de una y los meses de
-          otra, y refrescar solo una deja las cifras de arriba diciendo una
-          cosa y la fila del mes otra. */}
-      {cargandoPago && !pagoCuenta && (
-        <Box sx={{
-          position: 'fixed', inset: 0, zIndex: 1400,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          bgcolor: 'rgba(0,0,0,0.2)',
-        }}>
-          <CircularProgress size={32} />
-        </Box>
-      )}
-      {pagoCuenta && (
-        <PagoModal
-          cuenta={pagoCuenta}
-          onClose={() => setPagoCuenta(null)}
-          onSuccess={() => {
-            setPagoCuenta(null);
-            void revalidar(`/api/administracion-escolar/responsables/${clientId}`);
-            void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
-          }}
-        />
-      )}
+      {/* Los diálogos de las acciones de un cargo —el cobro entre ellos—. Una
+          sola vez, y aquí: los abre el menú de cualquier fila de cualquier
+          hijo, no una tarjeta en concreto. */}
+      {dialogos}
 
       <FacturaDrawer
         abierto={cajon != null}
@@ -470,8 +434,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           // de otra: refrescando solo la primera, las cifras de arriba
           // cambiaban y los cargos de abajo seguían diciendo «Sin facturar»
           // encima de una factura que acababa de salir.
-          void revalidar(`/api/administracion-escolar/responsables/${clientId}`);
-          void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
+          void refrescar();
         }}
         perfilEmpresa={perfilEmpresa}
         cargosIniciales={cajon?.cargos ?? []}
@@ -598,7 +561,9 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         clientId={clientId}
         puedeFacturar={puedeFacturar}
         puedePagos={puedePagos}
-        onCobrar={abrirPago}
+        puedeGestionar={puedeGestionar}
+        acciones={acciones}
+        onCambio={() => { void refrescar(); }}
         // «Facturar juntos» va al mismo sitio que «Adelantar»: el formulario
         // completo por la derecha, con esos cargos ya cargados. Antes abría el
         // diálogo rápido, que es otra pantalla con otras reglas — y sobre todo
