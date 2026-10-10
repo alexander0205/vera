@@ -20,6 +20,10 @@
     "  · titulo  — qué gana el cliente, en sus palabras. No el nombre técnico.",
     "  · detalle — 1-2 frases. Qué pasaba antes y qué pasa ahora.",
     "  · tipo    — nuevo | mejora | arreglo",
+    "  · desde   — el día en que lo escribes, AAAA-MM-DD. Es lo que hace que salga en la",
+    "              ventana que se abre al entrar al sistema: sin fecha solo aparece en",
+    "              esta pantalla. La ventana enseña cada entrada una vez por persona,",
+    "              durante 45 días. Ponla SIEMPRE en lo nuevo, y ponlo ARRIBA de la lista.",
     "",
     "Prohibido: nombres de colegios, personas, correos, RNC. Nombres de archivos,",
     "endpoints o tablas. La prueba: léelo en voz alta a alguien que no es de",
@@ -28,6 +32,72 @@
   "pendiente": {
     "titulo": "Tu colegio, cobrado solo",
     "cambios": [
+      {
+        "tipo": "nuevo",
+        "titulo": "Las novedades te salen al entrar",
+        "detalle": "Cada vez que mejoremos algo, al entrar verás una ventana con lo que cambió. La cierras y no vuelve a salir hasta la siguiente mejora. El historial completo sigue en Novedades.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Cóbrale lo mismo a varios alumnos, en tres pasos",
+        "detalle": "Para el día de cine, la excursión o la foto del curso: eliges qué se cobra, a quién, revisas la lista y confirmas. Antes de crear nada te dice el total, y a quien ya lo tiene no se le cobra dos veces.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Matricular y editar una matrícula, a pantalla completa",
+        "detalle": "Antes era una ventana pequeña encima de otra pantalla. Ahora tiene su propia pantalla, con más espacio y con los botones de guardar siempre a la vista.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "La matrícula te dice qué se le cobra, concepto por concepto",
+        "detalle": "En vez de la lista de cargos mes por mes, ves un renglón por concepto. Desde ahí cambias el monto, dejas de cobrárselo o le agregas otro, y antes de confirmar te dice cuánto dinero toca.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Corrige un monto sin salir de la cuenta del alumno",
+        "detalle": "Cada cargo que todavía no tiene factura lleva un lápiz junto a la cifra, en la ficha del alumno y en la de la familia. Y el botón para agregar un cargo está siempre a la vista.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "La pestaña de mensualidades se llama por su nombre",
+        "detalle": "En la ficha del alumno, la pestaña que decía «Cuentas por cobrar» ahora se llama «Mensualidades», que es lo que muestra. Los demás cargos siguen en «Otros cargos».",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Busca al estudiante en SIGERD desde su ficha",
+        "detalle": "Al editar un estudiante hay un botón que lo busca en SIGERD con los datos que ya tiene, sin volver a escribir su nombre.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "El aviso por WhatsApp respeta el número que pusiste",
+        "detalle": "Si a un responsable le quitas el WhatsApp, deja de recibir avisos por ahí. Antes el sistema usaba su celular aunque hubieras borrado el WhatsApp.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Un gasto ya no habla de «cobrar»",
+        "detalle": "Al registrar un gasto, los botones y los avisos decían «cobrar» cuando lo que haces es pagar. Ya dicen lo correcto.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Registra un gasto aunque no tenga comprobante fiscal",
+        "detalle": "El número de comprobante y el RNC del proveedor dejaron de ser obligatorios para guardar un gasto. Si faltan, el sistema te avisa de lo que implica: ese gasto no sale en el reporte de compras a la DGII y su ITBIS va al costo.",
+        "desde": "2026-10-10"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Sube el comprobante de un gasto en PDF",
+        "detalle": "Al registrar un gasto puedes subir el comprobante en PDF, además de la foto. Si trae código QR, el sistema lee sus datos por ti; revísalos antes de guardar.",
+        "desde": "2026-10-10"
+      },
       {
         "tipo": "nuevo",
         "titulo": "El colegio ya lleva su propio cobro",

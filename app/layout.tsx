@@ -12,6 +12,13 @@ import { RastreadorDeNavegacion } from '@/lib/hooks/useVolver';
 import { TicketWidgetGate } from '@/components/support/ticket-widget-gate';
 import { SoporteProvider } from '@/components/support/soporte-context';
 import { LlamadaGlobalProvider } from '@/lib/webrtc/LlamadaGlobalProvider';
+import { NovedadesAlEntrar } from '@/components/novedades-al-entrar';
+import { novedadesFechadas, type DocNovedades } from '@/lib/novedades';
+import docNovedades from '@/content/novedades.json';
+
+// Lo fechado de `content/novedades.json`, calculado una vez al compilar. Al
+// navegador solo viajan estas entradas, no el historial entero.
+const NOVEDADES = novedadesFechadas(docNovedades as unknown as DocNovedades);
 
 export const metadata: Metadata = {
   title: 'Zero — Facturación Electrónica República Dominicana',
@@ -93,6 +100,10 @@ export default function RootLayout({
               <LlamadaGlobalProvider>
                 <SoporteProvider>
                   {children}
+                  {/* La ventana de «qué cambió», una vez por persona y por
+                      tanda de cambios. Solo se abre dentro de un módulo y con
+                      sesión; fuera de eso no pinta ni pide nada. */}
+                  <NovedadesAlEntrar novedades={NOVEDADES} />
                   <TicketWidgetGate />
                 </SoporteProvider>
               </LlamadaGlobalProvider>
