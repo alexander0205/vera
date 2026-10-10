@@ -3,16 +3,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Search, Users, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Search, Users, Wallet } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useVolver } from '@/lib/hooks/useVolver';
 import {
   Categoria, DatosEstudiante, CamposSigerd, camposExtraVacios, camposExtraDe,
 } from '@/components/administracion-escolar/FormularioEstudiante';
-import { BuscarSigerdDialog } from '@/components/administracion-escolar/BuscarSigerdDialog';
+import { BuscarSigerdDialog, type EstudianteDeSigerd } from '@/components/administracion-escolar/BuscarSigerdDialog';
 import { TutoresPanel, type TutorVinculo } from '@/components/administracion-escolar/TutoresPanel';
 import { ResponsablePagoDialog, type Contacto } from '@/components/administracion-escolar/ResponsablePagoDialog';
 import { CLAVES_SIGERD_ESTUDIANTE } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
+import { busquedaDesdeFicha, type BusquedaDeFicha } from '@/lib/administracion-escolar/estudiante-sigerd-busqueda';
 
 /**
  * Editar la ficha del estudiante: LAS MISMAS secciones que el alta.
@@ -65,6 +66,17 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
   const [extra, setExtra] = useState<Record<string, string>>(camposExtraVacios);
   const [sigerdId, setSigerdId] = useState<number | null>(null);
   const [buscarSigerd, setBuscarSigerd] = useState(false);
+  /** Con qué abre buscando el diálogo de SIGERD: la ficha tal como estaba al pulsar el botón. */
+  const [busquedaSigerd, setBusquedaSigerd] = useState<BusquedaDeFicha | null>(null);
+  /**
+   * Lo último que se trajo de SIGERD, para decirlo en pantalla.
+   *
+   * El diálogo puede elegir solo y cerrarse, y aquí solo se rellena lo vacío:
+   * sin este aviso no quedaba rastro de que se hubiera cargado algo, ni de
+   * QUIÉN —lo único que delata una ficha enlazada al alumno equivocado—, ni de
+   * que falta pulsar «Guardar cambios».
+   */
+  const [traidoSigerd, setTraidoSigerd] = useState<EstudianteDeSigerd | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Qué falta, para poder pintarlo en rojo donde está (igual que el alta). */
@@ -108,6 +120,9 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
       setEstado(est.estado);
       setSigerdId(est.sigerdId ?? null);
       setExtra(camposExtraDe(data.estudiante));
+      // La pantalla vuelve a lo guardado: lo traído de SIGERD sin guardar ya
+      // no está, y el aviso que lo anunciaba tampoco puede quedarse.
+      setTraidoSigerd(null);
       setResponsable(est.responsable
         ? { id: est.responsable.clientId, nombre: est.responsable.razonSocial, rnc: est.responsable.rnc }
         : null);
@@ -182,6 +197,31 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
     setResponsableModo('crear');
     setResponsableAbierto(true);
   }, []);
+
+  /**
+   * «Buscar este estudiante en SIGERD»: el buscador abre ya buscando a ESTE
+   * alumno, sin teclear su nombre otra vez.
+   *
+   * Los criterios se toman al pulsar, de lo que hay en pantalla —también lo
+   * corregido sin guardar: quien acaba de arreglar el RNE quiere buscar con el
+   * arreglado—. Se guardan aparte para que sean los de ese momento: el diálogo
+   * busca una vez al abrir, no cada vez que esta pantalla se repinta.
+   *
+   * `soloPorNombre` es el «Buscar otro» del aviso: una ficha que ya tiene id
+   * de SIGERD se busca por él, vuelve ella sola, se elige y el diálogo se
+   * cierra, así que nunca se llegaba a la lista para elegir a otro. Por nombre
+   * no se elige nada solo: sale la lista y decide una persona.
+   */
+  function buscarEsteEnSigerd(soloPorNombre = false) {
+    setBusquedaSigerd(busquedaDesdeFicha({
+      sigerdId,
+      codigoRne: extra.codigoRne,
+      nombres: form.nombres,
+      apellidos: form.apellidos,
+      fechaNacimiento: form.fechaNacimiento,
+    }, { soloPorNombre }));
+    setBuscarSigerd(true);
+  }
 
   async function guardar() {
     if (!form.nombres.trim()) { fallar('Escribe los nombres del estudiante', 'nombres'); return; }
@@ -265,16 +305,20 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
         </div>
         {/* También aquí, y no solo en el alta: los alumnos importados llegan sin
             dirección, sin acta y sin teléfonos, y sin este botón la única forma
-            de completarlos era teclearlos uno a uno. */}
-        <Button variant="outline" className="shrink-0" onClick={() => setBuscarSigerd(true)}>
-          <Search className="mr-1.5 h-4 w-4" />Buscar en SIGERD
+            de completarlos era teclearlos uno a uno. Aquí el alumno ya se sabe
+            quién es, así que el botón lo busca a él directamente. */}
+        <Button variant="outline" className="shrink-0" onClick={() => buscarEsteEnSigerd()}>
+          <Search className="mr-1.5 h-4 w-4" />Buscar este estudiante en SIGERD
         </Button>
       </header>
 
       <BuscarSigerdDialog
         open={buscarSigerd}
         onClose={() => setBuscarSigerd(false)}
+        buscarAlAbrir={busquedaSigerd}
+        estudianteId={id}
         onElegir={(e) => {
+          setTraidoSigerd(e);
           // Solo se pisa lo que esté vacío: quien ya escribió algo a mano lo
           // hizo por algo, y el portal no siempre está al día.
           setForm((f) => ({
@@ -311,6 +355,40 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
       />
 
       <div className="space-y-5">
+        {/* Arriba, junto al botón que lo provoca: lo que se trae cae en tarjetas
+            del fondo de la pantalla y desde aquí no se ve que haya cambiado nada.
+            Dice de QUIÉN son los datos porque es lo que permite darse cuenta de
+            que se cargó a otro niño, y deja buscar a otro sin salir. */}
+        {traidoSigerd && (
+          <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${
+            traidoSigerd.fichaTraida
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+            {traidoSigerd.fichaTraida
+              ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+              : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />}
+            <div className="min-w-0">
+              <p className="font-medium">
+                {traidoSigerd.fichaTraida ? 'Datos traídos de SIGERD: ' : 'No se pudo traer de SIGERD la ficha de '}
+                {traidoSigerd.apellidos}, {traidoSigerd.nombres}
+                {traidoSigerd.sigerdId != null ? ` · SIGERD ${traidoSigerd.sigerdId}` : ''}
+              </p>
+              <p className="mt-0.5">
+                {traidoSigerd.fichaTraida
+                  ? 'Solo se rellenó lo que estaba vacío; lo que ya tenías escrito no se tocó. Revísalo y pulsa «Guardar cambios» para que no se pierda.'
+                  : 'Solo llegaron su nombre, su fecha de nacimiento y su RNE. Vuelve a intentarlo en un momento.'}
+                {traidoSigerd.tutores.length > 0
+                  ? ' Sus tutores del portal se agregan abajo, en «Tutores», y esos se guardan solos.'
+                  : !traidoSigerd.tutoresTraidos ? ' Sus tutores no se pudieron traer.' : ''}
+              </p>
+              <button type="button" onClick={() => buscarEsteEnSigerd(true)}
+                className="mt-1 font-medium underline">
+                ¿No es este alumno? Buscar otro
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div ref={avisoRef}
             className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>

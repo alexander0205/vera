@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { partirNombre } from '@/lib/sigerd/nombres';
+import { partirApellidos, partirNombre } from '@/lib/sigerd/nombres';
 
 /**
  * Los casos salen de nombres reales del listado de Andrés Bello. No se prueba
@@ -49,5 +49,58 @@ describe('partirNombre', () => {
 
   it('vacío no revienta', () => {
     expect(partirNombre('   ').dudoso).toBe(true);
+  });
+});
+
+/**
+ * El camino de vuelta: de nuestro campo «apellidos» a los dos que pide el
+ * buscador del portal. Aquí los apellidos son inventados; lo que se prueba es
+ * la forma, sobre todo que la partícula se quede con SU apellido.
+ */
+describe('partirApellidos', () => {
+  it('dos apellidos: uno y uno', () => {
+    expect(partirApellidos('INVENTADO FICTICIO'))
+      .toEqual({ primero: 'INVENTADO', segundo: 'FICTICIO', dudoso: false });
+  });
+
+  it('uno solo deja el segundo vacío', () => {
+    expect(partirApellidos('INVENTADO'))
+      .toEqual({ primero: 'INVENTADO', segundo: '', dudoso: false });
+  });
+
+  it('la partícula va con el apellido que introduce', () => {
+    // Cortando por el primer espacio, el primero sería "DE".
+    expect(partirApellidos('DE LA NADA INVENTADO'))
+      .toEqual({ primero: 'DE LA NADA', segundo: 'INVENTADO', dudoso: false });
+    expect(partirApellidos('INVENTADO DEL EJEMPLO'))
+      .toEqual({ primero: 'INVENTADO', segundo: 'DEL EJEMPLO', dudoso: false });
+    expect(partirApellidos('DEL EJEMPLO DE LOS INVENTOS'))
+      .toEqual({ primero: 'DEL EJEMPLO', segundo: 'DE LOS INVENTOS', dudoso: false });
+  });
+
+  it('un compuesto solo es UN apellido, no dos', () => {
+    expect(partirApellidos('DE LA NADA'))
+      .toEqual({ primero: 'DE LA NADA', segundo: '', dudoso: false });
+  });
+
+  it('las partículas se reconocen también en minúsculas', () => {
+    expect(partirApellidos('de la Nada Inventado'))
+      .toEqual({ primero: 'de la Nada', segundo: 'Inventado', dudoso: false });
+  });
+
+  it('con tres o más avisa: no se sabe dónde acaba el primero', () => {
+    expect(partirApellidos('INVENTADO FICTICIO IMAGINARIO'))
+      .toEqual({ primero: 'INVENTADO', segundo: 'FICTICIO IMAGINARIO', dudoso: true });
+  });
+
+  it('una partícula colgando al final no cuenta como otro apellido', () => {
+    expect(partirApellidos('INVENTADO DE'))
+      .toEqual({ primero: 'INVENTADO DE', segundo: '', dudoso: false });
+  });
+
+  it('los espacios de más no cuentan, y vacío no revienta', () => {
+    expect(partirApellidos('  INVENTADO    FICTICIO '))
+      .toEqual({ primero: 'INVENTADO', segundo: 'FICTICIO', dudoso: false });
+    expect(partirApellidos('   ')).toEqual({ primero: '', segundo: '', dudoso: false });
   });
 });
