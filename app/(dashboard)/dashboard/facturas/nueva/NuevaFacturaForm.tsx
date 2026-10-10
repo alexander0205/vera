@@ -254,6 +254,14 @@ export default function NuevaFacturaForm({
   // primaria guarda como interno en vez de forzar la emisión fiscal.
   const esGasto = tipoEcf === '43' || tipoEcf === '47';
 
+  // El dinero SALE de la caja: los gastos y también la compra a un proveedor
+  // informal (e41), que no usa la pantalla de gasto pero paga igual. Es la misma
+  // regla que aplica el servidor al guardar (`esSalidaDinero` en
+  // /api/ecf/emitir). Con solo `esGasto`, la confirmación de una compra decía
+  // «Sí, cobrar» y el resumen «Cobrado»: quien paga creía estar sumando ese
+  // efectivo a la caja.
+  const saleDinero = esGasto || tipoEcf === '41';
+
   // Título de la pantalla según la categoría de documento.
   const tituloDoc = ({
     'nota-credito': { nuevo: 'Nueva nota de crédito', editar: 'Editar nota de crédito' },
@@ -2165,16 +2173,16 @@ export default function NuevaFacturaForm({
               </Box>
               {resultado.modo === 'borrador' && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">{esGasto ? 'Pago' : 'Cobro'}</Typography>
+                  <Typography variant="body2" color="text.secondary">{saleDinero ? 'Pago' : 'Cobro'}</Typography>
                   {resultado.pagoRecibido ? (
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'success.dark' }}>
-                      ✓ {esGasto ? 'Pagado' : 'Cobrado'}
+                      ✓ {saleDinero ? 'Pagado' : 'Cobrado'}
                       {resultado.pagoMetodo ? ` · ${resultado.pagoMetodo.charAt(0).toUpperCase() + resultado.pagoMetodo.slice(1).replace('_', ' ')}` : ''}
                       {resultado.pagoValor != null ? ` · DOP ${resultado.pagoValor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : ''}
                     </Typography>
                   ) : (
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.dark' }}>
-                      ⏳ {esGasto ? 'Pendiente de pago' : 'Pendiente de cobro'}
+                      ⏳ {saleDinero ? 'Pendiente de pago' : 'Pendiente de cobro'}
                     </Typography>
                   )}
                 </Box>
@@ -2676,7 +2684,7 @@ export default function NuevaFacturaForm({
               // Una Nota de Crédito acredita al cliente — no se cobra ningún pago al
               // crearla. Ocultar el card "Pago".
               showPago={tipoEcf !== '34'}
-              pagoLabel={esGasto ? 'Pagado (sale de la caja)' : undefined}
+              pagoLabel={saleDinero ? 'Pagado (sale de la caja)' : undefined}
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
@@ -2837,7 +2845,7 @@ export default function NuevaFacturaForm({
                 montoFmt: `RD$ ${(parseFloat(l.valor || '0') || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
               }))}
             procesando={loading}
-            sentido={esGasto ? 'pago' : 'cobro'}
+            sentido={saleDinero ? 'pago' : 'cobro'}
             onCancel={() => setConfirmMetodo(null)}
             onConfirm={() => {
               const pend = confirmMetodo;
