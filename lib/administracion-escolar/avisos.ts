@@ -9,6 +9,7 @@ import { aGsm7 } from '@/lib/sms/mensaje';
 import { sumarDias } from './calendario';
 import { CANALES_TODOS_ACTIVOS, type CanalesActivos } from './canales';
 import { CANALES_DEL_AVISO, type Aviso, type Canal } from './ciclo-cobro';
+import { destinoDeContacto } from './destino-canal';
 
 /**
  * A quién hay que escribirle hoy, y por dónde.
@@ -81,22 +82,19 @@ export interface FilaAviso {
 }
 
 /**
- * El número o correo de cada canal, con las alternativas que valen.
- *
- * El fijo de la casa no recibe ni WhatsApp ni SMS, así que va de último: si el
- * contacto tiene celular, se usa ese. Mandar un SMS a un fijo es un mensaje
- * cobrado que no llega a nadie.
+ * El número o correo de cada canal. La regla vive en `destino-canal.ts`, que
+ * comparten las pantallas: el WhatsApp sale solo al campo «WhatsApp»; el SMS al
+ * celular y, si no hay, al número de WhatsApp. El fijo de la casa no recibe
+ * nada: mandar un SMS a un fijo es un mensaje cobrado que no llega a nadie.
  */
 export function destinoDelCanal(fila: FilaAviso, canal: Canal): string | null {
-  if (canal === 'correo') return fila.email?.trim() || null;
-  if (canal === 'whatsapp') return fila.whatsapp?.trim() || fila.celular?.trim() || null;
-  return fila.celular?.trim() || fila.whatsapp?.trim() || null;
+  return destinoDeContacto(fila, canal);
 }
 
 /** Lo que se le dice al usuario cuando falta el dato de contacto. */
 const FALTA: Record<Canal, string> = {
   correo: 'El responsable de pago no tiene correo',
-  whatsapp: 'El responsable de pago no tiene WhatsApp ni celular',
+  whatsapp: 'El responsable de pago no tiene número de WhatsApp',
   sms: 'El responsable de pago no tiene celular',
 };
 

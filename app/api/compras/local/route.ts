@@ -11,9 +11,9 @@ import { z } from 'zod';
 import { requirePermission, type AuthErr, type AuthOk } from '@/lib/auth/api-guard';
 import { registrarCompra, CompraError } from '@/lib/compras/registrar';
 import { listarCompras } from '@/lib/compras/consultas';
-import { METODOS_PAGO_COMPRA, TASAS_ITBIS, TIPOS_PROVEEDOR } from '@/lib/compras/fiscal';
+import { analizarNcf, METODOS_PAGO_COMPRA, TASAS_ITBIS, TIPOS_PROVEEDOR } from '@/lib/compras/fiscal';
 import { esFechaYMD } from '@/lib/nomina/periodos';
-import { marcarRegistrada } from '@/lib/compras/captura/consultas';
+import { estadoCaptura, marcarRegistrada } from '@/lib/compras/captura/consultas';
 
 const centavos = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
@@ -34,7 +34,8 @@ const compraSchema = z.object({
   proveedorRnc: z.string().max(20).nullable().optional(),
   proveedorNombre: z.string().max(255).nullable().optional(),
   tipoProveedor: z.enum(TIPOS_PROVEEDOR).default('juridica'),
-  ncf: z.string().max(19),
+  /** Vacío o null: un gasto sin comprobante fiscal. Lo decide registrarCompra. */
+  ncf: z.string().max(19).nullable().optional(),
   ncfModificado: z.string().max(19).nullable().optional(),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   tipoBienes606: z.string().max(2).nullable().optional(),
@@ -78,10 +79,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const { capturaId, ...datos } = parsed.data;
+    // Con NCF, registrar dos veces la misma factura fotografiada lo frena el
+    // aviso de NCF repetido. Sin NCF no hay número que comparar, así que la
+    // barrera es la propia captura: si ya no está por revisar (otra pestaña la
+    // registró, o alguien la mandó a leer de nuevo), no se guarda otro gasto.
+    if (capturaId && analizarNcf(datos.ncf).sinNcf) {
+      const captura = await estadoCaptura(auth.teamId, capturaId);
+      if (captura && captura.estado !== 'por_revisar') {
+        const error = captura.estado === 'registrada'
+          ? `Esta factura ya se registró${captura.compraId ? ` (gasto #${captura.compraId})` : ''}`
+          : 'Esta factura ya no está por revisar: vuelve a Gastos y ábrela de nuevo';
+        return NextResponse.json({ error, codigo: 'captura-no-disponible', compraId: captura.compraId }, { status: 409 });
+      }
+    }
     const r = await registrarCompra(auth.teamId, auth.user.id, {
       ...datos,
       proveedorRnc: datos.proveedorRnc ?? null,
       proveedorNombre: datos.proveedorNombre ?? null,
+      ncf: datos.ncf ?? null,
     });
     if (capturaId) {
       // La compra ya está guardada: si la bandeja no se actualiza, no se deshace

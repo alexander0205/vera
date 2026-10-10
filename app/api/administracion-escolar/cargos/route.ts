@@ -48,6 +48,10 @@ export async function GET(req: NextRequest) {
       matriculaId: adminEscolarCargos.matriculaId,
       periodoId: adminEscolarCargos.periodoId,
       conceptoId: adminEscolarCargos.conceptoId,
+      // De qué cuota del calendario nació, si nació de una: es lo único que
+      // deja decir en «Editar matrícula» que un cargo salió de un cobro
+      // automático aunque su concepto ya no esté en la lista del alumno.
+      cuotaId: adminEscolarCargos.cuotaId,
       concepto: adminEscolarConceptosPago.nombre,
       mes: adminEscolarCargos.mes,
       anio: adminEscolarCargos.anio,
@@ -55,6 +59,9 @@ export async function GET(req: NextRequest) {
       saldoCentavos: adminEscolarCargos.saldoCentavos,
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
       estado: adminEscolarCargos.estado,
+      // Para saber si el cargo todavía se puede corregir: con factura detrás, el
+      // importe que vale es el del e-CF.
+      ecfDocumentId: adminEscolarCargos.ecfDocumentId,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarEstudiantes, and(

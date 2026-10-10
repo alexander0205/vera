@@ -96,7 +96,19 @@ export async function POST(
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
 
-    if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear')) {
+    /**
+     * Cualquiera de los dos: quien factura, y quien solo cobra.
+     *
+     * Estaba atado a `facturas:crear` a secas, así que para dejar cobrar a un
+     * rol había que dejarle además crear facturas, compras y planes
+     * recurrentes — ese permiso no tiene puerta de módulo. `pagos:registrar`
+     * es lo que hace falta de verdad; se aceptan los dos para no quitarle el
+     * cobro a ningún rol que ya lo tenía.
+     */
+    const puedeCobrar =
+      await userCanForTeam(teamId, user.platformRole, member?.role, 'pagos:registrar')
+      || await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear');
+    if (!puedeCobrar) {
       return NextResponse.json({ error: 'Sin permiso para registrar pagos' }, { status: 403 });
     }
 

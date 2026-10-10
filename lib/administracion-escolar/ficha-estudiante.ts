@@ -248,6 +248,10 @@ export function tutoresDeEstudiante(teamId: number, estudianteId: number) {
       nombre: adminEscolarTutores.nombre,
       documento: adminEscolarTutores.documento,
       telefono: adminEscolarTutores.telefono,
+      // Sin esto la tabla de tutores pintaba «—» aunque el número estuviera
+      // guardado, y el diálogo de edición abría el campo vacío: al guardar
+      // cualquier otro cambio mandaba '' y el PATCH lo borraba.
+      whatsapp: adminEscolarTutores.whatsapp,
       email: adminEscolarTutores.email,
       imagen: adminEscolarTutores.imagen,
       clientId: adminEscolarTutores.clientId,

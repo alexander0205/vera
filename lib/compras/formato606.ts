@@ -7,18 +7,27 @@
  * Separado por CRLF, sin fila de títulos. Se nombra DGII_F_606_{RNC}_{AAAAMM}.TXT.
  */
 
-import { lineaFormato606, type CompraPara606 } from './fiscal';
+import { analizarNcf, lineaFormato606, type CompraPara606 } from './fiscal';
 
 export function construirFormato606(p: { rncEmpresa: string; periodo: string; compras: CompraPara606[] }) {
   const rnc = p.rncEmpresa.replace(/\D/g, '');
+  // Última barrera: al archivo solo llega lo que tiene un NCF válido que se
+  // reporta. La ruta ya lo filtra al leer la base; se repite aquí para que un
+  // gasto sin NCF no pueda acabar en un renglón con el campo 4 vacío —que la
+  // DGII rechaza—, entre por donde entre. El conteo del encabezado sale de lo
+  // que de verdad se escribe.
+  const compras = p.compras.filter((c) => {
+    const info = analizarNcf(c.ncf);
+    return info.valido && info.reporta606;
+  });
   const lineas = [
-    `606|${rnc}|${p.periodo}|${p.compras.length}`,
-    ...p.compras.map((c) => lineaFormato606(c, rnc)),
+    `606|${rnc}|${p.periodo}|${compras.length}`,
+    ...compras.map((c) => lineaFormato606(c, rnc)),
   ];
   return {
     nombreArchivo: `DGII_F_606_${rnc}_${p.periodo}.TXT`,
     contenido: lineas.join('\r\n'),
-    registros: p.compras.length,
+    registros: compras.length,
   };
 }
 

@@ -126,6 +126,137 @@ export async function resumenCompras(teamId: number, opts: { clase?: 'compra' | 
   };
 }
 
+// ─── Resumen de la pantalla de Gastos ────────────────────────────────────────
+
+export interface ResumenGastos {
+  /** Todas las filas del rango, anuladas incluidas: es lo que se pagina. */
+  cantidad: number;
+  /** Las que no están anuladas: es el número que acompaña al total gastado. */
+  vivas: number;
+  /** De aquí abajo, solo lo vivo: una anulada no se gastó. */
+  totalCents: number;
+  porPagarCents: number;
+  retencionesCents: number;
+  itbisPorAdelantarCents: number;
+  borradores: number;
+  porCategoria: { categoria: string | null; totalCents: number }[];
+}
+
+/**
+ * Los totales de la pantalla de Gastos, en la base y no en memoria.
+ *
+ * Antes se sumaban las filas que la pantalla ya tenía cargadas, y funcionaba
+ * porque cargaba el mes entero. Al pasar a una lista paginada eso deja de
+ * valer: sumar la página daría el gasto de cincuenta filas y lo llamaría el
+ * total. Así que las tarjetas salen de aquí, de todo el rango, y la lista solo
+ * trae lo que se ve.
+ *
+ * Un gasto puede venir de dos sitios —el comprobante de un proveedor y el que
+ * emite la propia empresa (e43/e47)— y hay que sumar los dos. Una consulta por
+ * sitio, agrupando por categoría de paso, que es el otro dato de la pantalla.
+ *
+ * Sin `desde`/`hasta` abarca todo lo que haya.
+ */
+export async function resumenGastos(
+  teamId: number,
+  opts: { desde?: string; hasta?: string } = {},
+): Promise<ResumenGastos> {
+  const { desde, hasta } = opts;
+  const [compras, emitidos] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      WITH g AS (
+        SELECT c.estado = 'anulada' AS anulado,
+               c.estado = 'registrada' AS registrada,
+               c.monto_total AS monto,
+               (c.itbis_retenido_cents + c.isr_retenido_cents) AS retenciones,
+               greatest(0, c.itbis_cents - c.itbis_al_costo_cents) AS adelantar,
+               CASE WHEN c.estado = 'anulada' THEN 0 ELSE greatest(0,
+                 c.monto_total - c.itbis_retenido_cents - c.isr_retenido_cents
+                 - CASE WHEN c.forma_pago = 'contado'
+                        THEN c.monto_total - c.itbis_retenido_cents - c.isr_retenido_cents
+                        ELSE coalesce((SELECT sum(p.monto_cents) FROM pagos_proveedores p WHERE p.compra_id = c.id), 0)
+                   END) END AS saldo,
+               (SELECT i.categoria FROM compras_locales_items i
+                 WHERE i.compra_id = c.id AND i.categoria IS NOT NULL
+                 ORDER BY i.cantidad * i.costo_unitario DESC, i.id LIMIT 1) AS categoria
+        FROM compras_locales c
+        WHERE c.team_id = ${teamId} AND c.clase = 'gasto'
+          ${desde ? sql`AND c.fecha >= ${desde}` : sql``}
+          ${hasta ? sql`AND c.fecha <= ${hasta}` : sql``}
+      )
+      SELECT categoria,
+             count(*)::int AS cantidad,
+             count(*) FILTER (WHERE NOT anulado)::int AS vivas,
+             coalesce(sum(monto)       FILTER (WHERE NOT anulado), 0) AS total,
+             coalesce(sum(retenciones) FILTER (WHERE NOT anulado), 0) AS retenciones,
+             coalesce(sum(saldo)       FILTER (WHERE NOT anulado), 0) AS "porPagar",
+             coalesce(sum(adelantar)   FILTER (WHERE registrada),  0) AS adelantar
+      FROM g GROUP BY categoria
+    `),
+    db.execute<Record<string, unknown>>(sql`
+      WITH g AS (
+        SELECT estado IN ('ANULADO', 'RECHAZADO') AS anulado,
+               estado = 'BORRADOR' AS borrador,
+               monto_total AS monto,
+               coalesce(total_retenciones, 0) AS retenciones,
+               greatest(0, monto_total - coalesce(total_retenciones, 0) - GREATEST(
+                 coalesce((SELECT sum(p.monto_centavos) FROM pagos_recibidos p
+                            WHERE p.ecf_document_id = ecf_documents.id), 0),
+                 CASE WHEN pago_recibido = 'true' THEN coalesce(pago_valor_cts, 0) ELSE 0 END
+               )) AS saldo,
+               categoria_gasto AS categoria
+        FROM ecf_documents
+        WHERE team_id = ${teamId} AND tipo_ecf IN ('43', '47')
+          ${desde ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) >= ${desde}` : sql``}
+          ${hasta ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) <= ${hasta}` : sql``}
+      )
+      SELECT categoria,
+             count(*)::int AS cantidad,
+             count(*) FILTER (WHERE NOT anulado)::int AS vivas,
+             count(*) FILTER (WHERE borrador)::int AS borradores,
+             coalesce(sum(monto)       FILTER (WHERE NOT anulado), 0) AS total,
+             coalesce(sum(retenciones) FILTER (WHERE NOT anulado), 0) AS retenciones,
+             coalesce(sum(saldo)       FILTER (WHERE NOT anulado), 0) AS "porPagar"
+      FROM g GROUP BY categoria
+    `),
+  ]);
+
+  const r: ResumenGastos = {
+    cantidad: 0, vivas: 0, totalCents: 0, porPagarCents: 0, retencionesCents: 0,
+    itbisPorAdelantarCents: 0, borradores: 0, porCategoria: [],
+  };
+  // Las dos fuentes nombran la categoría distinto —una guarda la clave del
+  // catálogo y la otra el texto— así que se traduce antes de juntarlas, igual
+  // que hacía la pantalla.
+  const porCategoria = new Map<string | null, number>();
+  const sumar = (cat: string | null, cents: number) => {
+    if (cents) porCategoria.set(cat, (porCategoria.get(cat) ?? 0) + cents);
+  };
+
+  for (const f of compras as unknown as Record<string, unknown>[]) {
+    r.cantidad += n(f.cantidad);
+    r.vivas += n(f.vivas);
+    r.totalCents += n(f.total);
+    r.retencionesCents += n(f.retenciones);
+    r.porPagarCents += n(f.porPagar);
+    r.itbisPorAdelantarCents += n(f.adelantar);
+    sumar(categoriaCompra(f.categoria as string | null)?.label ?? null, n(f.total));
+  }
+  for (const f of emitidos as unknown as Record<string, unknown>[]) {
+    r.cantidad += n(f.cantidad);
+    r.vivas += n(f.vivas);
+    r.totalCents += n(f.total);
+    r.retencionesCents += n(f.retenciones);
+    r.porPagarCents += n(f.porPagar);
+    r.borradores += n(f.borradores);
+    sumar((f.categoria as string | null) || null, n(f.total));
+  }
+
+  r.porCategoria = [...porCategoria].map(([categoria, totalCents]) => ({ categoria, totalCents }))
+    .sort((a, b) => b.totalCents - a.totalCents);
+  return r;
+}
+
 export async function detalleCompra(teamId: number, compraId: number) {
   const [c] = await db.execute<Record<string, unknown>>(sql`
     SELECT c.*, to_char(c.fecha, 'YYYY-MM-DD') AS fecha_ymd,
@@ -245,7 +376,15 @@ export interface GastoEcf {
 }
 
 /** Gastos menores (e43) y pagos al exterior (e47) del período, por la fecha del gasto. */
-export async function listarGastosEcf(teamId: number, desde: string, hasta: string): Promise<GastoEcf[]> {
+/**
+ * Los gastos que emite la propia empresa (e43, e47). Sin rango los trae todos,
+ * del más nuevo al más viejo, y `limit` acota lo que se pide a la base: la
+ * pantalla solo necesita la página que enseña.
+ */
+export async function listarGastosEcf(
+  teamId: number, desde?: string, hasta?: string, limit = 500,
+): Promise<GastoEcf[]> {
+  const tope = Math.min(Math.max(limit, 1), 1000);
   const filas = await db.execute(sql`
     SELECT id, encf, tipo_ecf AS "tipoEcf", estado, estado_pago AS "estadoPago",
            razon_social_comprador AS proveedor, rnc_comprador AS "rncProveedor",
@@ -260,9 +399,10 @@ export async function listarGastosEcf(teamId: number, desde: string, hasta: stri
            to_char(coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date), 'YYYY-MM-DD') AS fecha
     FROM ecf_documents
     WHERE team_id = ${teamId} AND tipo_ecf IN ('43', '47')
-      AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) BETWEEN ${desde} AND ${hasta}
+      ${desde ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) >= ${desde}` : sql``}
+      ${hasta ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) <= ${hasta}` : sql``}
     ORDER BY fecha DESC, id DESC
-    LIMIT 500
+    LIMIT ${tope}
   `);
   return (filas as unknown as Record<string, unknown>[]).map((f) => ({
     id: n(f.id),

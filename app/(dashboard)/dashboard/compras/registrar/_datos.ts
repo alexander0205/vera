@@ -7,7 +7,7 @@ import { recepciones } from '@/lib/ecf-api/client';
 import { leerEcfRecibido } from '@/lib/compras/ecf-xml';
 import { hoyRD } from '@/lib/utils/format';
 import { detalleCaptura } from '@/lib/compras/captura/consultas';
-import { inicialDesdeCaptura } from '@/lib/compras/captura/datos';
+import { inicialDesdeCaptura, type DatosCaptura } from '@/lib/compras/captura/datos';
 import type { ContextoRegistro } from './_registrar-client';
 
 /**
@@ -40,6 +40,9 @@ export async function contextoRegistro(
   let captura: ContextoRegistro['captura'] = null;
   let avisosCaptura: string[] = [];
   let ecfId = ecfIdPedido;
+  // Lo leído de la foto cuando el registro iba a salir del XML del proveedor:
+  // si el XML falla, es lo que queda.
+  let leidoDeLaFoto: DatosCaptura | null = null;
 
   // Una factura fotografiada: si el proveedor ya mandó ese e-CF por ecf-api se
   // registra desde su XML (líneas e ITBIS exactos); si no, con lo leído.
@@ -55,13 +58,14 @@ export async function contextoRegistro(
       captura = { id: c.id, metodo: c.metodo, subidoPor: c.subidoPor, archivos: c.archivos };
       if (c.datos?.ecfRecibidoId && !ecfId) {
         ecfId = c.datos.ecfRecibidoId;
+        leidoDeLaFoto = c.datos;
         avisosCaptura = ['El proveedor ya envió este e-CF: los datos salen de su XML.'];
       } else if (c.datos) {
         const r = inicialDesdeCaptura(c.datos);
         inicial = r.inicial;
         avisosCaptura = r.avisos;
       } else {
-        avisosCaptura = ['No se pudo leer la factura: complétala mirando la foto.'];
+        avisosCaptura = ['No se pudo leer la factura: complétala mirando el comprobante.'];
       }
     }
   }
@@ -83,7 +87,17 @@ export async function contextoRegistro(
         lineas: e.lineas,
       };
     } catch {
-      avisoEcf = 'No se pudo leer el e-CF recibido: completa los datos a mano.';
+      if (leidoDeLaFoto) {
+        // Antes el formulario abría en blanco y el NCF vacío impedía guardar.
+        // Ahora un gasto se guarda sin NCF, así que no se puede perder el que ya
+        // se conocía: se cae a lo leído de la foto o del QR.
+        const r = inicialDesdeCaptura(leidoDeLaFoto);
+        inicial = r.inicial;
+        avisosCaptura = r.avisos;
+        avisoEcf = 'No se pudo leer el e-CF que envió el proveedor: los datos son los leídos del comprobante. Compáralos antes de registrar.';
+      } else {
+        avisoEcf = 'No se pudo leer el e-CF recibido: completa los datos a mano.';
+      }
     }
   }
 

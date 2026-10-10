@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { Plus, FileCheck2, Coins, Globe2, UserRound } from 'lucide-react';
+import { Plus, FileCheck2, Coins, Globe2, UserRound, Upload } from 'lucide-react';
+import { SubirComprobante } from '@/components/compras/subir-comprobante';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody,
 } from '@/components/ui/dialog';
@@ -31,6 +32,7 @@ const OPCIONES = [
 /** «¿Qué comprobante tienes?»: de eso depende cómo se registra el gasto. */
 export function NuevoGasto() {
   const [abierto, setAbierto] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
   return (
     <>
       <Box component="button" type="button" onClick={() => setAbierto(true)} sx={{
@@ -46,6 +48,35 @@ export function NuevoGasto() {
             <DialogDescription>Cada caso va distinto al 606 y a la contabilidad.</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-2">
+            {/* Primero, porque es el camino corto: quien tiene el papel a mano
+                no debería elegir tipo de comprobante y teclearlo todo, sino
+                soltar el archivo y repasar lo que salga leído. */}
+            <Box
+              component="button"
+              type="button"
+              onClick={() => { setAbierto(false); setSubiendo(true); }}
+              data-testid="opcion-subir-comprobante"
+              sx={{
+                display: 'flex', gap: 1.5, p: 1.5, mb: 1, width: '100%', textAlign: 'left', cursor: 'pointer',
+                border: '1px solid #c7d2fe', bgcolor: '#f8faff', borderRadius: '10px',
+                '&:hover': { borderColor: '#3658e1' },
+              }}
+            >
+              <Upload size={20} color="#3658e1" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Box>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+                  Tengo el archivo: súbelo y se llena solo
+                </Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+                  El PDF que te mandó el proveedor o una foto. Se lee y te deja el gasto listo para repasarlo.
+                </Typography>
+              </Box>
+            </Box>
+
+            <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', pt: 0.5 }}>
+              O regístralo a mano
+            </Typography>
+
             {OPCIONES.map((o) => (
               <Link key={o.href} href={o.href} onClick={() => setAbierto(false)} style={{ textDecoration: 'none' }}>
                 <Box sx={{ display: 'flex', gap: 1.5, p: 1.5, border: '1px solid #e5e7eb', borderRadius: '10px', mb: 1, '&:hover': { borderColor: '#3658e1', bgcolor: '#f8faff' } }}>
@@ -60,6 +91,8 @@ export function NuevoGasto() {
           </DialogBody>
         </DialogContent>
       </Dialog>
+
+      <SubirComprobante control={{ abierto: subiendo, setAbierto: setSubiendo }} />
     </>
   );
 }

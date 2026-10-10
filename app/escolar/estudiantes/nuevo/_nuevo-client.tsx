@@ -16,6 +16,7 @@ import {
 import { BuscarSigerdDialog } from '@/components/administracion-escolar/BuscarSigerdDialog';
 import { TutoresPanel, type TutorVinculo } from '@/components/administracion-escolar/TutoresPanel';
 import { ResponsablePagoDialog, type Contacto } from '@/components/administracion-escolar/ResponsablePagoDialog';
+import { rutaNuevaMatricula } from '@/lib/administracion-escolar/matricula-pantalla';
 
 
 export default function NuevoEstudianteClient() {
@@ -152,8 +153,9 @@ export default function NuevoEstudianteClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error creando estudiante');
       // Sin matrícula el alumno no cobra ni aparece en un curso, así que se
-      // entra derecho a ponérsela. `?matricular=1` abre el diálogo solo.
-      router.push(`/escolar/estudiantes/${data.estudiante.id}?matricular=1`);
+      // entra derecho a ponérsela: a la pantalla de matricular, con él ya
+      // elegido. Sin `volver`: de ahí se sale a su ficha, guarde o cancele.
+      router.push(rutaNuevaMatricula({ estudianteId: data.estudiante.id }));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error creando estudiante');
       setSaving(false);

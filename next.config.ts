@@ -150,10 +150,29 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: appVersion,
   },
   async headers() {
+    /**
+     * El comprobante de una compra se enseña dentro de la pantalla que se está
+     * rellenando: se registra mirándolo, y mandar a otra pestaña por cada dato
+     * que se comprueba es justo lo que ese panel viene a evitar. Un PDF solo se
+     * puede enseñar enmarcándolo, y el `DENY` de arriba lo impide incluso desde
+     * la propia app, así que esa ruta —y solo esa— baja a `SAMEORIGIN`.
+     *
+     * Lo que se expone es nada: la ruta ya exige sesión y comprueba la empresa,
+     * de modo que quien puede enmarcarlo es quien ya podía abrirlo. Y un PDF
+     * enmarcado no tiene botones que pulsar por engaño.
+     */
+    const COMPROBANTE = '/api/gastos/capturas/:id/archivos/:archivoId';
     return [
       {
-        source: '/(.*)',
+        // Todo menos esa ruta, para no mandar dos X-Frame-Options a la vez.
+        source: '/((?!api/gastos/capturas/[0-9]+/archivos/).*)',
         headers: securityHeaders,
+      },
+      {
+        source: COMPROBANTE,
+        headers: securityHeaders.map((h) => (
+          h.key === 'X-Frame-Options' ? { key: h.key, value: 'SAMEORIGIN' } : h
+        )),
       },
     ];
   },

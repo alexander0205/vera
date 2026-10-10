@@ -64,9 +64,12 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     .where(and(eq(clients.id, clientId), eq(clients.teamId, teamId))).limit(1);
   if (!existing) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
-  const { razonSocial, rnc, email, telefono, direccion, descripcion } = parsed.data;
+  // celular y whatsapp van aquí a propósito: el schema siempre los validó, pero
+  // el UPDATE los omitía, así que editar un contacto guardaba «bien» y descartaba
+  // los dos campos en silencio. Son justo los que usan los avisos escolares.
+  const { razonSocial, rnc, email, telefono, celular, whatsapp, direccion, descripcion } = parsed.data;
   const [updated] = await db.update(clients)
-    .set({ razonSocial, rnc: rnc || null, email: email || null, telefono: telefono || null, direccion: direccion || null, descripcion: descripcion ?? null, updatedBy: user.id, updatedAt: new Date() })
+    .set({ razonSocial, rnc: rnc || null, email: email || null, telefono: telefono || null, celular: celular || null, whatsapp: whatsapp || null, direccion: direccion || null, descripcion: descripcion ?? null, updatedBy: user.id, updatedAt: new Date() })
     .where(eq(clients.id, clientId))
     .returning();
 

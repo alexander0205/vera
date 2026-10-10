@@ -42,10 +42,29 @@ function fmtFecha(iso: string) {
   });
 }
 
+/**
+ * Lo publicado y, delante, lo más reciente.
+ *
+ * `pendiente` es lo que ya está en producción pero todavía no tiene número de
+ * versión: se lo pone el paso de publicación, y ese paso lleva meses sin
+ * correr. Mientras tanto esta pantalla se quedaba en agosto, y la ventana que
+ * sale al entrar mandaría a «Ver todas» a un sitio donde no está lo que acaba
+ * de enseñar. Se pinta como un bloque más, sin número.
+ */
 function leerNovedades(): Version[] {
   try {
     const raw = readFileSync(join(process.cwd(), 'content/novedades.json'), 'utf8');
-    return (JSON.parse(raw).versiones ?? []) as Version[];
+    const doc = JSON.parse(raw);
+    const versiones = (doc.versiones ?? []) as Version[];
+    const recientes = (doc.pendiente?.cambios ?? []) as (Cambio & { desde?: string })[];
+    if (recientes.length === 0) return versiones;
+    const fechas = recientes.map((c) => c.desde).filter((f): f is string => !!f).sort();
+    return [{
+      version: '',
+      fecha: fechas.at(-1) ?? '',
+      titulo: 'Lo más reciente',
+      cambios: recientes,
+    }, ...versiones];
   } catch {
     return [];
   }
@@ -70,13 +89,13 @@ export default function NovedadesPage() {
       ) : (
         <div className="space-y-8">
           {versiones.map((v) => (
-            <section key={v.version}>
+            <section key={v.version || 'recientes'}>
               {/* Cabecera de la versión */}
               <div className="flex items-baseline gap-3 border-b border-gray-200 pb-2 mb-4">
                 <h2 className="text-base font-semibold text-gray-900">{v.titulo}</h2>
-                <span className="text-xs text-gray-400">{fmtFecha(v.fecha)}</span>
+                {v.fecha && <span className="text-xs text-gray-400">{fmtFecha(v.fecha)}</span>}
                 {/* La versión va discreta: al cliente le importa qué cambió, no el número */}
-                <span className="ml-auto font-mono text-xs text-gray-300">v{v.version}</span>
+                {v.version && <span className="ml-auto font-mono text-xs text-gray-300">v{v.version}</span>}
               </div>
 
               <div className="space-y-4">

@@ -110,7 +110,7 @@ describe('resumen y validación', () => {
   });
 
   it('errores', () => {
-    expect(erroresCompra({ baseCents: 1_000_000, imp: { ...imp, itbisAlCostoCents: 200_000 }, formaPago: 'credito', fechaPago: null })).toContain('El ITBIS llevado al costo no puede pasar del ITBIS facturado');
+    expect(erroresCompra({ baseCents: 1_000_000, imp: { ...imp, itbisAlCostoCents: 200_000 }, formaPago: 'credito', fechaPago: null }).join(' ')).toContain('no puede pasar de él');
     expect(erroresCompra({ baseCents: 1_000_000, imp, formaPago: 'contado', fechaPago: null })).toContain('Con retenciones hace falta la fecha de pago: el 606 la exige');
     expect(erroresCompra({ baseCents: 1_000_000, imp, formaPago: 'contado', fechaPago: '2026-09-14' })).toEqual([]);
   });

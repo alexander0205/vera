@@ -11,7 +11,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Drawer from '@mui/material/Drawer';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { nombreDeCuenta, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import type { DetalleCuenta, EventoCartera } from '@/lib/cobranza/detalle';
 import type { OrigenEscolarFactura } from '@/lib/administracion-escolar/origen-factura';
 import { GestionCobro } from '@/components/cuentas-por-cobrar/GestionCobro';
@@ -72,7 +72,7 @@ export function DetallePanel({
       <Box component="header" sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
         <Box sx={{ minWidth: 0 }}>
           <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
-            {actual.razonSocialComprador ?? 'Consumidor Final'}
+            {nombreDeCuenta(actual) ?? 'Consumidor Final'}
           </Typography>
           <Box
             component={Link}

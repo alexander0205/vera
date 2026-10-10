@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { leerTimbre, fechaDgii } from '@/lib/compras/captura/timbre';
 import { datosDesdeTimbre, datosDesdeIa, combinarDatos, inicialDesdeCaptura, emparejarProductos, cuadrarLineas, ncfDesdeLectura, type LecturaIa } from '@/lib/compras/captura/datos';
+import { analizarNcf } from '@/lib/compras/fiscal';
 
 const QR_31 = 'https://ecf.dgii.gov.do/ecf/consultatimbre?rncemisor=132274741&RncComprador=131988032&encf=E310000000034&fechaemision=15-09-2026&montototal=3200.00&fechafirma=15-09-2026%2015%3A14%3A02&codigoseguridad=XdnBqr';
 const QR_FC = 'https://fc.dgii.gov.do/ecf/consultatimbrefc?rncemisor=132274741&encf=E320000000108&montototal=5300&codigoseguridad=JTzJOI';
@@ -62,6 +63,41 @@ describe('datos de la captura', () => {
     const d = datosDesdeIa(ia({ ncf: 'B99' }));
     expect(d.ncf).toBeNull();
     expect(d.avisos.join(' ')).toContain('no es válido');
+  });
+
+  // Un gasto con el NCF vacío ya se puede guardar. Si la lectura se comía un
+  // dígito y el campo abría en blanco, una factura con comprobante pasaba por
+  // «sin NCF»: fuera del 606 y con todo su ITBIS al gasto, con un solo clic.
+  it('un NCF leído a medias llega al campo del formulario, y ahí es un error', () => {
+    const d = datosDesdeIa(ia({ ncf: 'B010000012' }));
+    expect(d.ncf).toBeNull();
+    expect(d.ncfLeido).toBe('B010000012');
+    const { inicial } = inicialDesdeCaptura(d);
+    expect(inicial.ncf).toBe('B010000012');
+    expect(analizarNcf(inicial.ncf)).toMatchObject({ valido: false, sinNcf: false });
+    // No se da por bueno en ningún otro sitio: la línea armada con el total no lo nombra.
+    expect(inicial.lineas[0].descripcion).toBe('Factura del proveedor');
+  });
+
+  it('lo que no se parece a un NCF no llega al campo: abre vacío, como antes', () => {
+    const d = datosDesdeIa(ia({ ncf: '02-2009' }));
+    expect(d.ncfLeido).toBeNull();
+    expect(inicialDesdeCaptura(d).inicial.ncf).toBeNull();
+    // Y con uno válido no queda nada «a medias».
+    expect(datosDesdeIa(ia()).ncfLeido).toBeNull();
+  });
+
+  it('con el e-NCF exacto del QR, lo que la foto leyó a medias se descarta', () => {
+    const qr = datosDesdeTimbre(leerTimbre(QR_31)!, '131988032');
+    const c = combinarDatos(qr, datosDesdeIa(ia({ ncf: 'E31000000003' })));
+    expect(c.ncf).toBe('E310000000034');
+    expect(c.ncfLeido).toBeNull();
+    expect(inicialDesdeCaptura(c).inicial.ncf).toBe('E310000000034');
+  });
+
+  it('una captura guardada antes de existir ese dato se abre igual', () => {
+    const { ncfLeido: _sinEl, ...vieja } = datosDesdeIa(ia({ ncf: null }));
+    expect(inicialDesdeCaptura(vieja).inicial.ncf).toBeNull();
   });
 
   it('el QR manda sobre la foto y la discrepancia se avisa', () => {
@@ -249,7 +285,7 @@ describe('el encabezado de los recibos de caja', () => {
   it('el NIF no pasa por RNC, y el RNC que falta se avisa', () => {
     const d = datosDesdeIa(ia({ proveedorRnc: '1508520000060915', nif: '1508520000060915' }));
     expect(d.proveedorRnc).toBeNull();
-    expect(d.avisos).toContain('No se leyó el RNC del proveedor: escríbelo mirando la foto.');
+    expect(d.avisos).toContain('No se leyó el RNC del proveedor: si la factura tiene NCF, escríbelo mirando la foto.');
     expect(datosDesdeIa(ia({ proveedorRnc: null, tipoProveedor: 'exterior' })).avisos.join(' ')).not.toContain('RNC');
   });
 

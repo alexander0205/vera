@@ -45,13 +45,15 @@ const inputSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const
  * Campo de texto. Definido FUERA del componente página: si se define adentro,
  * cada render crea una función nueva y React remonta el <TextField>, tumbando el foco.
  */
-function Field({ label, field, type = 'text', placeholder, form, setForm }: {
+function Field({ label, field, type = 'text', placeholder, form, setForm, ayuda }: {
   label: string;
   field: keyof ClienteForm;
   type?: string;
   placeholder?: string;
   form: ClienteForm;
   setForm: React.Dispatch<React.SetStateAction<ClienteForm>>;
+  /** Una línea bajo el campo: un atajo o una aclaración. */
+  ayuda?: React.ReactNode;
 }) {
   const isTelefono = field === 'telefono' || field === 'celular' || field === 'whatsapp';
   return (
@@ -73,6 +75,7 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
         slotProps={{ htmlInput: { inputMode: isTelefono ? 'tel' : undefined } }}
         sx={inputSx}
       />
+      {ayuda}
     </Box>
   );
 }
@@ -411,7 +414,22 @@ export default function ClienteForm({
           {/* Aparte del teléfono: por aquí salen los avisos, y en muchas casas
               el fijo y el número que contesta no son el mismo. */}
           <Field label="Celular" field="celular" placeholder="(809) 000-0000" form={form} setForm={setForm} />
-          <Field label="WhatsApp" field="whatsapp" placeholder="(809) 000-0000" form={form} setForm={setForm} />
+          {/* El WhatsApp ya no toma prestado el celular: vacío quiere decir «por
+              WhatsApp no». Para la mayoría es el mismo número, así que copiarlo
+              cuesta un toque —y es una decisión que se ve, no algo que el
+              sistema hace por detrás—. */}
+          <Field label="WhatsApp" field="whatsapp" placeholder="(809) 000-0000" form={form} setForm={setForm}
+            ayuda={!form.whatsapp.trim() && form.celular.trim() ? (
+              <Typography component="span" sx={{ fontSize: '0.75rem', color: '#6B7280' }}>
+                Vacío: no se le escribe por WhatsApp.{' '}
+                <Box component="button" type="button"
+                  onClick={() => setForm((f) => ({ ...f, whatsapp: f.celular }))}
+                  sx={{ border: 0, p: 0, background: 'none', cursor: 'pointer', font: 'inherit',
+                    color: '#1d4ed8', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
+                  Usar el mismo del celular
+                </Box>
+              </Typography>
+            ) : undefined} />
           <Field label="Email" field="email" type="email" placeholder="facturacion@empresa.com" form={form} setForm={setForm} />
         </Box>
         <Field label="Dirección" field="direccion" placeholder="Calle, No., Ciudad" form={form} setForm={setForm} />

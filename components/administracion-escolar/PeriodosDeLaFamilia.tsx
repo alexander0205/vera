@@ -15,6 +15,10 @@
  * responsable de pago es justo la condición que cumplen por definición todos
  * los que salen en esta pantalla.
  *
+ * (Desde octubre de 2026 van una DEBAJO de la otra y no lado a lado: en media
+ * tarjeta no cabía la columna de acciones. Lo que sigue explica por qué son dos
+ * bloques y no una lista sola.)
+ *
  * LO QUE YA SE DEBE Y LO QUE VA A SALIR van en dos columnas, no en una tabla
  * sola. Antes era una lista corrida de veinte renglones donde el mes de
  * septiembre que hay que cobrar hoy estaba entre el de agosto ya pagado y el
@@ -30,7 +34,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
-import { CalendarDays, ChevronDown, FileText, Receipt, Zap } from 'lucide-react';
+import { CalendarDays, ChevronDown, FileText, Plus, Receipt, Wallet, Zap } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -39,7 +43,12 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { cargoDeFila, mesesConFactura, mesYaFacturado, montoCorregible } from '@/lib/administracion-escolar/acciones-cargo';
 import type { HijoConPeriodos, PeriodoDeHijo, FilaMes } from '@/lib/administracion-escolar/periodos-familia';
+import { CargoActionsMenu } from './CargoActionsMenu';
+import { CrearCargoEstudianteDialog } from './CrearCargoEstudianteDialog';
+import { HuecoDelLapiz, MontoEditable } from './MontoEditable';
+import type { AccionesDeCargo } from './useAccionesDeCargo';
 
 const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -143,15 +152,31 @@ function Fila({ children, resaltada = false }: { children: React.ReactNode; resa
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFacturarPrevisto }: {
+export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = false, puedeGestionar = false, acciones, onFacturar, onFacturarPrevisto, onCambio }: {
   clientId: number;
   puedeFacturar: boolean;
+  /** Puede anotar cobros. Habilita el atajo de cobrar en los meses que deben. */
+  puedePagos?: boolean;
+  /** Puede gestionar el módulo: reenviar el aviso de un cargo y anularlo. */
+  puedeGestionar?: boolean;
+  /**
+   * Lo que hace cada acción del menú ⋮ de un cargo. Son los mismos manejadores
+   * de la ficha del alumno (`useAccionesDeCargo`); sus diálogos los pinta la
+   * página, no esta tabla.
+   */
+  acciones: AccionesDeCargo;
   /** Recibe los cargos marcados de todos los hijos, para una sola factura. */
   onFacturar: (cargoIds: number[]) => void;
   /** Una cuota que todavía no es cargo: se crea al confirmar, no al abrir. */
   onFacturarPrevisto: (p: { matriculaId: number; cuotaId: number; conceptoId: number }) => void;
+  /**
+   * Algo cambió en la cuenta desde esta tabla (un monto corregido, un cargo
+   * agregado): la página vuelve a pedir la familia entera, con sus totales.
+   * Sin él se refresca solo esta lista.
+   */
+  onCambio?: () => void;
 }) {
-  const { data, error, isLoading } = useSWR<{ hijos: HijoConPeriodos[] }>(
+  const { data, error, isLoading, mutate } = useSWR<{ hijos: HijoConPeriodos[] }>(
     `/api/administracion-escolar/responsables/${clientId}/periodos`, traer,
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
   );
@@ -169,6 +194,9 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
    */
   const [anio, setAnio] = useState<string | null>(null);
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
+  /** A qué hijo, y en qué año, se le está agregando un cargo. null = a nadie. */
+  const [agregarA, setAgregarA] = useState<{ estudianteId: number; alumno: string; periodo: PeriodoDeHijo } | null>(null);
+  const alCambiar = onCambio ?? (() => { void mutate(); });
   /** null = todos los hijos. Con un id, solo ese. */
   const [soloHijo, setSoloHijo] = useState<number | null>(null);
   /** De qué hijos se desplegó la lista completa, por columna: `id:cargos` / `id:proximos`. */
@@ -389,6 +417,15 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
         const cargos = p.filas.filter((f) => f.tipo === 'cargo');
         const previstos = p.filas.filter((f) => f.tipo === 'previsto');
 
+        // Los meses que ya tienen factura en alguna mensualidad: a la otra del
+        // mismo mes no se le ofrece «Anular cargo». Se cuenta sobre TODOS los
+        // cargos del período y no solo sobre los que se ven: la que tiene la
+        // factura puede estar plegada tras «Ver los N restantes».
+        const mesesFacturados = mesesConFactura(cargos.flatMap((f) => {
+          const c = cargoDeFila(f);
+          return c ? [c] : [];
+        }));
+
         const claveCargos = `${h.estudianteId}:cargos`;
         const clavePrevistos = `${h.estudianteId}:proximos`;
         const cargosAbiertos = desplegadas.has(claveCargos);
@@ -421,7 +458,11 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
 
             <Box sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', lg: 'repeat(auto-fit, minmax(430px, 1fr))' },
+              // Una sola columna, a todo el ancho. Lado a lado, la tabla de
+              // cargos no cabía en media tarjeta: la columna «Acción» —lo único
+              // que se viene a pulsar— quedaba cortada contra «Próximos cargos»,
+              // que la mayor parte del año está vacía.
+              gridTemplateColumns: '1fr',
               pt: 2, pb: 0.5,
             }}>
               {/* ── Lo que ya se debe ─────────────────────────────────────── */}
@@ -433,25 +474,54 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
                     : `${cargos.length} ${cargos.length === 1 ? 'cargo' : 'cargos'} · ${
                         cobrados === cargos.length ? 'todos cobrados' : `${cobrados} cobrados`}`}
                 />
+                {/* Agregarle un cargo a ESTE hijo sin entrar a su ficha. La
+                    ventana lleva su nombre: con dos hermanos en pantalla es
+                    fácil ponérselo al que no es. */}
+                {puedeGestionar && (
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                    <Button size="sm" variant="outline"
+                      onClick={() => setAgregarA({ estudianteId: h.estudianteId, alumno: h.alumno, periodo: p })}>
+                      <Plus className="mr-1.5 h-4 w-4" />Agregar cargo
+                    </Button>
+                  </Box>
+                )}
                 {cargos.length === 0 ? (
                   <Vacio texto="Este período no tiene cargos emitidos." />
                 ) : (
                   <Box sx={{
                     display: 'grid',
-                    gridTemplateColumns: puedeFacturar
-                      ? '30px minmax(140px, 1fr) 92px 92px 108px'
-                      : 'minmax(150px, 1fr) 92px 92px 108px',
+                    gridTemplateColumns: [
+                      puedeFacturar ? '30px' : null,
+                      puedeFacturar ? 'minmax(140px, 1fr)' : 'minmax(150px, 1fr)',
+                      '92px 92px 132px',
+                      // La columna de acción está SIEMPRE: quien solo puede
+                      // mirar también abre la factura desde los tres puntos.
+                      // Mide lo que lleva dentro. Con cobro, los 88 px que ya
+                      // tenía «Cobrar» más los tres puntos (28) y su separación
+                      // (4); sin cobro solo van los tres puntos, y la cabecera
+                      // «ACCIÓN» es lo más ancho que hay que dejar entero.
+                      puedePagos ? '120px' : '56px',
+                    ].filter(Boolean).join(' '),
                     mt: 1.5,
+                    // Las pistas fijas suman más que la tarjeta en un teléfono
+                    // y que la media columna de un portátil. Sin esto, la
+                    // última —la de acción, donde ahora vive todo lo que se
+                    // puede hacer con el cargo— quedaba recortada por la
+                    // tarjeta o montada sobre «Próximos cargos», sin forma de
+                    // llegar a ella. Se desplaza la tabla, no la página.
+                    overflowX: 'auto',
                   }}>
                     {puedeFacturar && <Box sx={ENCABEZADO} />}
                     <Box sx={ENCABEZADO}>Concepto</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Vence</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'center' }}>Estado</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Monto</Box>
+                    <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Acción</Box>
 
                     {cargosVisibles.map((f) => {
                       const sePuede = puedeFacturar && marcable(f);
                       const marcado = f.cargoId != null && marcados.has(f.cargoId);
+                      const c = cargoDeFila(f);
                       return (
                         <Fila key={f.key} resaltada={marcado}>
                           {puedeFacturar && (
@@ -504,7 +574,85 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
                             <EstadoChip fila={f} hoy={hoy} />
                           </Box>
                           <Box sx={{ ...CELDA, textAlign: 'right', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
-                            {fmtDOP(f.montoCentavos)}
+                            {c ? (
+                              <MontoEditable cargoId={c.id} montoCentavos={f.montoCentavos}
+                                editable={montoCorregible(c, puedeGestionar)}
+                                concepto={tituloFila(f)} onGuardado={alCambiar} />
+                            ) : <>{fmtDOP(f.montoCentavos)}<HuecoDelLapiz /></>}
+                          </Box>
+                          {/*
+                            Cobrar el mes sin salir de la familia.
+
+                            Un mes vencido YA tiene factura, así que nunca le
+                            sale la casilla de facturar, y lo único que había
+                            en su fila era el icono del documento: se llegaba a
+                            la factura, pero «ver» y «cobrar» no son lo mismo y
+                            nadie daba con el segundo paso. El padre llama
+                            diciendo que ya pagó y la secretaria está mirando
+                            esta pantalla, no la ficha del hijo.
+
+                            Es un botón con la palabra y en columna propia, no
+                            un icono pegado al concepto: ahí se leía como parte
+                            del nombre y había que adivinar qué hacía.
+
+                            Abre el PagoModal de Cuentas por cobrar aquí mismo
+                            —el que usa la ficha del alumno— y no lleva a la
+                            pantalla de la factura: allí no se anota un pago
+                            recibido (su botón de cobro genera un LINK de pago
+                            para mandárselo al padre, que es otra cosa, y su
+                            panel derecho remite de vuelta a Cuentas por cobrar).
+
+                            A su lado, los tres puntos: el MISMO menú de la
+                            ficha del alumno, con sus trece acciones. Solo se
+                            podía cobrar, y para todo lo demás —mandar la
+                            factura, la mora, anular— había que entrar hijo por
+                            hijo. «Cobrar» se queda fuera del menú porque es lo
+                            que más se hace, pero no es otro cobro: llama al
+                            mismo manejador que su «Registrar pago».
+
+                            `py` corto, como la celda de la casilla: los tres
+                            puntos miden 28 px y con el relleno de las demás
+                            celdas subirían el alto de todas las filas.
+                          */}
+                          <Box sx={{ ...CELDA, py: 0.5, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.5 }}>
+                            {puedePagos && f.ecfDocumentId != null && f.saldoCentavos > 0 && (
+                              <Box
+                                component="button"
+                                type="button"
+                                onClick={() => acciones.onRegistrarPago(f.ecfDocumentId!)}
+                                title={`Registrar el pago de ${tituloFila(f)}`}
+                                sx={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                                  px: 1, py: 0.375, cursor: 'pointer',
+                                  fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.4,
+                                  color: '#0F7A4A', bgcolor: '#E8F6EF',
+                                  border: '1px solid #BFE6D4', borderRadius: '6px',
+                                  '&:hover': { bgcolor: '#D7EFE3', borderColor: '#9BD8BE' },
+                                }}
+                              >
+                                <Wallet size={12} />Cobrar
+                              </Box>
+                            )}
+                            {c && (
+                              <CargoActionsMenu
+                                cargo={c}
+                                puedePagos={puedePagos}
+                                puedeFacturar={puedeFacturar}
+                                puedeGestionar={puedeGestionar}
+                                mesTieneFactura={mesYaFacturado(c, mesesFacturados)}
+                                onRegistrarPago={acciones.onRegistrarPago}
+                                onAplicarMora={acciones.onAplicarMora}
+                                onCrearFactura={(x) => onFacturar([x.id])}
+                                onVerFactura={acciones.onVerFactura}
+                                onVincular={acciones.onVincular}
+                                onAnular={acciones.onAnular}
+                                onAnularFactura={acciones.onAnularFactura}
+                                onEnviarCorreo={acciones.onEnviarCorreo}
+                                onReenviarAviso={acciones.onReenviarAviso}
+                                reenviando={acciones.reenviandoCargoId === c.id}
+                                aplicandoMora={acciones.aplicandoMoraFacturaId === c.ecfDocumentId}
+                              />
+                            )}
                           </Box>
                         </Fila>
                       );
@@ -537,29 +685,32 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
                         py: 1.5, textAlign: 'right', fontSize: '0.9375rem', fontWeight: 600,
                         color: '#102A72', letterSpacing: '-0.4px', fontVariantNumeric: 'tabular-nums',
                       }}>
-                        {fmtDOP(totalCargos)}
+                        {fmtDOP(totalCargos)}<HuecoDelLapiz />
                       </Box>
+                      {/* La columna de acción no suma nada: va vacía para que
+                          el total siga cayendo bajo «Monto» y no se corra. */}
+                      <Box />
                     </Box>
                   </Box>
                 )}
               </Box>
 
               {/* ── Lo que va a salir ─────────────────────────────────────── */}
+              {/* Debajo de los cargos, y solo si queda algo por salir: un bloque
+                  que dice «nada por venir» ocupaba media tarjeta para no decir
+                  nada. */}
+              {previstos.length > 0 && (
               <Box sx={{
                 px: 2.75, minWidth: 0,
-                borderLeft: { lg: '1px solid #EDEFF5' },
-                borderTop: { xs: '1px solid #EDEFF5', lg: 'none' },
-                pt: { xs: 2, lg: 0 }, mt: { xs: 2, lg: 0 },
+                borderTop: '1px solid #EDEFF5',
+                pt: 2, mt: 2,
               }}>
                 <TituloColumna
                   titulo="Próximos cargos"
                   nota={ultimoPrevisto?.fechaVencimiento
                     ? `Hasta ${fmtFechaCorta(ultimoPrevisto.fechaVencimiento)}`
-                    : (previstos.length === 0 ? 'Nada por venir' : `${previstos.length} por venir`)}
+                    : `${previstos.length} por venir`}
                 />
-                {previstos.length === 0 ? (
-                  <Vacio texto="No queda nada por salir en este período." />
-                ) : (
                   <Box sx={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(140px, 1fr) 92px 100px 108px',
@@ -608,8 +759,8 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
                       />
                     )}
                   </Box>
-                )}
               </Box>
+              )}
             </Box>
           </Paper>
         );
@@ -640,6 +791,22 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, onFacturar, onFac
           </Box>
         </Box>
       )}
+
+      <CrearCargoEstudianteDialog
+        open={agregarA != null}
+        onClose={() => setAgregarA(null)}
+        onSaved={(cargoId) => {
+          alCambiar();
+          // Se pidió facturarlo en el acto: al formulario con ese cargo ya puesto.
+          if (cargoId) onFacturar([cargoId]);
+        }}
+        estudianteId={agregarA?.estudianteId ?? 0}
+        matriculaId={agregarA?.periodo.matriculaId ?? null}
+        periodoId={agregarA?.periodo.periodoId ?? null}
+        periodoNombre={agregarA ? `${agregarA.periodo.periodo} · ${agregarA.alumno}` : ''}
+        fechaInicio={agregarA?.periodo.fechaInicio ?? null}
+        fechaFin={agregarA?.periodo.fechaFin ?? null}
+      />
     </Box>
   );
 }

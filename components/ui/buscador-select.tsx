@@ -55,7 +55,7 @@ const filtrar = createFilterOptions<OpcionBuscador>({
  * y en lectores de pantalla.
  *
  * La API no cambió: sigue recibiendo y devolviendo el `valor` en texto plano,
- * no el objeto. Es lo que espera el único sitio que lo usa (`MatriculaDialog`)
+ * no el objeto. Es lo que espera el único sitio que lo usa (`MatriculaFormulario`)
  * y lo que hace que encaje con el resto de campos del formulario.
  */
 export function BuscadorSelect({
@@ -116,9 +116,13 @@ export function BuscadorSelect({
         </li>
       )}
       renderOption={(props, o) => {
-        const { key, ...resto } = props as React.HTMLAttributes<HTMLLIElement> & { key?: React.Key };
+        // La key sale del VALOR, no de la que arma MUI con la etiqueta: dos
+        // alumnos del colegio se llaman igual, y React descartaba al segundo
+        // («Encountered two children with the same key») — desaparecía de la
+        // lista justo cuando hacía falta distinguirlos.
+        const { key: _key, ...resto } = props as React.HTMLAttributes<HTMLLIElement> & { key?: React.Key };
         return (
-          <Box component="li" key={key ?? o.valor} {...resto} sx={{ display: 'block !important', py: 0.75 }}>
+          <Box component="li" key={o.valor} {...resto} sx={{ display: 'block !important', py: 0.75 }}>
             <Typography variant="body2" sx={{ fontSize: '0.875rem', lineHeight: 1.35 }}>
               {o.etiquetaLista ?? o.etiqueta}
             </Typography>

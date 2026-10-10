@@ -15,7 +15,7 @@ import { toast } from '@/lib/toast';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useVolver } from '@/lib/hooks/useVolver';
-import { analizarNcf, TIPOS_BIENES_606, TIPOS_RETENCION_ISR } from '@/lib/compras/fiscal';
+import { analizarNcf, avisoRetencionSinNcf, TIPOS_BIENES_606, TIPOS_RETENCION_ISR } from '@/lib/compras/fiscal';
 import type { DetalleCompra } from '@/lib/compras/consultas';
 import { ArrowLeft, Ban, BookOpen, Loader2, ShoppingCart, Receipt, Wallet } from 'lucide-react';
 
@@ -97,7 +97,7 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {compra.proveedorNombre ?? 'Sin proveedor'} · {compra.ncf} · {fmtFechaCorta(compra.fecha)}
+            {compra.proveedorNombre ?? 'Sin proveedor'} · {compra.ncf || 'Sin NCF'} · {fmtFechaCorta(compra.fecha)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -135,13 +135,14 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
         </CardContent></Card>
         <Card><CardContent className="space-y-1 p-4 text-sm">
           <div className="text-xs font-medium text-muted-foreground">Comprobante</div>
-          <div className="font-mono font-semibold">{compra.ncf ?? '—'}</div>
+          {/* Con `||` y no `??`: una fila vieja con el NCF en blanco tampoco deja un hueco. */}
+          <div className="font-mono font-semibold">{compra.ncf || 'Sin NCF'}</div>
           <div className="text-xs text-muted-foreground">
-            {ncf.valido ? `${ncf.electronico ? 'e-CF' : 'NCF'} de ${ncf.nombre.toLowerCase()}` : ''}
+            {ncf.valido ? `${ncf.electronico ? 'e-CF' : 'NCF'} de ${ncf.nombre.toLowerCase()}` : ncf.sinNcf ? 'Sin comprobante fiscal' : ''}
             {compra.ncfModificado ? ` · modifica ${compra.ncfModificado}` : ''}
           </div>
           <div className="text-xs text-muted-foreground">
-            606: {ncf.valido && !ncf.reporta606 ? 'no se reporta' : compra.tipoBienes606 ? `${compra.tipoBienes606} · ${TIPOS_BIENES_606[compra.tipoBienes606 as keyof typeof TIPOS_BIENES_606] ?? ''}` : '—'}
+            606: {ncf.sinNcf || (ncf.valido && !ncf.reporta606) ? 'no se reporta' : compra.tipoBienes606 ? `${compra.tipoBienes606} · ${TIPOS_BIENES_606[compra.tipoBienes606 as keyof typeof TIPOS_BIENES_606] ?? ''}` : '—'}
           </div>
         </CardContent></Card>
         <Card><CardContent className="space-y-1 p-4 text-sm">
@@ -224,6 +225,7 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
           {compra.retencionesCents > 0 && !anulada && (
             <p className="pt-1 text-xs text-muted-foreground">
               Las retenciones ({pesos(compra.retencionesCents)}) se le pagan a la DGII: el ITBIS con el IT-1 y el ISR con el IR-17.
+              {ncf.sinNcf ? ` ${avisoRetencionSinNcf(compra.tipoProveedor)}` : ''}
             </p>
           )}
           {compra.notas && <p className="whitespace-pre-wrap border-t pt-2 text-xs text-muted-foreground">{compra.notas}</p>}

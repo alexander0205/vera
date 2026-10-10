@@ -218,15 +218,27 @@ export interface FilaCliente {
 export async function getIngresosPorCliente(
   teamId: number, desde: Date, hasta: Date, limit = 100,
 ): Promise<FilaCliente[]> {
+  /**
+   * El nombre del contacto cuando la factura no guardó el del comprador: la
+   * emisión recurrente graba `client_id` y deja la razón social vacía, y sin
+   * esto el reporte amontonaba bajo «Consumidor Final» los ingresos de
+   * familias que sí están identificadas. Va en una expresión aparte porque
+   * tiene que repetirse igual en el SELECT y en el GROUP BY.
+   */
+  const nombreCliente = sql<string>`coalesce(
+    nullif(${ecfDocuments.razonSocialComprador}, ''),
+    nullif((SELECT cl.razon_social FROM clients cl WHERE cl.id = ${ecfDocuments.clientId}), ''),
+    'Consumidor Final'
+  )`;
   const rows = await db.select({
-    cliente: sql<string>`coalesce(nullif(${ecfDocuments.razonSocialComprador}, ''), 'Consumidor Final')`,
+    cliente: nombreCliente,
     rnc:     ecfDocuments.rncComprador,
     ingresos: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
     n:        count(),
   })
     .from(ecfDocuments)
     .where(and(pRango(teamId, desde, hasta), pVentaValida))
-    .groupBy(sql`coalesce(nullif(${ecfDocuments.razonSocialComprador}, ''), 'Consumidor Final')`, ecfDocuments.rncComprador)
+    .groupBy(nombreCliente, ecfDocuments.rncComprador)
     .orderBy(desc(sql`sum(${ecfDocuments.montoTotal})`))
     .limit(limit);
 
@@ -322,7 +334,11 @@ export async function getAgingCxC(teamId: number): Promise<AgingResumen> {
     filas.push({
       id: c.id,
       encf: c.encf,
-      cliente: c.razonSocialComprador?.trim() || 'Consumidor Final',
+      // Misma cascada que la pantalla de Cuentas por cobrar: el nombre del
+      // contacto cuando la factura no guardó razón social del comprador. Sin
+      // esto, la antigüedad de saldos listaba como «Consumidor Final» a
+      // familias que la cartera sí nombra.
+      cliente: c.razonSocialComprador?.trim() || c.clienteRazonSocial?.trim() || 'Consumidor Final',
       fechaLimite: c.fechaLimitePago,
       diasVencido: dias,
       saldoCents: c.saldo,

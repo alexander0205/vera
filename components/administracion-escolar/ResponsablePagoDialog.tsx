@@ -188,8 +188,9 @@ export function ResponsablePagoDialog({
                 El aviso de los iconos ya lo explicaba, pero en un tooltip de una
                 pantalla anterior, o sea después de haberse equivocado. */}
             <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-              Los recordatorios salen por <b>Celular</b>, <b>WhatsApp</b> y <b>Email</b>.
-              El <b>Teléfono</b> fijo no recibe SMS ni WhatsApp.
+              Cada aviso sale por su propio campo: el SMS al <b>Celular</b>, el WhatsApp al
+              número de <b>WhatsApp</b> y el correo al <b>Email</b>. Si dejas un campo vacío, por
+              ahí no se le escribe. El <b>Teléfono</b> fijo no recibe SMS ni WhatsApp.
             </p>
             {/* El MISMO formulario de Contactos, embebido. Copiarlo aquí habría
                 significado que el día que Contactos gane un campo, el colegio

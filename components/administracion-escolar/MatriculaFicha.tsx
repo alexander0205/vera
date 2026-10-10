@@ -66,8 +66,8 @@ export function EstadoMatriculaBadge({ estado }: { estado: string }) {
 
 // Genérica sobre la fila: la ficha solo lee los campos de `MatriculaFila`, pero
 // devuelve al padre la fila COMPLETA que recibió. Si aceptara y devolviera
-// `MatriculaFila` a secas, el diálogo de edición perdería `periodoId` y
-// `cursoId` por el camino.
+// `MatriculaFila` a secas, quien la monta recibiría de vuelta una fila
+// recortada —sin su `periodoId` ni su `cursoId`— en vez de la suya.
 export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar, onBorrar }: {
   matricula: T;
   onEditar: (m: T) => void;

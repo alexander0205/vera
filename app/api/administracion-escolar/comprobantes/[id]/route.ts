@@ -15,6 +15,7 @@ import {
 } from '@/lib/administracion-escolar/comprobantes';
 import type { AjustesAprobacion } from '@/lib/administracion-escolar/comprobantes';
 import { METODOS_PAGO_SET } from '@/lib/pagos/metodos';
+import { requireTurnoAbierto } from '@/lib/caja/guard';
 
 export async function GET(
   req: NextRequest,
@@ -110,9 +111,26 @@ export async function POST(
 
       if (body?.referencia != null) ajustes.referencia = String(body.referencia).trim().slice(0, 120);
 
+      /**
+       * Aprobar es cobrar, así que pasa por el mismo candado que cobrar.
+       *
+       * Faltaba: este era el único camino de Gobernanza por el que entraba
+       * dinero sin turno —funcionaba con la caja cerrada y el cobro no salía en
+       * ningún cierre—. Mismo guard y mismo 409 que `/api/ecf/emitir` y
+       * `/api/cuentas-por-cobrar/[docId]/pagos`, para que el mensaje que ve el
+       * usuario sea el de siempre. En una empresa sin caja no estorba: el guard
+       * devuelve `turno: null` y el cobro se registra como antes.
+       */
+      const guardCaja = await requireTurnoAbierto(auth.teamId, auth.user.id);
+      if (!guardCaja.ok) {
+        return NextResponse.json({ error: guardCaja.error, code: guardCaja.code }, { status: 409 });
+      }
+
       return NextResponse.json({
         ok: true,
-        ...await aprobarComprobante(auth.teamId, id, auth.user.id, ajustes),
+        ...await aprobarComprobante(
+          auth.teamId, id, auth.user.id, ajustes, guardCaja.turno?.id ?? null,
+        ),
       });
     }
     if (accion === 'rechazar') {
