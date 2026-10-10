@@ -13,6 +13,11 @@
  * parsearlo.
  */
 
+// Antes que `pdf-parse`, siempre: es lo que mete `@napi-rs/canvas` en la función
+// de Vercel. Sin esta línea pdf.js no encuentra `DOMMatrix` al cargarse y la
+// ruta entera contesta 500, también a quien no ha iniciado sesión
+// (lib/compras/captura/pdf.ts lo cuenta entero).
+import 'pdf-parse/worker';
 import { PDFParse } from 'pdf-parse';
 import { SigerdError } from './types';
 import type { SigerdClient } from './client';

@@ -35,6 +35,15 @@ export interface DatosCaptura {
   /** juridica | fisica | informal | rst | exterior: decide las retenciones. */
   tipoProveedor: TipoProveedor | null;
   ncf: string | null;
+  /**
+   * Lo que se leyó como NCF y no pasó la validación (le falta un dígito, un
+   * tipo que no existe). No es un NCF: solo llega al campo del formulario, para
+   * que salga en rojo y alguien lo corrija o lo borre a propósito. Sin esto el
+   * campo abría vacío, y un gasto con el NCF vacío ya se puede guardar: una
+   * factura con comprobante mal leído pasaba por «sin NCF». Opcional porque las
+   * capturas guardadas antes no lo traen.
+   */
+  ncfLeido?: string | null;
   /** YYYY-MM-DD */
   fecha: string | null;
   formaPago: 'contado' | 'credito' | null;
@@ -60,7 +69,7 @@ export interface DatosCaptura {
 }
 
 export const DATOS_VACIOS: DatosCaptura = {
-  clase: null, proveedorRnc: null, proveedorNombre: null, tipoProveedor: null, ncf: null, fecha: null,
+  clase: null, proveedorRnc: null, proveedorNombre: null, tipoProveedor: null, ncf: null, ncfLeido: null, fecha: null,
   formaPago: null, metodoPago: null, categoria: null,
   subtotalCents: null, itbisCents: null, propinaCents: null, iscCents: null, otrosImpuestosCents: null,
   itbisRetenidoCents: null, isrRetenidoCents: null, totalCents: null,
@@ -96,7 +105,8 @@ export const esquemaLecturaIa = z.object({
   ncf: z.string().nullable().describe('El NCF o e-NCF, lo que sigue a «NCF:», p. ej. B0100000123 o E310000000045'),
   fecha: z.string().nullable()
     .describe('Fecha de la venta, la que va junto a la hora (p. ej. «09/08/22 10:09:38» es 2022-08-09), en formato YYYY-MM-DD. Nunca la de la resolución DGII'),
-  formaPago: z.enum(['contado', 'credito']).nullable().describe('credito si dice crédito o trae fecha de vencimiento'),
+  formaPago: z.enum(['contado', 'credito']).nullable()
+    .describe('contado si la factura dice «al contado», «de contado» o aparece como pagada; credito solo si dice crédito o a plazo. Una fecha de vencimiento por sí sola NO la hace a crédito'),
   metodoPago: z.enum(METODOS_PAGO_COMPRA).nullable().describe('Con qué se pagó, si la factura lo dice: efectivo, transferencia, cheque, tarjeta o deposito'),
   categoria: z.enum(CLAVES_CATEGORIA).nullable().describe('La categoría del gasto que mejor describe la factura completa'),
   moneda: z.string().nullable().describe('DOP o USD'),
@@ -198,7 +208,11 @@ export function datosDesdeIa(l: LecturaIa, hoy: string = new Date().toISOString(
   // Las cuentas tienen que cuadrar: los modelos pequeños a veces toman el precio
   // con ITBIS incluido (recibos de supermercado) o se inventan el total cuando la
   // foto está cortada. Se comprueba contra el total leído, no se adivina.
-  const cuadre = cuadrarLineas(lineas, aCents(total));
+  const cuadre = cuadrarLineas(
+    lineas,
+    aCents(total),
+    (aCents(l.isc) ?? 0) + (aCents(l.otrosImpuestos) ?? 0) + (aCents(l.propina) ?? 0),
+  );
   if (cuadre.incluianItbis) avisos.push('Los precios de la factura ya incluían el ITBIS: se separó en cada línea.');
   if (cuadre.noCuadra) avisos.push('Las líneas no suman el total leído: revísalas con la foto antes de registrar.');
 
@@ -223,7 +237,8 @@ export function datosDesdeIa(l: LecturaIa, hoy: string = new Date().toISOString(
     ? l.tipoProveedor
     : tipoPorId ?? l.tipoProveedor;
   if (l.esFactura && !id.formatoValido && tipoProveedor !== 'exterior' && tipoProveedor !== 'informal') {
-    avisos.push('No se leyó el RNC del proveedor: escríbelo mirando la foto.');
+    // Sin NCF el RNC ya no es obligatorio: no se manda a escribir lo que quizá no existe.
+    avisos.push('No se leyó el RNC del proveedor: si la factura tiene NCF, escríbelo mirando la foto.');
   }
 
   return {
@@ -232,6 +247,7 @@ export function datosDesdeIa(l: LecturaIa, hoy: string = new Date().toISOString(
     proveedorNombre: l.proveedorNombre?.trim().slice(0, 200) || null,
     tipoProveedor,
     ncf: ncf.valido ? ncf.ncf : null,
+    ncfLeido: ncf.valido ? null : leido.ncf,
     fecha,
     formaPago: l.formaPago,
     metodoPago: l.metodoPago,
@@ -260,11 +276,19 @@ const TASA_NUM: Record<TasaItbis, number> = { '0.18': 0.18, '0.16': 0.16, '0': 0
  * TAL CUAL ya dan el total (±1 %), es que el precio impreso incluía el ITBIS y
  * se le quita a cada una. Si ni así ni sumándoles el ITBIS se llega al total,
  * se avisa. Sin total leído no se toca nada.
+ *
+ * `extrasCents` es todo lo que el total lleva encima y NO es ITBIS: el ISC, la
+ * contribución de telecomunicaciones, la propina. Sin descontarlo, una factura
+ * de internet jamás cuadra —las líneas más su ITBIS se quedan por debajo del
+ * total— y salía un aviso de que no cuadran cuando estaban perfectas. Un aviso
+ * que siempre salta enseña a no leer los avisos.
  */
-export function cuadrarLineas(lineas: LineaCaptura[], totalCents: number | null): {
+export function cuadrarLineas(lineas: LineaCaptura[], totalCents: number | null, extrasCents = 0): {
   lineas: LineaCaptura[]; incluianItbis: boolean; noCuadra: boolean;
 } {
   if (!lineas.length || !totalCents) return { lineas, incluianItbis: false, noCuadra: false };
+  // Contra lo que de verdad tienen que explicar las líneas.
+  totalCents = Math.max(0, totalCents - Math.max(0, extrasCents));
   const tal = lineas.reduce((s, x) => s + x.cantidad * x.costoUnitarioCents, 0);
   const conItbis = lineas.reduce((s, x) => s + Math.round(x.cantidad * x.costoUnitarioCents * (1 + TASA_NUM[x.itbisTasa])), 0);
   const cerca = (a: number) => Math.abs(a - totalCents) <= Math.max(100, totalCents * 0.01);
@@ -305,7 +329,24 @@ export function datosDesdeTimbre(t: TimbreEcf, rncEmpresa: string | null): Datos
 export function combinarDatos(qr: DatosCaptura | null, ia: DatosCaptura | null): DatosCaptura {
   if (!qr) return ia ?? { ...DATOS_VACIOS };
   if (!ia) return qr;
-  const avisos = [...qr.avisos, ...ia.avisos];
+
+  /**
+   * Los avisos de la lectura con IA que el QR deja sin sentido.
+   *
+   * La IA se queja de lo que no supo leer, y el QR trae justo esos campos
+   * exactos. Sin quitarlos salía «No se leyó el RNC del proveedor» con el RNC
+   * ahí puesto, al lado. Un aviso que contradice lo que se está viendo le quita
+   * el crédito a todos los demás, y los otros hay que leerlos.
+   */
+  const resueltos: [boolean, RegExp][] = [
+    [qr.proveedorRnc != null, /RNC del proveedor/i],
+    [qr.ncf != null, /NCF válido/i],
+    [qr.fecha != null, /fecha leída/i],
+  ];
+  const avisos = [
+    ...qr.avisos,
+    ...ia.avisos.filter((a) => !resueltos.some(([loTrae, patron]) => loTrae && patron.test(a))),
+  ];
   if (qr.totalCents != null && ia.totalCents != null && Math.abs(qr.totalCents - ia.totalCents) > 100) {
     avisos.push('El total leído de la foto no coincide con el del QR: vale el del QR.');
   }
@@ -317,6 +358,8 @@ export function combinarDatos(qr: DatosCaptura | null, ia: DatosCaptura | null):
     proveedorRnc: qr.proveedorRnc ?? ia.proveedorRnc,
     proveedorNombre: ia.proveedorNombre ?? qr.proveedorNombre,
     ncf: qr.ncf ?? ia.ncf,
+    // Con el e-NCF exacto del QR, lo que la foto leyó a medias ya no pinta nada.
+    ncfLeido: qr.ncf ? null : ia.ncfLeido ?? null,
     fecha: qr.fecha ?? ia.fecha,
     totalCents: qr.totalCents ?? ia.totalCents,
     timbre: qr.timbre,
@@ -331,6 +374,11 @@ export interface InicialRegistro {
   proveedorRnc: string | null;
   proveedorNombre: string | null;
   tipoProveedor: TipoProveedor | null;
+  /**
+   * Con qué arranca el campo NCF: el leído y validado o, si no lo hubo, lo que
+   * se leyó a medias, para que el formulario lo marque en rojo en vez de abrir
+   * vacío. Vacío de verdad solo cuando no se leyó nada parecido a un NCF.
+   */
   ncf: string | null;
   fecha: string | null;
   formaPago: 'contado' | 'credito';
@@ -358,11 +406,15 @@ export function inicialDesdeCaptura(d: DatosCaptura): { inicial: InicialRegistro
   const avisos = [...d.avisos];
   let lineas = d.lineas;
   if (!lineas.length && d.totalCents != null && d.totalCents > 0) {
-    const propina = d.propinaCents ?? 0;
+    // Todo lo que el total lleva encima de la base y no es ITBIS. Sin restar el
+    // ISC y los otros impuestos —una factura de telecomunicaciones trae ISC del
+    // 10 % y contribución del 2 %— la base salía inflada y el ITBIS parecía del
+    // 16 %, con lo que la línea nacía con la tasa equivocada.
+    const encima = (d.propinaCents ?? 0) + (d.iscCents ?? 0) + (d.otrosImpuestosCents ?? 0);
     const itbis = d.itbisCents;
     const descripcion = d.ncf ? `Factura ${d.ncf}` : 'Factura del proveedor';
     if (itbis != null && itbis > 0) {
-      const base = d.subtotalCents ?? d.totalCents - itbis - propina;
+      const base = d.subtotalCents ?? d.totalCents - itbis - encima;
       const ratio = base > 0 ? itbis / base : 0;
       const tasa: TasaItbis = Math.abs(ratio - 0.18) < 0.01 ? '0.18' : Math.abs(ratio - 0.16) < 0.01 ? '0.16' : '0.18';
       if (tasa === '0.18' && Math.abs(ratio - 0.18) >= 0.01) {
@@ -370,7 +422,7 @@ export function inicialDesdeCaptura(d: DatosCaptura): { inicial: InicialRegistro
       }
       lineas = [{ descripcion, cantidad: 1, costoUnitarioCents: Math.max(0, base), itbisTasa: tasa, esServicio: false, categoria: d.categoria }];
     } else {
-      lineas = [{ descripcion, cantidad: 1, costoUnitarioCents: d.totalCents - propina, itbisTasa: 'exento', esServicio: false, categoria: d.categoria }];
+      lineas = [{ descripcion, cantidad: 1, costoUnitarioCents: d.totalCents - encima, itbisTasa: 'exento', esServicio: false, categoria: d.categoria }];
       avisos.push('No se leyó el ITBIS: la línea quedó exenta por el total. Si la factura trae ITBIS, sepáralo mirando la foto.');
     }
   }
@@ -379,7 +431,7 @@ export function inicialDesdeCaptura(d: DatosCaptura): { inicial: InicialRegistro
       proveedorRnc: d.proveedorRnc,
       proveedorNombre: d.proveedorNombre,
       tipoProveedor: d.tipoProveedor,
-      ncf: d.ncf,
+      ncf: d.ncf ?? d.ncfLeido ?? null,
       fecha: d.fecha,
       formaPago: d.formaPago ?? 'contado',
       metodoPago: d.metodoPago,

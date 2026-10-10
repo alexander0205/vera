@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,11 +14,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { NativeSelect } from '@/components/ui/native-select';
-import { SelectorCurso } from '@/components/administracion-escolar/SelectorCurso';
 import { ConceptoPicker } from '@/components/administracion-escolar/ConceptoPicker';
 import { Paginador } from '@/components/ui/paginador';
 import { ModalHeader } from '@/components/ui/modal-header';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { AlertTriangle, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
@@ -88,10 +87,15 @@ function perteneceMes(periodo: Periodo | undefined, mes: string, anio: string) {
     .some((m) => m.mes === Number(mes) && m.anio === Number(anio));
 }
 
+/**
+ * Lo tecleado, en centavos. 0 si no sirve — quien llama ya exige > 0.
+ *
+ * Va por `parseDOPaCentavos` porque aqui la coma es separador de MILES, que es
+ * como este sistema escribe el dinero («RD$2,800.00»). Leida como decimal,
+ * escribir «1,100» creaba el cargo por RD$1.10.
+ */
 function toCentavos(value: string): number {
-  const n = Number.parseFloat(value.replace(',', '.'));
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100);
+  return parseDOPaCentavos(value) ?? 0;
 }
 
 function estadoBadge(estado: string, saldoCentavos: number) {
@@ -123,12 +127,6 @@ export default function CargosClient() {
   const [filtroPeriodo, setFiltroPeriodo] = useState('todos');
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [filtroConcepto, setFiltroConcepto] = useState('todos');
-
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [opError, setOpError] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ creados: number; omitidos: number; total: number } | null>(null);
 
   /**
    * El botón «Cargos del mes» se quitó de esta pantalla.
@@ -214,11 +212,6 @@ export default function CargosClient() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const periodosById = useMemo(() => new Map(periodos.map((p) => [p.id, p.nombre])), [periodos]);
-  const cursosActivos = useMemo(
-    () => cursos.filter((c) =>
-      c.activo !== false && c.gradoActivo !== false && c.servicioActivo !== false),
-    [cursos],
-  );
 
   /**
    * Las secciones que se pueden elegir para un período, listas para el buscador.
@@ -228,9 +221,6 @@ export default function CargosClient() {
    * desplegable eran treinta opciones idénticas.
    */
   const conceptosActivos = useMemo(() => conceptos.filter((c) => c.activo !== false), [conceptos]);
-  const conceptoSeleccionado = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
-  const periodoForm = periodos.find((p) => String(p.id) === form.periodoId);
-  const mesesForm = mesesDelPeriodo(periodoForm?.fechaInicio, periodoForm?.fechaFin);
 
   const filtrados = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -244,70 +234,6 @@ export default function CargosClient() {
   const saldoPendiente = pendientes.reduce((sum, c) => sum + c.saldoCentavos, 0);
   const vencidos = cargos.filter((c) => c.estado === 'vencido').length;
   const cobrado = cargos.reduce((sum, c) => sum + (c.montoCentavos - c.saldoCentavos), 0);
-
-  const objetivo = useMemo(() => {
-    if (!form.periodoId) return 0;
-    return matriculas.filter((m) => (
-      m.estado === 'activa'
-      && String(m.periodoId) === form.periodoId
-      && (form.cursoId === 'todos' || String(m.cursoId) === form.cursoId)
-    )).length;
-  }, [form.cursoId, form.periodoId, matriculas]);
-
-  function abrirGenerar() {
-    const periodoActivo = periodos.find((p) => p.activo);
-    const mensualidad = conceptosActivos.find((c) => c.tipo === 'mensualidad') ?? conceptosActivos[0];
-    const primerMes = mesInicial(periodoActivo);
-    setForm({
-      ...EMPTY_FORM,
-      periodoId: periodoActivo ? String(periodoActivo.id) : '',
-      conceptoId: mensualidad ? String(mensualidad.id) : '',
-      mes: mensualidad?.tipo === 'mensualidad' ? String(primerMes?.mes ?? '') : '',
-      anio: String(primerMes?.anio ?? new Date().getFullYear()),
-    });
-    setResultado(null);
-    setOpError(null);
-    setOpen(true);
-  }
-
-  async function handleGenerar() {
-    const montoCentavos = toCentavos(form.monto);
-    if (!form.periodoId || !form.conceptoId || !form.anio || montoCentavos <= 0) {
-      setOpError('Período, concepto, año y monto son obligatorios');
-      return;
-    }
-    if (conceptoSeleccionado?.tipo === 'mensualidad' && !form.mes) {
-      setOpError('Selecciona el mes de la mensualidad');
-      return;
-    }
-    setSaving(true);
-    setOpError(null);
-    setResultado(null);
-    try {
-      const res = await fetch('/api/administracion-escolar/cargos/generar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          periodoId: Number.parseInt(form.periodoId),
-          cursoId: form.cursoId === 'todos' ? null : Number.parseInt(form.cursoId),
-          conceptoId: Number.parseInt(form.conceptoId),
-          mes: form.mes ? Number.parseInt(form.mes) : null,
-          anio: Number.parseInt(form.anio),
-          montoCentavos,
-          fechaVencimiento: form.fechaVencimiento || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error generando cargos');
-      setResultado(data);
-      await cargarCargos();
-      await cargarCatalogos();
-    } catch (e: unknown) {
-      setOpError(e instanceof Error ? e.message : 'Error generando cargos');
-    } finally {
-      setSaving(false);
-    }
-  }
 
   // ── Cargo individual ──────────────────────────────────────────────────────
   const estNombre = useMemo(
@@ -407,8 +333,13 @@ export default function CargosClient() {
             <Button variant="outline" onClick={abrirIndividual} disabled={loading || sinCatalogos}>
               <Plus className="h-4 w-4 mr-2" />Cargo individual
             </Button>
-            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirGenerar} disabled={loading || sinCatalogos}>
-              <Plus className="h-4 w-4 mr-2" />Generar cargos
+            {/* Pantalla propia, no un diálogo: lo que se decide allí es una
+                lista de ciento cuarenta y cinco alumnos, y dentro de un modal
+                cabían cinco con scroll. */}
+            <Button asChild className="bg-zero-600 hover:bg-zero-700" disabled={loading || sinCatalogos}>
+              <Link href="/escolar/cargos/lote">
+                <Plus className="h-4 w-4 mr-2" />Cargo a varios alumnos
+              </Link>
             </Button>
           </div>
         )}
@@ -469,8 +400,10 @@ export default function CargosClient() {
               <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500 font-medium">{sinCargos ? 'Aún no hay cargos generados' : 'Sin resultados'}</p>
               {sinCargos && puedeGestionar && !sinCatalogos && (
-                <Button className="mt-4 bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirGenerar}>
-                  <Plus className="h-4 w-4 mr-1" />Generar cargos
+                <Button asChild className="mt-4 bg-zero-600 hover:bg-zero-700" size="sm">
+                  <Link href="/escolar/cargos/lote">
+                    <Plus className="h-4 w-4 mr-1" />Cargo a varios alumnos
+                  </Link>
                 </Button>
               )}
               {sinCatalogos && (
@@ -527,109 +460,6 @@ export default function CargosClient() {
           />
         </CardContent>
       </Card>
-
-      <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) setOpen(false); }}>
-        <DialogContent className="max-w-lg">
-          <ModalHeader title="Generar cargos masivos"
-            subtitle="Crea el mismo cargo para todas las matrículas del filtro." />
-          <div className="space-y-4 px-6 py-4">
-            {opError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>}
-            {resultado && (
-              <div className="bg-zero-50 border border-zero-200 text-zero-800 text-sm rounded-lg p-3">
-                Creados: {resultado.creados}. Omitidos por duplicado: {resultado.omitidos}. Total evaluado: {resultado.total}.
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Período *</Label>
-                <NativeSelect value={form.periodoId} onChange={(e) => {
-                  const periodo = periodos.find((p) => String(p.id) === e.target.value);
-                  const siguiente = mesInicial(periodo);
-                  setForm((f) => ({
-                    ...f,
-                    periodoId: e.target.value,
-                    ...(perteneceMes(periodo, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) }),
-                  }));
-                }}>
-                  <option value="" disabled>Período</option>
-                  {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
-                </NativeSelect>
-              </div>
-            </div>
-
-            {/* El MISMO selector que Matriculación: servicio → grado → sección.
-                Antes esto era un buscador aplanado donde cada línea decía solo
-                «A» o «B» bajo un encabezado en gris — con diecinueve grados,
-                cincuenta líneas para acertar una letra. */}
-            <SelectorCurso
-              permitirTodos
-              cursos={cursosActivos}
-              periodoId={Number(form.periodoId) || null}
-              valor={form.cursoId}
-              onChange={(v) => setForm((f) => ({ ...f, cursoId: v || 'todos' }))}
-            />
-
-            <div className="space-y-1.5">
-              <Label>Concepto *</Label>
-              {/* Busca en los conceptos del colegio Y en el catálogo de
-                  productos/servicios: cobrar una excursión obligaba antes a ir
-                  a Configuración a crear un concepto con el mismo nombre. */}
-              <ConceptoPicker
-                conceptos={conceptosActivos}
-                value={form.conceptoId}
-                onConceptoCreado={() => void cargarCatalogos()}
-                onChange={(id) => {
-                  const concepto = conceptos.find((c) => String(c.id) === id);
-                  const siguiente = mesInicial(periodoForm);
-                  setForm((f) => ({
-                    ...f,
-                    conceptoId: id,
-                    ...(concepto?.tipo === 'mensualidad'
-                      ? (perteneceMes(periodoForm, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
-                      : { mes: '' }),
-                  }));
-                }}
-              />
-            </div>
-
-            {conceptoSeleccionado?.tipo === 'mensualidad' ? (
-              <MesAcademicoSelect periodo={periodoForm} meses={mesesForm} mes={form.mes} anio={form.anio}
-                onChange={(seleccion) => setForm((f) => ({ ...f, mes: String(seleccion.mes), anio: String(seleccion.anio) }))} />
-            ) : (
-              <div className="space-y-1.5">
-                <Label>Año *</Label>
-                <Input type="number" value={form.anio}
-                  onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} />
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Monto por estudiante (RD$) *</Label>
-                <Input type="number" step="0.01" placeholder="3500.00" value={form.monto}
-                  onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fecha vencimiento</Label>
-                <Input type="date" value={form.fechaVencimiento}
-                  onChange={(e) => setForm((f) => ({ ...f, fechaVencimiento: e.target.value }))} />
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
-              Matrículas activas objetivo: <span className="font-semibold text-gray-900">{objetivo}</span>.
-              {' '}Duplicados existentes se omiten automáticamente.
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cerrar</Button>
-            <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGenerar} disabled={saving || objetivo === 0}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Generando...</> : 'Generar cargos'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Cargo individual — un estudiante */}
       <Dialog open={openInd} onOpenChange={(o: boolean) => { if (!o) setOpenInd(false); }}>

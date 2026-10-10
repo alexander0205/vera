@@ -61,7 +61,7 @@ export interface ResumenAvisos {
 
 const FALTA_TEXTO: Record<Canal, string> = {
   correo: 'sin correo',
-  whatsapp: 'sin WhatsApp ni celular',
+  whatsapp: 'sin WhatsApp',
   sms: 'sin celular',
 };
 

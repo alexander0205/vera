@@ -15,6 +15,7 @@ import { Paginador } from '@/components/ui/paginador';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
+import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 
 /**
  * Las familias que pagan.
@@ -356,10 +357,10 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
       {/* Por dónde se le escribe. Lo que falta, en rojo. */}
       <div className="space-y-1.5 border-t border-gray-100 pt-3 text-sm">
         <Row label="Correo" value={fila.email || 'Falta'} falta={!fila.email} />
-        <Row label="WhatsApp" value={fila.whatsapp || fila.celular || 'Falta'}
-          falta={!(fila.whatsapp || fila.celular)} />
-        <Row label="Celular (SMS)" value={fila.celular || fila.whatsapp || 'Falta'}
-          falta={!(fila.celular || fila.whatsapp)} />
+        <Row label="WhatsApp" value={destinoDeContacto(fila, 'whatsapp') ?? 'Falta'}
+          falta={!destinoDeContacto(fila, 'whatsapp')} />
+        <Row label="Celular (SMS)" value={destinoDeContacto(fila, 'sms') ?? 'Falta'}
+          falta={!destinoDeContacto(fila, 'sms')} />
       </div>
 
       <div className="space-y-2 border-t border-gray-100 pt-3">
@@ -493,15 +494,15 @@ function Row({ label, value, falta }: { label: string; value: string; falta?: bo
 /**
  * Por dónde se le puede escribir a esta familia.
  *
- * Rojo = ese canal no existe. El mismo orden de preferencia que usa el motor
- * de avisos: WhatsApp cae al celular y el SMS al celular antes que al fijo,
- * que no recibe nada.
+ * Rojo = ese canal no existe. La misma regla que usa el motor de avisos
+ * (destino-canal.ts): el WhatsApp sale solo al campo «WhatsApp» y el SMS al
+ * celular antes que al fijo, que no recibe nada.
  */
 function Canales({ fila }: { fila: FilaResponsable }) {
   const canales = [
     { icon: Mail, label: 'Correo', valor: fila.email?.trim() || null },
-    { icon: MessageCircle, label: 'WhatsApp', valor: fila.whatsapp?.trim() || fila.celular?.trim() || null },
-    { icon: Smartphone, label: 'SMS', valor: fila.celular?.trim() || fila.whatsapp?.trim() || null },
+    { icon: MessageCircle, label: 'WhatsApp', valor: destinoDeContacto(fila, 'whatsapp') },
+    { icon: Smartphone, label: 'SMS', valor: destinoDeContacto(fila, 'sms') },
   ];
   const faltan = canales.filter((c) => !c.valor).length;
 

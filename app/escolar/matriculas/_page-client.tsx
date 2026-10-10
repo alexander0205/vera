@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Paginador } from '@/components/ui/paginador';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,13 +14,16 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { MatriculaDialog } from '@/components/administracion-escolar/MatriculaDialog';
 import { MatriculaLoteDialog } from '@/components/administracion-escolar/MatriculaLoteDialog';
 import { MatriculaFicha, EstadoMatriculaBadge } from '@/components/administracion-escolar/MatriculaFicha';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { CalendarDays, ClipboardList, GraduationCap, Loader2, Plus, Search, Users } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useUrlParams } from '@/lib/hooks/useUrlEstado';
+import {
+  idDeRuta, rutaEditarMatricula, rutaNuevaMatricula,
+} from '@/lib/administracion-escolar/matricula-pantalla';
 
 interface Matricula {
   id: number;
@@ -76,6 +80,7 @@ const ESTADOS = [
 // El badge de estado vive en MatriculaFicha: fila y ficha comparten definición.
 
 export default function MatriculasClient() {
+  const router = useRouter();
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
 
@@ -86,39 +91,61 @@ export default function MatriculasClient() {
   const [loading, setLoading]       = useState(true);
   const [loadError, setLoadError]   = useState<string | null>(null);
 
-  const [filtroPeriodo, setFiltroPeriodo] = useState<string>('todos');
-  const [filtroEstado, setFiltroEstado]   = useState<string>('todos');
-  /** `query` es lo que se teclea; `qDebounced` es lo que viaja al servidor. */
-  const [query, setQuery]           = useState('');
-  const [qDebounced, setQDebounced] = useState('');
+  /**
+   * Filtros, página y matrícula seleccionada viven en la URL, no en `useState`,
+   * igual que en el listado de Estudiantes.
+   *
+   * Hacía falta desde que «Nueva matrícula» y «Editar matrícula» son pantallas
+   * aparte: con estado local, volver de editar la matrícula de la página tres
+   * de un período dejaba en la página uno, sin filtro y con la ficha cerrada.
+   * Con la URL, esta pantalla se pasa a sí misma como sitio al que volver y se
+   * regresa a lo que se estaba mirando.
+   *
+   * Los valores por defecto («todos», página 1) NO se escriben: la URL normal
+   * se queda limpia y solo dice lo que se ha tocado.
+   */
+  const { params: urlParams, setParams } = useUrlParams();
+
+  /** Lo que viaja al servidor: el texto ya rebotado. */
+  const qUrl = urlParams.get('q') ?? '';
+  // Lo que venga de fuera se valida: un ?periodo= o ?estado= escrito a mano
+  // llegaría tal cual a la consulta del servidor.
+  const periodoUrl = idDeRuta(urlParams.get('periodo'));
+  const filtroPeriodo = periodoUrl != null ? String(periodoUrl) : 'todos';
+  const estadoUrl = urlParams.get('estado') ?? '';
+  const filtroEstado = ESTADOS.some((e) => e.valor === estadoUrl) ? estadoUrl : 'todos';
+  // Paginado en el servidor: las matrículas se acumulan curso tras curso.
+  const pagina = idDeRuta(urlParams.get('page')) ?? 1;
   /** La fila abierta en la ficha lateral. */
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedId = idDeRuta(urlParams.get('matricula'));
+
+  /**
+   * El texto del buscador SÍ es estado local, además del de la URL: a la URL
+   * va el valor ya rebotado (300 ms), y el recuadro se alimenta de este para
+   * no ir a tirones mientras se teclea.
+   */
+  const [query, setQuery] = useState(qUrl);
   const [stats, setStats] = useState({ total: 0, activas: 0, cursos: 0 });
 
-  const [showForm, setShowForm]     = useState(false);
   const [showLote, setShowLote]     = useState(false);
-  /** La matrícula que se está editando; `null` mientras se crea una nueva. */
-  const [editando, setEditando]     = useState<Matricula | null>(null);
   const [porBorrar, setPorBorrar]   = useState<Matricula | null>(null);
   const [borrando, setBorrando]     = useState(false);
   const [borrarError, setBorrarError] = useState<string | null>(null);
 
-  // Paginado en el servidor: las matrículas se acumulan curso tras curso.
-  const [pagina, setPagina] = useState(1);
   const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });
 
   const cargarMatriculas = useCallback(async () => {
     const params = new URLSearchParams({ pagina: String(pagina) });
     if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
     if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
-    if (qDebounced) params.set('q', qDebounced);
+    if (qUrl) params.set('q', qUrl);
     const res = await fetch(`/api/administracion-escolar/matriculas?${params}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Error cargando matrículas');
     setMatriculas(data.matriculas ?? []);
     setPaginaInfo({ total: data.total ?? 0, paginas: data.paginas ?? 1, porPagina: data.porPagina ?? 50 });
     setStats(data.stats ?? { total: 0, activas: 0, cursos: 0 });
-  }, [filtroPeriodo, filtroEstado, qDebounced, pagina]);
+  }, [filtroPeriodo, filtroEstado, qUrl, pagina]);
 
   const cargarCatalogos = useCallback(async () => {
     const [periodosRes, cursosRes, estudiantesRes] = await Promise.all([
@@ -136,14 +163,37 @@ export default function MatriculasClient() {
   }, []);
 
   // Debounce de la búsqueda (300 ms): sin él sale una consulta por tecla.
-  useEffect(() => {
-    const t = setTimeout(() => setQDebounced(query.trim()), 300);
-    return () => clearTimeout(t);
-  }, [query]);
-
+  //
   // Cambiar de filtro vuelve a la primera página: quedarse en la siete de un
   // listado que ahora tiene dos deja la pantalla vacía sin explicar por qué.
-  useEffect(() => { setPagina(1); }, [qDebounced, filtroPeriodo, filtroEstado]);
+  // Va en el MISMO cambio de URL que el filtro: en dos, el segundo pisa al
+  // primero (ver `useUrlParams`).
+  const ultimoEnviado = useRef<string | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const v = query.trim();
+      if (v === qUrl) return;
+      ultimoEnviado.current = v;
+      setParams({ q: v || null, page: null });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, qUrl, setParams]);
+
+  // Atrás/adelante cambian la URL sin pasar por el recuadro: hay que bajarle el
+  // valor. Se compara recortado, que es como va a la URL, para no comerle el
+  // espacio final a quien sigue tecleando.
+  //
+  // Lo que llega de vuelta por haberlo mandado este mismo recuadro NO se baja:
+  // quien escribe «mar», duda y sigue con «ia» mientras la dirección se
+  // actualiza, perdía la «ia» al confirmarse «mar».
+  useEffect(() => {
+    if (ultimoEnviado.current === qUrl) { ultimoEnviado.current = null; return; }
+    setQuery((actual) => (actual.trim() === qUrl ? actual : qUrl));
+  }, [qUrl]);
+
+  const cambiarPeriodo = (v: string) => setParams({ periodo: v === 'todos' ? null : v, page: null });
+  const cambiarEstado  = (v: string) => setParams({ estado: v === 'todos' ? null : v, page: null });
+  const irAPagina      = (p: number) => setParams({ page: p <= 1 ? null : p });
 
   /**
    * Los catálogos, UNA vez.
@@ -193,10 +243,15 @@ export default function MatriculasClient() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'No se pudo borrar la matrícula');
       setPorBorrar(null);
-      if (selectedId === porBorrar.id) setSelectedId(null);
       // La última de la página deja la página vacía: se retrocede una.
-      if (matriculas.length === 1 && pagina > 1) setPagina((p) => p - 1);
-      else await cargarMatriculas();
+      const retrocede = matriculas.length === 1 && pagina > 1;
+      // La fila elegida y la página, en un solo cambio de URL.
+      const cambios: Record<string, number | null> = {};
+      if (selectedId === porBorrar.id) cambios.matricula = null;
+      if (retrocede) cambios.page = pagina - 1 <= 1 ? null : pagina - 1;
+      setParams(cambios);
+      // Al retroceder, el cambio de página ya vuelve a pedir el listado.
+      if (!retrocede) await cargarMatriculas();
     } catch (e: unknown) {
       setBorrarError(e instanceof Error ? e.message : 'No se pudo borrar la matrícula');
     } finally {
@@ -206,19 +261,24 @@ export default function MatriculasClient() {
 
   const seleccionada = matriculas.find((m) => m.id === selectedId) ?? null;
 
+  /**
+   * «Nueva matrícula» y «Editar matrícula» son pantallas aparte. Se les pasa
+   * ESTA, con sus filtros, su página y su fila elegida, para volver a ella.
+   */
+  const qs = urlParams.toString();
+  const volverAqui = qs ? `/escolar/matriculas?${qs}` : '/escolar/matriculas';
+
   function abrirNueva() {
-    setEditando(null);
-    setShowForm(true);
+    router.push(rutaNuevaMatricula({ volver: volverAqui }));
   }
 
   function abrirEdicion(m: Matricula) {
-    setEditando(m);
-    setShowForm(true);
+    router.push(rutaEditarMatricula(m.id, volverAqui));
   }
 
   const sinCatalogos = estudiantesActivos.length === 0 || periodos.length === 0 || cursosActivos.length === 0;
   const periodoActivo = periodos.find((p) => p.activo);
-  const filtrosActivos = qDebounced !== '' || filtroPeriodo !== 'todos' || filtroEstado !== 'todos';
+  const filtrosActivos = qUrl !== '' || filtroPeriodo !== 'todos' || filtroEstado !== 'todos';
 
   return (
     <section className="p-6 space-y-6">
@@ -271,14 +331,14 @@ export default function MatriculasClient() {
                 <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-zero-500" />
               )}
             </div>
-            <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+            <Select value={filtroPeriodo} onValueChange={cambiarPeriodo}>
               <SelectTrigger className="sm:w-44"><SelectValue placeholder="Período" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Período: Todos</SelectItem>
                 {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+            <Select value={filtroEstado} onValueChange={cambiarEstado}>
               <SelectTrigger className="sm:w-36"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Estado: Todos</SelectItem>
@@ -342,7 +402,7 @@ export default function MatriculasClient() {
                 <tbody>
                   {matriculas.map((m) => (
                     <tr key={m.id}
-                      onClick={() => setSelectedId(m.id)}
+                      onClick={() => setParams({ matricula: m.id })}
                       className={`cursor-pointer border-t border-gray-100 transition-colors ${
                         m.id === selectedId ? 'bg-zero-50' : 'hover:bg-gray-50'
                       }`}>
@@ -382,7 +442,7 @@ export default function MatriculasClient() {
             paginas={paginaInfo.paginas}
             total={paginaInfo.total}
             porPagina={paginaInfo.porPagina}
-            onCambiar={setPagina}
+            onCambiar={irAPagina}
             cargando={loading}
           />
         </CardContent>
@@ -404,17 +464,6 @@ export default function MatriculasClient() {
         )}
       </div>
       </div>
-
-      {/* Modal nueva matrícula */}
-      {/* El MISMO diálogo que la ficha del alumno: uno solo, para que las dos
-          pantallas matriculen igual. */}
-      <MatriculaDialog
-        open={showForm}
-        matricula={editando}
-        estudianteFijoNombre={editando ? `${editando.estudiante ?? ''} ${editando.estudianteApellidos ?? ''}`.trim() : null}
-        onClose={() => { setShowForm(false); setEditando(null); }}
-        onSaved={() => { setShowForm(false); setEditando(null); void cargarMatriculas(); }}
-      />
 
       {/* Matricular a varios alumnos de la misma sección de una pasada. No se
           cierra al confirmar: enseña el resultado —quién entró, quién chocaba—

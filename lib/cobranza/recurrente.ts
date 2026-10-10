@@ -7,7 +7,7 @@
  */
 
 import { db } from '@/lib/db/drizzle';
-import { facturasRecurrentes, ecfDocuments } from '@/lib/db/schema';
+import { facturasRecurrentes, ecfDocuments, clients } from '@/lib/db/schema';
 import { and, eq, ne } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
@@ -197,12 +197,42 @@ export async function generarFacturaDeRecurrente(
   const [py, pm, pd] = periodo.split('-').map(Number);
   const fechaEmision = new Date(py, pm - 1, pd, 12, 0, 0);
 
+  /**
+   * El nombre y el documento del comprador, copiados del contacto.
+   *
+   * La factura se guardaba con `client_id` y SIN `razon_social_comprador`, así
+   * que nacía anónima: en Cuentas por cobrar, en el detalle y en los reportes
+   * se leía «Consumidor final» aunque el padre estuviera identificado, y no
+   * había a quién llamar ni por quién buscar. Un colegio con la mensualidad
+   * automática encendida producía así toda su cartera.
+   *
+   * Se copia al emitir y no se lee en la vista a propósito: es el titular del
+   * documento en el momento en que se emitió. Si el contacto se renombra
+   * después, la factura vieja sigue diciendo a nombre de quién se hizo.
+   *
+   * Sin contacto (`clientId` null) se queda como estaba: esa sí es una venta a
+   * consumidor final.
+   */
+  let razonSocialComprador: string | null = null;
+  let rncComprador: string | null = null;
+  if (fr.clientId) {
+    const [cli] = await db
+      .select({ razonSocial: clients.razonSocial, rnc: clients.rnc })
+      .from(clients)
+      .where(and(eq(clients.id, fr.clientId), eq(clients.teamId, fr.teamId)))
+      .limit(1);
+    razonSocialComprador = cli?.razonSocial?.trim() || null;
+    rncComprador         = cli?.rnc?.trim() || null;
+  }
+
   // Insertar documento
   const [inserted] = await db
     .insert(ecfDocuments)
     .values({
       teamId: fr.teamId,
       clientId: fr.clientId,
+      razonSocialComprador,
+      rncComprador,
       encf,
       codigo,
       tipoEcf: fr.tipoEcf,

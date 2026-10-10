@@ -51,3 +51,54 @@ export function partirNombre(completo: string): NombrePartido {
     dudoso: partes.filter((p) => !PARTICULAS.has(p.toUpperCase())).length > 5,
   };
 }
+
+export interface ApellidosPartidos {
+  primero: string;
+  segundo: string;
+  /** Hay más de dos apellidos: dónde acaba el primero es una apuesta. */
+  dudoso: boolean;
+}
+
+/**
+ * Partir el campo «apellidos» en primer y segundo apellido.
+ *
+ * Es el camino de vuelta: nuestra tabla guarda los dos en una sola columna y el
+ * buscador del portal los pide por separado. Escritos juntos en «Primer
+ * apellido», el portal no encuentra a nadie y parece que el alumno no existe.
+ *
+ * Aquí la partícula se pega hacia DELANTE, al apellido que introduce: en "DE LA
+ * NADA INVENTADO" el primero es "DE LA NADA". Cortar por el primer espacio
+ * daría "DE", y `partirNombre` tampoco sirve: está hecho para dejar siempre una
+ * palabra de nombre delante y aquí no hay ninguna.
+ *
+ * Con tres apellidos o más no hay regla que valga —"INVENTADO FICTICIO
+ * IMAGINARIO" puede ser uno y dos o dos y uno—. Se devuelve el primero y el
+ * resto junto, y se marca `dudoso` para que quien llama decida si se fía del
+ * segundo.
+ */
+export function partirApellidos(apellidos: string): ApellidosPartidos {
+  const partes = apellidos.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+
+  // Cada apellido es su palabra más las partículas que traiga delante.
+  const piezas: string[] = [];
+  let pendiente: string[] = [];
+  for (const p of partes) {
+    pendiente.push(p);
+    if (!PARTICULAS.has(p.toUpperCase())) {
+      piezas.push(pendiente.join(' '));
+      pendiente = [];
+    }
+  }
+  // Partículas que se quedaron sin apellido detrás ("INVENTADO DE", a medio
+  // escribir): no son un apellido más, se quedan con el anterior.
+  if (pendiente.length > 0) {
+    if (piezas.length > 0) piezas[piezas.length - 1] += ` ${pendiente.join(' ')}`;
+    else piezas.push(pendiente.join(' '));
+  }
+
+  return {
+    primero: piezas[0] ?? '',
+    segundo: piezas.slice(1).join(' '),
+    dudoso: piezas.length > 2,
+  };
+}

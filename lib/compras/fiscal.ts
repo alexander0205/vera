@@ -170,16 +170,24 @@ export interface InfoNcf {
   daCreditoItbis: boolean;
   reporta606: boolean;
   esNota: boolean;
+  /**
+   * No se escribió ningún NCF. No es un NCF mal escrito (eso es `valido: false`
+   * con algo en `ncf`): es que no hay comprobante fiscal. Qué se hace con eso lo
+   * decide `reglasComprobante`; aquí solo se nombra.
+   */
+  sinNcf: boolean;
 }
 
 const NCF_VACIO: Omit<InfoNcf, 'ncf' | 'error'> = {
   valido: false, serie: null, tipo: null, tipoBase: null, electronico: false, nombre: '',
-  origen: null, daCreditoItbis: false, reporta606: false, esNota: false,
+  origen: null, daCreditoItbis: false, reporta606: false, esNota: false, sinNcf: false,
 };
 
 export function analizarNcf(texto: string | null | undefined): InfoNcf {
   const ncf = String(texto ?? '').trim().toUpperCase().replace(/\s+/g, '');
-  if (!ncf) return { ...NCF_VACIO, ncf, error: 'Escribe el NCF del comprobante' };
+  // Sin NCF sigue sin ser un comprobante válido —ni crédito, ni 606, ni repetido—,
+  // pero se marca aparte. `error` dice qué falta donde el NCF es obligatorio.
+  if (!ncf) return { ...NCF_VACIO, ncf, sinNcf: true, error: 'Escribe el NCF del comprobante' };
 
   const b = /^B(\d{2})(\d{8})$/.exec(ncf);
   const e = /^E(\d{2})(\d{10})$/.exec(ncf);
@@ -207,8 +215,95 @@ export function analizarNcf(texto: string | null | undefined): InfoNcf {
   return {
     ncf, valido: true, error: null, serie, tipo, tipoBase, electronico: serie === 'E',
     nombre: regla.nombre, origen: regla.origen, daCreditoItbis: regla.credito,
-    reporta606: regla.reporta606, esNota: !!regla.nota,
+    reporta606: regla.reporta606, esNota: !!regla.nota, sinNcf: false,
   };
+}
+
+// ─── Qué se le exige al comprobante y a su proveedor ─────────────────────────
+
+export interface ReglasComprobante {
+  /**
+   * Gasto sin comprobante fiscal: no se escribió NCF y es un gasto. Se guarda,
+   * pero no va al 606, su ITBIS va completo al costo y no se busca repetido.
+   */
+  gastoSinNcf: boolean;
+  /** Por qué no vale el NCF; null si vale o si se admite que no haya. */
+  errorNcf: string | null;
+  /**
+   * 'falta': es obligatorio y no hay uno de 9 u 11 dígitos.
+   * 'incompleto': se puede dejar vacío, pero lo escrito no son 9 ni 11 dígitos.
+   */
+  problemaRnc: 'falta' | 'incompleto' | null;
+  faltaNombre: boolean;
+  /** Entra en el Formato 606. */
+  va606: boolean;
+  /** Su ITBIS no se puede adelantar: va completo al costo o al gasto. */
+  itbisSinCredito: boolean;
+}
+
+/**
+ * Lo que se le exige a un comprobante y a su proveedor antes de guardarlo. La
+ * misma función decide en el formulario y en el servidor, para que no puedan
+ * decir cosas distintas.
+ *
+ * Un gasto se puede guardar sin NCF (el contratista del exterior que factura
+ * en dólares, el recibo de un informal): no es un NCF mal escrito, es un gasto
+ * sin comprobante fiscal. El RNC o la cédula solo es obligatorio cuando hay
+ * NCF, que es cuando el comprobante puede ir al 606; sin NCF se puede dejar
+ * vacío, pero lo que se escriba tiene que ser un RNC o una cédula.
+ */
+export function reglasComprobante(p: {
+  clase: 'compra' | 'gasto';
+  ncf: InfoNcf;
+  tipoProveedor: TipoProveedor;
+  id: Identificacion;
+  nombre: string | null | undefined;
+  /**
+   * Alguna línea es un producto del inventario. Entonces cuenta como compra
+   * diga lo que diga `clase`: la etiqueta la pone quien llama, y con decir
+   * «gasto» no puede entrar mercancía sin comprobante.
+   */
+  conInventario?: boolean;
+}): ReglasComprobante {
+  // En Compras el NCF sigue siendo obligatorio: lo que entra al inventario se
+  // compra con comprobante.
+  const gastoSinNcf = p.ncf.sinNcf && p.clase === 'gasto' && !p.conInventario;
+  const gastoMenor = p.ncf.tipoBase === '13';
+  // Como siempre: al proveedor del exterior y en un gasto menor no se le revisa.
+  const seRevisaRnc = p.tipoProveedor !== 'exterior' && !gastoMenor;
+  let problemaRnc: ReglasComprobante['problemaRnc'] = null;
+  if (seRevisaRnc && !p.id.formatoValido) {
+    if (!gastoSinNcf) problemaRnc = 'falta';
+    else if (p.id.limpio) problemaRnc = 'incompleto';
+  }
+  return {
+    gastoSinNcf,
+    errorNcf: p.ncf.valido || gastoSinNcf ? null : p.ncf.error ?? 'NCF inválido',
+    problemaRnc,
+    faltaNombre: !gastoMenor && !p.nombre?.trim(),
+    va606: p.ncf.valido && p.ncf.reporta606,
+    itbisSinCredito: gastoSinNcf || (p.ncf.valido && !p.ncf.daCreditoItbis),
+  };
+}
+
+/**
+ * Lo que hay que decirle a quien anota una retención en un gasto sin NCF. El
+ * mismo texto sale en el formulario, en el aviso al guardar y en el detalle.
+ *
+ * Lo retenido solo llega a la DGII por los comprobantes: los campos 12, 17 y
+ * 18 del 606 y, en un pago al exterior, el 609, que se arma con los e47
+ * emitidos. Sin NCF queda como deuda en el asiento y en ningún reporte. No se
+ * impide —si de verdad se retuvo, la deuda existe—, pero se dice dónde no sale
+ * y cuál es el camino que sí lo reporta. Ese camino es otro registro, no uno
+ * más: sin NCF nada detecta el repetido, así que se avisa de no hacer los dos.
+ */
+export function avisoRetencionSinNcf(tipoProveedor: string | null | undefined): string {
+  const exterior = tipoProveedor === 'exterior';
+  const informal = tipoProveedor === 'informal';
+  const comprobante = exterior ? 'el pago al exterior (e47)' : informal ? 'el comprobante de proveedor informal (e41)' : 'su comprobante (e41 o e47)';
+  const camino = `${exterior || informal ? 'Lo' : 'Si el proveedor es informal o del exterior, lo'} que sí lo reporta es emitir ${comprobante} `
+    + 'desde «Nuevo gasto», en vez de este registro y no además: los dos juntos contarían el gasto dos veces.';
+  return `Sin NCF, lo retenido no sale en el 606${exterior ? ' ni en el 609' : ''}: decláralo tú en el IT-1 o el IR-17. ${camino}`;
 }
 
 // ─── Líneas y totales ────────────────────────────────────────────────────────
@@ -256,7 +351,8 @@ export function totalizarLineas(lineas: LineaCompra[]): TotalesLineas {
 /**
  * Cuánto ITBIS no se puede adelantar y se suma al costo o al gasto: todo el de
  * un comprobante que no da crédito (consumo, gastos menores, pagos al
- * exterior) y todo el de una empresa que no cobra ITBIS en sus ventas.
+ * exterior, un gasto sin NCF) y todo el de una empresa que no cobra ITBIS en
+ * sus ventas.
  */
 export function itbisAlCostoPorDefecto(p: { ncf: InfoNcf; regimenItbis: string | null | undefined; itbisCents: number }): number {
   if (p.itbisCents <= 0) return 0;
@@ -409,7 +505,16 @@ export function erroresCompra(p: { baseCents: number; imp: ImpuestosCompra; form
   const valores = [imp.itbisFacturadoCents, imp.itbisAlCostoCents, imp.itbisRetenidoCents, imp.isrRetenidoCents, imp.iscCents, imp.otrosImpuestosCents, imp.propinaCents];
   if (valores.some((v) => !Number.isSafeInteger(v) || v < 0)) e.push('Los impuestos no pueden ser negativos');
   if (p.baseCents <= 0) e.push('El comprobante no tiene monto');
-  if (imp.itbisAlCostoCents > imp.itbisFacturadoCents) e.push('El ITBIS llevado al costo no puede pasar del ITBIS facturado');
+  if (imp.itbisAlCostoCents > imp.itbisFacturadoCents) {
+    // Se confunde con el total de impuestos del comprobante y se teclea aquí.
+    // El mensaje dice qué es este campo y dónde va lo que no es ITBIS.
+    e.push(
+      'El ITBIS llevado al costo es la parte del ITBIS facturado que no se adelanta, '
+      + 'así que no puede pasar de él. Si lo que anotas es otro impuesto del comprobante '
+      + '(ISC, contribución al desarrollo de las telecomunicaciones…), va en «ISC» o en '
+      + '«Otros impuestos y tasas»',
+    );
+  }
   if (imp.itbisRetenidoCents > imp.itbisFacturadoCents) e.push('No se puede retener más ITBIS del facturado');
   if (imp.isrRetenidoCents > p.baseCents) e.push('La retención de ISR no puede pasar del monto sin impuestos');
   if ((imp.itbisRetenidoCents > 0 || imp.isrRetenidoCents > 0) && p.formaPago === 'contado' && !p.fechaPago) {
@@ -485,4 +590,35 @@ export function lineaFormato606(c: CompraPara606, rncEmpresa: string): string {
     opcional(c.propinaCents),                    // 22 propina legal
     c.formaPago,                                 // 23 forma de pago
   ].join('|');
+}
+
+// ─── Cuadre con el comprobante impreso ───────────────────────────────────────
+
+/**
+ * Cuánto se puede separar lo capturado del total impreso sin que sea un error:
+ * un peso. El proveedor redondea cada línea a su manera y aplicar la tasa al
+ * total casi nunca devuelve el último centavo.
+ */
+export const TOLERANCIA_CUADRE_CENTS = 100;
+
+export interface Cuadre {
+  estado: 'cuadra' | 'falta' | 'sobra';
+  /** Impreso − capturado. Positivo: falta algo por capturar. */
+  diferenciaCents: number;
+}
+
+/**
+ * Compara el total que sale del formulario con el que está impreso en el
+ * comprobante.
+ *
+ * Existe porque un comprobante trae impuestos que no son ITBIS —el ISC del
+ * 10 % y la contribución del 2 % de una factura de telecomunicaciones, por
+ * ejemplo— y sin este contraste el formulario cerraba por un total más bajo
+ * que el papel sin decir nada. La diferencia no se reparte sola: quien
+ * registra decide en qué campo va, porque de eso depende el 606 y el asiento.
+ */
+export function cuadrarConComprobante(totalCapturadoCents: number, totalImpresoCents: number): Cuadre {
+  const diferenciaCents = totalImpresoCents - totalCapturadoCents;
+  if (Math.abs(diferenciaCents) <= TOLERANCIA_CUADRE_CENTS) return { estado: 'cuadra', diferenciaCents };
+  return { estado: diferenciaCents > 0 ? 'falta' : 'sobra', diferenciaCents };
 }

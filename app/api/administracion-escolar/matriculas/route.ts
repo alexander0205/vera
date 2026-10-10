@@ -173,8 +173,15 @@ export async function POST(req: NextRequest) {
     // El plan se recalcula en el servidor en vez de fiarse de los montos que
     // mandó el cliente: el navegador puede traer precios viejos, o alterados a
     // mano. Sin contexto de tarifa el plan va vacío → matrícula sin cargos.
+    // El alumno va en el contexto o su tarifa PERSONAL no se aplica: sin él,
+    // `resolverTarifas` no mete el nivel 'estudiante' en la cadena y gana la
+    // del grado. El precio propio se escribe justo antes de llamar aquí, así
+    // que omitirlo hacía que la pantalla prometiera un importe y la primera
+    // cuota naciera con otro — el precio quedaba escrito y sin efecto hasta
+    // que alguien lo tocaba de nuevo desde «Configuración mensual», que sí lo
+    // pasaba.
     const ctx = pedidos.length > 0
-      ? await contextoDeSeccion(teamId, periodoIdOk, cursoIdOk, { tipo: becaTipoOk, valor: becaValorOk })
+      ? await contextoDeSeccion(teamId, periodoIdOk, cursoIdOk, { tipo: becaTipoOk, valor: becaValorOk }, estudianteIdOk)
       : null;
     const plan = ctx ? await armarPlanDeCobro(teamId, ctx, inscripcion) : [];
 

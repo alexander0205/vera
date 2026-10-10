@@ -5,6 +5,7 @@ import { capturaFacturas, products, rncPadron, teams } from '@/lib/db/schema';
 import { recepciones } from '@/lib/ecf-api/client';
 import { leerArchivosDeCaptura } from './archivos';
 import { leerQr } from './qr';
+import { imagenesDePdf, pintarPrimeraPagina } from './pdf';
 import { leerTimbre } from './timbre';
 import { combinarDatos, datosDesdeIa, datosDesdeTimbre, emparejarProductos, DATOS_VACIOS, type DatosCaptura } from './datos';
 import { iaDisponible, leerFacturaConIa } from './ia';
@@ -30,11 +31,32 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
       .from(teams).where(eq(teams.id, teamId)).limit(1);
     const archivos = await leerArchivosDeCaptura(teamId, capturaId);
 
+    // El timbre, venga en una foto o dentro del PDF. Un PDF no tiene píxeles
+    // que mirar, así que se le sacan las imágenes que lleva dentro: el QR es
+    // una de ellas. Sin esto, subir el PDF de un e-CF perdía el dato exacto y
+    // dejaba la factura en manos de la lectura con IA.
     let qr: DatosCaptura | null = null;
     for (const a of archivos) {
-      if (!a.mime.startsWith('image/')) continue;
-      const timbre = leerTimbre(await leerQr(a.buffer));
-      if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+      if (a.mime.startsWith('image/')) {
+        const timbre = leerTimbre(await leerQr(a.buffer));
+        if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+        continue;
+      }
+      if (a.mime !== 'application/pdf') continue;
+      // Primero las imágenes que el PDF ya trae dentro, que es de donde sale el
+      // QR cuando el proveedor lo incrusta como tal. Si no hay suerte —hay
+      // generadores que lo dibujan con trazos— se pinta la página y se busca
+      // ahí. Lo caro solo si lo barato falla.
+      for (const imagen of await imagenesDePdf(a.buffer)) {
+        const timbre = leerTimbre(await leerQr(imagen));
+        if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+      }
+      if (qr) break;
+      const pagina = await pintarPrimeraPagina(a.buffer);
+      if (pagina) {
+        const timbre = leerTimbre(await leerQr(pagina));
+        if (timbre) { qr = datosDesdeTimbre(timbre, team?.rnc ?? null); break; }
+      }
     }
 
     let ia: DatosCaptura | null = null;
@@ -87,8 +109,8 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
     const metodo = qr ? 'qr' : ia ? 'ia' : 'manual';
     if (metodo === 'manual') {
       datos.avisos.unshift(iaDisponible()
-        ? 'No se pudo leer la factura: complétala mirando la foto.'
-        : 'La foto no trae el QR de un e-CF y la lectura con IA no está activada: complétala mirando la foto.');
+        ? 'No se pudo leer la factura: complétala mirando el comprobante.'
+        : 'El comprobante no trae el QR de un e-CF y la lectura con IA no está activada: complétalo a mano mirándolo.');
     }
 
     await db.update(capturaFacturas)
@@ -99,7 +121,7 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
     await db.update(capturaFacturas)
       .set({
         estado: 'por_revisar', metodo: 'manual', procesadoEn: new Date(), error: String(e).slice(0, 500),
-        datos: { ...DATOS_VACIOS, avisos: ['No se pudo leer la foto: complétala a mano.'] },
+        datos: { ...DATOS_VACIOS, avisos: ['No se pudo leer el comprobante: complétalo a mano.'] },
       })
       .where(soloSiProcesando);
   }

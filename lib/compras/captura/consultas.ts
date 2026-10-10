@@ -79,6 +79,13 @@ export async function detalleCaptura(teamId: number, id: number): Promise<FilaCa
   return fila ?? null;
 }
 
+/** Solo en qué está una captura y qué gasto salió de ella, sin cargar sus datos ni sus archivos. */
+export async function estadoCaptura(teamId: number, id: number): Promise<{ estado: EstadoCaptura; compraId: number | null } | null> {
+  const [fila] = await db.select({ estado: capturaFacturas.estado, compraId: capturaFacturas.compraId }).from(capturaFacturas)
+    .where(and(eq(capturaFacturas.id, id), eq(capturaFacturas.teamId, teamId))).limit(1);
+  return fila ? { estado: fila.estado as EstadoCaptura, compraId: fila.compraId } : null;
+}
+
 async function cambiarEstado(teamId: number, id: number, desde: EstadoCaptura[], cambios: Partial<typeof capturaFacturas.$inferInsert>): Promise<boolean> {
   const filas = await db.update(capturaFacturas).set(cambios)
     .where(and(eq(capturaFacturas.id, id), eq(capturaFacturas.teamId, teamId), inArray(capturaFacturas.estado, desde)))

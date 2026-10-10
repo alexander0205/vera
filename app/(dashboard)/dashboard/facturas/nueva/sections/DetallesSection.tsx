@@ -234,7 +234,9 @@ export function DetallesSection({
         </Box>
       )}
 
-      {/* De contado sin pago: la factura queda por cobrar, sin vencimiento y sin
+      {/* En una compra o un gasto (41/43/47) el dinero sale: ahí «queda por
+          pagar», no «por cobrar».
+          De contado sin pago: la factura queda por cobrar, sin vencimiento y sin
           mora. No se cambia sola —la condición de pago se le reporta a la DGII,
           así que la decisión es del usuario—; aquí solo se hace visible. */}
       {!esCredito && condicionPago === '1' && sinPagoRegistrado && (
@@ -243,7 +245,7 @@ export function DetallesSection({
           <Box>
             <Typography sx={{ fontSize: '0.875rem', color: '#78350f' }}>
               Marcada <Box component="span" sx={{ fontWeight: 600 }}>de contado</Box> pero sin pago
-              registrado. Queda por cobrar, sin fecha de vencimiento y sin generar mora.
+              registrado. Queda por {SIN_TIPO_INGRESO.includes(tipoEcf) ? 'pagar' : 'cobrar'}, sin fecha de vencimiento y sin generar mora.
             </Typography>
             <Box component="button" type="button" onClick={() => setCondicionPago('2')}
               sx={{

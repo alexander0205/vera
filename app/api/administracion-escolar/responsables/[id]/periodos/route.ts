@@ -108,6 +108,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           cuotaId: c.cuotaId,
           conceptoId: c.conceptoId,
           concepto: c.concepto ?? 'Cargo',
+          conceptoTipo: c.conceptoTipo,
           mes: c.mes,
           anio: c.anio,
           fechaVencimiento: c.fechaVencimiento,
@@ -117,6 +118,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           ecfDocumentId: c.ecfDocumentId,
           encf: c.facturaEncf,
           codigo: c.facturaCodigo,
+          facturaEstado: c.facturaEstado,
         })),
         ...previstos.map((p) => ({
           key: `p${m.id}-${p.key}`,
@@ -125,6 +127,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           cuotaId: p.cuotaId > 0 ? p.cuotaId : null,
           conceptoId: p.conceptoId,
           concepto: p.concepto,
+          conceptoTipo: p.tipo,
           mes: p.mes,
           anio: p.anio,
           fechaVencimiento: p.fechaVencimiento,
@@ -134,6 +137,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           ecfDocumentId: null,
           encf: null,
           codigo: null,
+          facturaEstado: null,
         })),
       ].sort((a, b) => (a.anio - b.anio) || ((a.mes ?? 0) - (b.mes ?? 0)) || a.concepto.localeCompare(b.concepto));
 
@@ -141,6 +145,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         matriculaId: m.id,
         periodoId: m.periodoId,
         periodo: m.periodo ?? 'Sin período',
+        fechaInicio: m.periodoFechaInicio ?? null,
+        fechaFin: m.periodoFechaFin ?? null,
         curso: m.curso ?? '—',
         activo: m.periodoActivo ?? false,
         facturaRecurrenteId: m.facturaRecurrenteId,
