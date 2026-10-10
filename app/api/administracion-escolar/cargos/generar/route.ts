@@ -98,6 +98,13 @@ export async function POST(req: NextRequest) {
   const cursos: number[] = Array.isArray(cursoIds)
     ? [...new Set(cursoIds.map(Number).filter(Boolean))]
     : cursoId ? [Number(cursoId)] : [];
+  // Una lista de secciones VACÍA no es «sin filtro»: quien manda `cursoIds: []`
+  // acotó a un grupo que no tiene secciones, y leerlo como «todo el colegio»
+  // le crearía la deuda a quien nadie eligió. Sin lista (o con `cursoId` suelto
+  // ausente) sí es todo el colegio.
+  if (Array.isArray(cursoIds) && cursos.length === 0) {
+    return NextResponse.json({ dryRun, creados: 0, omitidos: 0, total: 0, detalles: [] });
+  }
   if (cursos.length === 1) where.push(eq(adminEscolarMatriculas.cursoId, cursos[0]));
   else if (cursos.length > 1) where.push(inArray(adminEscolarMatriculas.cursoId, cursos));
 

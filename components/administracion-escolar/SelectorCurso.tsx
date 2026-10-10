@@ -16,6 +16,12 @@ import { NativeSelect } from '@/components/ui/native-select';
  * Tres campos encadenados dicen lo mismo en tres decisiones cortas, y cada una
  * recorta la siguiente. De paso deja a la vista la jerarquía real del colegio,
  * que en la lista aplanada vivía escondida en el título del grupo.
+ *
+ * Es para MATRICULAR: su valor es UNA sección, y servicio y grado solo son el
+ * camino hasta ella. Para acotar un grupo —«toda Primaria», «toda la sala de
+ * tareas»— está `FiltroCurso`. Este control tuvo un modo filtro añadido encima
+ * que no podía funcionar: un servicio entero no cabe en un id de sección, así
+ * que al elegirlo se devolvía solo a «Todos los cursos».
  */
 
 export interface CursoOpcion {
@@ -25,7 +31,7 @@ export interface CursoOpcion {
   periodoId: number;
 }
 
-export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, permitirTodos = false }: {
+export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled }: {
   /** Ya filtrados por activo; aquí solo se recortan por período. */
   cursos: CursoOpcion[];
   /** Año escolar elegido. Sin él no se ofrece nada: las secciones son de un año. */
@@ -34,23 +40,7 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, pe
   valor: string;
   onChange: (cursoId: string) => void;
   disabled?: boolean;
-  /**
-   * Añade «Todos los cursos» como primera opción del servicio, y con ella el
-   * valor `'todos'`.
-   *
-   * Es lo que hace que este mismo control sirva para FILTRAR y no solo para
-   * matricular. Antes los filtros usaban un buscador aplanado donde cada línea
-   * decía solo «A» o «B» bajo un encabezado en gris; tener dos controles para
-   * elegir lo mismo obligaba a aprender los dos.
-   *
-   * Solo el servicio ofrece «todos»: «todos los grados de Primaria» no se puede
-   * expresar con un único id de sección, y fingir que sí —mandando `todos`
-   * cuando el usuario acotó a Primaria— generaría cargos a un colegio entero
-   * creyendo que se acotó.
-   */
-  permitirTodos?: boolean;
 }) {
-  const todos = permitirTodos && valor === 'todos';
   const delPeriodo = useMemo(
     () => cursos.filter((c) => !periodoId || c.periodoId === periodoId),
     [cursos, periodoId],
@@ -80,15 +70,14 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, pe
 
   // Lo elegido manda sobre el tanteo: al abrir una matrícula existente, los tres
   // campos se rellenan solos desde su sección sin sincronizar nada a mano.
-  const servicio = todos ? null : (elegido?.servicioId ?? servicioTanteo);
-  const grado = todos ? null : (elegido?.gradoId ?? gradoTanteo);
+  const servicio = elegido?.servicioId ?? servicioTanteo;
+  const grado = elegido?.gradoId ?? gradoTanteo;
 
   // Con un solo servicio no hay nada que decidir: se deja puesto. Obligar a
   // elegir entre uno es un clic que no aporta.
   useEffect(() => {
-    if (todos) return;   // «Todos» es una elección, no un hueco que rellenar.
     if (servicio == null && servicios.length === 1) setServicioTanteo(servicios[0].id);
-  }, [todos, servicio, servicios]);
+  }, [servicio, servicios]);
 
   // Al cambiar de año escolar, la sección elegida es de otro año y ya no está
   // en la lista: se suelta todo en vez de dejar los campos enseñando algo que
@@ -99,9 +88,7 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, pe
   // para editar borraba la sección guardada antes de que el fetch respondiera.
   useEffect(() => {
     if (cursos.length === 0) return;
-    if (valor && valor !== 'todos' && !delPeriodo.some((c) => String(c.id) === valor)) {
-      onChange(permitirTodos ? 'todos' : '');
-    }
+    if (valor && !delPeriodo.some((c) => String(c.id) === valor)) onChange('');
     setServicioTanteo(null);
     setGradoTanteo(null);
     // Solo cuando cambia el período: lo demás lo resuelve `elegido`.
@@ -131,14 +118,8 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, pe
    * posible: ahí no se está eligiendo por él, no hay alternativa.
    */
   function elegirServicio(texto: string) {
-    if (texto === 'todos') {
-      setServicioTanteo(null);
-      setGradoTanteo(null);
-      onChange('todos');
-      return;
-    }
     const id = Number(texto) || null;
-    onChange(permitirTodos && id == null ? 'todos' : '');
+    onChange('');
     setGradoTanteo(null);
     setServicioTanteo(id);
     if (id == null) return;
@@ -152,7 +133,7 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, pe
 
   function elegirGrado(texto: string) {
     const id = Number(texto) || null;
-    onChange(permitirTodos ? 'todos' : '');
+    onChange('');
     setGradoTanteo(id);
     if (id == null) return;
     const suyas = delPeriodo.filter((c) => c.gradoId === id);
@@ -162,31 +143,30 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled, pe
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       <div className="space-y-1.5">
-        <Label>Servicio{permitirTodos ? '' : ' *'}</Label>
-        <NativeSelect value={todos ? 'todos' : servicio != null ? String(servicio) : ''}
+        <Label>Servicio *</Label>
+        <NativeSelect value={servicio != null ? String(servicio) : ''}
           disabled={disabled || servicios.length === 0}
           onChange={(e) => elegirServicio(e.target.value)}>
-          {permitirTodos && <option value="todos">Todos los cursos</option>}
           <option value="">{servicios.length ? 'Elige…' : 'Sin servicios'}</option>
           {servicios.map((s) => <option key={s.id} value={String(s.id)}>{s.etiqueta}</option>)}
         </NativeSelect>
       </div>
 
       <div className="space-y-1.5">
-        <Label>Grado{permitirTodos ? '' : ' *'}</Label>
+        <Label>Grado *</Label>
         <NativeSelect value={grado != null ? String(grado) : ''}
           disabled={disabled || servicio == null}
           onChange={(e) => elegirGrado(e.target.value)}>
-          <option value="">{todos ? 'Todos' : servicio == null ? 'Elige el servicio' : 'Elige…'}</option>
+          <option value="">{servicio == null ? 'Elige el servicio' : 'Elige…'}</option>
           {grados.map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
         </NativeSelect>
       </div>
 
       <div className="space-y-1.5">
-        <Label>Sección{permitirTodos ? '' : ' *'}</Label>
-        <NativeSelect value={todos ? '' : valor} disabled={disabled || grado == null}
-          onChange={(e) => onChange(e.target.value || (permitirTodos ? 'todos' : ''))}>
-          <option value="">{todos ? 'Todas' : grado == null ? 'Elige el grado' : 'Elige…'}</option>
+        <Label>Sección *</Label>
+        <NativeSelect value={valor} disabled={disabled || grado == null}
+          onChange={(e) => onChange(e.target.value)}>
+          <option value="">{grado == null ? 'Elige el grado' : 'Elige…'}</option>
           {secciones.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
         </NativeSelect>
       </div>
