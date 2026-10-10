@@ -26,6 +26,7 @@ import {
   adminEscolarAvisosEnviados, clients, teams,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 import { enviarWhatsApp, enviarWhatsAppPlantilla, WhatsAppNoConectadoError } from '@/lib/whatsapp/enviar';
 import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
@@ -144,10 +145,13 @@ async function armarAviso(
   }
 
   // Al CRM siempre con código de país, o abre otra conversación del mismo padre.
-  const destino = aE164(fila.whatsapp ?? fila.celular);
+  // Solo al campo «WhatsApp», como el motor de avisos (destino-canal.ts): si
+  // se usara el celular cuando está vacío, quitarle el WhatsApp a alguien no
+  // serviría de nada.
+  const destino = aE164(destinoDeContacto(fila, 'whatsapp'));
   if (!destino) {
     return {
-      error: 'El responsable no tiene WhatsApp ni celular. El teléfono fijo no recibe mensajes.',
+      error: 'El responsable no tiene número de WhatsApp. Ponlo en su ficha: el celular y el teléfono fijo no se usan para WhatsApp.',
       status: 409,
     };
   }

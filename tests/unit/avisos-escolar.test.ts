@@ -207,11 +207,15 @@ describe('destinoDelCanal', () => {
     expect(destinoDelCanal(fila({ email: '  ' }), 'correo')).toBeNull();
   });
 
-  it('WhatsApp prefiere el número de WhatsApp y cae al celular', () => {
+  it('el WhatsApp sale solo al número de WhatsApp: sin él, no cae al celular', () => {
     expect(destinoDelCanal(fila({ whatsapp: '8091112222', celular: '8093334444' }), 'whatsapp'))
       .toBe('8091112222');
-    expect(destinoDelCanal(fila({ whatsapp: null, celular: '8093334444' }), 'whatsapp'))
-      .toBe('8093334444');
+    // Antes caía al celular, y entonces no había forma de decir «a esta
+    // persona no le escribas por WhatsApp»: se borraba el número, se guardaba,
+    // y la ficha seguía enseñando «WhatsApp» con el celular. Parecía que el
+    // cambio no se había hecho.
+    expect(destinoDelCanal(fila({ whatsapp: null, celular: '8093334444' }), 'whatsapp')).toBeNull();
+    expect(destinoDelCanal(fila({ whatsapp: '   ', celular: '8093334444' }), 'whatsapp')).toBeNull();
   });
 
   it('el SMS prefiere el celular y cae al de WhatsApp', () => {
@@ -227,5 +231,28 @@ describe('destinoDelCanal', () => {
     const soloFijo = fila({ whatsapp: null, celular: null, telefono: '8095550000' });
     expect(destinoDelCanal(soloFijo, 'whatsapp')).toBeNull();
     expect(destinoDelCanal(soloFijo, 'sms')).toBeNull();
+  });
+});
+
+/**
+ * Las pantallas que enseñan por dónde se le puede escribir a alguien usan la
+ * MISMA regla que el motor. Estaba copiada en cuatro sitios; con una copia
+ * distinta, la ficha promete un canal por el que después no sale nada.
+ */
+describe('una sola regla de canales para el motor y las pantallas', () => {
+  it('nadie vuelve a escribir a mano «WhatsApp o, si no, celular»', async () => {
+    const { readFileSync } = await import('node:fs');
+    const archivos = [
+      'lib/administracion-escolar/avisos.ts',
+      'app/api/administracion-escolar/cargos/[id]/reenviar-aviso/route.ts',
+      'app/escolar/estudiantes/[id]/_perfil-client.tsx',
+      'app/escolar/responsables/_page-client.tsx',
+      'app/escolar/responsables/[id]/_perfil-client.tsx',
+    ];
+    for (const a of archivos) {
+      const fuente = readFileSync(a, 'utf8');
+      expect(fuente, a).toContain('destinoDeContacto(');
+      expect(fuente, a).not.toMatch(/whatsapp\??\.?(trim\(\))?\s*(\?\?|\|\|)\s*[a-zA-Z_.]*celular/);
+    }
   });
 });
