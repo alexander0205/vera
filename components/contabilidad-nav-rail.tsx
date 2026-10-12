@@ -18,11 +18,13 @@ import { RailSecciones } from '@/components/rail/RailSecciones';
 import type { RailSeccion } from '@/components/rail/tipos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { Permission } from '@/lib/config/roles';
+import type { ModuleKey } from '@/lib/config/modules';
 import {
-  LayoutDashboard, BookOpen, PenLine, ListTree, BarChart3, Receipt, Building2, Lock, Settings, Landmark,
+  LayoutDashboard, BookOpen, PenLine, ListTree, BarChart3, Receipt, Building2, Lock, Settings, Landmark, Users, ShoppingCart,
 } from 'lucide-react';
 
-type SeccionContable = RailSeccion & { permiso?: Permission };
+/** `modulo`: solo se muestra si la empresa y el rol tienen ese módulo (atajo a otra pantalla). */
+type SeccionContable = RailSeccion & { permiso?: Permission; modulo?: ModuleKey };
 
 const SECCIONES: SeccionContable[] = [
   // El panorama va primero: es donde se ve si los módulos están llegando al libro.
@@ -43,14 +45,24 @@ const SECCIONES: SeccionContable[] = [
   { tipo: 'item', id: 'contabilidad-cxp', href: '/contabilidad/cuentas-por-pagar', label: 'Cuentas por pagar', icon: Receipt },
   { tipo: 'item', id: 'contabilidad-activos', href: '/contabilidad/activos-fijos', label: 'Activos fijos', icon: Building2 },
   { tipo: 'item', id: 'contabilidad-cierre', href: '/contabilidad/cierre-ejercicio', label: 'Cierre de ejercicio', icon: Lock },
+  // Atajos a lo que alimenta el libro desde otros módulos.
+  {
+    tipo: 'grupo', id: 'contabilidad-nomina', label: 'Nómina', icon: Users, modulo: 'nomina',
+    children: [
+      { href: '/nomina/corridas', label: 'Corridas' },
+      { href: '/nomina/empleados', label: 'Empleados' },
+      { href: '/nomina/configuracion', label: 'Cuentas y conceptos' },
+    ],
+  },
+  { tipo: 'item', id: 'contabilidad-compras', href: '/dashboard/compras', label: 'Compras y gastos', icon: ShoppingCart, modulo: 'facturacion', permiso: 'compras:ver' },
   { tipo: 'item', id: 'contabilidad-config', href: '/contabilidad/configuracion', label: 'Configuración', icon: Settings },
 ];
 
 export function ContabilidadNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
-  const { can } = usePermissions();
+  const { can, modules } = usePermissions();
   const visibles: RailSeccion[] = SECCIONES
-    .filter((s) => !s.permiso || can(s.permiso))
-    .map(({ permiso: _permiso, ...s }) => s as RailSeccion);
+    .filter((s) => (!s.permiso || can(s.permiso)) && (!s.modulo || modules.includes(s.modulo)))
+    .map(({ permiso: _permiso, modulo: _modulo, ...s }) => s as RailSeccion);
   return (
     <RailArmazon modulo="contabilidad" variant={variant}>
       <RailSecciones secciones={visibles} modulo="contabilidad" />
