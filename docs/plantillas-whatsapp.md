@@ -204,3 +204,80 @@ Ninguna de las dos es de Meta:
 139, Pérez Rivera 38, Yomalia 17). Con los tres avisos activos son ~2,270
 conversaciones al mes. Conviene medirlo antes de decidir si van todas por un
 solo número.
+
+---
+
+## Con el enlace de la factura (`*_con_enlace`) y `pago_recibido`
+
+Pedido por el ticket «link de facturas a padres»: cada mensaje al padre lleva
+el enlace de SU factura, y al pagar le llega «recibimos tu pago» con la factura.
+
+### Las cinco con enlace
+
+Son las mismas cinco, con el enlace de la factura como **última variable del
+cuerpo**, antes del descargo:
+
+```
+…
+Ver tu factura y pagarla aquí:
+{{7}}
+
+Si ya realizaste el pago, ignora este mensaje.
+```
+
+La posición del enlace es `variables + 1` de cada una: `{{7}}` en
+`factura_lista`, `factura_vencio_hoy` y `evita_el_recargo`, y `{{6}}` en las dos
+de vencimiento sin hueco intermedio. Se llaman
+`factura_lista_con_enlace`, `factura_vencio_hoy_con_enlace`,
+`factura_vencio_con_recargo_con_enlace`, `factura_vencio_sin_recargo_con_enlace`
+y `evita_el_recargo_con_enlace`.
+
+**Por qué en el cuerpo y no con el botón:** el CRM no sabe rellenar botones con
+variable (`CRM_SOPORTA_BOTONES`). Una variable de cuerpo funciona hoy y WhatsApp
+vuelve la URL tocable igual.
+
+**Cómo las usa el motor:** el enlace es el de ESA factura
+(`/pagar/{token}?f={id}`) y se agrega solo si la plantilla asignada como «con
+factura» declara exactamente una variable más que los datos del aviso
+(`parametrosConEnlace`). Una plantilla vieja sale como siempre.
+
+### `pago_recibido`
+
+```
+Te escribimos de *{{1}}*.
+
+Recibimos el pago de *{{2}}* para {{3}}.
+
+Monto pagado: *{{4}}*
+Contacto del colegio: {{5}}
+
+Tu factura está aquí:
+{{6}}
+
+Gracias por tu pago.
+```
+
+| | |
+|---|---|
+| `{{1}}` colegio | `Colegio Andrés Bello` |
+| `{{2}}` concepto | `Mensualidad de octubre` |
+| `{{3}}` estudiante(s) | `Juan y María Pérez` |
+| `{{4}}` monto pagado | `RD$3,300.00` |
+| `{{5}}` teléfono del colegio | `(809) 590-6713` |
+| `{{6}}` enlace de la factura | `https://…/pagar/AbC123xyz?f=42` |
+
+La manda `enviarPagoRecibidoPorWhatsApp` al registrarse un cobro, junto al
+correo. Solo sale si la plantilla está **publicada y aprobada**; sin ella no
+manda nada (nunca cae a texto libre). Cuenta en la cuota mensual de WhatsApp y
+queda en `admin_escolar_avisos_enviados` con `tipo = 'pago-recibido'`.
+
+### Cómo ponerlas en marcha
+
+1. `npx tsx scripts/sembrar-plantillas-whatsapp.ts` (con `POSTGRES_URL`
+   exportada): crea las nuevas como **borrador**. No toca Meta.
+2. En `/admin/whatsapp/plantillas`, revisar el texto y **Publicar** cada una
+   (esto sí las manda a Meta; después no se editan mientras están en revisión).
+3. Esperar la aprobación (de minutos a un día).
+4. Asignar las `*_con_enlace` como «con factura» de cada aviso en
+   `/admin/whatsapp/plantillas`. El sembrador solo asigna por defecto en bases
+   donde el hueco aún no tenía fila: no pisa lo que ya estaba configurado.

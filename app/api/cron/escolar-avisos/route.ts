@@ -3,14 +3,14 @@ import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import {
-  avisosDeHoy, candidatos, despachar, equiposConAvisos, pesos, enLetra,
+  avisosDeHoy, candidatos, despachar, equiposConAvisos, pesos, enLetra, urlDeFacturaEnLink,
   type AvisoPendiente, type EnvioHecho,
 } from '@/lib/administracion-escolar/avisos';
 import { sumarDias } from '@/lib/administracion-escolar/calendario';
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import { enviarWhatsApp, enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
-import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/plantillas';
+import { resolverPlantilla, parametrosDeAviso, parametrosConEnlace, huecoDe } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
@@ -212,24 +212,34 @@ export async function GET(req: NextRequest) {
             idioma: plantilla.idioma,
             // El enlace del padre, que es lo que rellena la {{1}} del botón.
             botonUrl: necesitaBoton ? enlace : null,
-            parametros: parametrosDeAviso(
-              huecoDe(p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia),
-              {
-                colegio,
-                concepto: p.fila.concepto,
-                estudiante: p.fila.estudiante,
-                monto: pesos(p.fila.saldoCentavos),
-                telefonoColegio: telefonos.get(teamId) ?? '',
-                fechaLimite: p.fila.fechaVencimiento
-                  ? enLetra(p.fila.fechaVencimiento) : null,
-                diasGracia: p.fila.moraDiasGracia,
-                // La fecha del RECARGO, no la del vencimiento — igual que en
-                // `redactar()`. Decirle que pague «antes del 3» cuando el
-                // recargo entra el 8 le quita cinco días que tiene.
-                fechaRecargo: p.fila.fechaVencimiento
-                  ? enLetra(sumarDias(p.fila.fechaVencimiento, Math.max(0, p.fila.moraDiasGracia)))
-                  : null,
-              },
+            parametros: parametrosConEnlace(
+              parametrosDeAviso(
+                huecoDe(p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia),
+                {
+                  colegio,
+                  concepto: p.fila.concepto,
+                  estudiante: p.fila.estudiante,
+                  monto: pesos(p.fila.saldoCentavos),
+                  telefonoColegio: telefonos.get(teamId) ?? '',
+                  fechaLimite: p.fila.fechaVencimiento
+                    ? enLetra(p.fila.fechaVencimiento) : null,
+                  diasGracia: p.fila.moraDiasGracia,
+                  // La fecha del RECARGO, no la del vencimiento — igual que en
+                  // `redactar()`. Decirle que pague «antes del 3» cuando el
+                  // recargo entra el 8 le quita cinco días que tiene.
+                  fechaRecargo: p.fila.fechaVencimiento
+                    ? enLetra(sumarDias(p.fila.fechaVencimiento, Math.max(0, p.fila.moraDiasGracia)))
+                    : null,
+                },
+              ),
+              // El enlace de ESA factura, como última variable del cuerpo: solo
+              // si la versión con enlace no es de botón y declara una variable
+              // más. Con botón se manda por `botonUrl`; sin esa variable, la
+              // plantilla sale como siempre.
+              usarConLink && !necesitaBoton && enlace && p.fila.ecfDocumentId != null
+                ? urlDeFacturaEnLink(enlace, p.fila.ecfDocumentId)
+                : null,
+              usarConLink ? plantilla.conLinkVariables : null,
             ),
           });
           return r.messageId ?? null;

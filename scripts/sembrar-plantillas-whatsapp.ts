@@ -265,7 +265,64 @@ const CON_BOTON: Semilla[] = BASE.map((s) => ({
   boton: BOTON_FACTURA,
 }));
 
-const SEMILLAS: Semilla[] = [...BASE, ...CON_BOTON];
+/**
+ * Cada plantilla, una vez más, con el enlace de la factura COMO VARIABLE DEL
+ * CUERPO. Estas son las que SÍ se pueden mandar hoy.
+ *
+ * Las del botón (`_con_boton`) esperan a que el CRM sepa rellenar botones;
+ * estas no necesitan nada del CRM: el enlace es un parámetro más del cuerpo y
+ * WhatsApp lo vuelve tocable solo. Se generan de las de arriba por la misma
+ * razón que las del botón: una sola redacción, tres versiones.
+ *
+ * El enlace es el de ESA factura (`/pagar/{token}?f={id}`) y va como ÚLTIMA
+ * variable, antes del descargo final —Meta no admite que el cuerpo cierre con
+ * una variable—. El motor de avisos solo lo agrega cuando la plantilla asignada
+ * declara exactamente una variable más que los datos del aviso
+ * (ver `parametrosConEnlace`), así que asignarlas es seguro.
+ */
+const FACTURA = (pos: number) => `\n\nVer tu factura y pagarla aquí:\n{{${pos}}}`;
+
+const CON_ENLACE: Semilla[] = BASE.map((s) => {
+  const pos = s.variables.length + 1;
+  return {
+    ...s,
+    nombre: `${s.nombre}_con_enlace`,
+    // El enlace va justo antes del descargo, que cierra el cuerpo.
+    cuerpo: s.cuerpo.slice(0, s.cuerpo.length - CIERRE.length) + FACTURA(pos) + CIERRE,
+    variables: [...s.variables, v(pos, 'enlace_factura', 'texto', LINK_EJEMPLO)],
+  };
+});
+
+/**
+ * El mensaje de «recibimos tu pago», con el enlace a la factura.
+ *
+ * No es un aviso de cobro —no cuelga de ningún hueco de `AVISOS_PLANTILLA`— y
+ * lo manda `enviarPagoRecibidoPorWhatsApp` (lib/administracion-escolar/
+ * factura-al-padre.ts) al registrarse un cobro. El orden de las variables es el
+ * de `parametrosPagoRecibido`: cámbialos juntos o el mensaje sale corrido.
+ *
+ * Cierra con «Gracias por tu pago.» porque Meta no deja terminar en variable.
+ */
+const PAGO_RECIBIDO: Semilla = {
+  nombre: 'pago_recibido',
+  encabezado: 'Recibimos tu pago',
+  para: 'pago-recibido',
+  cuerpo:
+    'Te escribimos de *{{1}}*.\n\n' +
+    'Recibimos el pago de *{{2}}* para {{3}}.\n\n' +
+    'Monto pagado: *{{4}}*\n' +
+    'Contacto del colegio: {{5}}\n\n' +
+    'Tu factura está aquí:\n{{6}}\n\n' +
+    'Gracias por tu pago.',
+  pie: PIE,
+  variables: [
+    COLEGIO, CONCEPTO, ESTUDIANTE, MONTO,
+    v(5, 'telefono_colegio', 'texto', '(809) 590-6713'),
+    v(6, 'enlace_factura', 'texto', LINK_EJEMPLO),
+  ],
+};
+
+const SEMILLAS: Semilla[] = [...BASE, ...CON_BOTON, ...CON_ENLACE, PAGO_RECIBIDO];
 
 /** Las mismas pegas que valida la ruta de publicar, para no sembrar basura. */
 function revisar(s: Semilla): string[] {
@@ -368,7 +425,9 @@ async function main() {
    */
   console.log('\nAsignando los avisos…');
   for (const s of BASE) {
-    const conLink = `${s.nombre}_con_boton`;
+    // La del enlace en el cuerpo se puede mandar hoy; la del botón, no.
+    const conEnlace = `${s.nombre}_con_enlace`;
+    const conLink = SEMILLAS.some((x) => x.nombre === conEnlace) ? conEnlace : `${s.nombre}_con_boton`;
     const tieneGemela = SEMILLAS.some((x) => x.nombre === conLink);
     await db
       .insert(whatsappPlantillasAviso)

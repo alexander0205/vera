@@ -27,7 +27,7 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { enviarWhatsApp, enviarWhatsAppPlantilla, WhatsAppNoConectadoError } from '@/lib/whatsapp/enviar';
-import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/plantillas';
+import { resolverPlantilla, parametrosDeAviso, parametrosConEnlace, huecoDe } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
@@ -44,7 +44,10 @@ interface AvisoListo {
   /** null = va como texto libre. */
   nombrePlantilla: string | null;
   idioma: string;
+  /** Los valores que se muestran en la previa (sin el enlace). */
   parametros: string[];
+  /** Los que de verdad se mandan: los de arriba más el enlace, si la plantilla lo espera. */
+  parametrosEnvio: string[];
   botonUrl: string | null;
   /** Horas que faltan para poder repetirlo, o null si se puede ya. */
   esperaHoras: number | null;
@@ -198,6 +201,13 @@ async function armarAviso(
     nombrePlantilla: porPlantilla ? nombre! : null,
     idioma: plantilla?.idioma ?? 'es',
     parametros,
+    parametrosEnvio: parametrosConEnlace(
+      parametros,
+      usarConLink && !necesitaBoton && plantilla
+        ? urlDeFacturaEnLink(enlace, fila.ecfDocumentId)
+        : null,
+      usarConLink ? (plantilla?.conLinkVariables ?? null) : null,
+    ),
     botonUrl: necesitaBoton ? enlace : null,
     esperaHoras: await esperaRestante(teamId, cargoId),
   };
@@ -267,7 +277,7 @@ export async function POST(
           nombre: aviso.nombrePlantilla,
           idioma: aviso.idioma,
           botonUrl: aviso.botonUrl,
-          parametros: aviso.parametros,
+          parametros: aviso.parametrosEnvio,
         })
       : await enviarWhatsApp(auth.teamId, aviso.destino, aviso.texto);
 

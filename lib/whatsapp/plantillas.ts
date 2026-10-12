@@ -94,6 +94,15 @@ export interface PlantillaAsignada {
   /** Si esa otra lleva botón, y por tanto necesita el parámetro de URL. */
   conLinkTieneBoton: boolean;
   /**
+   * Cuántas variables `{{n}}` declara esa otra plantilla. Null = no se sabe, o
+   * este colegio no tiene versión con enlace.
+   *
+   * Es lo que decide si el enlace de la factura va como ÚLTIMA variable del
+   * cuerpo: solo cuando declara exactamente una más que los datos del aviso.
+   * Ver `parametrosConEnlace`.
+   */
+  conLinkVariables: number | null;
+  /**
    * Si la de siempre lleva botón de enlace.
    *
    * Importa porque HOY no se puede enviar: la URL del botón lleva variable y
@@ -128,14 +137,16 @@ export async function getPlantillasDeTeam(teamId: number): Promise<PlantillaAsig
     .where(or(eq(whatsappPlantillasAviso.teamId, teamId), isNull(whatsappPlantillasAviso.teamId)));
 
   const nombres = [...new Set(filas.flatMap((f) => [f.nombre, f.conLink].filter((x): x is string => !!x)))];
-  const conBoton = new Set(
-    nombres.length === 0 ? [] : (await db
-      .select({ nombre: whatsappPlantillas.nombre, boton: whatsappPlantillas.boton })
-      .from(whatsappPlantillas)
-      .where(inArray(whatsappPlantillas.nombre, nombres)))
-      .filter((p) => p.boton != null)
-      .map((p) => p.nombre),
-  );
+  const guardadas = nombres.length === 0 ? [] : await db
+    .select({
+      nombre: whatsappPlantillas.nombre,
+      boton: whatsappPlantillas.boton,
+      variables: whatsappPlantillas.variables,
+    })
+    .from(whatsappPlantillas)
+    .where(inArray(whatsappPlantillas.nombre, nombres));
+  const conBoton = new Set(guardadas.filter((p) => p.boton != null).map((p) => p.nombre));
+  const variablesDe = new Map(guardadas.map((p) => [p.nombre, p.variables?.length ?? null] as const));
 
   return AVISOS_PLANTILLA.map(({ clave }) => {
     const propia  = filas.find((f) => f.teamId === teamId && f.aviso === clave);
@@ -147,6 +158,7 @@ export async function getPlantillasDeTeam(teamId: number): Promise<PlantillaAsig
       propia: propia != null, conBoton: conBoton.has(usar.nombre),
       nombreConLink: usar.conLink ?? null,
       conLinkTieneBoton: usar.conLink ? conBoton.has(usar.conLink) : false,
+      conLinkVariables: usar.conLink ? (variablesDe.get(usar.conLink) ?? null) : null,
     };
   }).filter((x): x is PlantillaAsignada => x !== null);
 }
@@ -221,6 +233,26 @@ export interface DatosAviso {
   diasGracia?: number | null;
   /** Cuándo entra el recargo, en letra. Solo `antes-mora`. */
   fechaRecargo?: string | null;
+}
+
+/**
+ * Agrega el enlace de la factura como ÚLTIMO parámetro, solo si la plantilla lo
+ * espera.
+ *
+ * Meta rechaza el envío entero (132000) si los parámetros no son los que la
+ * plantilla declara, así que el enlace se suma únicamente cuando la plantilla
+ * asignada declara EXACTAMENTE una variable más que los datos del aviso. Una
+ * plantilla vieja, o una que el colegio eligió a mano sin esa variable, sigue
+ * saliendo como antes en vez de romper el envío.
+ */
+export function parametrosConEnlace(
+  base: string[],
+  enlace: string | null,
+  variablesDeLaPlantilla: number | null,
+): string[] {
+  if (!enlace || variablesDeLaPlantilla == null) return base;
+  if (variablesDeLaPlantilla !== base.length + 1) return base;
+  return [...base, enlace];
 }
 
 /**
