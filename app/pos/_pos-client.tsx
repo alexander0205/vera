@@ -18,6 +18,8 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import ButtonBase from '@mui/material/ButtonBase';
 import TextField from '@mui/material/TextField';
+import { MoneyTextField } from '@/components/ui/money-text-field';
+import { limpiarMonto, mascaraMonto } from '@/lib/utils/monto-mascara';
 import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 import Divider from '@mui/material/Divider';
@@ -358,10 +360,9 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
         </Box>
 
         <Typography component="label" sx={{ display: 'block', mt: 2.5, fontSize: 14, color: '#4b5563' }}>Fondo inicial (efectivo para cambio)</Typography>
-        <TextField
-          type="number"
+        <MoneyTextField
           value={monto}
-          onChange={(e) => setMonto(e.target.value)}
+          onChange={setMonto}
           placeholder="0.00"
           fullWidth
           slotProps={{
@@ -2611,10 +2612,9 @@ function CobroModal({
         </Box>
 
         {(propinaAbierta || propinaCentavos > 0) && (
-          <TextField
-            type="number"
+          <MoneyTextField
             value={propina}
-            onChange={(e) => setPropina(e.target.value)}
+            onChange={setPropina}
             placeholder="0.00"
             label="Propina"
             fullWidth
@@ -2702,11 +2702,10 @@ function CobroModal({
             {metodo === 'efectivo' && (
               <>
                 <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Efectivo recibido</Typography>
-                <TextField
-                  type="number"
+                <MoneyTextField
                   value={recibido}
                   autoFocus
-                  onChange={(e) => setRecibido(e.target.value)}
+                  onChange={setRecibido}
                   fullWidth
                   slotProps={{
                     input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
@@ -2782,10 +2781,9 @@ function CobroModal({
                   >
                     {METODOS.map((m) => <MenuItem key={m} value={m} sx={{ textTransform: 'capitalize', fontSize: 15, py: 1.25 }}>{m}</MenuItem>)}
                   </TextField>
-                  <TextField
-                    type="number"
+                  <MoneyTextField
                     value={f.valor}
-                    onChange={(e) => setFilaValor(i, e.target.value)}
+                    onChange={(v) => setFilaValor(i, v)}
                     placeholder="0.00"
                     sx={{ flex: 1, '& .MuiInputBase-root': { height: 52 }, '& input': { fontSize: 16 } }}
                     slotProps={{
@@ -3250,13 +3248,14 @@ function PrecioEditable({ linea, onEditar, bloqueado = false }: {
         <Box component="span" sx={{ color: '#9ca3af' }}>RD$</Box>
         <Box
           component="input"
-          type="number"
-          value={valor}
+          type="text"
+          inputMode="decimal"
+          value={mascaraMonto(valor)}
           autoFocus
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValor(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValor(limpiarMonto(e.target.value))}
           onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
           onBlur={guardar}
-          sx={{ width: 64, borderRadius: '4px', border: '1px solid #a5b4f9', px: 0.5, py: 0.25, fontSize: 12, outline: 'none', ...MONEY }}
+          sx={{ width: 88, borderRadius: '4px', border: '1px solid #a5b4f9', px: 0.5, py: 0.25, fontSize: 12, outline: 'none', ...MONEY }}
         />
       </Box>
     );
@@ -3368,11 +3367,10 @@ function CierreModal({ turnoId, onClose, onCerrado }: {
             </Box>
 
             <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Efectivo contado (RD$)</Typography>
-            <TextField
-              type="number"
+            <MoneyTextField
               value={estado.contado}
               autoFocus
-              onChange={(e) => setEstado((s) => ({ ...s, contado: e.target.value }))}
+              onChange={(v) => setEstado((s) => ({ ...s, contado: v }))}
               fullWidth
               slotProps={{
                 input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
@@ -3470,14 +3468,14 @@ function MonederoModal({ estudiante, onClose, onUpdated }: {
 
         <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Recargar (RD$)</Typography>
         <Box sx={{ mb: 1, display: 'flex', gap: 1 }}>
-          <TextField type="number" value={monto} onChange={(e) => setMonto(e.target.value)}
+          <MoneyTextField value={monto} onChange={setMonto}
             placeholder="0.00" sx={{ flex: 1 }} slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
           <Button onClick={recargar} disabled={busy} variant="contained" disableElevation sx={{ bgcolor: '#10b981', px: 2, fontWeight: 500, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.6, color: '#fff' } }}>Recargar</Button>
         </Box>
 
         <Typography component="label" sx={{ mb: 0.5, mt: 2, display: 'block', fontSize: 12, color: '#6b7280' }}>Límite diario (RD$, vacío = sin límite)</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField type="number" value={limite} onChange={(e) => setLimite(e.target.value)}
+          <MoneyTextField value={limite} onChange={setLimite}
             placeholder="sin límite" sx={{ flex: 1 }} slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
           <Button onClick={guardarLimite} disabled={busy} variant="outlined" sx={{ px: 2, color: '#374151', borderColor: '#d1d5db', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}>Guardar</Button>
         </Box>
@@ -3739,9 +3737,9 @@ function VentaSimpleModal({ onClose, onAgregar }: {
         </Box>
 
         <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Monto (DOP)</Typography>
-        <TextField
-          type="number" value={monto} autoFocus
-          onChange={(e) => setMonto(e.target.value)}
+        <MoneyTextField
+          value={monto} autoFocus
+          onChange={setMonto}
           onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
           placeholder="0.00" fullWidth
           slotProps={{

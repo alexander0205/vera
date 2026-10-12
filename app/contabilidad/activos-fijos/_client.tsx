@@ -15,6 +15,7 @@ import { Plus, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
+import { MoneyTextField } from '@/components/ui/money-text-field';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
@@ -195,14 +196,14 @@ export function ActivosFijosClient({
             />
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            <TextField
-              label="Costo (RD$)" type="number" value={costo}
-              onChange={(e) => setCosto(e.target.value)} placeholder="0.00"
+            <MoneyTextField
+              label="Costo (RD$)" value={costo}
+              onChange={setCosto} placeholder="0.00"
               slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 200 }}
             />
-            <TextField
-              label="Valor residual (RD$)" type="number" value={residual}
-              onChange={(e) => setResidual(e.target.value)} placeholder="0.00"
+            <MoneyTextField
+              label="Valor residual (RD$)" value={residual}
+              onChange={setResidual} placeholder="0.00"
               helperText="Opcional. Lo que valdrá al final."
               slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 200 }}
             />

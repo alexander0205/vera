@@ -15,6 +15,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import MuiButton from '@mui/material/Button';
 import MuiTextField from '@mui/material/TextField';
+import { MoneyTextField } from '@/components/ui/money-text-field';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
@@ -203,9 +204,9 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
               </Typography>
             )}
           </Box>
-          <MuiTextField
-            type="number" label="Monto (RD$)" placeholder="0.00"
-            value={monto} onChange={e => setMonto(e.target.value)}
+          <MoneyTextField
+            label="Monto (RD$)" placeholder="0.00"
+            value={monto} onChange={setMonto}
             size="small" fullWidth required
             slotProps={{ htmlInput: { min: '0.01', step: '0.01' } }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
@@ -325,9 +326,9 @@ function ModalCierre({ turno, desglose, ventasPorMetodo, onClose, onCerrado }: {
             </Card>
           )}
 
-          <MuiTextField
-            type="number" label="Efectivo contado (RD$)" placeholder="0.00"
-            value={contado} onChange={e => setContado(e.target.value)}
+          <MoneyTextField
+            label="Efectivo contado (RD$)" placeholder="0.00"
+            value={contado} onChange={setContado}
             size="small" fullWidth required autoFocus
             slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
@@ -506,9 +507,9 @@ export default function CajaPage() {
               )}
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>Monto de apertura (RD$)</Typography>
-                <MuiTextField
-                  type="number" placeholder="0.00"
-                  value={montoApertura} onChange={e => setMontoApertura(e.target.value)}
+                <MoneyTextField
+                  placeholder="0.00"
+                  value={montoApertura} onChange={setMontoApertura}
                   size="small" fullWidth required autoFocus
                   slotProps={{ htmlInput: { min: '0', step: '0.01', style: { fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' } } }}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
