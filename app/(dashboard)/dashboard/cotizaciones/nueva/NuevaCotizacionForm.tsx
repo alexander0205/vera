@@ -155,6 +155,9 @@ export default function NuevaCotizacionForm({
   // ── Columnas opcionales de items (Referencia / Descripción) ────────────────
   const [showItemRef, setShowItemRef]   = useState(false);
   const [showItemDesc, setShowItemDesc] = useState(false);
+  // Apagado por defecto: la mayoría de las facturas no llevan descuento y la
+  // casilla vacía en cada renglón robaba ancho a lo que sí se escribe.
+  const [showItemDescuento, setShowItemDescuento] = useState(false);
 
   // ── Textos ─────────────────────────────────────────────────────────────────
   const [notas, setNotas]                  = useState(initialData?.notas ?? '');
@@ -212,15 +215,16 @@ export default function NuevaCotizacionForm({
       localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
     } catch {}
   }
-  function persistCols(ref: boolean, desc: boolean) {
+  function persistCols(ref: boolean, desc: boolean, descuento: boolean = showItemDescuento) {
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
-      prefs.itemsCols = { referencia: ref, descripcion: desc };
+      prefs.itemsCols = { referencia: ref, descripcion: desc, descuento };
       localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
     } catch {}
   }
   const handleToggleRef  = (v: boolean) => { setShowItemRef(v);  persistCols(v, showItemDesc); };
   const handleToggleDesc = (v: boolean) => { setShowItemDesc(v); persistCols(showItemRef, v); };
+  const handleToggleDescuento = (v: boolean) => { setShowItemDescuento(v); persistCols(showItemRef, showItemDesc, v); };
 
   // ── Aplicar lista de precios (% sobre precio) a los items ──────────────────
   useEffect(() => {
@@ -474,7 +478,7 @@ export default function NuevaCotizacionForm({
                       value={fechaVencimiento}
                       min={today}
                       onChange={(e) => setFechaVencimiento(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
                     />
                   </div>
                 </div>
@@ -488,8 +492,10 @@ export default function NuevaCotizacionForm({
                   <ColumnasToggle
                     showReferencia={showItemRef}
                     showDescripcion={showItemDesc}
+                    showDescuento={showItemDescuento}
                     onToggleReferencia={handleToggleRef}
                     onToggleDescripcion={handleToggleDesc}
+                    onToggleDescuento={handleToggleDescuento}
                   />
                 }
               >
@@ -506,6 +512,7 @@ export default function NuevaCotizacionForm({
                   onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
+                  showDescuento={showItemDescuento}
                   dependientes={dependientesCliente}
                   bloquearPrecios={bloquearPrecios}
                 />
@@ -570,7 +577,7 @@ export default function NuevaCotizacionForm({
             <Button
               type="submit"
               disabled={saving}
-              className="bg-teal-600 hover:bg-teal-700 text-white"
+              className="bg-zero-600 hover:bg-zero-700 text-white"
             >
               {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
               {saving ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar cotización'}

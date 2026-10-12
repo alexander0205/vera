@@ -20,6 +20,9 @@
         "current",
         "glibc"
       ]
+    },
+    "overrides": {
+      "@modelcontextprotocol/sdk": "1.26.0"
     }
   },
   "scripts": {
@@ -34,6 +37,9 @@
     "corre:prod": "bash scripts/run-prod.sh start",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "db:setup": "npx tsx lib/db/setup.ts",
     "db:seed": "npx tsx lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",
@@ -42,12 +48,24 @@
     "db:reset": "npx tsx lib/db/reset.ts",
     "db:local:setup": "bash scripts/setup-local-db.sh",
     "branch:setup": "bash scripts/branch-setup.sh",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
     "comprobantes:reconciliar": "npx tsx scripts/reconciliar-comprobantes-s3.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.58",
     "@aws-sdk/client-s3": "^3.1105.0",
+    "@aws-sdk/client-sns": "^3.1105.0",
+    "@aws-sdk/s3-request-presigner": "^3.1105.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "@mui/icons-material": "^9.1.1",
+    "@mui/material": "^9.1.1",
+    "@mui/material-nextjs": "^9.1.1",
     "@react-pdf/renderer": "^4.4.0",
     "@tailwindcss/postcss": "4.1.7",
     "@types/adm-zip": "^0.5.8",
@@ -55,6 +73,7 @@
     "@types/react": "19.1.4",
     "@types/react-dom": "19.1.5",
     "adm-zip": "^0.5.17",
+    "ai": "^7.0.107",
     "autoprefixer": "^10.4.21",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
@@ -68,7 +87,11 @@
     "exceljs": "^4.4.0",
     "iconv-lite": "^0.7.2",
     "jose": "^6.0.11",
+    "jpeg-js": "^0.4.4",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.511.0",
+    "mcp-handler": "^1.1.0",
+    "modern-screenshot": "^4.7.0",
     "next": "15.6.0-canary.59",
     "otpauth": "^9.5.0",
     "papaparse": "^5.5.3",
@@ -90,7 +113,7 @@
     "tailwindcss": "4.1.7",
     "tw-animate-css": "^1.3.0",
     "typescript": "^5.8.3",
-    "zod": "^3.24.4"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

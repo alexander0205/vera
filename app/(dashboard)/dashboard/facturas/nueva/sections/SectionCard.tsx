@@ -2,32 +2,31 @@
 
 import type { ComponentType, ReactNode } from 'react';
 import type { LucideProps } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 interface Props {
   number: number;
   title: string;
   icon?: ComponentType<LucideProps>;
   children: ReactNode;
-  /** Optional right-aligned actions in the header. */
   actions?: ReactNode;
 }
 
-/**
- * Numbered card with teal badge + title. Used for the main form sections
- * (cliente, detalles, productos…). Matches the mockup's split-layout cards.
- */
 export function SectionCard({ number, title, icon: Icon, children, actions }: Props) {
   return (
-    <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <header className="flex items-center gap-3 px-4 pt-4 pb-3 md:px-5 md:pt-5">
-        <div className="h-6 w-6 rounded-md bg-teal-600 text-white flex items-center justify-center font-semibold text-[11px] shrink-0">
+    <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+      <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, md: 2.5 }, pt: { xs: 2, md: 2.5 }, pb: 1.5 }}>
+        <Box sx={{ height: 24, width: 24, borderRadius: '6px', bgcolor: '#3658e1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '0.6875rem', flexShrink: 0 }}>
           {number}
-        </div>
-        {Icon && <Icon className="h-4 w-4 text-gray-500 shrink-0" aria-hidden="true" />}
-        <h2 className="text-sm font-semibold text-gray-900 flex-1 truncate">{title}</h2>
-        {actions && <div className="shrink-0">{actions}</div>}
-      </header>
-      <div className="px-4 pb-4 md:px-5 md:pb-5">{children}</div>
-    </section>
+        </Box>
+        {Icon && <Icon size={16} color="#6b7280" aria-hidden />}
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {title}
+        </Typography>
+        {actions && <Box sx={{ flexShrink: 0 }}>{actions}</Box>}
+      </Box>
+      <Box sx={{ px: { xs: 2, md: 2.5 }, pb: { xs: 2, md: 2.5 } }}>{children}</Box>
+    </Box>
   );
 }

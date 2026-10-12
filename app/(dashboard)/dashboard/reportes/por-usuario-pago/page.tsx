@@ -5,6 +5,13 @@ import { fmtDOP } from '@/lib/utils/format';
 import { parseRango } from '@/lib/reportes/shared';
 import { getPagosPorUsuario } from '@/lib/reportes/queries';
 import { ReportShell, KpiCard } from '@/components/reportes/report-shell';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 
 export default async function PorUsuarioPagoPage({
   searchParams,
@@ -32,43 +39,43 @@ export default async function PorUsuarioPagoPage({
       hasta={d1}
       exportHref={`/api/reportes/export?report=por-usuario-pago&desde=${d0}&hasta=${d1}`}
     >
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        <KpiCard label="Total cobrado" value={fmtDOP(total)} tone="teal" />
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 1.5, mb: 3 }}>
+        <KpiCard label="Total cobrado" value={fmtDOP(total)} tone="marca" />
         <KpiCard label="Usuarios" value={String(filas.length)} />
         <KpiCard label="Top cobrador" value={filas[0]?.nombre ?? '—'} sub={filas[0] ? fmtDOP(filas[0].totalCents) : undefined} />
-      </div>
+      </Box>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-900">Detalle por usuario ({filas.length})</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-2.5 text-left">#</th>
-                <th className="px-4 py-2.5 text-left">Usuario</th>
-                <th className="px-4 py-2.5 text-right">Pagos</th>
-                <th className="px-4 py-2.5 text-right">Cobrado</th>
-                <th className="px-4 py-2.5 text-right">%</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb' }}>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Detalle por usuario ({filas.length})</Typography>
+        </Box>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ width: '100%', '& tbody td': { borderBottom: '1px solid #f3f4f6' }, '& tbody tr:last-child td': { borderBottom: 0 } }}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                {([['#', 'left'], ['Usuario', 'left'], ['Pagos', 'right'], ['Cobrado', 'right'], ['%', 'right']] as const).map(([h, align]) => (
+                  <TableCell key={h} align={align} sx={{ px: 2, py: 1.25, fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', borderBottom: '1px solid #e5e7eb' }}>
+                    {h}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {filas.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Sin cobros en este rango.</td></tr>
+                <TableRow><TableCell colSpan={5} sx={{ px: 2, py: 4, textAlign: 'center', color: '#9ca3af' }}>Sin cobros en este rango.</TableCell></TableRow>
               ) : filas.map((f, i) => (
-                <tr key={f.usuarioId ?? `nn-${i}`} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                  <td className="px-4 py-3 text-gray-900 font-medium">{f.nombre}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{f.numPagos}</td>
-                  <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtDOP(f.totalCents)}</td>
-                  <td className="px-4 py-3 text-right text-gray-500">{total > 0 ? Math.round(f.totalCents / total * 100) : 0}%</td>
-                </tr>
+                <TableRow key={f.usuarioId ?? `nn-${i}`} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                  <TableCell sx={{ px: 2, py: 1.5, color: '#9ca3af' }}>{i + 1}</TableCell>
+                  <TableCell sx={{ px: 2, py: 1.5, color: '#111827', fontWeight: 500 }}>{f.nombre}</TableCell>
+                  <TableCell align="right" sx={{ px: 2, py: 1.5, color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{f.numPagos}</TableCell>
+                  <TableCell align="right" sx={{ px: 2, py: 1.5, color: '#111827', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(f.totalCents)}</TableCell>
+                  <TableCell align="right" sx={{ px: 2, py: 1.5, color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>{total > 0 ? Math.round(f.totalCents / total * 100) : 0}%</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </Box>
+      </Box>
     </ReportShell>
   );
 }

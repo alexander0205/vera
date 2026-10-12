@@ -243,23 +243,10 @@ export function parsearEncf(encf: string): { tipo: string; secuencia: number } |
   return { tipo: match[1], secuencia: parseInt(match[2], 10) };
 }
 
-// Planes en DOP (pesos dominicanos)
-export const PLANES_LIMITES: Record<string, number> = {
-  free: 30,
-  base: 300,
-  plus: 1500,
-  business: 5000,
-  enterprise: Infinity,
-};
-
-export const PLANES_PRECIOS: Record<string, { mensual: number; label: string }> =
-  {
-    free: { mensual: 0, label: 'Gratis' },
-    base: { mensual: 800, label: 'Básico' },
-    plus: { mensual: 2000, label: 'Pro' },
-    business: { mensual: 5000, label: 'Business' },
-    enterprise: { mensual: 0, label: 'Enterprise' },
-  };
+// PLANES_LIMITES y PLANES_PRECIOS vivían aquí: cinco planes en pesos
+// (free/base/plus/business/enterprise) que no coincidían con ningún catálogo
+// vigente y que no leía nadie. La fuente de verdad de planes, precios y
+// límites es lib/config/plans.ts.
 
 export interface EcfItemInput {
   nombreItem: string;

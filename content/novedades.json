@@ -26,8 +26,104 @@
     "sistemas. Si no lo entiende, está mal escrito."
   ],
   "pendiente": {
-    "titulo": "",
-    "cambios": []
+    "titulo": "Tu colegio, cobrado solo",
+    "cambios": [
+      {
+        "tipo": "nuevo",
+        "titulo": "El colegio ya lleva su propio cobro",
+        "detalle": "Antes matriculabas al alumno aquí y la mensualidad la cobrabas por fuera, en una hoja aparte. Ahora cada concepto tiene su calendario de cuotas, su fecha de vencimiento y su recargo por mora, y de cada cargo sale la factura con su comprobante fiscal."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Recordatorios de pago que salen solos",
+        "detalle": "Puedes avisarle a la familia por correo, WhatsApp y mensaje de texto en tres momentos: cuando sale la factura, el día que vence y unos días antes de que entre el recargo. Se manda una sola vez por cargo y por vía, así que a nadie le llega el mismo aviso dos veces."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Una pantalla para las familias que pagan",
+        "detalle": "Cada responsable de pago tiene ahora su ficha: lo que se le facturó, lo que abonó, lo que debe por cada hijo, sus facturas, sus recordatorios y por dónde se le puede escribir. Antes había que ir alumno por alumno para armar esa cuenta."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Panorama de la cartera del colegio",
+        "detalle": "De un vistazo: cuánto se facturó, cuánto entró, cuánto está vencido y quién debe más. Y del alumno puedes imprimir un récord financiero completo, cargo por cargo y pago por pago, que es el papel que la familia viene a discutir."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Los papeles de cada alumno, en su sitio",
+        "detalle": "Defines qué documentos pide el colegio, ves cuáles faltan y le mandas a la familia un enlace para que los suba ella misma, sin ir presencialmente a entregarlos."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Se avisa a quien de verdad paga",
+        "detalle": "El responsable de pago dejó de ser una casilla dentro del tutor y pasó a ser un contacto de facturación. Antes la misma persona vivía duplicada —como tutor y como cliente— y con el teléfono y el correo escritos dos veces, que casi nunca coincidían."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Se ve claro por dónde NO se le puede avisar",
+        "detalle": "Si a un responsable le falta el celular, el WhatsApp o el correo, ahora se marca en rojo en su ficha y el aviso se queda mientras falte alguno. El teléfono fijo ya no cuenta como vía de contacto: no recibe ni mensajes de texto ni WhatsApp."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Los formularios se guardan solos",
+        "detalle": "La familia pulsa «Comenzar» y el enlace pasa a ser suyo: lo que va escribiendo se guarda cada pocos segundos y puede dejarlo a medias y volver por el mismo enlace. Antes, cerrar el navegador a mitad de una ficha de siete pasos costaba empezar de cero."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Papeles sueltos en el expediente de un alumno",
+        "detalle": "Desde el expediente ya se le puede agregar a UN alumno un documento que no está en el listado —la carta del pediatra, el permiso de viaje—, copiar uno de los listados, o adjuntarle un formulario para que la familia lo conteste por enlace. Antes todo lo que se le pedía a un alumno había que pedírselo también a sus trescientos compañeros."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Ver lo que contestó la familia antes de aprobarlo",
+        "detalle": "Un formulario recibido se abre y se lee entero —con sus secciones, sus firmas y lo que quedó sin contestar— y se aprueba o se rechaza desde ahí mismo. Antes solo se podía aprobar a ciegas. Además el formulario se puede mandar por correo desde el expediente, y todo lo que se le manda a una familia queda en su pestaña de Avisos."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Vuelve el detalle de una cuenta por cobrar",
+        "detalle": "Pulsando cualquier fila de Cuentas por cobrar se abre el detalle que explica el saldo sin sacarte de la lista: de dónde sale, qué se pagó, qué mora se le sumó, qué alumno y qué concepto escolar hay detrás, y la gestión de cobro con promesas de pago. Estaba construido pero llevaba semanas desconectado de la pantalla. Además, las columnas que no tienen nada que enseñar —vencimiento, atraso, mora— desaparecen solas, y el saldo deja de quedar cortado."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Quién debe qué documentos, en una sola pantalla",
+        "detalle": "Documentos abre en Seguimiento: la lista de quién tiene el expediente incompleto y qué le falta, ordenada por lo más atrasado. Se eligen varias familias y se les reclama por correo de una vez, cada una con su propio enlace. Antes había que entrar alumno por alumno, así que con cuatrocientas matrículas no se reclamaba."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "El colegio deja de tener que acordarse",
+        "detalle": "Un recordatorio semanal le escribe solo a las familias con documentos pendientes, sin repetirle a la misma antes de siete días y con un tope por colegio. Viene apagado: se enciende a propósito."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Instrucciones en cada documento",
+        "detalle": "Cada documento puede llevar una nota para la familia —«original con sello», «las dos caras»— que se ve en el enlace donde sube los papeles. Y «Fotos 2x2 ×3» ya no se puede dar por bueno con una sola foto."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "La caja ya no ofrece mensualidades ni recargos",
+        "detalle": "En el punto de venta salían cobros que no son de mostrador —matrícula, mensualidad y hasta un «recargo por mora» de RD$0.00 que al tocarlo emitía un comprobante en cero. Ahora un servicio nace fuera de la caja y solo entra si lo pones tú, desde «¿Dónde se vende?» en la ficha del producto; los bienes siguen apareciendo como siempre. Ese mismo desplegable ya se guarda al editar: antes lo cambiabas y el producto seguía igual."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Elige tu plan y empieza gratis, sin tarjeta",
+        "detalle": "Si tu empresa todavía no tiene un plan, el sistema te lleva directo a elegirlo: los planes de facturación empiezan con 15 días de prueba y los de colegio con 30, sin pedir tarjeta. Lo que tu empresa ya tiene registrado —clientes, comprobantes, estudiantes— se conserva tal cual. Y tu suscripción ahora se mantiene sincronizada con el sistema de cobros aunque un aviso se pierda por el camino."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Un cliente se registra completo de una sola vez",
+        "detalle": "Antes había que guardar el cliente, cerrarlo y volver a abrirlo en editar solo para ponerle los dependientes; y si lo creabas desde una factura salía sin celular, WhatsApp ni dirección. Ahora es el mismo formulario completo en todas partes: la lista de clientes, la factura, la cotización, las facturas recurrentes y el punto de venta."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Crear un cliente ya no te borra la factura recurrente",
+        "detalle": "En una factura recurrente, pulsar «Nuevo cliente» te sacaba de la pantalla y al volver todo lo que habías llenado estaba en blanco. Ahora el cliente se crea sin salir, y queda seleccionado al cerrar."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Las secuencias de comprobantes ya no se inventan solas",
+        "detalle": "Al dar de alta una institución se le creaban diez rangos de numeración de oficio, con números que nadie había autorizado. Ahora se crea sin ninguno, y cada rango se carga a mano desde Configuración con los datos exactos de la autorización. Mientras tanto se puede facturar sin comprobante fiscal con normalidad."
+      }
+    ]
   },
   "versiones": [
     {

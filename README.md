@@ -84,6 +84,11 @@ To test Stripe payments, use the following test card details:
 
 ## Going to Production
 
+> **Zero/EmiteDO ya está en producción.** El procedimiento real de deploy
+> (automático vía GitHub Actions al mergear a `master`, con gate manual para
+> migraciones) está en [`docs/deploy-zero.md`](docs/deploy-zero.md). Lo que
+> sigue en esta sección es la guía genérica del boilerplate original.
+
 When you're ready to deploy your SaaS application to production, follow these steps:
 
 ### Set up a production Stripe webhook

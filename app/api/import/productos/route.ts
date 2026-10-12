@@ -10,6 +10,7 @@ import { db } from '@/lib/db/drizzle';
 import { products } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireImport, readUpload, ImportError } from '@/lib/import/server';
+import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import {
   decodeBuffer, parseCsv, pick, normKey, toCents,
   type ImportRow, type ImportResult,
@@ -96,8 +97,12 @@ export async function POST(req: NextRequest) {
     });
 
     if (mode === 'commit' && toInsert.length > 0) {
-      for (let i = 0; i < toInsert.length; i += 500) {
-        await db.insert(products).values(toInsert.slice(i, i + 500));
+      // Las banderas van explícitas: el CSV no trae columna «¿dónde se vende?»
+      // y confiar en el default de la tabla fue justo lo que llenó la grilla de
+      // la caja de mensualidades. Se deducen del tipo (ver donde-se-vende.ts).
+      const conBanderas = toInsert.map((p) => ({ ...p, ...banderasPorTipo(p.tipo) }));
+      for (let i = 0; i < conBanderas.length; i += 500) {
+        await db.insert(products).values(conBanderas.slice(i, i + 500));
       }
     }
 

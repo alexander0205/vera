@@ -7,7 +7,7 @@
  * ventas atadas al turno.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, posTerminales, almacenes } from '@/lib/db/schema';
 import { getTurno, calcularEsperado, getVentasPorMetodo, type DesgloseEsperado, type VentaPorMetodo } from '@/lib/caja/core';
@@ -39,7 +39,14 @@ export async function getReporteTurno(teamId: number, turnoId: number): Promise<
     getVentasPorMetodo(teamId, turnoId),
     db.select({ lineasJson: ecfDocuments.lineasJson })
       .from(ecfDocuments)
-      .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.turnoCajaId, turnoId))),
+      .where(
+        and(
+          eq(ecfDocuments.teamId, teamId),
+          eq(ecfDocuments.turnoCajaId, turnoId),
+          // Un turno concilia caja; tipoOrden identifica ventas nacidas en POS.
+          isNotNull(ecfDocuments.tipoOrden),
+        ),
+      ),
   ]);
 
   // Nombres de terminal y almacén (si el turno es de un POS).

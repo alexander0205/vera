@@ -70,4 +70,36 @@ scripts/check-user-role.ts
 scripts/check-cert-status.ts
 
 .claire/
+
+# Playwright artifacts
+test-results/
+playwright-report/
+
 .release-notes.md
+
+# Capturas de QA (evidencia local, no versionar)
+test-results/
+
+# scratch de sesiones de trabajo (temporales de codex + transcripciones de audio)
+.codex_tmp/
+transcripciones/
+
+# docs de trabajo en curso (borradores locales, no parte del producto)
+docs/plan-contabilidad-vera.md
+docs/mini-plan-contabilidad-asientos-reportes.md
+docs/mockup-cuentas-por-cobrar-paso-1.html
+
+# Herramientas locales de redacción de video (demo) — nunca versionar
+.inspection/
+.video-tools/
+redact-video.ps1
+
+# worktrees locales de git (superpowers:using-git-worktrees)
+.worktrees/
+
+# mockups locales del brainstorming visual (superpowers:brainstorming)
+.superpowers/
+
+# artefactos locales del análisis de audio/video de WhatsApp (frames, venv de whisper)
+.tmp-video-audio-*/
+transcripciones/video_frames_*/

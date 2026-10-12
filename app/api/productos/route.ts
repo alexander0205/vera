@@ -4,11 +4,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleEnFacturacion } from '@/lib/productos/visibilidad';
+import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { products, productVariants, productVariantAlmacenStock, almacenes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { sembrarAlmacenPorDefecto } from '@/lib/pos/asignaciones';
 import { eq, ilike, or, and, sql, getTableColumns, desc, asc } from 'drizzle-orm';
 
 // Ejes de variante definidos por el usuario (MVP "por producto"):
@@ -46,6 +49,10 @@ const productoSchema = z.object({
   permiteVentaSinStock: z.boolean().optional(),
   categoriaId:          z.number().int().positive().optional().nullable(),
   imagen:               z.string().max(1_500_000).optional().nullable(),
+  // POS: si aparece en la grilla del punto de venta y si es favorito.
+  visiblePos:           z.boolean().optional(),
+  visibleFacturacion:   z.boolean().optional(),
+  posFavorito:          z.boolean().optional(),
   // Variantes (opcional). Si `variants` viene con filas, el producto se marca
   // como bien con control de inventario y su stock global es la suma de variantes.
   variantAtributos:     z.array(variantAtributoSchema).max(5).optional(),
@@ -83,6 +90,26 @@ export async function GET(req: NextRequest) {
     ) as typeof whereCondition;
   } else if (tipo) {
     whereCondition = and(eq(products.teamId, teamId), eq(products.tipo, tipo)) as typeof whereCondition;
+  }
+
+  // `?contexto=facturacion` aplica la regla de visibilidad (producto oculto o
+  // almacén solo-POS). Es OPT-IN a propósito: la pantalla de Productos tiene que
+  // seguir mostrándolos todos, si no no habría forma de editarlos ni de volver a
+  // hacerlos visibles. Solo lo pide el buscador de las facturas.
+  if (params.get('contexto') === 'facturacion') {
+    whereCondition = and(whereCondition, visibleEnFacturacion()) as typeof whereCondition;
+  }
+
+  // `?canal=pos` — el catálogo tal como lo ve la caja.
+  //
+  // Lo pide la pantalla de Productos DENTRO del módulo POS, que no debe
+  // enseñar mensualidades ni matrículas: ahí solo tiene sentido lo que se
+  // despacha en mostrador. A diferencia de `contexto=facturacion`, este filtro
+  // NO mira el almacén — es el catálogo del negocio, no la grilla de una
+  // terminal concreta— y sí incluye lo oculto por otras razones, para que se
+  // pueda editar desde ahí.
+  if (params.get('canal') === 'pos') {
+    whereCondition = and(whereCondition, eq(products.visiblePos, true)) as typeof whereCondition;
   }
 
   // Paginación opcional (compatible: sin params trae hasta 1000).
@@ -123,7 +150,12 @@ export async function POST(req: NextRequest) {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
     categoriaId, imagen, variantAtributos, variants,
+    visiblePos, visibleFacturacion, posFavorito,
   } = parsed.data;
+
+  // Default inteligente: un servicio no se muestra en el mostrador salvo que
+  // se marque explícito; un bien sí. El usuario puede sobreescribir.
+  const visiblePosFinal = visiblePos ?? banderasPorTipo(tipo).visiblePos;
 
   // Solo un bien puede llevar variantes; en servicios se ignoran.
   const conVariantes = tipo === 'bien' && !!variants && variants.length > 0;
@@ -151,6 +183,9 @@ export async function POST(req: NextRequest) {
       stockMinimo:          stockMinimo ?? 0,
       categoriaId:          categoriaId ?? null,
       imagen:               imagen ?? null,
+      visiblePos:           visiblePosFinal,
+      visibleFacturacion:   visibleFacturacion ?? true,
+      posFavorito:          posFavorito ?? false,
       controlaInventario:   tipo === 'bien' ? (conVariantes || (controlaInventario ?? false)) : false,
       permiteVentaSinStock: permiteVentaSinStock ?? true,
       variantAtributos:     conVariantes ? (variantAtributos ?? []) : [],
@@ -193,6 +228,15 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Nace vendible. Sin fila de almacén el producto no sale en ninguna caja
+    // por mucho que esté marcado visible en POS — ver sembrarAlmacenPorDefecto.
+    // Con variantes no hace falta: el bloque de arriba ya sembró el stock fino
+    // por talla, que es lo que mira el catálogo en ese caso.
+    if (prod.visiblePos && prod.controlaInventario && !conVariantes) {
+      await sembrarAlmacenPorDefecto(tx, teamId, prod.id, prod.stockActual);
+    }
+
     return prod;
   });
 

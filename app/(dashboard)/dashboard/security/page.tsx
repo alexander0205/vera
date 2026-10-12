@@ -1,6 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Shield, Smartphone, Key, AlertTriangle, Check, Copy } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
 
 export default function SecurityPage() {
   const [user, setUser] = useState<{ twoFactorEnabled: boolean; emailVerified: boolean; email: string } | null>(null);
@@ -69,163 +78,196 @@ export default function SecurityPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Seguridad</h1>
-        <p className="text-sm text-gray-500 mt-1">Gestiona la seguridad de tu cuenta</p>
-      </div>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 640 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+          Seguridad
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+          Gestiona la seguridad de tu cuenta
+        </Typography>
+      </Box>
 
       {success && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">
-          <Check className="h-4 w-4 shrink-0" />
+        <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }} onClose={() => setSuccess('')}>
           {success}
-        </div>
+        </Alert>
       )}
 
       {/* Email verification */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            <div className="h-9 w-9 rounded-lg bg-teal-50 flex items-center justify-center">
-              <Shield className="h-5 w-5 text-teal-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">Verificación de email</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {user?.email}
-              </p>
-            </div>
-          </div>
-          {user?.emailVerified ? (
-            <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
-              <Check className="h-3 w-3" /> Verificado
-            </span>
-          ) : (
-            <button onClick={sendVerification}
-              className="text-xs text-teal-600 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50">
-              Enviar verificación
-            </button>
-          )}
-        </div>
-      </div>
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+        <CardContent sx={{ p: '20px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Shield style={{ width: 18, height: 18, color: '#3658e1' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                  Verificación de email
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                  {user?.email}
+                </Typography>
+              </Box>
+            </Box>
+            {user?.emailVerified ? (
+              <Chip
+                label="Verificado"
+                size="small"
+                icon={<Check style={{ width: 12, height: 12 }} />}
+                sx={{ bgcolor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', height: 24, fontSize: '0.6875rem', fontWeight: 600 }}
+              />
+            ) : (
+              <MuiButton variant="outlined" size="small" onClick={sendVerification}
+                sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
+                Enviar verificación
+              </MuiButton>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* 2FA */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-start gap-3">
-            <div className="h-9 w-9 rounded-lg bg-teal-50 flex items-center justify-center">
-              <Smartphone className="h-5 w-5 text-teal-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">Autenticación en dos pasos (2FA)</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {user?.twoFactorEnabled
-                  ? 'Activa — tu cuenta está protegida con TOTP'
-                  : 'Usa una app como Google Authenticator o Authy'}
-              </p>
-            </div>
-          </div>
-          {user?.twoFactorEnabled ? (
-            <button onClick={() => setDisableMode(true)}
-              className="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50">
-              Desactivar
-            </button>
-          ) : (
-            <button onClick={startSetup}
-              className="text-xs text-teal-600 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50">
-              Activar 2FA
-            </button>
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+        <CardContent sx={{ p: '20px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: setupMode || disableMode ? 2 : 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Smartphone style={{ width: 18, height: 18, color: '#3658e1' }} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                  Autenticación en dos pasos (2FA)
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                  {user?.twoFactorEnabled
+                    ? 'Activa — tu cuenta está protegida con TOTP'
+                    : 'Usa una app como Google Authenticator o Authy'}
+                </Typography>
+              </Box>
+            </Box>
+            {user?.twoFactorEnabled ? (
+              <MuiButton variant="outlined" size="small" color="error" onClick={() => setDisableMode(true)}
+                sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem' }}>
+                Desactivar
+              </MuiButton>
+            ) : (
+              <MuiButton variant="outlined" size="small" onClick={startSetup}
+                sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
+                Activar 2FA
+              </MuiButton>
+            )}
+          </Box>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>{error}</Alert>
           )}
-        </div>
 
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{error}</p>
-        )}
+          {setupMode && (
+            <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 2.5, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                1. Escanea el código QR con tu app de autenticación
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrUri)}`}
+                  alt="QR Code 2FA"
+                  style={{ border: '1px solid #e5e7eb', borderRadius: 8 }}
+                  width={140}
+                  height={140}
+                />
+                <Box>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                    O ingresa este código manualmente:
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box component="code" sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 1, py: 0.5, fontFamily: 'monospace', fontSize: '0.75rem', wordBreak: 'break-all' }}>
+                      {secret}
+                    </Box>
+                    <IconButton size="small" onClick={copySecret} sx={{ color: copied ? 'success.main' : 'text.secondary' }}>
+                      {copied ? <Check style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
+                    </IconButton>
+                  </Box>
+                </Box>
+              </Box>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                2. Ingresa el código de 6 dígitos
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <MuiTextField
+                  value={code}
+                  onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  size="small"
+                  slotProps={{ htmlInput: { maxLength: 6, style: { fontFamily: 'monospace', textAlign: 'center', letterSpacing: '0.25em' } } }}
+                  sx={{ width: 120, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+                <MuiButton variant="contained" color="primary" disableElevation
+                  onClick={verifyAndEnable} disabled={loading || code.length !== 6}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+                  {loading ? 'Verificando...' : 'Activar 2FA'}
+                </MuiButton>
+                <MuiButton variant="text" onClick={() => setSetupMode(false)}
+                  sx={{ borderRadius: '8px', textTransform: 'none', color: 'text.secondary' }}>
+                  Cancelar
+                </MuiButton>
+              </Box>
+            </Box>
+          )}
 
-        {setupMode && (
-          <div className="space-y-4 border-t pt-4">
-            <p className="text-sm text-gray-700 font-medium">1. Escanea el código QR con tu app de autenticación</p>
-            <div className="flex items-start gap-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrUri)}`}
-                alt="QR Code 2FA"
-                className="border rounded-lg"
-                width={140}
-                height={140}
-              />
-              <div>
-                <p className="text-xs text-gray-500 mb-2">O ingresa este código manualmente:</p>
-                <div className="flex items-center gap-2">
-                  <code className="bg-gray-100 rounded px-2 py-1 text-xs font-mono break-all">{secret}</code>
-                  <button onClick={copySecret} className="text-gray-400 hover:text-gray-600">
-                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700 font-medium">2. Ingresa el código de 6 dígitos</p>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={code}
-                onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="000000"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 font-mono text-center focus:outline-none focus:ring-2 focus:ring-teal-500"
-                maxLength={6}
-              />
-              <button onClick={verifyAndEnable} disabled={loading || code.length !== 6}
-                className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
-                {loading ? 'Verificando...' : 'Activar 2FA'}
-              </button>
-              <button onClick={() => setSetupMode(false)}
-                className="text-gray-500 px-4 py-2 rounded-lg text-sm hover:bg-gray-100">
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
+          {disableMode && (
+            <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+                Desactivar 2FA reduce la seguridad de tu cuenta
+              </Alert>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <MuiTextField
+                  type="password"
+                  value={disablePassword}
+                  onChange={e => setDisablePassword(e.target.value)}
+                  placeholder="Confirma tu contraseña"
+                  size="small"
+                  sx={{ flex: 1, minWidth: 200, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+                <MuiButton variant="contained" color="error" disableElevation
+                  onClick={disable2FA} disabled={loading}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+                  {loading ? 'Desactivando...' : 'Desactivar'}
+                </MuiButton>
+                <MuiButton variant="text" onClick={() => setDisableMode(false)}
+                  sx={{ borderRadius: '8px', textTransform: 'none', color: 'text.secondary' }}>
+                  Cancelar
+                </MuiButton>
+              </Box>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
 
-        {disableMode && (
-          <div className="space-y-3 border-t pt-4">
-            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Desactivar 2FA reduce la seguridad de tu cuenta
-            </div>
-            <div className="flex gap-3">
-              <input type="password" value={disablePassword}
-                onChange={e => setDisablePassword(e.target.value)}
-                placeholder="Confirma tu contraseña"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-              <button onClick={disable2FA} disabled={loading}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                {loading ? 'Desactivando...' : 'Desactivar'}
-              </button>
-              <button onClick={() => setDisableMode(false)}
-                className="text-gray-500 px-3 py-2 rounded-lg text-sm hover:bg-gray-100">
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Change password link */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-teal-50 flex items-center justify-center">
-            <Key className="h-5 w-5 text-teal-600" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-gray-900">Contraseña</p>
-            <p className="text-xs text-gray-500">Cambia tu contraseña regularmente</p>
-          </div>
-          <a href="/forgot-password" className="text-xs text-teal-600 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50">
-            Cambiar
-          </a>
-        </div>
-      </div>
-    </div>
+      {/* Change password */}
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+        <CardContent sx={{ p: '20px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Key style={{ width: 18, height: 18, color: '#3658e1' }} />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                Contraseña
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                Cambia tu contraseña regularmente
+              </Typography>
+            </Box>
+            <MuiButton variant="outlined" size="small" href="/forgot-password"
+              sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
+              Cambiar
+            </MuiButton>
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }

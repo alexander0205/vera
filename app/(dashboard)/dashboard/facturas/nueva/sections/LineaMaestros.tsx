@@ -10,6 +10,7 @@
  */
 
 import useSWR from 'swr';
+import Box from '@mui/material/Box';
 import { Tags } from 'lucide-react';
 
 interface Valor { id: number; valor: string; }
@@ -43,16 +44,16 @@ export function LineaMaestros({ productoId }: { productoId?: number }) {
   if (grupos.length === 0) return null;
 
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-      <Tags className="h-3 w-3 text-gray-300 shrink-0" />
+    <Box sx={{ mt: 0.75, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, rowGap: 0.5 }}>
+      <Tags size={12} color="#d1d5db" style={{ flexShrink: 0 }} />
       {grupos.map(g => (
-        <span key={g.nombre} className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-          <span className="text-gray-400">{g.nombre}:</span>
+        <Box component="span" key={g.nombre} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '11px', color: '#6b7280' }}>
+          <Box component="span" sx={{ color: '#9ca3af' }}>{g.nombre}:</Box>
           {g.valores.map(v => (
-            <span key={v} className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{v}</span>
+            <Box component="span" key={v} sx={{ borderRadius: '4px', bgcolor: '#f3f4f6', px: 0.75, py: 0.25, color: '#4b5563' }}>{v}</Box>
           ))}
-        </span>
+        </Box>
       ))}
-    </div>
+    </Box>
   );
 }

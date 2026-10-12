@@ -8,10 +8,19 @@ import { and, eq, desc } from 'drizzle-orm';
 // innerJoin: el FK usuario_id → users(id) impide borrar un usuario referenciado,
 // así que el cajero siempre existe; innerJoin evita columnas null en el render.
 import { requirePermission } from '@/lib/auth/api-guard';
+import { conErrorJson } from '@/lib/api/error-json';
 import { db } from '@/lib/db/drizzle';
 import { cajaTurnos, users } from '@/lib/db/schema';
 
 export async function GET() {
+  return conErrorJson(
+    'api/caja/aprobaciones',
+    'No se pudieron cargar los cierres pendientes.',
+    cierresPendientes,
+  );
+}
+
+async function cierresPendientes(): Promise<Response> {
   const auth = await requirePermission('caja:aprobar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;

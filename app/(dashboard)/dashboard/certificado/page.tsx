@@ -6,9 +6,16 @@ import {
   X, Eye, EyeOff, FileKey, Calendar, User, Hash,
   ShieldCheck, ShieldAlert, CloudUpload, RefreshCw, Trash2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,7 +23,7 @@ interface CertInfo {
   tieneCertificado: boolean;
   errorLectura?: boolean;
   titular?:     string;
-  vencimiento?: string; // ISO string
+  vencimiento?: string;
   subject?:     string;
   serial?:      string;
 }
@@ -40,7 +47,7 @@ function getCertStatus(vencimiento?: string): CertStatus {
   if (!vencimiento) return 'ok';
   const diff = new Date(vencimiento).getTime() - Date.now();
   if (diff < 0)            return 'expired';
-  if (diff < 90 * 86400e3) return 'warning'; // < 90 días
+  if (diff < 90 * 86400e3) return 'warning';
   return 'ok';
 }
 
@@ -48,204 +55,148 @@ function getCertStatus(vencimiento?: string): CertStatus {
 
 function VerifRow({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <div className="flex items-center gap-2">
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       {ok
-        ? <CheckCircle className="h-4 w-4 text-teal-500 shrink-0" />
-        : <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+        ? <CheckCircle style={{ width: 14, height: 14, color: '#3658e1', flexShrink: 0 }} />
+        : <AlertTriangle style={{ width: 14, height: 14, color: '#ef4444', flexShrink: 0 }} />
       }
-      <p className="text-xs text-gray-700">{label}</p>
-    </div>
+      <Typography variant="caption" sx={{ color: 'text.primary' }}>{label}</Typography>
+    </Box>
   );
 }
 
-function InfoRow({
-  icon: Icon, label, value, valueClass = 'text-gray-900',
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  valueClass?: string;
+function InfoRow({ icon: Icon, label, value, valueColor = 'text.primary' }: {
+  icon: React.ElementType; label: string; value: string; valueColor?: string;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <Icon className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-      <div className="min-w-0">
-        <p className="text-xs text-gray-400">{label}</p>
-        <p className={`text-sm font-medium break-all ${valueClass}`}>{value}</p>
-      </div>
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+      <Icon style={{ width: 14, height: 14, color: '#9ca3af', marginTop: 3, flexShrink: 0 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{label}</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-all', color: valueColor }}>{value}</Typography>
+      </Box>
+    </Box>
   );
 }
 
 // ─── Left panel: current cert status ─────────────────────────────────────────
 
-function CertStatusPanel({
-  certInfo,
-  loading,
-  onReload,
-  onDelete,
-  deleting,
-}: {
-  certInfo: CertInfo | null;
-  loading: boolean;
-  onReload: () => void;
-  onDelete: () => void;
-  deleting: boolean;
+function CertStatusPanel({ certInfo, loading, onReload, onDelete, deleting }: {
+  certInfo: CertInfo | null; loading: boolean; onReload: () => void; onDelete: () => void; deleting: boolean;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-52 rounded-xl border border-gray-200 bg-gray-50">
-        <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: 'grey.50' }}>
+        <CircularProgress size={24} color="primary" />
+      </Box>
     );
   }
 
   if (!certInfo?.tieneCertificado) {
     return (
-      <div className="flex flex-col items-center justify-center h-52 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 text-center px-6">
-        <FileKey className="h-10 w-10 text-gray-300 mb-3" />
-        <p className="text-sm font-medium text-gray-500">Sin certificado configurado</p>
-        <p className="text-xs text-gray-400 mt-1">Sube tu P12 para poder emitir comprobantes</p>
-      </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, borderRadius: '12px', border: '2px dashed #e5e7eb', bgcolor: 'grey.50', textAlign: 'center', px: 3 }}>
+        <FileKey style={{ width: 40, height: 40, color: '#d1d5db', marginBottom: 12 }} />
+        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>Sin certificado configurado</Typography>
+        <Typography variant="caption" sx={{ color: 'text.disabled', mt: 0.5 }}>Sube tu P12 para poder emitir comprobantes</Typography>
+      </Box>
     );
   }
 
   if (certInfo.errorLectura) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0" />
-          <p className="text-sm font-semibold text-amber-800">Certificado con problemas</p>
-        </div>
-        <p className="text-xs text-amber-700">
-          No se pudo leer el certificado. La contraseña guardada puede ser incorrecta
-          o el archivo está dañado. Sube el certificado nuevamente.
-        </p>
-        <button
-          onClick={onReload}
-          className="text-xs text-amber-700 underline underline-offset-2 flex items-center gap-1"
-        >
-          <RefreshCw className="h-3 w-3" /> Reintentar
-        </button>
-      </div>
+      <Alert
+        severity="warning"
+        icon={<ShieldAlert style={{ width: 18, height: 18 }} />}
+        sx={{ borderRadius: '12px' }}
+        action={
+          <MuiButton size="small" color="warning" onClick={onReload} startIcon={<RefreshCw style={{ width: 12, height: 12 }} />}
+            sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
+            Reintentar
+          </MuiButton>
+        }
+      >
+        <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.25 }}>Certificado con problemas</Typography>
+        <Typography variant="caption">
+          No se pudo leer el certificado. La contraseña guardada puede ser incorrecta o el archivo está dañado.
+        </Typography>
+      </Alert>
     );
   }
 
   const status = getCertStatus(certInfo.vencimiento);
 
-  const headerColors = {
-    ok:      'bg-teal-50 border-teal-100',
-    warning: 'bg-amber-50 border-amber-100',
-    expired: 'bg-red-50 border-red-100',
-  };
-  const iconColors = {
-    ok: 'text-teal-600', warning: 'text-amber-500', expired: 'text-red-500',
-  };
-  const titleColors = {
-    ok: 'text-teal-800', warning: 'text-amber-800', expired: 'text-red-800',
-  };
-  const statusLabels = {
-    ok: 'Certificado activo', warning: 'Próximo a vencer', expired: 'Certificado vencido',
-  };
-  const venceClass = {
-    ok: 'text-gray-900', warning: 'text-amber-600', expired: 'text-red-600',
-  };
+  const headerSx = {
+    ok:      { bgcolor: '#eef2fe', borderColor: '#e0e7fd' },
+    warning: { bgcolor: '#fffbeb', borderColor: '#fde68a' },
+    expired: { bgcolor: '#fef2f2', borderColor: '#fecaca' },
+  }[status];
+
+  const iconColor = { ok: '#3658e1', warning: '#d97706', expired: '#dc2626' }[status];
+  const titleColor = { ok: '#24377d', warning: '#92400e', expired: '#991b1b' }[status];
+  const statusLabel = { ok: 'Certificado activo', warning: 'Próximo a vencer', expired: 'Certificado vencido' }[status];
+  const venceColor = { ok: 'text.primary', warning: '#d97706', expired: '#dc2626' }[status];
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      {/* Header coloreado según estado */}
-      <div className={`px-5 py-4 border-b flex items-center gap-2 ${headerColors[status]}`}>
-        <ShieldCheck className={`h-5 w-5 shrink-0 ${iconColors[status]}`} />
-        <p className={`text-sm font-semibold ${titleColors[status]}`}>
-          {statusLabels[status]}
-        </p>
-      </div>
+    <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+      <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', ...headerSx, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <ShieldCheck style={{ width: 18, height: 18, color: iconColor, flexShrink: 0 }} />
+        <Typography variant="body2" sx={{ fontWeight: 700, color: titleColor }}>{statusLabel}</Typography>
+      </Box>
 
-      {/* Datos del certificado */}
-      <div className="px-5 py-4 space-y-3.5">
-        {certInfo.titular && (
-          <InfoRow icon={User} label="Titular" value={certInfo.titular} />
-        )}
+      <CardContent sx={{ p: '16px 20px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {certInfo.titular && <InfoRow icon={User} label="Titular" value={certInfo.titular} />}
         {certInfo.vencimiento && (
-          <InfoRow
-            icon={Calendar}
-            label="Vencimiento"
-            value={fmtDate(certInfo.vencimiento)}
-            valueClass={venceClass[status]}
-          />
+          <InfoRow icon={Calendar} label="Vencimiento" value={fmtDate(certInfo.vencimiento)} valueColor={venceColor} />
         )}
         {certInfo.serial && (
-          <InfoRow
-            icon={Hash}
-            label="Número de serie"
-            value={certInfo.serial.length > 24
-              ? certInfo.serial.slice(0, 24) + '…'
-              : certInfo.serial}
-          />
+          <InfoRow icon={Hash} label="Número de serie" value={certInfo.serial.length > 24 ? certInfo.serial.slice(0, 24) + '…' : certInfo.serial} />
         )}
-      </div>
+      </CardContent>
 
-      {/* Checklist de verificaciones */}
-      <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
+      <Box sx={{ px: 2.5, py: 1.5, bgcolor: 'grey.50', borderTop: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'text.disabled' }}>
           Verificaciones
-        </p>
+        </Typography>
         <VerifRow ok label="Certificado cargado" />
         <VerifRow ok label="Archivo P12 legible" />
         <VerifRow ok={status !== 'expired'} label="Certificado vigente" />
-      </div>
+      </Box>
 
-      {/* Eliminar certificado */}
-      <div className="px-5 py-4 border-t border-gray-100">
+      <Box sx={{ px: 2.5, py: 1.5, borderTop: '1px solid #f3f4f6' }}>
         {!confirmDelete ? (
-          <button
+          <MuiButton size="small" variant="text" startIcon={<Trash2 style={{ width: 13, height: 13 }} />}
             onClick={() => setConfirmDelete(true)}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
+            sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
             Eliminar certificado
-          </button>
+          </MuiButton>
         ) : (
-          <div className="rounded-lg bg-red-50 border border-red-200 p-3 space-y-2">
-            <p className="text-xs font-medium text-red-800">
-              ¿Eliminar el certificado? No podrás emitir comprobantes hasta cargar uno nuevo.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { onDelete(); setConfirmDelete(false); }}
-                disabled={deleting}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-medium transition-colors"
-              >
-                {deleting
-                  ? <><Loader2 className="h-3 w-3 animate-spin" />Eliminando...</>
-                  : <><Trash2 className="h-3 w-3" />Sí, eliminar</>
-                }
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                disabled={deleting}
-                className="px-3 py-1.5 rounded-md border border-gray-200 hover:bg-gray-100 text-xs text-gray-600 font-medium transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
+          <Alert severity="error" sx={{ borderRadius: '8px' }}
+            action={
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <MuiButton size="small" color="error" variant="contained" disableElevation onClick={() => { onDelete(); setConfirmDelete(false); }} disabled={deleting}
+                  sx={{ textTransform: 'none', fontSize: '0.6875rem', borderRadius: '6px' }}>
+                  {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+                </MuiButton>
+                <MuiButton size="small" onClick={() => setConfirmDelete(false)} disabled={deleting}
+                  sx={{ textTransform: 'none', fontSize: '0.6875rem' }}>
+                  Cancelar
+                </MuiButton>
+              </Box>
+            }
+          >
+            <Typography variant="caption">¿Eliminar? No podrás emitir hasta cargar uno nuevo.</Typography>
+          </Alert>
         )}
-      </div>
-    </div>
+      </Box>
+    </Card>
   );
 }
 
 // ─── Right panel: upload form ─────────────────────────────────────────────────
 
-function UploadForm({
-  hasCert,
-  onSuccess,
-}: {
-  hasCert: boolean;
-  onSuccess: (info: CertInfo) => void;
-}) {
+function UploadForm({ hasCert, onSuccess }: { hasCert: boolean; onSuccess: (info: CertInfo) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file,         setFile]         = useState<File | null>(null);
@@ -257,22 +208,13 @@ function UploadForm({
   const [success,      setSuccess]      = useState(false);
 
   function handleFile(f: File) {
-    if (!f.name.match(/\.(p12|pfx)$/i)) {
-      setError('El archivo debe tener extensión .p12 o .pfx');
-      return;
-    }
-    if (f.size > 1_500_000) {
-      setError('El archivo no puede superar 1.5 MB');
-      return;
-    }
-    setFile(f);
-    setError(null);
-    setSuccess(false);
+    if (!f.name.match(/\.(p12|pfx)$/i)) { setError('El archivo debe tener extensión .p12 o .pfx'); return; }
+    if (f.size > 1_500_000) { setError('El archivo no puede superar 1.5 MB'); return; }
+    setFile(f); setError(null); setSuccess(false);
   }
 
   function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragging(false);
+    e.preventDefault(); setDragging(false);
     const f = e.dataTransfer.files[0];
     if (f) handleFile(f);
   }
@@ -280,30 +222,17 @@ function UploadForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file || !password) return;
-
-    setUploading(true);
-    setError(null);
-    setSuccess(false);
-
+    setUploading(true); setError(null); setSuccess(false);
     try {
       const buf    = await file.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-
-      const res  = await fetch('/api/equipo/certificado', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ certP12: base64, certPassword: password }),
+      const res    = await fetch('/api/equipo/certificado', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ certP12: base64, certPassword: password }),
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? 'Error al guardar el certificado');
-        return;
-      }
-
-      setSuccess(true);
-      setFile(null);
-      setPassword('');
+      if (!res.ok) { setError(data.error ?? 'Error al guardar el certificado'); return; }
+      setSuccess(true); setFile(null); setPassword('');
       onSuccess(data as CertInfo);
     } catch {
       setError('Error de conexión. Intenta de nuevo.');
@@ -315,139 +244,116 @@ function UploadForm({
   const canSubmit = !!file && !!password && !uploading;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Drop zone / file chip */}
-      <div>
-        <Label className="text-sm mb-2 block">
-          Certificado <span className="text-red-500">*</span>
-        </Label>
+    <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Drop zone */}
+      <Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1, color: 'text.primary' }}>
+          Certificado <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+        </Typography>
 
         {!file ? (
-          <div
+          <Box
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`
-              rounded-xl border-2 border-dashed transition-colors cursor-pointer
-              flex flex-col items-center gap-3 py-10 px-6 text-center
-              ${dragging
-                ? 'border-teal-400 bg-teal-50'
-                : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}
-            `}
+            sx={{
+              borderRadius: '12px', border: '2px dashed', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, py: 5, px: 3, textAlign: 'center',
+              borderColor: dragging ? 'primary.main' : '#e5e7eb',
+              bgcolor: dragging ? '#eef2fe' : 'grey.50',
+              transition: 'all 0.15s',
+              '&:hover': { borderColor: 'primary.light', bgcolor: 'grey.50' },
+            }}
           >
-            <CloudUpload className={`h-10 w-10 ${dragging ? 'text-teal-500' : 'text-gray-400'}`} />
-            <div>
-              <p className="text-sm font-medium text-gray-700">Arrastra el archivo aquí</p>
-              <p className="text-xs text-gray-400 mt-0.5">Formato PFX o P12</p>
-              <button
-                type="button"
-                className="mt-2 text-xs font-medium text-teal-600 hover:text-teal-700 underline-offset-2 hover:underline"
-                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-              >
+            <CloudUpload style={{ width: 40, height: 40, color: dragging ? '#3658e1' : '#9ca3af' }} />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>Arrastra el archivo aquí</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>Formato PFX o P12</Typography>
+              <MuiButton size="small" variant="text" color="primary" onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                sx={{ textTransform: 'none', fontSize: '0.75rem', mt: 0.5 }}>
                 Selecciónalo desde tu computador
-              </button>
-            </div>
-          </div>
+              </MuiButton>
+            </Box>
+          </Box>
         ) : (
-          /* Chip del archivo seleccionado */
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-            <FileKey className="h-5 w-5 text-teal-600 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-              <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setFile(null); setError(null); }}
-              className="p-1.5 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: 'grey.50', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <FileKey style={{ width: 18, height: 18, color: '#3658e1', flexShrink: 0 }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtSize(file.size)}</Typography>
+            </Box>
+            <IconButton size="small" onClick={() => { setFile(null); setError(null); }} sx={{ flexShrink: 0, color: 'text.secondary' }}>
+              <X style={{ width: 14, height: 14 }} />
+            </IconButton>
+          </Box>
         )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".p12,.pfx"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-            e.target.value = '';
+        <input ref={fileInputRef} type="file" accept=".p12,.pfx" style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+      </Box>
+
+      {/* Password */}
+      <Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1, color: 'text.primary' }}>
+          Clave del certificado <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+        </Typography>
+        <MuiTextField
+          type={showPassword ? 'text' : 'password'}
+          placeholder="Contraseña del P12"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(null); }}
+          size="small"
+          fullWidth
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          slotProps={{
+            input: {
+              endAdornment: (
+                <IconButton size="small" onClick={() => setShowPassword(v => !v)} edge="end" sx={{ color: 'text.secondary' }}>
+                  {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                </IconButton>
+              ),
+            },
           }}
         />
-      </div>
-
-      {/* Campo contraseña */}
-      <div>
-        <Label className="text-sm mb-2 block">
-          Clave del certificado <span className="text-red-500">*</span>
-        </Label>
-        <div className="relative">
-          <Input
-            type={showPassword ? 'text' : 'password'}
-            placeholder="Contraseña del P12"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); setError(null); }}
-            className="pr-10"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 mt-1.5">
+        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
           Se usa únicamente para firmar documentos en el servidor
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      {/* Error */}
       {error && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 p-3">
-          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
+        <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+          {error}
+        </Alert>
       )}
-
-      {/* Éxito */}
       {success && (
-        <div className="flex items-center gap-2 rounded-xl bg-green-50 border border-green-200 p-3">
-          <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
-          <p className="text-sm font-medium text-green-800">
-            Certificado guardado correctamente
-          </p>
-        </div>
+        <Alert severity="success" icon={<CheckCircle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>Certificado guardado correctamente</Typography>
+        </Alert>
       )}
 
-      {/* Botón */}
-      <Button
+      <MuiButton
         type="submit"
+        variant="contained"
+        color="primary"
+        disableElevation
+        fullWidth
         disabled={!canSubmit}
-        className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed"
+        startIcon={uploading ? <CircularProgress size={16} color="inherit" /> : <Upload style={{ width: 16, height: 16 }} />}
+        sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
       >
-        {uploading ? (
-          <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando...</>
-        ) : (
-          <><Upload className="h-4 w-4 mr-2" />
-            {hasCert ? 'Reemplazar certificado' : 'Guardar certificado'}
-          </>
-        )}
-      </Button>
-    </form>
+        {uploading ? 'Guardando...' : hasCert ? 'Reemplazar certificado' : 'Guardar certificado'}
+      </MuiButton>
+    </Box>
   );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CertificadoPage() {
-  const [certInfo,     setCertInfo]     = useState<CertInfo | null>(null);
-  const [loadingInfo,  setLoadingInfo]  = useState(true);
-  const [deleting,     setDeleting]     = useState(false);
+  const [certInfo,    setCertInfo]    = useState<CertInfo | null>(null);
+  const [loadingInfo, setLoadingInfo] = useState(true);
+  const [deleting,    setDeleting]    = useState(false);
 
   async function loadCertInfo() {
     setLoadingInfo(true);
@@ -464,19 +370,13 @@ export default function CertificadoPage() {
 
   useEffect(() => { loadCertInfo(); }, []);
 
-  function handleUploadSuccess(newInfo: CertInfo) {
-    setCertInfo(newInfo);
-  }
-
   async function handleDelete() {
     setDeleting(true);
     try {
       const res = await fetch('/api/equipo/certificado', { method: 'DELETE' });
-      if (res.ok) {
-        setCertInfo({ tieneCertificado: false });
-      }
+      if (res.ok) setCertInfo({ tieneCertificado: false });
     } catch {
-      // silencioso — el usuario puede reintentar
+      // silencioso
     } finally {
       setDeleting(false);
     }
@@ -485,24 +385,25 @@ export default function CertificadoPage() {
   const hasCert = !!certInfo?.tieneCertificado;
 
   return (
-    <section className="p-6 max-w-5xl mx-auto space-y-6">
-
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 960, mx: 'auto' }}>
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Certificado Digital</h1>
-        <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+          Certificado Digital
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
           Requerido para firmar y emitir comprobantes fiscales electrónicos ante la DGII
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
       {/* Layout dos columnas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 4 }}>
 
         {/* ── Columna izquierda: estado actual ── */}
-        <div className="space-y-5">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
             Estado actual
-          </h2>
+          </Typography>
 
           <CertStatusPanel
             certInfo={certInfo}
@@ -512,40 +413,37 @@ export default function CertificadoPage() {
             deleting={deleting}
           />
 
-          {/* Info: cómo obtener el P12 */}
-          <div className="rounded-xl border border-teal-100 bg-teal-50 p-4 flex gap-3">
-            <Shield className="h-4 w-4 text-teal-600 mt-0.5 shrink-0" />
-            <div className="text-xs text-teal-800 space-y-1">
-              <p className="font-semibold">¿Cómo obtener el certificado P12?</p>
-              <p className="text-teal-700">
-                Solicitado a entidades autorizadas por INDOTEL:
-              </p>
-              <ul className="space-y-0.5 text-teal-700 pl-1">
-                <li>· Viafirma</li>
-                <li>· Cámara de Comercio RD</li>
-                <li>· DigiCert</li>
-              </ul>
-              <p className="text-teal-600 pt-0.5">
-                El archivo debe tener extensión{' '}
-                <code className="bg-teal-100 px-1 rounded font-mono">.p12</code> o{' '}
-                <code className="bg-teal-100 px-1 rounded font-mono">.pfx</code>
-              </p>
-            </div>
-          </div>
-        </div>
+          <Card elevation={0} sx={{ border: '1px solid #e0e7fd', bgcolor: '#eef2fe', borderRadius: '12px' }}>
+            <CardContent sx={{ p: '16px !important', display: 'flex', gap: 1.5 }}>
+              <Shield style={{ width: 16, height: 16, color: '#3658e1', marginTop: 2, flexShrink: 0 }} />
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#24377d', mb: 0.5 }}>
+                  ¿Cómo obtener el certificado P12?
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#2a45c4', display: 'block', mb: 0.5 }}>
+                  Solicitado a entidades autorizadas por INDOTEL:
+                </Typography>
+                {['Viafirma', 'Cámara de Comercio RD', 'DigiCert'].map(e => (
+                  <Typography key={e} variant="caption" sx={{ color: '#2a45c4', display: 'block' }}>· {e}</Typography>
+                ))}
+                <Typography variant="caption" sx={{ color: '#3658e1', display: 'block', mt: 0.75 }}>
+                  El archivo debe tener extensión{' '}
+                  <Box component="code" sx={{ bgcolor: '#e0e7fd', px: 0.75, borderRadius: 0.5, fontFamily: 'monospace' }}>.p12</Box> o{' '}
+                  <Box component="code" sx={{ bgcolor: '#e0e7fd', px: 0.75, borderRadius: 0.5, fontFamily: 'monospace' }}>.pfx</Box>
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
 
-        {/* ── Columna derecha: formulario de subida ── */}
-        <div className="space-y-5">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+        {/* ── Columna derecha: formulario ── */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
             {hasCert ? 'Reemplazar certificado' : 'Subir certificado'}
-          </h2>
-
-          <UploadForm
-            hasCert={hasCert}
-            onSuccess={handleUploadSuccess}
-          />
-        </div>
-      </div>
-    </section>
+          </Typography>
+          <UploadForm hasCert={hasCert} onSuccess={setCertInfo} />
+        </Box>
+      </Box>
+    </Box>
   );
 }

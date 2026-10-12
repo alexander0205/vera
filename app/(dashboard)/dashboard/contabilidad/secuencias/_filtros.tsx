@@ -4,6 +4,12 @@
 import { useRouter, usePathname } from 'next/navigation';
 import { useTransition } from 'react';
 import { Search, X } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
 
 const ESTADOS = [
   { value: '',                     label: 'Todos los estados' },
@@ -41,61 +47,69 @@ export function LibroFiltros({
   const hayFiltros = Object.entries(valores).some(([, v]) => v);
 
   return (
-    <form onSubmit={aplicar} className="bg-white border border-gray-200 rounded-xl p-4 mb-5">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 flex-1 min-w-[220px]">
-          <span className="text-xs font-medium text-gray-500">Buscar</span>
-          <input name="q" defaultValue={valores.q} placeholder="e-NCF, cliente o RNC…"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-        </label>
+    <Box
+      component="form"
+      onSubmit={aplicar}
+      sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, mb: 2.5 }}
+    >
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5 }}>
+        <TextField
+          name="q" label="Buscar" defaultValue={valores.q}
+          placeholder="e-NCF, cliente o RNC…"
+          sx={{ flex: 1, minWidth: 220 }}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Tipo</span>
-          <select name="tipo" defaultValue={valores.tipo}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white min-w-[110px]">
-            <option value="">Todos</option>
-            {tipos.map(t => <option key={t} value={t}>e{t}</option>)}
-          </select>
-        </label>
+        <TextField
+          name="tipo" label="Tipo" select defaultValue={valores.tipo}
+          sx={{ minWidth: 120 }}
+        >
+          <MenuItem value="">Todos</MenuItem>
+          {tipos.map(t => <MenuItem key={t} value={t}>e{t}</MenuItem>)}
+        </TextField>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Estado</span>
-          <select name="estado" defaultValue={valores.estado}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white min-w-[170px]">
-            {ESTADOS.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
-          </select>
-        </label>
+        <TextField
+          name="estado" label="Estado" select defaultValue={valores.estado}
+          sx={{ minWidth: 180 }}
+        >
+          {ESTADOS.map(e => <MenuItem key={e.value} value={e.value}>{e.label}</MenuItem>)}
+        </TextField>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Desde</span>
-          <input type="date" name="desde" defaultValue={valores.desde}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-        </label>
+        <TextField
+          name="desde" label="Desde" type="date" defaultValue={valores.desde}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Hasta</span>
-          <input type="date" name="hasta" defaultValue={valores.hasta}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-        </label>
+        <TextField
+          name="hasta" label="Hasta" type="date" defaultValue={valores.hasta}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
 
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none pb-2">
-          <input type="checkbox" name="errores" defaultChecked={valores.errores === '1'}
-            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
-          Solo con problemas
-        </label>
+        <FormControlLabel
+          control={<Checkbox size="small" name="errores" defaultChecked={valores.errores === '1'} />}
+          label="Solo con problemas"
+          slotProps={{ typography: { sx: { fontSize: '0.875rem', color: '#4b5563' } } }}
+          sx={{ mr: 0, pb: 0.5 }}
+        />
 
-        <button type="submit" disabled={pending}
-          className="inline-flex items-center gap-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg">
-          <Search className="w-4 h-4" /> {pending ? 'Filtrando…' : 'Filtrar'}
-        </button>
+        <Button
+          type="submit" variant="contained" disabled={pending}
+          startIcon={<Search style={{ width: 16, height: 16 }} />}
+          sx={{ px: 2, py: 1, bgcolor: '#111827', '&:hover': { bgcolor: '#1f2937' } }}
+        >
+          {pending ? 'Filtrando…' : 'Filtrar'}
+        </Button>
 
         {hayFiltros && (
-          <button type="button" onClick={() => startTransition(() => router.push(pathname))}
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-2 py-2">
-            <X className="w-4 h-4" /> Limpiar
-          </button>
+          <Button
+            type="button" color="inherit"
+            onClick={() => startTransition(() => router.push(pathname))}
+            startIcon={<X style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#6b7280', '&:hover': { color: '#374151' } }}
+          >
+            Limpiar
+          </Button>
         )}
-      </div>
-    </form>
+      </Box>
+    </Box>
   );
 }

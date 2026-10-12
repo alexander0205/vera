@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Box from '@mui/material/Box';
 import { Copy, Check } from 'lucide-react';
 
 export function Terminal() {
@@ -32,37 +33,62 @@ export function Terminal() {
   };
 
   return (
-    <div className="w-full rounded-lg shadow-lg overflow-hidden bg-gray-900 text-white font-mono text-sm relative">
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex space-x-2">
-            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-          </div>
-          <button
+    <Box
+      sx={{
+        width: '100%',
+        borderRadius: '8px',
+        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+        overflow: 'hidden',
+        bgcolor: '#111827',
+        color: '#fff',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: '0.875rem',
+        position: 'relative',
+      }}
+    >
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ef4444' }} />
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#eab308' }} />
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#22c55e' }} />
+          </Box>
+          <Box
+            component="button"
             onClick={copyToClipboard}
-            className="text-gray-400 hover:text-white transition-colors"
             aria-label="Copy to clipboard"
+            sx={{
+              background: 'none',
+              border: 'none',
+              p: 0,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              color: '#9ca3af',
+              transition: 'color 0.15s',
+              '&:hover': { color: '#fff' },
+            }}
           >
             {copied ? (
-              <Check className="h-5 w-5" />
+              <Check style={{ width: 20, height: 20 }} />
             ) : (
-              <Copy className="h-5 w-5" />
+              <Copy style={{ width: 20, height: 20 }} />
             )}
-          </button>
-        </div>
-        <div className="space-y-2">
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {terminalSteps.map((step, index) => (
-            <div
+            <Box
               key={index}
-              className={`${index > terminalStep ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+              sx={{
+                opacity: index > terminalStep ? 0 : 1,
+                transition: 'opacity 0.3s',
+              }}
             >
-              <span className="text-green-400">$</span> {step}
-            </div>
+              <Box component="span" sx={{ color: '#4ade80' }}>$</Box> {step}
+            </Box>
           ))}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }

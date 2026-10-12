@@ -9,9 +9,11 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import {
   products, inventoryMovements, productVariants, productVariantAlmacenStock, almacenes,
+  adminEscolarConceptosPago, adminEscolarConceptoPrecios,
 } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { sembrarAlmacenPorDefecto } from '@/lib/pos/asignaciones';
 import { eq, and, sql, desc, asc } from 'drizzle-orm';
 
 // Ejes de variante (igual que en POST /api/productos).
@@ -47,6 +49,8 @@ const updateSchema = z.object({
   stockMinimo:          z.number().int().min(0).optional(),
   controlaInventario:   z.boolean().optional(),
   permiteVentaSinStock: z.boolean().optional(),
+  visiblePos:           z.boolean().optional(),
+  visibleFacturacion:   z.boolean().optional(),
   categoriaId:          z.number().int().positive().optional().nullable(),
   imagen:               z.string().max(1_500_000).optional().nullable(),
   // Variantes (Opción B). Si `variants` viene, se reconcilian con las existentes.
@@ -70,7 +74,29 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!prod) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
 
-  return NextResponse.json({ producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100 } });
+  // Las variantes van con el producto: quien pregunta por un producto con ejes
+  // casi siempre necesita saber CUÁLES son (para elegir talla al ajustar el
+  // inventario, por ejemplo). Traerlas aparte obligaba a una segunda ruta y a
+  // que cada pantalla se acordara de llamarla.
+  const variantes = await db.select({
+    id: productVariants.id,
+    nombre: productVariants.nombre,
+    atributos: productVariants.atributos,
+    precio: productVariants.precio,
+    stockActual: productVariants.stockActual,
+    activo: productVariants.activo,
+  })
+    .from(productVariants)
+    .where(and(
+      eq(productVariants.productId, prodId),
+      eq(productVariants.teamId, teamId),
+      eq(productVariants.activo, true),
+    ))
+    .orderBy(productVariants.id);
+
+  return NextResponse.json({
+    producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100, variantes },
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
@@ -89,6 +115,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo, activo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
+    visiblePos, visibleFacturacion,
     categoriaId, imagen, variantAtributos, variants,
   } = parsed.data;
 
@@ -123,6 +150,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(stockMinimo          !== undefined && { stockMinimo }),
       ...(controlaInventario   !== undefined && { controlaInventario }),
       ...(permiteVentaSinStock !== undefined && { permiteVentaSinStock }),
+      // Estas dos estaban en el esquema de validación y NO en el update: el
+      // formulario mandaba «¿dónde se vende?», la API la daba por buena y la
+      // tiraba. Editar un producto para sacarlo de la caja no hacía nada, y por
+      // eso 334 de 335 productos de producción seguían con visible_pos = true
+      // pese a que el desplegable lleva meses en pantalla.
+      ...(visiblePos           !== undefined && { visiblePos }),
+      ...(visibleFacturacion   !== undefined && { visibleFacturacion }),
       ...(categoriaId          !== undefined && { categoriaId }),
       ...(imagen               !== undefined && { imagen }),
       updatedAt: new Date(),
@@ -273,6 +307,14 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         .where(eq(products.id, prodId));
     }
 
+    // Igual que al crear: encender «visible en POS» o «controla inventario» en
+    // un producto que nunca se asignó lo dejaba invisible en la caja, y desde la
+    // pantalla no había forma de notarlo. Solo siembra si NO tiene ya almacén,
+    // así que un reparto hecho a mano no se toca.
+    if (row.visiblePos && row.controlaInventario && !reconciliaVariantes) {
+      await sembrarAlmacenPorDefecto(tx, teamId, prodId, row.stockActual);
+    }
+
     return row;
   });
 
@@ -281,7 +323,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   return NextResponse.json({ ok: true, producto: { ...updated, precioDOP: updated.precio / 100, costoDOP: updated.costo / 100 } });
 }
 
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
   const auth = await requirePermission('productos:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
@@ -289,10 +331,38 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   const prodId = parseInt(id);
   if (isNaN(prodId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  // Chequeo previo: la pantalla lo llama para saber, ANTES de ofrecer "eliminar",
+  // si el servicio está atado a tarifas escolares y no debe borrarse desde aquí.
+  const preview = new URL(req.url).searchParams.get('preview') === '1';
 
   const [existing] = await db.select({ id: products.id }).from(products)
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!existing) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
+
+  // Consistencia entre pantallas (regla #3): un servicio atado a tarifas
+  // escolares no se borra desde aquí. Su ciclo de vida —y la decisión de si hay
+  // factura que proteger— vive en la configuración escolar. Se dirige allí en
+  // vez de borrar por un lado lo que el otro cree intacto (o de reventar por la
+  // FK NO ACTION que va del concepto/tarifa al producto).
+  const [concepto] = await db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre })
+    .from(adminEscolarConceptosPago)
+    .where(and(eq(adminEscolarConceptosPago.teamId, teamId), eq(adminEscolarConceptosPago.productId, prodId)))
+    .limit(1);
+  const [tarifa] = concepto ? [undefined] : await db.select({ id: adminEscolarConceptoPrecios.id })
+    .from(adminEscolarConceptoPrecios)
+    .where(and(eq(adminEscolarConceptoPrecios.teamId, teamId), eq(adminEscolarConceptoPrecios.productId, prodId)))
+    .limit(1);
+  const vinculadoEscolar = Boolean(concepto || tarifa);
+
+  const mensajeEscolar = 'Este servicio está vinculado a tarifas escolares. Elimínalo desde Configuración escolar → Tarifas; allí se decide si hay facturas que conservar.';
+
+  if (preview) {
+    return NextResponse.json({ vinculadoEscolar, ...(vinculadoEscolar ? { error: mensajeEscolar } : {}) });
+  }
+
+  if (vinculadoEscolar) {
+    return NextResponse.json({ error: mensajeEscolar, vinculadoEscolar: true }, { status: 409 });
+  }
 
   await db.delete(products).where(eq(products.id, prodId));
   return NextResponse.json({ ok: true });

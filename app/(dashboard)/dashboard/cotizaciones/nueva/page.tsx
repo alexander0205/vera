@@ -29,7 +29,7 @@ export default async function NuevaCotizacionPage() {
         </div>
         <Link
           href="/dashboard/cotizaciones"
-          className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          className="text-sm px-4 py-2 bg-zero-600 text-white rounded-lg hover:bg-zero-700 transition-colors"
         >
           Volver a cotizaciones
         </Link>
@@ -42,7 +42,7 @@ export default async function NuevaCotizacionPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     }>
       <NuevaCotizacionFormClient initialPerfil={perfil} />

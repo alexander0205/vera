@@ -1,19 +1,27 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Warehouse, Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Checkbox from '@mui/material/Checkbox';
+import MenuItem from '@mui/material/MenuItem';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import { Warehouse, Plus, Pencil, Trash2 } from 'lucide-react';
 
 interface Almacen {
   id: number;
@@ -22,15 +30,13 @@ interface Almacen {
   direccion: string | null;
   observacion: string | null;
   esDefault: string;
+  soloPos: boolean;
   createdAt: string;
 }
 
-const EMPTY_FORM = {
-  nombre: '',
-  direccion: '',
-  observacion: '',
-  esDefault: false,
-};
+const EMPTY_FORM = { nombre: '', direccion: '', observacion: '', esDefault: false, soloPos: false };
+
+const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
 
 export default function AlmacenesPage() {
   const [almacenes, setAlmacenes]       = useState<Almacen[]>([]);
@@ -65,37 +71,28 @@ export default function AlmacenesPage() {
 
   function abrirEdicion(a: Almacen) {
     setEditTarget(a);
-    setForm({
-      nombre:      a.nombre,
-      direccion:   a.direccion ?? '',
-      observacion: a.observacion ?? '',
-      esDefault:   a.esDefault === 'true',
-    });
+    setForm({ nombre: a.nombre, direccion: a.direccion ?? '', observacion: a.observacion ?? '', esDefault: a.esDefault === 'true', soloPos: !!a.soloPos });
     setOpError(null);
     setShowForm(true);
   }
 
   async function handleGuardar() {
-    if (!form.nombre.trim()) {
-      setOpError('El nombre es obligatorio');
-      return;
-    }
-
+    if (!form.nombre.trim()) { setOpError('El nombre es obligatorio'); return; }
     setSaving(true);
     setOpError(null);
     try {
       const url    = editTarget ? `/api/almacenes/${editTarget.id}` : '/api/almacenes';
       const method = editTarget ? 'PATCH' : 'POST';
-      const body: Record<string, unknown> = {
-        nombre:      form.nombre.trim(),
-        direccion:   form.direccion.trim() || null,
-        observacion: form.observacion.trim() || null,
-        esDefault:   form.esDefault,
-      };
       const res  = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          nombre:      form.nombre.trim(),
+          direccion:   form.direccion.trim() || null,
+          observacion: form.observacion.trim() || null,
+          esDefault:   form.esDefault,
+          soloPos:     form.soloPos,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
@@ -126,158 +123,242 @@ export default function AlmacenesPage() {
   }
 
   return (
-    <section className="p-6 space-y-6">
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Warehouse className="h-6 w-6 text-teal-600" />
-            Almacenes
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Gestiona los almacenes donde guardas tu inventario</p>
-        </div>
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-          <Plus className="h-4 w-4 mr-2" />
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Warehouse size={22} color="#3658e1" />
+            <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Almacenes</Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
+            Gestiona los almacenes donde guardas tu inventario
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          disableElevation
+          startIcon={<Plus size={18} />}
+          onClick={abrirNuevo}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+        >
           Nuevo Almacén
         </Button>
-      </div>
+      </Box>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Warehouse className="h-4 w-4" />
+      {/* Table card */}
+      <Box sx={cardSx}>
+        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Warehouse size={16} color="#6b7280" />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>
             {loading ? 'Cargando…' : `${almacenes.length} almacén${almacenes.length !== 1 ? 'es' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : almacenes.length === 0 ? (
-            <div className="text-center py-16">
-              <Warehouse className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">Sin almacenes registrados</p>
-              <p className="text-sm text-gray-400 mt-1">Crea tu primer almacén para organizar tu inventario</p>
-              <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
-                <Plus className="h-4 w-4 mr-1" />Nuevo Almacén
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Dirección</TableHead>
-                  <TableHead>Por defecto</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+          </Typography>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress size={36} sx={{ color: '#3658e1' }} />
+          </Box>
+        ) : almacenes.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8 }}>
+            <Warehouse size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+            <Typography sx={{ color: '#6b7280', fontWeight: 500 }}>Sin almacenes registrados</Typography>
+            <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>Crea tu primer almacén para organizar tu inventario</Typography>
+            <Button
+              variant="contained"
+              disableElevation
+              size="small"
+              startIcon={<Plus size={16} />}
+              onClick={abrirNuevo}
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+            >
+              Nuevo Almacén
+            </Button>
+          </Box>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ '& th': { fontWeight: 600, color: '#6b7280', fontSize: '0.75rem', bgcolor: '#f9fafb', borderBottom: '1px solid #f3f4f6' } }}>
+                <TableCell>Nombre</TableCell>
+                <TableCell>Dirección</TableCell>
+                <TableCell>Por defecto</TableCell>
+                <TableCell align="right">Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {almacenes.map(a => (
+                <TableRow key={a.id} sx={{ '&:hover': { bgcolor: '#f9fafb' }, '& td': { borderBottom: '1px solid #f3f4f6' } }}>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827' }}>{a.nombre}</Typography>
+                    {a.observacion && (
+                      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                        {a.observacion}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ color: '#4b5563' }}>
+                      {a.direccion ?? <span style={{ color: '#d1d5db' }}>—</span>}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {a.esDefault === 'true'
+                      ? <Chip label="Por defecto" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', fontSize: '0.6875rem' }} />
+                      : <Typography sx={{ color: '#d1d5db' }}>—</Typography>
+                    }
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <IconButton size="small" onClick={() => abrirEdicion(a)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                        <Pencil size={16} />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => { setDeleteTarget(a); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {almacenes.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell>
-                      <p className="font-medium text-gray-900">{a.nombre}</p>
-                      {a.observacion && (
-                        <p className="text-xs text-gray-400 truncate max-w-[220px]">{a.observacion}</p>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {a.direccion ?? <span className="text-gray-300">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      {a.esDefault === 'true' ? (
-                        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">Por defecto</Badge>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => abrirEdicion(a)}>
-                          <Pencil className="h-4 w-4 text-gray-500" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(a); setOpError(null); }}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Box>
 
-      <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? 'Editar almacén' : 'Nuevo almacén'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <div className="space-y-1.5">
-              <Label>Nombre <span className="text-red-500">*</span></Label>
-              <Input placeholder="Ej: Almacén Principal" value={form.nombre}
-                onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Dirección</Label>
-              <Input placeholder="Ej: Calle Principal #1, Santiago" value={form.direccion}
-                onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Observación</Label>
-              <Textarea placeholder="Notas internas sobre este almacén…" value={form.observacion}
-                onChange={(e) => setForm((f) => ({ ...f, observacion: e.target.value }))}
-                rows={3} className="resize-none" />
-            </div>
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <div role="checkbox" aria-checked={form.esDefault} tabIndex={0}
-                onClick={() => setForm((f) => ({ ...f, esDefault: !f.esDefault }))}
-                onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setForm((f) => ({ ...f, esDefault: !f.esDefault })); } }}
-                className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1 ${form.esDefault ? 'bg-teal-600 border-teal-600' : 'bg-white border-gray-300 hover:border-gray-400'}`}
-              >
-                {form.esDefault && (
-                  <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-              <span className="text-sm text-gray-700">Establecer como almacén por defecto</span>
-            </label>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : editTarget ? 'Guardar cambios' : 'Crear almacén'}
-            </Button>
-          </DialogFooter>
+      {/* Modal: Crear / Editar */}
+      <Dialog
+        open={showForm}
+        onClose={() => { if (!saving) setShowForm(false); }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 480 } } as object }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>
+          {editTarget ? 'Editar almacén' : 'Nuevo almacén'}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pb: 1 }}>
+          {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
+          <TextField
+            label="Nombre *"
+            size="small"
+            fullWidth
+            placeholder="Ej: Almacén Principal"
+            value={form.nombre}
+            onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, mt: 1 }}
+          />
+          <TextField
+            label="Dirección"
+            size="small"
+            fullWidth
+            placeholder="Ej: Calle Principal #1, Santiago"
+            value={form.direccion}
+            onChange={e => setForm(f => ({ ...f, direccion: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+          <TextField
+            label="Observación"
+            size="small"
+            fullWidth
+            multiline
+            rows={3}
+            placeholder="Notas internas sobre este almacén…"
+            value={form.observacion}
+            onChange={e => setForm(f => ({ ...f, observacion: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={form.esDefault}
+                onChange={(_, v) => setForm(f => ({ ...f, esDefault: v }))}
+                size="small"
+                sx={{ color: '#3658e1', '&.Mui-checked': { color: '#3658e1' } }}
+              />
+            }
+            label={<Typography variant="body2" sx={{ color: '#374151' }}>Establecer como almacén por defecto</Typography>}
+          />
+          {/* En positivo: se elige con quién se comparte, no qué se esconde. */}
+          <Typography component="label" sx={{ mt: 1, mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>
+            ¿Con quién se comparte este almacén?
+          </Typography>
+          <TextField
+            select
+            value={form.soloPos ? 'pos' : 'ambos'}
+            onChange={e => setForm(f => ({ ...f, soloPos: e.target.value === 'pos' }))}
+            fullWidth
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          >
+            <MenuItem value="ambos">
+              <Box>
+                <Typography sx={{ fontSize: 14 }}>Facturación y Punto de Venta</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>Su mercancía se puede facturar y vender en la caja.</Typography>
+              </Box>
+            </MenuItem>
+            <MenuItem value="pos">
+              <Box>
+                <Typography sx={{ fontSize: 14 }}>Solo Punto de Venta</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>Lo que exista únicamente aquí no aparece al facturar. Para la cafetería, por ejemplo.</Typography>
+              </Box>
+            </MenuItem>
+          </TextField>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setShowForm(false)}
+            disabled={saving}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={handleGuardar}
+            disabled={saving}
+            startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+          >
+            {saving ? 'Guardando…' : editTarget ? 'Guardar cambios' : 'Crear almacén'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar almacén?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+      {/* Modal: Confirmar eliminación */}
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => { if (!deleting) setDeleteTarget(null); }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 360 } } as object }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>¿Eliminar almacén?</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          {opError && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>{opError}</Alert>}
+          <Typography variant="body2" sx={{ color: '#374151' }}>
+            Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
+          </Typography>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteTarget(null)}
+            disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            disableElevation
+            color="error"
+            onClick={handleEliminar}
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}
+          >
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </section>
+
+    </Box>
   );
 }

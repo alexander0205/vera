@@ -40,6 +40,10 @@ export const clienteSchema = z.object({
     z.string().email('Correo electrónico inválido').nullable().optional()
   ),
   telefono:    optStr(30),
+  /** El móvil al que se llama; el fijo y el celular no son el mismo número. */
+  celular:     optStr(30),
+  /** Por donde se le escribe de verdad; puede no ser el mismo que `telefono`. */
+  whatsapp:    optStr(30),
   direccion:   optStr(500),
   descripcion: optStr(2000),
 });

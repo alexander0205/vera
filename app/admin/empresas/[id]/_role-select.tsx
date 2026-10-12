@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { FormControl, Select, MenuItem, CircularProgress, Tooltip } from '@mui/material';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ROLES } from '@/lib/config/roles';
 
 interface Props {
-  teamId: number;
-  userId: number;
+  teamId:      number;
+  userId:      number;
   currentRole: string;
   isLastOwner: boolean;
-  action: (formData: FormData) => Promise<void>;
+  action:      (formData: FormData) => Promise<void>;
 }
 
 /**
@@ -21,22 +22,20 @@ export function RoleSelect({ teamId, userId, currentRole, isLastOwner, action }:
   const [error, setError]   = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const nuevoRole = e.target.value;
+  function handleChange(newRole: string) {
     setError(null);
 
-    if (isLastOwner && currentRole === 'owner' && nuevoRole !== 'owner') {
+    if (isLastOwner && currentRole === 'owner' && newRole !== 'owner') {
       setError('No puedes quitar el rol de owner al último propietario.');
-      e.target.value = currentRole;
       return;
     }
-    if (nuevoRole === currentRole) return;
+    if (newRole === currentRole) return;
 
-    setRole(nuevoRole);
+    setRole(newRole);
     const fd = new FormData();
     fd.set('teamId', String(teamId));
     fd.set('userId', String(userId));
-    fd.set('newRole', nuevoRole);
+    fd.set('newRole', newRole);
 
     startTransition(async () => {
       try {
@@ -49,23 +48,33 @@ export function RoleSelect({ teamId, userId, currentRole, isLastOwner, action }:
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <select
+    <FormControl size="small" sx={{ minWidth: 120 }}>
+      <Select
         value={role}
-        onChange={handleChange}
+        onChange={e => handleChange(e.target.value)}
         disabled={pending}
-        className="text-xs bg-white border border-gray-300 rounded px-2 py-1 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 cursor-pointer"
+        sx={{
+          fontSize: '0.75rem',
+          borderRadius: '8px',
+          '& .MuiSelect-select': { py: '4px', px: '8px' },
+        }}
+        MenuProps={{ sx: { '& .MuiPaper-root': { borderRadius: '8px' } } }}
+        endAdornment={
+          pending ? (
+            <CircularProgress size={14} sx={{ color: '#9ca3af', mr: 1 }} />
+          ) : error ? (
+            <Tooltip title={error}>
+              <AlertCircle style={{ width: 14, height: 14, color: '#dc2626', marginRight: 8, cursor: 'pointer' }} />
+            </Tooltip>
+          ) : null
+        }
       >
         {ROLES.map(r => (
-          <option key={r.key} value={r.key}>{r.label}</option>
+          <MenuItem key={r.key} value={r.key} sx={{ fontSize: '0.75rem' }}>
+            {r.label}
+          </MenuItem>
         ))}
-      </select>
-      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
-      {error && (
-        <span className="inline-flex items-center gap-1 text-xs text-red-600" title={error}>
-          <AlertCircle className="h-3.5 w-3.5" />
-        </span>
-      )}
-    </div>
+      </Select>
+    </FormControl>
   );
 }

@@ -4,25 +4,32 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Typography,
+} from '@mui/material';
 import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
   StickyNote, ScrollText, MessageSquare, CreditCard, Send,
+  GraduationCap, Loader2, Printer,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
+import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
+import { labelMetodo } from '@/lib/pagos/metodos';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { FacturaOrigenSection, type FacturaResumen } from './sections/FacturaOrigenSection';
 import { SectionCard } from './sections/SectionCard';
 import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
+import { GastoDatosSection } from './sections/GastoDatosSection';
 import { DetallesSection, MOTIVOS_NOTA } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
 import { ClasificacionFactura, type ClasifAsig } from './sections/ClasificacionFactura';
@@ -31,12 +38,13 @@ import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
 import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 import { sumaPagos } from '@/components/pagos/PagoMetodos';
-import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
-import { labelMetodo } from '@/lib/pagos/metodos';
+import { subirPendientes, type Pendiente } from '@/components/pagos/ComprobantesUploader';
 import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
 import { Comentarios } from './sections/Comentarios';
 import { BottomActionBar } from './sections/BottomActionBar';
+import { EsqueletoFactura } from './sections/EsqueletoFactura';
+import { Pasos } from './sections/Pasos';
 
 import { ModalNuevoCliente } from './modals/ModalNuevoCliente';
 import { ModalNuevoProducto } from './modals/ModalNuevoProducto';
@@ -55,8 +63,8 @@ import { useItemsState } from './hooks/useFacturaState';
 
 import { calcularTotales } from './utils/calculos';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
+import { datosComprador } from './utils/comprador';
 import { validate as validateEcf } from '@/lib/factura/validator';
-import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import type {
   BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Producto,
   ResultadoEmision, Retencion, VariantePick,
@@ -65,37 +73,107 @@ import type {
 // Re-export for callers that import from this module.
 export type { BorradorInicial, EmpresaPerfil };
 
-/** Opciones de emitir(). `metodoConfirmado` marca que el double-check del método
- *  de pago ya se aceptó, para no reabrir el diálogo en la segunda llamada. */
+/**
+ * Opciones de `emitir()`. `metodoConfirmado` marca que el doble-check del
+ * método de pago ya se aceptó, para no reabrir el diálogo en la segunda vuelta.
+ */
 type EmitirOpts = {
   andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar';
   metodoConfirmado?: boolean;
-  /** El aviso de "contado sin pago" ya se aceptó → no reabrir en la 2ª llamada. */
-  contadoConfirmado?: boolean;
 };
 
 export default function NuevaFacturaForm({
   initialPerfil,
   initialData,
   categoriaFija,
+  cargosIniciales,
+  cargosOfrecidos,
+  clienteInicial,
+  previsto,
+  onVolver,
+  sinRedirigirAlVincular = false,
+  modoColegio = false,
 }: {
   initialPerfil: EmpresaPerfil | null;
   initialData?:  BorradorInicial | null;
   /** Fija la categoría de documento por ruta → oculta el selector de categoría. */
   categoriaFija?: string;
+  /**
+   * Cargos escolares con los que arrancar, equivalente a `?desdeCargos=1,2,3`.
+   *
+   * Para cuando el formulario NO vive en su propia ruta y no hay URL donde
+   * poner el parámetro — hoy, el cajón de la ficha de familia.
+   */
+  cargosIniciales?: number[];
+  /**
+   * Cargos que se OFRECEN en el buscador de productos, sin ponerlos en la
+   * factura.
+   *
+   * «Nueva factura» abría con todo lo que la familia debía sin facturar ya
+   * metido en líneas: nueve meses de colegiatura para quien venía a cobrar
+   * uno. Ahora abre vacía, y lo que el alumno debe sale al buscar el producto
+   * en su línea —«COLEGIO — Noviembre 2026», con SU precio, que no tiene por
+   * qué ser el de otro alumno del mismo concepto—. Elegirlo ahí deja la
+   * factura atada a ese cargo, igual que si hubiera venido precargado.
+   */
+  cargosOfrecidos?: number[];
+  /**
+   * A quién se le factura, cuando no hay ningún cargo del que deducirlo.
+   *
+   * El cajón de la familia sacaba el cliente del prefill de los cargos, y una
+   * familia al día no tiene ninguno: el formulario abría en blanco —sin
+   * comprador, sin beneficiarios y por tanto sin columna de beneficiario— justo
+   * en la ficha donde el comprador se está mirando. Con esto, «Nueva factura»
+   * arranca con la familia puesta aunque no deba nada.
+   *
+   * No pisa al prefill: si vienen cargos, manda el comprador que resuelvan
+   * ellos, que es el que garantiza que los cargos y la factura sean del mismo.
+   */
+  clienteInicial?: { id: number; razonSocial: string; rnc: string | null;
+    email: string | null; telefono: string | null } | null;
+  /**
+   * Qué hace «Volver» de la barra de arriba.
+   *
+   * Por defecto vuelve al listado de facturas. Dentro de un cajón eso navega
+   * la página de DEBAJO y se pierde la ficha desde la que se estaba
+   * facturando, así que allí «Volver» tiene que cerrar el cajón.
+   */
+  onVolver?: () => void;
+  /**
+   * Un mes del calendario que TODAVÍA no es deuda.
+   *
+   * Llega desde «Adelantar»: la cuota existe en el plan de pagos pero nadie ha
+   * creado el cargo. Entra como una línea más y el cargo NACE AL VINCULAR, ya
+   * con la factura emitida — si el usuario cierra sin guardar, no queda un mes
+   * cobrándose porque alguien abrió una pantalla y se arrepintió.
+   */
+  previsto?: { matriculaId: number; cuotaId: number; conceptoId: number } | null;
+  /**
+   * No saltar a la ficha del estudiante después de vincular los cargos.
+   *
+   * Dentro del cajón el formulario está ENCIMA de la ficha de la familia: el
+   * `router.push` cambiaba la página de debajo mientras el cajón seguía
+   * abierto, y al cerrarlo se aparecía en otro sitio.
+   */
+  sinRedirigirAlVincular?: boolean;
+  /**
+   * Ajusta el formulario a lo que necesita un colegio.
+   *
+   * Tres cosas, y las tres se OCULTAN Y SE FUERZAN a la vez —enseñar una
+   * factura distinta de la que se envía sería el peor de los dos mundos—:
+   *
+   *   · ITBIS: la enseñanza está exenta, así que la columna de impuesto sobra
+   *     y todas las líneas quedan en exento.
+   *   · Tipo de ingresos: en una institución educativa siempre es 01, el giro
+   *     del negocio. Se manda 01 y no se pregunta.
+   *   · Plazo de vencimiento: no aplica al contado, que es como entra todo lo
+   *     que se factura desde la ficha de familia. Reaparece si la pasan a
+   *     crédito, porque ahí la DGII sí lo exige.
+   */
+  modoColegio?: boolean;
 }) {
   const router  = useRouter();
   const empresa = initialPerfil;
-  const { can, isLoading: permLoading } = usePermissions();
-  // Sin `facturas:precio-editar` el precio, el descuento y el ITBIS de cada
-  // línea quedan en solo lectura. Mientras el permiso carga no se bloquea nada:
-  // `can()` responde false por defecto y trancaría la pantalla al owner por un
-  // instante. El servidor revalida al guardar, así que la ventana no abre nada.
-  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
-  // Alerta double-check del método: solo si el rol del usuario tiene el permiso.
-  // Combina el toggle por-empresa con el permiso por-rol: la alerta sale solo si
-  // la empresa la tiene activa Y el rol del usuario tiene el permiso.
-  const alertaMetodoPago = !!empresa?.alertaMetodoPagoActivo && can('pagos:alerta-metodo');
 
   // ── Items iniciales desde borrador ─────────────────────────────────────────
   const itemsIniciales: ItemLinea[] = useMemo(() => {
@@ -131,6 +209,19 @@ export default function NuevaFacturaForm({
     ? searchParams.get('tipo')!
     : null;
   const qpPadreId = !initialData ? searchParams.get('padreId') : null;
+  // ?desdeCargo=N → prefill desde un cargo escolar (cliente=tutor, dependiente=
+  // estudiante, línea=producto del concepto). Solo lee/pre-llena; NO toca el
+  // motor de emisión. Ver /api/administracion-escolar/cargos/[id]/prefill-factura.
+  //
+  // `cargosIniciales` hace lo mismo por prop en vez de por URL. Existe porque
+  // este formulario ya no solo vive en su ruta: la ficha de la familia lo abre
+  // en un cajón lateral, y ahí la URL es la del responsable —no hay dónde
+  // colgar el parámetro sin ensuciar su dirección y su historial—.
+  const qpDesdeCargo = !initialData ? searchParams.get('desdeCargo') : null;
+  // ?desdeCargos=1,2,3 → una sola factura que cubre varios meses (N cargos).
+  const qpDesdeCargos = !initialData
+    ? searchParams.get('desdeCargos')
+    : null;
 
   // Categoría fija por ruta (factura/NC/ND/compras/gastos). Si está presente,
   // oculta el selector de categoría y el tipo arranca en el de esa categoría.
@@ -158,6 +249,11 @@ export default function NuevaFacturaForm({
   // un borrador (no se cambia el tipo de un documento ya creado).
   const ocultarCategoria = !!categoriaFija || !!initialData;
 
+  // Gasto (e43/e47): primero un registro interno de salida de dinero. Emitir a
+  // la DGII es opcional (queda en el menú "Más opciones"), así que la acción
+  // primaria guarda como interno en vez de forzar la emisión fiscal.
+  const esGasto = tipoEcf === '43' || tipoEcf === '47';
+
   // Título de la pantalla según la categoría de documento.
   const tituloDoc = ({
     'nota-credito': { nuevo: 'Nueva nota de crédito', editar: 'Editar nota de crédito' },
@@ -181,7 +277,7 @@ export default function NuevaFacturaForm({
     },
   } as Record<string, { noun: string; totalLabel: string; primaryBtnClass: string }>)[categoriaId]
     ?? { noun: 'factura', totalLabel: 'Total',
-         primaryBtnClass: 'bg-teal-600 hover:bg-teal-700 border-teal-700' };
+         primaryBtnClass: 'bg-zero-600 hover:bg-zero-700 border-zero-700' };
 
   // Base de ruta del detalle/listado según el tipo — para que al crear una NC/ND
   // se aterrice en su vista propia (no en la de factura).
@@ -194,6 +290,25 @@ export default function NuevaFacturaForm({
 
   // ── Clasificación por maestros (Plan A) ─────────────────────────────────────
   const [clasificacion, setClasificacion] = useState<ClasifAsig[]>([]);
+
+  // ── Origen: cargo(s) escolar(es) (prefill vía ?desdeCargo / ?desdeCargos) ────
+  // Si esta factura nace de cargos escolares, guardamos sus id + saldo para
+  // ofrecer, en la pantalla de éxito, "volver al estudiante y vincular". Una
+  // sola factura puede cubrir varios meses (N cargos → 1 factura).
+  const [origenCargos, setOrigenCargos] = useState<{ id: number; saldoCentavos: number }[]>([]);
+
+  /**
+   * Todas las deudas cobrables del alumno —marcadas o no— tal como las devolvió
+   * el prefill. Alimentan el buscador de productos para poder añadir otro mes
+   * sin salir de la factura.
+   */
+  type OpcionEscolar = {
+    cargoId: number; estudianteId: number; seleccionado: boolean;
+    saldoCentavos: number; mes: number | null; anio: number;
+    linea?: PrefillCargo['linea']; contexto: string;
+  };
+  const [opcionesEscolares, setOpcionesEscolares] = useState<OpcionEscolar[]>([]);
+  const [saldandoCargo, setSaldandoCargo] = useState(false);
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
@@ -222,6 +337,16 @@ export default function NuevaFacturaForm({
 
   // Fecha de emisión editable — solo roles con este permiso (admin/owner) y
   // solo aplica a sin-ncf. Ver CompactHeader y app/api/ecf/emitir/route.ts.
+  const { can, isLoading: permLoading } = usePermissions();
+  /**
+   * Sin `facturas:precio-editar` el precio y el descuento de cada línea quedan
+   * en solo lectura.
+   *
+   * Mientras el permiso carga NO se bloquea nada: `can()` responde false por
+   * defecto y trancaría la pantalla al dueño durante un instante. El servidor
+   * revalida al guardar, así que esa ventana no abre nada.
+   */
+  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   const puedeEditarFecha = can('facturas:fecha-personalizada');
 
   // ── Condición de pago ──────────────────────────────────────────────────────
@@ -230,6 +355,13 @@ export default function NuevaFacturaForm({
   // re-guardar). Factura nueva → hoy.
   const [fechaEmision, setFechaEmision] = useState(
     () => initialData?.fechaEmision ?? new Date().toISOString().slice(0, 10),
+  );
+  // Datos propios de un gasto. Los nombres rnc/razón social heredados del motor
+  // se presentan como proveedor en esta ruta; no se crea ningún cliente.
+  const [categoriaGasto, setCategoriaGasto] = useState(initialData?.categoriaGasto ?? 'Materiales y suministros');
+  const [ncfProveedor, setNcfProveedor] = useState(initialData?.ncfProveedor ?? '');
+  const [fechaGasto, setFechaGasto] = useState(
+    () => initialData?.fechaGasto ?? new Date().toISOString().slice(0, 10),
   );
   // Factura NUEVA → arranca con el default del team (si hay plazo > 0 → crédito).
   // Editar borrador → respeta el tipoPago guardado.
@@ -309,13 +441,14 @@ export default function NuevaFacturaForm({
 
   // Factura de origen sin-ncf (sin comprobante fiscal): no tiene e-NCF ni lo
   // tendrá → la nota es interna (borrador), sin referencia DGII (no se pide e-NCF).
-  //
-  // Mismo tratamiento si la empresa no está habilitada en DGII: la nota se
-  // guarda como documento interno en vez de reservar un e-NCF fiscal que no se
-  // puede emitir. Se conserva el tipo 33/34 para que siga apareciendo en su
-  // listado — los listados filtran por tipoEcf, no por el e-NCF.
+  // Sin habilitación en DGII la nota se guarda como documento interno en vez
+  // de reservar un e-NCF fiscal que no se puede emitir. Conserva el tipo 33/34
+  // para que siga saliendo en su listado: los listados filtran por tipoEcf.
   const { enProduccion } = useTiposDisponibles();
   const esPadreSinNcf = padreNota?.tipoEcf === 'sin-ncf' || !enProduccion;
+  // Combina el toggle por-empresa con el permiso por-rol: la alerta sale solo
+  // si la empresa la tiene activa Y el rol del usuario puede verla.
+  const alertaMetodoPago = !!empresa?.alertaMetodoPagoActivo && can('pagos:alerta-metodo');
 
   // Aplica una factura padre (payload de /api/facturas/:id) al formulario:
   // e-NCF modificado, fecha, cliente y líneas. Reutilizado por el prefill via
@@ -394,6 +527,283 @@ export default function NuevaFacturaForm({
       .catch(() => {});
   }
 
+  type PrefillCargo = {
+    cargo?: { id: number; saldoCentavos: number };
+    comprador?: { clienteId: number; razonSocial?: string | null; rnc?: string | null; email?: string | null; telefono?: string | null } | null;
+    linea?: {
+      productoId?: number | null; nombreItem?: string; cantidadItem?: number;
+      precioUnitarioItem?: number; tasaItbis?: string; indicadorBienoServicio?: string;
+      dependienteId?: number | null; dependienteNombre?: string;
+      /** `estudiante:cargo:mes:año` — ver `LineaPrefill.cuotaClave`. */
+      cuotaClave?: string;
+    };
+    advertencias?: string[];
+  };
+
+  /**
+   * Lo que devuelve la ruta plural.
+   *
+   * Trae dos cosas que la ruta por cargo no tiene y que la factura necesita:
+   * de qué MES es cada línea y DÓNDE está matriculado el alumno. Sin eso, la
+   * colegiatura de septiembre y la de octubre salen como dos líneas idénticas
+   * que dicen «Pago de colegiatura», y meses después la factura no se explica.
+   */
+  type CtxEscolar = { periodo: string | null; servicio: string | null; grado: string | null; curso: string | null };
+  type PrefillPlural = {
+    comprador?: PrefillCargo['comprador'];
+    estudiantes?: { id: number; contexto: CtxEscolar }[];
+    opciones?: {
+      cargoId: number;
+      estudianteId: number;
+      seleccionado: boolean;
+      saldoCentavos: number;
+      mes: number | null;
+      anio: number;
+      linea?: PrefillCargo['linea'];
+    }[];
+  };
+
+  const MESES_LINEA = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  /** «2026-2027 · Primario · Primero A» — igual que lo escribe el diálogo rápido. */
+  function contextoATexto(c: CtxEscolar | undefined): string {
+    if (!c) return '';
+    return [c.periodo, c.servicio, [c.grado, c.curso].filter(Boolean).join(' ')]
+      .filter(Boolean).join(' · ');
+  }
+
+  // Convierte la línea del prefill en un ItemLinea del formulario.
+  function lineaCargoAItem(l: NonNullable<PrefillCargo['linea']>, id: number): ItemLinea {
+    return {
+      id,
+      productoId:             typeof l.productoId === 'number' ? l.productoId : undefined,
+      nombreItem:             String(l.nombreItem ?? ''),
+      referencia:             '',
+      descripcionItem:        '',
+      cantidadItem:           Number(l.cantidadItem) || 1,
+      precioUnitarioItem:     Number(l.precioUnitarioItem) || 0,
+      descuentoPct:           0,
+      tasaItbis:              (['0.18', '0.16', '0', 'exento'].includes(String(l.tasaItbis))
+                                ? String(l.tasaItbis) : 'exento') as ItemLinea['tasaItbis'],
+      indicadorBienoServicio: String(l.indicadorBienoServicio) === '1' ? '1' : '2',
+      dependienteId:          typeof l.dependienteId === 'number' ? l.dependienteId : null,
+      dependienteNombre:      String(l.dependienteNombre ?? ''),
+      // De qué cuota vino. Antes se calculaba solo en el buscador de meses y se
+      // perdía al enviar; ahora viaja hasta `lineas_json` para que la factura
+      // sepa siempre a qué cargo pertenece cada línea.
+      cuotaClave:             typeof l.cuotaClave === 'string' ? l.cuotaClave : undefined,
+    };
+  }
+
+  // Prefill desde uno o varios cargos escolares. Con varios, cada cargo aporta
+  // UNA línea (su mes) y la factura los cubre todos: un solo documento que se
+  // vincula a los N cargos al terminar (N cargos → 1 factura). El cliente
+  // (tutor) y beneficiario (estudiante) son compartidos. Solo pre-llena.
+  function aplicarPrefillCargos(payloads: PrefillCargo[]) {
+    const validos = payloads.filter((p) => p?.cargo?.id);
+    if (validos.length === 0) return;
+    setOrigenCargos(validos.map((p) => ({ id: p.cargo!.id, saldoCentavos: p.cargo!.saldoCentavos })));
+
+    const comprador = validos.find((p) => p.comprador?.clienteId)?.comprador;
+    if (comprador?.clienteId) {
+      seleccionarCliente({
+        id:          comprador.clienteId,
+        razonSocial: comprador.razonSocial ?? '',
+        rnc:         comprador.rnc ?? null,
+        email:       comprador.email ?? null,
+        telefono:    comprador.telefono ?? null,
+      });
+    }
+
+    const items = validos
+      .filter((p) => p.linea)
+      .map((p, i) => lineaCargoAItem(p.linea!, i + 1));
+    if (items.length) dispatchItems({ type: 'SET', items });
+
+    // Advertencias deduplicadas (no repetir la misma por cada mes).
+    const vistas = new Set<string>();
+    validos.forEach((p) => (p.advertencias ?? []).forEach((msg) => {
+      if (!vistas.has(msg)) { vistas.add(msg); toast.warning(msg, { duration: 7000 }); }
+    }));
+  }
+
+  // Carga el prefill de N cargos (en paralelo) y los aplica.
+  function cargarPrefillCargos(cargoIds: number[]) {
+    Promise.all(cargoIds.map((cargoId) =>
+      fetch(`/api/administracion-escolar/cargos/${cargoId}/prefill-factura`)
+        .then((r) => r.ok ? r.json() : Promise.reject()),
+    ))
+      .then(aplicarPrefillCargos)
+      .catch(() => toast.error('No se pudieron cargar los cargos para prefacturar.'))
+      .finally(() => setCargandoPrefill(false));
+  }
+
+  /**
+   * Prefill escolar por la ruta plural. Es la que usa el cajón de la familia.
+   *
+   * Se prefiere sobre la ruta por cargo por dos motivos. Uno: un mes previsto
+   * no tiene id que pedir, y esta lo resuelve contra el plan de pagos sin crear
+   * la deuda. Dos: devuelve el mes y el grado de cada línea, que es lo que
+   * distingue «Pago de colegiatura — Septiembre 2026 · 2026-2027 · Primario ·
+   * Primero A» de un «Pago de colegiatura» a secas repetido diez veces.
+   */
+  function cargarPrefillEscolar(
+    cargoIds: number[], p?: { matriculaId: number; cuotaId: number; conceptoId: number } | null,
+    /** Solo alimenta el buscador: ni líneas, ni comprador, ni cargos de origen. */
+    soloOfrecer = false,
+  ) {
+    fetch('/api/administracion-escolar/cargos/prefill-factura', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cargoIds, previsto: p ?? undefined }),
+    })
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error ?? 'No se pudo preparar la factura');
+        return j;
+      })
+      .then((datos: PrefillPlural) => {
+        // Solo lo que viene marcado: el resto son las otras deudas del alumno,
+        // que aquí se ofrecían para añadir y en el formulario grande se añaden
+        // buscando el producto.
+        // Las NO marcadas también se guardan: son las otras deudas del alumno,
+        // y hasta ahora se tiraban. Sin ellas, quien ya está dentro de la
+        // factura y quiere añadir otro mes tiene que salir y empezar de nuevo,
+        // porque el buscador solo mira el catálogo y una mensualidad no es un
+        // producto. Ahora alimentan el buscador (ver `buscarProductos`).
+        const ctxTodos = new Map((datos.estudiantes ?? []).map((e) => [e.id, e.contexto]));
+        setOpcionesEscolares(
+          (datos.opciones ?? [])
+            .filter((o) => o.linea && o.saldoCentavos > 0)
+            .map((o) => ({ ...o, contexto: contextoATexto(ctxTodos.get(o.estudianteId)) })),
+        );
+
+        // «Nueva factura» a secas: lo que vino marcado solo era la lista de lo
+        // que se puede añadir. La factura se queda vacía y cada mes entra
+        // cuando alguien lo elige en el buscador (`aplicarCuotaEnLinea`), que
+        // es también quien lo apunta en `origenCargos`.
+        if (soloOfrecer) return;
+
+        const elegidas = (datos.opciones ?? []).filter((o) => o.seleccionado);
+        if (elegidas.length === 0) return;
+
+        setOrigenCargos(
+          elegidas.filter((o) => o.cargoId > 0)
+            .map((o) => ({ id: o.cargoId, saldoCentavos: o.saldoCentavos })),
+        );
+
+        const c = datos.comprador;
+        if (c?.clienteId) {
+          seleccionarCliente({
+            id: c.clienteId, razonSocial: c.razonSocial ?? '',
+            rnc: c.rnc ?? null, email: c.email ?? null, telefono: c.telefono ?? null,
+          });
+        }
+
+        // El contexto es el del alumno de CADA línea, no el del primero: con
+        // hermanos en grados distintos, una sola descripción pondría «Primero»
+        // debajo de la mensualidad del que va en Quinto.
+        const ctxPorAlumno = new Map((datos.estudiantes ?? []).map((e) => [e.id, e.contexto]));
+        const its = elegidas.filter((o) => o.linea).map((o, i) => {
+          const item = lineaCargoAItem(o.linea!, i + 1);
+          return {
+            ...item,
+            nombreItem: o.mes ? `${item.nombreItem} — ${MESES_LINEA[o.mes]} ${o.anio}` : item.nombreItem,
+            descripcionItem: contextoATexto(ctxPorAlumno.get(o.estudianteId)) || item.descripcionItem,
+          };
+        });
+        if (its.length) dispatchItems({ type: 'SET', items: its });
+      })
+      .catch((e: unknown) => {
+        // Sin la lista la factura se puede hacer igual, pero los meses del
+        // alumno no saldrán en el buscador: se dice, porque una línea escrita
+        // a mano no queda atada a ningún cargo.
+        if (soloOfrecer) {
+          toast.warning('No se pudieron cargar los cargos pendientes: no saldrán al buscar el producto.');
+          return;
+        }
+        toast.error(e instanceof Error ? e.message : 'No se pudo preparar la factura');
+      })
+      // Pase lo que pase se quita: si la carga falló hay que poder escribir la
+      // factura a mano, no quedarse mirando el esqueleto para siempre.
+      .finally(() => setCargandoPrefill(false));
+  }
+
+  /**
+   * Ir a otra pantalla desde el formulario.
+   *
+   * Dentro del cajón, `router.push` cambia la página que está DEBAJO mientras
+   * el cajón sigue encima: se cierra y uno aparece en otro sitio sin haber
+   * pedido irse. Ahí la factura se abre en una pestaña aparte y la ficha de la
+   * familia se queda donde estaba.
+   */
+  function irA(url: string) {
+    if (sinRedirigirAlVincular) { window.open(url, '_blank', 'noopener'); return; }
+    router.push(url);
+  }
+
+  // Cierra el loop: vincula la factura recién creada a TODOS los cargos de
+  // origen (uno o varios meses) y vuelve al perfil del estudiante. Solo
+  // disponible si la factura nació de cargos escolares (?desdeCargo[s]).
+  async function saldarCargoConFactura(documentoId: number) {
+    if (origenCargos.length === 0 && !previsto) return;
+    if (cargosVinculados) return;
+    setSaldandoCargo(true);
+    let estudianteId: number | undefined;
+    try {
+      // El mes adelantado se vuelve cargo justo ahora, no al abrir la pantalla:
+      // la factura ya existe, así que la deuda que se crea tiene con qué
+      // saldarse. Al revés quedaría un mes cobrándose por una factura que
+      // quizá nunca se guardó.
+      const aVincular = [...origenCargos];
+      if (previsto) {
+        const r = await fetch(`/api/administracion-escolar/matriculas/${previsto.matriculaId}/plan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cuotaId: previsto.cuotaId, conceptoId: previsto.conceptoId, accion: 'adelantar',
+            // El cargo nace ya atado a esta factura. Antes hacía falta una
+            // llamada más para enlazarlo, y si esa no llegaba el mes quedaba
+            // «Sin facturar» encima de una factura que existía.
+            ecfDocumentId: documentoId,
+          }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.cargoId) throw new Error(j.error ?? 'No se pudo preparar el mes por adelantado');
+        aVincular.push({ id: j.cargoId, saldoCentavos: 0 });
+      }
+
+      for (const oc of aVincular) {
+        const res = await fetch(`/api/administracion-escolar/cargos/${oc.id}/saldar-con-factura`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ecfDocumentId: documentoId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'No se pudo vincular el cargo');
+        estudianteId = data.cargo?.estudianteId ?? estudianteId;
+      }
+      // «Registra el cobro» solo si de verdad falta cobrarlo. Guardando la
+      // factura con el pago puesto —el camino normal en el cajón— el aviso
+      // mandaba a hacer algo que acababa de hacerse, encima de una pantalla
+      // que dice «Estado: Pagada».
+      const yaCobrado = pagoRecibido && sumaPagos(pagoLineas) > 0;
+      const cuantos = aVincular.length > 1
+        ? `${aVincular.length} cargos vinculados a la factura`
+        : 'Cargo vinculado a la factura';
+      toast.success(yaCobrado ? `${cuantos}.` : `${cuantos}. Registra el cobro en la factura.`);
+      setCargosVinculados(true);
+      if (sinRedirigirAlVincular) { setSaldandoCargo(false); return; }
+      router.push(estudianteId
+        ? `/escolar/estudiantes/${estudianteId}`
+        : '/escolar/estudiantes');
+    } catch (e) {
+      setSaldandoCargo(false);
+      toast.error(e instanceof Error ? e.message : 'No se pudo vincular el cargo');
+    }
+  }
+
   // Limpia el vínculo con la factura de origen (mantiene cliente/líneas editables).
   function limpiarPadre() {
     setPadreNota(null);
@@ -410,13 +820,121 @@ export default function NuevaFacturaForm({
 
   useEffect(() => {
     if (initialData) return; // editar borrador manda sobre los query params
-    if (!qpPadreId) return;
-    cargarPadre(Number(qpPadreId));
+    if (qpPadreId) { cargarPadre(Number(qpPadreId)); return; }
+    // El cajón de la familia (cargos por prop) y «Adelantar» van por la plural.
+    // Los `?desdeCargo[s]` de la URL siguen por la ruta por cargo: los usan
+    // otras pantallas y no hace falta moverlas para esto.
+    if (previsto || cargosIniciales?.length) {
+      cargarPrefillEscolar(cargosIniciales ?? [], previsto);
+      return;
+    }
+    // «Nueva factura» desde una ficha: vacía, con el comprador puesto ya —no
+    // hay que esperar a la lista para saber a quién se le factura— y con lo
+    // que se debe cargándose por detrás para el buscador.
+    if (cargosOfrecidos?.length) {
+      if (clienteInicial) seleccionarCliente(clienteInicial);
+      cargarPrefillEscolar(cargosOfrecidos, null, true);
+      return;
+    }
+    if (qpDesdeCargos) {
+      const ids = qpDesdeCargos.split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+      if (ids.length) cargarPrefillCargos(ids); else setCargandoPrefill(false);
+    } else if (qpDesdeCargo) {
+      cargarPrefillCargos([Number(qpDesdeCargo)]);
+    } else {
+      // Sin cargos de los que deducir el comprador, pero la pantalla que abrió
+      // el formulario ya sabe a quién le factura. Va por `seleccionarCliente`
+      // y no poniendo el RNC a mano porque es lo que además trae los
+      // beneficiarios: sin eso la columna del hijo no existe.
+      if (clienteInicial) seleccionarCliente(clienteInicial);
+      setCargandoPrefill(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Hay un prefill en camino y todavía no hay nada que enseñar.
+   *
+   * Se decide en el primer render, no dentro del efecto: si arrancara en false
+   * el formulario vacío alcanzaría a pintarse un cuadro antes de que el efecto
+   * lo pusiera en true, que es justo el parpadeo que esto viene a quitar.
+   *
+   * Editar un borrador no espera a nadie: sus datos vienen con el HTML.
+   */
+  /**
+   * En qué paso va la factura del cajón: 1 «Factura», 2 «Pago y envío».
+   *
+   * El 3 no es un paso de este estado sino la pantalla de `resultado`, que ya
+   * existía: cuando la factura sale, el formulario entero se sustituye por el
+   * comprobante con su e-NCF, su código de seguridad y su PDF.
+   *
+   * Solo en modo colegio. En la pantalla de siempre el formulario cabe entero
+   * con su barra lateral, y partirlo en dos le añadiría un clic a quien hoy
+   * factura de una sentada.
+   */
+  const [paso, setPaso] = useState<1 | 2>(1);
+  /** Los cargos de origen ya quedaron atados a la factura. */
+  const [cargosVinculados, setCargosVinculados] = useState(false);
+
+  const [cargandoPrefill, setCargandoPrefill] = useState(
+    !initialData && Boolean(previsto || cargosIniciales?.length || qpDesdeCargo || qpDesdeCargos),
+  );
+
   // ── Items (useReducer) ─────────────────────────────────────────────────────
   const [items, dispatchItems] = useItemsState(itemsIniciales);
+
+  // Gastos menores (43) y pagos al exterior (47) no llevan ITBIS: la DGII los
+  // recibe exentos y el selector de la línea solo ofrece «Exento». El cambio de
+  // tipo ya los forzaba, pero al abrir la pantalla con `?tipo=`, al agregar una
+  // línea o al cargar un borrador la línea traía el 18 % por defecto: el selector
+  // salía en blanco y el gasto se guardaba inflado con ese ITBIS.
+  useEffect(() => {
+    if (!esGasto || regla?.permiteItbis !== false) return;
+    if (items.some((i) => i.tasaItbis !== 'exento')) dispatchItems({ type: 'FORCE_EXENTO' });
+  }, [esGasto, regla, items]);
+
+  // Las líneas SIN producto (manuales/en blanco) salen exentas por defecto: un
+  // colegio no cobra ITBIS en un renglón suelto que escribió a mano. Las que
+  // traen producto conservan la tasa que resolvió la tarifa —R1—: si el colegio
+  // configuró un producto con ITBIS (un uniforme), se factura con su ITBIS, en
+  // vez de forzar todo a exento y contradecir lo que puso. La columna de ITBIS
+  // aparece sola cuando hay algo que cobrar o cuando se emite un comprobante
+  // fiscal (ver `ocultarItbisEscolar`).
+  useEffect(() => {
+    if (!modoColegio) return;
+    if (items.some((i) => !i.productoId && i.tasaItbis !== 'exento')) {
+      dispatchItems({ type: 'FORCE_EXENTO_SIN_PRODUCTO' });
+    }
+  }, [modoColegio, items]);
+
+  // La columna de ITBIS en el flujo escolar: escondida en el caso normal —un
+  // colegio que factura sin-ncf y todo exento no la necesita y una columna de
+  // ceros solo estorba—, pero VISIBLE en cuanto hay algo que cobrar (un producto
+  // con ITBIS) o se emite un comprobante fiscal (e31/e32), donde el ITBIS importa
+  // y hay que poder verlo y ajustarlo.
+  const hayItbisNoExento = items.some((i) => i.tasaItbis && i.tasaItbis !== 'exento');
+  const ocultarItbisEscolar = modoColegio && tipoEcf === 'sin-ncf' && !hayItbisNoExento;
+
+  // 01 · Operaciones (giro del negocio). Es lo que se le manda a la DGII con
+  // el campo oculto, y se fija por si un borrador traía otro valor.
+  useEffect(() => {
+    if (modoColegio && tipoIngresos !== '1') setTipoIngresos('1');
+  }, [modoColegio, tipoIngresos]);
+
+  /*
+    El colegio factura con la MISMA config fiscal que «Nueva factura».
+
+    Antes esto forzaba `sin-ncf` a cualquier factura escolar y bloqueaba el
+    desplegable de tipo, por miedo a que un clic de más gastara una secuencia de
+    la DGII. Pero ese candado ya lo pone `useTiposDisponibles`, compartido con el
+    resto del formulario: e31/e32 solo aparecen si el colegio está listo para la
+    DGII (tiene secuencias); si no —el caso normal— la única opción sigue siendo
+    `sin-ncf`, que además es el tipo por defecto de «factura-venta». Forzarlo aquí
+    hacía que un colegio que SÍ configuró sus comprobantes no pudiera elegirlos,
+    que es justo lo que el MD de facturas pide arreglar: los dos flujos ofrecen lo
+    mismo. El emisor exento se sigue respetando por el ITBIS de cada producto.
+  */
+
   const [showNuevoProductoIdx, setShowNuevoProductoIdx] = useState<number | null>(null);
 
   // ── Retenciones ────────────────────────────────────────────────────────────
@@ -428,6 +946,9 @@ export default function NuevaFacturaForm({
   // ── Items columns visibility (Referencia/Descripción) — persistido ────────
   const [showItemRef, setShowItemRef] = useState(false);
   const [showItemDesc, setShowItemDesc] = useState(false);
+  // Apagado por defecto: la mayoría de las facturas no llevan descuento y la
+  // casilla vacía en cada renglón robaba ancho a lo que sí se escribe.
+  const [showItemDescuento, setShowItemDescuento] = useState(false);
   useEffect(() => {
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
@@ -441,18 +962,23 @@ export default function NuevaFacturaForm({
       );
       setShowItemRef(Boolean(cols.referencia) || hasRef);
       setShowItemDesc(Boolean(cols.descripcion) || hasDesc);
+      const hasDescuento = (initialData?.lineasJson ? JSON.parse(initialData.lineasJson) : items).some(
+        (i: { descuentoPct?: number }) => Number(i.descuentoPct ?? 0) > 0,
+      );
+      setShowItemDescuento(Boolean(cols.descuento) || hasDescuento);
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  function persistCols(ref: boolean, desc: boolean) {
+  function persistCols(ref: boolean, desc: boolean, descuento: boolean = showItemDescuento) {
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
-      prefs.itemsCols = { referencia: ref, descripcion: desc };
+      prefs.itemsCols = { referencia: ref, descripcion: desc, descuento };
       localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
     } catch {}
   }
   function handleToggleRef(v: boolean) { setShowItemRef(v); persistCols(v, showItemDesc); }
   function handleToggleDesc(v: boolean) { setShowItemDesc(v); persistCols(showItemRef, v); }
+  function handleToggleDescuento(v: boolean) { setShowItemDescuento(v); persistCols(showItemRef, showItemDesc, v); }
 
   // ── NCF gear modal ─────────────────────────────────────────────────────────
   const [showEditarNcf, setShowEditarNcf]     = useState(false);
@@ -468,11 +994,33 @@ export default function NuevaFacturaForm({
   const [terminosCondiciones, setTerminos] = useState(
     initialData ? (initialData.terminosCondiciones ?? '') : (empresa?.terminosCondicionesDefault ?? ''),
   );
+  /**
+   * Doble confirmación del método de pago.
+   *
+   * Cuando la factura registra un cobro se pide reconfirmar el método antes de
+   * emitir: registrar efectivo como transferencia descuadra el cierre de caja y
+   * nadie lo nota hasta el arqueo. Guarda el `emitir()` pendiente.
+   */
+  const [confirmMetodo, setConfirmMetodo] = useState<
+    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
+  >(null);
   const [pieFactura, setPieFactura]        = useState(initialData?.pieFactura ?? '');
 
   // ── Pago recibido ──────────────────────────────────────────────────────────
   // Al editar un borrador con split, restauramos las líneas desde initialData.
-  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? false);
+  // Un gasto normalmente ya se pagó al registrarlo (saliste con el dinero), así
+  // que arranca como pagado; una venta arranca sin cobro. Se puede desmarcar.
+  /**
+   * Comprobantes elegidos mientras la factura todavía no existe.
+   *
+   * Suben en `subirPendientes` justo después de crearla. Antes no se podía
+   * adjuntar nada al crear —solo al cobrar una factura ya guardada—, así que
+   * quien cobraba en el mismo acto de facturar tenía que volver después.
+   */
+  const [comprobantesPendientes, setComprobantesPendientes] = useState<Pendiente[]>([]);
+  const [avisoComprobantes, setAvisoComprobantes] = useState<string | null>(null);
+
+  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? esGasto);
   const [pagoFecha, setPagoFecha]       = useState(
     initialData?.pagoFecha ?? new Date().toISOString().slice(0, 10),
   );
@@ -482,13 +1030,6 @@ export default function NuevaFacturaForm({
       ? initialData.pagoLineas
       : [{ metodo: 'efectivo', valor: '', cuenta: '' }],
   );
-
-  // Double-check del método de pago: cuando la factura registra un pago, antes de
-  // emitir/guardar pedimos reconfirmar el método (evita registrar efectivo por
-  // transferencia, etc.). Guarda el emitir() pendiente hasta que el usuario acepte.
-  const [confirmMetodo, setConfirmMetodo] = useState<
-    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
-  >(null);
 
   // Aviso al guardar una factura de venta marcada "de contado" que queda sin
   // pago y la empresa tiene mora configurada. Guarda el emitir() pendiente.
@@ -543,7 +1084,16 @@ export default function NuevaFacturaForm({
   // Mirror error → toast (más visible, no requiere scroll para verlo)
   useEffect(() => { if (error) toast.error(error, { duration: 6500 }); }, [error]);
   const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
-  const [draftKey] = useState(() => `emitedo:draft:${initialData?.id ?? 'new'}`);
+  // Draft por-categoría: sin el sufijo, `new` era una key compartida y un
+  // borrador de gasto (e43/e47) se restauraba en el form de compras/factura,
+  // arrastrándolos a modo gasto. Cada ruta nueva tiene su propio borrador.
+  //
+  // El colegio va aparte por lo mismo: la categoría es «factura-venta» en los
+  // dos sitios, así que el cajón de la familia y /dashboard/facturas/nueva
+  // compartían borrador y el cajón abría con el tipo de comprobante y el RNC
+  // de la última factura normal que alguien empezó y no terminó.
+  const [draftKey] = useState(() =>
+    `emitedo:draft:${initialData?.id ?? `new-${categoriaId}${modoColegio ? '-colegio' : ''}`}`);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [vistaPrevia, setVistaPrevia]   = useState(false);
   // Vista previa = PDF en blob URL (NO crea factura en DB). Ver /api/pdf/factura/preview.
@@ -592,7 +1142,6 @@ export default function NuevaFacturaForm({
       if (prefs.almacen)      setShowAlmacen(true);
       if (prefs.listaPrecios) setShowListaPrecios(true);
       if (prefs.vendedor)     setShowVendedor(true);
-      if (prefs.ocultarAvisoContado) setOcultarAvisoContado(true);
     } catch {}
   }, []);
 
@@ -601,6 +1150,24 @@ export default function NuevaFacturaForm({
     if (initialData) { setDraftHydrated(true); return; }
     // Prefill por query params (nota desde factura) manda sobre el draft local.
     if (qpTipo || qpPadreId) { setDraftHydrated(true); return; }
+    /*
+      El comprador ya viene decidido: el borrador local no pinta nada.
+
+      Este efecto y el del prefill corren los dos al montar, y el borrador
+      ganaba: restauraba `rncManual`, `telefonoManual` y `tipoEcf` sueltos, sin
+      el objeto `clienteSeleccionado` —que nunca se guarda—. El resultado era
+      un cajón con el RNC y el teléfono puestos pero SIN cliente: el buscador
+      volvía a salir en vez del cliente bloqueado, no se pedían los
+      beneficiarios y la columna del hijo desaparecía de la tabla.
+
+      Y lo peor no se veía: `rncManualNombre` de un cliente podía quedarse
+      encima del RNC de otro, que es una factura con el nombre de A y la cédula
+      de B camino de la DGII.
+    */
+    if (clienteInicial || previsto || cargosIniciales?.length || qpDesdeCargo || qpDesdeCargos) {
+      setDraftHydrated(true);
+      return;
+    }
     try {
       const saved = localStorage.getItem(draftKey);
       if (saved) {
@@ -700,13 +1267,94 @@ export default function NuevaFacturaForm({
   }
 
   // ─── Búsqueda productos ───────────────────────────────────────────────────
-  async function buscarProductos(q: string): Promise<Producto[]> {
-    const res  = await fetch(`/api/productos?q=${encodeURIComponent(q)}`);
+  /**
+   * Cuotas del plan de un alumno, en forma de producto, para que el buscador
+   * las pueda ofrecer. Solo las de ESE beneficiario: con hermanos en la misma
+   * factura, mezclarlas haría cobrarle a uno la mensualidad del otro.
+   *
+   * El `id` va en negativo para no chocar nunca con un producto real.
+   */
+  function cuotasComoProductos(dependienteId: number | null | undefined, q: string): Producto[] {
+    if (!dependienteId || opcionesEscolares.length === 0) return [];
+    const texto = q.trim().toLowerCase();
+
+    return opcionesEscolares
+      // Por el BENEFICIARIO de la opción, no por su `estudianteId`. La línea de
+      // la factura guarda al hijo como beneficiario de Facturación, y el alumno
+      // de Gobernanza lleva otro número: comparando uno con otro el buscador no
+      // ofrecía ninguna cuota, salvo que los dos ids coincidieran por
+      // casualidad, y quedaban solo los productos genéricos del catálogo.
+      .filter((o) => o.linea?.dependienteId === dependienteId)
+      // Lo que ya está en la factura no se vuelve a ofrecer: añadir dos veces
+      // el mismo mes es cobrarlo dos veces.
+      .filter((o) => !items.some((it) => it.cuotaClave === `${o.estudianteId}:${o.cargoId}:${o.mes ?? 0}:${o.anio}`))
+      .map((o) => {
+        const nombre = o.mes
+          ? `${o.linea!.nombreItem} — ${MESES_LINEA[o.mes]} ${o.anio}`
+          : String(o.linea!.nombreItem);
+        return {
+          id: -(o.cargoId || (o.estudianteId * 100 + (o.mes ?? 0))),
+          nombre,
+          descripcion: o.contexto || null,
+          precioDOP: Number(o.linea!.precioUnitarioItem) || 0,
+          tasaItbis: String(o.linea!.tasaItbis ?? 'exento'),
+          tipo: String(o.linea!.indicadorBienoServicio) === '1' ? 'bien' : 'servicio',
+          referencia: 'PLAN',
+          stockActual: 0, stockMinimo: 0,
+          controlaInventario: false, permiteVentaSinStock: true,
+          cuotaEscolar: {
+            cargoId: o.cargoId, estudianteId: o.estudianteId,
+            mes: o.mes, anio: o.anio, saldoCentavos: o.saldoCentavos,
+            productoId: typeof o.linea!.productoId === 'number' ? o.linea!.productoId : null,
+            contexto: o.contexto,
+          },
+        } satisfies Producto;
+      })
+      .filter((p) => !texto || p.nombre.toLowerCase().includes(texto) || (p.descripcion ?? '').toLowerCase().includes(texto));
+  }
+
+  /**
+   * Reloj de la factura: arranca al montar el formulario.
+   *
+   * Es tiempo de PARED, no de trabajo — incluye que alguien se levante por un
+   * café a mitad de una factura. Se mide igual porque la alternativa es seguir
+   * discutiendo con minutos estimados; para leerlo se usa la mediana, que a
+   * una pestaña olvidada no la deja arrastrar el número.
+   */
+  const abiertoEn = useRef<number>(Date.now());
+
+  function apuntarTiempo(extra: { ecfDocumentId: number | null; emitida: boolean }) {
+    const cuerpo = {
+      ms: Date.now() - abiertoEn.current,
+      origen: modoColegio ? 'escolar' : 'formulario',
+      lineas: items.length,
+      montoCentavos: Math.round(totales.total * 100),
+      ...extra,
+    };
+    // `keepalive` para que sobreviva a la navegación que viene justo después.
+    void fetch('/api/metricas/factura-tiempo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  async function buscarProductos(q: string, dependienteId?: number | null): Promise<Producto[]> {
+    // contexto=facturacion: excluye lo que es solo del POS (cafetería).
+    const res  = await fetch(`/api/productos?contexto=facturacion&q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    return data.productos ?? [];
+    // Las cuotas del alumno van PRIMERO: quien está facturando a una familia
+    // busca el mes, no el producto genérico del catálogo.
+    return [...cuotasComoProductos(dependienteId, q), ...(data.productos ?? [])];
   }
 
   function seleccionarProducto(idx: number, p: Producto) {
+    // Una cuota del plan no es un producto: trae su propio precio, su mes y el
+    // cargo del que sale. Va por su camino antes de cualquier otra cosa —lo de
+    // las variantes no le aplica y el id negativo no debe llegar a la línea.
+    if (p.cuotaEscolar) { aplicarCuotaEnLinea(idx, p); return; }
+
     // Producto con variantes (talla/color…): no se puede vender "el producto" a
     // secas — hay que elegir la variante para saber a qué stock pega el descuento.
     // Se abre el selector y la línea se completa al escoger (aplicarVarianteEnLinea).
@@ -715,6 +1363,46 @@ export default function NuevaFacturaForm({
       return;
     }
     aplicarProductoEnLinea(idx, p);
+  }
+
+  /**
+   * Añade un mes del plan como línea.
+   *
+   * Tres cosas que no hace `aplicarProductoEnLinea` y aquí son obligatorias:
+   * el `productoId` es el del catálogo, no el id negativo del buscador; el
+   * cargo se registra en `origenCargos` para que al emitir se marque pagado; y
+   * queda la `cuotaClave` para no volver a ofrecer ese mismo mes.
+   */
+  function aplicarCuotaEnLinea(idx: number, p: Producto) {
+    const c = p.cuotaEscolar!;
+    const tasa = (p.tasaItbis as ItemLinea['tasaItbis']) ?? 'exento';
+    const tasaFinal: ItemLinea['tasaItbis'] =
+      regla === undefined ? tasa : regla.permiteItbis ? tasa : 'exento';
+
+    dispatchItems({
+      type: 'APPLY_PRODUCTO',
+      idx,
+      patch: {
+        productoId: c.productoId ?? undefined,
+        variantId: undefined,
+        variantNombre: undefined,
+        nombreItem: p.nombre,
+        referencia: '',
+        descripcionItem: c.contexto,
+        precioUnitarioItem: p.precioDOP,
+        tasaItbis: tasaFinal,
+        indicadorBienoServicio: p.tipo === 'bien' ? '1' : '2',
+        cuotaClave: `${c.estudianteId}:${c.cargoId}:${c.mes ?? 0}:${c.anio}`,
+      },
+    });
+
+    // Solo si la deuda ya existe. Una cuota prevista todavía no tiene cargo, y
+    // apuntar el 0 haría que al emitir se intentara saldar un cargo inexistente.
+    if (c.cargoId > 0) {
+      setOrigenCargos((prev) => prev.some((x) => x.id === c.cargoId)
+        ? prev
+        : [...prev, { id: c.cargoId, saldoCentavos: c.saldoCentavos }]);
+    }
   }
 
   /** Aplica un producto SIN variantes a la línea (comportamiento clásico). */
@@ -828,7 +1516,9 @@ export default function NuevaFacturaForm({
   // ─── Cambio de tipo ───────────────────────────────────────────────────────
   function handleChangeTipo(t: string) {
     setTipoEcf(t);
-    limpiarCliente();
+    // No se limpia el cliente: el comprador no depende del tipo de e-CF, y
+    // borrarlo obligaba a re-elegir cliente + beneficiarios (perdiendo el
+    // prefill de un cargo escolar). El ITBIS sí se ajusta abajo según la regla.
     setNcfModificado('');
     setError(null);
     const r = TIPO_ECF_REGLAS[t];
@@ -859,6 +1549,8 @@ export default function NuevaFacturaForm({
     setPagoRecibido(false); setPagoFecha(new Date().toISOString().slice(0, 10));
     setPagoLineas([{ metodo: 'efectivo', valor: '', cuenta: '' }]);
     setComentario('');
+    setCategoriaGasto('Materiales y suministros'); setNcfProveedor('');
+    setFechaGasto(new Date().toISOString().slice(0, 10));
     setAlmacenId(null); setAlmacenNombre('');
     setListaPreciosId(null); setListaPreciosNombre('');
     setVendedorId(null); setVendedorNombre('');
@@ -877,6 +1569,9 @@ export default function NuevaFacturaForm({
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
+      categoriaGasto: esGasto ? categoriaGasto : undefined,
+      ncfProveedor: esGasto ? ncfProveedor : undefined,
+      fechaGasto: esGasto ? fechaGasto : undefined,
       borradorId: initialData?.id ?? null,
     });
   }
@@ -885,6 +1580,20 @@ export default function NuevaFacturaForm({
   const totales = useMemo(() => calcularTotales(items), [items]);
   const totalRetenciones = useMemo(() => retenciones.reduce((s, r) => s + r.monto, 0), [retenciones]);
   const totalNeto = totales.total - totalRetenciones;
+
+  // Gasto pagado en efectivo por defecto: el monto de pago sigue al total, para
+  // que registrar el gasto baje la caja sin escribir nada. Solo mientras haya una
+  // sola línea en efectivo; si el usuario cambia el método o agrega líneas (pago
+  // dividido / a crédito), se respeta lo que puso y deja de autocompletarse.
+  useEffect(() => {
+    if (!esGasto || !pagoRecibido || initialData) return;
+    if (pagoLineas.length !== 1 || pagoLineas[0].metodo !== 'efectivo') return;
+    const objetivo = totalNeto > 0 ? totalNeto.toFixed(2) : '';
+    if (pagoLineas[0].valor !== objetivo) {
+      setPagoLineas([{ ...pagoLineas[0], valor: objetivo }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esGasto, pagoRecibido, totalNeto]);
 
   // Motivo (código de modificación) obligatorio para notas 33/34 — también al
   // guardar como borrador: la DGII lo exige y evita notas incompletas que luego
@@ -897,8 +1606,10 @@ export default function NuevaFacturaForm({
   }
 
   function validar(): string | null {
-    const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
-    const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
+    const { rnc: rncFinal, razonSocial: razonFinal } =
+      datosComprador(clienteSeleccionado, rncManual, rncManualNombre);
+    if (esGasto && !razonFinal.trim()) return 'Indica el nombre del proveedor';
+    if (esGasto && !fechaGasto) return 'Indica la fecha del gasto';
     if (regla?.requiereRncComprador && !rncFinal.trim())
       return `El ${regla.rncLabel} es obligatorio para este tipo de comprobante`;
     if (regla?.requiereRazonSocial && !razonFinal.trim())
@@ -934,8 +1645,8 @@ export default function NuevaFacturaForm({
     const TIPOS_VENTA = ['31', '32', '45', '46', '47', 'sin-ncf'];
     if (!TIPOS_VENTA.includes(tipoEcf)) return null;
     if (condicionPago === '3' || condicionPago === '4') return null; // gratuito / uso: no es por cobrar
-    const rncFinal   = (clienteSeleccionado?.rnc ?? rncManual).trim();
-    const razonFinal = (clienteSeleccionado?.razonSocial ?? rncManualNombre).trim();
+    const { rnc: rncFinal, razonSocial: razonFinal } =
+      datosComprador(clienteSeleccionado, rncManual, rncManualNombre);
     if (rncFinal || razonFinal) return null;                          // ya hay a quién cobrarle
     const pagado = pagoRecibido ? sumaPagos(pagoLineas) : 0;
     const pagoCompleto = totalNeto > 0 && Math.round(pagado * 100) >= Math.round(totalNeto * 100);
@@ -979,27 +1690,12 @@ export default function NuevaFacturaForm({
   }
 
   async function emitir(modo: 'emitir' | 'borrador', opts?: EmitirOpts) {
-    // Double-check del método de pago: si la factura registra un pago y aún no se
-    // reconfirmó el método, paramos y abrimos el diálogo. Va ANTES de la traza para
-    // no registrar un submit fantasma en el diagnóstico anti-duplicados. La alerta
-    // solo aplica si el rol del usuario tiene el permiso 'pagos:alerta-metodo'.
+    // Va ANTES de la traza para no registrar un submit fantasma en el
+    // diagnóstico anti-duplicados.
     if (alertaMetodoPago && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
       setConfirmMetodo({ modo, opts });
       return;
     }
-
-    // Aviso: venta "de contado" sin pago registrado y con mora configurada. La
-    // factura quedaría por cobrar sin vencimiento ni mora automática. Se ofrece
-    // corregir la condición a crédito o continuar. Solo ventas cobrables.
-    const esVentaCobrable = ['31', '32', '45', '46', '47', 'sin-ncf'].includes(tipoEcf);
-    const sinPago = !pagoRecibido || sumaPagos(pagoLineas) <= 0;
-    if (esVentaCobrable && condicionPago === '1' && sinPago
-        && empresa?.recargoMoraActivo && !opts?.contadoConfirmado && !ocultarAvisoContado) {
-      setNoMostrarContado(false);
-      setConfirmContado({ modo, opts });
-      return;
-    }
-
     // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
     // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
     // cada submit con el documento creado y diagnosticar las facturas duplicadas.
@@ -1011,10 +1707,24 @@ export default function NuevaFacturaForm({
     };
     console.log('[factura-submit]', traza, 'submitting=', submittingRef.current, 'loading=', loading);
 
-    // Sin eCF seleccionado → siempre guardar como borrador (no se emite a DGII)
-    // sin-ncf (factura sin comprobante) o nota sobre factura de origen sin-ncf
-    // (no hay e-NCF que referenciar) → solo borrador, nunca se emite a la DGII.
-    const modoEfectivo: 'emitir' | 'borrador' = (tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'borrador' : modo;
+    /*
+      sin-ncf (factura sin comprobante) o nota sobre factura de origen sin-ncf
+      (no hay e-NCF que referenciar) → solo borrador, nunca se emite a la DGII.
+
+      El flujo por pasos del colegio SÍ emite, igual que «Nueva factura». Estuvo
+      forzado a borrador un tiempo, y con razón: el botón decía «Guardar
+      factura» y mandaba el documento a la DGII en el mismo clic con el que se
+      registraba el pago. Pero el fallo era el rótulo, no el sitio — ir a la
+      DGII gasta un e-NCF y no se deshace, así que lo que hace falta es que el
+      botón lo diga, no que el colegio tenga que salirse a la pantalla de
+      detalle para emitir lo que acaba de crear.
+
+      Ahora el rótulo y el efecto son el mismo: con un comprobante fiscal el
+      botón dice «Emitir e-CF» y emite; con sin-ncf dice «Guardar factura» y
+      guarda. Ver `primaryLabel` en la barra de acciones.
+    */
+    const modoEfectivo: 'emitir' | 'borrador' =
+      (tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'borrador' : modo;
 
     const err = modoEfectivo === 'borrador'
       ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : validarMotivoNota())
@@ -1159,6 +1869,32 @@ export default function NuevaFacturaForm({
       // Emitió bien: la reserva quedó consumida por este documento.
       setReservaDocId(null);
       try { localStorage.removeItem(draftKey); } catch {}
+
+      // Cuánto se tardó. Se manda y se olvida: si falla no se entera nadie, y
+      // sobre todo no toca el flujo de quien acaba de facturar.
+      apuntarTiempo({
+        ecfDocumentId: typeof data.id === 'number' ? data.id : null,
+        emitida: modoEfectivo === 'emitir',
+      });
+      /**
+       * Los comprobantes que se eligieron ANTES de que la factura existiera.
+       *
+       * Al crear no hay `docId` al que colgarlos, así que esperaron en memoria
+       * y suben ahora, con la factura ya nacida. Va antes que nada porque el
+       * flujo puede terminar navegando a otra pantalla y desmontando esto.
+       */
+      if (data.documentoId && comprobantesPendientes.length > 0) {
+        const { fallidos } = await subirPendientes(data.documentoId, comprobantesPendientes);
+        setComprobantesPendientes([]);
+        if (fallidos > 0) {
+          // La factura ya existe: esto es un aviso, no un fallo del guardado.
+          // Se pueden adjuntar después desde el detalle.
+          setAvisoComprobantes(
+            `La factura se guardó, pero ${fallidos === 1 ? 'un comprobante no subió' : `${fallidos} comprobantes no subieron`}. Puedes adjuntarlos desde el detalle de la factura.`,
+          );
+        }
+      }
+
       // Persistir clasificación por maestros (Plan A) — metadata no fiscal.
       if (data.documentoId) {
         try {
@@ -1169,10 +1905,7 @@ export default function NuevaFacturaForm({
           });
         } catch {}
       }
-      // Si la creación pasó por el double-check del método de pago (cobro real),
-      // mostramos la pantalla de éxito con los detalles en vez de resetear el
-      // formulario — el usuario acaba de confirmar un cobro y espera el recibo.
-      if (opts?.andThen === 'nueva' && !opts?.metodoConfirmado) {
+      if (opts?.andThen === 'nueva') {
         resetForm();
         return;
       }
@@ -1191,10 +1924,25 @@ export default function NuevaFacturaForm({
       }
       if (opts?.andThen === 'cobrar' && data.documentoId) {
         // Abre el detalle con el modal de link de pago (elige pasarela allí).
-        router.push(`${detalleBase}/${data.documentoId}?cobrar=1`);
+        irA(`${detalleBase}/${data.documentoId}?cobrar=1`);
         return;
       }
       setResultado(data);
+
+      /**
+       * En el cajón, la factura se ata a sus cargos SOLA.
+       *
+       * Fuera de aquí vincular es un botón que el usuario pulsa en la pantalla
+       * de resultado, y tiene sentido: allí la factura pudo nacer de cualquier
+       * sitio. Pero al cajón se entra DESDE los cargos —«Nueva factura»,
+       * «Adelantar», «Facturar juntos»—, así que no vincular no es una opción,
+       * es un olvido. Y el olvido se paga caro: la factura queda emitida, los
+       * cargos siguen en «Sin facturar», y la familia aparece debiendo dos
+       * veces lo mismo. Pasó, y por eso está esto.
+       */
+      if (sinRedirigirAlVincular && (origenCargos.length > 0 || previsto)) {
+        await saldarCargoConFactura(data.documentoId);
+      }
     } catch {
       setError('Error de conexión. Intenta de nuevo.');
     } finally {
@@ -1205,7 +1953,8 @@ export default function NuevaFacturaForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await emitir('emitir');
+    // Gasto: la acción primaria guarda como interno; emitir a DGII es opcional.
+    await emitir(esGasto ? 'borrador' : 'emitir');
   }
 
   // ─── Cmd/Ctrl + Enter → emitir ────────────────────────────────────────────
@@ -1214,14 +1963,14 @@ export default function NuevaFacturaForm({
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         if (!loading && !resultado) {
-          void emitir('emitir');
+          void emitir(esGasto ? 'borrador' : 'emitir');
         }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, resultado]);
+  }, [loading, resultado, esGasto]);
 
   // ─── Guardar NCF modal ────────────────────────────────────────────────────
   async function handleGuardarNcf() {
@@ -1255,115 +2004,377 @@ export default function NuevaFacturaForm({
     const esSinEcf = resultado.modo === 'borrador';
     const esNotaBorrador = esSinEcf && (tipoEcf === '33' || tipoEcf === '34');
     return (
-      <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8 text-center">
-            <CheckCircle className="h-16 w-16 text-teal-500 mx-auto mb-4" />
+      <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: { xs: 2, sm: 3 } }}>
+        {/* Algún comprobante no llegó a subir. La factura SÍ se guardó, así que
+            esto avisa sin alarmar y dice dónde terminar el trabajo. */}
+        {avisoComprobantes && (
+          <Box sx={{ maxWidth: 980, mx: 'auto', mb: 2 }}>
+            <Alert severity="warning" onClose={() => setAvisoComprobantes(null)}>
+              {avisoComprobantes}
+            </Alert>
+          </Box>
+        )}
+
+        {/*
+          La barra del comprobante ya emitido.
+
+          Solo en el cajón, y por una razón concreta: fuera de él la cabecera
+          de la pantalla ya dice de qué documento se trata y hay una barra de
+          navegación encima. Dentro del cajón no hay ninguna de las dos —el
+          formulario se sustituye entero por esta pantalla— y sin esto no se
+          veía por ninguna parte QUÉ número acaba de salir sin bajar a leerlo
+          entre los detalles.
+        */}
+        {sinRedirigirAlVincular && (
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.75, flexWrap: 'wrap',
+            maxWidth: 980, mx: 'auto', mb: 2,
+            bgcolor: '#fff', border: '1px solid #E6E8F0', borderRadius: '14px',
+            px: 2.25, py: 1.75, boxShadow: '0 1px 2px rgba(15,17,24,.03)',
+          }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{
+                fontSize: '1.0625rem', fontWeight: 600, letterSpacing: '-0.3px',
+                color: '#0F1118', fontVariantNumeric: 'tabular-nums',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {resultado.encf || resultado.codigo || `Documento #${resultado.documentoId}`}
+              </Typography>
+              <Typography sx={{ mt: 0.25, fontSize: '0.71875rem', color: '#8A90A0', fontVariantNumeric: 'tabular-nums' }}>
+                {[
+                  fechaEmision ? fechaEmision.split('-').reverse().join('/') : null,
+                  condicionPago === '2' && fechaLimitePago
+                    ? `Vence ${fechaLimitePago.split('-').reverse().join('/')}`
+                    : null,
+                  resultado.montoTotal != null
+                    ? `RD$ ${resultado.montoTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+                    : null,
+                ].filter(Boolean).join(' · ')}
+              </Typography>
+            </Box>
+            {/* Los dos abren el mismo PDF. Se separan porque son dos gestos
+                distintos —guardarlo o darle al padre un papel— y quien busca
+                «Imprimir» no lo encuentra bajo «Descargar». */}
+            <Button
+              variant="outlined"
+              disableElevation
+              component="a"
+              href={`/api/pdf/factura/${resultado.documentoId}`}
+              target="_blank"
+              rel="noreferrer"
+              startIcon={<FileText style={{ width: 15, height: 15 }} />}
+              sx={{ textTransform: 'none', borderRadius: '9px', height: 34, flex: '0 0 auto' }}
+            >
+              Ver PDF
+            </Button>
+            <Button
+              variant="outlined"
+              disableElevation
+              onClick={() => {
+                const v = window.open(`/api/pdf/factura/${resultado.documentoId}`, '_blank', 'noopener');
+                // El PDF lo pinta el visor del navegador y no avisa de cuándo
+                // terminó; se le pide imprimir al cargar y, si el visor no lo
+                // permite, queda abierto para hacerlo a mano.
+                v?.addEventListener?.('load', () => { try { v.print(); } catch {} });
+              }}
+              startIcon={<Printer style={{ width: 15, height: 15 }} />}
+              sx={{ textTransform: 'none', borderRadius: '9px', height: 34, flex: '0 0 auto' }}
+            >
+              Imprimir
+            </Button>
+          </Box>
+        )}
+        <Box sx={{ maxWidth: 672, mx: 'auto' }}>
+          <Box
+            sx={{
+              bgcolor: '#fff',
+              borderRadius: '16px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+              p: { xs: 2.5, sm: 4 },
+              textAlign: 'center',
+            }}
+          >
+            <CheckCircle
+              style={{ width: 64, height: 64, color: '#3658e1', margin: '0 auto 16px' }}
+            />
             {esNotaBorrador ? (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
                   ¡{tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} guardada!
-                </h2>
-                <p className="text-gray-500 mb-6">
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
                   La nota quedó guardada{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
-                </p>
+                </Typography>
               </>
             ) : esSinEcf ? (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Factura guardada!</h2>
-                <p className="text-gray-500 mb-6">Tu factura fue guardada correctamente.</p>
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
+                  ¡{esGasto ? 'Gasto guardado' : 'Factura guardada'}!
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+                  {esGasto ? 'Tu gasto fue registrado correctamente.' : 'Tu factura fue guardada correctamente.'}
+                </Typography>
               </>
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Comprobante emitido!</h2>
-                <p className="text-gray-500 mb-6">Tu e-CF fue enviado a la DGII exitosamente.</p>
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
+                  ¡Comprobante emitido!
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+                  Tu e-CF fue enviado a la DGII exitosamente.
+                </Typography>
               </>
             )}
-            <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 border border-gray-100 mb-6">
+
+            <Box
+              sx={{
+                bgcolor: '#f9fafb',
+                borderRadius: '12px',
+                p: 3,
+                textAlign: 'left',
+                border: '1px solid #f3f4f6',
+                mb: 3,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.5,
+              }}
+            >
               {!esSinEcf && resultado.encf && (
-                <div className="flex justify-between"><span className="text-sm text-gray-500">e-NCF</span><span className="font-mono font-bold">{resultado.encf}</span></div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">e-NCF</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{resultado.encf}</Typography>
+                </Box>
               )}
               {!esSinEcf && resultado.trackId && (
-                <div className="flex justify-between"><span className="text-sm text-gray-500">Track ID</span><span className="font-mono text-sm">{resultado.trackId}</span></div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">Track ID</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{resultado.trackId}</Typography>
+                </Box>
               )}
               {!esSinEcf && resultado.codigoSeguridad && (
-                <div className="flex justify-between"><span className="text-sm text-gray-500">Código de seguridad</span><span className="font-mono font-bold text-teal-700 text-lg">{resultado.codigoSeguridad}</span></div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">Código de seguridad</Typography>
+                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#2a45c4' }}>{resultado.codigoSeguridad}</Typography>
+                </Box>
               )}
-              <div className="flex justify-between"><span className="text-sm text-gray-500">Monto total</span><span className="font-bold">DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
-              {/* Fila cobro — solo en modo borrador (sin-ncf / sin DGII) */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">Monto total</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
               {resultado.modo === 'borrador' && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Cobro</span>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">{esGasto ? 'Pago' : 'Cobro'}</Typography>
                   {resultado.pagoRecibido ? (
-                    <span className="text-sm font-medium text-emerald-700">
-                      ✓ Cobrado
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'success.dark' }}>
+                      ✓ {esGasto ? 'Pagado' : 'Cobrado'}
                       {resultado.pagoMetodo ? ` · ${resultado.pagoMetodo.charAt(0).toUpperCase() + resultado.pagoMetodo.slice(1).replace('_', ' ')}` : ''}
                       {resultado.pagoValor != null ? ` · DOP ${resultado.pagoValor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : ''}
-                    </span>
+                    </Typography>
                   ) : (
-                    <span className="text-sm font-medium text-amber-600">⏳ Pendiente de cobro</span>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.dark' }}>
+                      ⏳ {esGasto ? 'Pendiente de pago' : 'Pendiente de cobro'}
+                    </Typography>
                   )}
-                </div>
+                </Box>
               )}
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">Estado</span>
-                <Badge variant="outline">
-                  {resultado.modo === 'borrador'
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Estado</Typography>
+                <Chip
+                  label={resultado.modo === 'borrador'
                     ? (resultado.pagoRecibido ? 'Pagada' : 'Guardada')
                     : resultado.estado}
-                </Badge>
-              </div>
-            </div>
+                  size="small"
+                  variant="outlined"
+                />
+              </Box>
+            </Box>
+
+            {/* Origen cargo escolar → cerrar el loop: vincular la factura al
+                cargo. El cobro se registra luego en la factura (no hay pago
+                escolar paralelo), y el cargo refleja el estado de la factura. */}
+            {origenCargos.length > 0 && (
+              <Box
+                sx={{
+                  bgcolor: '#eef2fe',
+                  border: '1px solid #e0e7fd',
+                  borderRadius: '12px',
+                  p: 2,
+                  textAlign: 'left',
+                  mb: 3,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1.5 }}>
+                  <GraduationCap style={{ width: 20, height: 20, color: '#2a45c4', flexShrink: 0, marginTop: 2 }} />
+                  <Typography variant="body2" sx={{ color: '#24377d' }}>
+                    {origenCargos.length > 1
+                      ? `Esta factura cubre ${origenCargos.length} cargos escolares. Al vincularla, los ${origenCargos.length} meses quedarán ligados a esta factura y sus saldos reflejarán lo que se cobre aquí. El cobro se registra una sola vez en la factura.`
+                      : 'Esta factura nació de un cargo escolar. Al vincularla, el cargo quedará ligado a esta factura y su saldo reflejará lo que se cobre aquí. El cobro se registra en la factura.'}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                  {cargosVinculados ? (
+                  <Chip
+                    color="success"
+                    icon={<CheckCircle style={{ width: 15, height: 15 }} />}
+                    label={origenCargos.length > 1
+                      ? `${origenCargos.length} cargos ya vinculados a esta factura`
+                      : 'Cargo ya vinculado a esta factura'}
+                    sx={{ fontWeight: 500 }}
+                  />
+                  ) : (
+                  <Button
+                    variant="contained"
+                    disableElevation
+                    disabled={saldandoCargo}
+                    onClick={() => saldarCargoConFactura(resultado.documentoId)}
+                    startIcon={saldandoCargo
+                      ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" />
+                      : <CheckCircle style={{ width: 16, height: 16 }} />}
+                    sx={{
+                      bgcolor: '#3658e1',
+                      '&:hover': { bgcolor: '#2a45c4' },
+                      textTransform: 'none',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    {saldandoCargo
+                      ? 'Vinculando…'
+                      : origenCargos.length > 1
+                        ? 'Vincular a los cargos y volver al estudiante'
+                        : 'Vincular al cargo y volver al estudiante'}
+                  </Button>
+                  )}
+                  <Button
+                    variant="outlined"
+                    disableElevation
+                    disabled={saldandoCargo}
+                    onClick={() => irA(`${detalleBase}/${resultado.documentoId}`)}
+                    sx={{ textTransform: 'none', borderRadius: '8px' }}
+                  >
+                    Ver factura sin vincular
+                  </Button>
+                </Box>
+              </Box>
+            )}
+
             {/* Nota en borrador → elección explícita: emitir ahora o dejar borrador.
                 Nunca obligatorio — emitir requiere que la factura padre tenga e-CF. */}
             {esNotaBorrador && (
-              <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
-                <p className="text-sm text-teal-900 mb-3">
+              <Box
+                sx={{
+                  bgcolor: '#eef2fe',
+                  border: '1px solid #e0e7fd',
+                  borderRadius: '12px',
+                  p: 2,
+                  textAlign: 'left',
+                  mb: 3,
+                }}
+              >
+                <Typography variant="body2" sx={{ color: '#24377d', mb: 1.5 }}>
                   ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
                   factura original ya tiene e-CF emitido. También puedes dejarla
                   guardada y emitirla después desde su detalle.
-                </p>
-                <div className="flex gap-3 flex-wrap">
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                   <Button
-                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                    variant="contained"
+                    disableElevation
                     disabled={padreNota ? (!padreNota.conEcfReal && !ncfModificadoValido) : false}
-                    onClick={() => router.push(`${detalleBase}/${resultado.documentoId}?emitir=1`)}
+                    onClick={() => irA(`${detalleBase}/${resultado.documentoId}?emitir=1`)}
+                    startIcon={<Send style={{ width: 16, height: 16 }} />}
+                    sx={{
+                      bgcolor: '#3658e1',
+                      '&:hover': { bgcolor: '#2a45c4' },
+                      textTransform: 'none',
+                      borderRadius: '8px',
+                    }}
                   >
-                    <Send className="h-4 w-4 mr-1.5" />
                     Enviar a DGII ahora
                   </Button>
                   <Button
-                    variant="outline"
-                    onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
+                    variant="outlined"
+                    disableElevation
+                    onClick={() => irA(`${detalleBase}/${resultado.documentoId}`)}
+                    sx={{ textTransform: 'none', borderRadius: '8px' }}
                   >
-                    Guardar sin emitir
+                    Dejar como borrador
                   </Button>
-                </div>
+                </Box>
                 {padreNota && !padreNota.conEcfReal && !ncfModificadoValido && (
-                  <p className="text-xs text-amber-700 mt-2">
+                  <Typography variant="caption" color="warning.dark" sx={{ display: 'block', mt: 1 }}>
                     Escribe el e-NCF original en la nota para poder enviarla a la DGII, o emite primero la factura padre.
-                  </p>
+                  </Typography>
                 )}
-              </div>
+              </Box>
             )}
-            <div className="flex gap-3 justify-center flex-wrap">
-              <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>
-              <Button variant="outline" asChild><Link href={`${detalleBase}/${resultado.documentoId}`}>Ver detalle</Link></Button>
-              <Button variant="outline" onClick={() => { try { localStorage.removeItem(draftKey); } catch {} setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva {docAccent.noun}</Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push(detalleBase)}>Ver todas</Button>
-            </div>
-          </div>
-        </div>
-      </div>
+            <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                disableElevation
+                component="a"
+                href={`/api/pdf/factura/${resultado.documentoId}`}
+                target="_blank"
+                rel="noreferrer"
+                sx={{ textTransform: 'none', borderRadius: '8px' }}
+              >
+                Descargar PDF
+              </Button>
+              <Button
+                variant="outlined"
+                disableElevation
+                component={Link}
+                href={`${detalleBase}/${resultado.documentoId}`}
+                sx={{ textTransform: 'none', borderRadius: '8px' }}
+              >
+                Ver detalle
+              </Button>
+              <Button
+                variant="outlined"
+                disableElevation
+                onClick={() => {
+                  try { localStorage.removeItem(draftKey); } catch {}
+                  setResultado(null);
+                  setPaso(1);
+                  setCargosVinculados(false);
+                  dispatchItems({ type: 'RESET' });
+                  limpiarCliente();
+                }}
+                sx={{ textTransform: 'none', borderRadius: '8px' }}
+              >
+                {esGasto ? 'Nuevo gasto' : `Nueva ${docAccent.noun}`}
+              </Button>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={() => irA(detalleBase)}
+                sx={{
+                  bgcolor: '#3658e1',
+                  '&:hover': { bgcolor: '#2a45c4' },
+                  textTransform: 'none',
+                  borderRadius: '8px',
+                }}
+              >
+                Ver todas
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
   // ─── Formulario ───────────────────────────────────────────────────────────
+  if (cargandoPrefill) return <EsqueletoFactura />;
+
   return (
-    <div className="bg-[#eef0f7] min-h-full flex flex-col">
-      <a href="#main-content" className="skip-link">Saltar al contenido</a>
-      <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box component="a" href="#main-content" sx={{ position: 'absolute', left: '-9999px', '&:focus': { left: 8, top: 8, zIndex: 9999 } }}>Saltar al contenido</Box>
+      <Box sx={{ p: { xs: 1.5, sm: 2, md: 2.5 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <NavBar
+          ocultarPersonalizar={modoColegio}
+          onVolver={onVolver}
           title={initialData ? tituloDoc.editar : tituloDoc.nuevo}
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
           showListaPrecios={showListaPrecios}   setShowListaPrecios={setShowListaPrecios}
@@ -1372,16 +2383,75 @@ export default function NuevaFacturaForm({
         />
 
         {error && (
-          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-            <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
+          <Alert
+            severity="error"
+            icon={<AlertTriangle style={{ width: 20, height: 20 }} />}
+            sx={{ borderRadius: '12px', mb: 2 }}
+          >
+            {error}
+          </Alert>
         )}
 
-        <form
+        {/* Banner: nota creada desde una factura */}
+        {padreNota && (tipoEcf === '33' || tipoEcf === '34') && (
+          <Alert
+            severity={padreNota.conEcfReal ? 'success' : 'warning'}
+            icon={<FileText style={{ width: 20, height: 20 }} />}
+            sx={{ borderRadius: '12px', mb: 2, alignItems: 'flex-start' }}
+          >
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
+                <Link
+                  href={`/dashboard/facturas/${padreNota.id}`}
+                  style={{ fontFamily: 'monospace', textDecoration: 'underline' }}
+                  target="_blank"
+                >
+                  {padreNota.conEcfReal ? padreNota.encf : (padreNota.codigo ?? `#${padreNota.id}`)}
+                </Link>
+              </Typography>
+              <Box
+                sx={{
+                  mt: 1,
+                  display: 'grid',
+                  gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
+                  gap: '4px 16px',
+                }}
+              >
+                {padreNota.razonSocial && (
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>Cliente</Typography>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>{padreNota.razonSocial}</Typography>
+                  </Box>
+                )}
+                {padreNota.montoTotal && (
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>Monto original</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>RD$ {padreNota.montoTotal}</Typography>
+                  </Box>
+                )}
+                {padreNota.fechaEmision && (
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>Fecha</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{padreNota.fechaEmision}</Typography>
+                  </Box>
+                )}
+              </Box>
+              {!padreNota.conEcfReal && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                  La factura original no tiene e-CF emitido — esta nota solo puede guardarse como{' '}
+                  <strong>borrador</strong>. Podrás enviarla a la DGII cuando el padre sea emitido.
+                </Typography>
+              )}
+            </Box>
+          </Alert>
+        )}
+
+        <Box
+          component="form"
           id="main-content"
           onSubmit={handleSubmit}
-          onKeyDown={(e) => {
+          onKeyDown={(e: React.KeyboardEvent<HTMLFormElement>) => {
             const t = e.target as HTMLElement;
             const isInput = t.tagName === 'INPUT' || t.tagName === 'SELECT';
             const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
@@ -1389,47 +2459,71 @@ export default function NuevaFacturaForm({
               e.preventDefault();
             }
           }}
-          className="flex-1 flex flex-col"
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          <TopBar
-            showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
-            showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}
-            showVendedor={showVendedor} setShowVendedor={setShowVendedor}
-            toggleOpcion={toggleOpcion}
-            almacenes={almacenes} listasPrecios={listasPrecios} vendedores={vendedores}
-            almacenId={almacenId} setAlmacenId={setAlmacenId} setAlmacenNombre={setAlmacenNombre}
-            listaPreciosId={listaPreciosId} setListaPreciosId={setListaPreciosId} setListaPreciosNombre={setListaPreciosNombre}
-            vendedorId={vendedorId} setVendedorId={setVendedorId} setVendedorNombre={setVendedorNombre}
-            onOpenNuevoAlmacen={() => setShowNuevoAlmacen(true)}
-            onOpenNuevaLista={() => setShowNuevaLista(true)}
-            onOpenNuevoVendedor={() => setShowNuevoVendedor(true)}
-          />
+          {!esGasto && (
+            <TopBar
+              showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
+              showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}
+              showVendedor={showVendedor} setShowVendedor={setShowVendedor}
+              toggleOpcion={toggleOpcion}
+              almacenes={almacenes} listasPrecios={listasPrecios} vendedores={vendedores}
+              almacenId={almacenId} setAlmacenId={setAlmacenId} setAlmacenNombre={setAlmacenNombre}
+              listaPreciosId={listaPreciosId} setListaPreciosId={setListaPreciosId} setListaPreciosNombre={setListaPreciosNombre}
+              vendedorId={vendedorId} setVendedorId={setVendedorId} setVendedorNombre={setVendedorNombre}
+              onOpenNuevoAlmacen={() => setShowNuevoAlmacen(true)}
+              onOpenNuevaLista={() => setShowNuevaLista(true)}
+              onOpenNuevoVendedor={() => setShowNuevoVendedor(true)}
+            />
+          )}
+
+          {/* Los dos pasos, con el que toca en azul. Solo se enseña mientras
+              se edita: en la pantalla de resultado ya no hay a dónde volver. */}
+          {modoColegio && <Pasos paso={paso} />}
 
           {/* ── SPLIT LAYOUT: form left, sticky sidebar right ─────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5">
-            {/* LEFT column */}
-            <div className="space-y-4 min-w-0">
-              <CompactHeader
-                empresa={empresa}
-                categoriaId={categoriaId} setCategoriaId={setCategoriaId}
-                tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
-                ocultarCategoria={ocultarCategoria}
-                mostrarCodigoTipo={!(padreNota && !padreNota.conEcfReal && !ncfModificadoValido)}
-                // Nota sobre factura sin e-CF → nunca tendrá e-NCF real: mostrar "Sin
-                // comprobante fiscal" en vez de un próximo e-NCF que no se va a usar.
-                sinComprobante={esPadreSinNcf}
-                secuencia={secuencia}
-                fechaEmision={fechaEmision}
-                puedeEditarFecha={puedeEditarFecha}
-                onChangeFecha={setFechaEmision}
-                onEditarNcf={() => {
-                  setNcfSiguienteNum('');
-                  setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
-                  setNcfPieFactura(secuencia?.pieDeFactura ?? '');
-                  setNcfError(null);
-                  setShowEditarNcf(true);
-                }}
-              />
+          <Box
+            sx={{
+              display: 'grid',
+              // En modo colegio no hay barra lateral: el resumen y el pago son
+              // el paso 2, así que la columna del formulario se queda sola y
+              // centrada. Suelta ocupaba 1.240px de ancho para una tabla de
+              // cinco columnas.
+              gridTemplateColumns: modoColegio ? '1fr' : { xs: '1fr', lg: 'minmax(0,1fr) 360px' },
+              gap: { xs: 2, lg: 2.5 },
+              ...(modoColegio ? { maxWidth: 980, mx: 'auto', width: '100%' } : {}),
+            }}
+          >
+            {/* LEFT column — en modo colegio, solo el paso 1 */}
+            {(!modoColegio || paso === 1) && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              {!esGasto && (
+                <CompactHeader
+                  camposMinimos={modoColegio}
+                  // No se bloquea el tipo en el flujo escolar: qué comprobantes
+                  // se ofrecen lo decide `useTiposDisponibles` igual que en
+                  // «Nueva factura» (sin-ncf siempre; e31/e32 solo si el colegio
+                  // está listo para la DGII). Ver el MD de facturas.
+                  tipoBloqueado={false}
+                  empresa={empresa}
+                  categoriaId={categoriaId} setCategoriaId={setCategoriaId}
+                  tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
+                  ocultarCategoria={ocultarCategoria}
+                  mostrarCodigoTipo={!(padreNota && !padreNota.conEcfReal && !ncfModificadoValido)}
+                  sinComprobante={esPadreSinNcf}
+                  secuencia={secuencia}
+                  fechaEmision={fechaEmision}
+                  puedeEditarFecha={puedeEditarFecha}
+                  onChangeFecha={setFechaEmision}
+                  onEditarNcf={() => {
+                    setNcfSiguienteNum('');
+                    setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
+                    setNcfPieFactura(secuencia?.pieDeFactura ?? '');
+                    setNcfError(null);
+                    setShowEditarNcf(true);
+                  }}
+                />
+              )}
 
               {(tipoEcf === '33' || tipoEcf === '34') && (
                 <FacturaOrigenSection
@@ -1448,57 +2542,73 @@ export default function NuevaFacturaForm({
                 />
               )}
 
-              <SectionCard number={1} title="Datos del cliente" icon={User}>
-                <ClienteSection
-                  clienteSeleccionado={clienteSeleccionado}
-                  buscarClientes={buscarClientes}
-                  onSelectCliente={seleccionarCliente}
-                  onClearCliente={limpiarCliente}
-                  onOpenNuevoCliente={() => setShowNuevoCliente(true)}
-                  regla={regla}
-                  rncManual={rncManual} rncManualNombre={rncManualNombre}
-                  setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
-                  emailManual={emailManual} setEmailManual={setEmailManual}
-                  telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
-                  tipoEcf={tipoEcf} totalDocumento={totales.total}
-                />
-              </SectionCard>
-
-              <SectionCard number={2} title="Detalles de la factura" icon={Calendar}>
-                <DetallesSection
-                  regla={regla} tipoEcf={tipoEcf}
-                  condicionPago={condicionPago} setCondicionPago={setCondicionPago}
-                  diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
-                  tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
-                  fechaLimitePago={fechaLimitePago}
-                  empresa={empresa}
-                  sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
-                />
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <ClasificacionFactura
-                    docId={initialData?.id}
-                    value={clasificacion}
-                    onChange={setClasificacion}
+              {esGasto ? (
+                <SectionCard number={1} title="Registro del gasto" icon={Calendar}>
+                  <GastoDatosSection
+                    proveedor={rncManualNombre} setProveedor={setRncManualNombre}
+                    rncProveedor={rncManual} setRncProveedor={setRncManual}
+                    ncfProveedor={ncfProveedor} setNcfProveedor={setNcfProveedor}
+                    categoriaGasto={categoriaGasto} setCategoriaGasto={setCategoriaGasto}
+                    fechaGasto={fechaGasto} setFechaGasto={setFechaGasto}
+                    tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
                   />
-                </div>
-              </SectionCard>
+                </SectionCard>
+              ) : (
+                <>
+                  <SectionCard number={1} title="Datos del cliente" icon={User}>
+                    <ClienteSection
+                      clienteSeleccionado={clienteSeleccionado}
+                      buscarClientes={buscarClientes}
+                      onSelectCliente={seleccionarCliente}
+                      onClearCliente={limpiarCliente}
+                      onOpenNuevoCliente={() => setShowNuevoCliente(true)}
+                      regla={regla}
+                      rncManual={rncManual} rncManualNombre={rncManualNombre}
+                      setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
+                      emailManual={emailManual} setEmailManual={setEmailManual}
+                      telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
+                      tipoEcf={tipoEcf} totalDocumento={totales.total}
+                      soloLectura={modoColegio}
+                    />
+                  </SectionCard>
+                  <SectionCard number={2} title="Detalles de la factura" icon={Calendar}>
+                    <DetallesSection
+                      camposMinimos={modoColegio}
+                      regla={regla} tipoEcf={tipoEcf}
+                      condicionPago={condicionPago} setCondicionPago={setCondicionPago}
+                      diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
+                      tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
+                      fechaLimitePago={fechaLimitePago}
+                      empresa={empresa}
+                      sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
+                    />
+                    <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
+                      <ClasificacionFactura docId={initialData?.id} value={clasificacion} onChange={setClasificacion} />
+                    </Box>
+                  </SectionCard>
+                </>
+              )}
 
               <SectionCard
-                number={3}
-                title="Productos y servicios"
+                number={esGasto ? 2 : 3}
+                title={esGasto ? 'Detalle e importe' : 'Productos y servicios'}
                 icon={Package}
                 actions={
                   <ColumnasToggle
                     showReferencia={showItemRef}
                     showDescripcion={showItemDesc}
+                    showDescuento={showItemDescuento}
                     onToggleReferencia={handleToggleRef}
                     onToggleDescripcion={handleToggleDesc}
+                    onToggleDescuento={handleToggleDescuento}
                   />
                 }
               >
                 <ItemsTable
                   items={items}
                   regla={regla}
+                  ocultarItbis={ocultarItbisEscolar}
+                  ocultarConduce={modoColegio}
                   buscarProductos={buscarProductos}
                   onSelectProducto={seleccionarProducto}
                   onCrearProductoLibre={crearProductoLibre}
@@ -1509,47 +2619,53 @@ export default function NuevaFacturaForm({
                   onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
+                  showDescuento={showItemDescuento}
                   dependientes={dependientesCliente}
-                  bloquearPrecios={bloquearPrecios}
+                  bloquearPrecios={esGasto ? false : bloquearPrecios}
+                  modoGasto={esGasto}
                 />
-                <RetencionesSection
-                  retenciones={retenciones} setRetenciones={setRetenciones}
-                  totalesItbis={totales.itbis} totalesSubtotal={totales.subtotal}
-                />
+                {/* Las retenciones son de quien le compra al Estado o a un
+                    gran contribuyente. Un colegio le cobra a familias: nunca
+                    aplica, y el enlace solo invita a equivocarse. */}
+                {!modoColegio && (
+                  <RetencionesSection
+                    retenciones={retenciones} setRetenciones={setRetenciones}
+                    totalesItbis={totales.itbis} totalesSubtotal={totales.subtotal}
+                  />
+                )}
               </SectionCard>
 
-              <AccordionSection
-                number={4} title="Términos y condiciones" icon={ScrollText}
-                defaultOpen={terminosCondiciones.trim().length > 0}
-              >
-                <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
-              </AccordionSection>
+              {!esGasto && (
+                <AccordionSection number={4} title="Términos y condiciones" icon={ScrollText} defaultOpen={terminosCondiciones.trim().length > 0}>
+                  <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
+                </AccordionSection>
+              )}
 
               <AccordionSection
-                number={5} title="Notas" icon={StickyNote}
+                number={esGasto ? 3 : 5} title={esGasto ? 'Notas internas' : 'Notas'} icon={StickyNote}
                 defaultOpen={notas.trim().length > 0}
               >
                 <Notas notas={notas} setNotas={setNotas} />
               </AccordionSection>
 
-              <AccordionSection
-                number={6} title="Pie de factura" icon={FileText}
-                defaultOpen={pieFactura.trim().length > 0}
-              >
-                <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} label={docAccent.noun === 'factura' ? 'Pie de factura' : 'Pie del documento'} />
-              </AccordionSection>
-
-              <AccordionSection
-                number={7} title="Comentario" icon={MessageSquare}
-                defaultOpen={comentario.trim().length > 0}
-              >
-                <Comentarios comentario={comentario} setComentario={setComentario} />
-              </AccordionSection>
+              {!esGasto && (<>
+                <AccordionSection number={6} title="Pie de factura" icon={FileText} defaultOpen={pieFactura.trim().length > 0}>
+                  <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} label={docAccent.noun === 'factura' ? 'Pie de factura' : 'Pie del documento'} />
+                </AccordionSection>
+                <AccordionSection number={7} title="Comentario" icon={MessageSquare} defaultOpen={comentario.trim().length > 0}>
+                  <Comentarios comentario={comentario} setComentario={setComentario} />
+                </AccordionSection>
+              </>)}
 
               {/* Sección 8 Pago movida al sidebar derecho (ResumenSidebar) */}
-            </div>
+            </Box>
 
-            {/* RIGHT column — sticky sidebar: Resumen + Pago */}
+            )}
+
+            {/* RIGHT column — sticky sidebar: Resumen + Pago.
+                En modo colegio deja de ser barra lateral y pasa a ser el
+                paso 2, a lo ancho de la columna. */}
+            {(!modoColegio || paso === 2) && (
             <ResumenSidebar
               empresa={empresa}
               totales={totales}
@@ -1560,11 +2676,16 @@ export default function NuevaFacturaForm({
               // Una Nota de Crédito acredita al cliente — no se cobra ningún pago al
               // crearla. Ocultar el card "Pago".
               showPago={tipoEcf !== '34'}
+              pagoLabel={esGasto ? 'Pagado (sale de la caja)' : undefined}
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
+              comprobantesPendientes={comprobantesPendientes}
+              setComprobantesPendientes={setComprobantesPendientes}
+              enPaso={modoColegio}
             />
-          </div>
+            )}
+          </Box>
 
           {/* Action bar — sticky bottom, full width */}
           <BottomActionBar
@@ -1572,16 +2693,33 @@ export default function NuevaFacturaForm({
             loading={loading}
             loadingPreview={loadingPreview}
             primaryBtnClass={docAccent.primaryBtnClass}
-            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : esPadreSinNcf ? 'Guardar' : 'Emitir e-CF'}
-            loadingPrimaryLabel={(tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
+            // Misma regla en el cajón del colegio que en «Nueva factura»: el
+            // rótulo lo decide el TIPO de comprobante, no el flujo. Un e31 en
+            // el cajón hacía lo mismo que un e31 en la pantalla grande, pero
+            // el botón decía otra cosa.
+            primaryLabel={esGasto ? 'Guardar gasto'
+              : tipoEcf === 'sin-ncf' ? 'Guardar factura'
+              : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
+            loadingPrimaryLabel={(esGasto || tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
+            // El paso 1 no emite nada: su botón lleva al pago. Emitir vive al
+            // final, cuando ya se decidió si se cobra en el acto — que es lo
+            // que cambia si la factura sale pagada o queda por cobrar.
+            paso={modoColegio ? paso : undefined}
+            onSiguiente={() => setPaso(2)}
+            onAtras={() => setPaso(1)}
             onCancelar={() => {
               try { localStorage.removeItem(draftKey); } catch {}
-              router.push('/dashboard/facturas');
+              // Dentro de un cajón, cancelar es CERRARLO. Navegando, la página
+              // de debajo —la ficha del alumno o de la familia desde la que se
+              // estaba facturando— se cambiaba por el listado de facturas, y al
+              // cerrar el cajón uno aparecía en otro sitio sin haberlo pedido.
+              if (onVolver) { onVolver(); return; }
+              router.push(esGasto ? '/dashboard/gastos/nueva' : '/dashboard/facturas');
             }}
           />
-        </form>
+        </Box>
 
         {/* Modals */}
         <ModalPreviewPDF
@@ -1708,65 +2846,7 @@ export default function NuevaFacturaForm({
           />
         )}
 
-        {/* Aviso al guardar una factura de contado sin pago (con mora configurada) */}
-        {confirmContado && (
-          <Dialog open onOpenChange={(o) => { if (!o && !loading) setConfirmContado(null); }}>
-            <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
-                  Factura sin pago registrado
-                </DialogTitle>
-                <DialogDescription className="pt-1 text-sm text-gray-600">
-                  Está marcada <span className="font-semibold">de contado</span> pero no registraste
-                  ningún pago. Quedará por cobrar, sin fecha de vencimiento y sin generar la mora
-                  automática que tienes configurada. Puedes cambiarla a crédito para que aplique el
-                  vencimiento y la mora, o continuar de contado.
-                </DialogDescription>
-              </DialogHeader>
-              <label className="flex items-center gap-2 mt-1 text-sm text-gray-600 select-none cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={noMostrarContado}
-                  onChange={(e) => setNoMostrarContado(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                />
-                No volver a mostrar este mensaje
-              </label>
-              <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
-                <Button
-                  variant="outline"
-                  onClick={() => setConfirmContado(null)}
-                  disabled={loading}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  variant="outline"
-                  className="border-teal-600 text-teal-700 hover:bg-teal-50"
-                  onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setCondicionPago('2'); setConfirmContado(null); }}
-                  disabled={loading}
-                >
-                  Cambiar a crédito
-                </Button>
-                <Button
-                  className="bg-amber-500 hover:bg-amber-600 text-white"
-                  onClick={() => {
-                    const pend = confirmContado;
-                    if (noMostrarContado) persistOcultarAvisoContado();
-                    setConfirmContado(null);
-                    void emitir(pend.modo, { ...pend.opts, contadoConfirmado: true });
-                  }}
-                  disabled={loading}
-                >
-                  Continuar de contado
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

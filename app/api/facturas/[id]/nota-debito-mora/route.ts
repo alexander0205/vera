@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { teamMembers, users } from '@/lib/db/schema';
+import { ecfDocuments, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
@@ -62,6 +62,15 @@ export async function POST(
   if (!Number.isInteger(ecfDocumentId) || ecfDocumentId <= 0) {
     return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
   }
+
+  // El generador recibe un ID global. Verificar pertenencia antes de mutar para
+  // que un miembro de otro team no pueda generar mora por un ID adivinable.
+  const [factura] = await db
+    .select({ id: ecfDocuments.id })
+    .from(ecfDocuments)
+    .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
+    .limit(1);
+  if (!factura) return NextResponse.json({ error: 'Factura no encontrada.' }, { status: 404 });
 
   const res = await generarNotaDebitoMora(ecfDocumentId, { createdBy: user.id });
 
