@@ -23,6 +23,7 @@ import {
 } from '@/lib/whatsapp/client';
 import { deducirVariables } from '@/lib/whatsapp/catalogo';
 import { getPlantillasDeTeam } from '@/lib/whatsapp/plantillas';
+import { aplicarPendientes } from '@/lib/whatsapp/plantillas-servicio';
 import { casosDeUso, nombreMeta, pegasDeMeta } from '@/lib/whatsapp/plantillas-colegio';
 
 const CATEGORIAS = ['utility', 'marketing'] as const;
@@ -60,7 +61,7 @@ export async function GET() {
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
 
-  const locales = await db.select().from(whatsappPlantillas)
+  let locales = await db.select().from(whatsappPlantillas)
     .where(or(eq(whatsappPlantillas.teamId, teamId), isNull(whatsappPlantillas.teamId)))
     .orderBy(whatsappPlantillas.nombre);
 
@@ -79,6 +80,15 @@ export async function GET() {
     }
   }
   const porClave = new Map(deMeta.map((t) => [`${t.name}|${t.language}`, t]));
+
+  // Las que esperaban aprobación y Meta ya aprobó se asignan aquí, antes de
+  // leer las asignaciones, para que la pantalla ya las muestre puestas.
+  const aplicadas = deMeta.length > 0 ? await aplicarPendientes(teamId, deMeta) : [];
+  if (aplicadas.length > 0) {
+    locales = await db.select().from(whatsappPlantillas)
+      .where(or(eq(whatsappPlantillas.teamId, teamId), isNull(whatsappPlantillas.teamId)))
+      .orderBy(whatsappPlantillas.nombre);
+  }
 
   const plantillas = locales.map((l) => {
     const crm = porClave.get(`${l.nombre}|${l.idioma}`);
@@ -100,6 +110,7 @@ export async function GET() {
       esBorrador: l.borrador,
       // Las de la plataforma se pueden usar pero no tocar.
       propia: l.teamId === teamId,
+      avisoDestino: l.avisoDestino,
     };
   });
 
@@ -113,6 +124,7 @@ export async function GET() {
     plantillas,
     casos: casosDeUso(),
     asignaciones,
+    aplicadas,
     botonesActivos: CRM_SOPORTA_BOTONES,
     canal: {
       disponible: remitente != null,

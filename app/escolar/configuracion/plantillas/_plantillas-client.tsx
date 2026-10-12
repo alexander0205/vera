@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, CheckCheck, CheckCircle2, Clock, FilePlus2, Loader2, MessageCircle,
+  AlertTriangle, CheckCheck, CheckCircle2, Clock, FilePlus2, Loader2,
   Pencil, Send, Sparkles, Trash2, X, XCircle,
 } from 'lucide-react';
+import { Asistente } from './_asistente';
 import { Button } from '@/components/ui/button';
 import { pegasDeMeta, contarVariables, MAX_CUERPO } from '@/lib/whatsapp/plantillas-reglas';
 
@@ -37,6 +38,7 @@ interface Plantilla {
   boton: Boton | null;
   esBorrador: boolean;
   propia: boolean;
+  avisoDestino: string | null;
 }
 interface Caso { clave: string; titulo: string; detalle: string; variables: Variable[] }
 interface Asignacion { aviso: string; nombre: string; propia: boolean; conBoton: boolean }
@@ -44,6 +46,7 @@ interface Datos {
   plantillas: Plantilla[];
   casos: Caso[];
   asignaciones: Asignacion[];
+  aplicadas?: string[];
   botonesActivos: boolean;
   canal: { disponible: boolean; propio: boolean; error: string | null };
 }
@@ -124,6 +127,7 @@ export function PlantillasWhatsApp() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [editor, setEditor] = useState<Borrador | null>(null);
+  const [asistente, setAsistente] = useState<{ inicial: string | null } | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -132,6 +136,7 @@ export function PlantillasWhatsApp() {
       if (!r.ok) throw new Error(d.error ?? 'No se pudieron cargar las plantillas');
       setDatos(d);
       setError(null);
+      if (d.aplicadas?.length) setAviso(`Meta aprobó y se asignó: ${d.aplicadas.join(', ')}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error de conexión');
     } finally {
@@ -262,11 +267,16 @@ export function PlantillasWhatsApp() {
 
       {/* 1 · Casos de uso */}
       <section className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">Qué avisos salen y con qué plantilla</h2>
-          <p className="text-sm text-gray-500">
-            Cada situación de cobro usa una plantilla aprobada. Si no eliges ninguna, se usa la de Zero.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Qué avisos salen y con qué plantilla</h2>
+            <p className="text-sm text-gray-500">
+              Cada situación de cobro usa una plantilla aprobada. Si no eliges ninguna, se usa la de Zero.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setAsistente({ inicial: null })}>
+            <Sparkles className="mr-1 h-4 w-4" /> Asistente IA
+          </Button>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -296,9 +306,12 @@ export function PlantillasWhatsApp() {
                     <option value="">{a && !a.propia && a.nombre ? `Por defecto (${a.nombre})` : 'Por defecto de Zero'}</option>
                     {opciones.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
                   </select>
-                  <Button size="sm" variant="outline" onClick={() => nuevaPara(c)}>
-                    <Sparkles className="mr-1 h-3.5 w-3.5" /> Crear
+                  <Button size="sm" variant="outline" onClick={() => setAsistente({
+                    inicial: `Crea la plantilla para el aviso «${c.titulo}» (${c.clave}), mándala a aprobación y asígnala.`,
+                  })}>
+                    <Sparkles className="mr-1 h-3.5 w-3.5" /> Con IA
                   </Button>
+                  <Button size="sm" variant="ghost" onClick={() => nuevaPara(c)}>Manual</Button>
                 </div>
                 {a?.propia && a.conBoton && !datos.botonesActivos && (
                   <p className="mt-2 text-xs text-amber-700">
@@ -335,6 +348,12 @@ export function PlantillasWhatsApp() {
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                 {p.categoria === 'marketing' ? 'Marketing' : 'Utilidad'}
               </span>
+              {p.avisoDestino && (
+                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700">
+                  Para «{datos.casos.find((c) => c.clave === p.avisoDestino)?.titulo ?? p.avisoDestino}»
+                  {p.esBorrador ? ' · pendiente de enviar' : ' · se asigna al aprobarse'}
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-1">
                 {p.esBorrador && (
                   <Button size="sm" variant="outline" disabled={!datos.canal.disponible || ocupado === `pub-${p.id}`}
@@ -363,6 +382,10 @@ export function PlantillasWhatsApp() {
         ))}
       </section>
 
+      {asistente && (
+        <Asistente inicial={asistente.inicial} onCerrar={() => setAsistente(null)} onCambios={() => void cargar()} />
+      )}
+
       {editor && (
         <Editor
           borrador={editor}
@@ -380,16 +403,6 @@ export function PlantillasWhatsApp() {
 }
 
 // ─── Editor + chat ────────────────────────────────────────────────────────────
-
-interface Mensaje { role: 'user' | 'assistant'; content: string; propuesta?: Propuesta | null }
-interface Propuesta {
-  nombre: string;
-  categoria: 'utility' | 'marketing';
-  cuerpo: string;
-  pie: string | null;
-  variables: Variable[];
-  avisoSugerido: string | null;
-}
 
 function Editor({ borrador, casos, ocupado, puedePublicar, esBorradorEnMeta, onCambiar, onCerrar, onGuardar }: {
   borrador: Borrador;
@@ -418,63 +431,9 @@ function Editor({ borrador, casos, ocupado, puedePublicar, esBorradorEnMeta, onC
     cambiar({ variables: variables.map((v) => (v.pos === pos ? { ...v, ...p } : v)) });
   }
 
-  // ── Chat ──
-  const [chat, setChat] = useState<Mensaje[]>([]);
-  const [entrada, setEntrada] = useState('');
-  const [pensando, setPensando] = useState(false);
-  const [errorIa, setErrorIa] = useState<string | null>(null);
-  const finRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { finRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat, pensando]);
-
-  async function enviar(texto: string) {
-    const t = texto.trim();
-    if (!t || pensando) return;
-    const historial: Mensaje[] = [...chat, { role: 'user', content: t }];
-    setChat(historial); setEntrada(''); setPensando(true); setErrorIa(null);
-    try {
-      const r = await fetch('/api/administracion-escolar/whatsapp-plantillas/ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mensajes: historial.map(({ role, content }) => ({ role, content })),
-          borrador: { nombre: borrador.nombre, cuerpo: borrador.cuerpo, avisoDestino: borrador.aviso },
-        }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error ?? 'El asistente no respondió');
-      setChat([...historial, { role: 'assistant', content: d.respuesta, propuesta: d.propuesta }]);
-    } catch (e) {
-      setErrorIa(e instanceof Error ? e.message : 'Error de conexión');
-    } finally {
-      setPensando(false);
-    }
-  }
-
-  function aplicar(p: Propuesta) {
-    // Si el caso de uso ya está fijado, sus variables mandan: la IA solo pone el
-    // texto. Si no, se toman las suyas.
-    const sugerido = casos.find((c) => c.clave === p.avisoSugerido) ?? null;
-    const destino = caso ?? sugerido;
-    onCambiar({
-      ...borrador,
-      nombre: borrador.nombre.trim() || p.nombre,
-      categoria: p.categoria,
-      cuerpo: p.cuerpo,
-      pie: p.pie ?? '',
-      aviso: destino?.clave ?? null,
-      variables: destino
-        ? destino.variables.map((v) => ({ ...v }))
-        : p.variables,
-    });
-  }
-
-  const SUGERENCIAS = caso
-    ? [`Escribe la plantilla para «${caso.titulo}»`, 'Hazla más cordial', 'Hazla más corta']
-    : ['Recordatorio de mensualidad con tono amable', 'Aviso de reunión de padres', 'Hazla más corta'];
-
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <div className="my-4 w-full max-w-5xl rounded-2xl bg-white shadow-xl">
+      <div className="my-4 w-full max-w-3xl rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
           <h3 className="text-base font-semibold text-gray-900">
             {borrador.id == null ? 'Nueva plantilla' : 'Editar plantilla'}
@@ -485,7 +444,7 @@ function Editor({ borrador, casos, ocupado, puedePublicar, esBorradorEnMeta, onC
           </button>
         </div>
 
-        <div className="grid gap-5 p-5 lg:grid-cols-[1fr_340px]">
+        <div className="grid gap-5 p-5">
           {/* Formulario */}
           <div className="min-w-0 space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -608,64 +567,6 @@ function Editor({ borrador, casos, ocupado, puedePublicar, esBorradorEnMeta, onC
             </div>
           </div>
 
-          {/* Chat con IA */}
-          <aside className="flex h-[560px] min-h-0 flex-col rounded-xl border border-gray-200 bg-gray-50 lg:sticky lg:top-4">
-            <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2">
-              <Sparkles className="h-4 w-4 text-zero-600" />
-              <p className="text-sm font-medium text-gray-900">Asistente de plantillas</p>
-            </div>
-
-            <div className="flex-1 space-y-3 overflow-y-auto p-3">
-              {chat.length === 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-500">
-                    Cuéntame qué quieres avisar y lo redacto con las reglas de Meta. También puedo mejorar lo que ya escribiste.
-                  </p>
-                  {SUGERENCIAS.map((s) => (
-                    <button key={s} onClick={() => void enviar(s)}
-                      className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-xs text-gray-700 hover:border-zero-600">
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {chat.map((m, i) => (
-                <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
-                  <div className={`max-w-[92%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
-                    m.role === 'user' ? 'bg-zero-600 text-white' : 'border border-gray-200 bg-white text-gray-800'}`}>
-                    <p className="whitespace-pre-wrap">{m.content}</p>
-                    {m.propuesta && (
-                      <div className="mt-2 space-y-2 rounded-lg bg-gray-50 p-2">
-                        <p className="whitespace-pre-wrap text-gray-700">{m.propuesta.cuerpo}</p>
-                        <Button size="sm" onClick={() => aplicar(m.propuesta!)}>
-                          <MessageCircle className="mr-1 h-3.5 w-3.5" /> Usar en el editor
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {pensando && (
-                <p className="flex items-center gap-1.5 text-xs text-gray-500">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Redactando…
-                </p>
-              )}
-              {errorIa && <p className="text-xs text-red-600">{errorIa}</p>}
-              <div ref={finRef} />
-            </div>
-
-            <form className="flex gap-2 border-t border-gray-200 p-2"
-              onSubmit={(e) => { e.preventDefault(); void enviar(entrada); }}>
-              <input value={entrada} onChange={(e) => setEntrada(e.target.value)}
-                placeholder="Escribe aquí…" disabled={pensando}
-                className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-zero-600" />
-              <Button type="submit" size="sm" disabled={pensando || !entrada.trim()} aria-label="Enviar">
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
-          </aside>
         </div>
       </div>
     </div>
