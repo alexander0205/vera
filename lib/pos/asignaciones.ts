@@ -11,7 +11,7 @@
  * stock, se reporta como "no removible" (hay que ajustar el stock a 0 primero).
  */
 
-import { and, eq, inArray, asc } from 'drizzle-orm';
+import { and, eq, inArray, asc, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { products, almacenes, productAlmacenStock } from '@/lib/db/schema';
 
@@ -142,4 +142,54 @@ export function setAlmacenesDeProducto(teamId: number, productId: number, almace
 }
 export function setProductosDeAlmacen(teamId: number, almacenId: number, productIds: number[]) {
   return sync(teamId, { almacenId }, productIds);
+}
+
+/**
+ * Lo que hace falta para ejecutar: sirve tanto `db` como una `tx` abierta.
+ * Se tipa así para poder sembrar dentro de la misma transacción que crea el
+ * producto — si el alta se cae, la asignación se cae con ella.
+ */
+type Ejecutor = { execute: (consulta: SQL) => Promise<unknown> };
+
+/**
+ * Deja el producto asignado al almacén por defecto del equipo.
+ *
+ * Un producto que controla inventario solo sale en la caja si tiene fila en
+ * product_almacen_stock (ver lib/pos/catalogo.ts). Hasta ahora esa fila solo
+ * nacía de dos sitios: la pantalla de casillas, y un ajuste de inventario en el
+ * que alguien se acordara de elegir almacén — un desplegable opcional cuyo
+ * valor por defecto es «Solo el stock general». Nadie se acordaba. El comercio
+ * creaba el producto con sus 25 unidades, lo marcaba visible en POS, y no
+ * aparecía nunca; la caja de un colegio llegó a tener 53 productos y 1,042
+ * unidades invisibles.
+ *
+ * Sembrar aquí cierra el agujero en el origen: se crea el producto y ya se
+ * vende. Repartirlo entre varios almacenes sigue siendo cosa de la pantalla de
+ * detalle; esto solo garantiza que exista UN sitio donde se venda.
+ *
+ * El stock inicial va en la fila para que no salga «agotado» de recién nacido:
+ * con permiteVentaSinStock en false, una fila en cero es tan invendible como no
+ * tenerla.
+ *
+ * No hace nada si el equipo no tiene almacenes, o si el producto ya está
+ * asignado a alguno — no se pisa un reparto que alguien ya decidió.
+ */
+export async function sembrarAlmacenPorDefecto(
+  ejecutor:     Ejecutor,
+  teamId:       number,
+  productId:    number,
+  stockInicial: number,
+): Promise<void> {
+  await ejecutor.execute(sql`
+    INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+    SELECT ${teamId}, ${productId}, a.id, ${Math.max(0, stockInicial)}
+      FROM almacenes a
+     WHERE a.team_id = ${teamId}
+       AND NOT EXISTS (
+         SELECT 1 FROM product_almacen_stock s WHERE s.product_id = ${productId}
+       )
+     ORDER BY a.es_default DESC, a.id ASC
+     LIMIT 1
+    ON CONFLICT (product_id, almacen_id) DO NOTHING
+  `);
 }

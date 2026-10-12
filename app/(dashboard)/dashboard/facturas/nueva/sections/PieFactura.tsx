@@ -1,6 +1,8 @@
 'use client';
 
-import { Label } from '@/components/ui/label';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
 
 interface Props {
   pieFactura: string;
@@ -15,14 +17,18 @@ interface Props {
  */
 export function PieFactura({ pieFactura, setPieFactura, label = 'Pie de factura' }: Props) {
   return (
-    <div>
-      <Label className="text-sm font-medium text-gray-700 mb-1.5 block">{label}</Label>
-      <textarea
-        className="w-full min-h-[80px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+    <Box>
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.75 }}>{label}</Typography>
+      <TextField
+        multiline
+        minRows={3}
+        fullWidth
+        size="small"
         placeholder="Visible en la impresión del documento"
         value={pieFactura}
         onChange={(e) => setPieFactura(e.target.value)}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
       />
-    </div>
+    </Box>
   );
 }

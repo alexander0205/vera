@@ -43,7 +43,15 @@ const TASA_LABELS: Record<string, string> = {
   'exento': 'Exento',
 };
 
-export default function ProductosPage() {
+/**
+ * @param canal Con 'pos' la pantalla se acota al catálogo de la caja: solo los
+ *   ítems marcados como Punto de venta, y lo que se cree aquí nace marcado así.
+ *   Es lo que se sirve en /pos/productos. Sin `canal` es el catálogo completo
+ *   del negocio, que es lo que tiene que ver Facturación —ahí SÍ se muestran
+ *   todos, o no habría forma de editar un ítem oculto ni de volver a mostrarlo.
+ */
+export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
+  const soloPos = canal === 'pos';
   const [productos, setProductos]       = useState<Producto[]>([]);
   const [loading, setLoading]           = useState(true);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
@@ -53,6 +61,10 @@ export default function ProductosPage() {
   const [deleting, setDeleting]         = useState(false);
   const [showImport, setShowImport]     = useState(false);
   const [opError, setOpError]           = useState<string | null>(null);
+  // Si el servicio está atado a tarifas escolares, se sabe ANTES de ofrecer
+  // borrar: el diálogo cambia a una guía en vez del confirm destructivo.
+  const [bloqueoEscolar, setBloqueoEscolar] = useState<string | null>(null);
+  const [chequeandoVinculo, setChequeandoVinculo] = useState(false);
 
   const search = filterValues.q     ?? '';
   const tipoFilter = filterValues.tipo ?? '';
@@ -63,13 +75,14 @@ export default function ProductosPage() {
       const params = new URLSearchParams();
       if (q)    params.set('q', q);
       if (tipo) params.set('tipo', tipo);
+      if (soloPos) params.set('canal', 'pos');
       const res  = await fetch(`/api/productos?${params}`);
       const data = await res.json();
       setProductos(data.productos ?? []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [soloPos]);
 
   // Debounce on filter change
   useEffect(() => {
@@ -82,9 +95,28 @@ export default function ProductosPage() {
     setShowForm(true);
   }
 
+  // Deep-link `?nuevo=1`: abre el modal de creación al entrar (p. ej. desde el
+  // form de concepto escolar). Se dispara una sola vez al montar.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('nuevo') === '1') abrirNuevo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function abrirEdicion(p: Producto) {
     setEditProductoId(p.id);
     setShowForm(true);
+  }
+
+  /** Abre el borrado, pero antes pregunta si el servicio es escolar. */
+  async function pedirEliminar(p: Producto) {
+    setDeleteTarget(p); setOpError(null); setBloqueoEscolar(null);
+    setChequeandoVinculo(true);
+    try {
+      const res = await fetch(`/api/productos/${p.id}?preview=1`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.vinculadoEscolar) setBloqueoEscolar(data.error as string);
+    } catch { /* si el chequeo falla, cae al confirm normal; el server bloquea igual */ }
+    finally { setChequeandoVinculo(false); }
   }
 
   async function handleEliminar() {
@@ -184,7 +216,7 @@ export default function ProductosPage() {
     ...(p.tipo === 'bien' && p.controlaInventario
       ? [{ icon: PackagePlus, title: 'Ver movimientos', onClick: () => { window.location.href = `/dashboard/inventario?productoId=${p.id}`; } }]
       : []),
-    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' as const },
+    { icon: Trash2, title: 'Eliminar', onClick: () => { void pedirEliminar(p); }, variant: 'danger' as const },
   ];
 
   return (
@@ -195,7 +227,9 @@ export default function ProductosPage() {
         columns={columns}
         rowHref={p => `/dashboard/productos/${p.id}`}
         title="Productos y Servicios"
-        description="Catálogo de ítems para tus facturas"
+        description={soloPos
+          ? 'Lo que se vende en la caja. Un ítem aparece acá solo si está marcado como Punto de venta.'
+          : 'Catálogo de ítems para tus facturas'}
         filters={[
           { type: 'search', id: 'q', placeholder: 'Buscar por nombre o referencia…' },
           {
@@ -217,7 +251,7 @@ export default function ProductosPage() {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin productos o servicios registrados',
           hint: search ? undefined : 'Crea tu catálogo para agilizar la emisión de facturas',
           cta: search ? undefined : (
-            <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
+            <Button className="bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirNuevo}>
               <Plus className="h-4 w-4 mr-1" />Nuevo ítem
             </Button>
           ),
@@ -228,7 +262,7 @@ export default function ProductosPage() {
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNuevo}>
               <Plus className="h-4 w-4 mr-2" />
               Nuevo ítem
             </Button>
@@ -258,30 +292,53 @@ export default function ProductosPage() {
         productoId={editProductoId}
         onClose={() => setShowForm(false)}
         onSaved={() => cargar(search, tipoFilter)}
+        canalPorDefecto={soloPos ? 'pos' : undefined}
       />
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
+      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) { setDeleteTarget(null); setBloqueoEscolar(null); setOpError(null); } }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar ítem?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Las facturas existentes no se verán afectadas.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Este ítem dejará de aparecer en el selector de nueva factura.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+          {bloqueoEscolar ? (
+            <>
+              <DialogHeader><DialogTitle>No se puede eliminar aquí</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{bloqueoEscolar}</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cerrar</Button>
+                <a href="/escolar/configuracion/tarifas">
+                  <Button>Ir a Tarifas</Button>
+                </a>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader><DialogTitle>¿Eliminar ítem?</DialogTitle></DialogHeader>
+              <div className="py-2 space-y-3">
+                {opError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
+                )}
+                <p className="text-sm text-gray-700">
+                  Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Las facturas existentes no se verán afectadas.
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Este ítem dejará de aparecer en el selector de nueva factura.</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
+                <Button variant="destructive" onClick={handleEliminar} disabled={deleting || chequeandoVinculo}>
+                  {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</>
+                    : chequeandoVinculo ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Comprobando…</>
+                    : 'Sí, eliminar'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </section>

@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getUser, getTeamForUser } from '@/lib/db/queries';
-import { Receipt, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import { IsotipoZero } from '@/components/marca-zero';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 export default async function LiteLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
@@ -10,30 +13,41 @@ export default async function LiteLayout({ children }: { children: React.ReactNo
   const team = await getTeamForUser();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <Link href="/lite" className="flex items-center gap-2 font-semibold min-w-0">
-            <Receipt className="w-5 h-5 text-orange-600 flex-shrink-0" />
-            <span className="truncate">{team?.razonSocial ?? team?.name ?? 'Factura'}</span>
-          </Link>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f9fafb' }}>
+      <Box
+        component="header"
+        sx={{
+          position: 'sticky', top: 0, zIndex: 10,
+          bgcolor: '#fff', borderBottom: '1px solid #e5e7eb',
+        }}
+      >
+        <Box sx={{ maxWidth: '80rem', mx: 'auto', px: { xs: 2, sm: 3 }, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="a" href="/lite" sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none', minWidth: 0 }}>
+            <IsotipoZero lado={22} />
+            <Typography sx={{ fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {team?.razonSocial ?? team?.name ?? 'Factura'}
+            </Typography>
+          </Box>
 
-          <div className="flex items-center gap-3 sm:gap-4 text-sm text-gray-600 flex-shrink-0">
-            <span className="hidden sm:inline truncate max-w-[180px]">{user.email}</span>
-            <Link
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, flexShrink: 0 }}>
+            <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontSize: '0.875rem', color: '#4b5563', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user.email}
+            </Typography>
+            <Box
+              component="a"
               href="/sign-out"
-              className="flex items-center gap-1 hover:text-gray-900 p-1"
               title="Cerrar sesión"
+              sx={{ display: 'flex', alignItems: 'center', color: '#4b5563', '&:hover': { color: '#111827' }, p: '4px' }}
             >
-              <LogOut className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </header>
+              <LogOut size={16} />
+            </Box>
+          </Box>
+        </Box>
+      </Box>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <Box component="main" sx={{ maxWidth: '80rem', mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 3, sm: 4 } }}>
         {children}
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }

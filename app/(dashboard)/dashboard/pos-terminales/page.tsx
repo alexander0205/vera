@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { requirePermission } from '@/lib/auth/page-guard';
+import { requirePermission, requireModule } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
-import { teams, almacenes, impresoras, listasPrecios } from '@/lib/db/schema';
+import { almacenes, impresoras, listasPrecios } from '@/lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { listarTerminales } from '@/lib/pos/terminales';
 import TerminalesClient from './_page-client';
@@ -11,11 +11,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function PosTerminalesPage() {
   await requirePermission('pos:configurar');
+  await requireModule('pos', '/dashboard');
 
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/dashboard/empresas');
-  const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
-  if (!team?.posHabilitado) redirect('/dashboard');
 
   const [terminales, alms, imps, listas] = await Promise.all([
     listarTerminales(teamId),

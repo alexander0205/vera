@@ -11,6 +11,10 @@ import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ModalHeader } from '@/components/ui/modal-header';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   ArrowLeft, Download, FileText, RefreshCw, XCircle,
@@ -34,9 +38,10 @@ import { ComprobantesCard } from '@/components/pagos/ComprobantesCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
-import { StickyNote, History as HistoryIcon } from 'lucide-react';
+import { StickyNote, History as HistoryIcon, Link2 } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useVolver } from '@/lib/hooks/useVolver';
 import { useListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
@@ -213,14 +218,14 @@ function EstadoDgiiCard({
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-        <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
+        <CheckCircle className="h-4 w-4 text-zero-600 shrink-0" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
         {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
           <button
             type="button"
             onClick={onConsultar}
             disabled={consultarStatus === 'loading'}
-            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1 disabled:opacity-50"
+            className="text-xs text-zero-600 hover:text-zero-800 flex items-center gap-1 disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${consultarStatus === 'loading' ? 'animate-spin' : ''}`} />
             Consultar
@@ -283,7 +288,7 @@ function EstadoDgiiCard({
             href={verUrl}
             target="_blank"
             rel="noreferrer"
-            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-zero-700 hover:text-zero-800 border border-zero-200 hover:bg-zero-50 rounded-lg py-2 transition-colors"
           >
             Ver en DGII <ArrowLeft className="h-3.5 w-3.5 rotate-[135deg]" />
           </a>
@@ -373,15 +378,39 @@ const DOC_UI: Record<DocVariant, { backHref: string; backLabel: string; noun: st
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant }) {
+export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
+  variant?: DocVariant;
+  /**
+   * Qué documento enseñar, cuando esto NO es una página.
+   *
+   * Sin él la pantalla saca el id de la ruta, que es lo correcto en
+   * `/dashboard/facturas/[id]`. Pero la ficha del alumno quiere ver la factura
+   * SIN salirse: si navega, pierde el estado de cuenta de la familia justo
+   * cuando hace falta —es el mismo motivo por el que crear una factura se hace
+   * en un cajón y no en otra pantalla.
+   */
+  docIdFijo?: number;
+  /** En un cajón, «volver» es cerrarlo. */
+  onCerrar?: () => void;
+}) {
   const params   = useParams();
   const router   = useRouter();
-  const docId    = params.id as string;
+  const docId    = docIdFijo != null ? String(docIdFijo) : (params.id as string);
+  const enCajon  = docIdFijo != null;
   const ui       = DOC_UI[variant];
+  // A esta pantalla se llega desde muchos sitios —la ficha de un estudiante,
+  // cuentas por cobrar, el buscador—, así que el listado es solo el respaldo.
+  const volverNav = useVolver(ui.backHref);
+  const volver    = onCerrar ?? volverNav;
 
   // Posición dentro de la lista de la que se llegó, para las flechas del
   // header. Va antes de cualquier return temprano: es un hook.
-  const navLista = useListaNavegacion(ui.backHref, Number(docId));
+  const navListaRuta = useListaNavegacion(ui.backHref, Number(docId));
+  // En el cajón no se llegó de ninguna lista, así que las flechas de
+  // anterior/siguiente no tienen a dónde ir.
+  const navLista: typeof navListaRuta = enCajon
+    ? { ...navListaRuta, anteriorId: null, siguienteId: null, posicion: 0, total: 0 }
+    : navListaRuta;
 
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -547,7 +576,28 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
   // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
-  const { can } = usePermissions();
+  const { can, modules } = usePermissions();
+  /** El enlace de pago es del módulo escolar: sin él no hay página que ofrecer. */
+  const esColegio = modules.includes('escolar');
+
+  /**
+   * Copia al portapapeles el enlace de pago del comprador.
+   *
+   * Se copia en vez de abrirlo: lo que se quiere hacer con él es pegarlo en un
+   * WhatsApp o un correo, no mirarlo. El servidor lo crea si no existe y
+   * comprueba que el contacto sea responsable de un alumno de este colegio.
+   */
+  async function copiarEnlacePago() {
+    try {
+      const r = await fetch(`/api/administracion-escolar/link-pago?facturaId=${docId}`);
+      const d = await r.json();
+      if (!r.ok) { toast.error(d.error ?? 'No se pudo obtener el enlace'); return; }
+      await navigator.clipboard.writeText(d.url);
+      toast.success(`Enlace copiado · referencia ${d.referencia}`);
+    } catch {
+      toast.error('No se pudo copiar el enlace');
+    }
+  }
   const { tipoVisible, enProduccion, ambiente } = useTiposDisponibles();
   const canCreate = can('facturas:crear');
   const canEdit   = can('facturas:editar');
@@ -806,7 +856,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     );
   }
@@ -817,7 +867,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
           <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
           <p className="font-medium">{error ?? 'Documento no encontrado'}</p>
-          <Button variant="outline" className="mt-4" onClick={() => router.push(ui.backHref)}>
+          <Button variant="outline" className="mt-4" onClick={volver}>
             Volver a {ui.backLabel.toLowerCase()}
           </Button>
         </div>
@@ -906,11 +956,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           fiscal lo cuenta la tarjeta Estado DGII y el cobro las cifras de
           arriba; en el título eran una tercera copia. */}
       <div className="flex items-center gap-3 mb-5 min-w-0">
-        <Button variant="ghost" size="sm" asChild className="shrink-0">
-          <Link href={ui.backHref}>
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">{ui.backLabel}</span>
-          </Link>
+        {/* A esta pantalla se llega desde muchos sitios, así que el botón
+            vuelve a donde se vino y el listado queda solo como respaldo. */}
+        <Button variant="ghost" size="sm" onClick={volver} className="shrink-0">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">{ui.backLabel}</span>
         </Button>
 
         <div className="flex flex-col min-w-0 flex-1">
@@ -1016,7 +1066,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 }}
                 className="flex items-center gap-2 cursor-pointer"
               >
-                <Printer className="h-4 w-4 text-teal-600" />
+                <Printer className="h-4 w-4 text-zero-600" />
                 <div>
                   <p className="text-sm font-medium">Imprimir (predeterminada)</p>
                   <p className="text-xs text-gray-400 truncate max-w-[180px]">{printerLabel}</p>
@@ -1043,7 +1093,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Ticket className="h-4 w-4 text-teal-600" />
+                  <Ticket className="h-4 w-4 text-zero-600" />
                   <div>
                     <p className="text-sm font-medium">Factura pequeña (80mm)</p>
                     <p className="text-xs text-gray-400">PDF tirilla térmica</p>
@@ -1116,6 +1166,22 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   Duplicar
                 </DropdownMenuItem>
               )}
+              {/* El enlace de pago del padre. Solo en colegios: en una empresa
+                  normal el comprador no tiene una página donde ver su deuda y
+                  subir un comprobante.
+
+                  Va aquí y no solo en la ficha del alumno porque el caso de uso
+                  empieza en la factura: alguien la mira, ve que está pendiente,
+                  y quiere mandársela por donde sea. */}
+              {esColegio && (
+                <DropdownMenuItem
+                  onSelect={copiarEnlacePago}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Link2 className="h-4 w-4 text-gray-500" />
+                  Copiar enlace de pago
+                </DropdownMenuItem>
+              )}
               {canCreate && puedeCrearNota && (
                 <>
                   {/* Separadores por intención: arriba lo que hace con ESTE
@@ -1126,7 +1192,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
-                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                      className="flex items-center gap-2 cursor-pointer text-zero-700"
                     >
                       <Plus className="h-4 w-4" />
                       Crear nota de crédito
@@ -1135,7 +1201,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
-                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                      className="flex items-center gap-2 cursor-pointer text-zero-700"
                     >
                       <Plus className="h-4 w-4" />
                       Crear nota de débito
@@ -1195,7 +1261,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         <div className={`rounded-xl p-3 text-sm flex gap-2 mb-4 ${
           pollingStatus === 'error'
             ? 'bg-red-50 border border-red-200 text-red-700'
-            : 'bg-teal-50 border border-teal-200 text-teal-700'
+            : 'bg-zero-50 border border-zero-200 text-zero-700'
         }`}>
           {pollingStatus === 'error'
             ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -1244,19 +1310,19 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: si es NC/ND, link a la factura que modifica */}
           {factura.notaOrigen && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
-              <p className="text-sm text-teal-900">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
+              <p className="text-sm text-zero-900">
                 {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
                 <span className="font-semibold font-mono">{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</span>
                 {factura.codigoModificacion != null && (
-                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-teal-200 text-teal-800">
+                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-zero-200 text-zero-800">
                     {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
                   </span>
                 )}
               </p>
               <Link
                 href={`/dashboard/facturas/${factura.notaOrigen.id}`}
-                className="text-sm font-medium text-teal-700 hover:text-teal-800 whitespace-nowrap"
+                className="text-sm font-medium text-zero-700 hover:text-zero-800 whitespace-nowrap"
               >
                 Ver factura →
               </Link>
@@ -1265,15 +1331,15 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: NC del modelo nuevo → generó saldo a favor (no descontó la factura) */}
           {factura.tipoEcf === '34' && factura.creditoGeneradoCents != null && (
-            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+            <div className="rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
               {factura.creditoGeneradoCents > 0 ? (
-                <p className="text-sm text-violet-900">
+                <p className="text-sm text-zero-900">
                   Esta nota generó <span className="font-semibold">{fmtDOP(factura.creditoGeneradoCents / 100)}</span> de
                   saldo a favor del cliente — <span className="font-medium">no descontó la factura original</span>.
                   El cliente puede usarlo para pagar otras facturas.
                 </p>
               ) : (
-                <p className="text-sm text-violet-900">
+                <p className="text-sm text-zero-900">
                   Esta nota no generó saldo a favor: la factura original no tenía pagos registrados
                   (solo se acredita lo que el cliente ya pagó).
                 </p>
@@ -1391,8 +1457,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                     {ncAplicadoDOP > 0 && (
                       <tr>
                         <td colSpan={4} />
-                        <td className="py-1 px-2 text-right text-xs text-teal-700">Notas de crédito</td>
-                        <td className="py-1 px-2 text-right tabular-nums text-teal-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
+                        <td className="py-1 px-2 text-right text-xs text-zero-700">Notas de crédito</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-zero-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
                         <td />
                       </tr>
                     )}
@@ -1413,7 +1479,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full border-dashed text-teal-700 border-teal-300 hover:bg-teal-50"
+                  className="w-full border-dashed text-zero-700 border-zero-300 hover:bg-zero-50"
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
@@ -1612,7 +1678,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <TabsContent value="notas">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <StickyNote className="h-4 w-4 text-teal-600" />
+                  <StickyNote className="h-4 w-4 text-zero-600" />
                   <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
                 </div>
                 <EntityNotes entityType="factura" entityId={factura.id} />
@@ -1622,7 +1688,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <TabsContent value="historia">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <HistoryIcon className="h-4 w-4 text-teal-600" />
+                  <HistoryIcon className="h-4 w-4 text-zero-600" />
                   <h3 className="text-sm font-semibold text-gray-900">Historia de la factura</h3>
                 </div>
                 <EntityHistory docId={factura.id} encf={factura.encf} />
@@ -1651,7 +1717,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <Button
                   onClick={() => handleResetEmision(false)}
                   disabled={reseteando}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white h-9 text-sm disabled:opacity-50"
+                  className="w-full bg-zero-600 hover:bg-zero-700 text-white h-9 text-sm disabled:opacity-50"
                 >
                   Cancelar y reintentar con e-NCF nuevo
                 </Button>
@@ -1708,11 +1774,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 {factura.ncsAsociadas.map(nc => (
                   <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
                     <div className="min-w-0 flex-1">
-                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
+                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-zero-700 hover:underline truncate block">
                         {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Sin comprobante #${nc.id}`)}
                       </Link>
                       <div className="text-[10px] text-gray-500 mt-0.5 flex gap-1.5 flex-wrap items-center">
-                        <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
+                        <span className={nc.tipoEcf === '34' ? 'text-zero-700 font-medium' : 'text-orange-700 font-medium'}>
                           {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
                         </span>
                         {(nc.razonModificacion || nc.codigoModificacion != null) && (
@@ -1727,7 +1793,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                         <span>{fmtDate(nc.fechaEmision)}</span>
                       </div>
                     </div>
-                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-teal-700' : 'text-gray-800'}`}>
+                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-zero-700' : 'text-gray-800'}`}>
                       {nc.tipoEcf === '34' ? '−' : ''}RD$ {nc.montoTotalDOP}
                     </span>
                   </li>
@@ -1852,7 +1918,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           type="button"
           variant="outline"
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-          onClick={() => router.push(ui.backHref)}
+          onClick={volver}
         >
           {esBorrador ? 'Cancelar' : 'Volver'}
         </Button>
@@ -1867,7 +1933,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <Button
                   type="button"
                   variant="outline"
-                  className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
+                  className="text-zero-700 border-zero-300 hover:bg-zero-50 h-11 sm:h-9 w-full sm:w-auto"
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
@@ -1883,7 +1949,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               {canEmitir && (
                 <Button
                   type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   onClick={triggerEnviarDgii}
                 >
                   <Send className="h-4 w-4 mr-1.5" />
@@ -1896,7 +1962,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   disabled={esFinal && factura.estado === 'ANULADO'}
                 >
                   Acciones
@@ -2038,7 +2104,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 value={emailTo}
                 onChange={(e) => setEmailTo(e.target.value)}
                 placeholder="cliente@dominio.com"
-                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
               />
             </label>
           </div>
@@ -2049,7 +2115,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <Button
               onClick={handleSendEmail}
               disabled={sendingEmail || !emailTo}
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-zero-600 hover:bg-zero-700"
             >
               {sendingEmail
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
@@ -2062,10 +2128,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* Enviar a DGII */}
       <Dialog open={showEnviarDgii} onOpenChange={setShowEnviarDgii}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar a la DGII</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-4">
+          {/* El párrafo que antes iba suelto bajo el título es el subtítulo:
+              así el modal abre con una sola voz y no con dos bloques de texto. */}
+          <ModalHeader
+            title="Enviar a la DGII"
+            subtitle="Se asigna un e-NCF de tu secuencia activa y se envía el comprobante."
+          />
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-4">
             {enviandoDgiiError && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 space-y-2">
                 <div className="flex gap-2">
@@ -2090,54 +2159,50 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 )}
               </div>
             )}
-            <p className="text-sm text-gray-700">
-              Selecciona el tipo de comprobante fiscal para emitir esta factura a la DGII.
-              Se asignará un e-NCF de tu secuencia activa.
-            </p>
             <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-gray-600">Tipo de comprobante (e-CF)</label>
+              <Label htmlFor="dgii-tipo">Tipo de comprobante (e-CF)</Label>
               {esNota ? (
                 // El tipo de una nota es intrínseco al documento (e33 débito / e34
                 // crédito): no se puede cambiar al emitir. Se muestra fijo.
-                <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 flex items-center justify-between">
+                <div className="flex h-10 w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
                   <span>{TIPOS_EMIT_DGII.find(t => t.value === factura.tipoEcf)?.label ?? `e${factura.tipoEcf}`}</span>
                   <span className="text-[10px] uppercase tracking-wide text-gray-400">fijo</span>
                 </div>
               ) : (
-                <select
+                <NativeSelect
+                  id="dgii-tipo"
                   value={dgiiTipoEcf}
                   onChange={e => setDgiiTipoEcf(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   {/* El tipo propio del documento siempre visible: aunque aún no exista
                       secuencia (el server devuelve un error claro indicando crearla). */}
                   {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value) || t.value === factura.tipoEcf).map(t => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
-                </select>
+                </NativeSelect>
               )}
               {dgiiRegla && (
-                <p className="text-[11px] text-gray-500 leading-snug">{dgiiRegla.descripcion}</p>
+                <p className="text-xs leading-snug text-gray-500">{dgiiRegla.descripcion}</p>
               )}
             </div>
 
             {/* ─── Código de modificación (notas 33/34) ───────────────────── */}
             {(dgiiTipoEcf === '33' || dgiiTipoEcf === '34') && (
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-gray-600">
-                  Código de modificación<span className="text-red-500 ml-0.5">*</span>
-                </label>
-                <select
+                <Label htmlFor="dgii-codmod">
+                  Código de modificación<span className="ml-0.5 text-red-500">*</span>
+                </Label>
+                <NativeSelect
+                  id="dgii-codmod"
                   value={dgiiCodMod}
                   onChange={e => setDgiiCodMod(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   <option value="">Selecciona el motivo…</option>
                   {Object.entries(COD_MODIFICACION_LABEL).map(([code, label]) => (
                     <option key={code} value={code}>{code} — {label}</option>
                   ))}
-                </select>
-                <p className="text-[11px] text-gray-500 leading-snug">
+                </NativeSelect>
+                <p className="text-xs leading-snug text-gray-500">
                   Por qué esta nota modifica el comprobante original — lo exige la DGII.
                 </p>
               </div>
@@ -2151,20 +2216,22 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               dgiiRegla.requiereRazonSocial ||
               (dgiiTipoEcf === '32' && (parseFloat(factura.montos.montoTotalDOP) || 0) >= 250000)
             ) && (
-              <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-gray-700">
+              // Sin tarjeta gris alrededor: metía una caja dentro de la caja y
+              // hundía los dos campos que más importan. Se separa con una línea.
+              <div className="space-y-3 border-t border-gray-100 pt-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900">
                     {dgiiRegla.compradorLabel}
                     {(dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial) && (
-                      <span className="text-red-500 ml-0.5">*</span>
+                      <span className="ml-0.5 text-red-500">*</span>
                     )}
-                  </label>
+                  </p>
                   {factura.comprador.rnc && (
-                    <span className="text-[10px] text-gray-400">guardado en factura</span>
+                    <span className="shrink-0 text-xs text-gray-400">guardado en factura</span>
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] text-gray-600">{dgiiRegla.rncLabel}</label>
+                  <Label>{dgiiRegla.rncLabel}</Label>
                   <RncSearch
                     value={tempRnc ? `${tempRnc}${tempRazon ? ` · ${tempRazon}` : ''}` : ''}
                     onSelect={(r) => { setTempRnc(r.rnc); setTempRazon(r.nombre); }}
@@ -2173,13 +2240,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] text-gray-600">Razón social / nombre</label>
-                  <input
+                  <Label htmlFor="dgii-razon">Razón social / nombre</Label>
+                  <Input
+                    id="dgii-razon"
                     type="text"
                     value={tempRazon}
                     onChange={e => setTempRazon(e.target.value)}
                     placeholder="Nombre o razón social"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
@@ -2228,37 +2295,43 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
             {/* Numeración — próximo e-NCF, editable para resolver colisiones de secuencia */}
             {dgiiTipoEcf !== 'sin-ncf' && (
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-gray-600">Próximo e-NCF</label>
+              <div className="space-y-1.5 border-t border-gray-100 pt-4">
+                <Label htmlFor="dgii-ncf">Próximo e-NCF</Label>
                 {seqInfo == null ? (
-                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                  <p className="flex items-center gap-1 text-xs text-gray-400">
                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando numeración…
                   </p>
                 ) : seqInfo.sinSecuencia ? (
                   <p className="text-xs text-red-600">
                     No hay secuencia activa para e{dgiiTipoEcf}.{' '}
-                    <Link href="/dashboard/secuencias" className="underline font-medium">Crea una</Link>.
+                    <Link href="/dashboard/secuencias" className="font-medium underline">Crea una</Link>.
                   </p>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2">
+                    {/* El e-NCF completo y el número que lo genera, en la misma
+                        línea. Antes el campo ocupaba todo el ancho para un dato
+                        de un dígito, y parecía el control principal del modal
+                        cuando casi nadie lo toca. */}
+                    <div className="flex items-center gap-3">
                       <span className="font-mono text-sm font-semibold text-gray-900">
                         E{dgiiTipoEcf}{(ncfNum || '0').padStart(10, '0')}
                       </span>
+                      <Input
+                        id="dgii-ncf"
+                        type="number"
+                        value={ncfNum}
+                        onChange={e => setNcfNum(e.target.value)}
+                        aria-label="Siguiente número de e-NCF"
+                        className="w-24"
+                        style={{ width: '6rem' }}
+                      />
                       {seqInfo.disponibles >= 0 && (
-                        <span className="text-[11px] text-gray-400">{seqInfo.disponibles} disponibles</span>
+                        <span className="whitespace-nowrap text-xs text-gray-400">
+                          {seqInfo.disponibles} disponibles
+                        </span>
                       )}
                     </div>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={ncfNum}
-                      onChange={e => setNcfNum(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      aria-label="Siguiente número de e-NCF"
-                    />
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs leading-snug text-gray-400">
                       Si la DGII reporta el e-NCF como ya emitido, sube el siguiente número. No puede ser menor al actual.
                     </p>
                   </>
@@ -2266,13 +2339,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               </div>
             )}
 
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            {/* El aviso ya no es un bloque amarillo: la advertencia de verdad
+                está en el botón, que dice lo que hace. Aquí solo queda la nota
+                al pie, del tamaño de una nota al pie. */}
+            <p className="flex gap-2 border-t border-gray-100 pt-4 text-xs leading-snug text-gray-500">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
               <span>
-                Esta acción consume un número de la secuencia activa para el tipo seleccionado
-                y envía el comprobante a la DGII. No se puede deshacer.
+                Consume un número de la secuencia activa y envía el comprobante a la DGII.
+                No se puede deshacer.
               </span>
-            </div>
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEnviarDgii(false)} disabled={enviandoDgii}>
@@ -2281,7 +2357,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <Button
               onClick={handleEnviarDgii}
               disabled={enviandoDgii || !dgiiValidacion.ok}
-              className="bg-teal-600 hover:bg-teal-700"
             >
               {enviandoDgii
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
@@ -2310,7 +2385,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </div>
             <div className="flex flex-col gap-2 pt-2">
               <Button
-                className="bg-teal-600 hover:bg-teal-700 text-white"
+                className="bg-zero-600 hover:bg-zero-700 text-white"
                 onClick={() => {
                   setShowPagoMissingAlert(false);
                   document.querySelector('[data-pago-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });

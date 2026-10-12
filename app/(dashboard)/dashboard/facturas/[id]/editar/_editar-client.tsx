@@ -1,16 +1,17 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Loader2 } from 'lucide-react';
+import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
 import type { EmpresaPerfil } from '../../nueva/page';
 import type { BorradorInicial } from '../../nueva/NuevaFacturaForm';
 
 const NuevaFacturaForm = dynamic(() => import('../../nueva/NuevaFacturaForm'), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+      <CircularProgress size={32} sx={{ color: '#3658e1' }} />
+    </Box>
   ),
 });
 

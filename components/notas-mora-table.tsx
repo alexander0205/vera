@@ -51,7 +51,7 @@ export function NotasMoraTable({
     <div className="py-1">
       {/* Franja teal a la izquierda: se lee como algo que cuelga de la fila de
           arriba, no como una tabla independiente. */}
-      <div className="border-l-2 border-teal-300 pl-3 sm:ml-12">
+      <div className="border-l-2 border-zero-300 pl-3 sm:ml-12">
         <div className="overflow-hidden rounded-md border border-gray-300">
           <table className="w-full text-sm">
             <thead>
@@ -77,7 +77,7 @@ export function NotasMoraTable({
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/dashboard/facturas/${nd.id}`}
-                        className="whitespace-nowrap font-mono text-xs text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+                        className="whitespace-nowrap font-mono text-xs text-zero-700 underline decoration-zero-200 underline-offset-2 hover:decoration-zero-600"
                       >
                         {nd.codigo ?? `ND #${nd.id}`}
                       </Link>

@@ -19,6 +19,7 @@ import { db } from '@/lib/db/drizzle';
 import { paymentLinks, pagosRecibidos, cotizaciones } from '@/lib/db/schema';
 import { registrarPago } from '@/lib/db/queries';
 import { logError, logInfo } from '@/lib/logger';
+import { enviarFacturaAlResponsableEnSegundoPlano } from '@/lib/administracion-escolar/factura-al-padre';
 
 export type PaymentLinkRow = typeof paymentLinks.$inferSelect;
 
@@ -151,6 +152,11 @@ export async function marcarLinkPagado(
   // y reconciliarLedger es reintentable (cron/manual). Devolvemos 'pagado'.
   try {
     const pagoRecibidoId = await reconciliarLedger(token);
+    // Solo se llega aquí la primera vez (un callback repetido sale como
+    // `ya_pagado` en la fase A), y la transacción ya cerró: el PDF lee el pago.
+    if (pagoRecibidoId && fase.link.ecfDocumentId) {
+      enviarFacturaAlResponsableEnSegundoPlano(fase.link.teamId, fase.link.ecfDocumentId);
+    }
     return { estado: 'pagado', pagoRecibidoId };
   } catch {
     return { estado: 'pagado', pagoRecibidoId: null };

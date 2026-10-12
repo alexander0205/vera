@@ -114,7 +114,6 @@ export async function POST(req: NextRequest) {
         sitioWeb:         team.sitioWeb ?? undefined,
         emailFacturacion: team.emailFacturacion ?? undefined,
         logo:             team.logo ?? undefined,
-        firma:            team.firma ?? undefined,
         colorPrimario:    team.colorPrimario ?? '#1e40af',
       },
 

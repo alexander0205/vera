@@ -5,6 +5,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers } from '@/lib/db/schema';
 import { seedSystemRoles } from '@/lib/auth/permissions';
 import { z } from 'zod';
+import { FREE_PLAN } from '@/lib/config/plans';
 
 const schema = z.object({
   razonSocial: z.string().min(2).max(255),
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
       razonSocial: body.razonSocial,
       rnc: body.rnc,
       nombreComercial: body.nombreComercial ?? null,
-      planName: 'Gratis',
+      planName: FREE_PLAN.key,
     })
     .returning();
 

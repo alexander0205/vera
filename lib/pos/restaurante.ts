@@ -216,6 +216,25 @@ export async function marcarCobrada(teamId: number, comandaId: number, ecfDocume
     .where(and(eq(comandas.teamId, teamId), eq(comandas.id, comandaId)));
 }
 
+/**
+ * Reabre la comanda de un e-CF anulado (unsettle): vuelve a 'abierta' y suelta
+ * el vínculo al documento. Los `comanda_items` no se tocan al cobrar, así que la
+ * cuenta queda editable tal como estaba. Devuelve null si no había comanda cobrada
+ * atada a ese documento. */
+export async function reabrirComanda(teamId: number, ecfDocumentId: number): Promise<Comanda | null> {
+  const [c] = await db.select().from(comandas)
+    .where(and(
+      eq(comandas.teamId, teamId),
+      eq(comandas.ecfDocumentId, ecfDocumentId),
+      eq(comandas.estado, 'cobrada'),
+    )).limit(1);
+  if (!c) return null;
+  const [reab] = await db.update(comandas)
+    .set({ estado: 'abierta', ecfDocumentId: null, updatedAt: new Date() })
+    .where(eq(comandas.id, c.id)).returning();
+  return reab;
+}
+
 /** Cancela una comanda abierta (libera la mesa sin cobrar). */
 export async function cancelarComanda(teamId: number, comandaId: number): Promise<void> {
   await db.update(comandas)

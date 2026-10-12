@@ -13,7 +13,8 @@ import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit, syncPago
 import { requireTurnoAbierto } from '@/lib/caja/guard';
 import { METODOS_PAGO_SET, labelMetodo } from '@/lib/pagos/metodos';
 import { faltaComprobanteExigido } from '@/lib/pagos/adjuntos';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
+import { enviarFacturaAlResponsableEnSegundoPlano } from '@/lib/administracion-escolar/factura-al-padre';
 
 // Fuente única: lib/pagos/metodos.
 const METODOS_VALIDOS = METODOS_PAGO_SET;
@@ -87,6 +88,21 @@ export async function POST(
   }
   const turnoCajaId = guardCaja.turno?.id ?? null;
 
+  // Este endpoint REEMPLAZA el ledger de la factura: corregir un monto pasa por
+  // aquí igual que cobrar. Para no mandarle al padre un correo por cada
+  // corrección, la factura solo se envía cuando lo cobrado SUBE.
+  const totalCobrado = async () => {
+    const [r] = await db
+      .select({ t: sql<number>`COALESCE(SUM(${pagosRecibidos.montoCentavos}), 0)::bigint` })
+      .from(pagosRecibidos)
+      .where(and(eq(pagosRecibidos.teamId, teamId), eq(pagosRecibidos.ecfDocumentId, docId)));
+    return Number(r?.t ?? 0);
+  };
+  const cobradoAntes = await totalCobrado();
+  const avisarSiSubio = async () => {
+    if ((await totalCobrado()) > cobradoAntes) enviarFacturaAlResponsableEnSegundoPlano(teamId, docId);
+  };
+
   // Método que exige comprobante. Misma regla que en Cuentas por cobrar: sin
   // esto el gate se saltaba registrando el cobro desde el detalle.
   const metodosDelCobro = Array.isArray(body.pagos)
@@ -137,6 +153,7 @@ export async function POST(
       await syncPagoMirror(teamId, docId);
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar split' }, { status: 422 });
     }
+    await avisarSiSubio();
     return NextResponse.json({ ok: true, recibido: true, split: true, lineas: lineas.length });
   }
 
@@ -182,5 +199,6 @@ export async function POST(
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar pago' }, { status: 422 });
   }
 
+  await avisarSiSubio();
   return NextResponse.json({ ok: true, recibido: true, metodo, cuenta, valorCts, fecha });
 }

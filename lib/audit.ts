@@ -56,9 +56,29 @@ export type AuditAction =
   | 'POS_MESERO_CREAR'
   | 'POS_COMANDA_COBRAR'
   | 'POS_COMANDA_CANCELAR'
+  | 'POS_VENTA_ELIMINAR'
+  | 'POS_VENTA_UNSETTLE'
+  | 'POS_VENTA_EDITAR'
+  | 'POS_VENTA_QUITAR_ITEM'
   | 'MONEDERO_RECARGA'
   | 'MONEDERO_CONSUMO'
-  | 'MONEDERO_LIMITE';
+  | 'MONEDERO_LIMITE'
+  // Cobranza — acciones hacia el cliente, deben quedar trazadas
+  | 'RECORDATORIOS_COBRO_ENVIADOS'
+  // El mensaje de prueba de los canales de aviso. También sale hacia afuera y
+  // cuesta dinero (el SMS), así que se traza igual que un envío de verdad.
+  | 'ESCOLAR_AVISO_PRUEBA'
+  // WhatsApp (crm-escolar)
+  | 'WHATSAPP_CONECTAR'
+  // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
+  // clasifica todo lo que viene después. Se traza quién y cuánto.
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Nómina: una carga masiva de empleados cambia salarios y cuentas de banco de golpe.
+  | 'NOMINA_EMPLEADOS_IMPORTADOS'
+  // Contabilidad: transferencias, cargos, depósitos y retiros de banco.
+  | 'CONTABILIDAD_MOVIMIENTO_BANCARIO'
+  // Nómina: una liquidación da de baja al empleado y genera un pago grande.
+  | 'NOMINA_LIQUIDACION_CREADA';
 
 export interface AuditParams {
   teamId:    number;

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mockup — Perfil del estudiante rediseñado</title>
+  <style>
+    :root {
+      --bg: #f6f7f9; --panel: #ffffff; --ink: #17202a; --muted: #657181;
+      --line: #e2e6ec; --line2: #eef1f5;
+      --brand: #0f766e; --brand-soft: #e4f5f2; --brand-ink: #0b5e57;
+      --danger: #b42318; --danger-soft: #fff0ed;
+      --warn: #9a6700; --warn-soft: #fff7df;
+      --ok: #067647; --ok-soft: #e8f7ef;
+      --blue: #175cd3; --blue-soft: #eaf1ff;
+      --note: #6d28d9; --note-soft: #f4efff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 20px 64px; }
+    a { color: inherit; }
+    .muted { color: var(--muted); }
+    .row { display: flex; align-items: center; }
+    .gap6 { gap: 6px; } .gap8 { gap: 8px; } .gap12 { gap: 12px; }
+
+    /* Banner de anotación */
+    .legend { background: var(--note-soft); border: 1px solid #e2d6ff; border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 20px; }
+    .legend h1 { margin: 0 0 6px; font-size: 15px; color: var(--note); }
+    .legend ul { margin: 6px 0 0; padding-left: 18px; color: #4b3b7a; }
+    .legend li { margin: 2px 0; }
+    .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px;
+      border-radius: 999px; background: var(--note); color: #fff; vertical-align: middle; }
+    .anno { position: relative; }
+    .anno::after { content: attr(data-note); position: absolute; top: -9px; right: 10px;
+      font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
+      background: var(--note); color: #fff; padding: 2px 8px; border-radius: 999px; }
+
+    .back { color: var(--muted); font-size: 13px; text-decoration: none; margin-bottom: 14px; display: inline-block; }
+
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+    .pad { padding: 16px 18px; }
+
+    /* Tarjeta horizontal del estudiante */
+    .student { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; }
+    .avatar { width: 60px; height: 60px; border-radius: 999px; background: var(--brand-soft);
+      color: var(--brand-ink); font-weight: 700; font-size: 20px; display: grid; place-items: center; }
+    .sname { font-size: 19px; font-weight: 700; margin: 0; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink);
+      background: #f4f6f8; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+    .chip b { font-weight: 600; }
+    .chip .k { color: var(--muted); }
+    .badge { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+    .b-ok { background: var(--ok-soft); color: var(--ok); }
+    .b-brand { background: var(--brand-soft); color: var(--brand-ink); }
+    .b-blue { background: var(--blue-soft); color: var(--blue); }
+    .b-warn { background: var(--warn-soft); color: var(--warn); }
+    .b-danger { background: var(--danger-soft); color: var(--danger); }
+    .btn { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 9px;
+      padding: 7px 13px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+    .tutorbox { border-left: 1px solid var(--line2); padding-left: 16px; min-width: 210px; }
+    .tutorbox .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+
+    /* Filtro de período (padre global) */
+    .periodbar { margin: 18px 0; }
+    .periodbar .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin-bottom: 6px; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 15px;
+      font-size: 13px; cursor: pointer; color: var(--ink); }
+    .pill.active { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+    .pill small { display: block; font-size: 10px; opacity: .8; font-weight: 400; }
+
+    /* Secciones principales */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+    .tab { padding: 10px 16px; font-size: 14px; color: var(--muted); cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab.active { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .stat { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .stat .k { display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase;
+      letter-spacing: .3px; color: var(--muted); }
+    .stat .v { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .dot { width: 8px; height: 8px; border-radius: 3px; }
+
+    .sub { display: flex; gap: 6px; margin: 4px 0 14px; }
+    .schip { padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; color: var(--muted); background: #f4f6f8; }
+    .schip.active { background: var(--brand-soft); color: var(--brand-ink); font-weight: 600; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
+      color: var(--muted); font-weight: 600; padding: 8px 10px; background: #fafbfc; }
+    td { padding: 10px; border-top: 1px solid var(--line2); }
+    .right { text-align: right; }
+    .actlink { color: var(--brand); font-weight: 600; cursor: pointer; font-size: 12px; }
+    .actlink.mora { color: var(--warn); }
+    .actlink.mut { color: var(--muted); }
+    .sec-title { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+    .h2row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .strike { text-decoration: line-through; opacity: .5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="legend">
+      <h1>Mockup — Perfil del estudiante rediseñado <span class="tag">MD2 · paso 2</span></h1>
+      <ul>
+        <li><b>Tarjeta horizontal full-width</b>: el nombre aparece una sola vez; se elimina el encabezado duplicado. El <b>código</b> vive dentro de la tarjeta.</li>
+        <li><b>Período = filtro padre global</b> (barra larga): al elegir un período, todo lo de abajo se filtra a ese período.</li>
+        <li>Solo 3 secciones: <b>Por período</b> (contiene Cuentas por cobrar, Pagos, Facturas + acciones), <b>Tutores</b> e <b>Historial</b>.</li>
+        <li><b>Deudas → renombrada «Cuentas por cobrar»</b>. Se quita la pestaña <b>Matrículas</b> (ya está en la tarjeta/período) y los tabs generales que se repetían.</li>
+        <li><b>Cargo por mora</b> disponible por cargo (reutiliza la mora de la factura — paso 3).</li>
+      </ul>
+    </div>
+
+    <a class="back" href="#">← Volver a estudiantes</a>
+
+    <!-- Tarjeta horizontal del estudiante -->
+    <div class="card pad student anno" data-note="tarjeta horizontal · sin header duplicado">
+      <div class="avatar">AP</div>
+      <div>
+        <p class="sname">Ana María Pérez</p>
+        <div class="chips">
+          <span class="chip"><span class="k">Código</span><b>2026-0001</b></span>
+          <span class="chip"><span class="k">Curso</span><b>Segundo B</b></span>
+          <span class="chip"><span class="k">Período</span><b>2026-2027</b></span>
+          <span class="chip"><span class="k">Sexo · edad</span><b>Femenino · 11 años</b></span>
+          <span class="badge b-ok">Activo</span>
+        </div>
+      </div>
+      <div class="tutorbox">
+        <div class="lbl">Tutor de pago</div>
+        <div class="row gap8" style="margin-top:4px">
+          <b>Persona Física</b><span class="badge b-blue">Contacto</span>
+        </div>
+        <div class="muted" style="font-size:12px; margin-top:2px">809-555-0142</div>
+        <div style="margin-top:10px"><button class="btn">✎ Editar</button></div>
+      </div>
+    </div>
+
+    <!-- Filtro de período (padre global) -->
+    <div class="periodbar anno" data-note="filtro padre: filtra todo lo de abajo">
+      <div class="lbl">Período académico</div>
+      <div class="pills">
+        <div class="pill active">2026-2027 <small>Activo</small></div>
+        <div class="pill">2025-2026</div>
+        <div class="pill">2024-2025</div>
+        <div class="pill">Todos</div>
+      </div>
+    </div>
+
+    <!-- Secciones principales -->
+    <div class="tabs">
+      <div class="tab active">Por período</div>
+      <div class="tab">Tutores</div>
+      <div class="tab">Historial</div>
+      <div class="tab strike muted" title="se elimina">Deudas · Pagos · Facturas · Matrículas</div>
+    </div>
+
+    <!-- Contenido: Por período -->
+    <div class="stats">
+      <div class="stat">
+        <div class="k"><span class="dot" style="background:var(--blue)"></span>Facturado</div>
+        <div class="v">RD$57,932.00</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="dot" style="background:var(--brand)"></span>Pagado</div>
+        <div class="v" style="color:var(--brand)">RD$40,315.00</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="dot" style="background:var(--danger)"></span>Pendiente</div>
+        <div class="v" style="color:var(--danger)">RD$17,617.00</div>
+      </div>
+    </div>
+
+    <div class="row gap8" style="margin-bottom:16px">
+      <button class="btn primary">＋ Registrar pago</button>
+      <button class="btn">＋ Crear factura</button>
+      <span class="muted" style="font-size:12px; margin-left:6px">Las acciones viven dentro del período seleccionado</span>
+    </div>
+
+    <!-- Sub-secciones dentro de Por período -->
+    <div class="sub">
+      <div class="schip active">Cuentas por cobrar</div>
+      <div class="schip">Pagos</div>
+      <div class="schip">Facturas</div>
+    </div>
+
+    <div class="card pad anno" data-note="antes «Deudas»">
+      <div class="h2row">
+        <p class="sec-title">Cuentas por cobrar — 2026-2027</p>
+        <span class="muted" style="font-size:12px">3 cargos con saldo</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Concepto</th><th>Vencimiento</th><th class="right">Monto</th><th class="right">Saldo</th><th>Factura</th><th class="right">Acciones</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Mensualidad septiembre</b></td>
+            <td><span class="badge b-danger">Venció 10/09</span></td>
+            <td class="right">RD$3,800.00</td>
+            <td class="right">RD$3,700.00</td>
+            <td><a class="actlink mut" href="#">DEMO-…-9-7-11</a></td>
+            <td class="right">
+              <span class="actlink">Registrar pago</span> ·
+              <span class="actlink mora">Cargo por mora</span>
+            </td>
+          </tr>
+          <tr>
+            <td><b>Mensualidad octubre</b></td>
+            <td><span class="badge b-warn">Vence 10/10</span></td>
+            <td class="right">RD$1,800.00</td>
+            <td class="right">RD$1,800.00</td>
+            <td><a class="actlink mut" href="#">DEMO-…-16-10</a></td>
+            <td class="right">
+              <span class="actlink">Registrar pago</span> ·
+              <span class="actlink mora">Cargo por mora</span>
+            </td>
+          </tr>
+          <tr>
+            <td><b>Uniforme escolar</b></td>
+            <td class="muted">—</td>
+            <td class="right">RD$2,500.00</td>
+            <td class="right">RD$2,500.00</td>
+            <td><span class="muted" style="font-size:12px">Sin factura</span></td>
+            <td class="right">
+              <span class="actlink">Crear factura</span> ·
+              <span class="actlink mut">Vincular</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="muted" style="font-size:12px; margin-top:22px; text-align:center">
+      Mockup estático para alinear el rediseño con Alex — no es la app real. Datos de ejemplo.
+    </p>
+
+  </div>
+</body>
+</html>

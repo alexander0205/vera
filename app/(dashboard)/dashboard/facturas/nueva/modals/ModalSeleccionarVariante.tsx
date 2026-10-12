@@ -42,7 +42,7 @@ export function ModalSeleccionarVariante({ productoId, productoNombre, almacenId
       <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6 max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-teal-600" />Elegir variante
+            <Layers className="h-5 w-5 text-zero-600" />Elegir variante
           </DialogTitle>
         </DialogHeader>
 
@@ -52,7 +52,7 @@ export function ModalSeleccionarVariante({ productoId, productoNombre, almacenId
 
         {cargando ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-zero-600" />
           </div>
         ) : variants.length === 0 && !error ? (
           <p className="text-sm text-gray-500 py-6 text-center">Este producto no tiene variantes activas.</p>
@@ -65,7 +65,7 @@ export function ModalSeleccionarVariante({ productoId, productoNombre, almacenId
                   key={v.id}
                   type="button"
                   onClick={() => onPick(v)}
-                  className="w-full flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left hover:border-teal-400 hover:bg-teal-50/50 transition-colors"
+                  className="w-full flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3 text-left hover:border-zero-400 hover:bg-zero-50/50 transition-colors"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{v.nombre}</p>

@@ -10,12 +10,15 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import { Loader2, Check, ChevronDown, ChevronUp, Camera, X } from 'lucide-react';
+import { Loader2, Check, ChevronDown, ChevronUp, Camera, X, FileText, Store } from 'lucide-react';
 import MaestrosProductoSection from '@/app/(dashboard)/dashboard/productos/MaestrosProductoSection';
 import { VariantesEditor, type VariantesPayload } from '@/components/productos/VariantesEditor';
 import {
   VariantesEditorEdit, type VariantesEditPayload, type VariantesEditInitial,
 } from '@/components/productos/VariantesEditorEdit';
+import {
+  CANALES, aBanderas, desdeBanderas, defaultPorTipo, type DondeSeVende,
+} from '@/lib/productos/donde-se-vende';
 
 // ─── Constantes / helpers (movidos desde productos/_page-client) ─────────────
 
@@ -45,12 +48,23 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
   { value: 'combo',    label: 'Combo', disabled: true },
 ];
 
+/** Con qué tipo se abre el alta. El default de «¿dónde se vende?» lo sigue. */
+const EMPTY_TIPO = 'servicio';
+
 const EMPTY_FORM = {
   nombre: '', descripcion: '', referencia: '', codigoBarras: '',
-  precio: '', tasaItbis: 'exento', tipo: 'servicio', unidad: 'Unidad',
+  precio: '', tasaItbis: 'exento', tipo: EMPTY_TIPO, unidad: 'Unidad',
   costo: '', stockActual: '', stockMinimo: '',
   controlaInventario: false, permiteVentaSinStock: true,
   categoriaId: '', imagen: '',
+  // "¿Dónde se vende?" — se guarda como visiblePos/visibleFacturacion.
+  //
+  // Sale del tipo, no de un literal. Estaba fijo en 'ambos' mientras el tipo
+  // arranca en 'servicio': la combinación por defecto era «servicio que además
+  // va a la caja», y como el formulario SIEMPRE manda las dos banderas, el
+  // default por tipo de /api/productos nunca llegaba a ejecutarse. Así fue como
+  // mensualidades y matrículas terminaron en la grilla de la cafetería.
+  donde: defaultPorTipo(EMPTY_TIPO) as DondeSeVende,
 };
 
 interface Categoria { id: number; nombre: string; }
@@ -63,11 +77,19 @@ interface Categoria { id: number; nombre: string; }
  * `productoId` (null = crear) y carga el detalle + variantes él mismo, así los
  * dos callers no necesitan conocer la forma completa del producto.
  */
-export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
+export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPorDefecto }: {
   open: boolean;
   productoId: number | null;
   onClose: () => void;
   onSaved: () => void;
+  /**
+   * Dónde se vende un ítem NUEVO creado desde aquí, antes de que el usuario
+   * toque nada. Lo pasa la pantalla de productos del POS: quien está creando
+   * desde la caja está creando algo para la caja, y llegar al formulario con
+   * «Punto de venta» ya marcado le ahorra el paso que casi todos olvidan —el
+   * mismo olvido que llenó la grilla de mensualidades. Sigue siendo editable.
+   */
+  canalPorDefecto?: 'pos';
 }) {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
@@ -75,6 +97,9 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
   const [opError, setOpError]     = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
   const [categorias, setCategorias]     = useState<Categoria[]>([]);
+  // ¿El usuario ya contestó «¿dónde se vende?» a mano? Mientras no, el default
+  // sigue al tipo; en cuanto contesta, manda él.
+  const [tocóDonde, setTocóDonde]       = useState(false);
 
   // Variantes en CREAR (o convertir un bien simple): payload cartesiano.
   const [variantesNuevas, setVariantesNuevas] = useState<VariantesPayload>({ activo: false, variantAtributos: [], variants: [] });
@@ -120,6 +145,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
         permiteVentaSinStock: p.permiteVentaSinStock ?? true,
         categoriaId:          p.categoriaId != null ? String(p.categoriaId) : '',
         imagen:               p.imagen ?? '',
+        donde:                desdeBanderas(p),
       });
       // Variantes existentes (solo bienes).
       if (p.tipo === 'bien' && Array.isArray(p.variantAtributos) && p.variantAtributos.length > 0) {
@@ -148,15 +174,33 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
     setOpError(null);
     setShowAvanzado(false);
     setVariantesEdit(null);
+    setTocóDonde(false);
     if (productoId == null) {
-      setForm(EMPTY_FORM);
+      // Creando desde la caja: nace marcado como Punto de venta. Se marca
+      // también `tocóDonde` para que elegir «Producto» o «Servicio» después no
+      // pise la decisión que ya tomó el sitio desde donde se abrió.
+      setForm(canalPorDefecto === 'pos' ? { ...EMPTY_FORM, donde: 'pos' as DondeSeVende } : EMPTY_FORM);
+      if (canalPorDefecto === 'pos') setTocóDonde(true);
       setVariantesInit(null);
       setVariantesNuevas({ activo: false, variantAtributos: [], variants: [] });
       setResetVariantes(n => n + 1);
     } else {
       cargarDetalle(productoId);
     }
-  }, [open, productoId, cargarDetalle]);
+  }, [open, productoId, cargarDetalle, canalPorDefecto]);
+
+  /**
+   * Cambiar el tipo arrastra el «¿dónde se vende?» mientras el usuario no haya
+   * contestado esa pregunta él mismo. Mismo criterio que components/shared/
+   * producto-dialog.tsx: elegir «Producto» y que el desplegable siguiera
+   * diciendo «Solo en Facturación» obliga a corregir a mano algo que el sistema
+   * ya sabe; y en el otro sentido, un servicio que se queda en «En los dos»
+   * porque antes se tocó «Producto» es justo cómo se cuela una mensualidad en la
+   * caja. Si el usuario ya eligió, no se le mueve nada.
+   */
+  function cambiarTipo(tipo: string) {
+    setForm((f) => ({ ...f, tipo, donde: tocóDonde ? f.donde : defaultPorTipo(tipo) }));
+  }
 
   async function handleGuardar() {
     if (!form.nombre.trim()) { setOpError('El nombre es obligatorio'); return; }
@@ -191,6 +235,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
         permiteVentaSinStock: form.permiteVentaSinStock,
         categoriaId:          form.categoriaId ? Number(form.categoriaId) : null,
         imagen:               form.imagen || null,
+        ...aBanderas(form.donde),
       };
       if (!conVariantesEdit && !conVariantesNuevas) {
         body.stockActual = stockActual;
@@ -223,7 +268,13 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setShowAvanzado(false); } }}>
-      <DialogContent className="max-w-3xl lg:left-[calc(50%+7rem)]">
+      {/* Sin `lg:left-[calc(50%+7rem)]`. Esa compensación venía de cuando
+          `DialogContent` era el de Radix —que se centra a mano con `left-1/2` y
+          un translate— y había que correrlo para que el sidebar no lo tapara.
+          Aquí ese mismo componente ya es un Dialog de MUI, que centra por flex:
+          el `left` deja de compensar nada y se convierte en un desplazamiento a
+          secas, que sacaba el modal 652 px fuera de la pantalla. */}
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{esEdicion ? 'Editar ítem' : 'Nuevo producto o servicio'}</DialogTitle>
         </DialogHeader>
@@ -233,7 +284,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
         {loadingDetalle ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-zero-600" />
           </div>
         ) : (
         <div className="grid grid-cols-1 gap-6 py-2 md:grid-cols-[1fr_260px]">
@@ -255,10 +306,10 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                     }
                     return (
                       <button key={t.value} type="button"
-                        onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
+                        onClick={() => cambiarTipo(t.value)}
                         className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium transition-colors ${
                           isSelected
-                            ? 'bg-teal-100 border-teal-300 text-teal-800'
+                            ? 'bg-zero-100 border-zero-300 text-zero-800'
                             : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                         }`}>
                         {isSelected && <Check className="h-3.5 w-3.5" />}
@@ -292,6 +343,65 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Dónde se vende — dos casillas, no un desplegable.
+                Se ven las dos opciones de un vistazo y se marca la que toca,
+                sin abrir nada. Desmarcar las dos no se permite: un ítem que no
+                aparece en ningún lado no se puede vender. Ver
+                lib/productos/donde-se-vende.ts. */}
+            <div className="space-y-1.5">
+              <Label>¿Dónde se vende?</Label>
+              <div className="flex flex-wrap gap-2">
+                {CANALES.map(({ clave, label, ayuda }) => {
+                  const Icono = clave === 'pos' ? Store : FileText;
+                  const marcado = form.donde === 'ambos' || form.donde === clave;
+                  // La última marcada no se puede quitar: se dice por qué en el
+                  // title, y así el bloqueo no se lee como un botón roto.
+                  const esLaUltima = marcado && form.donde !== 'ambos';
+                  return (
+                    <button
+                      key={clave}
+                      type="button"
+                      title={esLaUltima ? 'Tiene que venderse al menos en un sitio' : ayuda}
+                      aria-pressed={marcado}
+                      onClick={() => {
+                        if (esLaUltima) return;
+                        setTocóDonde(true);
+                        setForm((f) => ({
+                          ...f,
+                          donde: marcado
+                            ? (clave === 'pos' ? 'facturacion' : 'pos')
+                            : 'ambos',
+                        }));
+                      }}
+                      className={[
+                        'flex flex-1 min-w-[190px] items-start gap-2.5 rounded-lg border p-3 text-left transition-colors',
+                        marcado
+                          ? 'border-zero-300 bg-zero-50'
+                          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50',
+                        esLaUltima ? 'cursor-default' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span
+                        className={[
+                          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                          marcado ? 'border-zero-600 bg-zero-600 text-white' : 'border-gray-300 bg-white',
+                        ].join(' ')}
+                      >
+                        {marcado && <Check className="h-3 w-3" strokeWidth={3} />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                          <Icono className="h-3.5 w-3.5 text-gray-400" />
+                          {label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{ayuda}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -350,7 +460,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
             {/* Control de inventario — solo bienes sin variantes */}
             {form.tipo === 'bien' && !tieneVariantes && !usaVariantesNuevas && (
-              <div className="space-y-3 border border-dashed border-teal-200 rounded-lg p-4 bg-teal-50/30">
+              <div className="space-y-3 border border-dashed border-zero-200 rounded-lg p-4 bg-zero-50/30">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-800">Controlar inventario</p>
@@ -358,7 +468,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                   </div>
                   <button type="button"
                     onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-zero-600' : 'bg-gray-200'}`}>
                     <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.controlaInventario ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
                 </div>
@@ -385,7 +495,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                       </div>
                       <button type="button"
                         onClick={() => setForm(f => ({ ...f, permiteVentaSinStock: !f.permiteVentaSinStock }))}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-zero-600' : 'bg-gray-200'}`}>
                         <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.permiteVentaSinStock ? 'translate-x-4' : 'translate-x-0'}`} />
                       </button>
                     </div>
@@ -398,7 +508,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
             <div>
               <button type="button"
                 onClick={() => setShowAvanzado((v) => !v)}
-                className="flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900 font-medium">
+                className="flex items-center gap-1.5 text-sm text-zero-700 hover:text-zero-900 font-medium">
                 {showAvanzado ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 Mostrar formulario avanzado
               </button>
@@ -447,7 +557,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => { onClose(); setShowAvanzado(false); }} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving || loadingDetalle}>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGuardar} disabled={saving || loadingDetalle}>
             {saving
               ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
               : (esEdicion ? 'Guardar cambios' : 'Crear ítem')}

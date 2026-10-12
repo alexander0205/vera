@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, History as HistoryIcon } from 'lucide-react';
+import { History as HistoryIcon } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface LogRow {
   id:           number | string;
@@ -90,7 +93,7 @@ function labelForRow(log: LogRow): string {
  * filtrado por resource/docId. Usa para mostrar la pestaña "Historia"
  * en el detalle de factura.
  */
-export function EntityHistory({ docId, encf, className = '' }: Props) {
+export function EntityHistory({ docId, encf }: Props) {
   const [logs, setLogs]       = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -146,58 +149,69 @@ export function EntityHistory({ docId, encf, className = '' }: Props) {
     }
   }
 
-  // Badge visual por tipo de fuente/operación
-  function badgeClass(log: LogRow): string {
+  // Badge visual por tipo de fuente/operación → color de borde izquierdo + fondo
+  function badgeStyle(log: LogRow): { borderColor: string; bgcolor: string } {
     if (log._source === 'row_audit') {
-      if (log._operation === 'I') return 'border-emerald-300 bg-emerald-50';
-      if (log._operation === 'U') return 'border-sky-200 bg-sky-50';
-      if (log._operation === 'D') return 'border-red-200 bg-red-50';
-      return 'border-gray-200';
+      if (log._operation === 'I') return { borderColor: '#6ee7b7', bgcolor: '#ecfdf5' }; // emerald
+      if (log._operation === 'U') return { borderColor: '#bae6fd', bgcolor: '#f0f9ff' }; // sky
+      if (log._operation === 'D') return { borderColor: '#fecaca', bgcolor: '#fef2f2' }; // red
+      return { borderColor: '#e5e7eb', bgcolor: 'transparent' };
     }
-    if (log.action === 'ECF_SEND' || log.action === 'ECF_ACEPTADO') return 'border-teal-300 bg-teal-50';
-    if (log.action === 'ECF_RECHAZADO' || log.action === 'ECF_ANULADO') return 'border-red-200 bg-red-50';
-    if (log.action === 'PAGO_REGISTRADO') return 'border-emerald-200 bg-emerald-50';
-    return 'border-gray-200';
+    if (log.action === 'ECF_SEND' || log.action === 'ECF_ACEPTADO') return { borderColor: '#a5b4f9', bgcolor: '#eef2fe' }; // teal
+    if (log.action === 'ECF_RECHAZADO' || log.action === 'ECF_ANULADO') return { borderColor: '#fecaca', bgcolor: '#fef2f2' }; // red
+    if (log.action === 'PAGO_REGISTRADO') return { borderColor: '#a7f3d0', bgcolor: '#ecfdf5' }; // emerald
+    return { borderColor: '#e5e7eb', bgcolor: 'transparent' };
   }
 
   if (loading) {
     return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
-      </div>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+        <CircularProgress size={20} sx={{ color: '#5b73ec' }} />
+      </Box>
     );
   }
 
   if (logs.length === 0) {
     return (
-      <div className={`text-center py-8 text-gray-400 text-sm ${className}`}>
-        <HistoryIcon className="h-8 w-8 mx-auto mb-2 opacity-40" />
+      <Box sx={{ textAlign: 'center', py: 4, color: '#9ca3af', fontSize: '0.875rem' }}>
+        <HistoryIcon style={{ width: 32, height: 32, display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
         Sin historial registrado todavía.
-      </div>
+      </Box>
     );
   }
 
   return (
-    <ol className={`space-y-3 ${className}`}>
+    <Box
+      component="ol"
+      sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+    >
       {logs.map(l => {
         const label = labelForRow(l);
         const meta  = renderMeta(l);
         const actorLabel = l.userName || l.actor || 'Sistema';
+        const badge = badgeStyle(l);
         return (
-          <li key={l.id} className={`border-l-2 pl-3 pb-2 ${badgeClass(l)}`}>
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-medium text-gray-900">{label}</p>
-              <span className="text-[10px] text-gray-400 whitespace-nowrap shrink-0">
+          <Box
+            component="li"
+            key={l.id}
+            sx={{ borderLeft: '2px solid', borderColor: badge.borderColor, bgcolor: badge.bgcolor, pl: 1.5, pb: 1 }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{label}</Typography>
+              <Typography
+                component="span"
+                sx={{ fontSize: '10px', color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
                 {fmtDate(l.createdAt)}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>
               {actorLabel}
-              {meta && <span className="text-gray-400"> · {meta}</span>}
-            </p>
-          </li>
+              {meta && <Box component="span" sx={{ color: '#9ca3af' }}> · {meta}</Box>}
+            </Typography>
+          </Box>
         );
       })}
-    </ol>
+    </Box>
   );
 }

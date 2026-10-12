@@ -1,3 +1,8 @@
+// Relativo y no `@/…`: este archivo lo carga next.config.ts, que corre en Node
+// antes de que exista el alias de TypeScript. Con `@/` el build muere con
+// «Cannot find module».
+import { validarBasesDeEnlaces } from './config/enlaces';
+
 const REQUIRED_ENV_VARS = [
   'AUTH_SECRET',
   'POSTGRES_URL',
@@ -23,6 +28,10 @@ export function validateEnv() {
       throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
   }
+
+  // Que estén no basta: una base de enlaces puede estar puesta y ser inservible,
+  // o puede haber tres puestas diciendo cosas distintas. Ver enlaces.ts.
+  validarBasesDeEnlaces();
 }
 
 // ─── Constantes de Proveedor — leer UNA sola vez, nunca hardcodear ───────────

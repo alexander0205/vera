@@ -10,6 +10,7 @@ const schema = z.object({
   direccion:   z.string().max(500).nullable().optional(),
   observacion: z.string().nullable().optional(),
   esDefault:   z.boolean().optional(),
+  soloPos:     z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -38,6 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (parsed.data.direccion !== undefined) upd.direccion   = parsed.data.direccion?.trim() || null;
   if (parsed.data.observacion !== undefined) upd.observacion = parsed.data.observacion?.trim() || null;
   if (parsed.data.esDefault !== undefined) upd.esDefault   = parsed.data.esDefault ? 'true' : 'false';
+  if (parsed.data.soloPos   !== undefined) upd.soloPos     = parsed.data.soloPos;
 
   const [updated] = await db.update(almacenes).set(upd).where(eq(almacenes.id, almId)).returning();
   return NextResponse.json({ almacen: updated });

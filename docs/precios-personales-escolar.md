@@ -1,0 +1,31 @@
+# Precios personales de estudiantes
+
+## Dónde se configuran
+
+En la ficha del estudiante, dentro de un período, **Configuración mensual** permite fijar la mensualidad de ese alumno. **La de su generación** quita la excepción; **Monto propio** guarda un importe en centavos; **Descuento** guarda un porcentaje de 1 a 100. Se persiste en `admin_escolar_matriculas.beca_tipo`, `beca_valor` y `beca_motivo`. El descuento solo se aplica a conceptos que admiten beca.
+
+En el mismo diálogo, **Precio personal de otro concepto** crea o cambia una fila de `admin_escolar_concepto_precios` con `objetivo_tipo='estudiante'` y `objetivo_id` igual al ID del alumno. Este precio gana sobre sección, grado y servicio para ese concepto y período. El producto de facturación se hereda de la tarifa aplicable a la matrícula o del concepto; nunca se toma de la tarifa de otro alumno o grado.
+
+## Cuándo nace la deuda
+
+- **Solo guardar el precio:** el POST guarda la tarifa sin llamar a `devengarPeriodo`. Un devengo posterior puede crear el cargo si el concepto está asignado a la matrícula y ya corresponde cobrarlo.
+- **Generar el cargo ahora:** el POST guarda la tarifa y llama a `devengarPeriodo` acotado a la matrícula y al concepto hasta la fecha actual. El motor es idempotente: no duplica un cargo existente. Si el concepto no está asignado o aún no toca, crea cero cargos.
+
+La resolución de tarifas se usa en plan de matrícula, devengo, prefill de factura y proyección del dashboard. Al quitar un precio personal, se elimina únicamente esa tarifa: los cargos existentes se conservan, pues pudieron haberse creado antes de la excepción. Las tarifas de estructura mantienen sus reglas de eliminación de cargos huérfanos.
+
+## Emisión automática del 25
+
+La factura recurrente congela sus ítems al configurarla. Para que un **monto propio** o un **descuento** puesto DESPUÉS sí se cobre, el emisor (`generarFacturaDeRecurrente`, tanto el cron del día 25 como «Generar ahora») **reprecia la mensualidad en cada emisión** vía `tarifaMensualidadActual`: resuelve la tarifa de la matrícula y, **solo si el origen es del propio alumno** (`beca` = monto propio/descuento, o `estudiante` = precio con `objetivo_tipo='estudiante'`), sobrescribe el `precioUnitarioItem` de la línea.
+
+Guardas deliberadas, para no cambiar montos por sorpresa:
+- **Solo planes de una línea.** Los multi-línea (p. ej. colegio + guardería) se dejan congelados: cuál línea es la mensualidad es ambiguo.
+- **Solo excepción del alumno.** Si la tarifa sale de la estructura (servicio/grado/sección = la de su generación), se conserva el precio congelado. Reprecificar en masa todas las mensualidades a la tarifa de generación es otra decisión (el cutover de precios de estructura), no la de esta función.
+- **Sin tarifa que resolver** (recurrente no escolar, sin concepto de mensualidad) → se conserva el precio congelado. Sin regresión.
+
+El cargo del mes que refleja la factura (`reflejarFacturaRecurrenteEnCargo`) toma el monto ya repreciado.
+
+## Verificación local
+
+`tsc --noEmit` pasó el 30-09-2026. Prueba HTTP contra la app y base local: precio personal de RD$42.36 guardado sin cargo; segundo POST con devengo creó un cargo de 4236 centavos; repetir creó cero. Otra prueba creó y quitó un precio personal en una matrícula que ya tenía un cargo de Inscripción y confirmó que ese cargo siguió intacto.
+
+Prueba en navegador, con el servidor local activo: **Solo guardar el precio** creó la tarifa personal sin crear deuda; **Generar el cargo ahora** mostró la nota ámbar, creó un cargo pendiente de RD$42.36 y actualizó el pendiente visible en la ficha. Repetir sobre un cargo existente no lo duplicó. Al terminar se eliminaron las filas de prueba y se restauró `conceptos_ids` como arreglo JSON original.

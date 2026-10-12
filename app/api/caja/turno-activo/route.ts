@@ -15,9 +15,18 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { conErrorJson } from '@/lib/api/error-json';
 import { getTurnoAbierto, getMinutosAbierto } from '@/lib/caja/core';
 
 export async function GET() {
+  return conErrorJson(
+    'api/caja/turno-activo',
+    'No se pudo consultar el estado de la caja.',
+    turnoActivo,
+  );
+}
+
+async function turnoActivo(): Promise<Response> {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   const teamId = await getTeamIdForUser();

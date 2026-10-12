@@ -1,28 +1,32 @@
 'use client';
 
-import { Label } from '@/components/ui/label';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
 
 interface Props {
   comentario: string;
   setComentario: (v: string) => void;
 }
 
-/**
- * Inline comentario textarea — rendered inside an AccordionSection.
- * The comentario is internal-only and is persisted with the document on emit.
- */
 export function Comentarios({ comentario, setComentario }: Props) {
   return (
-    <div>
-      <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Comentario interno</Label>
-      <textarea
-        className="w-full min-h-[80px] text-sm border border-gray-200 rounded-lg p-3 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+    <Box>
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.75 }}>Comentario interno</Typography>
+      <TextField
+        multiline
+        rows={3}
+        fullWidth
+        size="small"
         placeholder="Escribe un comentario"
-        maxLength={280}
         value={comentario}
         onChange={(e) => setComentario(e.target.value)}
+        slotProps={{ htmlInput: { maxLength: 280 } }}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
       />
-      <p className="text-xs text-gray-600 mt-1 text-right">{comentario.length}/280</p>
-    </div>
+      <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', mt: 0.5, textAlign: 'right' }}>
+        {comentario.length}/280
+      </Typography>
+    </Box>
   );
 }

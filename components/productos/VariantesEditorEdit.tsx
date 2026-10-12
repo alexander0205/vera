@@ -156,7 +156,7 @@ export function VariantesEditorEdit({ initial, basePrecioDOP, onChange }: {
   return (
     <div className="rounded-lg border border-gray-200 p-4 space-y-4">
       <div className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
-        <Layers className="h-4 w-4 text-teal-600" />
+        <Layers className="h-4 w-4 text-zero-600" />
         Variantes del producto
       </div>
 
@@ -173,7 +173,7 @@ export function VariantesEditorEdit({ initial, basePrecioDOP, onChange }: {
             {eje.valores.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {eje.valores.map(v => (
-                  <span key={v} className="inline-flex items-center gap-1 bg-teal-100 text-teal-800 text-xs font-medium pl-1 pr-1.5 py-0.5 rounded-full">
+                  <span key={v} className="inline-flex items-center gap-1 bg-zero-100 text-zero-800 text-xs font-medium pl-1 pr-1.5 py-0.5 rounded-full">
                     <input
                       className="bg-transparent outline-none w-[7ch] px-1 text-center"
                       defaultValue={v}
@@ -181,7 +181,7 @@ export function VariantesEditorEdit({ initial, basePrecioDOP, onChange }: {
                       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                       title="Editar valor"
                     />
-                    <button type="button" onClick={() => quitarValor(idx, v)} className="hover:text-teal-950" title="Quitar valor (si no está en uso)">
+                    <button type="button" onClick={() => quitarValor(idx, v)} className="hover:text-zero-950" title="Quitar valor (si no está en uso)">
                       <X className="h-3 w-3" />
                     </button>
                   </span>

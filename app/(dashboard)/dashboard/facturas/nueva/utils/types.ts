@@ -1,5 +1,7 @@
 // Tipos compartidos del formulario de Nueva Factura.
 
+import { tasasRetencion, CAMBIO_RETENCIONES_LEY_30_26 } from '@/lib/compras/fiscal';
+
 export interface Cliente {
   id:          number;
   razonSocial: string;
@@ -25,6 +27,24 @@ export interface Producto {
   permiteVentaSinStock: boolean;
   // Ejes de variante del producto. Vacío/undefined = producto sin variantes.
   variantAtributos?:    { nombre: string; valores: string[] }[];
+  /**
+   * Marca que esto NO es un producto del catálogo sino una cuota del plan de
+   * cobro de un alumno —«Colegiatura — Diciembre 2026»—, que el buscador ofrece
+   * cuando la línea ya tiene beneficiario.
+   *
+   * Existe porque las mensualidades no son productos: el catálogo tiene
+   * «Colegiatura — Primaria» y nada más. Sin esto, quien está dentro de una
+   * factura y quiere añadir otro mes tiene que salir y volver a empezar.
+   */
+  cuotaEscolar?: {
+    cargoId:        number;      // 0 = todavía no existe la deuda
+    estudianteId:   number;
+    mes:            number | null;
+    anio:           number;
+    saldoCentavos:  number;
+    productoId:     number | null;
+    contexto:       string;
+  };
 }
 
 /** Variante concreta de un producto (talla, color…), con su stock y precio. */
@@ -69,6 +89,9 @@ export interface BorradorInicial {
   pagoRecibido?:        boolean;
   pagoFecha?:           string | null;
   pagoLineas?:          { metodo: string; valor: string; cuenta?: string; referencia?: string }[];
+  categoriaGasto?:      string | null;
+  ncfProveedor?:        string | null;
+  fechaGasto?:          string | null;
 }
 
 export interface ItemLinea {
@@ -89,12 +112,22 @@ export interface ItemLinea {
   /** Beneficiario por línea (dependiente del cliente). */
   dependienteId?: number | null;
   dependienteNombre?: string;
+  /**
+   * `estudiante:cargo:mes:año` cuando la línea salió de una cuota del plan.
+   *
+   * Sirve para no ofrecer dos veces el mismo mes en el buscador. Un cargo que
+   * todavía no existe tiene id 0, así que el mes y el año son parte de la clave
+   * — si no, dos meses previstos del mismo alumno serían indistinguibles.
+   */
+  cuotaClave?: string;
 }
 
 export interface ResultadoEmision {
   ok:              boolean;
   modo:            'emitir' | 'borrador';
   encf?:           string;
+  /** El código interno (FA-2026-…). En un «sin NCF» es el único que hay. */
+  codigo?:         string | null;
   trackId?:        string;
   estado:          string;
   codigoSeguridad?: string;
@@ -179,14 +212,22 @@ export const TASA_ITBIS = [
   { value: 'exento', label: 'Exento' },
 ];
 
+// Tasas de ISR vigentes: las mismas que sugiere el registro de compras
+// (lib/compras/fiscal.ts). Desde el 1-jul-2026 la Ley 30-26 subió honorarios y
+// alquileres de personas físicas al 15 % y los servicios técnicos al 3 %.
+const TASAS_ISR = tasasRetencion(CAMBIO_RETENCIONES_LEY_30_26);
+const pct = (tasa: number) => Math.round(tasa * 100);
+
 export const RETENCIONES_PREDEFINIDAS = [
   // ITBIS
   { id: 'itbis_30',  nombre: 'Retención ITBIS',         porcentaje: 30,  tipo: 'itbis' as const, descripcion: 'Retención 30% del ITBIS (Estado y entidades públicas)' },
   { id: 'itbis_75',  nombre: 'Retención ITBIS',         porcentaje: 75,  tipo: 'itbis' as const, descripcion: 'Retención 75% del ITBIS (Grandes Contribuyentes designados)' },
   { id: 'itbis_100', nombre: 'Retención ITBIS',         porcentaje: 100, tipo: 'itbis' as const, descripcion: 'Retención 100% del ITBIS' },
   // ISR
-  { id: 'isr_alq',   nombre: 'Alquileres',              porcentaje: 10,  tipo: 'isr'   as const, descripcion: 'ISR sobre alquileres pagados a personas físicas (10%)' },
-  { id: 'isr_hon',   nombre: 'Honorarios por servicios', porcentaje: 10, tipo: 'isr'   as const, descripcion: 'ISR honorarios profesionales y servicios (10%)' },
+  { id: 'isr_alq',   nombre: 'Alquileres',              porcentaje: pct(TASAS_ISR.alquilerPF),   tipo: 'isr' as const, descripcion: `ISR sobre alquileres pagados a personas físicas (${pct(TASAS_ISR.alquilerPF)}%)` },
+  { id: 'isr_hon',   nombre: 'Honorarios por servicios', porcentaje: pct(TASAS_ISR.honorariosPF), tipo: 'isr' as const, descripcion: `ISR honorarios profesionales de personas físicas (${pct(TASAS_ISR.honorariosPF)}%)` },
+  { id: 'isr_tec',   nombre: 'Servicios técnicos',      porcentaje: pct(TASAS_ISR.tecnicosPF),   tipo: 'isr' as const, descripcion: `ISR servicios técnicos y mano de obra de personas físicas (${pct(TASAS_ISR.tecnicosPF)}%)` },
+  { id: 'isr_ext',   nombre: 'Pagos al exterior',       porcentaje: pct(TASAS_ISR.exterior),     tipo: 'isr' as const, descripcion: `ISR sobre rentas pagadas a no residentes (${pct(TASAS_ISR.exterior)}%)` },
   { id: 'isr_otras', nombre: 'Otras rentas',            porcentaje: 10,  tipo: 'isr'   as const, descripcion: 'ISR otras rentas (10%)' },
   { id: 'isr_div',   nombre: 'Dividendos',              porcentaje: 10,  tipo: 'isr'   as const, descripcion: 'ISR retención dividendos (10%)' },
 ];

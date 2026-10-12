@@ -1,32 +1,32 @@
 'use client';
 
 import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { CreditCard, ChevronDown, FileX, User } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface PagoLineaHistorial {
-  metodo:     string;
-  valor:      string;          // DOP string
-  cuenta?:    string;
+  metodo:      string;
+  valor:       string;
+  cuenta?:     string;
   referencia?: string;
-  fechaPago?: string | null;   // YYYY-MM-DD
-  notas?:     string;
-  usuario?:   string;
+  fechaPago?:  string | null;
+  notas?:      string;
+  usuario?:    string;
 }
 
 export interface PagoData {
   recibido: boolean;
-  metodo?: string | null;
-  cuenta?: string | null;
-  valorDOP: string;            // total pagado (DOP)
-  fecha?: string | null;
-  /** Historial real del ledger (read-only). */
-  lineas?: PagoLineaHistorial[];
+  metodo?:  string | null;
+  cuenta?:  string | null;
+  valorDOP: string;
+  fecha?:   string | null;
+  lineas?:  PagoLineaHistorial[];
 }
 
 interface Props {
-  initial: PagoData;
-  /** Total de la factura — para mostrar saldo en el resumen. */
+  initial:  PagoData;
   totalDOP: string;
 }
 
@@ -44,106 +44,110 @@ const metodoLabel = (m: string) =>
 
 const toCts = (dop: string) => Math.round((parseFloat(dop || '0') || 0) * 100);
 
-/**
- * Right-sidebar "Historial de pagos" card — SOLO LECTURA.
- * Los pagos se registran/editan desde Cuentas por cobrar; aquí solo se consultan.
- */
 export function PagoCard({ initial, totalDOP }: Props) {
   const [open, setOpen] = useState(true);
 
-  const lineas = initial.lineas ?? [];
+  const lineas    = initial.lineas ?? [];
   const pagadoCts = toCts(initial.valorDOP);
   const totalCts  = toCts(totalDOP);
   const saldoCts  = Math.max(totalCts - pagadoCts, 0);
 
   return (
-    <section
+    <Box
       data-pago-card
-      className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+      sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}
     >
-      <button
+      <Box
+        component="button"
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 hover:bg-gray-50 transition-colors"
         aria-expanded={open}
+        sx={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 1, px: 2, pt: 2, pb: 1.5,
+          bgcolor: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+          '&:hover': { bgcolor: '#f9fafb' }, transition: 'background 0.1s',
+        }}
       >
-        <CreditCard className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
-        <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Historial de pagos</h2>
+        <CreditCard size={16} color="#3658e1" style={{ flexShrink: 0 }} />
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}>
+          Historial de pagos
+        </Typography>
         {lineas.length > 0 && (
-          <span className="text-[11px] text-gray-400 tabular-nums">{lineas.length}</span>
+          <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>{lineas.length}</Typography>
         )}
-        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
-      </button>
+        <Box sx={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>
+          <ChevronDown size={16} color="#9ca3af" />
+        </Box>
+      </Box>
 
       {open && (
-        <div className="px-4 pb-4 md:px-5 space-y-3">
+        <Box sx={{ px: 2, pb: 2 }}>
           {lineas.length === 0 ? (
-            /* ─── Estado vacío ─── */
-            <div className="flex flex-col items-center text-center py-6">
-              <FileX className="h-10 w-10 text-gray-300 mb-3" strokeWidth={1.4} />
-              <p className="text-sm font-medium text-gray-700">Sin pagos registrados</p>
-              <p className="text-xs text-gray-500 mt-1 max-w-[28ch]">
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', py: 4 }}>
+              <FileX size={40} color="#d1d5db" style={{ marginBottom: 12 }} strokeWidth={1.4} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Sin pagos registrados</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.5, maxWidth: 200 }}>
                 Los pagos se registran desde Cuentas por cobrar.
-              </p>
-            </div>
+              </Typography>
+            </Box>
           ) : (
             <>
-              {/* ─── Lista de pagos ─── */}
-              <ul className="divide-y divide-gray-100">
+              {/* Lista de pagos */}
+              <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', '& li + li': { borderTop: '1px solid #f3f4f6' } }}>
                 {lineas.map((l, i) => (
-                  <li key={l.referencia ? `${i}-${l.referencia}` : i} className="py-2.5 first:pt-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-gray-800">
+                  <Box component="li" key={l.referencia ? `${i}-${l.referencia}` : i} sx={{ py: 1.5, '&:first-of-type': { pt: 0.5 } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937' }}>
                         {metodoLabel(l.metodo)}
-                      </span>
-                      <span className="text-sm font-semibold text-gray-900 tabular-nums whitespace-nowrap">
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                         {fmtDOP(toCts(l.valor))}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
-                      {l.fechaPago && <span>{fmtFechaCorta(l.fechaPago)}</span>}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ mt: 0.25, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px' }}>
+                      {l.fechaPago && (
+                        <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280' }}>{fmtFechaCorta(l.fechaPago)}</Typography>
+                      )}
                       {l.usuario && (
-                        <>
-                          {l.fechaPago && <span aria-hidden="true">·</span>}
-                          <span className="inline-flex items-center gap-1">
-                            <User className="h-3 w-3" aria-hidden="true" />
-                            {l.usuario}
-                          </span>
-                        </>
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                          <User size={11} color="#9ca3af" />
+                          <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280' }}>{l.usuario}</Typography>
+                        </Box>
                       )}
                       {l.referencia && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className="font-mono">{l.referencia}</span>
-                        </>
+                        <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280', fontFamily: 'monospace' }}>{l.referencia}</Typography>
                       )}
-                    </div>
+                    </Box>
                     {l.notas && (
-                      <p className="mt-1 text-[11px] text-gray-600 italic leading-snug">{l.notas}</p>
+                      <Typography sx={{ mt: 0.5, fontSize: '0.6875rem', color: '#4b5563', fontStyle: 'italic', lineHeight: 1.4 }}>
+                        {l.notas}
+                      </Typography>
                     )}
-                  </li>
+                  </Box>
                 ))}
-              </ul>
+              </Box>
 
-              {/* ─── Resumen ─── */}
-              <div className="pt-2 border-t border-gray-100 space-y-1.5">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Total pagado</span>
-                  <span className="font-semibold text-emerald-700 tabular-nums">{fmtDOP(pagadoCts)}</span>
-                </div>
+              {/* Resumen */}
+              <Box sx={{ pt: 1.5, borderTop: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Total pagado</Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#16a34a', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtDOP(pagadoCts)}
+                  </Typography>
+                </Box>
                 {totalCts > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Saldo</span>
-                    <span className={`font-semibold tabular-nums ${saldoCts === 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Saldo</Typography>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: saldoCts === 0 ? '#16a34a' : '#dc2626' }}>
                       {fmtDOP(saldoCts)}
-                    </span>
-                  </div>
+                    </Typography>
+                  </Box>
                 )}
-              </div>
+              </Box>
             </>
           )}
-        </div>
+        </Box>
       )}
-    </section>
+    </Box>
   );
 }
