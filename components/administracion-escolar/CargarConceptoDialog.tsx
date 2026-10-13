@@ -17,8 +17,11 @@ import {
   type DetalleRevisado, type FraseDelCobro,
 } from '@/lib/administracion-escolar/cargo-lote';
 import {
-  ERRORES_AL_COMPROBAR, conteoDeLaCarga, errorDeLaCarga, todosLoTienen,
+  ERRORES_AL_COMPROBAR, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga, necesitaMes, todosLoTienen,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
+import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
+import { mesEnLetras } from '@/lib/administracion-escolar/cargo-lote';
+import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 
 /**
@@ -59,10 +62,20 @@ interface CuerpoDelCargo {
   periodoId: number;
   cursoIds: number[];
   conceptoId: number;
-  mes: null;
+  /** El mes de la colegiatura. `null` en todo lo demás: ese cobro va una vez al año. */
+  mes: number | null;
   anio: number;
   montoCentavos: number;
   fechaVencimiento: string | null;
+}
+
+/** El año escolar con sus fechas, para saber qué meses tiene. */
+interface PeriodoConFechas { fechaInicio: string | null; fechaFin: string | null }
+
+/** El mes que viene puesto: el de hoy si cae dentro del año escolar. */
+function mesInicial(meses: MesDelPeriodo[]): MesDelPeriodo | null {
+  const [anio, mes] = hoyRD().split('-').map(Number);
+  return meses.find((m) => m.mes === mes && m.anio === anio) ?? meses[0] ?? null;
 }
 
 /**
@@ -97,7 +110,7 @@ export function CargarConceptoDialog({
   concepto, grupoNombre, montoCentavos, periodo, cursoIds, onCerrar, onCreado,
 }: {
   /** El concepto de la fila. Desde aquí no se cambia ni se crea otro. */
-  concepto: { id: number; nombre: string };
+  concepto: { id: number; nombre: string; tipo: string };
   /** El curso de la fila, como se dice en una frase: «Inicial - Matutina», «1ro». */
   grupoNombre: string;
   /** La tarifa de la fila: lo que paga cada alumno. */
@@ -110,6 +123,15 @@ export function CargarConceptoDialog({
   onCreado?: (creados: number) => void;
 }) {
   const hoy = hoyRD();
+  const conMes = necesitaMes(concepto.tipo);
+  const aviso = avisoDeLaCarga(concepto.tipo);
+  /**
+   * Los meses del año escolar. Solo se piden cuando el cobro es de los que van
+   * por mes: la pantalla de Tarifas no trae las fechas del período, y pedirlas
+   * siempre sería una llamada de más en el caso normal.
+   */
+  const [meses, setMeses] = useState<MesDelPeriodo[] | null>(null);
+  const [mes, setMes] = useState<MesDelPeriodo | null>(null);
   const [fecha, setFecha] = useState(() => sumarDias(hoyRD(), 7));
   const [errorFecha, setErrorFecha] = useState<string | null>(null);
   const [revision, setRevision] = useState<Generacion | null>(null);
@@ -133,11 +155,13 @@ export function CargarConceptoDialog({
     periodoId: periodo.id,
     cursoIds,
     conceptoId: concepto.id,
-    mes: null,
-    anio: Number(hoyRD().slice(0, 4)),
+    mes: conMes && mes ? mes.mes : null,
+    // El año es el del mes elegido; sin mes, el de hoy, que es como lo manda
+    // la pantalla de «Cargo a varios alumnos».
+    anio: conMes && mes ? mes.anio : Number(hoyRD().slice(0, 4)),
     montoCentavos,
     fechaVencimiento: fecha || null,
-  }), [periodo.id, cursoIds, concepto.id, montoCentavos, fecha]);
+  }), [periodo.id, cursoIds, concepto.id, montoCentavos, fecha, conMes, mes]);
 
   /** Cada «volver a mirar» sube esto: lo que venga de una pregunta vieja no se pinta. */
   const preguntaVigente = useRef(0);
@@ -148,12 +172,21 @@ export function CargarConceptoDialog({
     setMirando(true);
     setError(null);
     setSoloVolverAMirar(false);
-    // Las dos preguntas salen a la vez para no esperar el doble.
-    const quienesLoTienen = alumnosConEseConcepto(concepto.id, periodo.id);
+    /*
+     * Quién lo tiene ya se pregunta aparte SOLO cuando el cargo va sin mes: el
+     * servidor, preguntado sin mes, no ve los cargos que sí lo tienen. Con mes
+     * —una colegiatura— el servidor ya cuenta los repetidos de ESE mes, y
+     * mirar además todos los del año marcaría como «ya lo tiene» a quien pagó
+     * septiembre cuando se está cobrando octubre.
+     */
+    const cuerpo = cuerpoDelCargo();
+    const quienesLoTienen = cuerpo.mes === null
+      ? alumnosConEseConcepto(concepto.id, periodo.id)
+      : Promise.resolve<number[]>([]);
     try {
       const res = await fetch('/api/administracion-escolar/cargos/generar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...cuerpoDelCargo(), dryRun: true }),
+        body: JSON.stringify({ ...cuerpo, dryRun: true }),
       });
       const data = await res.json().catch(() => null);
       if (estaVez !== preguntaVigente.current) return;
@@ -187,14 +220,47 @@ export function CargarConceptoDialog({
     }
   }, [concepto.id, periodo.id, cuerpoDelCargo]);
 
-  // Al abrir se mira una vez. Cambiar la fecha NO vuelve a preguntar: «ya lo
-  // tiene» no depende de hasta cuándo pueden pagar.
-  const yaMiro = useRef(false);
+  /**
+   * Los meses del año escolar, solo para los cobros que van por mes.
+   *
+   * Si no se pueden leer, el diálogo lo dice y no deja cobrar: sin mes, el
+   * cargo de una colegiatura se guardaría suelto y el de octubre taparía al de
+   * septiembre.
+   */
   useEffect(() => {
-    if (yaMiro.current) return;
-    yaMiro.current = true;
+    if (!conMes) return;
+    let vigente = true;
+    void (async () => {
+      try {
+        const r = await fetch('/api/administracion-escolar/periodos');
+        if (!r.ok) throw new Error('periodos');
+        const d = await r.json();
+        const suyo: PeriodoConFechas | undefined = (d.periodos ?? [])
+          .find((p: { id: number }) => p.id === periodo.id);
+        const lista = mesesDelPeriodo(suyo?.fechaInicio, suyo?.fechaFin);
+        if (!vigente) return;
+        setMeses(lista);
+        setMes(mesInicial(lista));
+      } catch {
+        if (vigente) setMeses([]);
+      }
+    })();
+    return () => { vigente = false; };
+  }, [conMes, periodo.id]);
+
+  /**
+   * Se mira al abrir y cada vez que se cambia de mes: «ya lo tiene» es de ese
+   * mes y de ningún otro. Cambiar la fecha límite NO vuelve a preguntar — a
+   * quién se le debe no depende de hasta cuándo puede pagar.
+   */
+  const claveDeLaPregunta = conMes ? (mes ? `${mes.anio}-${mes.mes}` : null) : 'sin-mes';
+  const miradaHecha = useRef<string | null>(null);
+  useEffect(() => {
+    if (claveDeLaPregunta === null) return;
+    if (miradaHecha.current === claveDeLaPregunta) return;
+    miradaHecha.current = claveDeLaPregunta;
     void mirar();
-  }, [mirar]);
+  }, [claveDeLaPregunta, mirar]);
 
   function cambiarFecha(iso: string) {
     setFecha(iso);
@@ -265,7 +331,7 @@ export function CargarConceptoDialog({
   const frase: FraseDelCobro | null = revision ? fraseDelCobro({
     montoCentavos: cuerpo.montoCentavos,
     cobro: concepto.nombre,
-    mesTexto: null,
+    mesTexto: cuerpo.mes ? mesEnLetras(cuerpo.mes, cuerpo.anio) : null,
     aMano: false,
     grupo: grupoNombre,
     marcados: seleccion.size,
@@ -283,10 +349,18 @@ export function CargarConceptoDialog({
     quitados.length > 0 ? fraseDeQuitados(quitados) : null,
     yaLoTienen > 0 ? fraseDeDuplicados(yaLoTienen) : null,
   ].filter((n): n is string => n !== null);
-  const avisos = periodo.activo ? [] : [`Es del año escolar «${periodo.nombre}», que no es el que está en curso.`];
+  // El ámbar del tipo de cobro se repite al confirmar: es lo que más cuesta
+  // deshacer, y el diálogo de «¿seguro?» tapa el del cuerpo.
+  const avisos = [
+    aviso,
+    periodo.activo ? null : `Es del año escolar «${periodo.nombre}», que no es el que está en curso.`,
+  ].filter((a): a is string => a !== null);
 
   const ecoFecha = fecha && esFechaValida(fecha) ? ecoDeLaFecha(fecha, hoy) : null;
-  const puedeCobrar = revision !== null && seleccion.size > 0 && !mirando && !errorFecha && !soloVolverAMirar;
+  /** El año escolar no tiene fechas, así que no hay meses que elegir. */
+  const sinMeses = conMes && meses !== null && meses.length === 0;
+  const puedeCobrar = revision !== null && seleccion.size > 0 && !mirando && !errorFecha
+    && !soloVolverAMirar && !sinMeses;
 
   return (
     <>
@@ -305,6 +379,46 @@ export function CargarConceptoDialog({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            {/* El aviso del tipo de cobro va ARRIBA del todo y no junto al
+                botón: lo que cambia aquí no es si se puede cobrar, sino qué se
+                va a cobrar —la tarifa de la fila, sin beca—, y eso hay que
+                leerlo antes de repasar la lista, no después. */}
+            {aviso && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {aviso}
+              </p>
+            )}
+
+            {conMes && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="carga-mes">¿De qué mes?</Label>
+                {sinMeses ? (
+                  <p id="carga-mes-sin-fechas" className="text-sm text-amber-800">
+                    {`El año escolar «${periodo.nombre}» no tiene fechas, así que no se sabe qué meses tiene. Ponle fechas en Estructura y vuelve.`}
+                  </p>
+                ) : meses === null ? (
+                  <p className="text-sm text-gray-500">Buscando los meses del año escolar…</p>
+                ) : (
+                  <div className="w-56">
+                    <NativeSelect id="carga-mes" value={mes ? `${mes.anio}-${mes.mes}` : ''}
+                      onChange={(e) => setMes(meses.find((m) => `${m.anio}-${m.mes}` === e.target.value) ?? null)}>
+                      {meses.map((m) => (
+                        <option key={`${m.anio}-${m.mes}`} value={`${m.anio}-${m.mes}`}>
+                          {mesEnLetras(m.mes, m.anio)}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                )}
+                {/* Por qué el mes manda: es lo que decide quién sale en gris. */}
+                {!sinMeses && (
+                  <p className="text-xs text-gray-500">
+                    Quien ya tenga este cobro de ese mes sale en gris y no se le cobra otra vez.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid gap-1.5">
               <Label htmlFor="carga-fecha">¿Hasta cuándo pueden pagar?</Label>
               <div className="w-44">
@@ -315,7 +429,7 @@ export function CargarConceptoDialog({
                 : ecoFecha && <p className={`text-xs ${ecoFecha.aviso ? 'text-amber-700' : 'text-gray-500'}`}>{ecoFecha.texto}</p>}
             </div>
 
-            {mirando && (
+            {mirando && !sinMeses && (
               <p className="flex items-center gap-2 py-6 text-sm text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" /> Buscando a los alumnos…
               </p>

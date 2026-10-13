@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ERRORES_AL_COMPROBAR, ETIQUETA_CARGAR, conteoDeLaCarga, errorDeLaCarga,
-  motivoParaNoCargar, seccionesDelObjetivo, todosLoTienen,
+  ERRORES_AL_COMPROBAR, ETIQUETA_CARGAR, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga, necesitaMes,
+  motivoParaNoCargar, seccionesDelObjetivo, tienePlanPropio, todosLoTienen,
   type ObjetivoDeTarifa,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
 
@@ -66,32 +66,55 @@ describe('seccionesDelObjetivo', () => {
 describe('motivoParaNoCargar', () => {
   const conPrecio = { montoCentavos: 50_000, cursoIds: [100, 101] };
 
-  it('un cobro suelto con precio y con secciones se puede cargar', () => {
-    expect(motivoParaNoCargar({ tipoDeConcepto: 'otro', ...conPrecio })).toBeNull();
-  });
-
-  /*
-   * La mensualidad y la inscripción tienen precio por curso, becas y su propio
-   * calendario: cobrarlas «a todos por igual» desde aquí se salta justo lo que
-   * las tarifas configuran.
-   */
-  it('la mensualidad y la inscripción no se cobran desde aquí', () => {
-    expect(motivoParaNoCargar({ tipoDeConcepto: 'mensualidad', ...conPrecio }))
-      .toMatch(/plan del año/);
-    expect(motivoParaNoCargar({ tipoDeConcepto: 'inscripcion', ...conPrecio }))
-      .toMatch(/plan del año/);
+  it('con precio y con secciones se puede cargar', () => {
+    expect(motivoParaNoCargar(conPrecio)).toBeNull();
   });
 
   it('sin precio no hay cargo: el monto es obligatorio y no hay de dónde sacarlo', () => {
-    expect(motivoParaNoCargar({ tipoDeConcepto: 'otro', montoCentavos: null, cursoIds: [100] }))
-      .toMatch(/Ponle precio/);
-    expect(motivoParaNoCargar({ tipoDeConcepto: 'otro', montoCentavos: 0, cursoIds: [100] }))
-      .toMatch(/Ponle precio/);
+    expect(motivoParaNoCargar({ montoCentavos: null, cursoIds: [100] })).toMatch(/Ponle precio/);
+    expect(motivoParaNoCargar({ montoCentavos: 0, cursoIds: [100] })).toMatch(/Ponle precio/);
   });
 
   it('una fila sin secciones no pregunta: mandarla sería cobrarle al colegio entero', () => {
-    expect(motivoParaNoCargar({ tipoDeConcepto: 'otro', montoCentavos: 50_000, cursoIds: [] }))
-      .toMatch(/secciones/);
+    expect(motivoParaNoCargar({ montoCentavos: 50_000, cursoIds: [] })).toMatch(/secciones/);
+  });
+
+  /*
+   * El tipo de cobro ya NO para el botón. Lo paraba —la colegiatura tiene
+   * becas y plan propio—, pero apagarlo dejaba sin salida al colegio que
+   * necesita ponerle la colegiatura a los seis que entraron tarde. Ahora se
+   * avisa y se enseña uno por uno a quién se le pone.
+   */
+  it('la colegiatura y la inscripción ya no están prohibidas', () => {
+    expect(motivoParaNoCargar(conPrecio)).toBeNull();
+    expect(avisoDeLaCarga('mensualidad')).toMatch(/sin beca/);
+    expect(avisoDeLaCarga('inscripcion')).toMatch(/una vez por año escolar/);
+    expect(tienePlanPropio('mensualidad')).toBe(true);
+    expect(tienePlanPropio('inscripcion')).toBe(true);
+  });
+
+  it('un cobro suelto no lleva aviso: no hay nada que avisar', () => {
+    expect(avisoDeLaCarga('actividad')).toBeNull();
+    expect(avisoDeLaCarga('otro')).toBeNull();
+    expect(tienePlanPropio('actividad')).toBe(false);
+  });
+});
+
+describe('necesitaMes', () => {
+  /*
+   * Sin mes, el servidor cuenta los repetidos por año escolar: a quien se le
+   * cobró septiembre se le daría por cobrado octubre, y la colegiatura de
+   * octubre no se podría poner.
+   */
+  it('la colegiatura va por mes', () => {
+    expect(necesitaMes('mensualidad')).toBe(true);
+  });
+
+  it('lo demás va una vez por año escolar', () => {
+    expect(necesitaMes('inscripcion')).toBe(false);
+    expect(necesitaMes('actividad')).toBe(false);
+    expect(necesitaMes('uniforme')).toBe(false);
+    expect(necesitaMes('otro')).toBe(false);
   });
 });
 

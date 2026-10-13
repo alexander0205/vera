@@ -246,7 +246,7 @@ export function ConceptosPanel() {
     if (!concepto || !data.periodo || !puedeCobrar) return null;
     const montoCentavos = precio?.montoCentavos ?? null;
     const cursoIds = seccionesDelObjetivo(objetivo, data.grados, data.secciones);
-    const motivo = motivoParaNoCargar({ tipoDeConcepto: concepto.tipo, montoCentavos, cursoIds });
+    const motivo = motivoParaNoCargar({ montoCentavos, cursoIds });
     return (
       <button type="button" disabled={motivo !== null}
         onClick={() => setCargaDe({ grupoNombre, montoCentavos: montoCentavos as number, cursoIds })}
@@ -482,7 +482,7 @@ export function ConceptosPanel() {
 
       {cargaDe && concepto && data.periodo && (
         <CargarConceptoDialog
-          concepto={{ id: concepto.id, nombre: concepto.nombre }}
+          concepto={{ id: concepto.id, nombre: concepto.nombre, tipo: concepto.tipo }}
           grupoNombre={cargaDe.grupoNombre}
           montoCentavos={cargaDe.montoCentavos}
           cursoIds={cargaDe.cursoIds}

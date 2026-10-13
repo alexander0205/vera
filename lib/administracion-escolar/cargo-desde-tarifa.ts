@@ -63,19 +63,15 @@ export function seccionesDelObjetivo(
  * Por qué esta fila no puede cobrar, para decirlo en el botón antes de que
  * nadie lo pulse. `null` = se puede.
  *
- * La mensualidad y la inscripción quedan fuera a propósito: tienen precio por
- * curso, becas y su propio calendario, y cobrarlas «a todos por igual» desde
- * aquí se salta justo lo que las tarifas configuran. Se siguen cobrando por
- * donde se cobran, con el plan del año.
+ * Solo paran las dos cosas que hacen imposible el cargo: sin precio no hay
+ * monto que poner —la ruta de generar lo exige— y sin secciones no hay a
+ * quién. El tipo de cobro NO para: la colegiatura también se carga desde
+ * aquí, con sus límites (ver `avisoDeLaCarga` y `necesitaMes`).
  */
 export function motivoParaNoCargar(d: {
-  tipoDeConcepto: string;
   montoCentavos: number | null;
   cursoIds: number[];
 }): string | null {
-  if (esCobroFijo(d.tipoDeConcepto)) {
-    return 'La mensualidad y la inscripción se cobran con el plan del año, no desde aquí.';
-  }
   if (d.montoCentavos === null || d.montoCentavos <= 0) {
     return 'Ponle precio a esta fila para poder cobrárselo a sus alumnos.';
   }
@@ -83,6 +79,43 @@ export function motivoParaNoCargar(d: {
     return 'Esta fila todavía no tiene secciones con alumnos.';
   }
   return null;
+}
+
+/**
+ * Una colegiatura se cobra POR MES, y por mes se decide también quién la tiene
+ * ya: sin mes, a quien se le cobró septiembre se le daría por cobrado octubre.
+ *
+ * La inscripción no lo necesita: va una vez por año escolar, que es justo como
+ * la ruta de generar cuenta los repetidos cuando no se manda mes.
+ */
+export function necesitaMes(tipoDeConcepto: string): boolean {
+  return tipoDeConcepto === 'mensualidad';
+}
+
+/**
+ * Lo que hay que decir en ámbar, dentro del diálogo y otra vez al confirmar,
+ * cuando el cobro es de los que tienen plan propio.
+ *
+ * Antes esto era un botón apagado. Lo que lo apagaba sigue siendo verdad —aquí
+ * todos pagan la tarifa de la fila, y las becas y las tarifas personales del
+ * alumno viven en su matrícula—, pero apagarlo dejaba sin salida al colegio
+ * que necesita ponerle la colegiatura a los seis alumnos que entraron tarde.
+ * Así que no se prohíbe: se avisa, se enseña uno por uno a quién se le va a
+ * poner, y los que ya la tienen salen en gris y no se pueden marcar.
+ */
+export function avisoDeLaCarga(tipoDeConcepto: string): string | null {
+  if (tipoDeConcepto === 'mensualidad') {
+    return 'Es una colegiatura: normalmente la pone el plan del año. Desde aquí todos pagan la tarifa de esta fila, sin beca ni tarifa personal del alumno.';
+  }
+  if (tipoDeConcepto === 'inscripcion') {
+    return 'Es la inscripción: va una vez por año escolar. Desde aquí todos pagan la tarifa de esta fila, sin beca ni tarifa personal del alumno.';
+  }
+  return null;
+}
+
+/** Los dos cobros con plan propio, por si hace falta tratarlos juntos. */
+export function tienePlanPropio(tipoDeConcepto: string): boolean {
+  return esCobroFijo(tipoDeConcepto);
 }
 
 /** Nombre de la etiqueta de la acción. Una sola, y se dice igual en todas las filas. */
