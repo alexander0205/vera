@@ -118,6 +118,28 @@ export function tienePlanPropio(tipoDeConcepto: string): boolean {
   return esCobroFijo(tipoDeConcepto);
 }
 
+/**
+ * El aviso de que este cobro ya tiene calendario, y por tanto quien lo pone es
+ * el plan del año y no esta pantalla.
+ *
+ * Es el choque que ninguna de las dos partes ve. Son dos controles de
+ * duplicado con llaves distintas: el plan pregunta «¿ya hice la cuota P1 de
+ * este alumno?» y mira `cuota_id`; esta pantalla pregunta «¿ya tiene este
+ * concepto en este año (y este mes)?» y no mira las cuotas. Un cargo creado
+ * aquí nace sin `cuota_id`, así que cuando luego corre el plan no lo encuentra
+ * y crea el suyo: dos cargos de lo mismo.
+ *
+ * Hacia el otro lado sí hay red —a quien ya tenga un cargo de este concepto se
+ * le marca «ya lo tiene», lo haya puesto el plan o una persona—, pero eso no
+ * alcanza a lo que el plan hará DESPUÉS. Por eso se avisa en vez de prometer
+ * que no pasará nada.
+ */
+export function avisoDeCalendario(cuotas: number): string | null {
+  if (cuotas <= 0) return null;
+  const cuantas = cuotas === 1 ? 'una cuota' : `${cuotas} cuotas`;
+  return `Este cobro tiene calendario (${cuantas}): normalmente lo pone el plan del año, cuota por cuota. Lo que cobres aquí el plan no lo verá, y creará igual el cargo de su cuota.`;
+}
+
 /** Nombre de la etiqueta de la acción. Una sola, y se dice igual en todas las filas. */
 export const ETIQUETA_CARGAR = 'Cargar a estudiantes';
 

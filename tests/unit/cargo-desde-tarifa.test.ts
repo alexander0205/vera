@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ERRORES_AL_COMPROBAR, ETIQUETA_CARGAR, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga, necesitaMes,
+  ERRORES_AL_COMPROBAR, ETIQUETA_CARGAR, avisoDeCalendario, avisoDeLaCarga, conteoDeLaCarga,
+  errorDeLaCarga, necesitaMes,
   motivoParaNoCargar, seccionesDelObjetivo, tienePlanPropio, todosLoTienen,
   type ObjetivoDeTarifa,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
@@ -183,5 +184,24 @@ const objetivos: ObjetivoDeTarifa[] = [
 describe('ObjetivoDeTarifa', () => {
   it('son las tres filas del árbol de tarifas', () => {
     expect(objetivos.map((o) => o.tipo)).toEqual(['servicio', 'grado', 'seccion']);
+  });
+});
+
+describe('avisoDeCalendario', () => {
+  /*
+   * El choque que ninguna de las dos partes ve: el plan pregunta «¿ya hice la
+   * cuota P1 de este alumno?» y mira `cuota_id`; esta pantalla pregunta «¿ya
+   * tiene este concepto este año?» y no mira las cuotas. El cargo que se crea
+   * aquí nace sin cuota, así que el plan no lo encuentra y crea el suyo.
+   */
+  it('avisa cuando el cobro tiene calendario, y dice quién lo pone', () => {
+    expect(avisoDeCalendario(3)).toMatch(/3 cuotas/);
+    expect(avisoDeCalendario(3)).toMatch(/plan del año/);
+    expect(avisoDeCalendario(1)).toMatch(/una cuota/);
+  });
+
+  it('sin calendario no hay aviso', () => {
+    expect(avisoDeCalendario(0)).toBeNull();
+    expect(avisoDeCalendario(-1)).toBeNull();
   });
 });

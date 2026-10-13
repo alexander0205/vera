@@ -17,7 +17,8 @@ import {
 } from '@/lib/administracion-escolar/cargo-lote';
 import { vencimientoDe } from '@/lib/administracion-escolar/calendario';
 import {
-  ERRORES_AL_COMPROBAR, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga, necesitaMes, todosLoTienen,
+  ERRORES_AL_COMPROBAR, avisoDeCalendario, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga,
+  necesitaMes, todosLoTienen,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { mesEnLetras } from '@/lib/administracion-escolar/cargo-lote';
@@ -141,6 +142,8 @@ export function CargarConceptoDialog({
    * año. `undefined` = todavía no se sabe; `null` = este cobro no vence.
    */
   const [diasParaPago, setDiasParaPago] = useState<number | null | undefined>(undefined);
+  /** Cuántas cuotas tiene este cobro en este año escolar. `null` = aún no se sabe. */
+  const [cuotas, setCuotas] = useState<number | null>(null);
   const [revision, setRevision] = useState<Generacion | null>(null);
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
   const [mirando, setMirando] = useState(true);
@@ -252,6 +255,30 @@ export function CargarConceptoDialog({
     })();
     return () => { vigente = false; };
   }, [concepto.id]);
+
+  /**
+   * ¿Este cobro tiene calendario? Si lo tiene, quien pone sus cargos es el
+   * plan del año y hay que decirlo (ver `avisoDeCalendario`).
+   *
+   * Si no se puede leer no se inventa un aviso: se deja sin él. Un ámbar que
+   * sale por un fallo de red enseña a no hacer caso de los ámbares.
+   */
+  useEffect(() => {
+    let vigente = true;
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/administracion-escolar/conceptos/${concepto.id}/cuotas?periodoId=${periodo.id}`,
+        );
+        if (!r.ok) throw new Error('cuotas');
+        const d = await r.json();
+        if (vigente) setCuotas(Array.isArray(d.cuotas) ? d.cuotas.length : 0);
+      } catch {
+        if (vigente) setCuotas(0);
+      }
+    })();
+    return () => { vigente = false; };
+  }, [concepto.id, periodo.id]);
 
   /**
    * Los meses del año escolar, solo para los cobros que van por mes.
@@ -379,8 +406,10 @@ export function CargarConceptoDialog({
   ].filter((n): n is string => n !== null);
   // El ámbar del tipo de cobro se repite al confirmar: es lo que más cuesta
   // deshacer, y el diálogo de «¿seguro?» tapa el del cuerpo.
+  const avisoCalendario = cuotas === null ? null : avisoDeCalendario(cuotas);
   const avisos = [
     aviso,
+    avisoCalendario,
     periodo.activo ? null : `Es del año escolar «${periodo.nombre}», que no es el que está en curso.`,
   ].filter((a): a is string => a !== null);
 
@@ -415,6 +444,11 @@ export function CargarConceptoDialog({
             {aviso && (
               <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 {aviso}
+              </p>
+            )}
+            {avisoCalendario && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {avisoCalendario}
               </p>
             )}
 
