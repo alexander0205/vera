@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -12,10 +11,11 @@ import {
 import { ListaAlumnosLote } from '@/components/administracion-escolar/cargo-lote/ListaAlumnosLote';
 import { ConfirmarCobroDialog } from '@/components/administracion-escolar/cargo-lote/ConfirmarCobroDialog';
 import {
-  alumnosConCargoVivo, ecoDeLaFecha, esFechaValida, fraseDeDuplicados, fraseDeQuitados,
-  fraseDelCobro, marcarLosQueYaLoTienen, sumarDias,
+  alumnosConCargoVivo, fraseDeDuplicados, fraseDeQuitados,
+  fraseDelCobro, marcarLosQueYaLoTienen,
   type DetalleRevisado, type FraseDelCobro,
 } from '@/lib/administracion-escolar/cargo-lote';
+import { vencimientoDe } from '@/lib/administracion-escolar/calendario';
 import {
   ERRORES_AL_COMPROBAR, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga, necesitaMes, todosLoTienen,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
@@ -132,8 +132,15 @@ export function CargarConceptoDialog({
    */
   const [meses, setMeses] = useState<MesDelPeriodo[] | null>(null);
   const [mes, setMes] = useState<MesDelPeriodo | null>(null);
-  const [fecha, setFecha] = useState(() => sumarDias(hoyRD(), 7));
-  const [errorFecha, setErrorFecha] = useState<string | null>(null);
+  /**
+   * Hasta cuándo pueden pagar NO se pregunta aquí: sale del concepto, que ya
+   * lo tiene configurado («Tiene fecha de vencimiento, N días después»).
+   *
+   * Preguntarlo era pedir dos veces lo mismo y abrir la puerta a que el mismo
+   * cobro venciera a siete días desde Tarifas y a treinta desde el plan del
+   * año. `undefined` = todavía no se sabe; `null` = este cobro no vence.
+   */
+  const [diasParaPago, setDiasParaPago] = useState<number | null | undefined>(undefined);
   const [revision, setRevision] = useState<Generacion | null>(null);
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
   const [mirando, setMirando] = useState(true);
@@ -160,8 +167,10 @@ export function CargarConceptoDialog({
     // la pantalla de «Cargo a varios alumnos».
     anio: conMes && mes ? mes.anio : Number(hoyRD().slice(0, 4)),
     montoCentavos,
-    fechaVencimiento: fecha || null,
-  }), [periodo.id, cursoIds, concepto.id, montoCentavos, fecha, conMes, mes]);
+    // La misma regla que usa el plan del año: la fecha de emisión es hoy y el
+    // plazo lo pone el concepto. Sin plazo configurado, el cargo no vence.
+    fechaVencimiento: vencimientoDe(hoyRD(), diasParaPago ?? null),
+  }), [periodo.id, cursoIds, concepto.id, montoCentavos, diasParaPago, conMes, mes]);
 
   /** Cada «volver a mirar» sube esto: lo que venga de una pregunta vieja no se pinta. */
   const preguntaVigente = useRef(0);
@@ -221,6 +230,30 @@ export function CargarConceptoDialog({
   }, [concepto.id, periodo.id, cuerpoDelCargo]);
 
   /**
+   * El plazo que el concepto tiene configurado. Si no se puede leer se toma
+   * como «sin fecha límite», que es lo que menos daño hace: un cargo sin
+   * vencimiento no entra en mora ni se pinta como atrasado, y la fecha se le
+   * puede poner después desde la ficha del alumno.
+   */
+  useEffect(() => {
+    let vigente = true;
+    void (async () => {
+      try {
+        const r = await fetch('/api/administracion-escolar/conceptos');
+        if (!r.ok) throw new Error('conceptos');
+        const d = await r.json();
+        const suyo = (d.conceptos ?? []).find((c: { id: number }) => c.id === concepto.id);
+        if (!vigente) return;
+        const dias = suyo?.diasParaPago;
+        setDiasParaPago(typeof dias === 'number' ? dias : null);
+      } catch {
+        if (vigente) setDiasParaPago(null);
+      }
+    })();
+    return () => { vigente = false; };
+  }, [concepto.id]);
+
+  /**
    * Los meses del año escolar, solo para los cobros que van por mes.
    *
    * Si no se pueden leer, el diálogo lo dice y no deja cobrar: sin mes, el
@@ -261,11 +294,6 @@ export function CargarConceptoDialog({
     miradaHecha.current = claveDeLaPregunta;
     void mirar();
   }, [claveDeLaPregunta, mirar]);
-
-  function cambiarFecha(iso: string) {
-    setFecha(iso);
-    setErrorFecha(iso && !esFechaValida(iso) ? 'Esa fecha no es válida. Elígela otra vez en el calendario.' : null);
-  }
 
   function alternar(estudianteId: number) {
     setSeleccion((s) => {
@@ -356,11 +384,12 @@ export function CargarConceptoDialog({
     periodo.activo ? null : `Es del año escolar «${periodo.nombre}», que no es el que está en curso.`,
   ].filter((a): a is string => a !== null);
 
-  const ecoFecha = fecha && esFechaValida(fecha) ? ecoDeLaFecha(fecha, hoy) : null;
   /** El año escolar no tiene fechas, así que no hay meses que elegir. */
   const sinMeses = conMes && meses !== null && meses.length === 0;
-  const puedeCobrar = revision !== null && seleccion.size > 0 && !mirando && !errorFecha
-    && !soloVolverAMirar && !sinMeses;
+  // No se cobra hasta saber el plazo del concepto: sin eso, el cargo nacería
+  // sin fecha de vencimiento cuando sí la tiene configurada.
+  const puedeCobrar = revision !== null && seleccion.size > 0 && !mirando
+    && diasParaPago !== undefined && !soloVolverAMirar && !sinMeses;
 
   return (
     <>
@@ -418,16 +447,6 @@ export function CargarConceptoDialog({
                 )}
               </div>
             )}
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="carga-fecha">¿Hasta cuándo pueden pagar?</Label>
-              <div className="w-44">
-                <Input id="carga-fecha" type="date" value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
-              </div>
-              {errorFecha
-                ? <p role="alert" className="text-xs text-red-600">{errorFecha}</p>
-                : ecoFecha && <p className={`text-xs ${ecoFecha.aviso ? 'text-amber-700' : 'text-gray-500'}`}>{ecoFecha.texto}</p>}
-            </div>
 
             {mirando && !sinMeses && (
               <p className="flex items-center gap-2 py-6 text-sm text-gray-500">
