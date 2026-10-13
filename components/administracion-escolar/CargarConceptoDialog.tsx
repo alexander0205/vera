@@ -1,0 +1,396 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2, Users } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { ListaAlumnosLote } from '@/components/administracion-escolar/cargo-lote/ListaAlumnosLote';
+import { ConfirmarCobroDialog } from '@/components/administracion-escolar/cargo-lote/ConfirmarCobroDialog';
+import {
+  alumnosConCargoVivo, ecoDeLaFecha, esFechaValida, fraseDeDuplicados, fraseDeQuitados,
+  fraseDelCobro, marcarLosQueYaLoTienen, sumarDias,
+  type DetalleRevisado, type FraseDelCobro,
+} from '@/lib/administracion-escolar/cargo-lote';
+import {
+  ERRORES_AL_COMPROBAR, conteoDeLaCarga, errorDeLaCarga, todosLoTienen,
+} from '@/lib/administracion-escolar/cargo-desde-tarifa';
+import { fmtDOP, hoyRD } from '@/lib/utils/format';
+
+/**
+ * «Cargar a estudiantes»: cobrarle el concepto de una fila de Tarifas a los
+ * alumnos de ESA fila.
+ *
+ * Toma lo imprescindible de «Cargo a varios alumnos» —la lista con casillas,
+ * «ya lo tiene», la frase de lo que va a pasar y el «¿seguro?»— y quita todo
+ * lo que aquí ya está contestado: el concepto es el de la fila y no se puede
+ * cambiar ni crear otro, el curso es el de la fila y el monto es su tarifa. Lo
+ * único que queda por decidir es a cuáles de esos alumnos se les cobra y hasta
+ * cuándo pueden pagar.
+ *
+ * Lo que no se puede romper:
+ *  - la frase y lo que se manda al crear salen del MISMO cuerpo
+ *    (`cuerpoDelCargo`), así que la pantalla no puede decir una cosa y cobrar
+ *    otra;
+ *  - nunca se crea con la lista de marcados vacía: el servidor la leería como
+ *    «a todos los del curso»;
+ *  - «ya lo tiene» se mira dos veces —lo que dice la revisión y lo que se ve
+ *    al listar los cargos del concepto—, porque el servidor, preguntando sin
+ *    mes, no ve los cargos que sí lo tienen;
+ *  - si el crear se queda sin respuesta no se deja repetir a ciegas: solo
+ *    queda volver a mirar la lista, donde el que se creó ya sale como «ya lo
+ *    tiene».
+ *
+ * Las reglas y los textos que no necesitan pantalla están en
+ * `lib/administracion-escolar/cargo-desde-tarifa.ts`.
+ */
+
+/** Hasta diez páginas de cargos; más que eso no es el colegio para el que está hecho esto. */
+const PAGINAS_DE_CARGOS = 10;
+
+interface Generacion { creados: number; omitidos: number; total: number; detalles: DetalleRevisado[] }
+
+/** El cuerpo de `POST /cargos/generar` de este cargo, sin `dryRun` ni marcados. */
+interface CuerpoDelCargo {
+  periodoId: number;
+  cursoIds: number[];
+  conceptoId: number;
+  mes: null;
+  anio: number;
+  montoCentavos: number;
+  fechaVencimiento: string | null;
+}
+
+/**
+ * Quién tiene ya este concepto cobrado este año escolar, pagado o no.
+ *
+ * Si no se puede saber no se devuelve una lista a medias: se dice por qué y la
+ * lista no se enseña. Una lista incompleta dejaría marcado a quien ya lo
+ * tiene, que es justo lo que se quiere evitar.
+ */
+async function alumnosConEseConcepto(
+  conceptoId: number, periodoId: number,
+): Promise<number[] | keyof typeof ERRORES_AL_COMPROBAR> {
+  const pagina = async (n: number) => {
+    const r = await fetch(
+      `/api/administracion-escolar/cargos?conceptoId=${conceptoId}&periodoId=${periodoId}&porPagina=200&pagina=${n}`,
+    );
+    if (!r.ok) throw new Error('cargos');
+    return (await r.json()) as { cargos?: { estudianteId: number; estado: string }[]; paginas?: number };
+  };
+  try {
+    const primera = await pagina(1);
+    const paginas = Number(primera.paginas) || 1;
+    if (paginas > PAGINAS_DE_CARGOS) return 'demasiados';
+    const resto = await Promise.all(Array.from({ length: paginas - 1 }, (_, i) => pagina(i + 2)));
+    return alumnosConCargoVivo([primera, ...resto].flatMap((p) => p.cargos ?? []));
+  } catch {
+    return 'sin-respuesta';
+  }
+}
+
+export function CargarConceptoDialog({
+  concepto, grupoNombre, montoCentavos, periodo, cursoIds, onCerrar, onCreado,
+}: {
+  /** El concepto de la fila. Desde aquí no se cambia ni se crea otro. */
+  concepto: { id: number; nombre: string };
+  /** El curso de la fila, como se dice en una frase: «Inicial - Matutina», «1ro». */
+  grupoNombre: string;
+  /** La tarifa de la fila: lo que paga cada alumno. */
+  montoCentavos: number;
+  periodo: { id: number; nombre: string; activo: boolean };
+  /** Las secciones de la fila. Nunca vacía: sin alumnos no se ofrece la acción. */
+  cursoIds: number[];
+  onCerrar: () => void;
+  /** Se crearon cargos: quien abrió el diálogo puede refrescar lo que tenga en pantalla. */
+  onCreado?: (creados: number) => void;
+}) {
+  const hoy = hoyRD();
+  const [fecha, setFecha] = useState(() => sumarDias(hoyRD(), 7));
+  const [errorFecha, setErrorFecha] = useState<string | null>(null);
+  const [revision, setRevision] = useState<Generacion | null>(null);
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
+  const [mirando, setMirando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  /** El crear se quedó sin respuesta: lo único que se ofrece es volver a mirar. */
+  const [soloVolverAMirar, setSoloVolverAMirar] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const [creando, setCreando] = useState(false);
+
+  /**
+   * Lo que se manda, entero. De aquí salen la frase, el diálogo de confirmar y
+   * el cuerpo de crear: si cada cosa lo armara por su lado podrían decir una
+   * cosa y cobrar otra.
+   *
+   * El mes va en `null` a propósito: esta acción no cobra mensualidades (se
+   * bloquean antes, en el botón), y con mes «ya lo tiene» se decidiría distinto.
+   */
+  const cuerpoDelCargo = useCallback((): CuerpoDelCargo => ({
+    periodoId: periodo.id,
+    cursoIds,
+    conceptoId: concepto.id,
+    mes: null,
+    anio: Number(hoyRD().slice(0, 4)),
+    montoCentavos,
+    fechaVencimiento: fecha || null,
+  }), [periodo.id, cursoIds, concepto.id, montoCentavos, fecha]);
+
+  /** Cada «volver a mirar» sube esto: lo que venga de una pregunta vieja no se pinta. */
+  const preguntaVigente = useRef(0);
+
+  const mirar = useCallback(async () => {
+    const estaVez = preguntaVigente.current + 1;
+    preguntaVigente.current = estaVez;
+    setMirando(true);
+    setError(null);
+    setSoloVolverAMirar(false);
+    // Las dos preguntas salen a la vez para no esperar el doble.
+    const quienesLoTienen = alumnosConEseConcepto(concepto.id, periodo.id);
+    try {
+      const res = await fetch('/api/administracion-escolar/cargos/generar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cuerpoDelCargo(), dryRun: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (estaVez !== preguntaVigente.current) return;
+      if (!res.ok || !data || !Array.isArray(data.detalles)) {
+        setError(errorDeLaCarga('mirar', res.ok ? 500 : res.status, data?.error).texto);
+        setRevision(null);
+        return;
+      }
+      const conEseConcepto = await quienesLoTienen;
+      if (estaVez !== preguntaVigente.current) return;
+      if (!Array.isArray(conEseConcepto)) {
+        setError(ERRORES_AL_COMPROBAR[conEseConcepto]);
+        setRevision(null);
+        return;
+      }
+      const mirado = marcarLosQueYaLoTienen(data as Generacion, new Set(conEseConcepto));
+      setRevision(mirado);
+      // Vienen marcados todos los que pueden recibirlo: el caso normal es
+      // cobrárselo al curso entero, y quitar dos marcas es menos trabajo que
+      // poner cuarenta.
+      setSeleccion(new Set(
+        mirado.detalles.filter((d) => d.resultado !== 'duplicado').map((d) => d.estudianteId),
+      ));
+    } catch {
+      if (estaVez === preguntaVigente.current) {
+        setError(errorDeLaCarga('mirar', 0).texto);
+        setRevision(null);
+      }
+    } finally {
+      if (estaVez === preguntaVigente.current) setMirando(false);
+    }
+  }, [concepto.id, periodo.id, cuerpoDelCargo]);
+
+  // Al abrir se mira una vez. Cambiar la fecha NO vuelve a preguntar: «ya lo
+  // tiene» no depende de hasta cuándo pueden pagar.
+  const yaMiro = useRef(false);
+  useEffect(() => {
+    if (yaMiro.current) return;
+    yaMiro.current = true;
+    void mirar();
+  }, [mirar]);
+
+  function cambiarFecha(iso: string) {
+    setFecha(iso);
+    setErrorFecha(iso && !esFechaValida(iso) ? 'Esa fecha no es válida. Elígela otra vez en el calendario.' : null);
+  }
+
+  function alternar(estudianteId: number) {
+    setSeleccion((s) => {
+      const n = new Set(s);
+      if (!n.delete(estudianteId)) n.add(estudianteId);
+      return n;
+    });
+  }
+
+  function marcarVarios(ids: number[], marcar: boolean) {
+    setSeleccion((s) => {
+      const n = new Set(s);
+      for (const id of ids) {
+        if (marcar) n.add(id);
+        else n.delete(id);
+      }
+      return n;
+    });
+  }
+
+  async function crear() {
+    if (creando || seleccion.size === 0) return;
+    setCreando(true);
+    setError(null);
+    const cuerpo = cuerpoDelCargo();
+    try {
+      const res = await fetch('/api/administracion-escolar/cargos/generar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cuerpo, estudianteIds: [...seleccion] }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        const fallo = errorDeLaCarga('cobrar', res.ok ? 500 : res.status, data?.error);
+        setError(fallo.texto);
+        setSoloVolverAMirar(fallo.volverAMirar);
+        setConfirmando(false);
+        return;
+      }
+      // El número es el del SERVIDOR, no el que se marcó: entre mirar y
+      // confirmar alguien pudo crear el mismo cargo desde otra pantalla.
+      const creados = Number(data.creados) || 0;
+      toast.success(
+        creados === 1 ? `1 cargo de «${concepto.nombre}» creado` : `${creados} cargos de «${concepto.nombre}» creados`,
+        { description: `${fmtDOP(cuerpo.montoCentavos)} a cada uno · ${fmtDOP(creados * cuerpo.montoCentavos)} en total` },
+      );
+      onCreado?.(creados);
+      onCerrar();
+    } catch {
+      const fallo = errorDeLaCarga('cobrar', 0);
+      setError(fallo.texto);
+      setSoloVolverAMirar(fallo.volverAMirar);
+      setConfirmando(false);
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  const cuerpo = cuerpoDelCargo();
+  const aCobrar = revision ? revision.creados : 0;
+  const yaLoTienen = revision ? revision.omitidos : 0;
+  const nadaQueCobrar = revision !== null && todosLoTienen({ aCobrar, yaLoTienen });
+
+  const frase: FraseDelCobro | null = revision ? fraseDelCobro({
+    montoCentavos: cuerpo.montoCentavos,
+    cobro: concepto.nombre,
+    mesTexto: null,
+    aMano: false,
+    grupo: grupoNombre,
+    marcados: seleccion.size,
+    enLaLista: revision.total,
+    fechaVencimiento: cuerpo.fechaVencimiento,
+    hoy,
+  }) : null;
+
+  const quitados = revision
+    ? revision.detalles
+      .filter((d) => d.resultado !== 'duplicado' && !seleccion.has(d.estudianteId))
+      .map((d) => d.nombre)
+    : [];
+  const notas = [
+    quitados.length > 0 ? fraseDeQuitados(quitados) : null,
+    yaLoTienen > 0 ? fraseDeDuplicados(yaLoTienen) : null,
+  ].filter((n): n is string => n !== null);
+  const avisos = periodo.activo ? [] : [`Es del año escolar «${periodo.nombre}», que no es el que está en curso.`];
+
+  const ecoFecha = fecha && esFechaValida(fecha) ? ecoDeLaFecha(fecha, hoy) : null;
+  const puedeCobrar = revision !== null && seleccion.size > 0 && !mirando && !errorFecha && !soloVolverAMirar;
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => { if (!o && !creando) onCerrar(); }}>
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-gray-100 px-5 py-4">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4 text-zero-600" />
+              {`Cargar «${concepto.nombre}» a los alumnos de ${grupoNombre}`}
+            </DialogTitle>
+            {/* El concepto, el curso y el monto se dicen, no se preguntan: son
+                los de la fila desde la que se abrió esto. */}
+            <p className="text-sm text-gray-500">
+              {`${fmtDOP(montoCentavos)} por alumno · Año escolar ${periodo.nombre}`}
+            </p>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="carga-fecha">¿Hasta cuándo pueden pagar?</Label>
+              <div className="w-44">
+                <Input id="carga-fecha" type="date" value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
+              </div>
+              {errorFecha
+                ? <p role="alert" className="text-xs text-red-600">{errorFecha}</p>
+                : ecoFecha && <p className={`text-xs ${ecoFecha.aviso ? 'text-amber-700' : 'text-gray-500'}`}>{ecoFecha.texto}</p>}
+            </div>
+
+            {mirando && (
+              <p className="flex items-center gap-2 py-6 text-sm text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> Buscando a los alumnos…
+              </p>
+            )}
+
+            {!mirando && error && (
+              <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                <p role="alert" className="text-sm text-red-700">{error}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void mirar()}>
+                  Volver a mirar
+                </Button>
+              </div>
+            )}
+
+            {!mirando && !error && revision && (
+              <>
+                <p className="text-sm text-gray-600">{conteoDeLaCarga({ aCobrar, yaLoTienen })}</p>
+                {nadaQueCobrar ? (
+                  <p className="rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-sm text-zero-800">
+                    {`Todos los alumnos de ${grupoNombre} ya tienen este cargo. No hay nada que cobrar.`}
+                  </p>
+                ) : revision.detalles.length === 0 ? (
+                  <p className="py-4 text-sm text-gray-500">
+                    {`No hay alumnos matriculados en ${grupoNombre} este año escolar.`}
+                  </p>
+                ) : (
+                  <ListaAlumnosLote
+                    detalles={revision.detalles}
+                    seleccion={seleccion}
+                    /* El curso es uno solo y está en el título: repetirlo en
+                       cada fila no distingue a nadie. */
+                    cursoPorAlumno={new Map()}
+                    aMano={false}
+                    onAlternar={alternar}
+                    onMarcarVarios={marcarVarios}
+                  />
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="shrink-0 flex-col gap-2 border-t border-gray-100 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 text-left">
+              {frase?.principal && (
+                <>
+                  <p className="text-sm text-gray-900">{frase.principal}</p>
+                  <p className="text-xs text-gray-500">{`${frase.total} · ${frase.plazo}`}</p>
+                </>
+              )}
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" variant="outline" onClick={onCerrar} disabled={creando}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={() => setConfirmando(true)} disabled={!puedeCobrar}>
+                {seleccion.size === 1 ? 'Cobrar a 1 alumno' : `Cobrar a ${seleccion.size} alumnos`}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* El «¿seguro?» de siempre: esto no tiene deshacer, un cargo mal puesto
+          se anula alumno por alumno. */}
+      <ConfirmarCobroDialog
+        abierto={confirmando}
+        frase={frase}
+        marcados={seleccion.size}
+        notas={notas}
+        avisos={avisos}
+        creando={creando}
+        error={error}
+        onCerrar={() => setConfirmando(false)}
+        onConfirmar={() => void crear()}
+      />
+    </>
+  );
+}
