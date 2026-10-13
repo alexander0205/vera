@@ -230,8 +230,8 @@ export function ConceptosPanel() {
   }
 
   /**
-   * «Cargar a estudiantes» en la fila: le cobra ESTE concepto a los alumnos de
-   * ESA fila, al precio de esa fila.
+   * «Asignar a estudiantes» en la fila: incorpora ESTE concepto al plan de los
+   * alumnos de ESA fila. Las cuotas se devengan en sus fechas configuradas.
    *
    * Va en cada fila y no una sola vez arriba porque el curso es la mitad de la
    * pregunta: «Evaluación Inicial» se le cobra a Inicial, y la fila es el único

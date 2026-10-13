@@ -1,6 +1,7 @@
 /**
- * Cobrarle un concepto a los alumnos de un curso desde la propia pantalla de
- * Tarifas.
+ * Reglas de la acción de Tarifas. La acción actual asigna el concepto entero al
+ * plan de la matrícula; las reglas de cargos sueltos de abajo se conservan para
+ * el flujo legado y sus pruebas.
  *
  * En Configuración escolar > Tarifas se ve, fila por fila, lo que cuesta un
  * concepto en cada servicio, grado y sección: «Evaluación Inicial, RD$500,
@@ -209,7 +210,7 @@ export function fraseDeSinTarifa(n: number): string | null {
 }
 
 /** Nombre de la etiqueta de la acción. Una sola, y se dice igual en todas las filas. */
-export const ETIQUETA_CARGAR = 'Cargar a estudiantes';
+export const ETIQUETA_CARGAR = 'Asignar a estudiantes';
 
 /**
  * Lo que se enseña encima de la lista: a cuántos les falta el cargo y cuántos

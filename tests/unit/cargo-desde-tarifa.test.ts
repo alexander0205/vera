@@ -173,7 +173,7 @@ describe('errorDeLaCarga', () => {
 
 describe('la etiqueta', () => {
   it('es una sola y se dice igual en todas las filas', () => {
-    expect(ETIQUETA_CARGAR).toBe('Cargar a estudiantes');
+    expect(ETIQUETA_CARGAR).toBe('Asignar a estudiantes');
   });
 });
 

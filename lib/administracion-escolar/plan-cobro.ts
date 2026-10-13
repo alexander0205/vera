@@ -90,6 +90,13 @@ export function repartir(
 ): number[] {
   const suma = pesos.reduce((a, b) => a + b, 0);
   if (suma <= 0) return pesos.map(() => 0);
+  // Tercios guardados como 33.334/33.333/33.333 representan cuotas iguales.
+  // Si el total se divide exacto, no crear centavos artificiales (200,02 y
+  // 199,99 para tres evaluaciones de RD$200).
+  if (pesos.length > 0 && montoCentavos % pesos.length === 0
+    && Math.max(...pesos) - Math.min(...pesos) <= 1) {
+    return pesos.map(() => montoCentavos / pesos.length);
+  }
   const partes = pesos.map((p) => Math.floor((montoCentavos * p) / suma));
   // Lo que se perdió al truncar se le da a la primera cuota, en vez de dejar
   // que el total de las cuotas no cuadre con la tarifa. Un colegio que cobra
@@ -199,7 +206,10 @@ export async function armarPlanDeCobro(
         cuotaId: c.id,
         numero: c.numero,
         etiqueta: c.etiqueta,
-        mes: c.mes,
+        // Una fecha de emisión puede editarse después de generar el calendario.
+        // La ficha y el devengo deben poner esa cuota en el mismo mes.
+        mes: c.mes == null && suyas.length <= 1
+          ? null : Number(fechaEmision.slice(5, 7)),
         fechaEmision,
         fechaVencimiento: vencimientoDe(fechaEmision, concepto.diasParaPago),
         montoCentavos: montos[i],

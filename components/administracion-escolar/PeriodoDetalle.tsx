@@ -93,6 +93,7 @@ export interface Cargo {
   conceptoTipo: string | null;
   /** Cuota del calendario de la que salió, si vino del devengo. */
   cuotaId: number | null;
+  cuotaEtiqueta?: string;
   matriculaId: number;
   periodoId: number;
   mes: number | null;
@@ -165,6 +166,7 @@ interface Previsto {
   cuotaId: number;
   conceptoId: number;
   concepto: string;
+  etiqueta: string;
   tipo: string;
   /** null en un concepto que se cobra de una vez y no cae en ningún mes. */
   mes: number | null;
@@ -401,6 +403,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
    * se quedaba sin previstos hasta que volviera.
    */
   const plan = (matriculaId && planes?.[matriculaId]?.lineas) || [];
+  const etiquetasCuota = new Map(plan.flatMap((linea) =>
+    linea.cuotas.map((cuota) => [cuota.cuotaId, cuota.etiqueta] as const)));
   const planDevenga = !!(matriculaId && planes?.[matriculaId]?.devenga);
 
   /**
@@ -716,8 +720,10 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 reenviandoCargoId={reenviandoCargoId}
                 diaFacturaAuto={grupo.diaFacturaAuto}
                 tutorClientId={tutorClientId}
-                cargos={mensualidades}
-                previstos={previstosMensualidad}
+                cargos={cargosPeriodo.filter((c) => c.mes != null).map((c) => ({
+                  ...c, cuotaEtiqueta: c.cuotaId != null ? etiquetasCuota.get(c.cuotaId) : undefined,
+                }))}
+                previstos={previstos.filter((p) => p.mes != null)}
                 enviadosPorCargo={enviadosPorCargo}
                 pagos={pagos}
                 mesesAcademicos={mesesAcademicos}
@@ -1283,10 +1289,11 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
       .filter((p) => p.mes === mes && p.anio === anio)
       .sort((a, b) => a.fechaEmision.localeCompare(b.fechaEmision));
     const total = cargosMes.reduce((s, c) => s + c.montoCentavos, 0);
-    const saldo = cargosMes
+    const facturadosMes = cargosMes.filter((c) => c.ecfDocumentId != null);
+    const saldo = facturadosMes
       .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
       .reduce((s, c) => s + c.saldoCentavos, 0);
-    const pagado = Math.max(0, total - saldo);
+    const pagado = Math.max(0, facturadosMes.reduce((s, c) => s + c.montoCentavos, 0) - saldo);
     const totalPrevisto = previstosMes.reduce((s, p) => s + p.montoCentavos, 0);
     const factura = cargosMes.find((c) => c.ecfDocumentId != null) ?? null;
     // Historial de pagos del mes: los abonos hechos a las facturas de sus cargos.
@@ -1672,6 +1679,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                 )}
                 <td className={`px-3 py-2.5 font-medium ${anulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {c.concepto ?? 'Sin concepto'}
+                  {c.mes && <span className="block text-xs font-normal text-gray-500">{MESES[c.mes]} {c.anio}</span>}
                 </td>
                 <td className="px-3 py-2.5">
                   <AvisoSemaforo canales={enviadosPorCargo?.get(c.id)} />
@@ -1736,7 +1744,10 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
             <tr key={`p-${p.key}`} className="border-t border-dashed border-gray-200 bg-gray-50/30 hover:bg-gray-50/60">
               {/* Un previsto todavía no es deuda: no hay cargo que marcar. */}
               {puedeFacturar && <td className="px-3 py-2.5" />}
-              <td className="px-3 py-2.5 text-gray-500">{p.concepto}</td>
+              <td className="px-3 py-2.5 text-gray-500">
+                {p.concepto}
+                {p.mes && <span className="block text-xs">{MESES[p.mes]} {p.anio}</span>}
+              </td>
               {/* Faltaba: la fila tenía siete celdas contra las ocho de la
                   cabecera, así que el vencimiento caía bajo «Avisos» y todo lo
                   demás iba corrido una columna hasta el final. */}
@@ -1919,12 +1930,17 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
    * mensualidad, uniforme y material son tres cargos, y marcarlos uno por uno
    * al desplegar es justo lo que el diálogo de antes ya obligaba a hacer.
    */
-  const facturablesDelMes = r.cargosMes.filter(cargoMarcable).map((c) => c.id);
+  // La evaluación lleva factura aparte de la colegiatura: la casilla del mes
+  // solo selecciona mensualidades; cada otro cargo tiene su propia acción.
+  const facturablesDelMes = r.cargosMes.filter((c) => c.conceptoTipo === 'mensualidad' && cargoMarcable(c)).map((c) => c.id);
   const mesMarcado = facturablesDelMes.length > 0 && facturablesDelMes.every((id) => marcados.has(id));
 
   const cuantos = r.cargosMes.length + r.previstosMes.length;
   // Un solo concepto: la fila del mes ES el concepto, abierta o cerrada.
-  const unico = cuantos === 1;
+  // Una evaluación solitaria también se abre: dentro se ve P1/P2/P3, su
+  // estado y los pagos. La colegiatura sola conserva la fila compacta.
+  const unico = cuantos === 1
+    && (r.cargosMes[0]?.conceptoTipo ?? r.previstosMes[0]?.tipo) === 'mensualidad';
   const cargoUnico = unico ? r.cargosMes[0] ?? null : null;
   const previstoUnico = unico ? r.previstosMes[0] ?? null : null;
   const soloPrevistos = r.cargosMes.length === 0;
@@ -1950,7 +1966,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
   const sinFacturaAun = !r.factura;
   // Solo se despliega lo que tiene algo que enseñar debajo. Un mes de un solo
   // concepto sin pagos no esconde nada, así que ni flecha ni click.
-  const desplegable = cuantos > 1 || r.pagosMes.length > 0;
+  const desplegable = (cuantos > 0 && !unico) || r.pagosMes.length > 0;
   const desplegado = abierto && desplegable;
 
   // El cargo sobre el que actúa el menú del mes: el primero que aún debe algo,
@@ -1962,7 +1978,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
     ...r.previstosMes.map((p) => p.fechaVencimiento),
   ].filter((f): f is string => !!f).sort()[0] ?? null;
 
-  const montoMes = r.total > 0 ? r.total : r.totalPrevisto;
+  const montoMes = r.total + r.totalPrevisto;
 
   return (
     <>
@@ -1994,7 +2010,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           )}
           {/* Que no haya factura todavía no significa que haya que hacerla a
               mano: si la matrícula tiene mensualidad configurada, sale sola. */}
-          {diaFacturaAuto && soloPrevistos && (
+          {diaFacturaAuto && soloPrevistos && r.previstosMes.some((p) => p.tipo === 'mensualidad') && (
             <span className="ml-9 mt-0.5 flex items-center gap-1 text-xs text-zero-700">
               <Repeat className="h-3 w-3" />
               Se factura sola el {diaFacturaAuto}/{String(r.mes).padStart(2, '0')}
@@ -2008,9 +2024,11 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           ) : unico ? (
             <span className={cargoUnico?.estado === 'anulado' ? 'text-gray-400 line-through' : 'text-gray-800'}>
               {cargoUnico?.concepto ?? previstoUnico?.concepto ?? 'Sin concepto'}
+              {(cargoUnico?.cuotaEtiqueta ?? previstoUnico?.etiqueta) &&
+                <span className="block text-xs text-gray-500">{cargoUnico?.cuotaEtiqueta ?? previstoUnico?.etiqueta}</span>}
             </span>
           ) : (
-            <span className="text-gray-500">Total del período</span>
+            <span className="text-gray-500">Total del mes</span>
           )}
         </td>
 
@@ -2077,7 +2095,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
               puedePagos={puedePagos}
               puedeFacturar={puedeFacturar}
               puedeGestionar={puedeGestionar}
-              mesTieneFactura={!!r.factura}
+              mesTieneFactura={accion.conceptoTipo === 'mensualidad' && r.cargosMes.some((c) => c.conceptoTipo === 'mensualidad' && c.ecfDocumentId != null)}
               onRegistrarPago={onRegistrarPago}
               onAplicarMora={onAplicarMora}
               onCrearFactura={onCrearFactura}
@@ -2121,6 +2139,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
               <span className={anulado ? 'text-gray-400 line-through' : 'text-gray-800'}>
                 {c.concepto ?? 'Sin concepto'}
               </span>
+              {c.cuotaEtiqueta && <span className="block text-xs text-gray-500">{c.cuotaEtiqueta}</span>}
             </td>
             <td className="px-3 py-3">
               <AvisoSemaforo canales={enviadosPorCargo?.get(c.id)} />
@@ -2158,7 +2177,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
                   puedePagos={puedePagos}
                   puedeFacturar={puedeFacturar}
                   puedeGestionar={puedeGestionar}
-                  mesTieneFactura={!!r.factura}
+                  mesTieneFactura={c.conceptoTipo === 'mensualidad' && r.cargosMes.some((otro) => otro.conceptoTipo === 'mensualidad' && otro.ecfDocumentId != null)}
                   onRegistrarPago={onRegistrarPago}
                   onAplicarMora={onAplicarMora}
                   onCrearFactura={onCrearFactura}
@@ -2182,6 +2201,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           <td className="px-3 py-3" />
           <td className="px-3 py-3">
             <span className="text-gray-800">{p.concepto}</span>
+            <span className="block text-xs text-gray-500">{p.etiqueta}</span>
             <span className="block text-xs text-gray-400">Se emite el {fmtFechaCorta(p.fechaEmision)}</span>
           </td>
           {/* Un previsto todavía no es deuda: los tres van apagados, y el

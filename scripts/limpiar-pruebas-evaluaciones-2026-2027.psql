@@ -1,0 +1,66 @@
+-- Reinicia las asignaciones de Evaluación Inicial y Primaria para Mi Casita,
+-- año 2026-2027. Conserva conceptos, tarifas y calendarios. Repetible.
+BEGIN;
+
+DO $limpieza$
+DECLARE
+  v_team_id integer;
+  v_periodo_id integer;
+  v_inicial_id integer;
+  v_primaria_id integer;
+  v_cargos integer;
+  v_matriculas integer;
+BEGIN
+  SELECT id INTO STRICT v_team_id
+  FROM teams WHERE name = 'INFANTIL MI CASITA II SRL'
+    AND EXISTS (SELECT 1 FROM admin_escolar_periodos p
+      WHERE p.team_id = teams.id AND p.nombre = '2026-2027' AND p.activo);
+
+  SELECT id INTO STRICT v_periodo_id
+  FROM admin_escolar_periodos
+  WHERE team_id = v_team_id AND nombre = '2026-2027' AND activo;
+
+  SELECT id INTO STRICT v_inicial_id
+  FROM admin_escolar_conceptos_pago
+  WHERE team_id = v_team_id AND nombre = 'Evaluacion Inicial' AND activo;
+
+  SELECT id INTO STRICT v_primaria_id
+  FROM admin_escolar_conceptos_pago
+  WHERE team_id = v_team_id AND nombre = 'Evaluacion Primaria' AND activo;
+
+  -- Una factura o pago convierte el cargo en historial financiero: no borrarlo.
+  IF EXISTS (
+    SELECT 1 FROM admin_escolar_cargos c
+    WHERE c.team_id = v_team_id AND c.periodo_id = v_periodo_id
+      AND c.concepto_id IN (v_inicial_id, v_primaria_id)
+      AND (c.estado <> 'pendiente' OR c.ecf_document_id IS NOT NULL
+        OR c.saldo_centavos <> c.monto_centavos
+        OR EXISTS (SELECT 1 FROM admin_escolar_pagos p WHERE p.cargo_id = c.id))
+  ) THEN
+    RAISE EXCEPTION 'Hay evaluaciones facturadas, pagadas o modificadas; revisar antes de limpiar';
+  END IF;
+
+  DELETE FROM admin_escolar_cargos
+  WHERE team_id = v_team_id AND periodo_id = v_periodo_id
+    AND concepto_id IN (v_inicial_id, v_primaria_id);
+  GET DIAGNOSTICS v_cargos = ROW_COUNT;
+
+  UPDATE admin_escolar_matriculas m
+  SET conceptos_ids = COALESCE((
+    SELECT jsonb_agg(elemento.valor ORDER BY elemento.orden)
+    FROM jsonb_array_elements(m.conceptos_ids) WITH ORDINALITY AS elemento(valor, orden)
+    WHERE elemento.valor <> to_jsonb(v_inicial_id)
+      AND elemento.valor <> to_jsonb(v_primaria_id)
+  ), '[]'::jsonb),
+  updated_at = now()
+  WHERE m.team_id = v_team_id AND m.periodo_id = v_periodo_id
+    AND (m.conceptos_ids @> jsonb_build_array(v_inicial_id)
+      OR m.conceptos_ids @> jsonb_build_array(v_primaria_id));
+  GET DIAGNOSTICS v_matriculas = ROW_COUNT;
+
+  RAISE NOTICE 'Evaluaciones de prueba limpiadas: % cargos, % matrículas',
+    v_cargos, v_matriculas;
+END;
+$limpieza$;
+
+COMMIT;
