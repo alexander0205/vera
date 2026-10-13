@@ -84,7 +84,7 @@ export interface ReglasCobro {
 }
 
 /** Reparte un monto entre cuotas sin perder ni un centavo por redondeo. */
-function repartir(
+export function repartir(
   montoCentavos: number,
   pesos: number[],
 ): number[] {

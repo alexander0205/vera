@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ERRORES_AL_COMPROBAR, ETIQUETA_CARGAR, avisoDeCalendario, avisoDeLaCarga, conteoDeLaCarga,
-  errorDeLaCarga, necesitaMes,
+  cuantosPaganDistinto, errorDeLaCarga, fraseDeLaCarga, fraseDeSinTarifa, necesitaMes,
   motivoParaNoCargar, seccionesDelObjetivo, tienePlanPropio, todosLoTienen,
   type ObjetivoDeTarifa,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
@@ -88,7 +88,7 @@ describe('motivoParaNoCargar', () => {
    */
   it('la colegiatura y la inscripción ya no están prohibidas', () => {
     expect(motivoParaNoCargar(conPrecio)).toBeNull();
-    expect(avisoDeLaCarga('mensualidad')).toMatch(/sin beca/);
+    expect(avisoDeLaCarga('mensualidad')).toMatch(/plan del año/);
     expect(avisoDeLaCarga('inscripcion')).toMatch(/una vez por año escolar/);
     expect(tienePlanPropio('mensualidad')).toBe(true);
     expect(tienePlanPropio('inscripcion')).toBe(true);
@@ -203,5 +203,66 @@ describe('avisoDeCalendario', () => {
   it('sin calendario no hay aviso', () => {
     expect(avisoDeCalendario(0)).toBeNull();
     expect(avisoDeCalendario(-1)).toBeNull();
+  });
+});
+
+describe('fraseDeLaCarga', () => {
+  const dinero = (c: number) => `RD$${(c / 100).toFixed(2)}`;
+  const base = {
+    cobro: 'Colegiatura', etiqueta: 'octubre de 2026', grupo: 'INICIAL',
+    marcados: 46, enLaLista: 49, totalCentavos: 13_580_000, conPrecioPropio: 0, dinero,
+  };
+
+  /*
+   * El total y no «a cada uno»: con becas y tarifas personales no hay un monto
+   * por cabeza que multiplicar, y decir uno sería mentir en la línea que la
+   * persona lee justo antes de cobrar.
+   */
+  it('dice el total, no un monto por alumno', () => {
+    expect(fraseDeLaCarga(base).principal)
+      .toBe('Les vas a cobrar «Colegiatura» de octubre de 2026 a 46 de los 49 alumnos de INICIAL. Total: RD$135800.00.');
+  });
+
+  it('cuando son todos no dice «de los»', () => {
+    expect(fraseDeLaCarga({ ...base, marcados: 49 }).principal)
+      .toMatch(/a los 49 alumnos de INICIAL/);
+  });
+
+  it('avisa de cuántos pagan distinto, que es lo que explica el total', () => {
+    expect(fraseDeLaCarga({ ...base, conPrecioPropio: 3 }).nota)
+      .toBe('3 pagan distinto: tienen beca o precio propio.');
+    expect(fraseDeLaCarga({ ...base, conPrecioPropio: 1 }).nota)
+      .toMatch(/^1 paga distinto/);
+    expect(fraseDeLaCarga(base).nota).toBeNull();
+  });
+
+  it('sin nadie marcado no hay nada que decir', () => {
+    expect(fraseDeLaCarga({ ...base, marcados: 0 }).principal).toBeNull();
+  });
+
+  it('sin tarifa, el alumno se queda fuera y se dice', () => {
+    expect(fraseDeSinTarifa(2)).toMatch(/2 alumnos se quedan fuera/);
+    expect(fraseDeSinTarifa(0)).toBeNull();
+  });
+});
+
+describe('cuantosPaganDistinto', () => {
+  /*
+   * Se mide contra lo que paga la MAYORÍA. Comparándolo con la tarifa de la
+   * fila, un cobro repartido en tres cuotas decía «3 pagan distinto» con los
+   * tres pagando lo mismo: todos pagaban un tercio, y un tercio no es la
+   * tarifa.
+   */
+  it('con todos pagando igual no hay nadie distinto', () => {
+    expect(cuantosPaganDistinto([6668, 6668, 6668])).toBe(0);
+  });
+
+  it('cuenta a los que se salen de lo que paga el resto', () => {
+    expect(cuantosPaganDistinto([280000, 280000, 280000, 300000, 500000])).toBe(2);
+  });
+
+  it('con uno solo, o con ninguno, no hay con qué comparar', () => {
+    expect(cuantosPaganDistinto([280000])).toBe(0);
+    expect(cuantosPaganDistinto([])).toBe(0);
   });
 });

@@ -11,14 +11,14 @@ import {
 import { ListaAlumnosLote } from '@/components/administracion-escolar/cargo-lote/ListaAlumnosLote';
 import { ConfirmarCobroDialog } from '@/components/administracion-escolar/cargo-lote/ConfirmarCobroDialog';
 import {
-  alumnosConCargoVivo, fraseDeDuplicados, fraseDeQuitados,
-  fraseDelCobro, marcarLosQueYaLoTienen,
+  alumnosConCargoVivo, fechaEnLetras, fraseDeDuplicados, fraseDeQuitados, fraseDelPlazo,
+  marcarLosQueYaLoTienen,
   type DetalleRevisado, type FraseDelCobro,
 } from '@/lib/administracion-escolar/cargo-lote';
 import { vencimientoDe } from '@/lib/administracion-escolar/calendario';
 import {
   ERRORES_AL_COMPROBAR, avisoDeCalendario, avisoDeLaCarga, conteoDeLaCarga, errorDeLaCarga,
-  necesitaMes, todosLoTienen,
+  cuantosPaganDistinto, fraseDeLaCarga, fraseDeSinTarifa, necesitaMes, todosLoTienen,
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { mesEnLetras } from '@/lib/administracion-escolar/cargo-lote';
@@ -56,22 +56,60 @@ import { fmtDOP, hoyRD } from '@/lib/utils/format';
 /** Hasta diez páginas de cargos; más que eso no es el colegio para el que está hecho esto. */
 const PAGINAS_DE_CARGOS = 10;
 
-interface Generacion { creados: number; omitidos: number; total: number; detalles: DetalleRevisado[] }
+interface Generacion {
+  creados: number;
+  omitidos: number;
+  total: number;
+  /** Lo que suman los que SÍ reciben cargo: con tarifa por alumno no hay un monto que multiplicar. */
+  totalCentavos: number;
+  /** A cuántos no se les pudo saber el precio. */
+  sinTarifa: number;
+  detalles: DetalleConMonto[];
+}
 
 /** El cuerpo de `POST /cargos/generar` de este cargo, sin `dryRun` ni marcados. */
 interface CuerpoDelCargo {
   periodoId: number;
   cursoIds: number[];
   conceptoId: number;
-  /** El mes de la colegiatura. `null` en todo lo demás: ese cobro va una vez al año. */
+  /** La cuota del calendario a la que se ata el cargo. `null` = cargo suelto. */
+  cuotaId: number | null;
+  /** El mes de la colegiatura. `null` con cuota (lo pone ella) o si el cobro va una vez al año. */
   mes: number | null;
   anio: number;
-  montoCentavos: number;
+  /** Cada alumno paga su tarifa: con su beca y su precio personal si los tiene. */
+  tarifaPorAlumno: true;
   fechaVencimiento: string | null;
+}
+
+/** Una fila de la revisión, con lo que paga ESE alumno. */
+interface DetalleConMonto extends DetalleRevisado {
+  /** Lo que paga ESTE alumno, con su beca y su precio personal ya aplicados. */
+  montoCentavos: number | null;
 }
 
 /** El año escolar con sus fechas, para saber qué meses tiene. */
 interface PeriodoConFechas { fechaInicio: string | null; fechaFin: string | null }
+
+/** Una cuota del calendario del concepto. */
+interface CuotaDelConcepto {
+  id: number;
+  numero: number;
+  etiqueta: string;
+  fechaEmision: string;
+}
+
+/**
+ * La cuota que viene puesta: la primera que todavía no se ha emitido, o la
+ * última si el año ya pasó por todas.
+ *
+ * Es la que va a tocar en el 99 % de los casos —se cobra lo que viene, no lo
+ * de hace tres meses— y así nadie elige a ciegas entre «Evaluacion P1», «P2» y
+ * «P3», que por el nombre no dicen cuándo son.
+ */
+function cuotaInicial(lista: CuotaDelConcepto[], hoy: string): CuotaDelConcepto | null {
+  return lista.find((c) => c.fechaEmision >= hoy) ?? lista[lista.length - 1] ?? null;
+}
 
 /** El mes que viene puesto: el de hoy si cae dentro del año escolar. */
 function mesInicial(meses: MesDelPeriodo[]): MesDelPeriodo | null {
@@ -142,8 +180,16 @@ export function CargarConceptoDialog({
    * año. `undefined` = todavía no se sabe; `null` = este cobro no vence.
    */
   const [diasParaPago, setDiasParaPago] = useState<number | null | undefined>(undefined);
-  /** Cuántas cuotas tiene este cobro en este año escolar. `null` = aún no se sabe. */
-  const [cuotas, setCuotas] = useState<number | null>(null);
+  /**
+   * Las cuotas de este cobro en este año escolar. `null` = aún no se sabe.
+   *
+   * Si tiene, el cargo se ata a UNA de ellas y deja de ser un cargo suelto:
+   * eso es lo que hace que el plan del año lo reconozca y no vuelva a crearlo.
+   */
+  const [cuotas, setCuotas] = useState<CuotaDelConcepto[] | null>(null);
+  const [cuotaSel, setCuotaSel] = useState<CuotaDelConcepto | null>(null);
+  /** Este cobro va por calendario: la cuota manda sobre el mes. */
+  const tieneCalendario = cuotas !== null && cuotas.length > 0;
   const [revision, setRevision] = useState<Generacion | null>(null);
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
   const [mirando, setMirando] = useState(true);
@@ -165,15 +211,20 @@ export function CargarConceptoDialog({
     periodoId: periodo.id,
     cursoIds,
     conceptoId: concepto.id,
-    mes: conMes && mes ? mes.mes : null,
-    // El año es el del mes elegido; sin mes, el de hoy, que es como lo manda
-    // la pantalla de «Cargo a varios alumnos».
-    anio: conMes && mes ? mes.anio : Number(hoyRD().slice(0, 4)),
-    montoCentavos,
-    // La misma regla que usa el plan del año: la fecha de emisión es hoy y el
-    // plazo lo pone el concepto. Sin plazo configurado, el cargo no vence.
+    // Con cuota, el mes, el año y el vencimiento los pone ELLA en el servidor:
+    // los mismos que escribe el plan, para que no haya dos versiones del
+    // mismo cargo. Sin cuota, el mes es el que se eligió arriba.
+    cuotaId: cuotaSel ? cuotaSel.id : null,
+    mes: !cuotaSel && conMes && mes ? mes.mes : null,
+    anio: !cuotaSel && conMes && mes ? mes.anio : Number(hoyRD().slice(0, 4)),
+    // Cada alumno paga LO SUYO: su tarifa personal si la tiene, su beca si la
+    // tiene. Por eso no viaja un monto: el servidor lo resuelve uno por uno
+    // con la misma regla del plan del año.
+    tarifaPorAlumno: true,
+    // La misma regla que usa el plan: emisión hoy y el plazo del concepto.
+    // Con cuota la calcula el servidor desde la fecha de emisión de la cuota.
     fechaVencimiento: vencimientoDe(hoyRD(), diasParaPago ?? null),
-  }), [periodo.id, cursoIds, concepto.id, montoCentavos, diasParaPago, conMes, mes]);
+  }), [periodo.id, cursoIds, concepto.id, diasParaPago, conMes, mes, cuotaSel]);
 
   /** Cada «volver a mirar» sube esto: lo que venga de una pregunta vieja no se pinta. */
   const preguntaVigente = useRef(0);
@@ -192,7 +243,7 @@ export function CargarConceptoDialog({
      * septiembre cuando se está cobrando octubre.
      */
     const cuerpo = cuerpoDelCargo();
-    const quienesLoTienen = cuerpo.mes === null
+    const quienesLoTienen = cuerpo.mes === null && cuerpo.cuotaId === null
       ? alumnosConEseConcepto(concepto.id, periodo.id)
       : Promise.resolve<number[]>([]);
     try {
@@ -214,7 +265,19 @@ export function CargarConceptoDialog({
         setRevision(null);
         return;
       }
-      const mirado = marcarLosQueYaLoTienen(data as Generacion, new Set(conEseConcepto));
+      /*
+       * Los que no tienen precio no entran en la lista: no se les puede
+       * marcar ni desmarcar, porque no hay cargo que crearles. Se cuentan
+       * aparte y se dicen en una nota, que es lo único que se puede hacer con
+       * ellos desde aquí.
+       */
+      const sinTarifa = Number(data.sinTarifa) || 0;
+      const conPrecio = (data.detalles as DetalleConMonto[])
+        .filter((d) => (d.resultado as string) !== 'sin-tarifa');
+      const mirado = marcarLosQueYaLoTienen(
+        { ...(data as Generacion), detalles: conPrecio, sinTarifa },
+        new Set(conEseConcepto),
+      );
       setRevision(mirado);
       // Vienen marcados todos los que pueden recibirlo: el caso normal es
       // cobrárselo al curso entero, y quitar dos marcas es menos trabajo que
@@ -272,9 +335,15 @@ export function CargarConceptoDialog({
         );
         if (!r.ok) throw new Error('cuotas');
         const d = await r.json();
-        if (vigente) setCuotas(Array.isArray(d.cuotas) ? d.cuotas.length : 0);
+        const lista: CuotaDelConcepto[] = (Array.isArray(d.cuotas) ? d.cuotas : [])
+          .map((c: { id: number; numero: number; etiqueta: string; fechaEmision: string }) => ({
+            id: c.id, numero: c.numero, etiqueta: c.etiqueta, fechaEmision: String(c.fechaEmision),
+          }));
+        if (!vigente) return;
+        setCuotas(lista);
+        setCuotaSel(cuotaInicial(lista, hoyRD()));
       } catch {
-        if (vigente) setCuotas(0);
+        if (vigente) setCuotas([]);
       }
     })();
     return () => { vigente = false; };
@@ -288,7 +357,7 @@ export function CargarConceptoDialog({
    * septiembre.
    */
   useEffect(() => {
-    if (!conMes) return;
+    if (!conMes || tieneCalendario) return;
     let vigente = true;
     void (async () => {
       try {
@@ -306,14 +375,17 @@ export function CargarConceptoDialog({
       }
     })();
     return () => { vigente = false; };
-  }, [conMes, periodo.id]);
+  }, [conMes, tieneCalendario, periodo.id]);
 
   /**
    * Se mira al abrir y cada vez que se cambia de mes: «ya lo tiene» es de ese
    * mes y de ningún otro. Cambiar la fecha límite NO vuelve a preguntar — a
    * quién se le debe no depende de hasta cuándo puede pagar.
    */
-  const claveDeLaPregunta = conMes ? (mes ? `${mes.anio}-${mes.mes}` : null) : 'sin-mes';
+  const claveDeLaPregunta = cuotas === null ? null
+    : cuotas.length > 0 ? (cuotaSel ? `cuota:${cuotaSel.id}` : null)
+    : conMes ? (mes ? `mes:${mes.anio}-${mes.mes}` : null)
+    : 'suelto';
   const miradaHecha = useRef<string | null>(null);
   useEffect(() => {
     if (claveDeLaPregunta === null) return;
@@ -364,7 +436,9 @@ export function CargarConceptoDialog({
       const creados = Number(data.creados) || 0;
       toast.success(
         creados === 1 ? `1 cargo de «${concepto.nombre}» creado` : `${creados} cargos de «${concepto.nombre}» creados`,
-        { description: `${fmtDOP(cuerpo.montoCentavos)} a cada uno · ${fmtDOP(creados * cuerpo.montoCentavos)} en total` },
+        // El total también es el del servidor: con beca y tarifa personal no
+        // se puede multiplicar un monto por el numero de alumnos.
+        { description: `${fmtDOP(Number(data.totalCentavos) || 0)} en total` },
       );
       onCreado?.(creados);
       onCerrar();
@@ -383,17 +457,41 @@ export function CargarConceptoDialog({
   const yaLoTienen = revision ? revision.omitidos : 0;
   const nadaQueCobrar = revision !== null && todosLoTienen({ aCobrar, yaLoTienen });
 
-  const frase: FraseDelCobro | null = revision ? fraseDelCobro({
-    montoCentavos: cuerpo.montoCentavos,
+  /** Las filas marcadas, que son exactamente a las que se les va a crear cargo. */
+  const marcados = revision
+    ? revision.detalles.filter((d) => d.resultado !== 'duplicado' && seleccion.has(d.estudianteId))
+    : [];
+  /** El total es la SUMA de lo que paga cada uno, no un monto por cabeza. */
+  const totalCentavos = marcados.reduce((a, d) => a + (d.montoCentavos ?? 0), 0);
+  /** Cuántos de los marcados pagan algo distinto de lo que paga la mayoría. */
+  const conPrecioPropio = cuantosPaganDistinto(marcados.map((d) => d.montoCentavos ?? 0));
+  /** De qué es el cargo: su cuota si la tiene, si no el mes. */
+  const etiquetaDelCargo = cuotaSel
+    ? cuotaSel.etiqueta
+    : (cuerpo.mes ? mesEnLetras(cuerpo.mes, cuerpo.anio) : null);
+  /** Con cuota, el vencimiento sale de SU fecha de emisión, como en el servidor. */
+  const venceEl = cuotaSel
+    ? vencimientoDe(cuotaSel.fechaEmision, diasParaPago ?? null)
+    : cuerpo.fechaVencimiento;
+
+  const dicho = revision ? fraseDeLaCarga({
     cobro: concepto.nombre,
-    mesTexto: cuerpo.mes ? mesEnLetras(cuerpo.mes, cuerpo.anio) : null,
-    aMano: false,
+    etiqueta: etiquetaDelCargo,
     grupo: grupoNombre,
-    marcados: seleccion.size,
+    marcados: marcados.length,
     enLaLista: revision.total,
-    fechaVencimiento: cuerpo.fechaVencimiento,
-    hoy,
-  }) : null;
+    totalCentavos,
+    conPrecioPropio,
+    dinero: fmtDOP,
+  }) : { principal: null, nota: null };
+
+  /** La misma forma que espera el diálogo de confirmar. */
+  const frase: FraseDelCobro | null = revision ? {
+    principal: dicho.principal,
+    total: `Total: ${fmtDOP(totalCentavos)}`,
+    totalCentavos,
+    plazo: fraseDelPlazo(venceEl, hoy, marcados.length),
+  } : null;
 
   const quitados = revision
     ? revision.detalles
@@ -401,12 +499,14 @@ export function CargarConceptoDialog({
       .map((d) => d.nombre)
     : [];
   const notas = [
+    dicho.nota,
     quitados.length > 0 ? fraseDeQuitados(quitados) : null,
     yaLoTienen > 0 ? fraseDeDuplicados(yaLoTienen) : null,
+    revision ? fraseDeSinTarifa(revision.sinTarifa) : null,
   ].filter((n): n is string => n !== null);
   // El ámbar del tipo de cobro se repite al confirmar: es lo que más cuesta
   // deshacer, y el diálogo de «¿seguro?» tapa el del cuerpo.
-  const avisoCalendario = cuotas === null ? null : avisoDeCalendario(cuotas);
+  const avisoCalendario = cuotas === null ? null : avisoDeCalendario(cuotas.length);
   const avisos = [
     aviso,
     avisoCalendario,
@@ -414,7 +514,7 @@ export function CargarConceptoDialog({
   ].filter((a): a is string => a !== null);
 
   /** El año escolar no tiene fechas, así que no hay meses que elegir. */
-  const sinMeses = conMes && meses !== null && meses.length === 0;
+  const sinMeses = conMes && !tieneCalendario && meses !== null && meses.length === 0;
   // No se cobra hasta saber el plazo del concepto: sin eso, el cargo nacería
   // sin fecha de vencimiento cuando sí la tiene configurada.
   const puedeCobrar = revision !== null && seleccion.size > 0 && !mirando
@@ -432,7 +532,9 @@ export function CargarConceptoDialog({
             {/* El concepto, el curso y el monto se dicen, no se preguntan: son
                 los de la fila desde la que se abrió esto. */}
             <p className="text-sm text-gray-500">
-              {`${fmtDOP(montoCentavos)} por alumno · Año escolar ${periodo.nombre}`}
+              {/* «Tarifa de esta fila» y no «por alumno»: el becado y el de
+                  precio propio pagan otra cosa, y el total de abajo lo dice. */}
+              {`Tarifa de esta fila: ${fmtDOP(montoCentavos)} · Año escolar ${periodo.nombre}`}
             </p>
           </DialogHeader>
 
@@ -452,7 +554,28 @@ export function CargarConceptoDialog({
               </p>
             )}
 
-            {conMes && (
+            {/* Con calendario, la cuota sustituye al mes: ella dice de qué mes
+                es, cuándo vence y cuánto toca pagar de este cobro. */}
+            {tieneCalendario && cuotas && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="carga-cuota">¿De qué cuota?</Label>
+                <div className="w-72">
+                  <NativeSelect id="carga-cuota" value={cuotaSel ? String(cuotaSel.id) : ''}
+                    onChange={(e) => setCuotaSel(cuotas.find((c) => String(c.id) === e.target.value) ?? null)}>
+                    {cuotas.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {`${c.etiqueta} · se emite el ${fechaEnLetras(c.fechaEmision)}`}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Quien ya tenga esta cuota sale en gris y no se le cobra otra vez.
+                </p>
+              </div>
+            )}
+
+            {conMes && !tieneCalendario && (
               <div className="grid gap-1.5">
                 <Label htmlFor="carga-mes">¿De qué mes?</Label>
                 {sinMeses ? (
@@ -529,7 +652,15 @@ export function CargarConceptoDialog({
               {frase?.principal && (
                 <>
                   <p className="text-sm text-gray-900">{frase.principal}</p>
-                  <p className="text-xs text-gray-500">{`${frase.total} · ${frase.plazo}`}</p>
+                  <p className="text-xs text-gray-500">{frase.plazo}</p>
+                  {/* «3 pagan distinto» va aquí y no solo en el «¿seguro?»:
+                      es lo que explica por qué el total no es la tarifa
+                      multiplicada por los alumnos, y se lee mientras se
+                      repasa la lista. */}
+                  {dicho.nota && <p className="text-xs text-gray-500">{dicho.nota}</p>}
+                  {revision && fraseDeSinTarifa(revision.sinTarifa) && (
+                    <p className="text-xs text-amber-700">{fraseDeSinTarifa(revision.sinTarifa)}</p>
+                  )}
                 </>
               )}
             </div>

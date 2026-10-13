@@ -105,10 +105,10 @@ export function necesitaMes(tipoDeConcepto: string): boolean {
  */
 export function avisoDeLaCarga(tipoDeConcepto: string): string | null {
   if (tipoDeConcepto === 'mensualidad') {
-    return 'Es una colegiatura: normalmente la pone el plan del año. Desde aquí todos pagan la tarifa de esta fila, sin beca ni tarifa personal del alumno.';
+    return 'Es una colegiatura: lo normal es que la ponga el plan del año. Aquí se cobra la de un mes suelto, a quien le falte.';
   }
   if (tipoDeConcepto === 'inscripcion') {
-    return 'Es la inscripción: va una vez por año escolar. Desde aquí todos pagan la tarifa de esta fila, sin beca ni tarifa personal del alumno.';
+    return 'Es la inscripción: va una vez por año escolar, así que solo se le puede poner a quien todavía no la tenga.';
   }
   return null;
 }
@@ -137,7 +137,75 @@ export function tienePlanPropio(tipoDeConcepto: string): boolean {
 export function avisoDeCalendario(cuotas: number): string | null {
   if (cuotas <= 0) return null;
   const cuantas = cuotas === 1 ? 'una cuota' : `${cuotas} cuotas`;
-  return `Este cobro tiene calendario (${cuantas}): normalmente lo pone el plan del año, cuota por cuota. Lo que cobres aquí el plan no lo verá, y creará igual el cargo de su cuota.`;
+  return `Este cobro va en calendario (${cuantas}). Elige de qué cuota es el cargo: queda atado a ella, así que el plan del año lo reconoce y no lo cobra otra vez.`;
+}
+
+/**
+ * Lo que va a pasar al confirmar, cuando cada alumno puede pagar lo suyo.
+ *
+ * La frase de «Cargo a varios alumnos» dice «RD$150 a cada uno» porque allí el
+ * monto se teclea una vez y vale para todos. Aquí no: el becado paga menos y
+ * el de tarifa personal paga lo suyo, así que el único número verdadero es el
+ * TOTAL, y lo que hay que decir aparte es a cuántos no se les está cobrando la
+ * tarifa de la fila. Decir «RD$2,800 a cada uno» con tres becados delante
+ * sería mentir en la línea que la persona lee antes de pulsar.
+ */
+export function fraseDeLaCarga(d: {
+  cobro: string;
+  /** «octubre de 2026», «Evaluacion P2» o `null` si el cobro no lleva etiqueta. */
+  etiqueta: string | null;
+  grupo: string;
+  marcados: number;
+  enLaLista: number;
+  totalCentavos: number;
+  /** A cuántos de los marcados no se les cobra la tarifa de la fila. */
+  conPrecioPropio: number;
+  /** Para formatear el dinero sin que esta función sepa de monedas. */
+  dinero: (centavos: number) => string;
+}): { principal: string | null; nota: string | null } {
+  if (d.marcados <= 0) return { principal: null, nota: null };
+  const que = `«${d.cobro}»${d.etiqueta ? ` de ${d.etiqueta}` : ''}`;
+  const aQuien = d.marcados < d.enLaLista
+    ? `a ${d.marcados} de los ${d.enLaLista} alumnos de ${d.grupo}`
+    : `a ${d.marcados === 1 ? '1 alumno' : `los ${d.marcados} alumnos`} de ${d.grupo}`;
+  const nota = d.conPrecioPropio > 0
+    ? (d.conPrecioPropio === 1
+      ? '1 paga distinto: tiene beca o precio propio.'
+      : `${d.conPrecioPropio} pagan distinto: tienen beca o precio propio.`)
+    : null;
+  return {
+    principal: `${d.marcados === 1 ? 'Le' : 'Les'} vas a cobrar ${que} ${aQuien}. Total: ${d.dinero(d.totalCentavos)}.`,
+    nota,
+  };
+}
+
+/**
+ * Cuántos de los marcados pagan algo distinto de lo que paga la mayoría.
+ *
+ * Se mide contra el monto MÁS REPETIDO y no contra la tarifa de la fila. La
+ * primera versión comparaba con la tarifa, y en un cobro repartido en tres
+ * cuotas —donde todos pagan un tercio— salía «3 pagan distinto» con los tres
+ * pagando exactamente lo mismo. Lo que la persona necesita saber no es si el
+ * número coincide con el de la fila de arriba, sino si hay alguien que se sale
+ * de lo que paga el resto.
+ */
+export function cuantosPaganDistinto(montos: number[]): number {
+  if (montos.length <= 1) return 0;
+  const veces = new Map<number, number>();
+  for (const m of montos) veces.set(m, (veces.get(m) ?? 0) + 1);
+  let masRepetido = montos[0];
+  for (const [monto, n] of veces) {
+    if (n > (veces.get(masRepetido) ?? 0)) masRepetido = monto;
+  }
+  return montos.filter((m) => m !== masRepetido).length;
+}
+
+/** A quién no se le pudo saber el precio: ese alumno no recibe cargo. */
+export function fraseDeSinTarifa(n: number): string | null {
+  if (n <= 0) return null;
+  return n === 1
+    ? '1 alumno se queda fuera: no tiene precio para este cobro.'
+    : `${n} alumnos se quedan fuera: no tienen precio para este cobro.`;
 }
 
 /** Nombre de la etiqueta de la acción. Una sola, y se dice igual en todas las filas. */
