@@ -1,0 +1,295 @@
+/* Chat de Zero: el asistente y el soporte con una persona.
+   Todo sale de los tokens de la app (--primary, --card…): sigue al tema y no
+   hay colores sueltos.
+
+   Va anclado a la derecha, de la barra superior hacia abajo, como un panel y
+   no como una ventanita: las respuestas traen tablas y necesitan ancho y alto. */
+
+.panel {
+  position: fixed; z-index: 1200;
+  top: 62px; right: 12px; bottom: 12px;
+  width: min(432px, calc(100vw - 24px));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: 0 24px 56px rgb(15 23 42 / 0.18), 0 2px 8px rgb(15 23 42 / 0.06);
+  font-size: 14px; line-height: 1.55;
+  animation: entra .18s ease-out;
+}
+@keyframes entra { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .panel { animation: none; } }
+
+/* En el celular ocupa todo el ancho, debajo de la barra. */
+@media (max-width: 640px) {
+  .panel { top: 52px; right: 8px; left: 8px; bottom: 8px; width: auto; border-radius: 16px; }
+}
+
+/* ── Encabezado ─────────────────────────────────────────────────────────── */
+.cabecera { display: flex; align-items: center; gap: 11px; padding: 14px 10px 12px 16px; flex-shrink: 0; }
+.marca {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #7c3aed));
+  color: var(--primary-foreground);
+}
+.titulos { flex: 1; min-width: 0; }
+.titulo { font-weight: 700; font-size: 15.5px; margin: 0; line-height: 1.25; }
+.subtitulo {
+  font-size: 12.5px; color: var(--muted-foreground); margin: 1px 0 0; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.acciones { display: flex; align-items: center; gap: 2px; }
+.icono {
+  display: grid; place-items: center; width: 34px; height: 34px; border: 0; background: none; cursor: pointer;
+  border-radius: 9px; color: var(--muted-foreground); text-decoration: none;
+}
+.icono:hover { background: var(--muted); color: var(--foreground); }
+.icono:disabled { opacity: .4; cursor: default; }
+.icono:focus-visible, .chip:focus-visible, .enviar:focus-visible, .segmento:focus-visible,
+.humano:focus-visible, .reintentar:focus-visible, .copiar:focus-visible {
+  outline: 2px solid var(--ring); outline-offset: 2px;
+}
+
+/* ── Selector Asistente | Soporte ───────────────────────────────────────── */
+.segmentos { display: flex; gap: 2px; margin: 0 16px 12px; padding: 3px; background: var(--muted); border-radius: 11px; flex-shrink: 0; }
+.segmento {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px;
+  border: 0; border-radius: 9px; background: transparent; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted-foreground);
+}
+.segmento:hover { color: var(--foreground); }
+.segmentoActivo, .segmentoActivo:hover {
+  background: var(--card); color: var(--foreground); box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
+}
+.punto { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+
+/* ── Mensajes ───────────────────────────────────────────────────────────── */
+.mensajes {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 16px 14px;
+  display: flex; flex-direction: column; gap: 14px;
+  background: var(--background); border-top: 1px solid var(--border);
+}
+.fila { display: flex; gap: 8px; min-width: 0; }
+.filaUsuario { align-self: flex-end; max-width: 84%; }
+.filaAsistente { align-self: flex-start; max-width: 100%; }
+.avatar {
+  width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; margin-top: 2px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary);
+}
+.cuerpo { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.burbuja { padding: 9px 13px; border-radius: 15px; overflow-wrap: anywhere; min-width: 0; }
+.burbujaUsuario { background: var(--primary); color: var(--primary-foreground); border-bottom-right-radius: 5px; white-space: pre-wrap; }
+.burbujaAsistente { background: var(--card); border: 1px solid var(--border); border-top-left-radius: 5px; }
+.burbujaError { background: color-mix(in srgb, var(--destructive) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--border)); }
+.debajo { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; min-height: 22px; }
+.consulto {
+  font-size: 11.5px; color: var(--muted-foreground); min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.copiar {
+  display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: var(--muted-foreground); padding: 2px 6px; border-radius: 6px;
+  margin-left: auto; flex-shrink: 0;
+}
+.copiar:hover { background: var(--muted); color: var(--foreground); }
+.reintentar {
+  margin-top: 6px; border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+  border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.reintentar:hover { background: var(--muted); }
+
+.parrafo { margin: 0 0 8px; }
+.parrafo:last-child, .lista:last-child { margin-bottom: 0; }
+.parrafoTitulo { margin: 10px 0 4px; font-weight: 700; }
+.parrafoTitulo:first-child { margin-top: 0; }
+.lista { margin: 0 0 8px; padding-left: 1.25em; }
+.lista li { margin: 3px 0; }
+.burbujaAsistente code { background: var(--muted); border-radius: 4px; padding: 0 4px; font-size: .9em; }
+
+.tablaCaja { overflow-x: auto; margin: 6px 0 8px; border: 1px solid var(--border); border-radius: 10px; }
+.tabla { border-collapse: collapse; width: 100%; font-size: 12.75px; }
+.tabla th, .tabla td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+.tabla th { white-space: nowrap; background: var(--muted); font-weight: 600; color: var(--muted-foreground); }
+.tabla td:first-child { min-width: 120px; }
+.tabla tr:last-child td { border-bottom: 0; }
+.tabla td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Consultando */
+.pensando {
+  display: flex; align-items: center; gap: 9px; color: var(--muted-foreground); font-size: 13px;
+  padding: 6px 12px; border-radius: 15px; background: var(--card); border: 1px solid var(--border);
+}
+.puntos { display: inline-flex; gap: 3px; }
+.puntos i { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); opacity: .5; animation: salto 1.2s infinite ease-in-out; }
+.puntos i:nth-child(2) { animation-delay: .15s; }
+.puntos i:nth-child(3) { animation-delay: .3s; }
+@keyframes salto { 0%, 80%, 100% { transform: translateY(0); opacity: .35; } 40% { transform: translateY(-3px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .puntos i { animation: none; } }
+
+/* ── Al abrir ───────────────────────────────────────────────────────────── */
+.bienvenida { display: flex; flex-direction: column; gap: 18px; margin: auto 0; padding: 6px 2px 2px; }
+.bienvenidaMarca {
+  width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #7c3aed));
+  color: var(--primary-foreground);
+}
+.bienvenida h3 { margin: 0; font-size: 21px; line-height: 1.2; letter-spacing: -0.01em; }
+.bienvenida p { margin: 6px 0 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
+.bienvenida p strong { color: var(--foreground); font-weight: 600; }
+.sugerencias { display: flex; flex-direction: column; gap: 7px; }
+.etiqueta { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
+.chip {
+  display: flex; align-items: center; gap: 11px; text-align: left; width: 100%;
+  border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+  border-radius: 12px; padding: 10px 13px; cursor: pointer; font: inherit; font-size: 13.75px;
+}
+.chip svg { color: var(--primary); flex-shrink: 0; }
+.chip:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+.pie { border-top: 1px solid var(--border); background: var(--card); padding: 10px 12px 10px; flex-shrink: 0; }
+.compositor {
+  display: flex; align-items: flex-end; gap: 6px; border: 1px solid var(--input); border-radius: 14px;
+  padding: 5px 5px 5px 14px; background: var(--background);
+}
+.compositor:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent); }
+.texto {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; resize: none; color: var(--foreground);
+  font: inherit; padding: 7px 0; max-height: 132px; line-height: 1.45;
+}
+.texto::placeholder { color: var(--muted-foreground); }
+.enviar {
+  width: 36px; height: 36px; border: 0; border-radius: 10px; display: grid; place-items: center; cursor: pointer;
+  background: var(--primary); color: var(--primary-foreground); flex-shrink: 0;
+}
+.enviar:disabled { background: var(--muted); color: var(--muted-foreground); cursor: default; }
+.notas {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 0 2px;
+  font-size: 11.5px; color: var(--muted-foreground);
+}
+.humano {
+  border: 0; background: none; color: var(--primary); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 2px 4px; border-radius: 6px; white-space: nowrap; flex-shrink: 0;
+}
+.humano:hover { text-decoration: underline; }
+.humano:disabled { opacity: .5; cursor: default; text-decoration: none; }
+.derivada { margin: 0 0 8px; font-size: 12.5px; color: var(--muted-foreground); text-align: center; }
+
+/* ── Soporte con una persona ────────────────────────────────────────────── */
+.pestanas { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--card); }
+.pestana {
+  flex: 1; border: 0; background: none; cursor: pointer; padding: 9px 0; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--muted-foreground); border-bottom: 2px solid transparent;
+}
+.pestana:hover { color: var(--foreground); }
+.pestanaActiva { color: var(--primary); border-bottom-color: var(--primary); }
+.zonaLlamada { flex: 1; min-height: 0; border-top: 1px solid var(--border); }
+.llamadaFin { padding: 16px; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--background); }
+
+.aviso { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 14px; font-size: 12.5px; text-align: center; flex-shrink: 0; border-top: 1px solid var(--border); }
+.avisoEspera { background: color-mix(in srgb, #f59e0b 14%, var(--card)); color: color-mix(in srgb, #92400e 80%, var(--foreground)); }
+.avisoCerrado { background: color-mix(in srgb, #f59e0b 12%, var(--card)); color: color-mix(in srgb, #92400e 80%, var(--foreground)); }
+.avisoOk { background: color-mix(in srgb, #22c55e 14%, var(--card)); color: color-mix(in srgb, #166534 80%, var(--foreground)); }
+.avisoNeutro { background: var(--muted); color: var(--muted-foreground); }
+
+.hilo {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--background); border-top: 1px solid var(--border);
+}
+.vacioSoporte { margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 6px 2px; }
+.vacioIcono {
+  width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; margin-bottom: 8px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary);
+}
+.vacioSoporte h3 { margin: 0; font-size: 20px; line-height: 1.2; letter-spacing: -0.01em; }
+.vacioSoporte p { margin: 0; color: var(--muted-foreground); font-size: 14px; }
+.vacioPistas { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted-foreground); }
+.vacioPistas li { display: flex; align-items: center; gap: 9px; }
+.vacioPistas svg { color: var(--primary); flex-shrink: 0; }
+.escribiendo { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted-foreground); margin-left: 2px; }
+.enviandoMsg { font-size: 12px; color: var(--muted-foreground); align-self: flex-end; margin-right: 2px; }
+
+/* Burbujas de soporte (message-bubble.tsx) */
+.sBurbuja { display: flex; flex-direction: column; max-width: 82%; min-width: 0; }
+.sMia { align-self: flex-end; align-items: flex-end; }
+.sSuya { align-self: flex-start; }
+.sAutor { font-size: 11.5px; font-weight: 600; color: var(--muted-foreground); margin: 0 0 3px 3px; }
+.sTexto {
+  padding: 9px 13px; border-radius: 15px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.sTextoMio { background: var(--primary); color: var(--primary-foreground); border-bottom-right-radius: 5px; }
+.sTextoSuyo { background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-bottom-left-radius: 5px; }
+.sHora { display: flex; align-items: center; gap: 4px; margin: 3px 3px 0; font-size: 11px; color: var(--muted-foreground); }
+.sLeido { color: var(--primary); }
+.sSistema { align-self: center; margin: 4px 0; }
+.sSistema span { display: inline-block; font-size: 12px; color: var(--muted-foreground); background: var(--muted); border-radius: 999px; padding: 4px 12px; }
+.sPedido { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; opacity: .8; margin-bottom: 5px; }
+.sAcciones { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.sAccion {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: var(--background);
+  color: var(--primary); border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.sAccion:disabled { opacity: .6; cursor: default; }
+.sAdjunto { margin-top: 8px; }
+.sAdjunto img, .sAdjunto video { max-width: 100%; border-radius: 10px; display: block; }
+.sAdjunto img { cursor: zoom-in; }
+.sArchivo {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; text-decoration: none;
+  border-radius: 8px; padding: 5px 10px; border: 1px solid var(--border); background: var(--background); color: var(--primary);
+}
+.sTextoMio .sArchivo { background: rgb(255 255 255 / 0.16); border-color: transparent; color: var(--primary-foreground); }
+
+/* Calificación */
+.calificacion { padding: 12px 14px; background: var(--card); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.calificacionTitulo { margin: 0; font-size: 13px; font-weight: 600; }
+.estrellas { display: flex; gap: 4px; }
+.estrella { background: none; border: 0; cursor: pointer; font-size: 24px; line-height: 1; padding: 0; color: var(--border); }
+.estrella:hover { color: #f59e0b; }
+.estrellaOn { color: #f59e0b; }
+.comentario {
+  resize: none; border: 1px solid var(--input); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px;
+  background: var(--background); color: var(--foreground); outline: 0;
+}
+.comentario:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent); }
+.btnPrimario {
+  border: 0; border-radius: 10px; background: var(--primary); color: var(--primary-foreground); padding: 8px 12px;
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btnPrimario:disabled { background: var(--muted); color: var(--muted-foreground); cursor: default; }
+
+/* Barra de escritura de soporte */
+.herramienta {
+  display: grid; place-items: center; width: 34px; height: 36px; border: 0; background: none; cursor: pointer;
+  border-radius: 9px; color: var(--muted-foreground); flex-shrink: 0;
+}
+.herramienta:hover { background: var(--muted); color: var(--foreground); }
+.herramienta:disabled { opacity: .45; cursor: default; }
+.campoLinea {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--foreground);
+  font: inherit; padding: 8px 4px;
+}
+.campoLinea::placeholder { color: var(--muted-foreground); }
+
+/* ── Botón de la barra superior ─────────────────────────────────────────── */
+.abrir {
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px 0 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; position: relative;
+  transition: background .15s, border-color .15s;
+}
+.abrir:hover { background: var(--muted); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
+.abrir:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.abrirActivo { background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-color: var(--primary); color: var(--primary); }
+.abrirIcono {
+  width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #7c3aed)); color: var(--primary-foreground);
+}
+.abrirLlamada { border-color: #16a34a; color: #15803d; background: color-mix(in srgb, #22c55e 12%, var(--card)); }
+.abrirLlamada .abrirIcono { background: #16a34a; }
+.abrirLatido { animation: latido 1.4s ease-in-out infinite; }
+@keyframes latido { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.abrirEtiqueta { white-space: nowrap; }
+@media (max-width: 900px) { .abrirEtiqueta { display: none; } .abrir { padding: 0 7px; } }
+@media (prefers-reduced-motion: reduce) { .abrirLatido { animation: none; } }
+
+.enlace { color: var(--primary); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.enlace:hover { text-decoration-thickness: 2px; }

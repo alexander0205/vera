@@ -1,0 +1,299 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+/**
+ * El asistente de Zero es SOLO LECTURA y trabaja con el teamId de la sesión.
+ * Aquí se comprueba, sin llamar a ningún modelo real ni a la base:
+ *  - cada herramienta consulta con el teamId que se le dio, nunca otro;
+ *  - ninguna herramienta escribe (el catálogo es de reportes);
+ *  - los montos viajan en pesos, no en centavos;
+ *  - el resumen que recibe el agente humano es corto y plano.
+ */
+
+const q = vi.hoisted(() => ({
+  getKpis: vi.fn(),
+  getTendencia: vi.fn(),
+  getIngresosPorProducto: vi.fn(),
+  getIngresosPorCliente: vi.fn(),
+  getIngresosPorMetodo: vi.fn(),
+  getAgingCxC: vi.fn(),
+  getItbisResumen: vi.fn(),
+  getVentasPorTipo: vi.fn(),
+  getVentasPorUsuario: vi.fn(),
+}));
+vi.mock('@/lib/reportes/queries', () => q);
+vi.mock('@/lib/db/drizzle', () => ({ db: {} }));
+vi.mock('@/lib/auth/modules', () => ({ getTeamModules: vi.fn() }));
+vi.mock('@/lib/auth/permissions', () => ({ getEffectivePermissions: vi.fn() }));
+vi.mock('@/lib/compras/captura/consultas', () => ({ listarCapturas: vi.fn(), contarPorRevisar: vi.fn() }));
+vi.mock('@/lib/compras/consultas', () => ({ listarCompras: vi.fn(), resumenGastos: vi.fn() }));
+vi.mock('server-only', () => ({}));
+
+import { crearHerramientas, type ConsultaHecha } from '@/lib/asistente/herramientas';
+import { armarResumenParaAgente } from '@/lib/asistente/derivar';
+
+const ejecutar = async (t: unknown, input: unknown) =>
+  (t as { execute: (i: unknown, o: unknown) => Promise<unknown> }).execute(input, {});
+
+beforeEach(() => { vi.clearAllMocks(); });
+
+describe('herramientas del asistente', () => {
+  it('consultan siempre con el teamId de la sesión', async () => {
+    q.getKpis.mockResolvedValue({
+      ingresosCents: 1_234_567, baseCents: 1_000_000, itbisCents: 180_000, numFacturas: 12,
+      ticketPromedioCents: 102_880, porCobrarCents: 50_000, vencidoCents: 10_000, tasaAceptacion: 1,
+    });
+    const consultas: ConsultaHecha[] = [];
+    const h = crearHerramientas(42, consultas);
+    await ejecutar(h.resumen_ventas, { desde: '2026-10-01', hasta: '2026-10-31' });
+    expect(q.getKpis).toHaveBeenCalledTimes(1);
+    expect(q.getKpis.mock.calls[0][0]).toBe(42);
+  });
+
+  it('devuelve pesos, no centavos', async () => {
+    q.getKpis.mockResolvedValue({
+      ingresosCents: 1_234_567, baseCents: 0, itbisCents: 0, numFacturas: 3,
+      ticketPromedioCents: 100, porCobrarCents: 0, vencidoCents: 0, tasaAceptacion: 0,
+    });
+    const h = crearHerramientas(1, []);
+    const r = await ejecutar(h.resumen_ventas, {}) as { ventasNetas: number; facturas: number };
+    expect(r.ventasNetas).toBe(12345.67);
+    expect(r.facturas).toBe(3);
+  });
+
+  it('anota qué consultó para mostrárselo a la persona', async () => {
+    q.getIngresosPorMetodo.mockResolvedValue([{ metodo: 'transferencia', totalCents: 5000, numPagos: 2 }]);
+    const consultas: ConsultaHecha[] = [];
+    const h = crearHerramientas(7, consultas);
+    const r = await ejecutar(h.cobros_por_metodo, { desde: '2026-10-01', hasta: '2026-10-15' }) as {
+      metodos: { metodo: string; cobrado: number }[];
+    };
+    expect(r.metodos[0]).toMatchObject({ metodo: 'Transferencia', cobrado: 50 });
+    expect(consultas).toHaveLength(1);
+    expect(consultas[0].nombre).toBe('Cobros por método');
+    expect(consultas[0].resumen).toContain('2026-10-01');
+  });
+
+  it('agrupa la cartera por cliente y respeta «solo vencidas»', async () => {
+    q.getAgingCxC.mockResolvedValue({
+      totalCents: 600_00, buckets: { porVencer: 100_00, '0-30': 200_00, '31-60': 0, '61-90': 0, '90+': 300_00 },
+      filas: [
+        { id: 1, encf: 'A', cliente: 'Familia Pérez', fechaLimite: null, diasVencido: 10, saldoCents: 200_00, cubeta: '0-30' },
+        { id: 2, encf: 'B', cliente: 'Familia Pérez', fechaLimite: null, diasVencido: 120, saldoCents: 300_00, cubeta: '90+' },
+        { id: 3, encf: 'C', cliente: 'Familia Gómez', fechaLimite: null, diasVencido: 0, saldoCents: 100_00, cubeta: 'porVencer' },
+      ],
+    });
+    const h = crearHerramientas(1, []);
+    const todo = await ejecutar(h.cuentas_por_cobrar, { soloVencidas: false, limite: 10 }) as {
+      totalPorCobrar: number; mayoresDeudores: { cliente: string; debe: number; facturas: number; diasVencidoMaximo: number }[];
+    };
+    expect(todo.totalPorCobrar).toBe(600);
+    expect(todo.mayoresDeudores[0]).toEqual({ cliente: 'Familia Pérez', debe: 500, facturas: 2, diasVencidoMaximo: 120 });
+    expect(todo.mayoresDeudores).toHaveLength(2);
+
+    const vencidas = await ejecutar(h.cuentas_por_cobrar, { soloVencidas: true, limite: 10 }) as {
+      mayoresDeudores: { cliente: string }[];
+    };
+    expect(vencidas.mayoresDeudores.map((d) => d.cliente)).toEqual(['Familia Pérez']);
+  });
+
+  it('el catálogo es exactamente el de consultas: una herramienta nueva obliga a revisar esto', () => {
+    // Si alguien agrega una herramienta, este test falla a propósito: toda
+    // herramienta del asistente tiene que ser de lectura y pasar por revisión.
+    expect(Object.keys(crearHerramientas(1, [])).sort()).toEqual([
+      'buscar_clientes', 'buscar_empleados', 'buscar_estudiantes', 'buscar_facturas', 'buscar_productos',
+      'cargos_escolares', 'catalogo_cuentas', 'cobros_por_metodo', 'cuentas_por_cobrar', 'donde_encontrar',
+      'facturas_por_revisar', 'facturas_recurrentes', 'libro_diario', 'listar_cotizaciones', 'listar_gastos_compras',
+      'pagos_recibidos', 'resumen_gastos', 'resumen_itbis', 'resumen_matriculas', 'resumen_nomina', 'resumen_ventas',
+      'tendencia_ventas', 'turnos_caja', 'ventas_por_cliente', 'ventas_por_producto',
+      'ventas_por_tipo_comprobante', 'ventas_por_usuario',
+    ]);
+  });
+
+  it('el modelo solo puede escoger fechas con formato YYYY-MM-DD', async () => {
+    const h = crearHerramientas(1, []);
+    const esquema = (h.resumen_ventas as unknown as { inputSchema: { safeParse: (v: unknown) => { success: boolean } } }).inputSchema;
+    expect(esquema.safeParse({ desde: '2026-10-01' }).success).toBe(true);
+    expect(esquema.safeParse({ desde: "'; DROP TABLE teams;--" }).success).toBe(false);
+    expect(esquema.safeParse({ desde: '01/10/2026' }).success).toBe(false);
+  });
+});
+
+describe('resumen para el agente humano', () => {
+  it('trae la conversación en texto plano, sin markdown de tablas', () => {
+    const t = armarResumenParaAgente([
+      { rol: 'user', contenido: 'Quién me debe' },
+      { rol: 'assistant', contenido: '**Total:** RD$ 500.00\n\n| cliente | debe |\n| --- | --- |\n| Pérez | 500 |' },
+    ]);
+    expect(t).toContain('Cliente: Quién me debe');
+    expect(t).toContain('Asistente: Total: RD$ 500.00');
+    expect(t).not.toContain('**');
+    expect(t).not.toContain('---');
+    expect(t).toContain('Pérez · 500');
+    expect(t).not.toMatch(/·\s*$/m);
+  });
+
+  it('no pasa de ~4000 caracteres y conserva lo más reciente', () => {
+    const largo = Array.from({ length: 40 }, (_, i) => ({
+      rol: i % 2 ? 'assistant' : 'user', contenido: `mensaje ${i} ${'x'.repeat(500)}`,
+    }));
+    largo.push({ rol: 'user', contenido: 'ÚLTIMA PREGUNTA' });
+    const t = armarResumenParaAgente(largo);
+    expect(t.length).toBeLessThan(4200);
+    expect(t).toContain('ÚLTIMA PREGUNTA');
+    expect(t).not.toContain('mensaje 0 ');
+  });
+});
+
+// ── Guía y permisos por módulo ──────────────────────────────────────────────
+
+import { buscarEnMapa } from '@/lib/asistente/guia';
+import { contextoDePrueba } from '@/lib/asistente/contexto';
+import type { EntradaMapa } from '@/lib/asistente/mapa-sistema';
+
+const MAPA: EntradaMapa[] = [
+  {
+    id: 'libro', modulo: 'contabilidad', titulo: 'Libro diario', ruta: '/contabilidad/libro-diario',
+    menu: 'Contabilidad › Libro diario', que: 'Lista de asientos contables', palabras: ['asientos', 'libro', 'diario', 'contable'],
+    permiso: 'contabilidad:ver',
+  },
+  {
+    id: 'nuevo-asiento', modulo: 'contabilidad', titulo: 'Nuevo asiento', ruta: '/contabilidad/nuevo-asiento',
+    menu: 'Contabilidad › Nuevo asiento', que: 'Registrar un asiento manual', palabras: ['asiento', 'manual', 'registrar asiento'],
+    como: ['Abre Nuevo asiento', 'Elige la fecha', 'Agrega las líneas', 'Guarda'], permiso: 'contabilidad:gestionar',
+  },
+  {
+    id: 'corridas', modulo: 'nomina', titulo: 'Corridas de nómina', ruta: '/nomina/corridas',
+    menu: 'Nómina › Corridas', que: 'Calcular y aprobar la nómina', palabras: ['nomina', 'pago empleados', 'corrida'],
+  },
+  {
+    id: 'facturas', modulo: 'facturacion', titulo: 'Facturas', ruta: '/dashboard/facturas',
+    menu: 'Facturación › Facturas', que: 'Lista de facturas emitidas', palabras: ['facturas', 'ventas'],
+  },
+];
+
+describe('guía: dónde está cada cosa', () => {
+  const todo = contextoDePrueba(1);
+
+  it('encuentra la pantalla con las palabras de la persona, con módulo, menú y pasos', () => {
+    const r = buscarEnMapa('¿cómo creo un nuevo asiento manual?', todo, { mapa: MAPA });
+    expect(r.resultados[0]).toMatchObject({
+      titulo: 'Nuevo asiento', modulo: 'Contabilidad', menu: 'Contabilidad › Nuevo asiento', ruta: '/contabilidad/nuevo-asiento',
+    });
+    expect(r.resultados[0].pasos).toHaveLength(4);
+  });
+
+  it('no distingue tildes ni mayúsculas', () => {
+    const r = buscarEnMapa('NÓMINA', todo, { mapa: MAPA });
+    expect(r.resultados[0].titulo).toBe('Corridas de nómina');
+  });
+
+  it('si el módulo no está contratado no lo recomienda, pero lo dice', () => {
+    const sinNomina = contextoDePrueba(1, { modulos: ['facturacion', 'administracion'] });
+    const r = buscarEnMapa('nómina', sinNomina, { mapa: MAPA });
+    expect(r.resultados).toEqual([]);
+    expect(r.noDisponibles[0]).toMatchObject({ modulo: 'Nómina' });
+    expect(r.noDisponibles[0].motivo).toMatch(/no está activo/);
+  });
+
+  it('si el rol no tiene el permiso de la pantalla, tampoco la recomienda', () => {
+    const lector = contextoDePrueba(1, { permisos: ['contabilidad:ver'] });
+    const r = buscarEnMapa('registrar asiento manual', lector, { mapa: MAPA });
+    expect(r.resultados.find((x) => x.titulo === 'Nuevo asiento')).toBeUndefined();
+    expect(r.noDisponibles.map((x) => x.titulo)).toContain('Nuevo asiento');
+  });
+
+  it('una consulta sin relación no devuelve nada', () => {
+    const r = buscarEnMapa('receta de sancocho', todo, { mapa: MAPA });
+    expect(r.resultados).toEqual([]);
+  });
+});
+
+describe('herramientas según módulo y permiso', () => {
+  const nombres = (ctx: ReturnType<typeof contextoDePrueba>) => Object.keys(crearHerramientas(ctx, []));
+
+  it('sin el módulo de nómina no existen las consultas de nómina', () => {
+    const n = nombres(contextoDePrueba(1, { modulos: ['facturacion', 'administracion'] }));
+    expect(n).not.toContain('resumen_nomina');
+    expect(n).not.toContain('buscar_empleados');
+    expect(n).not.toContain('turnos_caja');
+  });
+
+  it('con el módulo pero sin el permiso, tampoco', () => {
+    const n = nombres(contextoDePrueba(1, { permisos: ['reportes:ver'] }));
+    expect(n).not.toContain('libro_diario');
+    expect(n).not.toContain('resumen_nomina');
+    expect(n).not.toContain('buscar_productos');
+    expect(n).toContain('resumen_ventas');
+  });
+
+  it('con módulo y permiso existen; la guía va siempre', () => {
+    const n = nombres(contextoDePrueba(1));
+    for (const esperado of ['libro_diario', 'resumen_nomina', 'turnos_caja', 'buscar_estudiantes', 'buscar_productos', 'donde_encontrar']) {
+      expect(n).toContain(esperado);
+    }
+    expect(nombres(contextoDePrueba(1, { modulos: [], permisos: [] }))).toContain('donde_encontrar');
+  });
+});
+
+describe('mapa del sistema', () => {
+  it('cada ruta del mapa existe como pantalla real y no hay ids repetidos', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { MAPA_SISTEMA } = await import('@/lib/asistente/mapa-sistema');
+
+    const rutas = new Set<string>();
+    const recorrer = (dir: string, prefijo: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) {
+          // Los grupos de rutas «(dashboard)» no forman parte de la URL.
+          const seg = /^\(.*\)$/.test(e.name) ? '' : `/${e.name}`;
+          recorrer(path.join(dir, e.name), prefijo + seg);
+        } else if (/^page\.(t|j)sx?$/.test(e.name)) {
+          rutas.add(prefijo || '/');
+        }
+      }
+    };
+    recorrer(path.join(process.cwd(), 'app'), '');
+
+    const faltan = MAPA_SISTEMA.filter((e) => !rutas.has(e.ruta.split('?')[0].split('#')[0])).map((e) => `${e.id} → ${e.ruta}`);
+    expect(faltan).toEqual([]);
+    const ids = MAPA_SISTEMA.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(MAPA_SISTEMA.length).toBeGreaterThan(60);
+  });
+
+  it('«cómo creo un asiento» llega a una pantalla de contabilidad con pasos', async () => {
+    const { MAPA_SISTEMA } = await import('@/lib/asistente/mapa-sistema');
+    const r = buscarEnMapa('cómo creo un asiento contable', contextoDePrueba(1), { mapa: MAPA_SISTEMA });
+    expect(r.resultados.length).toBeGreaterThan(0);
+    expect(r.resultados[0].modulo).toBe('Contabilidad');
+    expect(r.resultados[0].ruta).toMatch(/^\/contabilidad\//);
+  });
+
+  it('«libro diario» lo ubica en Contabilidad', async () => {
+    const r = buscarEnMapa('dónde veo el libro diario', contextoDePrueba(1));
+    expect(r.resultados[0]).toMatchObject({ modulo: 'Contabilidad', ruta: '/contabilidad/libro-diario' });
+  });
+});
+
+describe('guía con el mapa real', () => {
+  const todo = contextoDePrueba(1);
+  const casos: [string, string][] = [
+    ['¿Cómo creo un nuevo asiento en el libro diario?', '/contabilidad/nuevo-asiento'],
+    ['dónde veo las cotizaciones', '/dashboard/cotizaciones'],
+    ['dónde configuro las plantillas de WhatsApp', '/escolar/configuracion/plantillas'],
+    ['cómo registro un empleado nuevo', '/nomina/empleados'],
+  ];
+  for (const [pregunta, ruta] of casos) {
+    it(`«${pregunta}» incluye ${ruta}`, () => {
+      const r = buscarEnMapa(pregunta, todo);
+      expect(r.resultados.map((x) => x.ruta)).toContain(ruta);
+    });
+  }
+
+  it('sin nómina contratada, «empleado nuevo» no manda a Nómina y lo explica', () => {
+    const r = buscarEnMapa('cómo registro un empleado nuevo', contextoDePrueba(1, { modulos: ['facturacion', 'administracion'] }));
+    expect(r.resultados.every((x) => x.modulo !== 'Nómina')).toBe(true);
+    expect(r.noDisponibles.some((x) => x.modulo === 'Nómina')).toBe(true);
+  });
+});

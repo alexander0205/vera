@@ -3777,6 +3777,34 @@ export const whatsappMensajes = pgTable('whatsapp_mensajes', {
   teamIdx: index('whatsapp_mensajes_team_idx').on(t.teamId, t.recibidoEn),
 }));
 
+// ── Asistente de Zero (solo lectura) — ver migración 0193_asistente_zero.sql ──
+export const asistenteConversaciones = pgTable('asistente_conversaciones', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  userId:        integer('user_id').notNull().references(() => users.id),
+  titulo:        varchar('titulo', { length: 120 }),
+  creadaEn:      timestamp('creada_en').notNull().defaultNow(),
+  actualizadaEn: timestamp('actualizada_en').notNull().defaultNow(),
+  derivadaTicketId: integer('derivada_ticket_id'),
+}, (t) => ({
+  userIdx: index('asistente_conv_user_idx').on(t.teamId, t.userId, t.actualizadaEn),
+}));
+
+export const asistenteMensajes = pgTable('asistente_mensajes', {
+  id:             serial('id').primaryKey(),
+  conversacionId: integer('conversacion_id').notNull()
+    .references(() => asistenteConversaciones.id, { onDelete: 'cascade' }),
+  rol:            varchar('rol', { length: 12 }).notNull(),
+  contenido:      text('contenido').notNull(),
+  herramientas:   jsonb('herramientas').$type<{ nombre: string; resumen: string }[]>(),
+  creadoEn:       timestamp('creado_en').notNull().defaultNow(),
+}, (t) => ({
+  convIdx: index('asistente_msg_conv_idx').on(t.conversacionId, t.id),
+}));
+
+export type AsistenteConversacion = typeof asistenteConversaciones.$inferSelect;
+export type AsistenteMensaje = typeof asistenteMensajes.$inferSelect;
+
 export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
 export type WhatsappMensaje = typeof whatsappMensajes.$inferSelect;
 

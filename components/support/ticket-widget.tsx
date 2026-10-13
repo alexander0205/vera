@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Maximize2, X, Paperclip, Camera, Send } from 'lucide-react';
+import { Maximize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, LifeBuoy, Phone } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
@@ -16,13 +16,15 @@ import { MessageBubble } from '@/components/support/message-bubble';
 import { InvitacionLlamada } from '@/components/support/invitacion-llamada';
 import { PanelLlamada } from '@/components/support/panel-llamada';
 import { useSoporte } from './soporte-context';
+import { useAsistente } from './asistente/use-asistente';
+import { PanelAsistente } from './asistente/panel-asistente';
+import est from './asistente/asistente.module.css';
 import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
 import { useLlamadaGlobal } from '@/lib/webrtc/LlamadaGlobalProvider';
 import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
 import { responderLlamada } from '@/lib/webrtc/senalizacion';
 import { reproducirTonoLlamada } from '@/lib/webrtc/tonoLlamada';
 
-const COLOR_MIO = '#3658e1';
 const ADJUNTO_TITLE = 'Adjuntar imagen, video o PDF (máx. 15MB)';
 const CAPTURA_TITLE = 'Capturar esta pantalla y adjuntarla al chat';
 
@@ -33,6 +35,11 @@ export function TicketWidget() {
   const open = soporte?.abierto ?? false;
   const setOpen = (v: boolean) => (v ? soporte?.abrir() : soporte?.cerrar());
   const chat = useTicketChat(open);
+  // El asistente (solo lectura) es para dueños y administradores: si no aplica,
+  // `disponible` queda en false y todo sigue siendo el soporte de siempre.
+  const asistente = useAsistente(open);
+  const conAsistente = asistente.disponible === true;
+  const [modo, setModo] = useState<'asistente' | 'soporte'>('asistente');
   // La conexión WebRTC vive en un provider único montado en el layout raíz
   // (LlamadaGlobalProvider) — nunca este componente. Si este widget se
   // desmonta (p.ej. al navegar a una ruta excluida, ver TicketWidgetGate),
@@ -86,6 +93,23 @@ export function TicketWidget() {
     if (accept) setOpen(true);
   }
 
+  // Una llamada en curso o entrante siempre se atiende en la vista de soporte.
+  useEffect(() => {
+    if (call?.status === 'activa' || call?.status === 'pendiente') setModo('soporte');
+  }, [call?.status]);
+
+  const modoEfectivo = conAsistente ? modo : 'soporte';
+
+  // Punto en «Soporte» cuando un agente respondió y no lo has visto.
+  const ultimoAgenteId = [...chat.messages].reverse().find((m) => m.senderType === 'agent')?.id ?? null;
+  const [vistoAgenteId, setVistoAgenteId] = useState<number | null>(null);
+  useEffect(() => {
+    if (open && modoEfectivo === 'soporte') setVistoAgenteId(ultimoAgenteId);
+  }, [open, modoEfectivo, ultimoAgenteId]);
+  const soporteSinLeer =
+    conAsistente && modoEfectivo === 'asistente' && ultimoAgenteId != null && ultimoAgenteId !== vistoAgenteId
+    && (chat.status === 'abierto' || chat.status === 'esperando');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -130,71 +154,83 @@ export function TicketWidget() {
     {(chat.busyStage === 'capturando' || chat.busyStage === 'subiendo') && (
       <CapturaOverlay stage={chat.busyStage} />
     )}
-    <div
-      ref={panelRef}
-      style={{
-        // Abajo a la derecha, que es donde la gente busca un chat. Lo probé
-        // colgado de la barra superior —donde vive su botón— y se siente
-        // fuera de sitio: un panel de conversación se espera en el pie.
-        //
-        // El tope de alto sí importa: sin él, en pantallas cortas el panel se
-        // metía debajo de la barra superior. `100vh - 104px` lo deja siempre
-        // por debajo del header, con sus 20px de margen inferior incluidos.
-        position: 'fixed', bottom: 20, right: 20, zIndex: 1200,
-        width: 360, height: 'min(520px, calc(100vh - 104px))', background: 'white',
-        borderRadius: 16, boxShadow: '0 12px 32px rgba(15, 23, 42, 0.18)',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}
-    >
-      <div style={{ background: '#3658e1', color: 'white', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700, fontSize: 15 }}>Soporte</span>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <Link
-            href="/dashboard/soporte"
-            title="Abrir en pantalla completa"
-            style={{ color: 'white', opacity: 0.9, display: 'flex', alignItems: 'center' }}
-          >
-            <Maximize2 size={16} />
-          </Link>
-          <button
-            onClick={() => setOpen(false)}
-            title="Cerrar"
-            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-          >
+    <div ref={panelRef} className={est.panel} role="dialog" aria-label="Asistencia y soporte">
+      <div className={est.cabecera}>
+        <span className={est.marca} aria-hidden>
+          {modoEfectivo === 'asistente' ? <Sparkles size={17} /> : <MessageCircle size={17} />}
+        </span>
+        <div className={est.titulos}>
+          <p className={est.titulo}>{modoEfectivo === 'asistente' ? 'Asistente de Zero' : 'Soporte'}</p>
+          <p className={est.subtitulo}>
+            {modoEfectivo === 'asistente'
+              ? (asistente.perfil.empresa ?? 'Tu negocio, a una pregunta')
+              : 'Te atiende una persona del equipo'}
+          </p>
+        </div>
+        <div className={est.acciones}>
+          {modoEfectivo === 'asistente' && asistente.mensajes.length > 0 && (
+            <button type="button" className={est.icono} onClick={asistente.nueva} title="Nueva conversación" aria-label="Nueva conversación">
+              <RotateCcw size={16} />
+            </button>
+          )}
+          {modoEfectivo === 'soporte' && (
+            <Link href="/dashboard/soporte" className={est.icono} title="Abrir en pantalla completa" aria-label="Abrir en pantalla completa">
+              <Maximize2 size={16} />
+            </Link>
+          )}
+          <button type="button" className={est.icono} onClick={() => setOpen(false)} title="Cerrar" aria-label="Cerrar">
             <X size={18} />
           </button>
         </div>
       </div>
 
-      {(call?.status === 'activa' || finalizadaReciente) && (
-        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+      {conAsistente && (
+        <div className={est.segmentos} role="tablist" aria-label="Con quién hablar">
           <button
+            type="button" role="tab" aria-selected={modoEfectivo === 'asistente'}
+            className={`${est.segmento} ${modoEfectivo === 'asistente' ? est.segmentoActivo : ''}`}
+            onClick={() => setModo('asistente')}
+          >
+            <Sparkles size={14} aria-hidden /> Asistente
+          </button>
+          <button
+            type="button" role="tab" aria-selected={modoEfectivo === 'soporte'}
+            className={`${est.segmento} ${modoEfectivo === 'soporte' ? est.segmentoActivo : ''}`}
+            onClick={() => setModo('soporte')}
+          >
+            <MessageCircle size={14} aria-hidden /> Soporte
+            {soporteSinLeer && <span className={est.punto} aria-label="Respuesta nueva" />}
+          </button>
+        </div>
+      )}
+
+      {modoEfectivo === 'asistente' && (
+        <PanelAsistente a={asistente} onDerivada={() => setModo('soporte')} onIrASoporte={() => setModo('soporte')} />
+      )}
+
+      {modoEfectivo === 'soporte' && (call?.status === 'activa' || finalizadaReciente) && (
+        <div className={est.pestanas} role="tablist" aria-label="Chat o llamada">
+          <button
+            type="button" role="tab" aria-selected={vista === 'chat'}
+            className={`${est.pestana} ${vista === 'chat' ? est.pestanaActiva : ''}`}
             onClick={() => setVista('chat')}
-            style={{
-              flex: 1, border: 'none', background: 'none', padding: '8px 0', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              color: vista === 'chat' ? COLOR_MIO : '#64748b',
-              borderBottom: vista === 'chat' ? `2px solid ${COLOR_MIO}` : '2px solid transparent',
-            }}
           >
             Chat
           </button>
           <button
+            type="button" role="tab" aria-selected={vista === 'llamada'}
+            className={`${est.pestana} ${vista === 'llamada' ? est.pestanaActiva : ''}`}
             onClick={() => setVista('llamada')}
-            style={{
-              flex: 1, border: 'none', background: 'none', padding: '8px 0', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              color: vista === 'llamada' ? COLOR_MIO : '#64748b',
-              borderBottom: vista === 'llamada' ? `2px solid ${COLOR_MIO}` : '2px solid transparent',
-            }}
           >
             Llamada
           </button>
         </div>
       )}
 
-      {vista === 'llamada' && (finalizadaReciente || call?.status === 'activa') && (
-        <div style={{ flex: 1, minHeight: 0 }}>
+      {modoEfectivo === 'soporte' && vista === 'llamada' && (finalizadaReciente || call?.status === 'activa') && (
+        <div className={est.zonaLlamada}>
           {finalizadaReciente && call?.status !== 'activa' ? (
-            <div style={{ padding: 16, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+            <div className={est.llamadaFin}>
               <LlamadaFinalizada />
             </div>
           ) : (
@@ -213,15 +249,18 @@ export function TicketWidget() {
         </div>
       )}
 
-      {vista === 'chat' && chat.status === 'esperando' && chat.espera && (
-        <div style={{ padding: '8px 12px', fontSize: 12, background: '#fffbeb', color: '#92400e', textAlign: 'center', borderBottom: '1px solid #fde68a' }}>
-          {chat.espera.agentesDisponibles === 0
-            ? 'Todos nuestros agentes están ocupados. Te vamos a responder pronto.'
-            : `Tiempo de espera estimado: ${chat.espera.esperaMinutos} min (posición en cola: ${chat.espera.enCola})`}
+      {modoEfectivo === 'soporte' && vista === 'chat' && chat.status === 'esperando' && chat.espera && (
+        <div className={`${est.aviso} ${est.avisoEspera}`} role="status">
+          <Clock size={14} aria-hidden />
+          <span>
+            {chat.espera.agentesDisponibles === 0
+              ? 'Todos nuestros agentes están ocupados. Te vamos a responder pronto.'
+              : `Tiempo de espera estimado: ${chat.espera.esperaMinutos} min (posición en cola: ${chat.espera.enCola})`}
+          </span>
         </div>
       )}
 
-      {vista === 'chat' && call?.status === 'pendiente' && (
+      {modoEfectivo === 'soporte' && vista === 'chat' && call?.status === 'pendiente' && (
         <InvitacionLlamada
           nombreAgente={call.requestedByName ?? null}
           onAceptar={() => responderInvitacion(true)}
@@ -229,54 +268,66 @@ export function TicketWidget() {
         />
       )}
 
-      {vista === 'chat' && (
-      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 10, background: '#f8fafc' }}>
-        {[...chat.messages, ...chat.pending].map((m, i) => {
-          const key = m.id != null ? `msg-${m.id}` : `tmp-${i}`;
-          const mine = m.senderType === 'user';
-          const leido = mine && chat.readByAgentAt != null && new Date(m.createdAt) <= new Date(chat.readByAgentAt);
-          return (
-            <MessageBubble
-              key={key}
-              message={m}
-              mine={mine}
-              leido={leido}
-              colorMio={COLOR_MIO}
-              loading={chat.loading}
-              onCapture={() => chat.captureScreenshot(panelRef.current)}
-              onAttach={() => fileInputRef.current?.click()}
-              onImageClick={setLightbox}
-              onImageLoad={scrollToBottom}
-              capturaTitle={CAPTURA_TITLE}
-              adjuntoTitle={ADJUNTO_TITLE}
-            />
-          );
-        })}
-        {chat.agentTyping && (
-          <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginLeft: 2 }}>El agente está escribiendo...</div>
-        )}
-        {chat.busyStage === 'enviando' && (
-          <div style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'flex-end', marginRight: 2 }}>enviando...</div>
-        )}
-      </div>
-      )}
-
-      {vista === 'chat' && chat.status === 'cerrado' && (
-        <div style={{ padding: '6px 10px', fontSize: 12, color: '#92400e', background: '#fef3c7', textAlign: 'center' }}>
-          Este ticket fue cerrado. Escribe para reabrirlo.
+      {modoEfectivo === 'soporte' && vista === 'chat' && (
+        <div ref={listRef} className={est.hilo} role="log" aria-live="polite" aria-label="Conversación con soporte">
+          {chat.messages.length + chat.pending.length === 0 && !chat.loading && (
+            <div className={est.vacioSoporte}>
+              <span className={est.vacioIcono} aria-hidden><LifeBuoy size={22} /></span>
+              <h3>¿En qué te ayudamos?</h3>
+              <p>Cuéntanos qué pasó o qué necesitas. Una persona del equipo te responde aquí mismo.</p>
+              <ul className={est.vacioPistas}>
+                <li><Camera size={14} aria-hidden /> Puedes adjuntar una captura de tu pantalla</li>
+                <li><Phone size={14} aria-hidden /> Si hace falta, te llamamos desde este chat</li>
+              </ul>
+            </div>
+          )}
+          {[...chat.messages, ...chat.pending].map((m, i) => {
+            const key = m.id != null ? `msg-${m.id}` : `tmp-${i}`;
+            const mine = m.senderType === 'user';
+            const leido = mine && chat.readByAgentAt != null && new Date(m.createdAt) <= new Date(chat.readByAgentAt);
+            return (
+              <MessageBubble
+                key={key}
+                message={m}
+                mine={mine}
+                leido={leido}
+                colorMio="var(--primary)"
+                loading={chat.loading}
+                onCapture={() => chat.captureScreenshot(panelRef.current)}
+                onAttach={() => fileInputRef.current?.click()}
+                onImageClick={setLightbox}
+                onImageLoad={scrollToBottom}
+                capturaTitle={CAPTURA_TITLE}
+                adjuntoTitle={ADJUNTO_TITLE}
+              />
+            );
+          })}
+          {chat.agentTyping && (
+            <div className={est.escribiendo}>
+              <span className={est.puntos} aria-hidden><i /><i /><i /></span>
+              El agente está escribiendo…
+            </div>
+          )}
+          {chat.busyStage === 'enviando' && <div className={est.enviandoMsg}>Enviando…</div>}
         </div>
       )}
 
-      {vista === 'chat' && chat.showRating && (
-        <div style={{ padding: 10, background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 12, color: '#334155', fontWeight: 600 }}>¿Cómo calificás la atención recibida?</div>
-          <div style={{ display: 'flex', gap: 4 }}>
+      {modoEfectivo === 'soporte' && vista === 'chat' && chat.status === 'cerrado' && (
+        <div className={`${est.aviso} ${est.avisoCerrado}`}>Este ticket fue cerrado. Escribe para reabrirlo.</div>
+      )}
+
+      {modoEfectivo === 'soporte' && vista === 'chat' && chat.showRating && (
+        <div className={est.calificacion}>
+          <p className={est.calificacionTitulo}>¿Cómo calificas la atención recibida?</p>
+          <div className={est.estrellas}>
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
+                type="button"
                 onClick={() => chat.setRatingValue(n)}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', padding: 0, lineHeight: 1, color: n <= chat.ratingValue ? '#f59e0b' : '#d1d5db' }}
+                className={`${est.estrella} ${n <= chat.ratingValue ? est.estrellaOn : ''}`}
                 aria-label={`${n} estrella${n > 1 ? 's' : ''}`}
+                aria-pressed={n <= chat.ratingValue}
               >
                 ★
               </button>
@@ -287,66 +338,71 @@ export function TicketWidget() {
             onChange={(e) => chat.setRatingComment(e.target.value)}
             placeholder="Comentario (opcional)"
             rows={2}
-            style={{ resize: 'none', border: '1px solid #e2e8f0', borderRadius: 6, padding: 6, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+            className={est.comentario}
+            aria-label="Comentario sobre la atención"
           />
           <button
+            type="button"
             onClick={chat.submitRating}
             disabled={chat.ratingValue < 1 || chat.ratingLoading}
-            style={{
-              border: 'none', background: chat.ratingValue < 1 || chat.ratingLoading ? '#a8b8ee' : '#3658e1', color: 'white',
-              borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: chat.ratingValue < 1 || chat.ratingLoading ? 'default' : 'pointer',
-            }}
+            className={est.btnPrimario}
           >
-            {chat.ratingLoading ? 'Enviando...' : 'Enviar calificación'}
+            {chat.ratingLoading ? 'Enviando…' : 'Enviar calificación'}
           </button>
         </div>
       )}
 
-      {vista === 'chat' && chat.ratingSubmitted && (
-        <div style={{ padding: '6px 10px', fontSize: 12, color: '#166534', background: '#dcfce7', textAlign: 'center' }}>
-          ¡Gracias por tu calificación!
-        </div>
+      {modoEfectivo === 'soporte' && vista === 'chat' && chat.ratingSubmitted && (
+        <div className={`${est.aviso} ${est.avisoOk}`} role="status">¡Gracias por tu calificación!</div>
       )}
 
-      {vista === 'chat' && chat.status === 'abierto' && chat.onHold && (
-        <div style={{ padding: '6px 10px', fontSize: 12, color: '#334155', background: '#f1f5f9', textAlign: 'center' }}>
-          Tu ticket está en espera mientras el agente investiga.
-        </div>
+      {modoEfectivo === 'soporte' && vista === 'chat' && chat.status === 'abierto' && chat.onHold && (
+        <div className={`${est.aviso} ${est.avisoNeutro}`}>Tu ticket está en espera mientras el agente investiga.</div>
       )}
 
-      {vista === 'chat' && (
-      <div style={{ display: 'flex', borderTop: '1px solid #eee', alignItems: 'center' }}>
-        <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={chat.onFileSelected} style={{ display: 'none' }} />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          title={ADJUNTO_TITLE}
-          style={{ border: 'none', background: 'none', padding: '0 8px', cursor: 'pointer', display: 'flex', color: '#64748b' }}
-        >
-          <Paperclip size={19} />
-        </button>
-        <button
-          onClick={() => chat.captureScreenshot(panelRef.current)}
-          title={CAPTURA_TITLE}
-          disabled={chat.loading}
-          style={{ border: 'none', background: 'none', padding: '0 8px', cursor: chat.loading ? 'default' : 'pointer', display: 'flex', color: '#64748b' }}
-        >
-          <Camera size={19} />
-        </button>
-        <input
-          value={chat.input}
-          onChange={(e) => chat.onInputChange(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && chat.send()}
-          placeholder="Escribe un mensaje..."
-          style={{ flex: 1, border: 'none', padding: 10, fontSize: 14, outline: 'none' }}
-        />
-        <button
-          onClick={chat.send}
-          title="Enviar mensaje"
-          style={{ border: 'none', background: '#3658e1', color: 'white', padding: '0 16px', height: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-        >
-          <Send size={17} />
-        </button>
-      </div>
+      {modoEfectivo === 'soporte' && vista === 'chat' && (
+        <div className={est.pie}>
+          <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={chat.onFileSelected} style={{ display: 'none' }} />
+          <div className={est.compositor}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title={ADJUNTO_TITLE}
+              aria-label="Adjuntar archivo"
+              className={est.herramienta}
+            >
+              <Paperclip size={18} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => chat.captureScreenshot(panelRef.current)}
+              title={CAPTURA_TITLE}
+              aria-label="Capturar esta pantalla"
+              disabled={chat.loading}
+              className={est.herramienta}
+            >
+              <Camera size={18} aria-hidden />
+            </button>
+            <input
+              id="soporte-texto"
+              value={chat.input}
+              onChange={(e) => chat.onInputChange(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && chat.send()}
+              placeholder="Escribe un mensaje…"
+              aria-label="Mensaje para soporte"
+              className={est.campoLinea}
+            />
+            <button
+              type="button"
+              onClick={chat.send}
+              title="Enviar mensaje"
+              aria-label="Enviar mensaje"
+              className={est.enviar}
+            >
+              <Send size={17} aria-hidden />
+            </button>
+          </div>
+        </div>
       )}
     </div>
     </>
