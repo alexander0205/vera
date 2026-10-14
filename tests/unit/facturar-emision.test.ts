@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * final, no por cuántos joins pasaron.
  */
 let cargosDevueltos: unknown[] = [];
+/** Matrículas del año con plan recurrente (la consulta que acaba en `limit`). */
+let planesDevueltos: unknown[] = [];
 let insertados: Record<string, unknown>[] = [];
 /** Cuántos cargos deja enlazar el UPDATE. -1 = todos los pedidos. */
 let enlazaSolo = -1;
@@ -19,7 +21,7 @@ vi.mock('@/lib/db/drizzle', () => {
   cadena.leftJoin = () => cadena;
   cadena.where = () => cadena;
   cadena.orderBy = () => Promise.resolve(cargosDevueltos);
-  cadena.limit = () => Promise.resolve(cargosDevueltos);
+  cadena.limit = () => Promise.resolve(planesDevueltos);
 
   const tx = {
     execute: () => Promise.resolve([]),
@@ -77,16 +79,17 @@ vi.mock('@/lib/facturas/codigo', () => ({
   generarCodigoFactura: vi.fn(async () => 'FA-2026-TEST-000001'),
 }));
 
-const { facturarCuotasEmitidas } = await import('@/lib/administracion-escolar/facturar-emision');
+const { facturarCuotasEmitidas, cargosQueFacturaElCalendario } = await import('@/lib/administracion-escolar/facturar-emision');
 const { prefillDeCargos } = await import('@/lib/administracion-escolar/prefill-factura');
 
-const cargo = (id: number, clienteId: number | null, vence = '2026-09-05') => ({
-  id, estudianteId: id, saldoCentavos: 1000000, fechaVencimiento: vence,
+const cargo = (id: number, clienteId: number | null, vence = '2026-09-05', conceptoTipo = 'mensualidad') => ({
+  id, conceptoTipo, estudianteId: id, saldoCentavos: 1000000, fechaVencimiento: vence,
   fechaEmision: '2026-09-01', clienteId,
 });
 
 beforeEach(() => {
   cargosDevueltos = [];
+  planesDevueltos = [];
   insertados = [];
   ultimoPedido = [];
   enlazaSolo = -1;
@@ -220,5 +223,43 @@ describe('facturarCuotasEmitidas', () => {
     const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-01', hasta: '2026-09-01' });
     expect(r.facturas).toHaveLength(1);
     expect(r.diagnostico[0]).toMatchObject({ motivo: 'prefill-rechazado', cargoIds: [1] });
+  });
+});
+
+/**
+ * Un colegio que factura la colegiatura con planes recurrentes (Mi Casita, el
+ * 25) y tiene además una evaluación con calendario que ningún plan cubre.
+ */
+describe('colegiatura con recurrentes, lo demás por calendario', () => {
+  it('con planes recurrentes, el calendario factura la evaluación y deja la colegiatura', async () => {
+    planesDevueltos = [{ id: 1 }];
+    cargosDevueltos = [cargo(1, 55, '2026-10-18', 'actividad'), cargo(2, 55, '2026-10-30', 'mensualidad')];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-10-13', hasta: '2026-10-25' });
+
+    expect(r.facturas).toHaveLength(1);
+    expect(r.facturas[0].cargoIds).toEqual([1]);
+  });
+
+  it('con planes recurrentes y solo colegiaturas emitidas, no crea nada', async () => {
+    planesDevueltos = [{ id: 1 }];
+    cargosDevueltos = [cargo(1, 55), cargo(2, 77)];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-25', hasta: '2026-09-25' });
+
+    expect(r.facturas).toHaveLength(0);
+    expect(insertados).toHaveLength(0);
+    expect(prefillDeCargos).not.toHaveBeenCalled();
+  });
+
+  it('un colegio sin recurrentes sigue facturando todo por calendario', async () => {
+    cargosDevueltos = [cargo(1, 55, '2026-10-18', 'actividad'), cargo(2, 55, '2026-10-30', 'mensualidad')];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-10-13', hasta: '2026-10-25' });
+
+    expect(r.facturas[0].cargoIds).toEqual([1, 2]);
+  });
+
+  it('la regla sola: solo quita la colegiatura, y solo si hay planes', () => {
+    const cargos = [{ conceptoTipo: 'mensualidad' }, { conceptoTipo: 'actividad' }, { conceptoTipo: 'inscripcion' }];
+    expect(cargosQueFacturaElCalendario(cargos, true).map((c) => c.conceptoTipo)).toEqual(['actividad', 'inscripcion']);
+    expect(cargosQueFacturaElCalendario(cargos, false)).toHaveLength(3);
   });
 });

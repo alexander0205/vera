@@ -183,6 +183,8 @@ export async function devengarPeriodo(
       matriculaId: adminEscolarCargos.matriculaId,
       cuotaId: adminEscolarCargos.cuotaId,
       conceptoId: adminEscolarCargos.conceptoId,
+      mes: adminEscolarCargos.mes,
+      anio: adminEscolarCargos.anio,
     })
     .from(adminEscolarCargos)
     .where(and(
@@ -190,6 +192,11 @@ export async function devengarPeriodo(
       inArray(adminEscolarCargos.matriculaId, matriculas.map((m) => m.id)),
     ));
   const existentes = new Set(yaHechos.map(claveHecho));
+  // Los cargos manuales anteriores al enlace por cuota no deben duplicarse
+  // cuando se asigne ahora el calendario completo del mismo concepto.
+  const manualesPorMes = new Set(yaHechos
+    .filter((c) => c.cuotaId == null && c.mes != null)
+    .map((c) => `${c.matriculaId}:${c.conceptoId}:${c.anio}:${c.mes}`));
 
   const filas: (typeof adminEscolarCargos.$inferInsert)[] = [];
   const diagnostico: DiagnosticoDevengo[] = [];
@@ -241,7 +248,12 @@ export async function devengarPeriodo(
 
     for (const { linea, cuota } of cuotasVigentes(plan, conceptosVivos, hasta)) {
       const clave = claveHecho({ matriculaId: m.id, cuotaId: cuota.cuotaId || null, conceptoId: linea.conceptoId });
-      if (existentes.has(clave)) continue;
+      const manualMismoMes = `${m.id}:${linea.conceptoId}:${cuota.fechaEmision.slice(0, 4)}:${cuota.mes}`;
+      if (existentes.has(clave) || (cuota.cuotaId > 0 && (
+        cuota.mes == null
+          ? existentes.has(`c:${m.id}:${linea.conceptoId}`)
+          : manualesPorMes.has(manualMismoMes)
+      ))) continue;
       // Se apunta ya: dentro de la misma corrida, dos conceptos sin calendario
       // de la misma matrícula generarían la misma clave.
       existentes.add(clave);

@@ -180,13 +180,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       };
     }
     const fecha = String(c.fechaEmision ?? '');
-    const mes = Number(c.mes);
     const pct = Number(c.porcentajeMilesimas);
+    const mesPedido = Number(c.mes);
+    /*
+     * El mes SALE DE LA FECHA, no de lo que mande el cliente.
+     *
+     * Eran dos datos que decían lo mismo y se iban por su lado: el calendario
+     * se generaba automático —que los deja cuadrados— y luego alguien corregía
+     * las fechas a mano en la tabla, y el `mes` se quedaba con el valor viejo.
+     * En Mi Casita quedó una cuota que emite en marzo guardada como mes 9. El
+     * cargo que nace de esa cuota hereda el mes, así que la cuota de marzo se
+     * cobraba marcada como septiembre, y así no cuadra con nada.
+     *
+     * Solo se respeta lo que llega cuando no hay fecha válida de la que
+     * derivarlo, para no empeorar una fila que ya viene a medias.
+     */
+    const mes = FECHA.test(fecha)
+      ? Number(fecha.slice(5, 7))
+      : (Number.isInteger(mesPedido) && mesPedido >= 1 && mesPedido <= 12 ? mesPedido : null);
     return {
       id,
       numero: i + 1,
       etiqueta: String(c.etiqueta ?? '').trim().slice(0, 60) || `Cuota ${i + 1}`,
-      mes: Number.isInteger(mes) && mes >= 1 && mes <= 12 ? mes : null,
+      mes,
       fechaEmision: FECHA.test(fecha) ? fecha : null,
       porcentajeMilesimas: Number.isInteger(pct) && pct > 0 && pct <= 100_000 ? pct : null,
     };

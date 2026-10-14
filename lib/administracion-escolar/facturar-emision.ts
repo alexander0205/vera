@@ -29,6 +29,8 @@
  *      cero —así consta la exención y el mes no se queda anunciado como
  *      previsto— pero no estrena una factura de RD$0 ni ensucia la de sus
  *      hermanos con una línea de cero.
+ *   5. No factura la colegiatura de un colegio que ya la factura con planes
+ *      recurrentes (ver `cargosQueFacturaElCalendario`).
  */
 
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
@@ -36,7 +38,9 @@ import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCargos,
   adminEscolarConceptoCuotas,
+  adminEscolarConceptosPago,
   adminEscolarEstudiantes,
+  adminEscolarMatriculas,
   ecfDocuments,
 } from '@/lib/db/schema';
 import { calcularTotales } from '@/lib/ecf/types';
@@ -76,6 +80,30 @@ export interface ResultadoFacturacion {
   cargosFacturados: number;
   montoCentavos: number;
   diagnostico: DiagnosticoFacturacion[];
+}
+
+/**
+ * Qué cargos factura el calendario, según quién factura ya la colegiatura.
+ *
+ * Un colegio puede facturar la colegiatura con planes recurrentes (una factura
+ * por alumno el día de cobro, como Mi Casita el 25) y tener además cobros con
+ * calendario que ningún plan cubre: la evaluación de diciembre, marzo y junio.
+ * Sin esto, encender la facturación por calendario le quitaba la colegiatura
+ * a las recurrentes —el calendario corre antes y la recurrente ve el mes ya
+ * facturado— y empezaba a facturársela también a los alumnos que a propósito
+ * no tienen plan. Con esto, la colegiatura sigue con quien ya la llevaba y el
+ * calendario factura solo lo demás, que hasta ahora se quedaba sin factura
+ * hasta que alguien se acordara.
+ *
+ * Basta con que UNA matrícula del año tenga plan: es una decisión del colegio,
+ * no de cada alumno. Un colegio sin recurrentes no cambia en nada.
+ */
+export function cargosQueFacturaElCalendario<T extends { conceptoTipo: string | null }>(
+  cargos: T[],
+  colegioFacturaColegiaturaConRecurrentes: boolean,
+): T[] {
+  if (!colegioFacturaColegiaturaConRecurrentes) return cargos;
+  return cargos.filter((c) => c.conceptoTipo !== 'mensualidad');
 }
 
 const vacio = (): ResultadoFacturacion => ({
@@ -149,9 +177,10 @@ export async function facturarCuotasEmitidas(
   // El `innerJoin` con las cuotas es lo que deja fuera los cargos de pago único
   // (inscripción, uniforme): no tienen `cuota_id`, así que no tienen fecha de
   // emisión y nada los dispara. Se facturan cuando la familia pasa a pagarlos.
-  const cargos = await db
+  const emitidos = await db
     .select({
       id: adminEscolarCargos.id,
+      conceptoTipo: adminEscolarConceptosPago.tipo,
       estudianteId: adminEscolarCargos.estudianteId,
       saldoCentavos: adminEscolarCargos.saldoCentavos,
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
@@ -167,6 +196,10 @@ export async function facturarCuotasEmitidas(
       eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id),
       eq(adminEscolarEstudiantes.teamId, teamId),
     ))
+    .innerJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, teamId),
+    ))
     .where(and(
       eq(adminEscolarCargos.teamId, teamId),
       eq(adminEscolarCargos.periodoId, periodoId),
@@ -178,6 +211,18 @@ export async function facturarCuotasEmitidas(
     ))
     .orderBy(asc(adminEscolarCargos.id));
 
+  if (emitidos.length === 0) return vacio();
+
+  const [conPlan] = await db
+    .select({ id: adminEscolarMatriculas.id })
+    .from(adminEscolarMatriculas)
+    .where(and(
+      eq(adminEscolarMatriculas.teamId, teamId),
+      eq(adminEscolarMatriculas.periodoId, periodoId),
+      isNotNull(adminEscolarMatriculas.facturaRecurrenteId),
+    ))
+    .limit(1);
+  const cargos = cargosQueFacturaElCalendario(emitidos, conPlan != null);
   if (cargos.length === 0) return vacio();
 
   // Una factura por responsable de pago. Los hermanos caen solos en el mismo
