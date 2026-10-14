@@ -25,7 +25,7 @@ export interface RespuestaPolitica {
   /** Para pruebas y registros. */
   categoria:
     | 'prompt' | 'secretos' | 'otra-empresa' | 'asesoria' | 'evasion' | 'ofensivo'
-    | 'capacidades' | 'identidad' | 'vacio' | 'cambio-de-reglas';
+    | 'capacidades' | 'identidad' | 'vacio' | 'cambio-de-reglas' | 'volcado';
   respuesta: string;
 }
 
@@ -70,6 +70,13 @@ const REGLAS: Regla[] = [
     re: /\b(que inversion|en que (invierto|invertir)|me conviene (invertir|comprar acciones|vender acciones)|invertir (mi|el) dinero|es legal|es ilegal|puedo deducir|se puede deducir|me conviene (declarar|facturar|pagar)|debo (declarar|pagar|retener)|tengo que (declarar|pagar) (el )?(isr|itbis)|cuanto (isr|impuesto) (me toca|debo|corresponde)|que (dice|establece) la (ley|dgii|norma)|norma general|multa (de|por|de la) dgii|sancion(es)? (de|por) (la )?dgii|asesor(ia)? (fiscal|legal|contable)|consejo (fiscal|legal))\b/,
     respuesta: 'Eso es una consulta fiscal o legal que depende de tu caso, y no soy asesor: lo mejor es confirmarlo con tu contador o con la DGII. ' +
       'Lo que sí puedo hacer es mostrarte los números de tu empresa (ventas, ITBIS, gastos) para que lo consultes con datos.',
+  },
+  {
+    // Sacar datos personales de todos de golpe: no es una pregunta, es una extracción.
+    categoria: 'volcado',
+    re: /\b(toda la base de datos|la base de datos completa|volcado|dump|descarga(r)? toda la (informacion|base)|exporta(r)? toda la (informacion|base)|todos los datos de todos|(lista|listado|dame|muestrame|exporta)( la| el)? (completa |completo )?(de )?(todos los |todas las )?(clientes|estudiantes|alumnos|empleados|proveedores|padres|tutores) con (sus )?(telefonos?|cedulas?|correos?|emails?|direcciones|salarios?|sueldos?|rnc))\b/,
+    respuesta: 'No entrego listados masivos de datos personales por el chat. Para exportar clientes, estudiantes o empleados, ' +
+      'usa la pantalla del módulo (tiene sus permisos y deja registro). Si buscas a alguien en particular, dime su nombre y lo ubico.',
   },
   {
     categoria: 'ofensivo',

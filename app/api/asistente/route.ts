@@ -18,6 +18,8 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/schema';
 import { rateLimitDb } from '@/lib/rate-limit';
+import { logAudit } from '@/lib/audit';
+import { clasificarSolicitud } from '@/lib/asistente/politicas';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
@@ -83,6 +85,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Muchas consultas seguidas. Espera unos minutos.' }, { status: 429 });
   }
 
+  // Ráfaga: más de 12 preguntas en 2 minutos no es una persona leyendo.
+  const rafaga = await rateLimitDb(`asistente_rafaga:${teamId}:${user.id}`, 12, 2 * 60_000);
+  if (!rafaga.allowed) {
+    logAudit({ teamId, userId: user.id, actor: user.email, action: 'ASISTENTE_ABUSO', resource: 'rafaga', meta: { motivo: 'más de 12 preguntas en 2 minutos' } });
+    return NextResponse.json({ error: 'Vas muy rápido. Espera un par de minutos y vuelve a preguntar.' }, { status: 429 });
+  }
+
   const b = await req.json().catch(() => null);
   const crudo = typeof b?.mensaje === 'string' ? b.mensaje.trim() : '';
   if (!crudo) return NextResponse.json({ error: 'Escribe tu pregunta' }, { status: 400 });
@@ -93,6 +102,9 @@ export async function POST(req: NextRequest) {
     );
   }
   const texto = crudo;
+  if (clasificarSolicitud(texto)?.categoria === 'volcado') {
+    logAudit({ teamId, userId: user.id, actor: user.email, action: 'ASISTENTE_ABUSO', resource: 'volcado', meta: { texto: texto.slice(0, 200) } });
+  }
 
   // La conversación tiene que ser de este usuario en este team; si no, nueva.
   let conversacionId: number | null = null;

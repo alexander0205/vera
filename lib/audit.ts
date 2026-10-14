@@ -72,6 +72,8 @@ export type AuditAction =
   | 'WHATSAPP_CONECTAR'
   // Asistente de IA: acción que la persona confirmó en el panel (crear, modificar, eliminar).
   | 'ASISTENTE_ACCION_CONFIRMADA'
+  // Asistente de IA: intento de extracción masiva o ráfaga de consultas.
+  | 'ASISTENTE_ABUSO'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
   | 'CONTABILIDAD_CATALOGO_IMPORTADO';
