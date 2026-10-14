@@ -179,20 +179,8 @@ test('QA completo de un colegio desde cero', async ({ page }) => {
   await shot(page, '04-matriculas');
 
   // ── 5. Cargos ─────────────────────────────────────────────────────────────
-  await ir(page, '/escolar/cargos');
-  await paso('generar cargos para todo el curso', async () => {
-    await page.getByRole('button', { name: /Generar cargos/i }).first().click();
-    await page.waitForTimeout(1500);
-    await page.getByPlaceholder(/3500\.00/).first().fill('2500');
-    await page.getByRole('button', { name: /^Generar/i }).last().click();
-    await page.waitForTimeout(3000);
-  });
-
-  await paso('los cargos generados aparecen con su saldo', async () => {
-    await ir(page, '/escolar/cargos');
-    await expect(page.getByText(/Mensualidad/).first()).toBeVisible({ timeout: 15_000 });
-  });
-  await shot(page, '05-cargos');
+  // La pantalla «Cargos y deudas» se quitó: los cargos nacen del plan de la
+  // matrícula y se ven en la ficha del alumno y en la de la familia.
 
   // ── 6. Usuarios ───────────────────────────────────────────────────────────
   await paso('invitar personal del colegio', async () => {
@@ -256,7 +244,7 @@ test('QA completo de un colegio desde cero', async ({ page }) => {
   const RUTAS = [
     '/dashboard', '/dashboard/facturas', '/dashboard/clientes', '/dashboard/productos',
     '/dashboard/cuentas-por-cobrar', '/dashboard/reportes',
-    '/escolar', '/escolar/estudiantes', '/escolar/matriculas', '/escolar/cargos',
+    '/escolar', '/escolar/estudiantes', '/escolar/matriculas', '/escolar/responsables',
     '/escolar/pagos', '/escolar/configuracion',
     '/cuenta', '/cuenta/empresa', '/cuenta/usuarios', '/cuenta/roles', '/cuenta/plan',
   ];

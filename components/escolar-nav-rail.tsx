@@ -14,7 +14,7 @@ import { RailArmazon } from '@/components/rail/RailArmazon';
 import { RailSecciones } from '@/components/rail/RailSecciones';
 import type { RailSeccion } from '@/components/rail/tipos';
 import {
-  Users, ClipboardList, Receipt, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
+  Users, ClipboardList, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
   LayoutDashboard,
 } from 'lucide-react';
 
@@ -37,7 +37,7 @@ type SeccionEscolar = RailSeccion & { oculto?: boolean };
 const SECCIONES: SeccionEscolar[] = [
   // El panorama va primero aunque no sea la más usada: la abre el dueño, no la
   // secretaria, y quien entra a mirar cómo va el dinero no tiene por qué saber
-  // que eso se deduce de «Cargos». Las demás siguen ordenadas por uso diario.
+  // que eso se deduce de los cargos. Las demás siguen ordenadas por uso diario.
   { tipo: 'item', id: 'escolar-panorama',    href: '/escolar/dashboard',     label: 'Panorama',       icon: LayoutDashboard },
   // Matriculación va después: es la pantalla que más se abre. Inscribir a un
   // alumno es el trabajo diario del colegio; consultarlo, lo de después.
@@ -54,7 +54,8 @@ const SECCIONES: SeccionEscolar[] = [
   { tipo: 'item', id: 'escolar-documentos',  href: '/escolar/documentos',    label: 'Documentos',     icon: FileText },
   { tipo: 'item', id: 'escolar-condicion',   href: '/escolar/condicion-academica', label: 'Condición académica', icon: ClipboardCheck, oculto: true },
   { tipo: 'item', id: 'escolar-personal',    href: '/escolar/personal',      label: 'Personal',       icon: Contact,  oculto: true },
-  { tipo: 'item', id: 'escolar-cargos',      href: '/escolar/cargos',        label: 'Cargos y deudas', icon: Receipt },
+  // «Cargos y deudas» se quitó: repetía lo que ya se ve en la ficha del alumno
+  // y en la de la familia, y asignar un concepto a un curso vive en Tarifas.
   // Las familias que pagan. Va antes de Pagos porque la pregunta llega en ese
   // orden: primero quién debe, después qué entró.
   { tipo: 'item', id: 'escolar-responsables', href: '/escolar/responsables', label: 'Responsables',   icon: Contact },

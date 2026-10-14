@@ -15,7 +15,7 @@ export type { PuntoMensual };
  * por entrar.
  *
  * Todo se agrega en Postgres. Un colegio de 465 alumnos genera unos 5.100
- * cargos al año, y las mismas cifras se sacaban hoy abriendo /escolar/cargos y
+ * cargos al año, y las mismas cifras se sacaban abriendo la lista de cargos y
  * sumando con la vista: traerse esas filas para sumarlas en JS convierte una
  * pantalla de resumen en la consulta más cara del módulo.
  *
