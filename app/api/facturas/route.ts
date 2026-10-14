@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, users } from '@/lib/db/schema';
-import { and, eq, gte, lte, desc, like, count, or, sql, inArray, ne, isNull } from 'drizzle-orm';
+import { and, eq, gte, lte, desc, ilike, count, or, sql, inArray, ne, isNull } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -47,9 +47,10 @@ export async function GET(req: NextRequest) {
   if (search) {
     conditions.push(
       or(
-        like(ecfDocuments.encf, `%${search}%`),
-        like(ecfDocuments.codigo, `%${search}%`),
-        like(ecfDocuments.razonSocialComprador, `%${search}%`),
+        // ilike: «campusano» y «Campusano» son la misma búsqueda (con `like`, minúsculas daba 0).
+        ilike(ecfDocuments.encf, `%${search}%`),
+        ilike(ecfDocuments.codigo, `%${search}%`),
+        ilike(ecfDocuments.razonSocialComprador, `%${search}%`),
       )!,
     );
   }

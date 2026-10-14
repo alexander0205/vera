@@ -720,3 +720,35 @@ describe('cliente de la API', () => {
     await expect(c.get('https://evil.com/api/x')).rejects.toMatchObject({ status: 400 });
   });
 });
+
+describe('precisión de la búsqueda de facturas', () => {
+  it('suma TODO lo que coincide aunque la API entregue 200 por página', async () => {
+    const fila = (id: number) => ({ id, encf: null, codigo: `BOR-${id}`, tipoEcf: '31', estado: 'BORRADOR', montoTotal: 10000, pagado: 0, createdAt: `2026-01-01T00:00:${String(id % 60).padStart(2, '0')}` });
+    const { api, llamadas } = apiFalsa({
+      '/api/facturas': (p) => {
+        const off = Number(p.offset ?? 0);
+        const n = Math.max(0, Math.min(200, 450 - off));
+        return { docs: Array.from({ length: n }, (_, i) => fila(off + i + 1)), total: 450 };
+      },
+    });
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.buscar_facturas, { estado: 'BORRADOR', limite: 5 }) as { coinciden: number; sumaTotal: number; parcial: boolean };
+    expect(llamadas.map((l) => l.params.offset)).toEqual([0, 200, 400]);
+    expect(r.coinciden).toBe(450);
+    expect(r.sumaTotal).toBe(450 * 100);
+    expect(r.parcial).toBe(false);
+  });
+
+  it('prueba también sin tildes y une sin repetir facturas', async () => {
+    const { api, llamadas } = apiFalsa({
+      '/api/facturas': (p) => (p.search === 'Mendez'
+        ? { docs: [{ id: 7, encf: 'E31', codigo: 'F', tipoEcf: '31', estado: 'ACEPTADO', montoTotal: 500, pagado: 0, createdAt: '2026-02-01' }], total: 1 }
+        : { docs: [], total: 0 }),
+    });
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.buscar_facturas, { q: 'Méndez', limite: 5 }) as { coinciden: number; facturas: { enlace: string }[] };
+    expect(llamadas.map((l) => l.params.search).sort()).toEqual(['Mendez', 'Méndez']);
+    expect(r.coinciden).toBe(1);
+    expect(r.facturas[0].enlace).toBe('/dashboard/facturas/7');
+  });
+});

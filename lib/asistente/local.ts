@@ -291,7 +291,9 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const f = (r.facturas as Fila[]) ?? [];
     if (!n(r.coinciden)) return 'No tienes facturas en borrador.';
     return [
-      `Tienes **${n(r.coinciden)}** factura${n(r.coinciden) === 1 ? '' : 's'} en borrador, por **${rd(n(r.sumaTotal))}** en total. Las más recientes:`,
+      r.parcial
+        ? `Tienes **${n(r.coinciden)}** facturas en borrador. Sumando las ${n(r.filasEvaluadas)} más recientes dan **${rd(n(r.sumaTotal))}** (hay más, así que el total real es mayor). Las más recientes:`
+        : `Tienes **${n(r.coinciden)}** factura${n(r.coinciden) === 1 ? '' : 's'} en borrador, por **${rd(n(r.sumaTotal))}** en total. Las más recientes:`,
       '',
       tabla(['Número', 'Cliente', 'Total', 'Fecha'], f.slice(0, 8).map((x) => [enlazar(String(x.numero || `Borrador ${x.fecha}`), x.enlace), String(x.cliente || '—'), rd(n(x.total)), String(x.fecha ?? '—')])),
       '',

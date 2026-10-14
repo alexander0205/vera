@@ -7,7 +7,7 @@ import type { ConsultaHecha } from './herramientas';
 import {
   enlaceFactura, enlaceCotizacion, enlaceCompraLocal, enlaceProducto, enlaceRecurrente, enlaceEstudiante,
 } from './enlaces';
-import { pesos, fechaYmd, ymd, normalizar } from './util';
+import { pesos, fechaYmd, ymd, normalizar, quitarTildes } from './util';
 
 /**
  * Consultas del asistente que pasan por la API de la app.
@@ -73,18 +73,39 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         limite: z.number().int().min(1).max(MAX).default(10),
       }),
       execute: seguro('las facturas', async ({ q, estado, estadoPago, desde, hasta, limite }) => {
-        const r = await api.get<{ docs: FacturaApi[]; total: number }>('/api/facturas', {
-          search: q?.trim(), estado, desde, hasta, limit: 200, offset: 0,
-        });
-        const traidas = r.docs ?? [];
+        // La búsqueda de la API distingue tildes: «Méndez» no encuentra «Mendez».
+        // Se prueba como se escribió y sin tildes, y se unen sin repetir.
+        const textos = [...new Set([q?.trim(), q ? quitarTildes(q).trim() : undefined].filter((x): x is string => !!x))];
+        // La API entrega 200 como máximo por llamada: se pide página por página
+        // (hasta 2000 filas) para que la cuenta y la suma sean de TODO lo que
+        // coincide, no solo de las 200 más recientes.
+        const pedir = async (search: string | undefined) => {
+          const primera = await api.get<{ docs: FacturaApi[]; total: number }>('/api/facturas', { search, estado, desde, hasta, limit: 200, offset: 0 });
+          const total = Number(primera.total ?? 0);
+          const offsets: number[] = [];
+          for (let o = 200; o < Math.min(total, 2000); o += 200) offsets.push(o);
+          const resto = await Promise.all(offsets.map((offset) =>
+            api.get<{ docs: FacturaApi[] }>('/api/facturas', { search, estado, desde, hasta, limit: 200, offset })));
+          return { docs: [...(primera.docs ?? []), ...resto.flatMap((x) => x.docs ?? [])], total };
+        };
+        const respuestas = await Promise.all((textos.length ? textos : [undefined]).map(pedir));
+        const unidas = new Map<number, FacturaApi>();
+        for (const x of respuestas) for (const d of x.docs ?? []) unidas.set(d.id, d);
+        const r = {
+          docs: [...unidas.values()].sort((a, b) =>
+            String(b.createdAt ?? b.fechaEmision ?? '').localeCompare(String(a.createdAt ?? a.fechaEmision ?? '')) || b.id - a.id),
+          total: respuestas.length > 1 ? unidas.size : respuestas[0]?.total ?? 0,
+        };
+        const traidas = r.docs;
         let docs = traidas;
         if (estadoPago) docs = docs.filter((d) => estadoDePago(d) === estadoPago);
         anotar('Búsqueda de facturas', [estado, estadoPago, q, desde && `desde ${desde}`].filter(Boolean).join(' · ') || 'todas');
         return {
           coinciden: estadoPago ? docs.length : Number(r.total ?? docs.length),
           sumaTotal: pesos(docs.reduce((s, d) => s + Number(d.montoTotal || 0), 0)),
-          // Más de 200: la suma (y el filtro de estado de pago) cubren solo las 200 más recientes.
+          // Solo si hay más de 2000 coincidencias: la suma cubre las 2000 más recientes.
           parcial: Number(r.total ?? 0) > traidas.length,
+          filasEvaluadas: traidas.length,
           mostrando: Math.min(limite, docs.length),
           enlaceLista: '/dashboard/facturas',
           facturas: docs.slice(0, limite).map((d) => ({
