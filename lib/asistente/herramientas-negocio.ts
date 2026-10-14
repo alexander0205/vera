@@ -12,6 +12,7 @@ import { listarCapturas, contarPorRevisar } from '@/lib/compras/captura/consulta
 import { listarCompras, resumenGastos } from '@/lib/compras/consultas';
 import { parseRango, METODO_LABEL } from '@/lib/reportes/shared';
 import type { ConsultaHecha } from './herramientas';
+import { pesos, fechaYmd, ymd, contiene } from './util';
 
 /**
  * Herramientas de consulta del día a día: no son reportes agregados sino
@@ -22,17 +23,8 @@ import type { ConsultaHecha } from './herramientas';
  * (`lib/mcp/campos-*`), que ya dejan fuera lo interno.
  */
 
-const pesos = (c: number | null | undefined) => Math.round(Number(c) || 0) / 100;
-const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa YYYY-MM-DD');
+const fecha = fechaYmd;
 const MAX = 25;
-
-/** «Pérez» y «perez» son la misma familia: se compara sin tildes ni mayúsculas. */
-const quitarTildes = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const sinTildes = (col: unknown) => sql`translate(lower(${col}), 'áéíóúüñ', 'aeiouun')`;
-const contiene = (col: unknown, texto: string) =>
-  sql`${sinTildes(col)} LIKE ${'%' + quitarTildes(texto) + '%'}`;
-const ymd = (d: Date | string | null | undefined) =>
-  d == null ? null : typeof d === 'string' ? d.slice(0, 10) : d.toLocaleDateString('en-CA');
 
 export function crearHerramientasNegocio(teamId: number, consultas: ConsultaHecha[]) {
   const anotar = (nombre: string, resumen: string) => consultas.push({ nombre, resumen });

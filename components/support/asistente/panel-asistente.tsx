@@ -120,7 +120,8 @@ export function PanelAsistente({
   }
 
   async function hablarConPersona() {
-    if (a.mensajes.length === 0) { onIrASoporte(); return; }
+    // Sin conversación que entregar, o ya entregada: solo se cambia de vista.
+    if (a.mensajes.length === 0 || a.derivada) { onIrASoporte(); return; }
     if (await a.derivar()) onDerivada();
   }
 
@@ -178,6 +179,7 @@ export function PanelAsistente({
 
       <div className={s.pie}>
         {a.derivada && <p className={s.derivada}>Ya abriste un ticket con esta conversación.</p>}
+        {a.errorDerivar && <p className={s.errorDerivar} role="alert">{a.errorDerivar}</p>}
         <div className={s.compositor}>
           <textarea
             id="asistente-texto"
@@ -209,7 +211,7 @@ export function PanelAsistente({
         <div className={s.notas}>
           <span>Puede equivocarse: revisa las cifras importantes.</span>
           <button type="button" className={s.humano} onClick={hablarConPersona} disabled={a.derivando}>
-            {a.derivando ? 'Abriendo ticket…' : 'Hablar con una persona'}
+            {a.derivando ? 'Abriendo ticket…' : a.derivada ? 'Ver mi ticket' : 'Hablar con una persona'}
           </button>
         </div>
       </div>

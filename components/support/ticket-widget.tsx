@@ -270,7 +270,7 @@ export function TicketWidget() {
 
       {modoEfectivo === 'soporte' && vista === 'chat' && (
         <div ref={listRef} className={est.hilo} role="log" aria-live="polite" aria-label="Conversación con soporte">
-          {chat.messages.length + chat.pending.length === 0 && !chat.loading && (
+          {chat.historialCargado && chat.messages.length + chat.pending.length === 0 && !chat.loading && (
             <div className={est.vacioSoporte}>
               <span className={est.vacioIcono} aria-hidden><LifeBuoy size={22} /></span>
               <h3>¿En qué te ayudamos?</h3>

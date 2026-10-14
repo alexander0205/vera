@@ -27,6 +27,7 @@ vi.mock('@/lib/auth/permissions', () => ({ getEffectivePermissions: vi.fn() }));
 vi.mock('@/lib/compras/captura/consultas', () => ({ listarCapturas: vi.fn(), contarPorRevisar: vi.fn() }));
 vi.mock('@/lib/compras/consultas', () => ({ listarCompras: vi.fn(), resumenGastos: vi.fn() }));
 vi.mock('server-only', () => ({}));
+vi.mock('@ai-sdk/google', () => ({ google: vi.fn() }));
 
 import { crearHerramientas, type ConsultaHecha } from '@/lib/asistente/herramientas';
 import { armarResumenParaAgente } from '@/lib/asistente/derivar';
@@ -282,7 +283,7 @@ describe('guía con el mapa real', () => {
     ['¿Cómo creo un nuevo asiento en el libro diario?', '/contabilidad/nuevo-asiento'],
     ['dónde veo las cotizaciones', '/dashboard/cotizaciones'],
     ['dónde configuro las plantillas de WhatsApp', '/escolar/configuracion/plantillas'],
-    ['cómo registro un empleado nuevo', '/nomina/empleados'],
+    ['cómo registro un empleado nuevo', '/nomina/empleados/nuevo'],
   ];
   for (const [pregunta, ruta] of casos) {
     it(`«${pregunta}» incluye ${ruta}`, () => {
@@ -295,5 +296,145 @@ describe('guía con el mapa real', () => {
     const r = buscarEnMapa('cómo registro un empleado nuevo', contextoDePrueba(1, { modulos: ['facturacion', 'administracion'] }));
     expect(r.resultados.every((x) => x.modulo !== 'Nómina')).toBe(true);
     expect(r.noDisponibles.some((x) => x.modulo === 'Nómina')).toBe(true);
+  });
+});
+
+// ── Contestador local (sin IA) ──────────────────────────────────────────────
+
+import { responderLocal, interpretarPeriodo } from '@/lib/asistente/local';
+import { terminos } from '@/lib/asistente/guia';
+import { esErrorDeCuota } from '@/lib/asistente/agente';
+
+/** Herramientas falsas: registran con qué se llamaron y devuelven lo que se les dé. */
+function herramientasFalsas(salidas: Record<string, unknown>) {
+  const llamadas: { nombre: string; input: Record<string, unknown> }[] = [];
+  const reales = crearHerramientas(contextoDePrueba(1), []) as Record<string, { inputSchema?: unknown }>;
+  const tools = Object.fromEntries(Object.keys(reales).map((nombre) => [nombre, {
+    inputSchema: reales[nombre].inputSchema,
+    execute: async (input: Record<string, unknown>) => { llamadas.push({ nombre, input }); return salidas[nombre] ?? {}; },
+  }]));
+  return { tools: tools as never, llamadas };
+}
+
+const HOY = '2026-10-13';
+const sinTildes = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+describe('períodos en lenguaje natural', () => {
+  it.each([
+    ['ventas de hoy', '2026-10-13', '2026-10-13'],
+    ['ventas de ayer', '2026-10-12', '2026-10-12'],
+    ['este mes', '2026-10-01', '2026-10-31'],
+    ['el mes pasado', '2026-09-01', '2026-09-30'],
+    ['en septiembre', '2026-09-01', '2026-09-30'],
+    ['en noviembre', '2025-11-01', '2025-11-30'],
+    ['en marzo de 2025', '2025-03-01', '2025-03-31'],
+    ['esta semana', '2026-10-12', '2026-10-13'],
+    ['la semana pasada', '2026-10-05', '2026-10-11'],
+    ['ultimos 7 dias', '2026-10-07', '2026-10-13'],
+    ['este año', '2026-01-01', '2026-10-13'],
+  ])('«%s» → %s a %s', (frase, desde, hasta) => {
+    expect(interpretarPeriodo(sinTildes(frase), HOY)).toMatchObject({ desde, hasta });
+  });
+
+  it('lo que no sabe leer lo deja a la IA', () => {
+    expect(interpretarPeriodo('el trimestre pasado', HOY)).toBeNull();
+    expect(interpretarPeriodo('desde marzo', HOY)).toBeNull();
+  });
+});
+
+describe('contestador local', () => {
+  it('«¿cuánto vendí el mes pasado?» responde solo, con el período correcto', async () => {
+    const { tools, llamadas } = herramientasFalsas({
+      resumen_ventas: { ventasNetas: 1500, baseImponible: 1271.19, itbis: 228.81, facturas: 3, ticketPromedio: 500, porCobrarHoy: 200, vencidoHoy: 0 },
+    });
+    const r = await responderLocal('¿Cuánto vendí el mes pasado?', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('ventas');
+    expect(llamadas[0]).toMatchObject({ nombre: 'resumen_ventas', input: { desde: '2026-09-01', hasta: '2026-09-30' } });
+    expect(r?.respuesta).toContain('RD$ 1,500.00');
+    expect(r?.respuesta).toContain('septiembre de 2026');
+  });
+
+  it('«¿quién me debe?» arma la tabla y señala si uno concentra la deuda', async () => {
+    const { tools } = herramientasFalsas({
+      cuentas_por_cobrar: {
+        totalPorCobrar: 1000, porVencer: 0, vencido0a30: 600, vencido31a60: 0, vencido61a90: 0, vencidoMasDe90: 400, clientesConDeuda: 2,
+        mayoresDeudores: [{ cliente: 'Familia Pérez', debe: 800, facturas: 2, diasVencidoMaximo: 120 }, { cliente: 'Gómez', debe: 200, facturas: 1, diasVencidoMaximo: 10 }],
+      },
+    });
+    const r = await responderLocal('quien me debe', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('cartera');
+    expect(r?.respuesta).toMatch(/\| Familia Pérez \| RD\$ 800\.00/);
+    expect(r?.respuesta).toContain('concentra el 80%');
+    expect(r?.respuesta).toContain('más de 90 días');
+  });
+
+  it('las facturas por revisar se contestan sin IA', async () => {
+    const { tools } = herramientasFalsas({ facturas_por_revisar: { totalPorRevisar: 1, facturas: [{ proveedor: 'Jade Teriyaki S.R.L.', total: 649.99, fecha: '2026-09-23', recibida: '2026-09-23' }] } });
+    const r = await responderLocal('¿Cuáles facturas tengo por revisar?', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('por-revisar');
+    expect(r?.respuesta).toContain('Jade Teriyaki');
+  });
+
+  it('una pregunta de «dónde/cómo» la contesta la guía, con enlace y pasos', async () => {
+    const tools = crearHerramientas(contextoDePrueba(1), []);
+    const r = await responderLocal('¿Cómo creo un nuevo asiento en el libro diario?', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('guia');
+    expect(r?.respuesta).toContain('](/contabilidad/nuevo-asiento)');
+    expect(r?.respuesta).toMatch(/\n1\. /);
+  });
+
+  it('un pedido de cambio no se ejecuta: explica y guía a la pantalla', async () => {
+    const tools = crearHerramientas(contextoDePrueba(1), []);
+    const r = await responderLocal('anula la factura E310000000045', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('cambio');
+    expect(r?.respuesta).toMatch(/no lo hago desde (aquí|el chat)/);
+  });
+
+  it('las preguntas que piden razonar van a la IA', async () => {
+    const { tools, llamadas } = herramientasFalsas({});
+    for (const q of [
+      'compara las ventas de septiembre con las de agosto',
+      '¿por qué bajaron las ventas este mes?',
+      '¿cómo puedo mejorar mi cobranza?',
+      'ventas y gastos de este mes',
+      'ventas del trimestre pasado',
+    ]) {
+      expect(await responderLocal(q, tools, { hoy: HOY }), q).toBeNull();
+    }
+    expect(llamadas.filter((l) => l.nombre !== 'donde_encontrar')).toEqual([]);
+  });
+
+  it('sin IA (tolerante) igual contesta lo que entiende, y lo que no, no lo inventa', async () => {
+    const { tools } = herramientasFalsas({ resumen_gastos: { gastos: 0, borradores: 0, porCategoria: [] } });
+    expect((await responderLocal('ventas y gastos de este mes', tools, { tolerante: true, hoy: HOY }))?.intencion).toBe('gastos');
+    expect(await responderLocal('cuéntame un chiste', tools, { tolerante: true, hoy: HOY })).toBeNull();
+  });
+
+  it('si la herramienta no está (módulo no contratado), no responde por su cuenta', async () => {
+    const tools = crearHerramientas(contextoDePrueba(1, { modulos: ['facturacion', 'administracion'] }), []);
+    expect(await responderLocal('¿cuántos empleados activos tengo?', tools, { hoy: HOY })).toBeNull();
+  });
+
+  it('saludos y agradecimientos no gastan la IA', async () => {
+    const { tools } = herramientasFalsas({});
+    expect((await responderLocal('Hola', tools))?.intencion).toBe('saludo');
+    expect((await responderLocal('gracias!', tools))?.intencion).toBe('gracias');
+  });
+});
+
+describe('guía: términos de búsqueda', () => {
+  it('no deja términos de 1 o 2 letras («mes» no se vuelve «m»)', () => {
+    expect(terminos('estado de cuenta del mes')).toEqual(['estado', 'cuenta', 'mes']);
+    expect(terminos('reporte de los tres meses').every((t) => t.length >= 3)).toBe(true);
+  });
+});
+
+describe('error de cuota de la IA', () => {
+  it('lo reconoce aunque venga envuelto en un reintento o en el respaldo', () => {
+    expect(esErrorDeCuota({ statusCode: 429 })).toBe(true);
+    expect(esErrorDeCuota({ lastError: { statusCode: 429 } })).toBe(true);
+    expect(esErrorDeCuota({ errors: [{ statusCode: 503 }, { responseBody: '{"status":"RESOURCE_EXHAUSTED"}' }] })).toBe(true);
+    expect(esErrorDeCuota({ statusCode: 503 })).toBe(false);
+    expect(esErrorDeCuota(new Error('timeout'))).toBe(false);
   });
 });

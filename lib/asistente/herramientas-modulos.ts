@@ -10,6 +10,7 @@ import {
   empleados, nominaCorridas, cajaTurnos, users,
 } from '@/lib/db/schema';
 import type { ConsultaHecha } from './herramientas';
+import { pesos, fechaYmd, ymd, contiene } from './util';
 
 /**
  * Consultas por módulo (inventario, cotizaciones, libro diario, estudiantes,
@@ -22,14 +23,8 @@ import type { ConsultaHecha } from './herramientas';
  * son y cuánto cuesta, no entrega datos personales que nadie le pidió.
  */
 
-const pesos = (c: number | string | null | undefined) => Math.round(Number(c) || 0) / 100;
-const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa YYYY-MM-DD');
+const fecha = fechaYmd;
 const MAX = 25;
-const quitarTildes = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const contiene = (col: unknown, texto: string) =>
-  sql`translate(lower(${col}), 'áéíóúüñ', 'aeiouun') LIKE ${'%' + quitarTildes(texto) + '%'}`;
-const ymd = (d: Date | string | null | undefined) =>
-  d == null ? null : typeof d === 'string' ? d.slice(0, 10) : d.toLocaleDateString('en-CA');
 
 type Anotar = (nombre: string, resumen: string) => void;
 export const anotador = (consultas: ConsultaHecha[]): Anotar => (nombre, resumen) => consultas.push({ nombre, resumen });
@@ -53,7 +48,9 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
           const t = q.trim();
           cond.push(sql`(${contiene(products.nombre, t)} OR ${contiene(products.referencia, t)} OR ${contiene(products.codigoBarras, t)})`);
         }
-        if (soloBajoMinimo) cond.push(sql`${products.controlaInventario} AND ${products.stockActual} <= ${products.stockMinimo}`);
+        if (soloBajoMinimo) {
+          cond.push(sql`${products.controlaInventario} AND (${products.stockActual} <= 0 OR (${products.stockMinimo} > 0 AND ${products.stockActual} <= ${products.stockMinimo}))`);
+        }
         const donde = and(...cond);
         const [filas, [tot]] = await Promise.all([
           db.select({
@@ -228,23 +225,44 @@ export function herramientasEscolar(teamId: number, anotar: Anotar) {
       }),
       execute: async ({ q, limite }) => {
         const nombre = sql`(${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos})`;
-        const filas = await db.select({
-          nombre: sql<string>`${nombre}`, codigo: adminEscolarEstudiantes.codigo, estado: adminEscolarEstudiantes.estado,
-          curso: adminEscolarCursos.nombre, periodo: adminEscolarPeriodos.nombre, matricula: adminEscolarMatriculas.estado,
+        // Primero los alumnos (uno por fila), después su matrícula activa más
+        // reciente. Con un JOIN directo, quien tenía dos matrículas activas
+        // (dos períodos abiertos) salía repetido y el conteo se inflaba.
+        const alumnos = await db.select({
+          id: adminEscolarEstudiantes.id, nombre: sql<string>`${nombre}`,
+          codigo: adminEscolarEstudiantes.codigo, estado: adminEscolarEstudiantes.estado,
         }).from(adminEscolarEstudiantes)
-          .leftJoin(adminEscolarMatriculas, and(
-            eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
-            eq(adminEscolarMatriculas.estado, 'activa'),
-          ))
-          .leftJoin(adminEscolarCursos, eq(adminEscolarCursos.id, adminEscolarMatriculas.cursoId))
-          .leftJoin(adminEscolarPeriodos, eq(adminEscolarPeriodos.id, adminEscolarMatriculas.periodoId))
           .where(and(
             eq(adminEscolarEstudiantes.teamId, teamId),
             sql`(${contiene(nombre, q.trim())} OR ${contiene(adminEscolarEstudiantes.codigo, q.trim())})`,
           ))
           .orderBy(adminEscolarEstudiantes.apellidos, adminEscolarEstudiantes.nombres).limit(limite);
+
+        const matriculas = alumnos.length
+          ? await db.select({
+            estudianteId: adminEscolarMatriculas.estudianteId,
+            curso: adminEscolarCursos.nombre, periodo: adminEscolarPeriodos.nombre,
+          }).from(adminEscolarMatriculas)
+            .innerJoin(adminEscolarCursos, eq(adminEscolarCursos.id, adminEscolarMatriculas.cursoId))
+            .innerJoin(adminEscolarPeriodos, eq(adminEscolarPeriodos.id, adminEscolarMatriculas.periodoId))
+            .where(and(
+              eq(adminEscolarMatriculas.teamId, teamId),
+              eq(adminEscolarMatriculas.estado, 'activa'),
+              inArray(adminEscolarMatriculas.estudianteId, alumnos.map((a) => a.id)),
+            ))
+            .orderBy(desc(adminEscolarPeriodos.activo), desc(adminEscolarPeriodos.fechaInicio), desc(adminEscolarMatriculas.id))
+          : [];
+        const actual = new Map<number, { curso: string; periodo: string }>();
+        for (const m of matriculas) if (!actual.has(m.estudianteId)) actual.set(m.estudianteId, m);
+
         anotar('Estudiantes', q);
-        return { encontrados: filas.length, estudiantes: filas };
+        return {
+          encontrados: alumnos.length,
+          estudiantes: alumnos.map((a) => ({
+            nombre: a.nombre, codigo: a.codigo, estado: a.estado,
+            curso: actual.get(a.id)?.curso ?? null, periodo: actual.get(a.id)?.periodo ?? null,
+          })),
+        };
       },
     }),
 

@@ -14,6 +14,7 @@ import {
 } from './herramientas-modulos';
 import { contextoDePrueba, type ContextoAsistente } from './contexto';
 import { buscarEnMapa } from './guia';
+import { pesos, fechaYmd } from './util';
 
 /**
  * Herramientas del asistente de Zero. TODAS son de solo lectura: cada una es
@@ -25,9 +26,7 @@ import { buscarEnMapa } from './guia';
  * tiene que dividir y no se equivoca por un factor de 100.
  */
 
-const pesos = (centavos: number) => Math.round(Number(centavos) || 0) / 100;
-
-const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa YYYY-MM-DD');
+const fecha = fechaYmd;
 const periodo = {
   desde: fecha.optional().describe('Primer día, YYYY-MM-DD. Si falta, el 1 del mes actual.'),
   hasta: fecha.optional().describe('Último día incluido, YYYY-MM-DD. Si falta, el fin del mes actual.'),

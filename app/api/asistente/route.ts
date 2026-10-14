@@ -1,8 +1,11 @@
 /**
  * Asistente de Zero (solo lectura).
  *
- *   GET  /api/asistente                       → { disponible, conversacion|null }
- *   POST /api/asistente { mensaje, conversacionId? } → { conversacionId, mensaje }
+ *   GET  /api/asistente                       → { disponible, ia, conversacion|null }
+ *   POST /api/asistente { mensaje, conversacionId? } → { conversacionId, mensaje, origen }
+ *
+ * Funciona aunque no haya IA configurada: el contestador local (lib/asistente/local.ts)
+ * responde lo claro y frecuente; la IA, cuando está, se encarga del resto.
  *
  * El historial vive en el servidor (asistente_conversaciones / _mensajes): sirve
  * para auditar qué se consultó y para pasárselo a un agente humano. El teamId y
@@ -17,7 +20,7 @@ import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/sche
 import { rateLimitDb } from '@/lib/rate-limit';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
-import { asistenteIaDisponible, conversar, type MensajeChat } from '@/lib/asistente/agente';
+import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
 // Principal 35 s + respaldo 25 s + consultas a la base: cabe en 60.
 export const maxDuration = 60;
@@ -31,9 +34,7 @@ export async function GET() {
   if (!acceso.ok) {
     return NextResponse.json({ disponible: false, motivo: acceso.motivo }, { status: acceso.status === 401 ? 401 : 200 });
   }
-  if (!asistenteIaDisponible()) {
-    return NextResponse.json({ disponible: false, motivo: 'El asistente no está configurado todavía' });
-  }
+  const ia = asistenteIaDisponible();
 
   // Para saludar por nombre y decir de qué empresa se habla.
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, acceso.teamId)).limit(1);
@@ -47,7 +48,7 @@ export async function GET() {
     .orderBy(desc(asistenteConversaciones.actualizadaEn))
     .limit(1);
 
-  if (!conv) return NextResponse.json({ disponible: true, ...perfil, conversacion: null });
+  if (!conv) return NextResponse.json({ disponible: true, ia, ...perfil, conversacion: null });
 
   const mensajes = await db.select({
     id: asistenteMensajes.id, rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido,
@@ -59,6 +60,7 @@ export async function GET() {
 
   return NextResponse.json({
     disponible: true,
+    ia,
     ...perfil,
     conversacion: { id: conv.id, derivada: conv.derivadaTicketId != null, mensajes },
   });
@@ -68,10 +70,6 @@ export async function POST(req: NextRequest) {
   const acceso = await evaluarAcceso();
   if (!acceso.ok) return sinAcceso(acceso);
   const { teamId, user } = acceso;
-
-  if (!asistenteIaDisponible()) {
-    return NextResponse.json({ error: 'El asistente no está configurado todavía.' }, { status: 503 });
-  }
 
   const rl = await rateLimitDb(`asistente:${teamId}:${user.id}`, 40, 60 * 60_000);
   if (!rl.allowed) {
@@ -100,7 +98,16 @@ export async function POST(req: NextRequest) {
     conversacionId = c.id;
   }
 
-  await db.insert(asistenteMensajes).values({ conversacionId, rol: 'user', contenido: texto });
+  // Un reintento tras un fallo manda la misma pregunta otra vez: si lo último
+  // de la conversación ya es esa pregunta sin contestar, no se guarda de nuevo.
+  const [ultimo] = await db.select({ rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido })
+    .from(asistenteMensajes)
+    .where(eq(asistenteMensajes.conversacionId, conversacionId))
+    .orderBy(desc(asistenteMensajes.id))
+    .limit(1);
+  if (!(ultimo?.rol === 'user' && ultimo.contenido === texto)) {
+    await db.insert(asistenteMensajes).values({ conversacionId, rol: 'user', contenido: texto });
+  }
 
   const previos = await db.select({ rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido })
     .from(asistenteMensajes)
@@ -127,6 +134,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       conversacionId,
+      origen: r.origen,
       mensaje: {
         id: guardado.id, rol: 'assistant', contenido: r.respuesta,
         herramientas: r.consultas, creadoEn: guardado.creadoEn,
@@ -135,9 +143,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error('[asistente]', e);
     // Cuota agotada del proveedor: no sirve reintentar de inmediato.
-    const sinCuota = JSON.stringify((e as { lastError?: unknown })?.lastError ?? '').includes('RESOURCE_EXHAUSTED')
-      || (e as { statusCode?: number })?.statusCode === 429;
-    if (sinCuota) {
+    if (e instanceof AsistenteSinCuotaError) {
       return NextResponse.json(
         { error: 'El asistente alcanzó su límite de uso por ahora. Intenta más tarde o habla con una persona.', conversacionId },
         { status: 503 },

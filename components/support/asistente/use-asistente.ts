@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { armarResumenParaAgente } from '@/lib/asistente/derivar';
 
 export interface MensajeAsistente {
   /** Id de la base; los mensajes que aún no se guardan llevan un id negativo. */
@@ -24,18 +23,28 @@ export function useAsistente(activo: boolean) {
   const [enviando, setEnviando] = useState(false);
   const [derivando, setDerivando] = useState(false);
   const [derivada, setDerivada] = useState(false);
+  const [errorDerivar, setErrorDerivar] = useState<string | null>(null);
   const [perfil, setPerfil] = useState<{ usuario: string | null; empresa: string | null }>({ usuario: null, empresa: null });
   const cargado = useRef(false);
   const idTemporal = useRef(-1);
 
+  // Se marca como cargado solo si la respuesta llegó: un corte de red al abrir
+  // no deja el asistente apagado hasta recargar; se reintenta al reabrir.
+  const cargando = useRef(false);
   useEffect(() => {
-    if (!activo || cargado.current) return;
-    cargado.current = true;
+    if (!activo || cargado.current || cargando.current) return;
+    cargando.current = true;
     (async () => {
       try {
         const r = await fetch('/api/asistente', { cache: 'no-store' });
-        if (!r.ok) { setDisponible(false); return; }
+        if (!r.ok) {
+          // 401/403: no aplica para esta persona, y eso no cambia al reabrir.
+          if (r.status < 500) cargado.current = true;
+          setDisponible(false);
+          return;
+        }
         const d = await r.json();
+        cargado.current = true;
         setDisponible(Boolean(d.disponible));
         setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null });
         if (d.conversacion) {
@@ -46,8 +55,10 @@ export function useAsistente(activo: boolean) {
           })));
         }
       } catch {
-        // Sin red: el widget sigue siendo el de soporte de siempre.
+        // Sin red: por ahora el soporte de siempre; se reintenta al reabrir.
         setDisponible(false);
+      } finally {
+        cargando.current = false;
       }
     })();
   }, [activo]);
@@ -100,36 +111,41 @@ export function useAsistente(activo: boolean) {
     setMensajes([]);
     setConversacionId(null);
     setDerivada(false);
+    setErrorDerivar(null);
   }, []);
 
   /**
-   * Abre el ticket de soporte con la conversación como primer mensaje. Usa la
-   * misma ruta que el chat de soporte de siempre: el agente la ve igual que
-   * cualquier ticket y las alertas a Slack salen solas.
+   * Abre el ticket de soporte con la conversación como primer mensaje. El
+   * servidor arma el resumen con lo guardado, abre el ticket igual que el chat
+   * de soporte (alertas a Slack incluidas) y anota en la conversación a qué
+   * ticket pasó, para no derivarla dos veces.
    */
   const derivar = useCallback(async (): Promise<boolean> => {
-    if (derivando) return false;
+    if (derivando || conversacionId == null) return false;
     setDerivando(true);
+    setErrorDerivar(null);
     try {
-      const contenido = armarResumenParaAgente(
-        mensajes.filter((m) => !m.error).map((m) => ({ rol: m.rol, contenido: m.contenido })),
-      );
-      const r = await fetch('/api/zero-tickets/tickets', {
+      const r = await fetch('/api/asistente/derivar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: contenido }),
+        body: JSON.stringify({ conversacionId }),
       });
-      if (!r.ok) return false;
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setErrorDerivar(d.error ?? 'No se pudo abrir el ticket. Intenta de nuevo.');
+        return false;
+      }
       setDerivada(true);
       return true;
     } catch {
+      setErrorDerivar('No hay conexión. Revisa tu internet e intenta de nuevo.');
       return false;
     } finally {
       setDerivando(false);
     }
-  }, [derivando, mensajes]);
+  }, [derivando, conversacionId]);
 
-  return { disponible, perfil, mensajes, enviando, derivando, derivada, enviar, reintentar, nueva, derivar };
+  return { disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;
