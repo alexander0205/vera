@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { parseDOPaCentavos } from '@/lib/utils/format';
+import { fmtDOP, parseDOPaCentavos } from '@/lib/utils/format';
+import { deDondeSaleElPrecio, type SugerenciaDeMonto } from '@/lib/administracion-escolar/precio-cargo-individual';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
@@ -85,6 +86,20 @@ export function CrearCargoEstudianteDialog({
    * pasos para algo que es uno solo en el mostrador.
    */
   const [facturarYa, setFacturarYa] = useState(false);
+  /**
+   * El precio que el colegio ya tiene configurado para el curso del alumno.
+   *
+   * Antes el monto salía en blanco y había que ir a Tarifas a copiarlo. Ahora
+   * se rellena con lo mismo que cobraría el plan y sigue siendo editable: un
+   * cargo suelto puede ser un caso aparte. `undefined` = aún no se preguntó;
+   * `null` = el concepto no tiene precio para este curso y se escribe a mano.
+   */
+  const [precio, setPrecio] = useState<{ curso: string; sugerencia: SugerenciaDeMonto | null } | undefined>(undefined);
+  const [buscandoPrecio, setBuscandoPrecio] = useState(false);
+  /** Lo último que se rellenó solo: si el monto sigue igual, nadie lo tocó. */
+  const montoSugerido = useRef('');
+  /** De qué concepto es el monto que hay en el campo. */
+  const conceptoDelMonto = useRef('');
   const meses = useMemo(() => mesesDelPeriodo(fechaInicio, fechaFin), [fechaInicio, fechaFin]);
   const concepto = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
   // Mes bloqueado: se abrió desde el panel de un mes concreto y ese mes existe
@@ -106,6 +121,9 @@ export function CrearCargoEstudianteDialog({
     });
     setError(null);
     setFacturarYa(false);
+    setPrecio(undefined);
+    montoSugerido.current = '';
+    conceptoDelMonto.current = '';
     setLoading(true);
     fetch('/api/administracion-escolar/conceptos')
       .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
@@ -117,13 +135,45 @@ export function CrearCargoEstudianteDialog({
       .finally(() => setLoading(false));
   }, [open, meses, mesInicial, anioInicial]);
 
+  // Al elegir concepto (o cambiar de mes, que en un cobro repartido cambia la
+  // cuota) se pide su precio. Otro concepto siempre trae su precio: lo escrito
+  // era para el anterior. Con el mismo concepto, un monto escrito a mano se
+  // respeta y solo se reemplaza el que se puso solo.
+  useEffect(() => {
+    if (!open || !matriculaId || !form.conceptoId) { setPrecio(undefined); return; }
+    const otroConcepto = conceptoDelMonto.current !== form.conceptoId;
+    conceptoDelMonto.current = form.conceptoId;
+    let vigente = true;
+    setBuscandoPrecio(true);
+    const qs = new URLSearchParams({ conceptoId: form.conceptoId, ...(form.mes ? { mes: form.mes } : {}) });
+    fetch(`/api/administracion-escolar/matriculas/${matriculaId}/precio?${qs}`)
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!vigente) return;
+        if (!ok) throw new Error(data.error ?? 'No se pudo leer el precio del concepto');
+        setPrecio({ curso: data.curso, sugerencia: data.sugerencia });
+        const nuevo = data.sugerencia ? (data.sugerencia.montoCentavos / 100).toFixed(2) : '';
+        setForm((f) => (otroConcepto || f.monto === '' || f.monto === montoSugerido.current
+          ? { ...f, monto: nuevo } : f));
+        montoSugerido.current = nuevo;
+      })
+      // Si no se pudo leer, no se afirma nada: el campo queda para escribirlo.
+      .catch(() => { if (vigente) setPrecio(undefined); })
+      .finally(() => { if (vigente) setBuscandoPrecio(false); });
+    return () => { vigente = false; };
+  }, [open, matriculaId, form.conceptoId, form.mes]);
+
   async function guardar() {
     if (!matriculaId || !periodoId) {
       setError('Este período no tiene una matrícula válida para crear el cargo');
       return;
     }
     const montoCentavos = montoACentavos(form.monto);
-    if (!form.conceptoId || montoCentavos <= 0) {
+    // Un becado al 100% resuelve en RD$0. El servidor solo acepta ese cero si
+    // lo calcula él, así que en ese caso no se manda el monto.
+    const exonerado = montoCentavos === 0 && precio?.sugerencia?.origen === 'beca'
+      && precio.sugerencia.montoCentavos === 0;
+    if (!form.conceptoId || (montoCentavos <= 0 && !exonerado)) {
       setError('Concepto y monto son obligatorios');
       return;
     }
@@ -144,7 +194,7 @@ export function CrearCargoEstudianteDialog({
           conceptoId: Number(form.conceptoId),
           mes: concepto?.tipo === 'mensualidad' ? Number(form.mes) : null,
           anio: Number(form.anio),
-          montoCentavos,
+          ...(exonerado ? {} : { montoCentavos }),
           fechaVencimiento: form.fechaVencimiento || null,
         }),
       });
@@ -218,6 +268,12 @@ export function CrearCargoEstudianteDialog({
                 })()}
               </div>
             </div>
+            <NotaDelPrecio
+              concepto={concepto?.nombre ?? ''}
+              buscando={buscandoPrecio}
+              precio={form.conceptoId ? precio : undefined}
+              aMano={precio?.sugerencia != null
+                && montoACentavos(form.monto) !== precio.sugerencia.montoCentavos} />
           </>}
         </div>
         <DialogFooter>
@@ -233,5 +289,44 @@ export function CrearCargoEstudianteDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Debajo del monto: de dónde salió el número, o que no hay precio y hay que
+ * escribirlo. Sin esto el campo lleno parecía una cifra inventada, y el campo
+ * vacío no decía si faltaba configurar algo.
+ */
+function NotaDelPrecio({ concepto, buscando, precio, aMano }: {
+  concepto: string;
+  buscando: boolean;
+  precio: { curso: string; sugerencia: SugerenciaDeMonto | null } | undefined;
+  aMano: boolean;
+}) {
+  if (buscando) {
+    return <p className="flex items-center gap-1.5 text-xs text-gray-500">
+      <Loader2 className="h-3 w-3 animate-spin" />Buscando el precio de su curso…
+    </p>;
+  }
+  if (!precio) return null;
+  const { curso, sugerencia } = precio;
+  if (!sugerencia) {
+    return (
+      <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+        «{concepto}» no tiene precio configurado{curso ? <> para <strong>{curso}</strong></> : null}.
+        Escribe el monto de este cargo.
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-xs text-gray-600">
+      <p>
+        Precio para <strong>{curso}</strong>: {fmtDOP(sugerencia.montoCentavos)}, de {deDondeSaleElPrecio(sugerencia.origen)}.
+        {sugerencia.cuota && (
+          <> Es la cuota «{sugerencia.cuota.etiqueta}» de {sugerencia.cuota.de} ({fmtDOP(sugerencia.tarifaCentavos)} en el año).</>
+        )}
+      </p>
+      {aMano && <p className="mt-1 text-amber-700">Cambiaste el monto: se cobra lo que escribiste.</p>}
+    </div>
   );
 }

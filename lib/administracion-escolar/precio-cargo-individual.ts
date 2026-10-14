@@ -1,0 +1,71 @@
+/**
+ * Cuánto sugerir en «Agregar cargo» de la ficha del alumno.
+ *
+ * El formulario pedía el monto en blanco aunque el colegio ya tuviera el
+ * precio configurado para el curso del alumno: había que ir a Tarifas, buscar
+ * el grado y copiarlo a mano. Aquí se calcula lo mismo que cobraría el plan,
+ * para que el campo salga lleno y la secretaria solo lo cambie si es un caso
+ * aparte.
+ *
+ * Sin base de datos: la ruta `matriculas/[id]/precio` resuelve la tarifa y el
+ * calendario, y esto decide qué número se pone. Pruebas en
+ * `tests/unit/precio-cargo-individual.test.ts`.
+ */
+import { montosPorCuota } from './repartir';
+import type { OrigenTarifa } from './tarifas';
+
+export interface CuotaDelConcepto {
+  etiqueta: string;
+  /** Mes en que se emite (1-12), o null si es un pago sin mes. */
+  mes: number | null;
+  porcentajeMilesimas: number;
+}
+
+export interface SugerenciaDeMonto {
+  /** Lo que se rellena en el campo «Monto». */
+  montoCentavos: number;
+  /** La tarifa tal como está configurada (el total del año si se reparte). */
+  tarifaCentavos: number;
+  origen: OrigenTarifa;
+  /** La cuota que representa este cargo, cuando la tarifa se reparte. */
+  cuota: { etiqueta: string; de: number } | null;
+}
+
+/**
+ * El monto de UN cargo de este concepto para este alumno.
+ *
+ * Misma regla que `armarPlanDeCobro`: la colegiatura cobra la tarifa entera en
+ * cada cuota; lo demás toma la tarifa como el total del año y la reparte. Una
+ * evaluación de RD$600 en tres cuotas es un cargo de RD$200, no de RD$600.
+ *
+ * Si el concepto se reparte, la cuota elegida es la del mes del cargo; si
+ * ninguna cae en ese mes, la primera.
+ */
+export function sugerirMontoDelCargo(
+  tipoDeConcepto: string,
+  tarifa: { montoCentavos: number; origen: OrigenTarifa } | null,
+  cuotas: CuotaDelConcepto[],
+  mes: number | null,
+): SugerenciaDeMonto | null {
+  if (!tarifa) return null;
+  const base = { tarifaCentavos: tarifa.montoCentavos, origen: tarifa.origen };
+  if (tipoDeConcepto === 'mensualidad' || cuotas.length <= 1) {
+    return { ...base, montoCentavos: tarifa.montoCentavos, cuota: null };
+  }
+  const montos = montosPorCuota(
+    tipoDeConcepto, tarifa.montoCentavos, cuotas.map((c) => c.porcentajeMilesimas));
+  const delMes = mes == null ? -1 : cuotas.findIndex((c) => c.mes === mes);
+  const i = delMes >= 0 ? delMes : 0;
+  return { ...base, montoCentavos: montos[i], cuota: { etiqueta: cuotas[i].etiqueta, de: cuotas.length } };
+}
+
+/** De dónde sale el precio, dicho como lo diría la secretaria. */
+export function deDondeSaleElPrecio(origen: OrigenTarifa): string {
+  switch (origen) {
+    case 'estudiante': return 'su precio personal';
+    case 'beca':       return 'su beca';
+    case 'seccion':    return 'su sección';
+    case 'grado':      return 'su grado';
+    case 'servicio':   return 'su servicio';
+  }
+}
