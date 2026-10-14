@@ -74,27 +74,26 @@ describe('herramientas del asistente', () => {
     expect(consultas[0].resumen).toContain('2026-10-01');
   });
 
-  it('agrupa la cartera por cliente y respeta «solo vencidas»', async () => {
-    q.getAgingCxC.mockResolvedValue({
-      totalCents: 600_00, buckets: { porVencer: 100_00, '0-30': 200_00, '31-60': 0, '61-90': 0, '90+': 300_00 },
-      filas: [
-        { id: 1, encf: 'A', cliente: 'Familia Pérez', fechaLimite: null, diasVencido: 10, saldoCents: 200_00, cubeta: '0-30' },
-        { id: 2, encf: 'B', cliente: 'Familia Pérez', fechaLimite: null, diasVencido: 120, saldoCents: 300_00, cubeta: '90+' },
-        { id: 3, encf: 'C', cliente: 'Familia Gómez', fechaLimite: null, diasVencido: 0, saldoCents: 100_00, cubeta: 'porVencer' },
-      ],
+  it('la cartera sale de la API de Cuentas por cobrar, agrupada por cliente', async () => {
+    const { api, llamadas } = apiFalsa({
+      '/api/cuentas-por-cobrar': {
+        cuentas: [
+          { id: 1, razonSocialComprador: 'Familia Pérez', saldo: 20000, diasVencido: 10 },
+          { id: 2, razonSocialComprador: 'Familia Pérez', saldo: 30000, diasVencido: 120 },
+          { id: 3, razonSocialComprador: 'Familia Gómez', saldo: 10000, diasVencido: 0 },
+        ],
+        totales: { pendiente: 60000 },
+        antiguedad: { porVencer: { saldo: 10000 }, d1a30: { saldo: 20000 }, d90mas: { saldo: 30000 } },
+      },
     });
-    const h = crearHerramientas(1, []);
-    const todo = await ejecutar(h.cuentas_por_cobrar, { soloVencidas: false, limite: 10 }) as {
-      totalPorCobrar: number; mayoresDeudores: { cliente: string; debe: number; facturas: number; diasVencidoMaximo: number }[];
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.cuentas_por_cobrar, { soloVencidas: false, limite: 10 }) as {
+      totalPorCobrar: number; vencidoMasDe90: number; mayoresDeudores: { cliente: string; debe: number; facturas: number; diasVencidoMaximo: number }[];
     };
-    expect(todo.totalPorCobrar).toBe(600);
-    expect(todo.mayoresDeudores[0]).toEqual({ cliente: 'Familia Pérez', debe: 500, facturas: 2, diasVencidoMaximo: 120 });
-    expect(todo.mayoresDeudores).toHaveLength(2);
-
-    const vencidas = await ejecutar(h.cuentas_por_cobrar, { soloVencidas: true, limite: 10 }) as {
-      mayoresDeudores: { cliente: string }[];
-    };
-    expect(vencidas.mayoresDeudores.map((d) => d.cliente)).toEqual(['Familia Pérez']);
+    expect(llamadas[0].ruta).toBe('/api/cuentas-por-cobrar');
+    expect(r.totalPorCobrar).toBe(600);
+    expect(r.vencidoMasDe90).toBe(300);
+    expect(r.mayoresDeudores[0]).toEqual({ cliente: 'Familia Pérez', debe: 500, facturas: 2, diasVencidoMaximo: 120 });
   });
 
   it('el catálogo es exactamente el de consultas: una herramienta nueva obliga a revisar esto', () => {
@@ -638,5 +637,86 @@ describe('contexto de la conversación', () => {
     });
     const r = await responderLocal('cual fue la ultima factura', tools, { hoy: '2026-10-13' });
     expect(r?.respuesta).toContain('](/dashboard/facturas/3985)');
+  });
+});
+
+
+// ── Motor de búsqueda por API y enlaces de registro ─────────────────────────
+
+import { apiFalsa, ErrorApi } from '@/lib/asistente/api';
+import { registrarEnlacesDeHerramientas } from '@/lib/asistente/enlaces';
+
+describe('búsqueda de facturas por la API', () => {
+  const FACTURAS = {
+    docs: [
+      { id: 3985, encf: null, codigo: 'BOR-31-MS4SG49S', tipoEcf: '31', estado: 'BORRADOR', razonSocialComprador: 'Manuel Campusano Bello', montoTotal: 2200000, pagado: 0, moraPendiente: 0, fechaEmision: '2026-10-08T00:00:00' },
+      { id: 3984, encf: 'E310000000045', codigo: 'F-45', tipoEcf: '31', estado: 'ACEPTADO', razonSocialComprador: 'Manolo Acosta', montoTotal: 700000, pagado: 700000, moraPendiente: 0, fechaEmision: '2026-10-07T00:00:00' },
+    ],
+    total: 2,
+  };
+
+  it('usa /api/facturas con los filtros de la pantalla y trae el enlace por id', async () => {
+    const { api, llamadas } = apiFalsa({ '/api/facturas': FACTURAS });
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.buscar_facturas, { q: 'Campusano', estado: 'BORRADOR', limite: 5 }) as {
+      facturas: { enlace: string; total: number; estadoPago: string }[]; coinciden: number;
+    };
+    expect(llamadas[0]).toMatchObject({ ruta: '/api/facturas', params: { search: 'Campusano', estado: 'BORRADOR' } });
+    expect(r.facturas[0]).toMatchObject({ enlace: '/dashboard/facturas/3985', total: 22000, estadoPago: 'PENDIENTE' });
+    expect(r.facturas[1]).toMatchObject({ enlace: '/dashboard/facturas/3984', estadoPago: 'PAGADA' });
+    expect(r.coinciden).toBe(2);
+  });
+
+  it('el estado de pago se filtra sobre lo que trajo la API', async () => {
+    const { api } = apiFalsa({ '/api/facturas': FACTURAS });
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.buscar_facturas, { estadoPago: 'PAGADA', limite: 5 }) as { facturas: { numero: string }[]; coinciden: number };
+    expect(r.coinciden).toBe(1);
+    expect(r.facturas[0].numero).toBe('E310000000045');
+  });
+
+  it('si la API falla, la herramienta lo dice en vez de inventar datos', async () => {
+    const { api } = apiFalsa({});
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.buscar_facturas, { limite: 5 }) as { error: string };
+    expect(r.error).toMatch(/No pude consultar las facturas/);
+    const sinPermiso = { async get() { throw new ErrorApi(403, '/api/facturas'); } };
+    const h2 = crearHerramientas(contextoDePrueba(1, { api: sinPermiso }), []);
+    expect(((await ejecutar(h2.buscar_facturas, { limite: 5 })) as { error: string }).error).toMatch(/no tiene acceso/);
+  });
+});
+
+describe('enlaces de registro: el número de factura NO es el id', () => {
+  it('el enlace armado con el número (el error real) se descarta; el que dio la API se conserva', () => {
+    const permitidos = new Set(['/dashboard/facturas/3985']);
+    const malo = sanitizarEnlaces('Puedes verla [aquí](http://localhost:3000/dashboard/facturas/0100000216).', permitidos);
+    expect(malo.texto).not.toContain('0100000216)');
+    expect(malo.descartados).toEqual(['http://localhost:3000/dashboard/facturas/0100000216']);
+
+    const bueno = sanitizarEnlaces('Factura [Manuel](/dashboard/facturas/3985)', permitidos);
+    expect(bueno.texto).toBe('Factura [Manuel](/dashboard/facturas/3985)');
+  });
+
+  it('solo valen los enlaces de registro que una herramienta entregó en el turno', async () => {
+    const { api } = apiFalsa({ '/api/facturas': { docs: [{ id: 3985, encf: null, codigo: 'BOR', tipoEcf: '31', estado: 'BORRADOR', montoTotal: 100, pagado: 0 }], total: 1 } });
+    const turno = new Set<string>();
+    const tools = registrarEnlacesDeHerramientas(
+      crearHerramientas(contextoDePrueba(1, { api }), []) as Record<string, unknown>, turno,
+    ) as Record<string, unknown>;
+    await ejecutar(tools.buscar_facturas, { limite: 5 });
+    expect([...turno]).toContain('/dashboard/facturas/3985');
+    expect(rutaEsReal('/dashboard/facturas/3985', turno)).toBe(true);
+    expect(rutaEsReal('/dashboard/facturas/3986', turno)).toBe(false);
+    expect(rutaEsReal('/dashboard/facturas/0100000216', turno)).toBe(false);
+  });
+});
+
+describe('cliente de la API', () => {
+  it('no deja llamar nada fuera de /api/', async () => {
+    const { crearClienteApi } = await import('@/lib/asistente/api');
+    const c = crearClienteApi({ origen: 'http://localhost:3000', cookie: 'session=x' });
+    await expect(c.get('/dashboard/facturas')).rejects.toMatchObject({ status: 400 });
+    await expect(c.get('/api/../etc/passwd')).rejects.toMatchObject({ status: 400 });
+    await expect(c.get('https://evil.com/api/x')).rejects.toMatchObject({ status: 400 });
   });
 });

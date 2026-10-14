@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
+import { crearClienteApi } from '@/lib/asistente/api';
 import { confirmarAccion } from '@/lib/asistente/acciones';
 import { logAudit } from '@/lib/audit';
 
@@ -22,7 +23,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const ctx = await construirContexto(teamId, user.platformRole, acceso.teamRole);
+    const api = crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') });
+    const ctx = await construirContexto(teamId, user.platformRole, acceso.teamRole, api);
     const r = await confirmarAccion(ctx, user.id, b.token);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     logAudit({

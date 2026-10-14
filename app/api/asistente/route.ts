@@ -20,6 +20,7 @@ import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/sche
 import { rateLimitDb } from '@/lib/rate-limit';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
+import { crearClienteApi } from '@/lib/asistente/api';
 import { esRespuestaGrande, pidePdf } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
@@ -144,7 +145,9 @@ export async function POST(req: NextRequest) {
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
 
   try {
-    const ctx = await construirContexto(teamId, user.platformRole, acceso.teamRole);
+    // Las búsquedas van por la API de la app con la cookie de la persona: ve lo que ve la pantalla.
+    const api = crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') });
+    const ctx = await construirContexto(teamId, user.platformRole, acceso.teamRole, api);
     const r = await conversar(ctx, historial, {
       empresa: team?.nombre ?? null, usuario: user.name ?? null, usuarioId: user.id,
     });

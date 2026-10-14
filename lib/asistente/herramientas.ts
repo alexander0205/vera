@@ -3,15 +3,12 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import {
   getKpis, getTendencia, getIngresosPorProducto, getIngresosPorCliente,
-  getIngresosPorMetodo, getAgingCxC, getItbisResumen, getVentasPorTipo,
+  getIngresosPorMetodo, getItbisResumen, getVentasPorTipo,
   getVentasPorUsuario,
 } from '@/lib/reportes/queries';
 import { parseRango, METODO_LABEL } from '@/lib/reportes/shared';
 import type { ToolSet } from 'ai';
-import { crearHerramientasNegocio } from './herramientas-negocio';
-import {
-  anotador, herramientasFacturacion, herramientasContabilidad, herramientasEscolar, herramientasNomina, herramientasPos,
-} from './herramientas-modulos';
+import { crearHerramientasApi } from './herramientas-api';
 import { contextoDePrueba, type ContextoAsistente } from './contexto';
 import { buscarEnMapa } from './guia';
 import { herramientasDeAcciones, type Propuesta } from './acciones';
@@ -138,42 +135,6 @@ function herramientasReportes(teamId: number, consultas: ConsultaHecha[]) {
       },
     }),
 
-    cuentas_por_cobrar: tool({
-      description:
-        'Cartera pendiente de HOY: total, antigüedad por cubetas y los clientes que más deben. ' +
-        'Úsala para «quién me debe», «cuánto tengo vencido», «cartera».',
-      inputSchema: z.object({
-        soloVencidas: z.boolean().default(false).describe('Solo lo que ya pasó su fecha límite'),
-        limite: z.number().int().min(1).max(MAX_FILAS).default(10),
-      }),
-      execute: async ({ soloVencidas, limite }) => {
-        const a = await getAgingCxC(teamId);
-        anotar('Cuentas por cobrar', soloVencidas ? 'solo vencidas' : 'toda la cartera');
-        const porCliente = new Map<string, { saldo: number; facturas: number; diasMax: number }>();
-        for (const f of a.filas) {
-          if (soloVencidas && f.cubeta === 'porVencer') continue;
-          const c = porCliente.get(f.cliente) ?? { saldo: 0, facturas: 0, diasMax: 0 };
-          c.saldo += f.saldoCents; c.facturas += 1; c.diasMax = Math.max(c.diasMax, f.diasVencido);
-          porCliente.set(f.cliente, c);
-        }
-        const deudores = [...porCliente.entries()]
-          .sort((x, y) => y[1].saldo - x[1].saldo)
-          .slice(0, limite)
-          .map(([cliente, c]) => ({
-            cliente, debe: pesos(c.saldo), facturas: c.facturas, diasVencidoMaximo: c.diasMax,
-          }));
-        return {
-          totalPorCobrar: pesos(a.totalCents),
-          porVencer: pesos(a.buckets.porVencer),
-          vencido0a30: pesos(a.buckets['0-30']),
-          vencido31a60: pesos(a.buckets['31-60']),
-          vencido61a90: pesos(a.buckets['61-90']),
-          vencidoMasDe90: pesos(a.buckets['90+']),
-          clientesConDeuda: porCliente.size,
-          mayoresDeudores: deudores,
-        };
-      },
-    }),
 
     resumen_itbis: tool({
       description: 'ITBIS del período: facturado (débito), adelantado en compras (crédito) y a pagar.',
@@ -246,34 +207,24 @@ export function crearHerramientas(
 ): ToolSet {
   const ctx = typeof entrada === 'number' ? contextoDePrueba(entrada) : entrada;
   const { teamId } = ctx;
-  const anotar = anotador(consultas);
-  const negocio = crearHerramientasNegocio(teamId, consultas) as ToolSet;
+  const anotar = (nombre: string, resumen: string) => consultas.push({ nombre, resumen });
 
-  const t: ToolSet = {
-    ...herramientasReportes(teamId, consultas),
-    // Consultas puntuales de facturación: qué está pendiente, buscar algo.
-    ...solo(negocio, ['facturas_por_revisar', 'resumen_gastos', 'listar_gastos_compras', 'buscar_clientes', 'pagos_recibidos']),
-    ...(ctx.puede('facturas:ver') ? solo(negocio, ['buscar_facturas']) : {}),
-    ...(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver') ? solo(negocio, ['cargos_escolares']) : {}),
-  };
+  // Búsquedas y listados: por la API de la app (lo que ve la pantalla). Los
+  // reportes agregados no tienen API de lista; salen de la misma capa que las
+  // pantallas de reportes (lib/reportes), nunca de consultas propias.
+  const api = crearHerramientasApi(ctx.api, consultas) as ToolSet;
+  const t: ToolSet = { ...herramientasReportes(teamId, consultas) };
 
-  const fact = herramientasFacturacion(teamId, anotar) as ToolSet;
-  if (ctx.puede('productos:ver')) Object.assign(t, solo(fact, ['buscar_productos']));
-  if (ctx.puede('cotizaciones:ver')) Object.assign(t, solo(fact, ['listar_cotizaciones']));
-  if (ctx.puede('facturas:ver')) Object.assign(t, solo(fact, ['facturas_recurrentes']));
-
-  if (ctx.tieneModulo('contabilidad') && ctx.puede('contabilidad:ver')) {
-    Object.assign(t, herramientasContabilidad(teamId, anotar));
-  }
-  if (ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver')) {
-    Object.assign(t, herramientasEscolar(teamId, anotar));
-  }
-  if (ctx.tieneModulo('nomina') && ctx.puede('empleados:ver')) {
-    Object.assign(t, herramientasNomina(teamId, anotar));
-  }
-  if (ctx.tieneModulo('pos') && ctx.puede('caja:ver')) {
-    Object.assign(t, herramientasPos(teamId, anotar));
-  }
+  const dar = (condicion: boolean, nombres: string[]) => { if (condicion) Object.assign(t, solo(api, nombres)); };
+  dar(ctx.puede('facturas:ver'), ['buscar_facturas', 'cuentas_por_cobrar', 'facturas_recurrentes']);
+  dar(true, ['facturas_por_revisar', 'resumen_gastos', 'listar_gastos_compras', 'buscar_clientes']);
+  dar(ctx.puede('pagos:ver'), ['pagos_recibidos']);
+  dar(ctx.puede('productos:ver'), ['buscar_productos']);
+  dar(ctx.puede('cotizaciones:ver'), ['listar_cotizaciones']);
+  dar(ctx.tieneModulo('contabilidad') && ctx.puede('contabilidad:ver'), ['libro_diario', 'catalogo_cuentas']);
+  dar(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver'), ['buscar_estudiantes', 'resumen_matriculas', 'cargos_escolares']);
+  dar(ctx.tieneModulo('nomina') && ctx.puede('empleados:ver'), ['resumen_nomina', 'buscar_empleados']);
+  dar(ctx.tieneModulo('pos') && ctx.puede('caja:ver'), ['turnos_caja']);
 
   // Acciones (crear / modificar / eliminar): el modelo solo PROPONE; la persona
   // confirma en el panel. Hoy no hay ninguna registrada. Ver acciones.ts.

@@ -43,10 +43,60 @@ export function rutaLimpia(url: string): string | null {
   return u.split(/[?#]/)[0].replace(/\/+$/, '') || '/';
 }
 
-export function rutaEsReal(url: string): boolean {
+/**
+ * ¿Es una pantalla que existe?
+ *
+ * Las rutas fijas valen siempre. La pantalla de un REGISTRO (una factura, una
+ * cotización…) solo vale si una herramienta la entregó en este turno
+ * (`permitidos`): el patrón `/dashboard/facturas/<número>` por sí solo no
+ * alcanza, porque el modelo puede poner ahí el NÚMERO de la factura
+ * (0100000216) en vez de su id (3985) y llevar a una pantalla vacía.
+ */
+export function rutaEsReal(url: string, permitidos?: ReadonlySet<string>): boolean {
   const r = rutaLimpia(url);
   if (!r) return false;
-  return FIJAS.has(r) || PATRONES_REGISTRO.some((p) => p.patron.test(r));
+  if (FIJAS.has(r)) return true;
+  if (!PATRONES_REGISTRO.some((p) => p.patron.test(r))) return false;
+  // Sin lista de permitidos (uso suelto) solo se comprueba el patrón; en el
+  // asistente siempre se pasa, y entonces el registro tiene que haber salido
+  // de una herramienta.
+  return permitidos ? permitidos.has(r) : true;
+}
+
+/** Guarda en `destino` todo campo «enlace…» de un resultado de herramienta. */
+export function recogerEnlaces(valor: unknown, destino: Set<string>, profundidad = 0): void {
+  if (profundidad > 6 || valor == null) return;
+  if (Array.isArray(valor)) { for (const v of valor) recogerEnlaces(v, destino, profundidad + 1); return; }
+  if (typeof valor !== 'object') return;
+  for (const [k, v] of Object.entries(valor as Record<string, unknown>)) {
+    if (typeof v === 'string' && /^enlace/.test(k)) {
+      const r = rutaLimpia(v);
+      if (r) destino.add(r);
+    } else {
+      recogerEnlaces(v, destino, profundidad + 1);
+    }
+  }
+}
+
+/** Enlaza una herramienta para que sus resultados queden registrados como enlaces permitidos. */
+export function registrarEnlacesDeHerramientas<T extends Record<string, unknown>>(
+  tools: T, destino: Set<string>,
+): T {
+  const salida: Record<string, unknown> = {};
+  for (const [nombre, t] of Object.entries(tools)) {
+    const def = t as { execute?: (i: unknown, o: unknown) => unknown };
+    if (typeof def?.execute !== 'function') { salida[nombre] = t; continue; }
+    const original = def.execute.bind(def);
+    salida[nombre] = {
+      ...(t as object),
+      execute: async (i: unknown, o: unknown) => {
+        const r = await original(i, o);
+        recogerEnlaces(r, destino);
+        return r;
+      },
+    };
+  }
+  return salida as T;
 }
 
 export interface ResultadoSaneado {
@@ -59,13 +109,13 @@ export interface ResultadoSaneado {
  * Deja solo enlaces a rutas reales (y los vuelve relativos). Un enlace
  * inventado se reemplaza por su texto, sin vínculo.
  */
-export function sanitizarEnlaces(texto: string): ResultadoSaneado {
+export function sanitizarEnlaces(texto: string, permitidos?: ReadonlySet<string>): ResultadoSaneado {
   const descartados: string[] = [];
 
   // [texto](destino)
   let salida = texto.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, etiqueta: string, destino: string) => {
     const r = rutaLimpia(destino);
-    if (r && rutaEsReal(r)) return `[${etiqueta}](${r})`;
+    if (r && rutaEsReal(r, permitidos)) return `[${etiqueta}](${r})`;
     descartados.push(destino);
     return etiqueta;
   });
@@ -77,7 +127,7 @@ export function sanitizarEnlaces(texto: string): ResultadoSaneado {
       // El punto o la coma que cierra la oración no es parte de la ruta.
       const ruta = cruda.replace(/[.,;:]+$/, '');
       const resto = cruda.slice(ruta.length);
-      if (rutaEsReal(ruta)) return m;
+      if (rutaEsReal(ruta, permitidos)) return m;
       descartados.push(ruta);
       return `${previo}(pantalla no verificada)${resto}`;
     });
