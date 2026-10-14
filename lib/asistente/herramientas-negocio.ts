@@ -13,6 +13,7 @@ import { listarCompras, resumenGastos } from '@/lib/compras/consultas';
 import { parseRango, METODO_LABEL } from '@/lib/reportes/shared';
 import type { ConsultaHecha } from './herramientas';
 import { pesos, fechaYmd, ymd, contiene } from './util';
+import { enlaceFactura, enlaceCompraLocal } from './enlaces';
 
 /**
  * Herramientas de consulta del día a día: no son reportes agregados sino
@@ -47,6 +48,8 @@ export function crearHerramientasNegocio(teamId: number, consultas: ConsultaHech
         anotar('Facturas por revisar', `${total} pendientes`);
         return {
           totalPorRevisar: total,
+          // Pantalla donde se revisan: usa este enlace tal cual, no armes otro.
+          enlace: '/dashboard/gastos',
           facturas: filas.map((f) => ({
             id: f.id,
             estado: f.estado === 'procesando' ? 'leyéndose' : 'por revisar',
@@ -103,7 +106,9 @@ export function crearHerramientasNegocio(teamId: number, consultas: ConsultaHech
         return {
           periodo: r.texto,
           mostrando: filas.length,
+          enlaceLista: '/dashboard/compras',
           registros: filas.map((c) => ({
+            enlace: enlaceCompraLocal(c.id),
             fecha: c.fecha, clase: c.clase, estado: c.estado, proveedor: c.proveedorNombre, ncf: c.ncf,
             total: pesos(c.montoTotal), estadoPago: c.estadoPago, categoria: c.categoria,
             pagado: pesos(c.pagadoCents),
@@ -152,7 +157,9 @@ export function crearHerramientasNegocio(teamId: number, consultas: ConsultaHech
           coinciden: Number(tot?.n ?? 0),
           sumaTotal: pesos(Number(tot?.total ?? 0)),
           mostrando: filas.length,
+          enlaceLista: '/dashboard/facturas',
           facturas: filas.map((f) => ({
+            enlace: enlaceFactura(f.id),
             numero: f.encf ?? f.codigo, tipo: f.tipoEcf, estado: f.estado, estadoPago: f.estadoPago,
             cliente: f.razonSocialComprador, rnc: f.rncComprador, total: pesos(f.montoTotal),
             fecha: ymd(f.fechaEmision), vence: f.fechaLimitePago, alumno: f.dependienteNombre,

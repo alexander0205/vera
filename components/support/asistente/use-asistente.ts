@@ -8,8 +8,22 @@ export interface MensajeAsistente {
   rol: 'user' | 'assistant';
   contenido: string;
   herramientas?: { nombre: string; resumen: string }[] | null;
+  /** Respuesta larga o con tabla grande: el PDF se ofrece con más énfasis. */
+  grande?: boolean;
+  /** Acciones que esperan «Confirmar». Viven solo mientras el token es válido (5 min). */
+  propuestas?: { token: string; tipo: 'crear' | 'modificar' | 'eliminar'; destructiva: boolean; resumen: string; estado?: 'pendiente' | 'confirmando' | 'hecha' | 'cancelada' | 'error'; resultado?: string; enlace?: string }[];
   /** La respuesta falló: se muestra como error con «Reintentar». */
   error?: boolean;
+}
+
+/** Descarga el PDF de una respuesta (mismo origen: la cookie de sesión viaja sola). */
+export function descargarPdf(mensajeId: number) {
+  const a = document.createElement('a');
+  a.href = `/api/asistente/pdf?mensajeId=${mensajeId}`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /**
@@ -51,7 +65,7 @@ export function useAsistente(activo: boolean) {
           setConversacionId(d.conversacion.id);
           setDerivada(Boolean(d.conversacion.derivada));
           setMensajes(d.conversacion.mensajes.map((m: MensajeAsistente) => ({
-            id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null,
+            id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande,
           })));
         }
       } catch {
@@ -79,8 +93,10 @@ export function useAsistente(activo: boolean) {
         return;
       }
       setMensajes((m) => [...m, {
-        id: d.mensaje.id, rol: 'assistant', contenido: d.mensaje.contenido, herramientas: d.mensaje.herramientas,
+        id: d.mensaje.id, rol: 'assistant', contenido: d.mensaje.contenido, herramientas: d.mensaje.herramientas, grande: d.mensaje.grande,
+        propuestas: (d.mensaje.propuestas ?? []).map((p: NonNullable<MensajeAsistente['propuestas']>[number]) => ({ ...p, estado: 'pendiente' as const })),
       }]);
+      if (typeof d.descargarMensajeId === 'number') descargarPdf(d.descargarMensajeId);
     } catch {
       setMensajes((m) => [...m, {
         id: idTemporal.current--, rol: 'assistant', error: true,
@@ -106,6 +122,26 @@ export function useAsistente(activo: boolean) {
     setMensajes((m) => m.filter((x) => !x.error));
     await preguntar(ultima.contenido, conversacionId);
   }, [enviando, mensajes, preguntar, conversacionId]);
+
+  /** El único camino a ejecutar una acción: el botón «Confirmar» de la tarjeta. */
+  const resolverPropuesta = useCallback(async (mensajeId: number, token: string, confirmar: boolean) => {
+    const cambiar = (patch: Partial<NonNullable<MensajeAsistente['propuestas']>[number]>) =>
+      setMensajes((ms) => ms.map((m) => (m.id !== mensajeId ? m : {
+        ...m, propuestas: m.propuestas?.map((p) => (p.token === token ? { ...p, ...patch } : p)),
+      })));
+    if (!confirmar) { cambiar({ estado: 'cancelada' }); return; }
+    cambiar({ estado: 'confirmando' });
+    try {
+      const r = await fetch('/api/asistente/confirmar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { cambiar({ estado: 'error', resultado: d.error ?? 'No se pudo completar la acción.' }); return; }
+      cambiar({ estado: 'hecha', resultado: d.mensaje, enlace: d.enlace });
+    } catch {
+      cambiar({ estado: 'error', resultado: 'No hay conexión. No se hizo ningún cambio.' });
+    }
+  }, []);
 
   const nueva = useCallback(() => {
     setMensajes([]);
@@ -145,7 +181,7 @@ export function useAsistente(activo: boolean) {
     }
   }, [derivando, conversacionId]);
 
-  return { disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar };
+  return { disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;

@@ -119,6 +119,8 @@ interface Intencion {
 }
 
 const INTENCIONES: Intencion[] = [
+  { id: 'ultima-compra', peso: 11, re: /\b(ultim[ao]s? (factura|compra|gasto)s? (recibid[ao]s?|de proveedor|de proveedores)|factura (de|del) proveedor mas reciente|ultim[ao]s? (compra|gasto)s?)\b/, herramienta: 'listar_gastos_compras' },
+  { id: 'ultima-factura', peso: 10, re: /\b(ultim[ao]s? facturas?(?! (recibid|de proveedor|de compra))|factura mas reciente|ultima venta)\b/, herramienta: 'buscar_facturas' },
   { id: 'por-revisar', peso: 9, re: /\b(por revisar|pendientes? (de|por) revisar|sin registrar|bandeja de (gastos|facturas))\b/, herramienta: 'facturas_por_revisar' },
   { id: 'borradores', peso: 8, re: /\bborrador(es)?\b/, herramienta: 'buscar_facturas' },
   { id: 'stock-bajo', peso: 8, re: /\b(agot\w*|stock bajo|bajo (el )?minimo|por acabarse|se (me )?(esta|estan) acabando|poco inventario|sin existencia)\b/, herramienta: 'buscar_productos' },
@@ -141,6 +143,9 @@ const n = (x: unknown) => Number(x) || 0;
 const pct = (parte: number, total: number) => (total > 0 ? `${Math.round((parte / total) * 100)}%` : '0%');
 const tabla = (cab: string[], filas: (string | number)[][]) =>
   [`| ${cab.join(' | ')} |`, `| ${cab.map(() => '---').join(' | ')} |`, ...filas.map((f) => `| ${f.join(' | ')} |`)].join('\n');
+
+/** `[texto](/ruta)` solo si hay una ruta; la validez la garantiza el filtro final. */
+const enlazar = (texto: string, ruta: unknown) => (typeof ruta === 'string' && ruta.startsWith('/') ? `[${texto}](${ruta})` : texto);
 
 type Plantilla = (r: Fila, p: Periodo | null, pedido: Record<string, unknown>) => string;
 
@@ -254,13 +259,41 @@ const PLANTILLAS: Record<string, Plantilla> = {
     ].join('\n');
   },
 
+  'ultima-factura': (r) => {
+    const f = (r.facturas as Fila[]) ?? [];
+    if (!f.length) return 'No encontré facturas registradas.';
+    const [a] = f;
+    const estado = String(a.estado) === 'BORRADOR' ? 'en **borrador** (aún no emitida)' : `**${String(a.estado).toLowerCase()}**`;
+    return [
+      `La última factura es ${enlazar(String(a.numero || `borrador del ${a.fecha}`), a.enlace)}, del **${a.fecha}**, a nombre de **${a.cliente || 'cliente no indicado'}**, por **${rd(n(a.total))}**, ${estado}.`,
+      '',
+      f.length > 1 ? tabla(['Factura', 'Cliente', 'Total', 'Fecha', 'Estado'], f.map((x) => [enlazar(String(x.numero || `Borrador ${x.fecha}`), x.enlace), String(x.cliente || '—'), rd(n(x.total)), String(x.fecha ?? '—'), String(x.estado)])) : '',
+      '',
+      `Todas están en [Facturas](/dashboard/facturas).`,
+    ].filter((x, i, arr) => !(x === '' && arr[i - 1] === '')).join('\n');
+  },
+
+  'ultima-compra': (r) => {
+    const f = (r.registros as Fila[]) ?? [];
+    if (!f.length) {
+      return 'No hay compras ni gastos de proveedor registrados en ese período. Los comprobantes que llegan por foto o enlace esperan en la bandeja [Facturas por revisar](/dashboard/gastos) hasta que se registran.';
+    }
+    return [
+      'Las últimas compras y gastos registrados:',
+      '',
+      tabla(['Fecha', 'Proveedor', 'Total', 'Estado', 'Detalle'], f.slice(0, 5).map((x) => [String(x.fecha ?? '—'), String(x.proveedor ?? '—'), rd(n(x.total)), String(x.estadoPago ?? x.estado ?? '—'), enlazar('Ver', x.enlace)])),
+      '',
+      'Lista completa en [Compras](/dashboard/compras).',
+    ].join('\n');
+  },
+
   borradores: (r) => {
     const f = (r.facturas as Fila[]) ?? [];
     if (!n(r.coinciden)) return 'No tienes facturas en borrador.';
     return [
       `Tienes **${n(r.coinciden)}** factura${n(r.coinciden) === 1 ? '' : 's'} en borrador, por **${rd(n(r.sumaTotal))}** en total. Las más recientes:`,
       '',
-      tabla(['Número', 'Cliente', 'Total', 'Fecha'], f.slice(0, 8).map((x) => [String(x.numero || 'Sin número'), String(x.cliente || '—'), rd(n(x.total)), String(x.fecha ?? '—')])),
+      tabla(['Número', 'Cliente', 'Total', 'Fecha'], f.slice(0, 8).map((x) => [enlazar(String(x.numero || `Borrador ${x.fecha}`), x.enlace), String(x.cliente || '—'), rd(n(x.total)), String(x.fecha ?? '—')])),
       '',
       'Los borradores no cuentan en los reportes de ventas hasta que se emiten.',
     ].join('\n');
@@ -367,7 +400,8 @@ async function ejecutar(tools: ToolSet, nombre: string, input: unknown): Promise
 export async function responderLocal(
   texto: string,
   tools: ToolSet,
-  opts: { tolerante?: boolean; hoy?: string } = {},
+  /** `previa`: la última respuesta del asistente, para entender «¿dónde la veo?». */
+  opts: { tolerante?: boolean; hoy?: string; previa?: string } = {},
 ): Promise<RespuestaLocal | null> {
   const t = normalizar(texto);
   if (!t) return null;
@@ -380,6 +414,20 @@ export async function responderLocal(
     };
   }
   if (GRACIAS.test(t)) return { intencion: 'gracias', respuesta: '¡Con gusto! Si necesitas algo más, aquí estoy.' };
+
+  // «¿Dónde la veo?», «¿dónde está eso?»: se refiere a lo último que se dijo. Si
+  // esa respuesta traía enlaces (reales: ya pasaron el filtro), son la respuesta.
+  if (opts.previa && /^(y )?(donde|en que pantalla|en que modulo) (puedo |se puede |podria )?(verl[aoes]+|esta|estan|lo veo|la veo|los veo|las veo|lo encuentro|la encuentro|lo consulto|la consulto)\b/.test(t)) {
+    const enlaces = [...new Map([...opts.previa.matchAll(/\[([^\]]+)\]\((\/[^)\s]+)\)/g)].map((m) => [m[2], m[1]])).entries()].slice(0, 4);
+    if (enlaces.length) {
+      return {
+        intencion: 'contexto',
+        respuesta: ['Lo ves aquí:', '', ...enlaces.map(([ruta, nombre]) => `- [${nombre}](${ruta})`)].join('\n'),
+      };
+    }
+  }
+
+  if (/^(y )?(donde|en que pantalla|en que modulo) (puedo |se puede |podria )?(verl[aoes]+|lo veo|la veo|los veo|las veo)$/.test(t)) return null;
 
   const palabras = t.split(' ').length;
   const compleja = COMPLEJA.test(t) || palabras > 16;
@@ -394,7 +442,7 @@ export async function responderLocal(
     if (cambio) {
       return {
         intencion: 'cambio',
-        respuesta: 'Eso no lo hago desde el chat: los cambios se hacen en la pantalla correspondiente de Zero. Si me dices qué quieres cambiar, te digo dónde está, o pulsa **Hablar con una persona**.',
+        respuesta: 'Todavía no hago cambios desde el chat: se hacen en la pantalla correspondiente de Zero. Cuando pueda crear o eliminar algo, siempre te mostraré qué va a pasar y esperaré tu confirmación. Si me dices qué quieres cambiar, te digo dónde está, o pulsa **Hablar con una persona**.',
       };
     }
     return null;
@@ -415,7 +463,9 @@ export async function responderLocal(
   if (it.usaPeriodo && !periodo) return null;
 
   const input: Record<string, unknown> =
-    it.id === 'borradores' ? { estado: 'BORRADOR', limite: 8 }
+    it.id === 'ultima-factura' ? { limite: 5 }
+      : it.id === 'ultima-compra' ? { limite: 5, desde: '2000-01-01', hasta: '2100-12-31' }
+      : it.id === 'borradores' ? { estado: 'BORRADOR', limite: 8 }
       : it.id === 'stock-bajo' ? { soloBajoMinimo: true, limite: 10 }
         : it.id === 'turnos-caja' ? { estado: 'ABIERTO', limite: 10 }
           : it.id === 'cartera' ? { soloVencidas: /\b(vencid|moros)/.test(t), limite: 8 }

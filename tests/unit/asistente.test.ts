@@ -438,3 +438,205 @@ describe('error de cuota de la IA', () => {
     expect(esErrorDeCuota(new Error('timeout'))).toBe(false);
   });
 });
+
+// ── Enlaces: solo rutas reales ──────────────────────────────────────────────
+
+import { sanitizarEnlaces, rutaEsReal, PATRONES_REGISTRO } from '@/lib/asistente/enlaces';
+
+describe('enlaces del asistente', () => {
+  it('cada pantalla de registro existe de verdad en app/', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    for (const p of PATRONES_REGISTRO) {
+      expect(fs.existsSync(path.join(process.cwd(), p.pagina)), p.pagina).toBe(true);
+    }
+  });
+
+  it('acepta rutas del mapa y de registros, aunque vengan con http://localhost', () => {
+    expect(rutaEsReal('/dashboard/compras')).toBe(true);
+    expect(rutaEsReal('http://localhost:3000/dashboard/compras')).toBe(true);
+    expect(rutaEsReal('/dashboard/facturas/123')).toBe(true);
+    expect(rutaEsReal('/dashboard/compras/local/9')).toBe(true);
+  });
+
+  it('rechaza rutas inventadas, externas o con id no numérico', () => {
+    for (const r of ['/dashboard/facturas-recibidas', '/dashboard/facturas/abc', 'https://evil.com/x', '//evil.com', '/api/asistente', 'javascript:alert(1)']) {
+      expect(rutaEsReal(r), r).toBe(false);
+    }
+  });
+
+  it('quita el enlace inventado y deja el texto; vuelve relativos los reales', () => {
+    const r = sanitizarEnlaces('Mira [Facturas recibidas](http://localhost:3000/dashboard/compras) y [Otra](/dashboard/no-existe) y /dashboard/tampoco.');
+    expect(r.texto).toContain('[Facturas recibidas](/dashboard/compras)');
+    expect(r.texto).not.toContain('no-existe)');
+    expect(r.texto).toContain('Otra');
+    expect(r.texto).toContain('(pantalla no verificada)');
+    expect(r.descartados).toEqual(['/dashboard/no-existe', '/dashboard/tampoco']);
+  });
+
+  it('toda ruta que el mapa publica pasa el filtro', async () => {
+    const { MAPA_SISTEMA } = await import('@/lib/asistente/mapa-sistema');
+    for (const e of MAPA_SISTEMA) expect(rutaEsReal(e.ruta), e.id).toBe(true);
+  });
+});
+
+// ── Política de acciones: confirmar antes de crear / eliminar ───────────────
+
+import { z } from 'zod';
+import {
+  registrarAccion, limpiarAcciones, proponerAccion, confirmarAccion, herramientasDeAcciones,
+} from '@/lib/asistente/acciones';
+import { aBloques, esRespuestaGrande, pidePdf } from '@/lib/asistente/bloques';
+
+const usos = vi.hoisted(() => new Set<string>());
+vi.mock('@/lib/rate-limit', () => ({
+  rateLimitDb: vi.fn(async (k: string) => {
+    if (usos.has(k)) return { allowed: false, remaining: 0, resetAt: new Date() };
+    usos.add(k);
+    return { allowed: true, remaining: 0, resetAt: new Date() };
+  }),
+}));
+
+describe('acciones con confirmación', () => {
+  const ejecutadas: unknown[] = [];
+
+  beforeEach(() => {
+    process.env.AUTH_SECRET = 'secreto-de-prueba-para-tokens';
+    usos.clear();
+    ejecutadas.length = 0;
+    limpiarAcciones();
+    registrarAccion({
+      nombre: 'eliminar_cotizacion',
+      tipo: 'eliminar',
+      descripcion: 'Elimina una cotización.',
+      permiso: 'cotizaciones:gestionar',
+      modulo: 'facturacion',
+      esquema: z.object({ numero: z.string().min(1) }),
+      resumen: (a) => `Eliminar la cotización ${a.numero}`,
+      ejecutar: async (_ctx, uid, a) => { ejecutadas.push({ uid, a }); return { mensaje: `Cotización ${a.numero} eliminada.` }; },
+    });
+  });
+
+  it('proponer NO ejecuta: solo devuelve un resumen y un token', async () => {
+    const r = await proponerAccion(contextoDePrueba(7), 11, 'eliminar_cotizacion', { numero: 'COT-12' });
+    expect(r).toMatchObject({ confirmacionPendiente: true, tipo: 'eliminar', destructiva: true, resumen: 'Eliminar la cotización COT-12' });
+    expect(ejecutadas).toEqual([]);
+  });
+
+  it('confirmar ejecuta una sola vez y con los datos propuestos', async () => {
+    const ctx = contextoDePrueba(7);
+    const p = await proponerAccion(ctx, 11, 'eliminar_cotizacion', { numero: 'COT-12' }) as { token: string };
+    const r1 = await confirmarAccion(ctx, 11, p.token);
+    expect(r1).toMatchObject({ ok: true, mensaje: 'Cotización COT-12 eliminada.' });
+    expect(ejecutadas).toEqual([{ uid: 11, a: { numero: 'COT-12' } }]);
+    const r2 = await confirmarAccion(ctx, 11, p.token);
+    expect(r2).toMatchObject({ ok: false, status: 409 });
+    expect(ejecutadas).toHaveLength(1);
+  });
+
+  it('un token de otra persona o de otra empresa no ejecuta nada', async () => {
+    const p = await proponerAccion(contextoDePrueba(7), 11, 'eliminar_cotizacion', { numero: 'COT-12' }) as { token: string };
+    expect(await confirmarAccion(contextoDePrueba(7), 99, p.token)).toMatchObject({ ok: false, status: 403 });
+    expect(await confirmarAccion(contextoDePrueba(8), 11, p.token)).toMatchObject({ ok: false, status: 403 });
+    expect(ejecutadas).toEqual([]);
+  });
+
+  it('un token alterado o inventado se rechaza', async () => {
+    expect(await confirmarAccion(contextoDePrueba(7), 11, 'eyJhbGciOiJIUzI1NiJ9.e30.firma-falsa')).toMatchObject({ ok: false, status: 400 });
+    expect(ejecutadas).toEqual([]);
+  });
+
+  it('sin el permiso o sin el módulo no se puede ni proponer', async () => {
+    const sinPermiso = contextoDePrueba(7, { permisos: ['reportes:ver'] });
+    expect(await proponerAccion(sinPermiso, 11, 'eliminar_cotizacion', { numero: 'X' })).toMatchObject({ error: expect.stringMatching(/permiso/) });
+    const sinModulo = contextoDePrueba(7, { modulos: ['administracion'] });
+    expect(await proponerAccion(sinModulo, 11, 'eliminar_cotizacion', { numero: 'X' })).toMatchObject({ error: expect.stringMatching(/módulo/) });
+  });
+
+  it('si el permiso se pierde entre proponer y confirmar, no ejecuta', async () => {
+    const p = await proponerAccion(contextoDePrueba(7), 11, 'eliminar_cotizacion', { numero: 'COT-12' }) as { token: string };
+    const r = await confirmarAccion(contextoDePrueba(7, { permisos: ['reportes:ver'] }), 11, p.token);
+    expect(r).toMatchObject({ ok: false, status: 403 });
+    expect(ejecutadas).toEqual([]);
+  });
+
+  it('datos inválidos no generan propuesta', async () => {
+    expect(await proponerAccion(contextoDePrueba(7), 11, 'eliminar_cotizacion', { numero: '' })).toMatchObject({ error: expect.any(String) });
+  });
+
+  it('el modelo recibe una herramienta de PROPUESTA y nunca el token', async () => {
+    const propuestas: unknown[] = [];
+    const t = herramientasDeAcciones(contextoDePrueba(7), 11, propuestas as never);
+    expect(Object.keys(t)).toEqual(['proponer_eliminar_cotizacion']);
+    const salida = await (t.proponer_eliminar_cotizacion as { execute: (i: unknown, o: unknown) => Promise<Record<string, unknown>> })
+      .execute({ numero: 'COT-1' }, {});
+    expect(salida).toMatchObject({ confirmacionPendiente: true, destructiva: true });
+    expect(JSON.stringify(salida)).not.toContain('token');
+    expect(propuestas).toHaveLength(1);
+    expect(ejecutadas).toEqual([]);
+  });
+
+  it('sin acciones registradas, el modelo no tiene ninguna herramienta que escriba', () => {
+    limpiarAcciones();
+    expect(herramientasDeAcciones(contextoDePrueba(7), 11)).toEqual({});
+  });
+});
+
+describe('PDF de respuestas', () => {
+  it('convierte el markdown en bloques (tabla, lista, negritas)', () => {
+    const b = aBloques('Total **RD$ 10.00**\n\n| A | B |\n| --- | --- |\n| x | 1 |\n\n1. uno\n2. dos');
+    expect(b.map((x) => x.tipo)).toEqual(['parrafo', 'tabla', 'lista']);
+    expect(b[0]).toMatchObject({ tramos: [{ texto: 'Total ' }, { texto: 'RD$ 10.00', negrita: true }] });
+    expect(b[1]).toMatchObject({ tipo: 'tabla', filas: [[[{ texto: 'x' }], [{ texto: '1' }]]] });
+  });
+
+  it('en el PDF los enlaces quedan como texto', () => {
+    const [b] = aBloques('Mira [Libro diario](/contabilidad/libro-diario) ahora');
+    expect((b as { tramos: { texto: string }[] }).tramos.map((t) => t.texto).join('')).toBe('Mira Libro diario ahora');
+  });
+
+  it('una tabla de 6 filas o más es «grande»; una respuesta corta no', () => {
+    const fila = '| x | 1 |\n';
+    expect(esRespuestaGrande(`| A | B |\n| --- | --- |\n${fila.repeat(6)}`)).toBe(true);
+    expect(esRespuestaGrande('Vendiste **RD$ 10.00**.')).toBe(false);
+    expect(esRespuestaGrande('a'.repeat(1600))).toBe(true);
+  });
+
+  it('reconoce cuándo se pide un PDF', () => {
+    for (const q of ['ponlo en PDF', 'dame las ventas del mes en pdf', 'quiero descargar el reporte', 'imprimir esto', 'exporta eso']) {
+      expect(pidePdf(q), q).toBe(true);
+    }
+    expect(pidePdf('¿cuánto vendí este mes?')).toBe(false);
+  });
+});
+
+describe('contexto de la conversación', () => {
+  it('«¿dónde puedo verla?» devuelve los enlaces de la respuesta anterior, sin IA', async () => {
+    const { tools } = herramientasFalsas({});
+    const previa = 'La última factura recibida es de **Jade**, por RD$ 649.99. Puedes verla aquí: [Facturas por revisar](/dashboard/gastos)';
+    const r = await responderLocal('donde puedo verla?', tools, { previa });
+    expect(r?.intencion).toBe('contexto');
+    expect(r?.respuesta).toContain('[Facturas por revisar](/dashboard/gastos)');
+  });
+
+  it('sin enlaces previos no inventa: lo deja a la IA', async () => {
+    const { tools } = herramientasFalsas({});
+    expect(await responderLocal('donde puedo verla?', tools, { previa: 'Vendiste RD$ 10.00.' })).toBeNull();
+  });
+
+  it('«última factura recibida» consulta compras, no ventas', async () => {
+    const { tools, llamadas } = herramientasFalsas({ listar_gastos_compras: { registros: [] } });
+    const r = await responderLocal('cual fue la ultima factura recibida', tools, { hoy: '2026-10-13' });
+    expect(r?.intencion).toBe('ultima-compra');
+    expect(llamadas[0].nombre).toBe('listar_gastos_compras');
+    expect(r?.respuesta).toContain('](/dashboard/gastos)');
+  });
+
+  it('«última factura» enlaza a la factura real', async () => {
+    const { tools } = herramientasFalsas({
+      buscar_facturas: { facturas: [{ numero: '', cliente: 'Manuel', total: 22000, fecha: '2026-10-08', estado: 'BORRADOR', enlace: '/dashboard/facturas/3985' }] },
+    });
+    const r = await responderLocal('cual fue la ultima factura', tools, { hoy: '2026-10-13' });
+    expect(r?.respuesta).toContain('](/dashboard/facturas/3985)');
+  });
+});

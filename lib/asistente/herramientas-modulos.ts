@@ -11,6 +11,7 @@ import {
 } from '@/lib/db/schema';
 import type { ConsultaHecha } from './herramientas';
 import { pesos, fechaYmd, ymd, contiene } from './util';
+import { enlaceCotizacion, enlaceProducto, enlaceRecurrente, enlaceEstudiante } from './enlaces';
 
 /**
  * Consultas por módulo (inventario, cotizaciones, libro diario, estudiantes,
@@ -54,7 +55,7 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
         const donde = and(...cond);
         const [filas, [tot]] = await Promise.all([
           db.select({
-            nombre: products.nombre, referencia: products.referencia, tipo: products.tipo, precio: products.precio,
+            id: products.id, nombre: products.nombre, referencia: products.referencia, tipo: products.tipo, precio: products.precio,
             costo: products.costo, existencia: products.stockActual, minimo: products.stockMinimo,
             controla: products.controlaInventario, unidad: products.unidadMedida,
           }).from(products).where(donde).orderBy(products.nombre).limit(limite),
@@ -65,7 +66,7 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
           coinciden: Number(tot?.n ?? 0),
           mostrando: filas.length,
           productos: filas.map((p) => ({
-            nombre: p.nombre, referencia: p.referencia, tipo: p.tipo, precio: pesos(p.precio), costo: pesos(p.costo),
+            enlace: enlaceProducto(p.id), nombre: p.nombre, referencia: p.referencia, tipo: p.tipo, precio: pesos(p.precio), costo: pesos(p.costo),
             existencia: p.controla ? p.existencia : null, minimo: p.controla ? p.minimo : null, unidad: p.unidad,
           })),
         };
@@ -86,7 +87,7 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
         const donde = and(...cond);
         const [filas, [tot]] = await Promise.all([
           db.select({
-            numero: cotizaciones.numero, estado: cotizaciones.estado, cliente: cotizaciones.razonSocialComprador,
+            id: cotizaciones.id, numero: cotizaciones.numero, estado: cotizaciones.estado, cliente: cotizaciones.razonSocialComprador,
             total: cotizaciones.montoTotal, emision: cotizaciones.fechaEmision, vence: cotizaciones.fechaVencimiento,
           }).from(cotizaciones).where(donde).orderBy(desc(cotizaciones.fechaEmision)).limit(limite),
           db.select({ n: sql<number>`count(*)::int`, total: sql<number>`coalesce(sum(${cotizaciones.montoTotal}),0)` })
@@ -96,7 +97,7 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
         return {
           coinciden: Number(tot?.n ?? 0), sumaTotal: pesos(Number(tot?.total ?? 0)),
           cotizaciones: filas.map((c) => ({
-            numero: c.numero, estado: c.estado, cliente: c.cliente, total: pesos(c.total),
+            enlace: enlaceCotizacion(c.id), numero: c.numero, estado: c.estado, cliente: c.cliente, total: pesos(c.total),
             emision: ymd(c.emision), vence: ymd(c.vence),
           })),
         };
@@ -115,7 +116,7 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
         const donde = and(...cond);
         const [filas, [tot]] = await Promise.all([
           db.select({
-            nombre: facturasRecurrentes.nombre, cliente: clients.razonSocial, frecuencia: facturasRecurrentes.frecuencia,
+            id: facturasRecurrentes.id, nombre: facturasRecurrentes.nombre, cliente: clients.razonSocial, frecuencia: facturasRecurrentes.frecuencia,
             proxima: facturasRecurrentes.proximaEmision, estado: facturasRecurrentes.estado,
             total: facturasRecurrentes.totalEstimado, emitidas: facturasRecurrentes.facturasEmitidas,
           }).from(facturasRecurrentes)
@@ -128,7 +129,7 @@ export function herramientasFacturacion(teamId: number, anotar: Anotar) {
         return {
           coinciden: Number(tot?.n ?? 0), totalEstimadoPorCiclo: pesos(Number(tot?.total ?? 0)),
           recurrentes: filas.map((r) => ({
-            nombre: r.nombre, cliente: r.cliente, frecuencia: r.frecuencia, proximaEmision: r.proxima,
+            enlace: enlaceRecurrente(r.id), nombre: r.nombre, cliente: r.cliente, frecuencia: r.frecuencia, proximaEmision: r.proxima,
             estado: r.estado, totalEstimado: pesos(r.total), facturasEmitidas: r.emitidas,
           })),
         };
@@ -259,7 +260,7 @@ export function herramientasEscolar(teamId: number, anotar: Anotar) {
         return {
           encontrados: alumnos.length,
           estudiantes: alumnos.map((a) => ({
-            nombre: a.nombre, codigo: a.codigo, estado: a.estado,
+            enlace: enlaceEstudiante(a.id), nombre: a.nombre, codigo: a.codigo, estado: a.estado,
             curso: actual.get(a.id)?.curso ?? null, periodo: actual.get(a.id)?.periodo ?? null,
           })),
         };

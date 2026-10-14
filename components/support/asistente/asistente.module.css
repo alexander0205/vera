@@ -295,3 +295,33 @@
 .enlace:hover { text-decoration-thickness: 2px; }
 
 .errorDerivar { margin: 0 0 8px; font-size: 12.5px; color: var(--destructive); text-align: center; }
+
+.accionesMensaje { display: flex; align-items: center; gap: 2px; margin-left: auto; flex-shrink: 0; }
+.pdfGrande { background: color-mix(in srgb, var(--primary) 10%, var(--card)); color: var(--primary); font-weight: 600; }
+.pdfGrande:hover { background: color-mix(in srgb, var(--primary) 18%, var(--card)); color: var(--primary); }
+
+/* ── Confirmación de acciones (crear / modificar / eliminar) ─────────────── */
+.propuesta {
+  margin-top: 6px; padding: 12px 13px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 6%, var(--card));
+}
+.propuestaPeligro {
+  border-color: color-mix(in srgb, var(--destructive) 50%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 7%, var(--card));
+}
+.propuestaTitulo { margin: 0 0 3px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); }
+.propuestaPeligro .propuestaTitulo { color: var(--destructive); }
+.propuestaTexto { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.propuestaBotones { display: flex; gap: 8px; align-items: center; }
+.propuestaBotones .btnPrimario { padding: 7px 14px; }
+.propuestaOk { margin: 0; font-size: 13px; color: color-mix(in srgb, #166534 80%, var(--foreground)); }
+.propuestaNota { margin: 0; font-size: 12.5px; color: var(--muted-foreground); }
+
+/* ── Panel anclado: columna fija al lado de la página ────────────────────── */
+.panelFijo {
+  top: 0; right: 0; bottom: 0; width: 420px;
+  border-radius: 0; border-width: 0 0 0 1px;
+  box-shadow: none;
+  animation: none;
+}

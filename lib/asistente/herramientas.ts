@@ -14,6 +14,7 @@ import {
 } from './herramientas-modulos';
 import { contextoDePrueba, type ContextoAsistente } from './contexto';
 import { buscarEnMapa } from './guia';
+import { herramientasDeAcciones, type Propuesta } from './acciones';
 import { pesos, fechaYmd } from './util';
 
 /**
@@ -236,7 +237,13 @@ const solo = (t: ToolSet, claves: string[]): ToolSet =>
  *
  * Recibe un número (solo pruebas) o el contexto real de la sesión.
  */
-export function crearHerramientas(entrada: number | ContextoAsistente, consultas: ConsultaHecha[]): ToolSet {
+export function crearHerramientas(
+  entrada: number | ContextoAsistente,
+  consultas: ConsultaHecha[],
+  /** Quién pregunta: solo hace falta para atar las propuestas de acción a la persona. */
+  usuarioId?: number,
+  propuestas?: Propuesta[],
+): ToolSet {
   const ctx = typeof entrada === 'number' ? contextoDePrueba(entrada) : entrada;
   const { teamId } = ctx;
   const anotar = anotador(consultas);
@@ -267,6 +274,10 @@ export function crearHerramientas(entrada: number | ContextoAsistente, consultas
   if (ctx.tieneModulo('pos') && ctx.puede('caja:ver')) {
     Object.assign(t, herramientasPos(teamId, anotar));
   }
+
+  // Acciones (crear / modificar / eliminar): el modelo solo PROPONE; la persona
+  // confirma en el panel. Hoy no hay ninguna registrada. Ver acciones.ts.
+  if (usuarioId != null) Object.assign(t, herramientasDeAcciones(ctx, usuarioId, propuestas));
 
   // La guía va siempre: orientar no abre ningún dato.
   t.donde_encontrar = tool({

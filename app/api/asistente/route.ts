@@ -20,6 +20,7 @@ import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/sche
 import { rateLimitDb } from '@/lib/rate-limit';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
+import { esRespuestaGrande, pidePdf } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
 // Principal 35 s + respaldo 25 s + consultas a la base: cabe en 60.
@@ -62,7 +63,11 @@ export async function GET() {
     disponible: true,
     ia,
     ...perfil,
-    conversacion: { id: conv.id, derivada: conv.derivadaTicketId != null, mensajes },
+    conversacion: {
+      id: conv.id,
+      derivada: conv.derivadaTicketId != null,
+      mensajes: mensajes.map((m) => ({ ...m, grande: m.rol === 'assistant' && esRespuestaGrande(m.contenido) })),
+    },
   });
 }
 
@@ -118,12 +123,30 @@ export async function POST(req: NextRequest) {
     role: m.rol === 'assistant' ? 'assistant' : 'user', content: m.contenido,
   }));
 
+  const quierePdf = pidePdf(texto);
+  if (quierePdf && texto.split(/\s+/).length <= 7) {
+    // «Pásalo a PDF»: es la respuesta anterior, no una pregunta nueva.
+    const [prev] = await db.select({ id: asistenteMensajes.id }).from(asistenteMensajes)
+      .where(and(eq(asistenteMensajes.conversacionId, conversacionId), eq(asistenteMensajes.rol, 'assistant')))
+      .orderBy(desc(asistenteMensajes.id)).limit(1);
+    if (prev) {
+      const contenido = 'Listo, aquí tienes el PDF de la respuesta anterior. Si no se descargó, usa el botón «PDF» debajo de ella.';
+      const [g] = await db.insert(asistenteMensajes).values({ conversacionId, rol: 'assistant', contenido })
+        .returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
+      await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() }).where(eq(asistenteConversaciones.id, conversacionId));
+      return NextResponse.json({
+        conversacionId, origen: 'local', descargarMensajeId: prev.id,
+        mensaje: { id: g.id, rol: 'assistant', contenido, herramientas: [], creadoEn: g.creadoEn, grande: false },
+      });
+    }
+  }
+
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
 
   try {
     const ctx = await construirContexto(teamId, user.platformRole, acceso.teamRole);
     const r = await conversar(ctx, historial, {
-      empresa: team?.nombre ?? null, usuario: user.name ?? null,
+      empresa: team?.nombre ?? null, usuario: user.name ?? null, usuarioId: user.id,
     });
     const [guardado] = await db.insert(asistenteMensajes).values({
       conversacionId, rol: 'assistant', contenido: r.respuesta,
@@ -135,9 +158,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       conversacionId,
       origen: r.origen,
+      // Pidió el PDF en la misma pregunta: el panel lo descarga solo.
+      descargarMensajeId: quierePdf ? guardado.id : undefined,
       mensaje: {
         id: guardado.id, rol: 'assistant', contenido: r.respuesta,
-        herramientas: r.consultas, creadoEn: guardado.creadoEn,
+        herramientas: r.consultas, creadoEn: guardado.creadoEn, grande: esRespuestaGrande(r.respuesta),
+        propuestas: r.propuestas ?? [],
       },
     });
   } catch (e) {

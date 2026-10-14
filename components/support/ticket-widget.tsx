@@ -19,6 +19,7 @@ import { useSoporte } from './soporte-context';
 import { useAsistente } from './asistente/use-asistente';
 import { PanelAsistente } from './asistente/panel-asistente';
 import est from './asistente/asistente.module.css';
+import { useAnclado } from './asistente/use-anclado';
 import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
 import { useLlamadaGlobal } from '@/lib/webrtc/LlamadaGlobalProvider';
 import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
@@ -39,6 +40,9 @@ export function TicketWidget() {
   // `disponible` queda en false y todo sigue siendo el soporte de siempre.
   const asistente = useAsistente(open);
   const conAsistente = asistente.disponible === true;
+  // En pantallas anchas el panel es una columna fija a la derecha y la página
+  // se hace a un lado; en pantallas angostas flota encima, como antes.
+  const anclado = useAnclado(open);
   const [modo, setModo] = useState<'asistente' | 'soporte'>('asistente');
   // La conexión WebRTC vive en un provider único montado en el layout raíz
   // (LlamadaGlobalProvider) — nunca este componente. Si este widget se
@@ -154,7 +158,7 @@ export function TicketWidget() {
     {(chat.busyStage === 'capturando' || chat.busyStage === 'subiendo') && (
       <CapturaOverlay stage={chat.busyStage} />
     )}
-    <div ref={panelRef} className={est.panel} role="dialog" aria-label="Asistencia y soporte">
+    <div ref={panelRef} className={`${est.panel} ${anclado ? est.panelFijo : ''}`} role="dialog" aria-label="Asistencia y soporte">
       <div className={est.cabecera}>
         <span className={est.marca} aria-hidden>
           {modoEfectivo === 'asistente' ? <Sparkles size={17} /> : <MessageCircle size={17} />}

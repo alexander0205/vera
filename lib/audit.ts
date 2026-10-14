@@ -70,6 +70,8 @@ export type AuditAction =
   | 'ESCOLAR_AVISO_PRUEBA'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
+  // Asistente de IA: acción que la persona confirmó en el panel (crear, modificar, eliminar).
+  | 'ASISTENTE_ACCION_CONFIRMADA'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
   | 'CONTABILIDAD_CATALOGO_IMPORTADO';

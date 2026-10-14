@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowUp, Check, Copy, CreditCard, Receipt, Sparkles, TrendingUp, Users, Wallet,
+  ArrowUp, Check, Copy, CreditCard, FileDown, Receipt, Sparkles, TrendingUp, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import type { AsistenteEstado, MensajeAsistente } from './use-asistente';
+import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
 import { Markdown } from './markdown';
 import s from './asistente.module.css';
 
@@ -48,8 +48,11 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar,
-}: { m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void }) {
+  m, ultimoError, onReintentar, resolver,
+}: {
+  m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
+  resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
+}) {
   if (m.rol === 'user') {
     return (
       <div className={`${s.fila} ${s.filaUsuario}`}>
@@ -67,6 +70,25 @@ function MensajeAsistenteVista({
             <div><button type="button" className={s.reintentar} onClick={onReintentar}>Reintentar</button></div>
           )}
         </div>
+        {m.propuestas?.map((p) => (
+          <div key={p.token} className={`${s.propuesta} ${p.destructiva ? s.propuestaPeligro : ''}`} role="group" aria-label="Confirmar acción">
+            <p className={s.propuestaTitulo}>
+              {p.destructiva ? 'Vas a eliminar' : p.tipo === 'crear' ? 'Vas a crear' : 'Vas a modificar'}
+            </p>
+            <p className={s.propuestaTexto}>{p.resumen}</p>
+            {p.estado === 'hecha' && <p className={s.propuestaOk}>{p.resultado ?? 'Listo.'}{p.enlace ? <> <Markdown texto={`[Abrir](${p.enlace})`} /></> : null}</p>}
+            {p.estado === 'cancelada' && <p className={s.propuestaNota}>Cancelado. No se hizo ningún cambio.</p>}
+            {p.estado === 'error' && <p className={s.errorDerivar} role="alert">{p.resultado}</p>}
+            {(p.estado === 'pendiente' || p.estado === 'confirmando' || p.estado === 'error') && (
+              <div className={s.propuestaBotones}>
+                <button type="button" className={s.btnPrimario} disabled={p.estado === 'confirmando'} onClick={() => resolver(m.id, p.token, true)}>
+                  {p.estado === 'confirmando' ? 'Confirmando…' : 'Confirmar'}
+                </button>
+                <button type="button" className={s.reintentar} disabled={p.estado === 'confirmando'} onClick={() => resolver(m.id, p.token, false)}>Cancelar</button>
+              </div>
+            )}
+          </div>
+        ))}
         {!m.error && (
           <div className={s.debajo}>
             {m.herramientas && m.herramientas.length > 0 && (
@@ -74,7 +96,20 @@ function MensajeAsistenteVista({
                 {m.herramientas.map((h) => h.nombre).filter((n, i, a) => a.indexOf(n) === i).join(' · ')}
               </span>
             )}
-            <BotonCopiar texto={m.contenido} />
+            <div className={s.accionesMensaje}>
+              {m.id > 0 && (
+                <button
+                  type="button"
+                  className={`${s.copiar} ${m.grande ? s.pdfGrande : ''}`}
+                  onClick={() => descargarPdf(m.id)}
+                  aria-label="Descargar esta respuesta en PDF"
+                >
+                  <FileDown size={13} aria-hidden />
+                  {m.grande ? 'Descargar PDF' : 'PDF'}
+                </button>
+              )}
+              <BotonCopiar texto={m.contenido} />
+            </div>
           </div>
         )}
       </div>
@@ -163,7 +198,7 @@ export function PanelAsistente({
         )}
 
         {a.mensajes.map((m) => (
-          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} />
+          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} />
         ))}
 
         {a.enviando && (
