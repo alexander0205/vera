@@ -101,7 +101,7 @@ describe('herramientas del asistente', () => {
     // herramienta del asistente tiene que ser de lectura y pasar por revisión.
     expect(Object.keys(crearHerramientas(1, [])).sort()).toEqual([
       'buscar_clientes', 'buscar_empleados', 'buscar_estudiantes', 'buscar_facturas', 'buscar_productos',
-      'cargos_escolares', 'catalogo_cuentas', 'cobros_por_metodo', 'cuentas_por_cobrar', 'donde_encontrar',
+      'cargos_escolares', 'catalogo_cuentas', 'clientes_con_mas_facturas', 'cobros_por_metodo', 'cuentas_por_cobrar', 'donde_encontrar',
       'facturas_por_revisar', 'facturas_recurrentes', 'libro_diario', 'listar_cotizaciones', 'listar_gastos_compras',
       'pagos_recibidos', 'resumen_gastos', 'resumen_itbis', 'resumen_matriculas', 'resumen_nomina', 'resumen_ventas',
       'tendencia_ventas', 'turnos_caja', 'ventas_por_cliente', 'ventas_por_producto',
@@ -643,7 +643,7 @@ describe('contexto de la conversación', () => {
 
 // ── Motor de búsqueda por API y enlaces de registro ─────────────────────────
 
-import { apiFalsa, ErrorApi } from '@/lib/asistente/api';
+import { apiFalsa, ErrorApi, type ParamsApi } from '@/lib/asistente/api';
 import { registrarEnlacesDeHerramientas } from '@/lib/asistente/enlaces';
 
 describe('búsqueda de facturas por la API', () => {
@@ -725,7 +725,7 @@ describe('precisión de la búsqueda de facturas', () => {
   it('suma TODO lo que coincide aunque la API entregue 200 por página', async () => {
     const fila = (id: number) => ({ id, encf: null, codigo: `BOR-${id}`, tipoEcf: '31', estado: 'BORRADOR', montoTotal: 10000, pagado: 0, createdAt: `2026-01-01T00:00:${String(id % 60).padStart(2, '0')}` });
     const { api, llamadas } = apiFalsa({
-      '/api/facturas': (p) => {
+      '/api/facturas': (p: ParamsApi) => {
         const off = Number(p.offset ?? 0);
         const n = Math.max(0, Math.min(200, 450 - off));
         return { docs: Array.from({ length: n }, (_, i) => fila(off + i + 1)), total: 450 };
@@ -741,7 +741,7 @@ describe('precisión de la búsqueda de facturas', () => {
 
   it('prueba también sin tildes y une sin repetir facturas', async () => {
     const { api, llamadas } = apiFalsa({
-      '/api/facturas': (p) => (p.search === 'mendez'
+      '/api/facturas': (p: ParamsApi) => (p.search === 'mendez'
         ? { docs: [{ id: 7, encf: 'E31', codigo: 'F', tipoEcf: '31', estado: 'ACEPTADO', montoTotal: 500, pagado: 0, createdAt: '2026-02-01' }], total: 1 }
         : { docs: [], total: 0 }),
     });
@@ -750,5 +750,51 @@ describe('precisión de la búsqueda de facturas', () => {
     expect(llamadas.map((l) => l.params.search).sort()).toEqual(['Méndez', 'mendez']);
     expect(r.coinciden).toBe(1);
     expect(r.facturas[0].enlace).toBe('/dashboard/facturas/7');
+  });
+});
+
+describe('«cliente con más facturas» y recurrentes con enlaces', () => {
+  const REC = {
+    facturasRecurrentes: [
+      { id: 11, nombre: 'Mensualidad Claudy', clienteRazonSocial: 'Claudy Castro', frecuencia: 'mensual', proximaEmision: '2026-11-01', estado: 'activa', totalEstimado: 350000, facturasEmitidas: 4 },
+      { id: 12, nombre: 'Comedor Claudy', clienteRazonSocial: 'Claudy Castro', frecuencia: 'mensual', proximaEmision: '2026-11-01', estado: 'activa', totalEstimado: 350000, facturasEmitidas: 4 },
+      { id: 13, nombre: 'Mensualidad Luz', clienteRazonSocial: 'Luz García', frecuencia: 'mensual', proximaEmision: '2026-11-01', estado: 'activa', totalEstimado: 350000, facturasEmitidas: 2 },
+    ],
+  };
+
+  it('cada recurrente conserva su enlace aunque se agrupe por cliente', async () => {
+    const { api } = apiFalsa({ '/api/facturas-recurrentes': REC });
+    const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await ejecutar(h.facturas_recurrentes, { estado: 'activa', limite: 10 }) as {
+      porCliente: { cliente: string; cantidad: number; recurrentes: { enlace: string }[] }[];
+    };
+    expect(r.porCliente[0]).toMatchObject({ cliente: 'Claudy Castro', cantidad: 2 });
+    expect(r.porCliente[0].recurrentes.map((x) => x.enlace)).toEqual(['/dashboard/facturas-recurrentes/11', '/dashboard/facturas-recurrentes/12']);
+  });
+
+  it('la respuesta local lista cada recurrente con su hipervínculo', async () => {
+    const { api } = apiFalsa({ '/api/facturas-recurrentes': REC });
+    const tools = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await responderLocal('que facturas recurrentes tengo', tools, { hoy: '2026-10-13' });
+    expect(r?.intencion).toBe('recurrentes');
+    expect(r?.respuesta).toContain('](/dashboard/facturas-recurrentes/11)');
+    expect(r?.respuesta).toContain('](/dashboard/facturas-recurrentes/12)');
+    expect(r?.respuesta).toContain('](/dashboard/facturas-recurrentes/13)');
+  });
+
+  it('«cliente con más facturas» cuenta facturas emitidas (no recurrentes), con enlaces, y lo aclara', async () => {
+    const f = (id: number, cli: string, estado = 'ACEPTADO') => ({ id, encf: `E${id}`, codigo: null, tipoEcf: '31', estado, razonSocialComprador: cli, montoTotal: 100000, pagado: 0, createdAt: `2026-01-${String(id % 28 + 1).padStart(2, '0')}` });
+    const { api } = apiFalsa({
+      '/api/facturas': { total: 6, docs: [f(1, 'Ana'), f(2, 'Ana'), f(3, 'Ana', 'BORRADOR'), f(4, 'Beto'), f(5, 'Beto', 'ANULADO'), f(6, 'Carla')] },
+    });
+    const tools = crearHerramientas(contextoDePrueba(1, { api }), []);
+    const r = await responderLocal('cual es el cliente con facturas mas repetidas?', tools, { hoy: '2026-10-13' });
+    expect(r?.intencion).toBe('cliente-mas-facturas');
+    expect(r?.respuesta).toContain('**Ana**');
+    expect(r?.respuesta).toContain('**3**');
+    expect(r?.respuesta).toMatch(/recurrentes son otra cosa/);
+    expect(r?.respuesta).toContain('](/dashboard/facturas/1)');
+    // La anulada de Beto no cuenta.
+    expect(r?.respuesta).toMatch(/\| Beto \| 1 \|/);
   });
 });

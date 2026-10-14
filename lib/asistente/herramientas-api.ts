@@ -357,14 +357,87 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         let c = r.facturasRecurrentes ?? [];
         if (estado) c = c.filter((x) => x.estado === estado);
         anotar('Facturas recurrentes', estado ?? 'todas');
+        // Agrupado aquí, no por el modelo: así cada recurrente conserva SU enlace.
+        const por = new Map<string, RecurrenteApi[]>();
+        for (const x of c) {
+          const k = x.clienteRazonSocial?.trim() || 'Sin cliente';
+          por.set(k, [...(por.get(k) ?? []), x]);
+        }
         return {
           coinciden: c.length,
           totalEstimadoPorCiclo: pesos(c.reduce((s, x) => s + Number(x.totalEstimado || 0), 0)),
           enlaceLista: '/dashboard/facturas-recurrentes',
+          porCliente: [...por.entries()]
+            .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+            .slice(0, limite)
+            .map(([cliente, lista]) => ({
+              cliente,
+              cantidad: lista.length,
+              totalEstimado: pesos(lista.reduce((s, x) => s + Number(x.totalEstimado || 0), 0)),
+              proximaEmision: lista.map((x) => x.proximaEmision).sort()[0] ?? null,
+              recurrentes: lista.map((x) => ({
+                enlace: enlaceRecurrente(x.id), nombre: x.nombre, frecuencia: x.frecuencia,
+                totalEstimado: pesos(x.totalEstimado), proximaEmision: x.proximaEmision,
+              })),
+            })),
           recurrentes: c.slice(0, limite).map((x) => ({
             enlace: enlaceRecurrente(x.id), nombre: x.nombre, cliente: x.clienteRazonSocial ?? null, frecuencia: x.frecuencia,
             proximaEmision: x.proximaEmision, estado: x.estado, totalEstimado: pesos(x.totalEstimado), facturasEmitidas: x.facturasEmitidas,
           })),
+        };
+      }),
+    }),
+
+    clientes_con_mas_facturas: tool({
+      description:
+        'Qué clientes tienen MÁS FACTURAS emitidas (conteo de facturas de venta, no montos), por la API de Facturas. ' +
+        'Úsala para «qué cliente tiene más facturas», «quién se repite más». NO son las facturas recurrentes (para eso, facturas_recurrentes). ' +
+        'Excluye anuladas; separa emitidas de borradores. Cada cliente trae los enlaces de sus facturas más recientes.',
+      inputSchema: z.object({
+        desde: fecha.optional(), hasta: fecha.optional(),
+        incluirBorradores: z.boolean().default(true).describe('Si false, cuenta solo las emitidas a la DGII'),
+        limite: z.number().int().min(1).max(MAX).default(8),
+      }),
+      execute: seguro('las facturas', async ({ desde, hasta, incluirBorradores, limite }) => {
+        const primera = await api.get<{ docs: FacturaApi[]; total: number }>('/api/facturas', { desde, hasta, limit: 200, offset: 0 });
+        const total = Number(primera.total ?? 0);
+        const offsets: number[] = [];
+        for (let o = 200; o < Math.min(total, 2000); o += 200) offsets.push(o);
+        const resto = await Promise.all(offsets.map((offset) =>
+          api.get<{ docs: FacturaApi[] }>('/api/facturas', { desde, hasta, limit: 200, offset })));
+        const docs = [...(primera.docs ?? []), ...resto.flatMap((x) => x.docs ?? [])]
+          .filter((d) => d.estado !== 'ANULADO' && (incluirBorradores || d.estado !== 'BORRADOR'));
+
+        const por = new Map<string, { emitidas: number; borradores: number; total: number; facturas: FacturaApi[] }>();
+        for (const d of docs) {
+          const k = d.razonSocialComprador?.trim() || 'Consumidor final / sin nombre';
+          const x = por.get(k) ?? { emitidas: 0, borradores: 0, total: 0, facturas: [] };
+          if (d.estado === 'BORRADOR') x.borradores++; else x.emitidas++;
+          x.total += Number(d.montoTotal || 0);
+          x.facturas.push(d);
+          por.set(k, x);
+        }
+        anotar('Clientes con más facturas', desde || hasta ? `${desde ?? ''} ${hasta ?? ''}`.trim() : 'todas');
+        return {
+          facturasContadas: docs.length,
+          // Más de 2000 coincidencias: el conteo cubre las 2000 más recientes.
+          parcial: total > 2000,
+          incluyeBorradores: incluirBorradores,
+          enlaceLista: '/dashboard/facturas',
+          clientes: [...por.entries()]
+            .sort((a, b) => (b[1].emitidas + b[1].borradores) - (a[1].emitidas + a[1].borradores) || b[1].total - a[1].total)
+            .slice(0, limite)
+            .map(([cliente, x]) => ({
+              cliente,
+              facturas: x.emitidas + x.borradores,
+              emitidas: x.emitidas,
+              borradores: x.borradores,
+              total: pesos(x.total),
+              ultimas: x.facturas.slice(0, 3).map((d) => ({
+                enlace: enlaceFactura(d.id), numero: d.encf ?? d.codigo ?? null, fecha: ymd(d.fechaEmision ?? d.createdAt),
+                estado: d.estado, total: pesos(d.montoTotal),
+              })),
+            })),
         };
       }),
     }),

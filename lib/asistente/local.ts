@@ -134,6 +134,8 @@ const INTENCIONES: Intencion[] = [
   { id: 'cartera', peso: 5, re: /\b(quien(es)? me debe(n)?|me deben|que me deben|cuentas? por cobrar|cartera|morosos?|deudores|vencid[oa]s?|pendiente de cobro|por cobrar)\b/, herramienta: 'cuentas_por_cobrar' },
   { id: 'gastos', peso: 5, re: /\b(gast(o|os|e|ado|amos|aron)|cuanto (he |hemos )?gastado|egresos)\b/, herramienta: 'resumen_gastos', usaPeriodo: true },
   { id: 'cobrado', peso: 4, re: /\b(cuanto (se )?(he |hemos )?(cobr\w*|recib\w*)|que (se )?(cobr\w*|entro)|cobros?|pagos recibidos)\b/, herramienta: 'pagos_recibidos', usaPeriodo: true },
+  { id: 'cliente-mas-facturas', peso: 7, re: /\b(cliente (con|que tiene|que tuvo) (mas|mayor)( cantidad de| numero de)? facturas|(quien|que cliente|cual cliente) (tiene|tuvo|se repite|repite)( mas)? facturas?|mas facturas (repetidas|por cliente)|facturas mas repetidas|cliente mas repetido|quien se repite mas)\b/, herramienta: 'clientes_con_mas_facturas', usaPeriodo: true },
+  { id: 'recurrentes', peso: 6, re: /\b(facturas? recurrentes?|facturacion (automatica|recurrente)|cobros? automaticos?|mensualidades? automaticas?|recurrentes activas?)\b/, herramienta: 'facturas_recurrentes' },
   { id: 'ventas', peso: 3, re: /\b(vend(i|ido|imos|ieron|emos)|ventas|facturad[oa]s?|factur(e|amos)|ingresos|cuanto (he |hemos )?factur\w*)\b/, herramienta: 'resumen_ventas', usaPeriodo: true },
 ];
 
@@ -143,6 +145,12 @@ const n = (x: unknown) => Number(x) || 0;
 const pct = (parte: number, total: number) => (total > 0 ? `${Math.round((parte / total) * 100)}%` : '0%');
 const tabla = (cab: string[], filas: (string | number)[][]) =>
   [`| ${cab.join(' | ')} |`, `| ${cab.map(() => '---').join(' | ')} |`, ...filas.map((f) => `| ${f.join(' | ')} |`)].join('\n');
+
+/** 2026-10-08 → 08/10 (para etiquetas de enlace cortas). */
+const corta = (f: unknown) => {
+  const m = String(f ?? '').match(/^d{4}-(d{2})-(d{2})/);
+  return m ? `${m[2]}/${m[1]}` : '';
+};
 
 /** `[texto](/ruta)` solo si hay una ruta; la validez la garantiza el filtro final. */
 const enlazar = (texto: string, ruta: unknown) => (typeof ruta === 'string' && ruta.startsWith('/') ? `[${texto}](${ruta})` : texto);
@@ -235,6 +243,48 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const c = (r.clientes as Fila[]) ?? [];
     if (!c.length) return `No hay ventas a clientes ${p!.etiqueta}.`;
     return [`Tus mejores clientes ${p!.etiqueta}:`, '', tabla(['Cliente', 'Ventas', 'Facturas'], c.slice(0, 8).map((x) => [String(x.cliente), rd(n(x.ventas)), n(x.facturas)]))].join('\n');
+  },
+
+  'cliente-mas-facturas': (r) => {
+    const c = (r.clientes as Fila[]) ?? [];
+    if (!c.length) return 'No encontré facturas para comparar.';
+    const [a] = c;
+    const l = [
+      `El cliente con más facturas es **${a.cliente}**, con **${n(a.facturas)}** (${n(a.emitidas)} emitidas${n(a.borradores) ? ` y ${n(a.borradores)} en borrador` : ''}), por **${rd(n(a.total))}**.`,
+      '',
+      'Lo conté sobre las facturas de venta (sin anuladas, sin notas de crédito ni débito). Las facturas recurrentes son otra cosa: pregúntame por ellas si te refieres a esas.',
+      '',
+      tabla(['Cliente', 'Facturas', 'Emitidas', 'Borrador', 'Total', 'Últimas'],
+        c.slice(0, 8).map((x) => [
+          String(x.cliente), n(x.facturas), n(x.emitidas), n(x.borradores), rd(n(x.total)),
+          ((x.ultimas as Fila[]) ?? []).map((u, i) => enlazar(corta(u.fecha) || `#${i + 1}`, u.enlace)).join(' · '),
+        ])),
+    ];
+    if (r.parcial) l.push('', 'Hay más de 2,000 facturas: el conteo cubre las 2,000 más recientes.');
+    return l.join('\n');
+  },
+
+  recurrentes: (r) => {
+    const c = (r.porCliente as Fila[]) ?? [];
+    if (!c.length) return 'No tienes facturas recurrentes activas.';
+    const filas: (string | number)[][] = [];
+    for (const x of c) {
+      const lista = (x.recurrentes as Fila[]) ?? [];
+      lista.forEach((rec, i) => filas.push([
+        i === 0 ? String(x.cliente) : '↳',
+        enlazar(String(rec.nombre ?? 'Recurrente'), rec.enlace),
+        String(rec.frecuencia ?? '—'),
+        rd(n(rec.totalEstimado)),
+        String(rec.proximaEmision ?? '—'),
+      ]));
+    }
+    return [
+      `Tienes **${n(r.coinciden)}** factura${n(r.coinciden) === 1 ? '' : 's'} recurrente${n(r.coinciden) === 1 ? '' : 's'} activa${n(r.coinciden) === 1 ? '' : 's'}, por **${rd(n(r.totalEstimadoPorCiclo))}** por ciclo:`,
+      '',
+      tabla(['Cliente', 'Recurrente', 'Frecuencia', 'Total', 'Próxima emisión'], filas),
+      '',
+      'Todas están en [Facturas recurrentes](/dashboard/facturas-recurrentes).',
+    ].join('\n');
   },
 
   'mas-vendidos': (r, p) => {
@@ -465,7 +515,9 @@ export async function responderLocal(
   if (it.usaPeriodo && !periodo) return null;
 
   const input: Record<string, unknown> =
-    it.id === 'ultima-factura' ? { limite: 5 }
+    it.id === 'cliente-mas-facturas' ? { limite: 8 }
+      : it.id === 'recurrentes' ? { estado: /\b(pausad|finalizad)/.test(t) ? undefined : 'activa', limite: 12 }
+      : it.id === 'ultima-factura' ? { limite: 5 }
       : it.id === 'ultima-compra' ? { limite: 5, desde: '2000-01-01', hasta: '2100-12-31' }
       : it.id === 'borradores' ? { estado: 'BORRADOR', limite: 8 }
       : it.id === 'stock-bajo' ? { soloBajoMinimo: true, limite: 10 }
@@ -473,7 +525,11 @@ export async function responderLocal(
           : it.id === 'cartera' ? { soloVencidas: /\b(vencid|moros)/.test(t), limite: 8 }
             : it.id === 'por-revisar' ? { limite: 8 }
               : {};
-  if (it.usaPeriodo && periodo) Object.assign(input, { desde: periodo.desde, hasta: periodo.hasta, limite: 8 });
+  if (it.usaPeriodo && periodo && it.id !== 'cliente-mas-facturas') Object.assign(input, { desde: periodo.desde, hasta: periodo.hasta, limite: 8 });
+  // «Qué cliente tiene más facturas»: salvo que diga un período, es todo el historial.
+  if (it.id === 'cliente-mas-facturas' && periodo && /\b(este mes|hoy|ayer|semana|mes pasado|ano|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ultimos)\b/.test(t)) {
+    Object.assign(input, { desde: periodo.desde, hasta: periodo.hasta });
+  }
 
   const r = await ejecutar(tools, it.herramienta, input);
   if (!r) return null;
