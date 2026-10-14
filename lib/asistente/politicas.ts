@@ -61,13 +61,13 @@ const REGLAS: Regla[] = [
   },
   {
     categoria: 'evasion',
-    re: /\b(evadir|evasion|evadiendo|no declarar|sin declarar|ocultar (ventas|ingresos|facturas)|facturar (en negro|sin comprobante para no|para no pagar)|no pagar (el )?(itbis|impuestos?|isr)|declarar menos|doble contabilidad|facturas? falsas?|factura(s)? ficticias?|alterar (la )?(factura|fecha|monto))\b/,
+    re: /\b(evadir|evasion|evadiendo|no declarar|sin declarar|ocultar (ventas|ingresos|facturas)|facturar (en negro|sin comprobante para no|para no pagar)|no pagar (el )?(itbis|impuestos?|isr)|evitw* pagar (el )?(itbis|impuestos?|isr)|pagar menos (itbis|impuestos?|isr)|sin que (se den cuenta|lo sepa|me vean)|declarar menos|doble contabilidad|facturas? falsas?|factura(s)? ficticias?|alterar (la )?(factura|fecha|monto))\b/,
     respuesta: 'No puedo ayudar con evadir impuestos ni con alterar o simular comprobantes. ' +
       'Sí puedo mostrarte tu ITBIS y tus ventas del período o decirte dónde se hacen los reportes 606/607 para tu declaración.',
   },
   {
     categoria: 'asesoria',
-    re: /\b(es legal|es ilegal|puedo deducir|se puede deducir|me conviene (declarar|facturar|pagar)|debo (declarar|pagar|retener)|tengo que (declarar|pagar) (el )?(isr|itbis)|cuanto (isr|impuesto) (me toca|debo|corresponde)|que (dice|establece) la (ley|dgii|norma)|norma general|multa (de|por|de la) dgii|sancion(es)? (de|por) (la )?dgii|asesor(ia)? (fiscal|legal|contable)|consejo (fiscal|legal))\b/,
+    re: /\b(que inversion|en que (invierto|invertir)|me conviene (invertir|comprar acciones|vender acciones)|invertir (mi|el) dinero|es legal|es ilegal|puedo deducir|se puede deducir|me conviene (declarar|facturar|pagar)|debo (declarar|pagar|retener)|tengo que (declarar|pagar) (el )?(isr|itbis)|cuanto (isr|impuesto) (me toca|debo|corresponde)|que (dice|establece) la (ley|dgii|norma)|norma general|multa (de|por|de la) dgii|sancion(es)? (de|por) (la )?dgii|asesor(ia)? (fiscal|legal|contable)|consejo (fiscal|legal))\b/,
     respuesta: 'Eso es una consulta fiscal o legal que depende de tu caso, y no soy asesor: lo mejor es confirmarlo con tu contador o con la DGII. ' +
       'Lo que sí puedo hacer es mostrarte los números de tu empresa (ventas, ITBIS, gastos) para que lo consultes con datos.',
   },
