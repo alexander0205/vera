@@ -65,9 +65,15 @@ export interface ApiCalendario {
 }
 
 export function CalendarioCuotas({
-  conceptoId, nombre, frecuencia, diaEmision, diasParaPago, api,
+  conceptoId, nombre, frecuencia, diaEmision, diasParaPago, api, porCuota,
 }: {
   conceptoId: number;
+  /**
+   * Si la tarifa se cobra entera en cada cuota (colegiatura) o es el total del
+   * año a repartir. Lo decide el tipo del concepto en `armarPlanDeCobro`; aquí
+   * solo se cuenta igual, para que el pie no diga «se reparte» de algo que no.
+   */
+  porCuota: boolean;
   /** Cómo se llama el concepto: es la etiqueta de la cuota del pago único. */
   nombre: string;
   /**
@@ -364,9 +370,11 @@ export function CalendarioCuotas({
                   mes depende de la tarifa de cada grado y se ve en Tarifas. */}
               <tr className="border-t border-gray-100 bg-gray-50 text-xs">
                 <td colSpan={5} className="px-2 py-1.5 text-gray-500">
-                  {filas.length === 1
-                    ? 'Se le cobra todo el año en esta única fecha.'
-                    : `El año se reparte en ${filas.length} cobros iguales. El monto de cada uno sale de la tarifa del grado.`}
+                  {porCuota
+                    ? `Cada uno de los ${filas.length} cobros es la tarifa completa del grado.`
+                    : filas.length === 1
+                      ? 'Se le cobra todo el año en esta única fecha.'
+                      : `La tarifa del grado es el total del año y se reparte en ${filas.length} cobros iguales.`}
                 </td>
               </tr>
             </tfoot>

@@ -19,6 +19,7 @@
 export interface CuotaDelPlan {
   cuotaId: number;
   numero: number;
+  etiqueta: string;
   mes: number | null;
   fechaEmision: string;
   fechaVencimiento: string | null;
@@ -47,6 +48,7 @@ export interface PrevistoDelPlan<R> {
   cuotaId: number;
   conceptoId: number;
   concepto: string;
+  etiqueta: string;
   tipo: string;
   /** null en un concepto que se cobra de una vez y no cae en ningún mes. */
   mes: number | null;
@@ -83,6 +85,7 @@ export function previstosDelPlan<R>(
         cuotaId: cuota.cuotaId,
         conceptoId: linea.conceptoId,
         concepto: linea.nombre,
+        etiqueta: cuota.etiqueta,
         tipo: linea.tipo,
         mes: cuota.mes,
         // El año sale de la EMISIÓN, igual que en el devengo: el del

@@ -92,6 +92,13 @@ export function FacturacionAutomatica() {
             Sale una por familia —los hermanos van en la misma— en borrador y a crédito, así que
             queda en cuentas por cobrar y se puede editar antes de enviarla.
           </p>
+          {/* La regla de `cargosQueFacturaElCalendario`, dicha donde se enciende:
+              quien ya factura la colegiatura con recurrentes necesita saber que
+              encender esto no se la quita a sus planes. */}
+          <p className="mt-1 text-sm text-gray-500">
+            Si la colegiatura ya se factura con planes recurrentes, sigue saliendo de su plan:
+            aquí solo se facturan los demás cobros con calendario, como las evaluaciones.
+          </p>
 
           {activa && data?.desde && (
             <p className="mt-2 text-sm text-gray-600">
