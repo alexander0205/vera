@@ -207,3 +207,92 @@ export function cuantasCuotas(
   const paso = PASO[frecuencia];
   return paso === 0 ? 1 : Math.ceil(meses.length / paso);
 }
+
+/** Lo mínimo de una fila del calendario que hace falta para agregarle otra. */
+export interface CuotaEditable {
+  id: number | null;
+  numero: number;
+  etiqueta: string;
+  mes: number | null;
+  fechaEmision: string;
+  porcentajeMilesimas: number;
+  /** Alumnos con cargo de esta cuota. > 0 = ya facturada, no se toca. */
+  cargos: number;
+}
+
+/**
+ * Agrega una cuota a mano al calendario.
+ *
+ * Es para los cobros de fechas sueltas —evaluaciones P1, P2, P3— que no caen
+ * en un patrón de cada mes o cada trimestre: el colegio genera o arma el
+ * calendario, y si le falta una fecha la añade aquí y la edita en la fila.
+ *
+ * La fila nueva sale un mes después de la última (o al arranque del año si no
+ * hay ninguna), con el día de emisión del concepto, y se le pone el nombre
+ * siguiente: tras «Evaluacion P2» viene «Evaluacion P3».
+ *
+ * El porcentaje del año se vuelve a repartir a partes iguales entre las cuotas
+ * que todavía no se facturaron más la nueva, igual que al quitar una. Las
+ * facturadas conservan su parte: cambiarla reescribiría la deuda de un padre.
+ */
+export function agregarCuota<T extends CuotaEditable>(
+  filas: T[],
+  opts: {
+    frecuencia?: Frecuencia;
+    diaEmision: number;
+    fechaInicio: string | null | undefined;
+    fechaFin: string | null | undefined;
+    hoy: string;
+  },
+): { filas: (T | CuotaEditable)[] } | { error: string } {
+  const facturadas = filas.filter((f) => f.cargos > 0);
+  const usado = facturadas.reduce((a, f) => a + f.porcentajeMilesimas, 0);
+  if (usado >= 100_000) {
+    return { error: 'Las cuotas facturadas ya cubren el 100% del año: no queda parte para otra cuota. Para cobrar algo más, hace falta un concepto aparte.' };
+  }
+
+  const ordenadas = [...filas].sort((a, b) => a.fechaEmision.localeCompare(b.fechaEmision));
+  const ultima = ordenadas[ordenadas.length - 1];
+  let fecha: string;
+  if (ultima) {
+    const [a, m] = ultima.fechaEmision.split('-').map(Number);
+    fecha = m === 12 ? fechaDeEmision(a + 1, 1, opts.diaEmision) : fechaDeEmision(a, m + 1, opts.diaEmision);
+  } else if (opts.fechaInicio) {
+    const [a, m] = opts.fechaInicio.split('-').map(Number);
+    const delMes = fechaDeEmision(a, m, opts.diaEmision);
+    fecha = delMes < opts.fechaInicio ? opts.fechaInicio : delMes;
+  } else {
+    fecha = opts.hoy;
+  }
+  // Una cuota fuera del año escolar no la cobra nadie: se queda en el último día.
+  if (opts.fechaFin && fecha > opts.fechaFin) fecha = opts.fechaFin;
+
+  const n = filas.length + 1;
+  const mes = Number(fecha.slice(5, 7));
+  // Un cobro mensual se llama como su mes, igual que al generarlo. Lo demás
+  // sigue la numeración de la última fila que tenga número —tras «P3» y
+  // «Evaluacion final» viene «P4»—; si ninguna lo tiene, «Cuota N».
+  const conNumero = [...ordenadas].reverse()
+    .map((f) => f.etiqueta.match(/^(.*?)(\d+)\s*$/))
+    .find((m) => m != null);
+  const etiqueta = opts.frecuencia === 'mensual'
+    ? MESES[mes - 1].replace(/^./, (c) => c.toUpperCase())
+    : conNumero ? `${conNumero[1]}${Number(conNumero[2]) + 1}` : `Cuota ${n}`;
+
+  const libres = filas.filter((f) => f.cargos === 0);
+  const partes = repartirMilesimasEntre(100_000 - usado, libres.length + 1);
+  let k = 0;
+  const conReparto: (T | CuotaEditable)[] = filas.map((f) => (
+    f.cargos === 0 ? { ...f, porcentajeMilesimas: partes[k++] } : f
+  ));
+  conReparto.push({
+    id: null, numero: n, etiqueta, mes,
+    fechaEmision: fecha, porcentajeMilesimas: partes[k], cargos: 0,
+  });
+
+  return {
+    filas: conReparto
+      .sort((a, b) => a.fechaEmision.localeCompare(b.fechaEmision))
+      .map((f, i) => ({ ...f, numero: i + 1 })),
+  };
+}
