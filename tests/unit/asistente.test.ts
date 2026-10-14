@@ -741,13 +741,13 @@ describe('precisión de la búsqueda de facturas', () => {
 
   it('prueba también sin tildes y une sin repetir facturas', async () => {
     const { api, llamadas } = apiFalsa({
-      '/api/facturas': (p) => (p.search === 'Mendez'
+      '/api/facturas': (p) => (p.search === 'mendez'
         ? { docs: [{ id: 7, encf: 'E31', codigo: 'F', tipoEcf: '31', estado: 'ACEPTADO', montoTotal: 500, pagado: 0, createdAt: '2026-02-01' }], total: 1 }
         : { docs: [], total: 0 }),
     });
     const h = crearHerramientas(contextoDePrueba(1, { api }), []);
     const r = await ejecutar(h.buscar_facturas, { q: 'Méndez', limite: 5 }) as { coinciden: number; facturas: { enlace: string }[] };
-    expect(llamadas.map((l) => l.params.search).sort()).toEqual(['Mendez', 'Méndez']);
+    expect(llamadas.map((l) => l.params.search).sort()).toEqual(['Méndez', 'mendez']);
     expect(r.coinciden).toBe(1);
     expect(r.facturas[0].enlace).toBe('/dashboard/facturas/7');
   });
