@@ -14,6 +14,7 @@ export type Bloque =
 /** `**negrita**` y `[texto](/ruta)` → solo el texto (en PDF el enlace no sirve). */
 export function tramos(linea: string): Tramo[] {
   const limpia = linea
+    .replace(/<br\s*\/?>/gi, '\n')
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/(^|[^*])\*([^*\s][^*]*)\*(?!\*)/g, '$1$2')

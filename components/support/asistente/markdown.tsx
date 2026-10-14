@@ -10,6 +10,13 @@ import s from './asistente.module.css';
  */
 
 function enLinea(texto: string, clave: string): ReactNode[] {
+  // «<br>» dentro de una celda: salto de línea (solo ese token; nada de HTML libre).
+  if (/<br\s*\/?>/i.test(texto)) {
+    return texto.split(/<br\s*\/?>/i).flatMap((trozo, k) => [
+      ...(k > 0 ? [<br key={`${clave}-br${k}`} />] : []),
+      ...enLinea(trozo.trim(), `${clave}-${k}`),
+    ]);
+  }
   const partes: ReactNode[] = [];
   const re = /(\[[^\]]+\]\(\/[^)\s]*\)|\*\*[^*]+\*\*|`[^`]+`|(?<![*\w])\*[^*\s][^*]*\*(?!\w)|(?<!\w)_[^_\s][^_]*_(?!\w))/g;
   let ultimo = 0;

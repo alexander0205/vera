@@ -3797,6 +3797,10 @@ export const asistenteMensajes = pgTable('asistente_mensajes', {
   rol:            varchar('rol', { length: 12 }).notNull(),
   contenido:      text('contenido').notNull(),
   herramientas:   jsonb('herramientas').$type<{ nombre: string; resumen: string }[]>(),
+  /** 1 = útil, -1 = no útil, null = sin valorar (migración 0194). */
+  valoracion:     smallint('valoracion'),
+  valoracionMotivo: varchar('valoracion_motivo', { length: 40 }),
+  valoradoEn:     timestamp('valorado_en'),
   creadoEn:       timestamp('creado_en').notNull().defaultNow(),
 }, (t) => ({
   convIdx: index('asistente_msg_conv_idx').on(t.conversacionId, t.id),

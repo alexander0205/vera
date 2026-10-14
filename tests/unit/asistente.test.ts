@@ -795,7 +795,7 @@ describe('«cliente con más facturas» y recurrentes con enlaces', () => {
     expect(r?.respuesta).toMatch(/recurrentes son otra cosa/);
     expect(r?.respuesta).toContain('](/dashboard/facturas/1)');
     // La anulada de Beto no cuenta.
-    expect(r?.respuesta).toMatch(/\| Beto \| 1 \|/);
+    expect(r?.respuesta).toMatch(/\| Beto \| 1 \(/);
   });
 });
 

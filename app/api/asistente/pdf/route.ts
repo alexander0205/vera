@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="asistente-zero-${fecha}.pdf"`,
+      'Content-Disposition': `${req.nextUrl.searchParams.get('inline') === '1' ? 'inline' : 'attachment'}; filename="asistente-zero-${fecha}.pdf"`,
       'Cache-Control': 'private, no-store',
     },
   });

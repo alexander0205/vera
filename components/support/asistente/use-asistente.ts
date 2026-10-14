@@ -10,6 +10,8 @@ export interface MensajeAsistente {
   herramientas?: { nombre: string; resumen: string }[] | null;
   /** Respuesta larga o con tabla grande: el PDF se ofrece con más énfasis. */
   grande?: boolean;
+  /** 1 = útil, -1 = no útil. */
+  valoracion?: 1 | -1 | null;
   /** Acciones que esperan «Confirmar». Viven solo mientras el token es válido (5 min). */
   propuestas?: { token: string; tipo: 'crear' | 'modificar' | 'eliminar'; destructiva: boolean; resumen: string; estado?: 'pendiente' | 'confirmando' | 'hecha' | 'cancelada' | 'error'; resultado?: string; enlace?: string }[];
   /** La respuesta falló: se muestra como error con «Reintentar». */
@@ -65,7 +67,7 @@ export function useAsistente(activo: boolean) {
           setConversacionId(d.conversacion.id);
           setDerivada(Boolean(d.conversacion.derivada));
           setMensajes(d.conversacion.mensajes.map((m: MensajeAsistente) => ({
-            id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande,
+            id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande, valoracion: m.valoracion ?? null,
           })));
         }
       } catch {
@@ -143,6 +145,27 @@ export function useAsistente(activo: boolean) {
     }
   }, []);
 
+  /** 👍 / 👎 sobre una respuesta. Volver a pulsar la misma la quita. */
+  const valorar = useCallback(async (mensajeId: number, valor: 1 | -1, motivo?: string) => {
+    let anterior: 1 | -1 | null | undefined;
+    setMensajes((ms) => ms.map((m) => {
+      if (m.id !== mensajeId) return m;
+      anterior = m.valoracion;
+      return { ...m, valoracion: m.valoracion === valor ? null : valor };
+    }));
+    const nuevo = anterior === valor ? 0 : valor;
+    try {
+      const r = await fetch('/api/asistente/valorar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensajeId, valor: nuevo, motivo }),
+      });
+      if (!r.ok) throw new Error('no guardó');
+    } catch {
+      // No se pudo guardar: se deshace para no mostrar algo que no quedó.
+      setMensajes((ms) => ms.map((m) => (m.id === mensajeId ? { ...m, valoracion: anterior ?? null } : m)));
+    }
+  }, []);
+
   const nueva = useCallback(() => {
     setMensajes([]);
     setConversacionId(null);
@@ -181,7 +204,7 @@ export function useAsistente(activo: boolean) {
     }
   }, [derivando, conversacionId]);
 
-  return { disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta };
+  return { disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;

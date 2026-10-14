@@ -32,13 +32,42 @@ const s = StyleSheet.create({
   tabla: { marginBottom: 10, borderWidth: 1, borderColor: '#d1d5db' },
   fila: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   filaCab: { backgroundColor: '#f3f4f6' },
-  celda: { flex: 1, padding: 4, fontSize: 9 },
+  celda: { padding: 4, fontSize: 8.5 },
   num: { textAlign: 'right' },
   pie: { position: 'absolute', bottom: 20, left: 36, right: 36, fontSize: 8, color: '#9ca3af', textAlign: 'center' },
 });
 
 const esNumero = (t: string) => /^(RD\$\s?)?-?[\d,]+(\.\d+)?%?$/.test(t.trim());
 const plano = (t: Tramo[]) => t.map((x) => x.texto).join('');
+
+/**
+ * Texto de una celda para el PDF. Una lista de números largos separados por
+ * coma («FA-2026-CACH-KFBTU-001098, FA-2026-…») se pone uno por línea: una
+ * palabra de 24 caracteres no se parte y se saldría de la página.
+ */
+const celda = (t: Tramo[]) => {
+  const texto = plano(t);
+  return texto.length > 28 && texto.includes(', ') ? texto.split(', ').join('\n') : texto;
+};
+
+/** Ancho relativo de cada columna según lo más largo que lleva (línea por línea). */
+function anchos(b: Extract<Bloque, { tipo: 'tabla' }>): number[] {
+  const n = b.cabecera.length;
+  const peso = Array.from({ length: n }, (_, j) => {
+    const textos = [plano(b.cabecera[j] ?? []), ...b.filas.map((f) => celda(f[j] ?? []))];
+    const mayor = Math.max(...textos.flatMap((x) => x.split('\n').map((l) => l.length)), 4);
+    return Math.min(Math.max(mayor, 5), 34);
+  });
+  const total = peso.reduce((s, x) => s + x, 0);
+  return peso.map((p) => (p / total) * 100);
+}
+
+const esColumnaNumerica = (b: Extract<Bloque, { tipo: 'tabla' }>, j: number) =>
+  b.filas.length > 0 && b.filas.every((f) => esNumero(plano(f[j] ?? [])));
+
+/** Con muchas columnas o texto ancho, la página va horizontal. */
+const necesitaHorizontal = (bloques: Bloque[]) =>
+  bloques.some((b) => b.tipo === 'tabla' && (b.cabecera.length >= 6 || anchos(b).length >= 5 && b.filas.some((f) => f.some((c) => celda(c).split('\n').some((l) => l.length > 24)))));
 
 function Runs({ t, estilo }: { t: Tramo[]; estilo?: Style }) {
   return (
@@ -53,7 +82,7 @@ function Runs({ t, estilo }: { t: Tramo[]; estilo?: Style }) {
 export function AsistentePDF({ data }: { data: AsistentePDFData }) {
   return (
     <Document title="Respuesta del asistente de Zero" author="Zero">
-      <Page size="A4" style={s.pagina} wrap>
+      <Page size="A4" orientation={necesitaHorizontal(data.bloques) ? 'landscape' : 'portrait'} style={s.pagina} wrap>
         <View style={s.cabecera} fixed>
           <Text style={s.marca}>Asistente de Zero</Text>
           <Text style={s.titulo}>{data.empresa}</Text>
@@ -84,15 +113,18 @@ export function AsistentePDF({ data }: { data: AsistentePDFData }) {
               </View>
             );
           }
+          const w = anchos(b);
           return (
             <View key={i} style={s.tabla}>
               <View style={[s.fila, s.filaCab]} fixed>
-                {b.cabecera.map((c, j) => <Text key={j} style={[s.celda, { fontFamily: 'Helvetica-Bold' }]}>{plano(c)}</Text>)}
+                {b.cabecera.map((c, j) => (
+                  <Text key={j} style={[s.celda, { width: `${w[j]}%`, fontFamily: 'Helvetica-Bold' }, ...(esColumnaNumerica(b, j) ? [s.num] : [])]}>{plano(c)}</Text>
+                ))}
               </View>
               {b.filas.map((f, r) => (
                 <View key={r} style={s.fila} wrap={false}>
                   {f.map((c, j) => (
-                    <Text key={j} style={esNumero(plano(c)) ? [s.celda, s.num] : s.celda}>{plano(c)}</Text>
+                    <Text key={j} style={[s.celda, { width: `${w[j]}%` }, ...(esColumnaNumerica(b, j) ? [s.num] : [])]}>{celda(c)}</Text>
                   ))}
                 </View>
               ))}

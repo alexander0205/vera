@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowUp, Check, Copy, CreditCard, FileDown, Receipt, Sparkles, TrendingUp, Users, Wallet,
+  ArrowUp, Check, Copy, CreditCard, FileDown, Receipt, Sparkles, ThumbsDown, ThumbsUp, TrendingUp, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
@@ -48,10 +48,11 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar, resolver,
+  m, ultimoError, onReintentar, resolver, valorar,
 }: {
   m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
   resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
+  valorar: (mensajeId: number, valor: 1 | -1) => void;
 }) {
   if (m.rol === 'user') {
     return (
@@ -107,6 +108,18 @@ function MensajeAsistenteVista({
                   <FileDown size={13} aria-hidden />
                   {m.grande ? 'Descargar PDF' : 'PDF'}
                 </button>
+              )}
+              {m.id > 0 && (
+                <>
+                  <button
+                    type="button" className={`${s.valorar} ${m.valoracion === 1 ? s.valorarOn : ''}`}
+                    onClick={() => valorar(m.id, 1)} aria-pressed={m.valoracion === 1} aria-label="Respuesta útil" title="Útil"
+                  ><ThumbsUp size={13} aria-hidden /></button>
+                  <button
+                    type="button" className={`${s.valorar} ${m.valoracion === -1 ? s.valorarMal : ''}`}
+                    onClick={() => valorar(m.id, -1)} aria-pressed={m.valoracion === -1} aria-label="Respuesta no útil" title="No me sirvió"
+                  ><ThumbsDown size={13} aria-hidden /></button>
+                </>
               )}
               <BotonCopiar texto={m.contenido} />
             </div>
@@ -198,7 +211,7 @@ export function PanelAsistente({
         )}
 
         {a.mensajes.map((m) => (
-          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} />
+          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} />
         ))}
 
         {a.enviando && (

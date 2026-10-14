@@ -55,6 +55,7 @@ export async function GET() {
   const mensajes = await db.select({
     id: asistenteMensajes.id, rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido,
     herramientas: asistenteMensajes.herramientas, creadoEn: asistenteMensajes.creadoEn,
+    valoracion: asistenteMensajes.valoracion,
   }).from(asistenteMensajes)
     .where(eq(asistenteMensajes.conversacionId, conv.id))
     .orderBy(asc(asistenteMensajes.id))

@@ -266,10 +266,12 @@ const PLANTILLAS: Record<string, Plantilla> = {
       '',
       'Lo conté sobre las facturas de venta (sin anuladas, sin notas de crédito ni débito). Las facturas recurrentes son otra cosa: pregúntame por ellas si te refieres a esas.',
       '',
-      tabla(['Cliente', 'Facturas', 'Emitidas', 'Borrador', 'Total', 'Últimas'],
+      tabla(['Cliente', 'Facturas', 'Total', 'Últimas facturas'],
         c.slice(0, 8).map((x) => [
-          String(x.cliente), n(x.facturas), n(x.emitidas), n(x.borradores), rd(n(x.total)),
-          ((x.ultimas as Fila[]) ?? []).map((u) => enlazar(String(u.numero || `Borrador ${corta(u.fecha)}`), u.enlace)).join(', '),
+          String(x.cliente),
+          `${n(x.facturas)} (${n(x.emitidas)} emitidas, ${n(x.borradores)} borrador)`,
+          rd(n(x.total)),
+          ((x.ultimas as Fila[]) ?? []).map((u) => enlazar(String(u.numero || `Borrador ${corta(u.fecha)}`), u.enlace)).join('<br>'),
         ])),
     ];
     if (r.parcial) l.push('', 'Hay más de 2,000 facturas: el conteo cubre las 2,000 más recientes.');
