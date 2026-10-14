@@ -1,4 +1,5 @@
 import { MAPA_SISTEMA } from './mapa-sistema';
+import { neutralizarDatos, hayOmitidos } from './politicas';
 
 /**
  * Enlaces del asistente: SOLO rutas que existen.
@@ -90,7 +91,10 @@ export function registrarEnlacesDeHerramientas<T extends Record<string, unknown>
     salida[nombre] = {
       ...(t as object),
       execute: async (i: unknown, o: unknown) => {
-        const r = await original(i, o);
+        // Un nombre o una nota con «ignora tus instrucciones» es un dato, no una
+        // orden: se omite antes de que el modelo lo lea.
+        const r = neutralizarDatos(await original(i, o));
+        if (hayOmitidos(r)) console.warn(`[asistente] ${nombre}: se omitió texto con forma de instrucción`);
         recogerEnlaces(r, destino);
         return r;
       },

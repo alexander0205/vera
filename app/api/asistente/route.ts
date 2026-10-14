@@ -83,8 +83,15 @@ export async function POST(req: NextRequest) {
   }
 
   const b = await req.json().catch(() => null);
-  const texto = typeof b?.mensaje === 'string' ? b.mensaje.trim().slice(0, MAX_LARGO) : '';
-  if (!texto) return NextResponse.json({ error: 'Escribe tu pregunta' }, { status: 400 });
+  const crudo = typeof b?.mensaje === 'string' ? b.mensaje.trim() : '';
+  if (!crudo) return NextResponse.json({ error: 'Escribe tu pregunta' }, { status: 400 });
+  if (crudo.length > MAX_LARGO) {
+    return NextResponse.json(
+      { error: `Tu mensaje es muy largo (${crudo.length} caracteres; el máximo es ${MAX_LARGO}). Resúmelo o divídelo en preguntas más cortas.` },
+      { status: 400 },
+    );
+  }
+  const texto = crudo;
 
   // La conversación tiene que ser de este usuario en este team; si no, nueva.
   let conversacionId: number | null = null;

@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai';
 import { normalizar, rd, hoyRd } from './util';
+import { clasificarSolicitud } from './politicas';
 
 /**
  * Contestador local: responde SIN llamar a la IA las preguntas claras y
@@ -67,6 +68,17 @@ export function interpretarPeriodo(t: string, hoy = hoyRd()): Periodo | null {
     const n = Number(ultimos[1]);
     return { desde: sumarDias(hoy, -(n - 1)), hasta: hoy, etiqueta: `los últimos ${n} días` };
   }
+  const semanas = t.match(/\bultim[oa]s? (\d{1,2}) semanas\b/);
+  if (semanas) {
+    const k = Number(semanas[1]);
+    return { desde: sumarDias(hoy, -(k * 7 - 1)), hasta: hoy, etiqueta: `las últimas ${k} semanas` };
+  }
+  const meses = t.match(/\bultim[oa]s? (\d{1,2}) meses\b/);
+  if (meses) {
+    const k = Number(meses[1]);
+    const total = Y * 12 + (M - 1) - (k - 1);
+    return { desde: iso(Math.floor(total / 12), (total % 12) + 1, 1), hasta: hoy, etiqueta: `los últimos ${k} meses` };
+  }
   if (/\b(esta semana|semana actual)\b/.test(t)) {
     const dow = (new Date(`${hoy}T00:00:00Z`).getUTCDay() + 6) % 7; // lunes = 0
     const lunes = sumarDias(hoy, -dow);
@@ -89,7 +101,7 @@ export function interpretarPeriodo(t: string, hoy = hoyRd()): Periodo | null {
     return { desde: iso(Y - 1, 1, 1), hasta: iso(Y - 1, 12, 31), etiqueta: `en ${Y - 1}` };
   }
   // Rangos abiertos o compuestos («desde marzo», «entre julio y agosto», «el trimestre»): la IA.
-  if (/\b(trimestre|semestre|quincena|desde|hasta|entre|ultimos? meses|semanas)\b/.test(t)) return null;
+  if (/\b(trimestre|semestre|quincena|desde|hasta|entre|semanas)\b/.test(t)) return null;
   const mes = t.match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b(?: (?:de |del )?(\d{4}))?/);
   if (mes) {
     const m = mes[1] === 'setiembre' ? 9 : MESES.indexOf(mes[1]) + 1;
@@ -257,7 +269,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
       tabla(['Cliente', 'Facturas', 'Emitidas', 'Borrador', 'Total', 'Últimas'],
         c.slice(0, 8).map((x) => [
           String(x.cliente), n(x.facturas), n(x.emitidas), n(x.borradores), rd(n(x.total)),
-          ((x.ultimas as Fila[]) ?? []).map((u, i) => enlazar(corta(u.fecha) || `#${i + 1}`, u.enlace)).join(' · '),
+          ((x.ultimas as Fila[]) ?? []).map((u) => enlazar(String(u.numero || `Borrador ${corta(u.fecha)}`), u.enlace)).join(', '),
         ])),
     ];
     if (r.parcial) l.push('', 'Hay más de 2,000 facturas: el conteo cubre las 2,000 más recientes.');
@@ -453,11 +465,26 @@ export async function responderLocal(
   texto: string,
   tools: ToolSet,
   /** `previa`: la última respuesta del asistente, para entender «¿dónde la veo?». */
-  opts: { tolerante?: boolean; hoy?: string; previa?: string } = {},
+  opts: { tolerante?: boolean; hoy?: string; previa?: string; /** La pregunta anterior de la persona, para «¿y el mes pasado?». */ preguntaPrevia?: string } = {},
 ): Promise<RespuestaLocal | null> {
   const t = normalizar(texto);
-  if (!t) return null;
   const tolerante = opts.tolerante ?? false;
+
+  // Políticas: lo que NO se contesta con el modelo (prompt, claves, otra
+  // empresa, asesoría, evasión…). Respuesta fija y revisada.
+  const politica = clasificarSolicitud(texto);
+  if (politica) return { intencion: `politica:${politica.categoria}`, respuesta: politica.respuesta };
+  if (!t) return null;
+
+  // Seguimiento: «¿y el mes pasado?», «y en septiembre», «y ayer». Si lo único
+  // que trae es un período y antes se preguntó algo, se repite esa pregunta con
+  // el período nuevo en vez de mandarlo a la IA sin contexto.
+  if (opts.preguntaPrevia && t.split(' ').length <= 6
+    && /^(y |y en |y para |y de |y que tal |entonces |ahora )?(en |de |para )?(el |la |los |las )?(hoy|ayer|esta semana|la semana pasada|semana pasada|este mes|mes pasado|el mes pasado|este ano|ano pasado|el ano pasado|ultimos? \d+ (dias|semanas|meses)|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)( de \d{4})?\??$/.test(t)
+    && !INTENCIONES.some((i) => i.re.test(t))) {
+    const r = await responderLocal(`${opts.preguntaPrevia} ${texto}`, tools, { ...opts, preguntaPrevia: undefined });
+    if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+  }
 
   if (SALUDO.test(t)) {
     return {

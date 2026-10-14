@@ -110,7 +110,9 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
           enlaceLista: '/dashboard/facturas',
           facturas: docs.slice(0, limite).map((d) => ({
             enlace: enlaceFactura(d.id),
-            numero: d.encf ?? d.codigo ?? null,
+            // Lo que identifica la factura aunque el PDF pierda el enlace: e-NCF, código
+            // interno o, si es un borrador sin número, «Borrador» y su fecha.
+            numero: numeroDe(d),
             tipo: d.tipoEcf,
             estado: d.estado,
             estadoPago: estadoDePago(d),
@@ -434,7 +436,7 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
               borradores: x.borradores,
               total: pesos(x.total),
               ultimas: x.facturas.slice(0, 3).map((d) => ({
-                enlace: enlaceFactura(d.id), numero: d.encf ?? d.codigo ?? null, fecha: ymd(d.fechaEmision ?? d.createdAt),
+                enlace: enlaceFactura(d.id), numero: numeroDe(d), fecha: ymd(d.fechaEmision ?? d.createdAt),
                 estado: d.estado, total: pesos(d.montoTotal),
               })),
             })),
@@ -712,6 +714,14 @@ interface CargoApi {
 interface EmpleadoApi { nombres: string; apellidos: string; cargo?: string | null; tipoContrato: string; estado: string; fechaIngreso?: string | null; frecuenciaPago: string; salarioBaseCents: number }
 interface CorridaApi { periodo: string; descripcion: string; estado: string; totalBrutoCents: number; totalNetoCents: number; totalPatronalCents: number; fechaPago?: string | null }
 interface TurnoApi { cajero?: string | null; aperturaAt?: string | null; montoAperturaCentavos?: number; efectivoContadoCentavos?: number | null; montoEsperadoCentavos?: number | null; diferenciaCentavos?: number | null }
+
+/** Número con el que se reconoce una factura, para mostrarlo siempre junto al enlace. */
+function numeroDe(d: FacturaApi): string {
+  const n = d.encf?.trim() || d.codigo?.trim();
+  if (n) return n;
+  const f = ymd(d.fechaEmision ?? d.createdAt);
+  return f ? `Borrador del ${f}` : 'Borrador';
+}
 
 /** Lo que la pantalla de Facturas llama «pagada», «parcial» o «pendiente». */
 function estadoDePago(d: FacturaApi): 'PENDIENTE' | 'PARCIAL' | 'PAGADA' {
