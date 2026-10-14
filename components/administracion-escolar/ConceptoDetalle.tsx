@@ -465,6 +465,28 @@ export function ConceptoDetalle({
               </span>
             </div>
 
+            {/* Qué significa el número de Tarifas cuando el cobro se repite.
+                Lo decide el tipo (`armarPlanDeCobro`): la colegiatura cobra la
+                tarifa entera en cada cuota; todo lo demás la toma como el total
+                del año y la reparte. Desde que el interruptor dejó de marcar
+                colegiatura, un concepto nuevo que se repite nace «Otro cobro»:
+                si era la colegiatura y nadie tocó el desplegable, 2.800 al mes
+                pasaban a 280 en silencio. Por eso, con «Otro cobro», ámbar. */}
+            {periodico && tipoDelBorrador !== 'mensualidad' && (
+              <div className="px-3 py-2.5">
+                <p className={tipoDelBorrador === 'otro'
+                  ? 'rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800'
+                  : 'text-xs text-gray-500'}>
+                  La tarifa que pongas en Tarifas es el <strong>total del año</strong> y se reparte entre
+                  las cuotas: con 2,800 y 10 cuotas, cada una sale de 280.
+                  {tipoDelBorrador === 'otro' && (
+                    <> Si es la colegiatura que se paga cada mes, elige <strong>«Colegiatura»</strong> en
+                    «¿Qué es este cobro?»: así cada cuota cobra la tarifa entera.</>
+                  )}
+                </p>
+              </div>
+            )}
+
             {periodico && (
               <div className="grid gap-3 px-3 py-2.5 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -507,6 +529,7 @@ export function ConceptoDetalle({
             <Paso n={paso.calendario} titulo="El calendario que genera" />
             <CalendarioCuotas conceptoId={borrador.id} nombre={borrador.nombre}
               frecuencia={borrador.frecuencia} api={calendario}
+              porCuota={tipoDelBorrador === 'mensualidad'}
               diaEmision={diaEmision} diasParaPago={borrador.diasParaPago} />
           </div>
         )}

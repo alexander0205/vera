@@ -1,6 +1,12 @@
 -- Configuración puntual de INFANTIL MI CASITA II SRL, año escolar 2026-2027.
 -- Cada evaluacion cuesta RD$200. El plan reparte el total anual:
 -- Inicial RD$600 / 3; Primaria RD$800 / 4. No asigna matrículas.
+--
+-- Ese reparto solo ocurre si el concepto NO es colegiatura: con
+-- tipo='mensualidad', `armarPlanDeCobro` cobra la tarifa ENTERA en cada cuota
+-- (3 x 600 en vez de 3 x 200). En prod «Evaluacion Inicial» quedó como
+-- mensualidad porque el interruptor de recurrencia lo marcaba solo; por eso
+-- este guion pasa los dos conceptos a 'actividad' antes de tocar tarifas.
 BEGIN;
 
 DO $config$
@@ -54,8 +60,9 @@ BEGIN
       mora_dias_gracia, aviso_correo, aviso_whatsapp, aviso_sms,
       descuento_adelanto_pct, product_id, activo, orden
     )
-    SELECT team_id, 'Evaluacion Primaria', tipo, frecuencia,
-      aplica_por_defecto, admite_beca, cobra_mora, dia_emision,
+    -- Tipo y beca NO se copian: el origen puede estar como colegiatura.
+    SELECT team_id, 'Evaluacion Primaria', 'actividad', frecuencia,
+      aplica_por_defecto, false, cobra_mora, dia_emision,
       dias_para_pago, avisos_activos, aviso_dia_emision,
       aviso_antes_mora_dias, aviso_dia_vencimiento, mora_dias_gracia,
       aviso_correo, aviso_whatsapp, aviso_sms, descuento_adelanto_pct,
@@ -119,6 +126,14 @@ BEGIN
           OR (concepto_id = v_inicial_id AND monto_centavos NOT IN (6666, 6667)))) THEN
     RAISE EXCEPTION 'Hay cargos de evaluación modificados o facturados; revisar antes de corregir importes';
   END IF;
+
+  -- Antes de subir tarifas al total del año: una evaluación es una actividad
+  -- (se reparte entre sus cuotas) y la beca no la rebaja.
+  UPDATE admin_escolar_conceptos_pago
+  SET tipo = 'actividad', admite_beca = false, updated_at = now()
+  WHERE team_id = v_team_id
+    AND id IN (v_inicial_id, v_primaria_concepto_id)
+    AND (tipo <> 'actividad' OR admite_beca);
 
   UPDATE admin_escolar_concepto_precios
   SET monto_centavos = 60000, updated_at = now()
