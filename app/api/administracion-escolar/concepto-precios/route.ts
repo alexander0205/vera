@@ -38,9 +38,7 @@ export async function GET(req: NextRequest) {
   // escritura de estructura o tarifas lo invalida.
   const datos = await cachearPorTag(
     () => leer(t, pedidoUrl),
-    // La corrección puntual de Evaluación 2026-2027 se aplicó por SQL;
-    // cambia la clave para no servir la tarifa anterior desde la caché.
-    ['escolar', 'concepto-precios', 'v2', String(t), String(pedidoUrl)],
+    ['escolar', 'concepto-precios', String(t), String(pedidoUrl)],
     [tagEstructura(t)],
   )();
   return NextResponse.json(datos);

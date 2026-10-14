@@ -1294,6 +1294,12 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
       .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
       .reduce((s, c) => s + c.saldoCentavos, 0);
     const pagado = Math.max(0, facturadosMes.reduce((s, c) => s + c.montoCentavos, 0) - saldo);
+    // Pagado y Pendiente salen de la factura, pero un cargo vivo sin factura
+    // también se debe. Sin esto, con la colegiatura pagada y la evaluación del
+    // mes sin facturar, la fila decía «Pendiente RD$0» en verde.
+    const sinFacturar = cargosMes
+      .filter((c) => c.ecfDocumentId == null && ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+      .reduce((s, c) => s + c.saldoCentavos, 0);
     const totalPrevisto = previstosMes.reduce((s, p) => s + p.montoCentavos, 0);
     const factura = cargosMes.find((c) => c.ecfDocumentId != null) ?? null;
     // Historial de pagos del mes: los abonos hechos a las facturas de sus cargos.
@@ -1305,7 +1311,7 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
     const estado: EstadoMes = cargosMes.length === 0 && previstosMes.length > 0
       ? 'previsto'
       : estadoMes(cargosMes);
-    return { mes, anio, cargosMes, previstosMes, total, saldo, pagado, totalPrevisto, factura, pagosMes, estado };
+    return { mes, anio, cargosMes, previstosMes, total, saldo, pagado, totalPrevisto, sinFacturar, factura, pagosMes, estado };
   });
 
   if (mesesAcademicos.length === 0) {
@@ -1864,6 +1870,8 @@ type EstadoMes = ReturnType<typeof estadoMes> | 'previsto';
 type MesRow = {
   mes: number; anio: number; cargosMes: Cargo[]; previstosMes: Previsto[];
   total: number; saldo: number; pagado: number; totalPrevisto: number;
+  /** Lo que se debe del mes y todavía no tiene factura (p. ej. una evaluación). */
+  sinFacturar: number;
   factura: Cargo | null; pagosMes: Pago[];
   estado: EstadoMes;
 };
@@ -2066,9 +2074,15 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           {soloPrevistos || sinFacturaAun ? (
             <span className="text-gray-300">—</span>
           ) : (
-            <span className={clsSaldo(r.saldo, !!r.factura)}>
+            <span className={r.saldo <= 0 && r.sinFacturar > 0 ? 'font-medium text-gray-700' : clsSaldo(r.saldo, !!r.factura)}>
               {fmtDOP(r.saldo)}
             </span>
+          )}
+          {/* Solo cuando el mes YA tiene factura: un mes entero sin facturar
+              sigue en «—» como antes, y su estado ya lo dice la columna de la
+              factura. Lo que se tapaba era lo de AL LADO de una factura. */}
+          {!soloPrevistos && !sinFacturaAun && r.sinFacturar > 0 && (
+            <span className="block text-xs text-amber-700">+ {fmtDOP(r.sinFacturar)} sin facturar</span>
           )}
         </td>
         <td className="sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,17,24,0.18)] px-3 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>

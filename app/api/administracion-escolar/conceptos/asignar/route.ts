@@ -4,6 +4,8 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { devengarPeriodo } from '@/lib/administracion-escolar/devengar';
 import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
+import { otraColegiatura } from '@/lib/administracion-escolar/cargo-desde-tarifa';
+import { hoyRD } from '@/lib/utils/format';
 import {
   adminEscolarCargos, adminEscolarConceptoCuotas, adminEscolarConceptosPago,
   adminEscolarEstudiantes, adminEscolarMatriculas, adminEscolarPeriodos,
@@ -13,15 +15,23 @@ export const maxDuration = 300;
 
 /** Asigna el concepto entero al plan de la matrícula. Sus cuotas siguen el calendario. */
 async function datos(teamId: number, periodoId: number, conceptoId: number, cursoIds: number[]) {
-  const [periodo, concepto, cuotas] = await Promise.all([
+  const [periodo, conceptos, cuotas] = await Promise.all([
     db.select({ id: adminEscolarPeriodos.id }).from(adminEscolarPeriodos)
       .where(and(eq(adminEscolarPeriodos.id, periodoId), eq(adminEscolarPeriodos.teamId, teamId))).limit(1),
-    db.select({ id: adminEscolarConceptosPago.id }).from(adminEscolarConceptosPago)
-      .where(and(eq(adminEscolarConceptosPago.id, conceptoId), eq(adminEscolarConceptosPago.teamId, teamId), eq(adminEscolarConceptosPago.activo, true))).limit(1),
+    // Todos los del colegio y no solo el que se asigna: hace falta saber qué
+    // OTRAS colegiaturas tiene ya cada alumno (`otraColegiatura`).
+    db.select({
+      id: adminEscolarConceptosPago.id,
+      tipo: adminEscolarConceptosPago.tipo,
+      nombre: adminEscolarConceptosPago.nombre,
+      activo: adminEscolarConceptosPago.activo,
+    }).from(adminEscolarConceptosPago)
+      .where(eq(adminEscolarConceptosPago.teamId, teamId)),
     db.select({ id: adminEscolarConceptoCuotas.id }).from(adminEscolarConceptoCuotas)
       .where(and(eq(adminEscolarConceptoCuotas.teamId, teamId), eq(adminEscolarConceptoCuotas.periodoId, periodoId), eq(adminEscolarConceptoCuotas.conceptoId, conceptoId), eq(adminEscolarConceptoCuotas.activo, true))),
   ]);
-  if (!periodo[0] || !concepto[0]) return null;
+  const concepto = conceptos.find((c) => c.id === conceptoId && c.activo);
+  if (!periodo[0] || !concepto) return null;
   const matriculas = await db.select({
     id: adminEscolarMatriculas.id,
     estudianteId: adminEscolarMatriculas.estudianteId,
@@ -40,7 +50,7 @@ async function datos(teamId: number, periodoId: number, conceptoId: number, curs
       eq(adminEscolarMatriculas.estado, 'activa'),
       inArray(adminEscolarMatriculas.cursoId, cursoIds),
     ));
-  return { matriculas, cuotas };
+  return { matriculas, cuotas, concepto, conceptos: new Map(conceptos.map((c) => [c.id, c])) };
 }
 
 function parametros(body: Record<string, unknown>) {
@@ -72,7 +82,7 @@ export async function POST(req: NextRequest) {
   const ids = datosActuales.matriculas.map((m) => m.id);
   const cargos = ids.length ? await db.select({
     matriculaId: adminEscolarCargos.matriculaId, conceptoId: adminEscolarCargos.conceptoId,
-    cuotaId: adminEscolarCargos.cuotaId,
+    cuotaId: adminEscolarCargos.cuotaId, mes: adminEscolarCargos.mes,
   }).from(adminEscolarCargos).where(and(
     eq(adminEscolarCargos.teamId, auth.teamId),
     inArray(adminEscolarCargos.matriculaId, ids),
@@ -81,15 +91,31 @@ export async function POST(req: NextRequest) {
   const legados = new Map<number, Set<number>>();
   const cuotasDelConcepto = new Set(datosActuales.cuotas.map((c) => c.id));
   const asociadosLegados = new Set<number>();
+  /*
+   * Un cargo de este concepto puesto a mano sin mes (un cobro suelto, de los
+   * de «Cargo a varios alumnos») no lo reconoce el devengo: ni tiene cuota ni
+   * cae en el mes de ninguna. Asignar el concepto encima le crearía todas las
+   * cuotas además de ese cargo. Esos alumnos no se pueden marcar.
+   */
+  const conCargoSuelto = new Set<number>();
   for (const c of cargos) {
     if (!c.matriculaId || !c.conceptoId) continue;
     if (!legados.has(c.matriculaId)) legados.set(c.matriculaId, new Set());
     legados.get(c.matriculaId)!.add(c.conceptoId);
-    if (c.conceptoId === p.conceptoId &&
-      (cuotasDelConcepto.size === 0 || (c.cuotaId != null && cuotasDelConcepto.has(c.cuotaId)))) {
+    if (c.conceptoId !== p.conceptoId) continue;
+    if (cuotasDelConcepto.size === 0 || (c.cuotaId != null && cuotasDelConcepto.has(c.cuotaId))) {
       asociadosLegados.add(c.matriculaId);
     }
+    if (cuotasDelConcepto.size > 0 && c.cuotaId == null && c.mes == null) {
+      conCargoSuelto.add(c.matriculaId);
+    }
   }
+  /** Los conceptos que el plan del alumno ya cobra, con el mismo respaldo que el devengo. */
+  const delPlan = (m: { id: number; conceptosIds: number[] | null }) => {
+    const propios = m.conceptosIds ?? [];
+    const ids = propios.length > 0 ? propios : [...(legados.get(m.id) ?? [])];
+    return ids.map((id) => datosActuales.conceptos.get(id)).filter((c) => c != null);
+  };
   const detalles = datosActuales.matriculas.map((m) => ({
     estudianteId: m.estudianteId,
     matriculaId: m.id,
@@ -97,7 +123,10 @@ export async function POST(req: NextRequest) {
     codigo: m.codigo,
     resultado: ((m.conceptosIds ?? []).includes(p.conceptoId)
       || ((m.conceptosIds ?? []).length === 0 && asociadosLegados.has(m.id))
-      ? 'duplicado' : sinTarifa.has(m.id) ? 'sin-tarifa' : 'crear') as 'duplicado' | 'sin-tarifa' | 'crear',
+      ? 'duplicado'
+      : conCargoSuelto.has(m.id) ? 'cargo-suelto'
+      : sinTarifa.has(m.id) ? 'sin-tarifa' : 'crear') as 'duplicado' | 'cargo-suelto' | 'sin-tarifa' | 'crear',
+    otraColegiatura: otraColegiatura(datosActuales.concepto, delPlan(m)),
   })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   if (revisar) return NextResponse.json({ detalles });
 
@@ -133,8 +162,9 @@ export async function POST(req: NextRequest) {
   // Las cuotas con fecha ya alcanzada aparecen como cargo al confirmar; las
   // futuras quedan previstas hasta que el cron diario llegue a su fecha.
   try {
-    const devengo = await devengarPeriodo(auth.teamId, p.periodoId,
-      new Date().toISOString().slice(0, 10), false, {
+    // Fecha de RD, no UTC: entre las 20:00 y las 24:00 la UTC ya es mañana y
+    // crearía hoy la cuota que se emite mañana.
+    const devengo = await devengarPeriodo(auth.teamId, p.periodoId, hoyRD(), false, {
         soloMatriculas: datosActuales.matriculas.filter((m) => elegidos.has(m.estudianteId)).map((m) => m.id),
         soloConceptos: [p.conceptoId],
       });
