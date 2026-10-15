@@ -12,7 +12,7 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Receipt, ArrowUpRight } from 'lucide-react';
+import { Receipt, ArrowUpRight, Printer, Download, FileText } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Table from '@mui/material/Table';
@@ -23,43 +23,43 @@ import TableCell from '@mui/material/TableCell';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
-import { rangoDelMes } from '@/lib/nomina/periodos';
-import { listarCompras, listarGastosEcf, resumenGastos } from '@/lib/compras/consultas';
-import { analizarNcf } from '@/lib/compras/fiscal';
+import { resumenGastos, categoriasDeGastos } from '@/lib/compras/consultas';
+import { cargarFilasGastos, METODO_LABEL, type FilaGasto as Fila } from '@/lib/compras/lista-gastos';
+import { leerFiltroGastos, filtroGastosAParams, hayFiltro, mesDelRango } from '@/lib/compras/filtro-gastos';
 import { NuevoGasto } from './_nuevo-gasto';
-import { SelectorMes } from './_selector-mes';
+import { FiltrosGastos } from './_filtros';
 import { EnlaceFotos } from './_enlace-fotos';
 import { SubirComprobante } from '@/components/compras/subir-comprobante';
 import { BandejaCapturas } from './_bandeja-capturas';
 import { PaginadorGastos } from './_paginador';
-import { compararGastos, paginaDe } from '@/lib/compras/orden-gastos';
+import { paginaDe } from '@/lib/compras/orden-gastos';
 import { listarCapturas } from '@/lib/compras/captura/consultas';
 
-const METODO_LABEL: Record<string, string> = {
-  efectivo: 'efectivo', transferencia: 'transferencia', tarjeta: 'tarjeta',
-  cheque: 'cheque', deposito: 'depósito', otro: 'otro método',
-};
-
-interface Fila {
-  key: string;
-  /** De qué tabla sale y con qué id: con eso se ordena igual que la consulta. */
-  fuente: 'r' | 'e';
-  id: number;
-  fecha: string;
-  proveedor: string;
-  rnc: string | null;
-  comprobante: string | null;
-  tipo: string;
-  categoria: string;
-  href: string;
-  anulado: boolean;
-  borrador: boolean;
-  pagado: boolean;
-  saldoCents: number;
-  metodo: string | null;
-  cuenta: string | null;
-  retencionesCents: number;
-  montoCents: number;
+/**
+ * Imprimir, PDF y Excel de lo que está filtrado (todo, no solo la página).
+ * Mismos botones que los reportes de Ingresos. «Imprimir» abre el PDF en el
+ * visor del navegador, que ya trae su botón de imprimir.
+ */
+function BotonesExportar({ filtro }: { filtro: string }) {
+  const base = `/api/gastos/export?${filtro ? `${filtro}&` : ''}`;
+  const sx = {
+    display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.5, height: 36, borderRadius: '8px',
+    fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap',
+    border: '1px solid #d1d5db', color: '#374151', bgcolor: '#fff', '&:hover': { bgcolor: '#f9fafb' },
+  } as const;
+  return (
+    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }} data-testid="exportar-gastos">
+      <Box component="a" href={`${base}formato=pdf&inline=1`} target="_blank" rel="noopener" sx={sx}>
+        <Printer size={15} /> Imprimir
+      </Box>
+      <Box component="a" href={`${base}formato=pdf`} sx={sx}>
+        <FileText size={15} /> PDF
+      </Box>
+      <Box component="a" href={`${base}formato=xlsx`} sx={sx}>
+        <Download size={15} /> Excel
+      </Box>
+    </Box>
+  );
 }
 
 function Chip({ label, bg, color, icon }: { label: string; bg: string; color: string; icon?: ReactNode }) {
@@ -105,56 +105,32 @@ function Tarjeta({ titulo, valor, sub, destacado }: { titulo: string; valor: str
 /** Cuántos gastos por página. Lo bastante para una pantalla, no para la base. */
 const POR_PAGINA = 50;
 
-export default async function GastosPage({ searchParams }: { searchParams: Promise<{ mes?: string; p?: string }> }) {
+export default async function GastosPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requirePermission('facturas:ver');
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/dashboard');
 
   const hoy = hoyRD();
   const sp = await searchParams;
-  // Sin `mes` se enseñan todos. Antes el mes actual era el valor por defecto y
+  // Sin fechas se enseñan todos. Antes el mes actual era el valor por defecto y
   // un gasto de otro mes no aparecía, como si no se hubiera guardado.
-  const mes = sp.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.mes) ? sp.mes : null;
-  const rango = mes ? rangoDelMes(mes) : null;
-  const inicio = rango?.inicio;
-  const fin = rango?.fin;
-  const pagina = Math.max(1, Number(sp.p) || 1);
+  const filtro = leerFiltroGastos(sp);
+  const filtroQs = filtroGastosAParams(filtro).toString();
+  const filtrando = hayFiltro(filtro);
+  const soloMes = Boolean(mesDelRango(filtro)) && !filtro.q && !filtro.categoria && !filtro.tipo && !filtro.estado;
+  const pagina = Math.max(1, Number(Array.isArray(sp.p) ? sp.p[0] : sp.p) || 1);
 
   // De cada fuente se piden solo las filas que hacen falta para llegar al final
-  // de esta página. Se juntan y se ordenan aquí porque son dos tablas
-  // distintas; pedir el rango entero para enseñar cincuenta filas era lo que
-  // había que evitar.
+  // de esta página. Se juntan y se ordenan en `cargarFilasGastos` porque son dos
+  // tablas distintas; pedir el rango entero para enseñar cincuenta filas era lo
+  // que había que evitar.
   const hastaFila = pagina * POR_PAGINA;
-  const [registrados, emitidos, porRevisar, resumen] = await Promise.all([
-    listarCompras(teamId, { clase: 'gasto', desde: inicio, hasta: fin, limit: hastaFila }),
-    listarGastosEcf(teamId, inicio, fin, hastaFila),
+  const [filas, porRevisar, resumen, categorias] = await Promise.all([
+    cargarFilasGastos(teamId, filtro, hastaFila),
     listarCapturas(teamId, ['procesando', 'por_revisar']),
-    resumenGastos(teamId, { desde: inicio, hasta: fin }),
+    resumenGastos(teamId, filtro),
+    categoriasDeGastos(teamId),
   ]);
-
-  const filas: Fila[] = [
-    ...registrados.map((g): Fila => {
-      const info = analizarNcf(g.ncf);
-      return {
-        key: `r${g.id}`, fuente: 'r', id: g.id, fecha: g.fecha, proveedor: g.proveedorNombre ?? 'Sin proveedor', rnc: g.proveedorRnc,
-        // Sin NCF se dice, no se deja un guion: es un gasto sin comprobante fiscal.
-        comprobante: info.sinNcf ? 'Sin NCF' : g.ncf,
-        tipo: info.valido ? `${info.nombre}` : info.sinNcf ? 'No va al 606' : 'Comprobante', categoria: g.categoriaLabel ?? '—',
-        href: `/dashboard/compras/local/${g.id}`, anulado: g.estado === 'anulada', borrador: false,
-        pagado: g.saldoCents === 0, saldoCents: g.saldoCents, metodo: g.formaPago === 'contado' ? g.metodoPago : null, cuenta: null,
-        retencionesCents: g.retencionesCents, montoCents: g.montoTotal,
-      };
-    }),
-    ...emitidos.map((g): Fila => ({
-      key: `e${g.id}`, fuente: 'e', id: g.id, fecha: g.fecha, proveedor: g.proveedor || 'Sin proveedor', rnc: g.rncProveedor,
-      comprobante: g.encf && !g.encf.startsWith('BOR') ? g.encf : g.ncfProveedor,
-      tipo: g.tipoEcf === '47' ? 'Pago al exterior (e47)' : 'Gasto menor (e43)', categoria: g.categoriaGasto || '—',
-      href: g.estado === 'BORRADOR' ? `/dashboard/facturas/${g.id}/editar` : `/dashboard/facturas/${g.id}`,
-      anulado: g.estado === 'ANULADO' || g.estado === 'RECHAZADO', borrador: g.estado === 'BORRADOR',
-      pagado: g.saldoCents === 0, saldoCents: g.saldoCents,
-      metodo: g.pagoMetodo, cuenta: g.pagoCuenta, retencionesCents: g.totalRetenciones, montoCents: g.montoTotal,
-    })),
-  ].sort(compararGastos);
 
   // Lo que toca a esta página, ya mezcladas las dos fuentes.
   const pagadas = paginaDe(filas, pagina, POR_PAGINA);
@@ -175,7 +151,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <SelectorMes mes={mes} hoy={hoy} />
+          <BotonesExportar filtro={filtroQs} />
           <EnlaceFotos />
           <SubirComprobante />
           <NuevoGasto />
@@ -185,7 +161,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       <BandejaCapturas inicial={porRevisar} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }} data-testid="resumen-gastos">
-        <Tarjeta titulo={mes ? 'Gastado en el mes' : 'Gastado en total'} valor={fmtDOP(total)}
+        <Tarjeta titulo={!filtrando ? 'Gastado en total' : soloMes ? 'Gastado en el mes' : 'Gastado (filtrado)'} valor={fmtDOP(total)}
           sub={`${vivas} gasto${vivas === 1 ? '' : 's'}`} destacado />
         <Tarjeta titulo="ITBIS por adelantar" valor={fmtDOP(adelantar)} sub="De facturas con crédito fiscal" />
         <Tarjeta titulo="Retenciones" valor={fmtDOP(retenciones)} sub="A pagar a la DGII" />
@@ -211,10 +187,11 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
       )}
 
       <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', bgcolor: '#fff' }}>
+        <FiltrosGastos filtro={filtro} categorias={categorias} hoy={hoy} />
         {pagadas.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 6, color: '#9ca3af' }}>
             <Receipt size={28} />
-            <Typography sx={{ fontSize: '0.875rem' }}>{mes ? 'No hay gastos en este mes' : 'Todavía no hay gastos'}</Typography>
+            <Typography sx={{ fontSize: '0.875rem' }}>{filtrando ? 'Ningún gasto coincide con los filtros' : 'Todavía no hay gastos'}</Typography>
           </Box>
         ) : (
           <Box sx={{ overflowX: 'auto' }}>
@@ -258,7 +235,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
             </Table>
           </Box>
         )}
-        <PaginadorGastos pagina={pagina} paginas={paginas} total={cantidad} porPagina={POR_PAGINA} mes={mes} />
+        <PaginadorGastos pagina={pagina} paginas={paginas} total={cantidad} porPagina={POR_PAGINA} filtro={filtroQs} />
       </Box>
     </Box>
   );
