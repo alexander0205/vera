@@ -374,3 +374,52 @@ describe('5.6 alertas al abrir el panel', () => {
     for (const ruta of rutas) expect(rutaEsReal(ruta), ruta).toBe(true);
   });
 });
+
+// ── 5.7 Resumen de la semana ──
+describe('5.7 resumen de la semana', () => {
+  const DATOS = {
+    resumen_ventas: { ventasNetas: 120000, facturas: 14 },
+    pagos_recibidos: { cantidad: 9, totalCobrado: 80000, pagos: [] },
+    resumen_gastos: { gastos: 5, totalGastado: 30000 },
+    ventas_por_cliente: { clientes: [{ cliente: 'Ana', ventas: 50000, facturas: 4 }, { cliente: 'Luis', ventas: 30000, facturas: 2 }] },
+    tendencia_ventas: { puntos: [{ periodo: '2026-10-12', ventas: 40000 }, { periodo: '2026-10-13', ventas: 80000 }] },
+    cuentas_por_cobrar: { totalPorCobrar: 90000, vencido0a30: 20000, vencido31a60: 0, vencido61a90: 0, vencidoMasDe90: 5000 },
+  };
+
+  it.each(['resumen de la semana', 'como me fue la semana', 'como va la semana', 'resumen semanal'])('«%s»', async (p) => {
+    const { tools } = herramientas(DATOS);
+    const r = await responderLocal(p, tools, { hoy: HOY });
+    expect(r?.intencion).toBe('resumen-semana');
+  });
+
+  it('junta ventas, cobros, gastos, gráfico por día, mejores clientes y vencido', async () => {
+    const { tools } = herramientas(DATOS);
+    const r = (await responderLocal('resumen de la semana', tools, { hoy: HOY }))!.respuesta;
+    expect(r).toContain('esta semana');
+    expect(r).toContain('Ventas: **RD$ 120,000.00** en 14 facturas');
+    expect(r).toContain('Cobrado: **RD$ 80,000.00** en 9 pagos');
+    expect(r).toContain('Gastos: **RD$ 30,000.00**');
+    expect(r).toContain('```grafico');
+    expect(r).toContain('lun 12/10');
+    expect(r).toContain('| Ana | RD$ 50,000.00 | 4 |');
+    expect(r).toContain('**RD$ 25,000.00** vencido');
+  });
+
+  it('«la semana pasada» pide la semana completa anterior y la compara con la previa', async () => {
+    const pedidos: Record<string, unknown>[] = [];
+    const reales = crearHerramientas(contextoDePrueba(1), []) as Record<string, { inputSchema?: unknown }>;
+    const tools = Object.fromEntries(Object.keys(reales).map((nombre) => [nombre, {
+      inputSchema: reales[nombre].inputSchema,
+      execute: async (i: Record<string, unknown>) => { if (nombre === 'resumen_ventas') pedidos.push(i); return nombre === 'resumen_ventas' ? { ventasNetas: i.desde === '2026-10-05' ? 120000 : 100000, facturas: 5 } : {}; },
+    }]));
+    const r = await responderLocal('resumen de la semana pasada', tools as never, { hoy: HOY });
+    expect(pedidos).toEqual([{ desde: '2026-10-05', hasta: '2026-10-11' }, { desde: '2026-09-28', hasta: '2026-10-04' }]);
+    expect(r?.respuesta).toContain('+20% frente a la semana anterior');
+  });
+
+  it('no inventa: sin datos de ninguna consulta, cae a la IA', async () => {
+    const { tools } = herramientas({});
+    const r = await responderLocal('resumen de la semana', tools, { hoy: HOY });
+    expect(r === null || /Ventas: no hubo|Resumen/.test(r.respuesta)).toBe(true);
+  });
+});

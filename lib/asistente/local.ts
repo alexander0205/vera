@@ -703,6 +703,69 @@ async function compararPeriodos(tools: ToolSet, t: string, hoy: string): Promise
   });
 }
 
+// ── Resumen de la semana ──────────────────────────────────────────
+
+const RESUMEN_SEMANA = /\b(resumen (de la|de esta|de la ultima|de lo de la|semanal)(?: semana)?|como (me )?(fue|va|ha ido|anduvo) la semana|balance (de|de la) semana|semana en resumen|resumen semanal|como (estuvo|esta) la semana)\b/;
+
+async function resumenSemanal(tools: ToolSet, t: string, hoy: string): Promise<string | null> {
+  const pasada = /\b(pasada|anterior|ultima)\b/.test(t);
+  const p = interpretarPeriodo(pasada ? 'semana pasada' : 'esta semana', hoy);
+  if (!p) return null;
+  // La semana anterior a la que se mira, del mismo largo.
+  const dias = Math.round((Date.parse(p.hasta) - Date.parse(p.desde)) / 86_400_000) + 1;
+  const previa = { desde: sumarDias(p.desde, -7), hasta: sumarDias(p.desde, -7 + dias - 1) };
+
+  const [ventas, anterior, cobros, gastos, clientes, dias_, cartera] = await Promise.all([
+    tools.resumen_ventas ? intentar(tools, 'resumen_ventas', { desde: p.desde, hasta: p.hasta }) : null,
+    tools.resumen_ventas ? intentar(tools, 'resumen_ventas', previa) : null,
+    tools.pagos_recibidos ? intentar(tools, 'pagos_recibidos', { desde: p.desde, hasta: p.hasta, limite: 1 }) : null,
+    tools.resumen_gastos ? intentar(tools, 'resumen_gastos', { desde: p.desde, hasta: p.hasta }) : null,
+    tools.ventas_por_cliente ? intentar(tools, 'ventas_por_cliente', { desde: p.desde, hasta: p.hasta, limite: 3 }) : null,
+    tools.tendencia_ventas ? intentar(tools, 'tendencia_ventas', { desde: p.desde, hasta: p.hasta, agrupar: 'dia' }) : null,
+    tools.cuentas_por_cobrar ? intentar(tools, 'cuentas_por_cobrar', { soloVencidas: true, limite: 3 }) : null,
+  ]);
+  if (![ventas, cobros, gastos, clientes, cartera].some(Boolean)) return null;
+
+  const L: string[] = [`**Resumen de ${pasada ? 'la semana pasada' : 'esta semana'}**, del ${fechaLarga(p.desde)} al ${fechaLarga(p.hasta)}`, ''];
+
+  if (ventas) {
+    const v = n(ventas.ventasNetas);
+    let cmp = '';
+    if (anterior && n(anterior.ventasNetas) > 0 && dias === 7) {
+      const pct = Math.round(((v - n(anterior.ventasNetas)) / n(anterior.ventasNetas)) * 1000) / 10;
+      cmp = ` — ${pct >= 0 ? '+' : '−'}${Math.abs(pct)}% frente a la semana anterior (${rd(n(anterior.ventasNetas))})`;
+    }
+    L.push(n(ventas.facturas)
+      ? `- Ventas: **${rd(v)}** en ${n(ventas.facturas)} factura${n(ventas.facturas) === 1 ? '' : 's'}${cmp}`
+      : '- Ventas: no hubo facturas emitidas');
+  }
+  if (cobros) L.push(n(cobros.cantidad) ? `- Cobrado: **${rd(n(cobros.totalCobrado))}** en ${n(cobros.cantidad)} pago${n(cobros.cantidad) === 1 ? '' : 's'}` : '- Cobrado: no se registraron pagos');
+  if (gastos) L.push(n(gastos.gastos) ? `- Gastos: **${rd(n(gastos.totalGastado))}** en ${n(gastos.gastos)} registro${n(gastos.gastos) === 1 ? '' : 's'}` : '- Gastos: no se registraron');
+
+  const pts = ((dias_?.puntos as Fila[] | undefined) ?? []).map((x) => ({ etiqueta: etiquetaDia(String(x.periodo)), valor: n(x.ventas) }));
+  const grafico = textoGrafico('Ventas por día', 'RD$', pts);
+  if (grafico) L.push('', grafico);
+
+  const top = (clientes?.clientes as Fila[] | undefined) ?? [];
+  if (top.length) {
+    L.push('', '**Quienes más compraron**', '', tabla(['Cliente', 'Ventas', 'Facturas'], top.map((x) => [String(x.cliente), rd(n(x.ventas)), n(x.facturas)])));
+  }
+
+  if (cartera && n(cartera.totalPorCobrar)) {
+    const venc = n(cartera.vencido0a30) + n(cartera.vencido31a60) + n(cartera.vencido61a90) + n(cartera.vencidoMasDe90);
+    if (venc) L.push('', `Pendiente: tienes **${rd(venc)}** vencido por cobrar (de ${rd(n(cartera.totalPorCobrar))} en total). Pregúntame «¿quién me debe?» para el detalle.`);
+  }
+  return L.join('\n');
+}
+
+const DIAS_SEMANA = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+function etiquetaDia(ymd: string): string {
+  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return ymd;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return `${DIAS_SEMANA[d.getUTCDay()]} ${m[3]}/${m[2]}`;
+}
+
 // ── Resumen del día ───────────────────────────────────────────────
 
 const RESUMEN_DIA = /\b(resumen (del|de|para) (dia|hoy)|resumen de hoy|como va (el|mi) dia|como (va|vamos|amanecio|esta|estamos) (el )?(negocio|hoy|hoy dia)|que paso hoy|que (hay|tengo|queda) (pendiente )?(para )?hoy|panorama (de hoy|del dia)|como (va|anda) todo)\b/;
@@ -989,6 +1052,12 @@ export async function responderLocal(
   if (DISPARA_COMPARACION.test(t)) {
     const c = await compararPeriodos(tools, t, opts.hoy ?? hoyRd());
     if (c) return { intencion: 'comparativo', respuesta: c };
+  }
+
+  // «Resumen de la semana»: ventas, cobros, gastos, mejores clientes y lo vencido.
+  if (RESUMEN_SEMANA.test(t)) {
+    const r = await resumenSemanal(tools, t, opts.hoy ?? hoyRd());
+    if (r) return { intencion: 'resumen-semana', respuesta: r };
   }
 
   // «Resumen de hoy»: varias consultas juntas, cada una opcional.
