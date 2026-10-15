@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import {
-  armarPayload, endpointDe, esNota, guardarLineas, leerLineas, lineaVacia, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
+  armarPayload, endpointDe, esNota, guardarLineas, leerLineas, lineaVacia, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
   resumenDeAnulacion, resumenDeNota, totalesDeLineas, validarFormulario,
   type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
@@ -154,14 +154,14 @@ function SelectorCliente({ id, valores, poner, deshabilitado }: {
   );
 }
 
-function SelectorFactura({ id, valores, poner, deshabilitado }: {
-  id: string; valores: Valores; poner: (p: Valores) => void; deshabilitado: boolean;
+function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores }: {
+  id: string; valores: Valores; poner: (p: Valores) => void; deshabilitado: boolean; soloBorradores?: boolean;
 }) {
   const [texto, setTexto] = useState(valores.documentoNombre ?? '');
   const [abierto, setAbierto] = useState(false);
   const elegido = Boolean(valores.documentoId);
   const { items, cargando } = useBusqueda<FacturaApi>(
-    (q) => `/api/facturas?search=${encodeURIComponent(q)}&limit=8`,
+    (q) => `/api/facturas?search=${encodeURIComponent(q)}&limit=8${soloBorradores ? '&estado=BORRADOR' : ''}`,
     (d) => ((d as { docs?: FacturaApi[] }).docs ?? []),
     texto, abierto && !elegido,
   );
@@ -366,6 +366,22 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     return () => ac.abort();
   }, [def.id, documentoElegido]);
 
+  // Editar borrador: al elegirlo se traen sus datos (y se guardan aparte los que no se editan).
+  useEffect(() => {
+    if (def.id !== 'borrador' || !documentoElegido) return;
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const r = await fetch(`/api/facturas/${encodeURIComponent(documentoElegido)}`, { signal: ac.signal, cache: 'no-store' });
+        const d = await r.json().catch(() => null);
+        const p = r.ok ? prefillDeBorrador(d) : { valores: { tipoEcf: '', documentoError: 'No pude leer ese borrador.', conservado: '', documentoTotal: '' }, error: 'No pude leer ese borrador.' };
+        setValores((x) => ({ ...x, ...p.valores }));
+        setErrores((e) => (p.error ? { ...e, documento: p.error } : (({ documento: _d, ...resto }) => resto)(e)));
+      } catch { /* cancelado */ }
+    })();
+    return () => ac.abort();
+  }, [def.id, documentoElegido]);
+
   const ocupado = fase.t === 'enviando';
   const esArchivo = def.modo !== 'json';
   const campoArchivo = def.campos.find((c) => c.tipo === 'archivo');
@@ -395,7 +411,9 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     if (!destino) { setErrores({ documento: 'Elige la factura de la lista' }); setFase({ t: 'editando' }); return; }
     setFase({ t: 'enviando' });
     try {
-      const cuerpo = { ...armarPayload(def, valores, modo), ...(opts.forzar ? { force: true } : {}) };
+      // Emitir un borrador existente son dos pasos: guardar los cambios y enviarlo a la DGII.
+      const emitirBorrador = def.id === 'borrador' && modo === 'emitir';
+      const cuerpo = { ...armarPayload(def, valores, emitirBorrador ? 'borrador' : modo), ...(opts.forzar ? { force: true } : {}) };
       const r = await fetch(destino, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
       });
@@ -414,6 +432,27 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
         });
         return;
       }
+      if (emitirBorrador) {
+        const id = Number(valores.documentoId);
+        const r2 = await fetch(`/api/facturas/${id}/emitir-ecf`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ tipoEcf: valores.tipoEcf }),
+        });
+        const d2 = await r2.json().catch(() => null);
+        if (!r2.ok) {
+          const caja = typeof d2?.code === 'string' && d2.code.startsWith('CAJA_');
+          const faltan = Array.isArray(d2?.errores) ? d2.errores.map((x: { mensaje?: string }) => x.mensaje).filter(Boolean).slice(0, 3).join(' · ') : '';
+          setFase({
+            t: 'error',
+            mensaje: `Guardé los cambios, pero no se pudo emitir: ${faltan || mensajeDeError(r2.status, d2)}`,
+            enlace: caja ? '/dashboard/caja' : `/dashboard/facturas/${id}`,
+            enlaceTexto: caja ? 'Abrir la caja' : 'Abrir en Zero',
+          });
+          return;
+        }
+        terminar(resultadoDeCreacion(def, { documentoId: id, encf: d2?.encf, estado: d2?.estado }, 'emitir'));
+        return;
+      }
       terminar(resultadoDeCreacion(def, d, modo));
     } catch {
       setFase({ t: 'error', mensaje: 'No hay conexión. No se guardó nada; revisa tu internet e intenta de nuevo.' });
@@ -425,7 +464,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     setErrores(e);
     if (Object.keys(e).length) return;
     if (def.id === 'factura' && valores.tipoEcf === 'sin-ncf') { setErrores({ tipoEcf: 'Sin comprobante fiscal solo se guarda como borrador. Elige consumo o crédito fiscal para emitir.' }); return; }
-    setFase({ t: 'confirmar', texto: def.id === 'notacredito' ? resumenDeNota(valores) : def.id === 'notadebito' ? resumenDeNota(valores, 'debito') : resumenDeEmision(valores), accion: 'emitir' });
+    setFase({ t: 'confirmar', texto: def.id === 'borrador' ? resumenDeEmision(valores) : def.id === 'notacredito' ? resumenDeNota(valores) : def.id === 'notadebito' ? resumenDeNota(valores, 'debito') : resumenDeEmision(valores), accion: 'emitir' });
   }
 
   function pedirAnulacion() {
@@ -529,7 +568,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     } else if (c.tipo === 'cliente') {
       control = <SelectorCliente id={id} valores={valores} poner={poner} deshabilitado={ocupado} />;
     } else if (c.tipo === 'documento') {
-      control = <SelectorFactura id={id} valores={valores} poner={poner} deshabilitado={ocupado} />;
+      control = <SelectorFactura id={id} valores={valores} poner={poner} deshabilitado={ocupado} soloBorradores={def.id === 'borrador'} />;
     } else if (c.tipo === 'lineas') {
       control = <EditorLineas id={id} valor={valores[c.id] ?? ''} cambiar={(v) => poner({ [c.id]: v })} deshabilitado={ocupado} />;
     } else {
@@ -558,7 +597,8 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
   }
 
   const puedeEmitir = (def.id === 'factura' && valores.tipoEcf !== 'sin-ncf' && Boolean(valores.tipoEcf))
-    || (esNota(def.id) && Boolean(valores.ncfModificado));
+    || (esNota(def.id) && Boolean(valores.ncfModificado))
+    || (def.id === 'borrador' && ['31', '32', '44', '45', '46'].includes(valores.tipoEcf ?? ''));
 
   return (
     <section className={s.formulario} aria-label={def.titulo}>
@@ -603,6 +643,10 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
         )}
 
         {def.campos.filter((c) => c.tipo !== 'archivo').map(renderCampo)}
+
+        {def.id === 'borrador' && valores.cobrosConservados && (
+          <p className={s.campoAyuda}>Este borrador tiene {valores.cobrosConservados} cobro(s) registrado(s): se conservan al guardar.</p>
+        )}
 
         {fase.t === 'previa' && (
           <div className={s.previa} role="status">
@@ -660,7 +704,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
             )}
             {puedeEmitir && (
               <button type="button" className={s.secundario} disabled={ocupado} onClick={pedirEmision}>
-                {esNota(def.id) ? 'Emitir la nota…' : 'Emitir a la DGII…'}
+                {esNota(def.id) ? 'Emitir la nota…' : def.id === 'borrador' ? 'Guardar y emitir…' : 'Emitir a la DGII…'}
               </button>
             )}
             {fase.t === 'previa' ? (

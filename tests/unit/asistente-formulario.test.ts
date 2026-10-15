@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   armarPayload, bloqueFormulario, defFormulario, detectarFormulario, endpointDe, FORMULARIOS, guardarLineas, leerLineas,
-  limpiarValor, parsearFormulario, prefillDeNota, resultadoDeCreacion, resumenDeAnulacion, resumenDeEmision, resumenDeNota, totalesDeLineas, validarFormulario,
+  limpiarValor, parsearFormulario, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeAnulacion, resumenDeEmision, resumenDeNota, totalesDeLineas, validarFormulario,
 } from '@/lib/asistente/formulario';
 import { calcularTotales } from '@/lib/ecf/types';
 import { aBloques } from '@/lib/asistente/bloques';
@@ -445,5 +445,78 @@ describe('nota de débito', () => {
   it('la nota de crédito sigue copiando líneas y con tope', () => {
     expect(prefillDeNota(padre).valores).toHaveProperty('lineas');
     expect(FORMULARIOS.notacredito.campos.find((c) => c.id === 'lineas')?.etiqueta).toBe('Lo que acreditas');
+  });
+});
+
+describe('editar un borrador', () => {
+  const def = FORMULARIOS.borrador;
+  const api = {
+    id: 4001, estado: 'BORRADOR', tipoEcf: '32', encf: 'BOR-32-ABC',
+    montos: { montoTotalDOP: '1180.00' },
+    comprador: { clienteId: 7, razonSocial: 'Ana Pérez', rnc: null, email: 'ana@x.com' },
+    notas: 'Entregar el lunes', terminosCondiciones: 'Pago a 30 días', pieFactura: null, comentario: 'interno',
+    retencionesList: [{ id: 'r1', nombre: 'ISR 10%', porcentaje: 10, tipo: 'isr', monto: 100 }],
+    tipoPago: 1, fechaLimitePago: null, almacenId: 3, vendedorId: 9, listaPreciosId: 2, tipoOrden: null,
+    pago: { fecha: '2026-10-10', lineas: [{ metodo: 'efectivo', valor: '500.00' }] },
+    lineas: [
+      { productoId: 4, nombreItem: 'Uniforme', cantidadItem: 1, precioUnitarioItem: 1000, tasaItbis: 0.18, indicadorBienoServicio: 1, variantId: 22, cuotaClave: '5:1:10:2026', dependienteId: 12, dependienteNombre: 'Luis', descuentoMonto: 50 },
+    ],
+  };
+
+  it('reconoce el pedido y no confunde preguntas ni facturas emitidas', () => {
+    expect(detectarFormulario('editar un borrador')?.id).toBe('borrador');
+    expect(detectarFormulario('quiero modificar el borrador')?.id).toBe('borrador');
+    expect(detectarFormulario('retomar un borrador de factura')?.id).toBe('borrador');
+    expect(detectarFormulario('cuántos borradores tengo')).toBeNull();
+    expect(detectarFormulario('cómo edito un borrador')).toBeNull();
+    expect(detectarFormulario('edita la factura E320000000001')).toBeNull();
+  });
+
+  it('solo se editan borradores de factura', () => {
+    expect(prefillDeBorrador({ ...api, estado: 'ACEPTADO' }).error).toMatch(/ya no lo es/);
+    expect(prefillDeBorrador({ ...api, tipoEcf: '34' }).error).toMatch(/pantalla/);
+    expect(prefillDeBorrador({}).error).toMatch(/No pude leer/);
+    expect(prefillDeBorrador(api).error).toBeNull();
+  });
+
+  it('conserva lo que el formulario no edita: variante, cuota, beneficiario, retenciones, almacén y cobros', () => {
+    const p = prefillDeBorrador(api);
+    const l = leerLineas(p.valores.lineas)[0];
+    expect(l).toMatchObject({ nombre: 'Uniforme', productoId: 4, dependienteId: 12, extra: { variantId: 22, cuotaClave: '5:1:10:2026', descuentoMonto: 50 } });
+    const v = { ...p.valores, documentoId: '4001' };
+    expect(validarFormulario(def, v)).toEqual({});
+    const body = armarPayload(def, v, 'borrador') as Record<string, unknown>;
+    expect(body).toMatchObject({
+      modo: 'borrador', borradorId: 4001, tipoEcf: '32', clientId: 7, notas: 'Entregar el lunes',
+      terminosCondiciones: 'Pago a 30 días', comentario: 'interno', almacenId: 3, vendedorId: 9, listaPreciosId: 2,
+      pagoRecibido: true, pagos: [{ metodo: 'efectivo', valor: 500 }], pagoFecha: '2026-10-10',
+    });
+    expect((body.retenciones as unknown[])).toHaveLength(1);
+    expect((body.items as Record<string, unknown>[])[0]).toMatchObject({ productoId: 4, variantId: 22, cuotaClave: '5:1:10:2026', dependienteId: 12, descuentoMonto: 50 });
+  });
+
+  it('un borrador sin cobros no manda pagos (y sin conservar nada raro)', () => {
+    const p = prefillDeBorrador({ ...api, pago: { lineas: [] }, retencionesList: [] });
+    const body = armarPayload(def, { ...p.valores, documentoId: '4001' }) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('pagos');
+    expect(body).not.toHaveProperty('pagoRecibido');
+  });
+
+  it('lo conservado se filtra: claves desconocidas y tipos raros no pasan', () => {
+    const v = { documentoId: '4001', tipoEcf: '32', lineas: guardarLineas([{ nombre: 'x', cantidad: 1, precio: 5, tasa: 'exento' }]),
+      conservado: JSON.stringify({ almacenId: 'abc', vendedorId: -2, tipoOrden: 'hacker', teamId: 99, estado: 'ACEPTADO', comentario: 'ok' }) };
+    const body = armarPayload(def, v) as Record<string, unknown>;
+    expect(body).toMatchObject({ comentario: 'ok' });
+    for (const k of ['almacenId', 'vendedorId', 'tipoOrden', 'teamId', 'estado']) expect(body).not.toHaveProperty(k);
+  });
+
+  it('exige elegir el borrador y tener líneas', () => {
+    expect(validarFormulario(def, {})).toHaveProperty('documento');
+    expect(validarFormulario(def, { documentoId: '1', tipoEcf: '' , documentoError: 'No pude leer ese borrador.' })).toHaveProperty('documento');
+  });
+
+  it('el resultado dice guardado o emitido', () => {
+    expect(resultadoDeCreacion(def, { documentoId: 4001, codigo: 'FA-1' }).mensaje).toContain('guardé los cambios');
+    expect(resultadoDeCreacion(def, { documentoId: 4001, encf: 'E320000000999', estado: 'EN_PROCESO' }, 'emitir').mensaje).toContain('emití');
   });
 });

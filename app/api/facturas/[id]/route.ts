@@ -245,6 +245,11 @@ export async function GET(
     createdByName,
     updatedByName,
     dependienteNombre: doc.dependienteNombre ?? null,
+    // Lo que un borrador conserva al re-guardarse (la API de emisión los reescribe).
+    almacenId: doc.almacenId ?? null,
+    vendedorId: doc.vendedorId ?? null,
+    listaPreciosId: doc.listaPreciosId ?? null,
+    tipoOrden: doc.tipoOrden ?? null,
 
     // Form payload (terminos / notas / pie / comentario)
     terminosCondiciones: doc.terminosCondiciones,

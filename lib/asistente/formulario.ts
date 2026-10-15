@@ -38,7 +38,7 @@ export interface Campo {
 
 export type Valores = Record<string, string>;
 export type IdFormulario =
-  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion' | 'notacredito' | 'notadebito'
+  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion' | 'notacredito' | 'notadebito' | 'borrador'
   | 'importar-productos' | 'importar-clientes';
 
 export interface DefFormulario {
@@ -190,6 +190,21 @@ export const FORMULARIOS: Record<IdFormulario, DefFormulario> = {
       { id: 'referencia', etiqueta: 'Referencia', tipo: 'texto', max: 100, ayuda: 'Número de transferencia, cheque o aprobación (opcional).' },
     ],
   },
+  borrador: {
+    id: 'borrador',
+    titulo: 'Editar un borrador de factura',
+    descripcion: 'Cambia el cliente, las líneas o las notas de un borrador. Lo demás (cobros, retenciones, almacén) se conserva tal cual.',
+    boton: 'Guardar cambios',
+    endpoint: '/api/ecf/emitir',
+    modo: 'json',
+    pantalla: '/dashboard/facturas',
+    campos: [
+      { id: 'documento', etiqueta: 'Borrador', tipo: 'documento', requerido: true, ayuda: 'Solo borradores de factura. Busca por código o cliente.' },
+      { id: 'cliente', etiqueta: 'Cliente', tipo: 'cliente' },
+      { id: 'lineas', etiqueta: 'Líneas', tipo: 'lineas', requerido: true },
+      { id: 'notas', etiqueta: 'Notas', tipo: 'area', max: 1000 },
+    ],
+  },
   notacredito: {
     id: 'notacredito',
     titulo: 'Nota de crédito',
@@ -295,11 +310,25 @@ export interface Linea {
   /** Beneficiario de la línea (colegios): hay que conservarlo al copiar de otra factura. */
   dependienteId?: number;
   dependienteNombre?: string;
+  /** Datos de la línea que el formulario no edita pero no puede perder al re-guardar (variante, cuota escolar…). */
+  extra?: { variantId?: number; cuotaClave?: string; descripcionItem?: string; descuentoMonto?: number; unidadMedidaItem?: string };
 }
 
 export const lineaVacia = (): Linea => ({ nombre: '', cantidad: 1, precio: 0, tasa: '0.18' });
 
 const redondear = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+function extraDeLinea(x: unknown): Linea['extra'] | undefined {
+  if (!x || typeof x !== 'object') return undefined;
+  const o = x as Record<string, unknown>;
+  const e: NonNullable<Linea['extra']> = {};
+  if (Number.isInteger(o.variantId) && Number(o.variantId) > 0) e.variantId = Number(o.variantId);
+  if (typeof o.cuotaClave === 'string' && o.cuotaClave) e.cuotaClave = o.cuotaClave.slice(0, 64);
+  if (typeof o.descripcionItem === 'string' && o.descripcionItem) e.descripcionItem = limpiarValor(o.descripcionItem, 500);
+  if (typeof o.descuentoMonto === 'number' && Number.isFinite(o.descuentoMonto) && o.descuentoMonto > 0) e.descuentoMonto = o.descuentoMonto;
+  if (typeof o.unidadMedidaItem === 'string' && o.unidadMedidaItem) e.unidadMedidaItem = limpiarValor(o.unidadMedidaItem, 50);
+  return Object.keys(e).length ? e : undefined;
+}
 
 /** Lee las líneas guardadas en el valor del campo (JSON); `[]` si no son válidas. */
 export function leerLineas(valor: string | undefined): Linea[] {
@@ -323,6 +352,7 @@ export function leerLineas(valor: string | undefined): Linea[] {
       ...(typeof o.bien === 'boolean' ? { bien: o.bien } : {}),
       ...(Number.isInteger(o.dependienteId) && Number(o.dependienteId) > 0 ? { dependienteId: Number(o.dependienteId) } : {}),
       ...(typeof o.dependienteNombre === 'string' && o.dependienteNombre ? { dependienteNombre: limpiarValor(o.dependienteNombre, MAX_TEXTO) } : {}),
+      ...(extraDeLinea(o.extra) ? { extra: extraDeLinea(o.extra) } : {}),
     });
   }
   return out;
@@ -461,6 +491,9 @@ export function validarFormulario(def: DefFormulario, valores: Valores): Record<
       if (!DOC.test(d)) e[c.id] = 'RNC (9 dígitos), cédula (11) o pasaporte';
     }
   }
+  if (def.id === 'borrador' && valores.documentoId && !e.documento && !(valores.tipoEcf ?? '').trim()) {
+    e.documento = valores.documentoError || 'No pude leer ese borrador.';
+  }
   if (esNota(def.id)) {
     if (valores.documentoId && !(valores.ncfModificado ?? '').trim() && !e.documento) {
       e.documento = valores.documentoError || 'Esa factura no tiene comprobante e-CF; la nota se hace desde su pantalla.';
@@ -489,6 +522,7 @@ function itemsDeLineas(lineas: Linea[], conCatalogo: boolean) {
     indicadorBienoServicio: l.bien ? 1 : 2,
     ...(conCatalogo && l.productoId ? { productoId: l.productoId } : {}),
     ...(l.dependienteId ? { dependienteId: l.dependienteId, dependienteNombre: l.dependienteNombre } : {}),
+    ...(l.extra ?? {}),
   }));
 }
 
@@ -556,6 +590,24 @@ export function armarPayload(def: DefFormulario, valores: Valores, modo: ModoEmi
     };
   }
 
+  if (def.id === 'borrador') {
+    const lineas = lineasLlenas(valores);
+    const c = datosDeCliente(valores);
+    const k = leerConservado(valores.conservado);
+    return {
+      modo,
+      borradorId: Number(valores.documentoId),
+      tipoEcf: valores.tipoEcf,
+      ...(c.rnc ? { rncComprador: c.rnc.replace(/[-\s]/g, '').toUpperCase() } : {}),
+      ...(c.razonSocial ? { razonSocialComprador: c.razonSocial } : {}),
+      ...(c.email ? { emailComprador: c.email } : {}),
+      ...(c.clientId ? { clientId: c.clientId } : {}),
+      items: itemsDeLineas(lineas, true),
+      ...((valores.notas ?? '').trim() ? { notas: valores.notas.trim() } : {}),
+      ...k,
+    };
+  }
+
   if (esNota(def.id)) {
     const lineas = lineasLlenas(valores);
     const c = datosDeCliente(valores);
@@ -618,6 +670,96 @@ export function resumenDeEmision(valores: Valores): string {
   const cliente = (valores.clienteNombre ?? '').trim() || 'consumo final';
   const total = t.total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `Se emitirá una factura por RD$ ${total} a ${cliente} y se enviará a la DGII. No se puede deshacer.`;
+}
+
+/** Lo que un borrador conserva al re-guardarse: solo estas claves y tipos pasan. */
+function leerConservado(json: string | undefined): Record<string, unknown> {
+  let o: Record<string, unknown>;
+  try { o = JSON.parse(json ?? '{}') as Record<string, unknown>; } catch { return {}; }
+  if (!o || typeof o !== 'object') return {};
+  const out: Record<string, unknown> = {};
+  const texto = (k: string, max: number) => { if (typeof o[k] === 'string' && o[k]) out[k] = String(o[k]).slice(0, max); };
+  const entero = (k: string) => { if (Number.isInteger(o[k]) && Number(o[k]) > 0) out[k] = Number(o[k]); };
+  texto('terminosCondiciones', 3000); texto('pieFactura', 1000); texto('comentario', 1000); texto('fechaLimitePago', 10);
+  entero('almacenId'); entero('vendedorId'); entero('listaPreciosId');
+  if (typeof o.tipoOrden === 'string' && ['comer-aqui', 'para-llevar', 'delivery', 'mostrador'].includes(o.tipoOrden)) out.tipoOrden = o.tipoOrden;
+  if (o.tipoPago === 1 || o.tipoPago === 2 || o.tipoPago === 3 || o.tipoPago === 4) out.tipoPago = o.tipoPago;
+  if (Array.isArray(o.retenciones) && o.retenciones.length <= 10) {
+    out.retenciones = o.retenciones
+      .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+      .map((r) => ({
+        id: String(r.id ?? '').slice(0, 40), nombre: String(r.nombre ?? '').slice(0, 80),
+        porcentaje: Number(r.porcentaje) || 0, tipo: ['itbis', 'isr', 'otro'].includes(String(r.tipo)) ? String(r.tipo) : 'otro',
+        monto: Number(r.monto) || 0,
+      }));
+  }
+  if (Array.isArray(o.pagos) && o.pagos.length && o.pagos.length <= 10) {
+    const pagos = o.pagos
+      .filter((p): p is Record<string, unknown> => !!p && typeof p === 'object')
+      .map((p) => ({
+        metodo: String(p.metodo ?? '').slice(0, 40), valor: Number(p.valor) || 0,
+        ...(typeof p.cuenta === 'string' && p.cuenta ? { cuenta: p.cuenta.slice(0, 100) } : {}),
+      }))
+      .filter((p) => p.metodo && p.valor > 0);
+    if (pagos.length) { out.pagoRecibido = true; out.pagos = pagos; }
+    if (typeof o.pagoFecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.pagoFecha)) out.pagoFecha = o.pagoFecha;
+  }
+  return out;
+}
+
+/** Lo que trae la ficha de una factura (GET /api/facturas/{id}) para editar su borrador. */
+export function prefillDeBorrador(api: unknown): { valores: Valores; error: string | null } {
+  const p = (api ?? {}) as {
+    id?: number; estado?: string; tipoEcf?: string; encf?: string | null;
+    montos?: { montoTotalDOP?: string | number };
+    comprador?: { clienteId?: number | null; razonSocial?: string | null; rnc?: string | null; email?: string | null };
+    lineas?: Record<string, unknown>[]; notas?: string | null;
+    terminosCondiciones?: string | null; pieFactura?: string | null; comentario?: string | null;
+    retencionesList?: unknown[]; tipoPago?: number; fechaLimitePago?: string | null;
+    almacenId?: number | null; vendedorId?: number | null; listaPreciosId?: number | null; tipoOrden?: string | null;
+    pago?: { fecha?: string | null; lineas?: { metodo?: string; valor?: string | number; cuenta?: string }[] };
+  };
+  const vacio: Valores = { tipoEcf: '', documentoError: '', conservado: '', documentoTotal: '' };
+  const fallo = (m: string) => ({ valores: { ...vacio, documentoError: m }, error: m });
+  if (!p.id) return fallo('No pude leer ese borrador.');
+  if (p.estado !== 'BORRADOR') return fallo('Solo se editan borradores; esta factura ya no lo es.');
+  if (!['sin-ncf', '31', '32', '44', '45', '46'].includes(String(p.tipoEcf))) {
+    return fallo('Este tipo de borrador se edita desde su pantalla.');
+  }
+  const lineas: Linea[] = leerLineas(JSON.stringify((p.lineas ?? []).map((l) => ({
+    nombre: l.nombreItem, cantidad: l.cantidadItem, precio: l.precioUnitarioItem,
+    tasa: ['0.18', '0.16', '0', 'exento'].includes(String(l.tasaItbis)) ? String(l.tasaItbis) : 'exento',
+    productoId: typeof l.productoId === 'number' ? l.productoId : undefined,
+    bien: String(l.indicadorBienoServicio) === '1',
+    dependienteId: typeof l.dependienteId === 'number' ? l.dependienteId : undefined,
+    dependienteNombre: typeof l.dependienteNombre === 'string' ? l.dependienteNombre : undefined,
+    extra: {
+      variantId: typeof l.variantId === 'number' ? l.variantId : undefined,
+      cuotaClave: typeof l.cuotaClave === 'string' ? l.cuotaClave : undefined,
+      descripcionItem: typeof l.descripcionItem === 'string' ? l.descripcionItem : undefined,
+      descuentoMonto: typeof l.descuentoMonto === 'number' ? l.descuentoMonto : undefined,
+      unidadMedidaItem: typeof l.unidadMedidaItem === 'string' ? l.unidadMedidaItem : undefined,
+    },
+  }))));
+  const c = p.comprador ?? {};
+  const total = Number(String(p.montos?.montoTotalDOP ?? '').replace(/,/g, ''));
+  const pagos = (p.pago?.lineas ?? []).map((x) => ({ metodo: x.metodo, valor: Number(x.valor), cuenta: x.cuenta })).filter((x) => x.metodo && x.valor > 0);
+  const conservado = JSON.stringify({
+    terminosCondiciones: p.terminosCondiciones, pieFactura: p.pieFactura, comentario: p.comentario,
+    retenciones: p.retencionesList, tipoPago: p.tipoPago, fechaLimitePago: p.fechaLimitePago,
+    almacenId: p.almacenId, vendedorId: p.vendedorId, listaPreciosId: p.listaPreciosId, tipoOrden: p.tipoOrden,
+    pagos, pagoFecha: p.pago?.fecha ?? undefined,
+  });
+  return {
+    error: null,
+    valores: {
+      tipoEcf: String(p.tipoEcf), documentoError: '', documentoTotal: Number.isFinite(total) ? String(total) : '',
+      conservado, lineas: guardarLineas(lineas), notas: p.notas ?? '',
+      clienteId: c.clienteId ? String(c.clienteId) : '', clienteNombre: c.razonSocial ?? '',
+      clienteRnc: c.rnc ?? '', clienteEmail: c.email ?? '',
+      cobrosConservados: pagos.length ? String(pagos.length) : '',
+    },
+  };
 }
 
 /** Confirmación antes de emitir una nota de crédito, con el monto y la factura a la vista. */
@@ -716,6 +858,13 @@ export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown, modo
       return { mensaje: 'Listo: registré el cobro.', enlace: def.pantalla };
     case 'anulacion':
       return { mensaje: 'Listo: la factura quedó anulada.', enlace: def.pantalla };
+    case 'borrador': {
+      const num = r.encf || r.codigo || '';
+      const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
+      return modo === 'emitir'
+        ? { mensaje: `Listo: emití la factura ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
+        : { mensaje: `Listo: guardé los cambios del borrador ${num}`.trim() + '.', enlace };
+    }
     case 'notacredito':
     case 'notadebito': {
       const nombre = def.id === 'notadebito' ? 'nota de débito' : 'nota de crédito';
@@ -750,6 +899,7 @@ const RE_PAGO = new RegExp(
   `^${CORTESIA}(?:${VERBO_CREAR}|anotar|anota|cargar|carga|aplicar|aplica|ingresar|ingresa)\\s+${ARTICULO}(?:cobro|pago recibido|pago|abono)\\b(.*)$`,
 );
 const RE_COBRAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |ayudame a )*(?:cobrar|cobra|cobrale)\s+(?:una |la |esa )?factura\b(.*)$/;
+const RE_EDITAR_BORRADOR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |podrias |me puedes |ayudame a )*(?:editar|edita|modificar|modifica|corregir|corrige|cambiar|cambia|actualizar|actualiza|retomar|retoma|abrir|abre|continuar|continua|seguir con)\s+(?:un |una |el |la |mi |mis |ese |esa |otro |otra |los |las )*(?:borrador(?:es)?|factura en borrador|factura borrador)\b(.*)$/;
 const RE_NOTA = new RegExp(`^${CORTESIA}(?:${VERBO_CREAR}|emitir|emite|emiteme)\\s+${ARTICULO}nota de (?:credito|debito)\\b(.*)$`);
 const RE_ANULAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |podrias |me puedes |ayudame a )*(?:anular|anula|anulame|cancelar|cancela)\s+(?:una |la |esa |otra )?factura\b(.*)$/;
 const RE_GASTO = new RegExp(
@@ -775,6 +925,7 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
   const imp = t.match(RE_IMPORTAR);
   if (imp) return { id: imp[1] === 'clientes' ? 'importar-clientes' : 'importar-productos', valores: {} };
 
+  if (RE_EDITAR_BORRADOR.test(t)) return { id: 'borrador', valores: {} };
   const nota = t.match(RE_NOTA);
   if (nota) return { id: /nota de debito/.test(t) ? 'notadebito' : 'notacredito', valores: {} };
   if (RE_ANULAR.test(t)) return { id: 'anulacion', valores: {} };
