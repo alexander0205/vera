@@ -652,3 +652,28 @@ describe('5.12 gráficos de línea y de torta', () => {
     expect(b?.respuesta).toContain('tipo: torta');
   });
 });
+
+// ── 5.13 Cifras clicables ──
+describe('5.13 cifras clicables', () => {
+  it('cada cifra lleva a la pantalla donde se ve ese número, y esa pantalla existe', async () => {
+    const { tools } = herramientas({
+      resumen_ventas: { ventasNetas: 1000, facturas: 2, porCobrarHoy: 500, vencidoHoy: 0 },
+      cuentas_por_cobrar: { totalPorCobrar: 800, clientesConDeuda: 1, vencido0a30: 0, mayoresDeudores: [] },
+      resumen_gastos: { gastos: 1, totalGastado: 300 },
+      pagos_recibidos: { cantidad: 1, totalCobrado: 200 },
+      cobros_por_metodo: { metodos: [{ metodo: 'efectivo', cobrado: 100, pagos: 1 }, { metodo: 'tarjeta', cobrado: 50, pagos: 1 }] },
+    });
+    const casos: [string, string, string][] = [
+      ['cuanto vendi este mes', '[RD$ 1,000.00](/dashboard/reportes/panel)', '/dashboard/reportes/panel'],
+      ['quien me debe', '[RD$ 800.00](/dashboard/cuentas-por-cobrar)', '/dashboard/cuentas-por-cobrar'],
+      ['cuanto gaste este mes', '[RD$ 300.00](/dashboard/gastos)', '/dashboard/gastos'],
+      ['cuanto cobre este mes', '[RD$ 200.00](/dashboard/pagos)', '/dashboard/pagos'],
+      ['cobros por metodo de pago', '[RD$ 150.00](/dashboard/pagos)', '/dashboard/pagos'],
+    ];
+    for (const [pregunta, enlace, ruta] of casos) {
+      const r = await responderLocal(pregunta, tools, { hoy: HOY });
+      expect(r?.respuesta, pregunta).toContain(enlace);
+      expect(rutaEsReal(ruta), ruta).toBe(true);
+    }
+  });
+});

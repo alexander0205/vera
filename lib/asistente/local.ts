@@ -201,6 +201,15 @@ const corta = (f: unknown) => {
 /** `[texto](/ruta)` solo si hay una ruta; la validez la garantiza el filtro final. */
 const enlazar = (texto: string, ruta: unknown) => (typeof ruta === 'string' && ruta.startsWith('/') ? `[${texto}](${ruta})` : texto);
 
+/** Pantallas a las que lleva una cifra: tocarla abre donde se ve ese número. */
+const PANTALLA_DE_CIFRA = {
+  ventas: '/dashboard/reportes/panel',
+  porCobrar: '/dashboard/cuentas-por-cobrar',
+  gastos: '/dashboard/gastos',
+  cobros: '/dashboard/pagos',
+} as const;
+const cifra = (monto: number, ruta: string) => `[${rd(monto)}](${ruta})`;
+
 type Plantilla = (r: Fila, p: Periodo | null, pedido: Record<string, unknown>) => string;
 
 const PLANTILLAS: Record<string, Plantilla> = {
@@ -210,12 +219,12 @@ const PLANTILLAS: Record<string, Plantilla> = {
       return `No hay ventas registradas ${p!.etiqueta}.\n\nPor cobrar hoy tienes **${rd(n(r.porCobrarHoy))}**${n(r.vencidoHoy) ? `, de los cuales **${rd(n(r.vencidoHoy))}** están vencidos` : ''}.`;
     }
     return [
-      `Vendiste **${rd(ventas)}** ${p!.etiqueta}, en ${n(r.facturas)} factura${n(r.facturas) === 1 ? '' : 's'}.`,
+      `Vendiste ${cifra(ventas, PANTALLA_DE_CIFRA.ventas)} ${p!.etiqueta}, en ${n(r.facturas)} factura${n(r.facturas) === 1 ? '' : 's'}.`,
       '',
       `- Base imponible: ${rd(n(r.baseImponible))}`,
       `- ITBIS: ${rd(n(r.itbis))}`,
       `- Ticket promedio: ${rd(n(r.ticketPromedio))}`,
-      `- Por cobrar hoy: ${rd(n(r.porCobrarHoy))}${n(r.vencidoHoy) ? ` (vencido: ${rd(n(r.vencidoHoy))})` : ''}`,
+      `- Por cobrar hoy: ${cifra(n(r.porCobrarHoy), PANTALLA_DE_CIFRA.porCobrar)}${n(r.vencidoHoy) ? ` (vencido: ${rd(n(r.vencidoHoy))})` : ''}`,
     ].join('\n');
   },
 
@@ -231,7 +240,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const lineas = [
       pedido.soloVencidas
         ? `Tienes **${rd(vencido)}** vencido entre ${n(r.clientesConDeuda)} cliente${n(r.clientesConDeuda) === 1 ? '' : 's'} (de ${rd(total)} por cobrar en total).`
-        : `Te deben **${rd(total)}** entre ${n(r.clientesConDeuda)} cliente${n(r.clientesConDeuda) === 1 ? '' : 's'}${vencido ? `; **${rd(vencido)}** ya está vencido` : ', y nada está vencido todavía'}.`,
+        : `Te deben ${cifra(total, PANTALLA_DE_CIFRA.porCobrar)} entre ${n(r.clientesConDeuda)} cliente${n(r.clientesConDeuda) === 1 ? '' : 's'}${vencido ? `; **${rd(vencido)}** ya está vencido` : ', y nada está vencido todavía'}.`,
     ];
     if (deudores.length) {
       lineas.push('', tabla(['Cliente', 'Debe', 'Facturas', 'Días vencido'],
@@ -259,7 +268,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
     if (!n(r.gastos)) return `No hay gastos registrados ${p!.etiqueta}.${n(r.borradores) ? ` Tienes ${n(r.borradores)} en borrador sin registrar.` : ''}`;
     const cats = ((r.porCategoria as Fila[]) ?? []).filter((c) => n(c.total) > 0);
     const l = [
-      `Gastaste **${rd(n(r.totalGastado))}** ${p!.etiqueta}, en ${n(r.gastos)} registro${n(r.gastos) === 1 ? '' : 's'}.`,
+      `Gastaste ${cifra(n(r.totalGastado), PANTALLA_DE_CIFRA.gastos)} ${p!.etiqueta}, en ${n(r.gastos)} registro${n(r.gastos) === 1 ? '' : 's'}.`,
       '',
       `- Por pagar a proveedores: ${rd(n(r.porPagarAProveedores))}`,
       `- ITBIS por adelantar: ${rd(n(r.itbisPorAdelantar))}`,
@@ -276,7 +285,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const total = m.reduce((s, x) => s + n(x.cobrado), 0);
     const grafico = textoGrafico(`Cobros por método ${p!.etiqueta}`, 'RD$', m.map((x) => ({ etiqueta: String(x.metodo), valor: n(x.cobrado) })), 'torta');
     return [
-      `Cobraste **${rd(total)}** ${p!.etiqueta}:`,
+      `Cobraste ${cifra(total, PANTALLA_DE_CIFRA.cobros)} ${p!.etiqueta}:`,
       '',
       ...(grafico ? [grafico, ''] : []),
       tabla(['Método', 'Cobrado', 'Pagos', '%'], m.map((x) => [String(x.metodo), rd(n(x.cobrado)), n(x.pagos), pct(n(x.cobrado), total)])),
@@ -284,7 +293,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
   },
 
   cobrado: (r, p) => (n(r.cantidad)
-    ? `Se cobraron **${rd(n(r.totalCobrado))}** ${p!.etiqueta}, en ${n(r.cantidad)} pago${n(r.cantidad) === 1 ? '' : 's'}.`
+    ? `Se cobraron ${cifra(n(r.totalCobrado), PANTALLA_DE_CIFRA.cobros)} ${p!.etiqueta}, en ${n(r.cantidad)} pago${n(r.cantidad) === 1 ? '' : 's'}.`
     : `No hay pagos recibidos ${p!.etiqueta}.`),
 
   'mejores-clientes': (r, p) => {
