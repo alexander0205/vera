@@ -653,3 +653,48 @@ describe('evaluación: historial del asistente', () => {
     expect(resumirRespuesta('palabra '.repeat(100), 50).length).toBeLessThanOrEqual(51);
   });
 });
+
+// ── 3.2 Alcance por rol ──
+describe('evaluación: alcance por rol', () => {
+  const nombres = (c: ReturnType<typeof contextoDePrueba>) => Object.keys(crearHerramientas(c, [])).sort();
+
+  it('un rol con solo reportes no recibe herramientas de nómina, escolar, contabilidad, caja ni catálogos', () => {
+    const t = nombres(contextoDePrueba(1, { permisos: ['configuracion:gestionar', 'reportes:ver'] }));
+    for (const prohibida of [
+      'resumen_nomina', 'buscar_empleados', 'buscar_estudiantes', 'resumen_matriculas', 'cargos_escolares',
+      'libro_diario', 'catalogo_cuentas', 'turnos_caja', 'buscar_productos', 'listar_cotizaciones', 'pagos_recibidos',
+      'buscar_facturas', 'ver_factura', 'cuentas_por_cobrar',
+    ]) expect(t, prohibida).not.toContain(prohibida);
+    expect(t).toContain('resumen_ventas');
+  });
+
+  it('con permiso de nómina pero sin el módulo activo, tampoco', () => {
+    const t = nombres(contextoDePrueba(1, { modulos: ['facturacion'], permisos: 'todos' }));
+    expect(t).not.toContain('resumen_nomina');
+    expect(t).not.toContain('buscar_estudiantes');
+    expect(t).not.toContain('turnos_caja');
+  });
+
+  it('el resumen del día solo incluye lo que la persona puede ver', async () => {
+    const { tools } = herramientasConPermisos(['configuracion:gestionar', 'reportes:ver']);
+    const r = await responderLocal('resumen de hoy', tools, { hoy: HOY });
+    expect(r?.respuesta ?? '').not.toMatch(/Turnos de caja|Productos en o bajo|Por cobrar|borrador/);
+  });
+
+  it('las preguntas de un módulo sin permiso explican por qué, no devuelven datos', async () => {
+    const { tools } = herramientasConPermisos(['configuracion:gestionar', 'reportes:ver']);
+    const r = await responderLocal('donde veo la nomina del mes', tools, { hoy: HOY });
+    expect(r?.respuesta ?? '').not.toMatch(/RD\$/);
+  });
+});
+
+function herramientasConPermisos(permisos: Parameters<typeof contextoDePrueba>[1] extends infer O ? (O extends { permisos?: infer P } ? P : never) : never) {
+  const reales = crearHerramientas(contextoDePrueba(1, { permisos }), []) as Record<string, { inputSchema?: unknown }>;
+  const tools = Object.fromEntries(Object.keys(reales).map((nombre) => [nombre, {
+    inputSchema: reales[nombre].inputSchema,
+    execute: nombre === 'donde_encontrar'
+      ? (reales[nombre] as unknown as { execute: unknown }).execute
+      : async () => ({ ventasNetas: 1, facturas: 1 }),
+  }]));
+  return { tools: tools as never };
+}
