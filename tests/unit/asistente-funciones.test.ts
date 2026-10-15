@@ -126,3 +126,73 @@ describe('5.1 explicar el estado ante la DGII', () => {
     void tools;
   });
 });
+
+// ── 5.2 / 5.3 Cliente, cotización y producto en pantalla ──
+describe('5.2 cliente en pantalla', () => {
+  const CLIENTE = {
+    enlace: '/dashboard/clientes/55/editar', nombre: 'Ana Pérez', rnc: '131988032', email: 'ana@correo.com', telefono: '809-555-1234',
+    direccion: 'Calle 1', debe: 3500, facturasPendientes: 2, diasVencidoMaximo: 45, facturasRecientes: 4, totalRecientes: 9000,
+    ultimas: [{ enlace: '/dashboard/facturas/9', numero: 'E310000000009', fecha: '2026-10-01', estado: 'ACEPTADO', total: 3000 }],
+  };
+  const pantalla = interpretarPantalla('/dashboard/clientes/55/editar');
+
+  it('reconoce la pantalla de un cliente', () => {
+    expect(pantalla?.registro).toEqual({ tipo: 'cliente', id: 55 });
+    expect(interpretarPantalla('/dashboard/clientes/nuevo')?.registro).toBeUndefined();
+  });
+
+  it('«¿cuánto me debe este cliente?» responde con su deuda y atraso, sin IA', async () => {
+    const { tools, llamadas } = herramientas({ ver_cliente: CLIENTE });
+    const r = await responderLocal('cuanto me debe este cliente', tools, { hoy: HOY, pantalla });
+    expect(r?.intencion).toBe('cliente-actual');
+    expect(llamadas[0]).toMatchObject({ nombre: 'ver_cliente', input: { id: 55 } });
+    expect(r?.respuesta).toContain('te debe **RD$ 3,500.00** en 2 facturas');
+    expect(r?.respuesta).toContain('45 días vencida');
+    expect(r?.respuesta).toContain('[E310000000009](/dashboard/facturas/9)');
+  });
+
+  it('cliente sin deuda lo dice', async () => {
+    const { tools } = herramientas({ ver_cliente: { ...CLIENTE, debe: 0, facturasPendientes: 0, diasVencidoMaximo: 0 } });
+    const r = await responderLocal('este cliente debe algo', tools, { hoy: HOY, pantalla });
+    expect(r?.respuesta).toContain('no tiene saldo pendiente');
+  });
+
+  it('«¿en qué pantalla estamos?» en un cliente describe al cliente', async () => {
+    const { tools } = herramientas({ ver_cliente: CLIENTE });
+    const r = await responderLocal('en que pantalla estamos', tools, { hoy: HOY, pantalla });
+    expect(r?.intencion).toBe('cliente-actual');
+    expect(r?.respuesta).toContain('Ana Pérez');
+  });
+
+  it('el id sale de la pantalla, no del texto', async () => {
+    const { tools, llamadas } = herramientas({ ver_cliente: CLIENTE });
+    await responderLocal('cuanto debe este cliente 9999', tools, { hoy: HOY, pantalla });
+    expect(llamadas[0].input).toEqual({ id: 55 });
+  });
+});
+
+describe('5.3 cotización y producto en pantalla', () => {
+  it('cotización vencida', async () => {
+    const { tools } = herramientas({ ver_cotizacion: { enlace: '/dashboard/cotizaciones/7', numero: 'COT-7', estado: 'enviada', cliente: 'Luz', total: 1000, emision: '2026-09-01', vence: '2026-09-30', vencida: true } });
+    const r = await responderLocal('esta cotizacion esta vencida', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/cotizaciones/7') });
+    expect(r?.intencion).toBe('cotizacion-actual');
+    expect(r?.respuesta).toContain('**vencida**');
+    expect(r?.respuesta).toContain('| Total | RD$ 1,000.00 |');
+  });
+
+  it('producto: precio y existencia', async () => {
+    const { tools } = herramientas({ ver_producto: { enlace: '/dashboard/productos/3', nombre: 'Cuaderno', referencia: 'CU-1', tipo: 'bien', precio: 150, costo: 90, itbis: '18%', controlaInventario: true, stock: 4, stockMinimo: 10, unidad: 'Unidad' } });
+    const pantalla = interpretarPantalla('/dashboard/productos/3');
+    const a = await responderLocal('cuanto cuesta este producto', tools, { hoy: HOY, pantalla });
+    expect(a?.respuesta).toContain('**Cuaderno** cuesta **RD$ 150.00** (ITBIS 18%)');
+    const b = await responderLocal('cuantos quedan de este producto', tools, { hoy: HOY, pantalla });
+    expect(b?.respuesta).toContain('quedan **4**');
+    expect(b?.respuesta).toContain('por debajo del mínimo (10)');
+  });
+
+  it('sin pantalla de registro no se consulta nada', async () => {
+    const { tools, llamadas } = herramientas({});
+    await responderLocal('cuanto cuesta este producto', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/reportes') });
+    expect(llamadas).toEqual([]);
+  });
+});

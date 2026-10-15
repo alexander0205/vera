@@ -238,8 +238,9 @@ export function crearHerramientas(
   dar(ctx.puede('facturas:ver'), ['buscar_facturas', 'ver_factura', 'clientes_con_mas_facturas', 'cuentas_por_cobrar', 'facturas_recurrentes']);
   dar(true, ['facturas_por_revisar', 'resumen_gastos', 'listar_gastos_compras', 'buscar_clientes']);
   dar(ctx.puede('pagos:ver'), ['pagos_recibidos']);
-  dar(ctx.puede('productos:ver'), ['buscar_productos']);
-  dar(ctx.puede('cotizaciones:ver'), ['listar_cotizaciones']);
+  dar(ctx.puede('productos:ver'), ['buscar_productos', 'ver_producto']);
+  dar(ctx.puede('clientes:ver'), ['ver_cliente']);
+  dar(ctx.puede('cotizaciones:ver'), ['listar_cotizaciones', 'ver_cotizacion']);
   dar(ctx.tieneModulo('contabilidad') && ctx.puede('contabilidad:ver'), ['libro_diario', 'catalogo_cuentas']);
   dar(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver'), ['buscar_estudiantes', 'resumen_matriculas', 'cargos_escolares']);
   dar(ctx.tieneModulo('nomina') && ctx.puede('empleados:ver'), ['resumen_nomina', 'buscar_empleados']);

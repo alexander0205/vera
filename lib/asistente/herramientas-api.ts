@@ -5,7 +5,7 @@ import type { ClienteApi } from './api';
 import { ErrorApi } from './api';
 import type { ConsultaHecha } from './herramientas';
 import {
-  enlaceFactura, enlaceCotizacion, enlaceCompraLocal, enlaceProducto, enlaceRecurrente, enlaceEstudiante,
+  enlaceFactura, enlaceCliente, enlaceCotizacion, enlaceCompraLocal, enlaceProducto, enlaceRecurrente, enlaceEstudiante,
 } from './enlaces';
 import { leerMensajesDgii } from './dgii';
 import { pesos, fechaYmd, ymd, normalizar, quitarTildes } from './util';
@@ -97,6 +97,76 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
           lineas: (d.lineas ?? []).slice(0, 8).map((l) => ({
             nombre: String(l.nombreItem ?? ''), cantidad: Number(l.cantidadItem ?? 0), precio: Number(l.precioUnitarioItem ?? 0),
           })),
+        };
+      }),
+    }),
+
+    ver_cliente: tool({
+      description:
+        'El detalle de UN cliente por su id (el de la pantalla que la persona está viendo): contacto, cuánto debe, cuántas facturas ' +
+        'tiene y las últimas. Úsala para «¿cuánto me debe este cliente?», «¿cuál es su teléfono?».',
+      inputSchema: z.object({ id: z.number().int().positive() }),
+      execute: seguro('el cliente', async ({ id }) => {
+        const d = await api.get<{ cliente: ClienteDetalleApi; facturas?: FacturaResumenApi[] }>('/api/clientes/' + id);
+        const c = d.cliente;
+        const nombre = (c.razonSocial ?? '').trim();
+        // La deuda sale de las cuentas por cobrar (las mismas de la pantalla), por nombre.
+        let debe = 0; let pendientes = 0; let diasMax = 0;
+        try {
+          const cx = await api.get<CxcApi>('/api/cuentas-por-cobrar', { limit: 2000 });
+          for (const x of cx.cuentas ?? []) {
+            const quien = (x.razonSocialComprador ?? x.clienteRazonSocial ?? '').trim();
+            if (nombre && quien.toLowerCase() === nombre.toLowerCase()) {
+              debe += Number(x.saldo || 0); pendientes += 1; diasMax = Math.max(diasMax, Number(x.diasVencido || 0));
+            }
+          }
+        } catch { /* sin permiso a cuentas por cobrar: no se muestra la deuda */ }
+        const facturas = d.facturas ?? [];
+        anotar('Detalle de cliente', nombre || ('id ' + id));
+        return {
+          enlace: enlaceCliente(c.id ?? id),
+          nombre, rnc: c.rnc ?? null, email: c.email ?? null, telefono: c.telefono ?? c.celular ?? c.whatsapp ?? null,
+          direccion: c.direccion ?? null,
+          debe: pesos(debe), facturasPendientes: pendientes, diasVencidoMaximo: diasMax,
+          facturasRecientes: facturas.length,
+          totalRecientes: pesos(facturas.reduce((s, f) => s + Number(f.montoTotal || 0), 0)),
+          ultimas: facturas.slice(0, 5).map((f) => ({
+            enlace: enlaceFactura(f.id), numero: f.encf || '', fecha: ymd(f.fechaEmision), estado: f.estado, total: pesos(f.montoTotal),
+          })),
+        };
+      }),
+    }),
+
+    ver_cotizacion: tool({
+      description: 'El detalle de UNA cotización por su id (la que la persona está viendo): cliente, estado, total y vencimiento.',
+      inputSchema: z.object({ id: z.number().int().positive() }),
+      execute: seguro('la cotización', async ({ id }) => {
+        const d = await api.get<{ cotizacion: CotizacionApi }>('/api/cotizaciones/' + id);
+        const c = d.cotizacion;
+        const vence = ymd(c.fechaVencimiento);
+        const hoy = ymd(new Date());
+        anotar('Detalle de cotización', c.numero);
+        return {
+          enlace: enlaceCotizacion(c.id), numero: c.numero, estado: c.estado, cliente: c.razonSocialComprador ?? null,
+          total: pesos(c.montoTotal), emision: ymd(c.fechaEmision), vence,
+          vencida: Boolean(vence && hoy && vence < hoy && !['aceptada', 'convertida', 'rechazada'].includes(sin(c.estado))),
+        };
+      }),
+    }),
+
+    ver_producto: tool({
+      description: 'El detalle de UN producto por su id (el que la persona está viendo): precio, ITBIS, existencia y mínimo.',
+      inputSchema: z.object({ id: z.number().int().positive() }),
+      execute: seguro('el producto', async ({ id }) => {
+        const d = await api.get<{ producto: ProductoDetalleApi }>('/api/productos/' + id);
+        const p = d.producto;
+        anotar('Detalle de producto', p.nombre);
+        return {
+          enlace: enlaceProducto(p.id), nombre: p.nombre, referencia: p.referencia ?? null, tipo: p.tipo,
+          precio: pesos(p.precio), costo: pesos(p.costo),
+          itbis: p.tasaItbis === 'exento' ? 'Exento' : `${Math.round(Number(p.tasaItbis) * 100)}%`,
+          controlaInventario: Boolean(p.controlaInventario), stock: Number(p.stockActual ?? 0), stockMinimo: Number(p.stockMinimo ?? 0),
+          unidad: p.unidadMedida ?? null,
         };
       }),
     }),
@@ -741,6 +811,15 @@ interface CompraApi {
 interface ProductoApi {
   id: number; nombre: string; referencia?: string | null; tipo: string; precio: number; costo: number; precioDOP?: number; costoDOP?: number;
   stockActual: number; stockMinimo: number; controlaInventario: boolean; activo?: string;
+}
+interface ClienteDetalleApi {
+  id?: number; razonSocial?: string | null; rnc?: string | null; email?: string | null;
+  telefono?: string | null; celular?: string | null; whatsapp?: string | null; direccion?: string | null;
+}
+interface FacturaResumenApi { id: number; encf?: string | null; estado: string; montoTotal: number; fechaEmision?: string | null }
+interface ProductoDetalleApi {
+  id: number; nombre: string; referencia?: string | null; tipo?: string; precio: number; costo: number; tasaItbis: string;
+  controlaInventario?: boolean; stockActual?: number; stockMinimo?: number; unidadMedida?: string | null;
 }
 interface FacturaDetalleApi {
   mensajesDgii?: unknown;

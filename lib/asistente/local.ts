@@ -686,6 +686,89 @@ function plantillaFacturaActual(r: Fila, t: string): string {
   return [titular, '', tabla(['Dato', 'Detalle'], datos), ...cola].join('\n');
 }
 
+
+// ── Cliente, cotización y producto en pantalla ───────────────────────────────
+
+const DEICTICO_REGISTRO = /\b(este|esta|ese|esa|esto|eso|aqui|actual|la que (estoy|estamos) viendo|el que (estoy|estamos) viendo)\b/;
+
+const PREGUNTA_CLIENTE = /\b(debe|deben|deuda|adeuda|saldo|pendiente|facturas?|compro|comprado|compras|facturado|telefono|celular|whatsapp|correo|email|rnc|cedula|direccion|contacto|datos|ultima|ultimas|resumen|quien es|detalle|cuanto|cliente)\b/;
+const PREGUNTA_COTIZACION = /\b(estado|total|monto|vence|vencida|vencimiento|cliente|de quien|fecha|aceptada|enviada|rechazada|detalle|resumen|cuanto|cotizacion)\b/;
+const PREGUNTA_PRODUCTO = /\b(precio|cuesta|cuanto|stock|existencia|inventario|quedan|minimo|costo|itbis|impuesto|referencia|codigo|detalle|resumen|margen|ganancia|producto)\b/;
+
+function filasDatos(datos: [string, string | number | null | undefined][]): string {
+  return tabla(['Dato', 'Detalle'], datos.filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]));
+}
+
+function plantillaClienteActual(r: Fila, t: string): string {
+  const nombre = String(r.nombre ?? 'Cliente');
+  const debe = n(r.debe);
+  const ultimas = (r.ultimas as Fila[] | undefined) ?? [];
+  let titular = `Estás viendo a **${nombre}**.`;
+  if (/\b(debe|deben|deuda|adeuda|saldo|pendiente)\b/.test(t)) {
+    const pend = n(r.facturasPendientes);
+    const atraso = n(r.diasVencidoMaximo) > 0 ? `, la más atrasada con ${n(r.diasVencidoMaximo)} días vencida` : '';
+    titular = debe > 0
+      ? `**${nombre}** te debe **${rd(debe)}** en ${pend} factura${pend === 1 ? '' : 's'}${atraso}.`
+      : `**${nombre}** no tiene saldo pendiente.`;
+  }
+  const recientes = n(r.facturasRecientes);
+  const datos = filasDatos([
+    ['Cliente', nombre],
+    ['RNC / cédula', r.rnc as string | null],
+    ['Correo', r.email as string | null],
+    ['Teléfono', r.telefono as string | null],
+    ['Dirección', r.direccion as string | null],
+    ['Debe', debe > 0 ? rd(debe) : 'Nada pendiente'],
+    ['Facturas recientes', `${recientes}${recientes >= 20 ? ' (las 20 más recientes)' : ''} · ${rd(n(r.totalRecientes))}`],
+  ]);
+  const filas = ultimas.slice(0, 5).map((x) => [
+    enlazar(String(x.numero || `Borrador ${corta(x.fecha)}`), x.enlace), String(x.fecha ?? ''), String(x.estado ?? ''), rd(n(x.total)),
+  ]);
+  return [titular, '', datos, ...(filas.length ? ['', '**Últimas facturas**', '', tabla(['Número', 'Fecha', 'Estado', 'Total'], filas)] : [])].join('\n');
+}
+
+function plantillaCotizacionActual(r: Fila): string {
+  const numero = String(r.numero);
+  const titular = r.vencida === true
+    ? `La cotización **${numero}** está **vencida** (venció el ${r.vence}).`
+    : `Estás viendo la cotización **${numero}**${r.cliente ? ` de **${r.cliente}**` : ''}.`;
+  return [titular, '', filasDatos([
+    ['Cliente', r.cliente as string | null],
+    ['Estado', r.estado as string | null],
+    ['Total', rd(n(r.total))],
+    ['Emitida', r.emision as string | null],
+    ['Vence', r.vence as string | null],
+  ])].join('\n');
+}
+
+function plantillaProductoActual(r: Fila, t: string): string {
+  const nombre = String(r.nombre);
+  let titular = `Estás viendo **${nombre}**.`;
+  if (/\b(precio|cuesta|cuanto)\b/.test(t)) {
+    titular = `**${nombre}** cuesta **${rd(n(r.precio))}**${r.itbis ? ` (ITBIS ${r.itbis})` : ''}.`;
+  } else if (/\b(stock|existencia|inventario|quedan|minimo)\b/.test(t)) {
+    titular = r.controlaInventario
+      ? `De **${nombre}** quedan **${n(r.stock)}** ${r.unidad ?? 'unidades'}${n(r.stock) <= n(r.stockMinimo) ? `, en o por debajo del mínimo (${n(r.stockMinimo)})` : ''}.`
+      : `**${nombre}** no controla inventario.`;
+  }
+  return [titular, '', filasDatos([
+    ['Producto', nombre],
+    ['Referencia', r.referencia as string | null],
+    ['Tipo', r.tipo as string | null],
+    ['Precio', rd(n(r.precio))],
+    ['Costo', n(r.costo) ? rd(n(r.costo)) : null],
+    ['ITBIS', r.itbis as string | null],
+    ['Existencia', r.controlaInventario ? `${n(r.stock)} ${r.unidad ?? ''}`.trim() : 'No controla inventario'],
+    ['Mínimo', r.controlaInventario ? n(r.stockMinimo) : null],
+  ])].join('\n');
+}
+
+const REGISTROS_EN_PANTALLA: Record<string, { herramienta: string; pregunta: RegExp; plantilla: (r: Fila, t: string) => string; intencion: string }> = {
+  cliente: { herramienta: 'ver_cliente', pregunta: PREGUNTA_CLIENTE, plantilla: plantillaClienteActual, intencion: 'cliente-actual' },
+  cotizacion: { herramienta: 'ver_cotizacion', pregunta: PREGUNTA_COTIZACION, plantilla: (r) => plantillaCotizacionActual(r), intencion: 'cotizacion-actual' },
+  producto: { herramienta: 'ver_producto', pregunta: PREGUNTA_PRODUCTO, plantilla: plantillaProductoActual, intencion: 'producto-actual' },
+};
+
 function plantillaEstadoDgii(r: Fila): string {
   const numero = String(r.numero || r.codigoInterno || 'sin número');
   const estado = String(r.estado);
@@ -773,6 +856,11 @@ export async function responderLocal(
       const r = await ejecutar(tools, 'ver_factura', { id: p.registro.id });
       if (r && !r.error) return { intencion: 'registro-actual', respuesta: plantillaFacturaActual(r, 'detalle') };
     }
+    const confP = p.registro ? REGISTROS_EN_PANTALLA[p.registro.tipo] : undefined;
+    if (p.registro && confP && tools[confP.herramienta]) {
+      const r = await ejecutar(tools, confP.herramienta, { id: p.registro.id });
+      if (r && !r.error) return { intencion: confP.intencion, respuesta: confP.plantilla(r, 'detalle') };
+    }
     if (p.registro) return { intencion: 'pantalla', respuesta: `Estás viendo ${NOMBRE_REGISTRO[p.registro.tipo]} (su pantalla de detalle).` };
     if (p.titulo) {
       const e = MAPA_SISTEMA.find((x) => x.ruta === p.ruta);
@@ -791,6 +879,13 @@ export async function responderLocal(
       }
       return { intencion: 'registro-actual', respuesta: plantillaFacturaActual(r, t) };
     }
+  }
+
+  // Cliente, cotización o producto abierto: «¿cuánto debe este cliente?», «¿cuánto cuesta este producto?».
+  const conf = reg ? REGISTROS_EN_PANTALLA[reg.tipo] : undefined;
+  if (reg && conf && tools[conf.herramienta] && DEICTICO_REGISTRO.test(quitarPeriodo(t)) && conf.pregunta.test(t)) {
+    const r = await ejecutar(tools, conf.herramienta, { id: reg.id });
+    if (r && !r.error) return { intencion: conf.intencion, respuesta: conf.plantilla(r, t) };
   }
 
   if (SALUDO.test(t)) {

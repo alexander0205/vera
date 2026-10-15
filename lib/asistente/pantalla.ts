@@ -11,7 +11,7 @@
 import { MAPA_SISTEMA } from './mapa-sistema';
 import { PATRONES_REGISTRO, rutaLimpia } from './enlaces';
 
-export type TipoRegistro = 'factura' | 'cotizacion' | 'compra' | 'producto' | 'recurrente' | 'estudiante';
+export type TipoRegistro = 'factura' | 'cliente' | 'cotizacion' | 'compra' | 'producto' | 'recurrente' | 'estudiante';
 
 export interface PantallaActual {
   ruta: string;
@@ -24,6 +24,7 @@ export interface PantallaActual {
 const TIPOS: { prefijo: string; tipo: TipoRegistro }[] = [
   { prefijo: '/dashboard/facturas-recurrentes/', tipo: 'recurrente' },
   { prefijo: '/dashboard/facturas/', tipo: 'factura' },
+  { prefijo: '/dashboard/clientes/', tipo: 'cliente' },
   { prefijo: '/dashboard/cotizaciones/', tipo: 'cotizacion' },
   { prefijo: '/dashboard/compras/local/', tipo: 'compra' },
   { prefijo: '/dashboard/productos/', tipo: 'producto' },
@@ -32,6 +33,7 @@ const TIPOS: { prefijo: string; tipo: TipoRegistro }[] = [
 
 export const NOMBRE_REGISTRO: Record<TipoRegistro, string> = {
   factura: 'una factura',
+  cliente: 'un cliente',
   cotizacion: 'una cotización',
   compra: 'una compra',
   producto: 'un producto',
@@ -47,7 +49,8 @@ export function interpretarPantalla(cruda: unknown): PantallaActual | null {
 
   if (PATRONES_REGISTRO.some((p) => p.patron.test(ruta))) {
     const hallado = TIPOS.find((t) => ruta.startsWith(t.prefijo));
-    const id = hallado ? Number(ruta.slice(hallado.prefijo.length)) : NaN;
+    // «/dashboard/clientes/55/editar» → 55
+    const id = hallado ? Number(ruta.slice(hallado.prefijo.length).split('/')[0]) : NaN;
     if (hallado && Number.isSafeInteger(id) && id > 0) {
       return { ruta, titulo: null, menu: null, registro: { tipo: hallado.tipo, id } };
     }

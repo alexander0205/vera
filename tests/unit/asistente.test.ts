@@ -105,7 +105,7 @@ describe('herramientas del asistente', () => {
       'facturas_por_revisar', 'facturas_recurrentes', 'ingresos_por_mes', 'libro_diario', 'listar_cotizaciones', 'listar_gastos_compras',
       'pagos_recibidos', 'resumen_gastos', 'resumen_itbis', 'resumen_matriculas', 'resumen_nomina', 'resumen_ventas',
       'tendencia_ventas', 'turnos_caja', 'ventas_por_cliente', 'ventas_por_producto',
-      'ventas_por_tipo_comprobante', 'ventas_por_usuario', 'ver_factura',
+      'ventas_por_tipo_comprobante', 'ventas_por_usuario', 'ver_cliente', 'ver_cotizacion', 'ver_factura', 'ver_producto',
     ]);
   });
 

@@ -18,6 +18,8 @@ import { neutralizarDatos, hayOmitidos } from './politicas';
 /** Pantallas de un registro: patrón de la URL → carpeta real de `app/` (la prueba lo verifica). */
 export const PATRONES_REGISTRO: { patron: RegExp; pagina: string }[] = [
   { patron: /^\/dashboard\/facturas\/\d+$/, pagina: 'app/(dashboard)/dashboard/facturas/[id]/page.tsx' },
+  // La ficha de un cliente es su pantalla de edición (no hay otra de solo lectura).
+  { patron: /^\/dashboard\/clientes\/\d+\/editar$/, pagina: 'app/(dashboard)/dashboard/clientes/[id]/editar/page.tsx' },
   { patron: /^\/dashboard\/cotizaciones\/\d+$/, pagina: 'app/(dashboard)/dashboard/cotizaciones/[id]/page.tsx' },
   { patron: /^\/dashboard\/compras\/local\/\d+$/, pagina: 'app/(dashboard)/dashboard/compras/local/[id]/page.tsx' },
   { patron: /^\/dashboard\/productos\/\d+$/, pagina: 'app/(dashboard)/dashboard/productos/[id]/page.tsx' },
@@ -27,6 +29,7 @@ export const PATRONES_REGISTRO: { patron: RegExp; pagina: string }[] = [
 
 /** Constructores: el único sitio donde se arma la URL de un registro. */
 export const enlaceFactura = (id: number) => `/dashboard/facturas/${id}`;
+export const enlaceCliente = (id: number) => `/dashboard/clientes/${id}/editar`;
 export const enlaceCotizacion = (id: number) => `/dashboard/cotizaciones/${id}`;
 export const enlaceCompraLocal = (id: number) => `/dashboard/compras/local/${id}`;
 export const enlaceProducto = (id: number) => `/dashboard/productos/${id}`;
