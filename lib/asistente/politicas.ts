@@ -461,3 +461,34 @@ export function crearDetectorFuga(instrucciones: string, ventana = 9): (salida: 
     return false;
   };
 }
+
+/**
+ * ¿La respuesta es el modelo describiendo SUS reglas o su funcionamiento?
+ *
+ * El detector de fuga solo ve copias; una paráfrasis («mis reglas son: 1. Solo
+ * hablo con números que saco de las herramientas…») no repite palabras del
+ * prompt. Aquí se buscan las marcas de alguien que se describe a sí mismo:
+ * hablar de «mis reglas/instrucciones» o de cómo le programaron, más
+ * enumerar sus límites internos. Cada marca suma; con dos o más (o «mis
+ * reglas» y una lista numerada) se considera descripción.
+ */
+const MARCAS_DESCRIPCION: RegExp[] = [
+  /\b(mis|estas|las siguientes|mis propias) (reglas|instrucciones|directrices|restricciones|politicas|limites internos|pautas)\b/,
+  /\b(mis|las|estas) (reglas|instrucciones|directrices|pautas) (son|incluyen|dicen|indican|establecen|me piden)\b/,
+  /\b(me (indicaron|dieron|programaron|configuraron|instruyeron|ordenaron|pidieron)|fui (programado|configurado|instruido|entrenado))\b/,
+  /\b(solo|unicamente) (hablo|respondo|uso|trabajo) (con )?(numeros|datos|cifras)\b.{0,40}\bherramientas\b/,
+  /\bno (invento|estimo|adivino|supongo)\b.{0,30}\bno (estimo|adivino|invento|supongo)\b/,
+  /\b(mis|las) herramientas (internas|del sistema|que tengo|disponibles)\b|\bherramientas (internas|del sistema)\b/,
+  /\bmi (prompt|configuracion|programacion|instruccion) (interna|inicial|del sistema)?\b/,
+  /\b(tengo|sigo|manejo|aplico) (\w+ |\d+ )?(reglas|instrucciones|directrices|restricciones)\b/,
+  /\b(regla|norma) (numero|n) ?\d\b/,
+];
+
+export function pareceDescripcionDeReglas(texto: string): boolean {
+  const t = normalizar(texto);
+  const marcas = MARCAS_DESCRIPCION.filter((re) => re.test(t)).length;
+  if (marcas >= 2) return true;
+  // «Mis reglas…» seguido de una lista numerada o con viñetas: es el listado.
+  const lista = (texto.match(/^\s*(?:\d+[.)]|[-*•])\s+\S/gm) ?? []).length >= 3;
+  return marcas >= 1 && lista;
+}

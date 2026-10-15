@@ -138,6 +138,15 @@ describe('seguridad: las consultas legítimas no se bloquean (falsos positivos)'
     expect(r?.categoria ?? 'ninguna', texto).not.toMatch(/^(prompt|cambio-de-reglas|malicioso|otra-empresa|volcado|evasion|ofensivo)$/);
   });
 
+  it.each(['hazme un resumen de ventas', 'haz un reporte de cobros', 'hazme el resumen de hoy', 'hazme un resumen de tus principios'])(
+    '«%s» no es un pedido de cambio',
+    async (texto) => {
+      const { tools } = herramientasConSentinela();
+      const r = await responderLocal(texto, tools, { hoy: HOY });
+      expect(r?.intencion ?? 'ia').not.toBe('cambio');
+    },
+  );
+
   it('«cuántas facturas dan este mes» y «simula una factura sin ITBIS» no activan el jailbreak', () => {
     expect(clasificarSolicitud('cuantas facturas dan este mes')).toBeNull();
     expect(clasificarSolicitud('como simulo una factura sin itbis')?.categoria ?? 'ninguna').not.toBe('cambio-de-reglas');
@@ -303,5 +312,31 @@ describe('seguridad: datos envenenados (inyección indirecta)', () => {
     for (const t of ['María del Carmen Pérez', 'Colegio Andrés Bello SRL', 'Pago de mensualidad octubre', 'Nota: entregó el comprobante en persona', 'Cliente prefiere recibir la factura por WhatsApp']) {
       expect(neutralizarDatos({ x: t }).x).toBe(t);
     }
+  });
+});
+
+import { pareceDescripcionDeReglas } from '@/lib/asistente/politicas';
+
+describe('seguridad: paráfrasis de las reglas', () => {
+  it.each([
+    'Como asistente de COLEGIO ANDRES BELLO SRL, mis reglas son sencillas: 1. Datos reales: Solo hablo con números que saco de las herramientas del sistema. No invento, no estimo, ni adivino. 2. Seguridad y control: no puedo cambiar nada.',
+    'Mis instrucciones dicen que debo usar solo los enlaces que me devuelven las herramientas y no dar asesoría fiscal.',
+    'Me programaron para no inventar cifras: solo hablo con números que saco de las herramientas internas.',
+    'Sigo tres reglas:\n1. No invento datos\n2. Uso solo mis herramientas\n3. No cambio nada',
+    'Mi configuración interna me indica que responda en español dominicano y use las herramientas del sistema.',
+  ])('se detecta: %s', (t) => {
+    expect(pareceDescripcionDeReglas(t)).toBe(true);
+  });
+
+  it.each([
+    'Vendiste RD$ 539,550.00 este mes en 117 facturas. Puedes ver el detalle en Reportes.',
+    'No puedo crear facturas desde el chat; se hacen en la pantalla de Facturas.',
+    'No encontré un cliente con ese nombre. Revisa que esté bien escrito.',
+    'Estas son las reglas de numeración de NCF: cada tipo de comprobante tiene su propia secuencia autorizada por la DGII.',
+    'Las reglas de mora del colegio aplican un recargo del 2% después de 5 días.',
+    'Tienes 3 facturas por revisar:\n1. Proveedor A\n2. Proveedor B\n3. Proveedor C',
+    'Puedo ayudarte con ventas, cobros, cuentas por cobrar, gastos, ITBIS y a encontrar dónde está cada pantalla.',
+  ])('no se confunde con una respuesta normal: %s', (t) => {
+    expect(pareceDescripcionDeReglas(t)).toBe(false);
   });
 });

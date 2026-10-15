@@ -124,7 +124,7 @@ const VERBOS_CAMBIO = [
   // imperativo
   'cambia', 'cambiale', 'borra', 'elimina', 'anula', 'modifica', 'deshabilita', 'desactiva', 'activa', 'edita',
   'envia', 'enviale', 'enviame', 'manda', 'mandale', 'mandame', 'crea', 'creame', 'registra', 'emite', 'cobra', 'aplica', 'aplicame',
-  'asigna', 'pon', 'ponle', 'quita', 'agrega', 'agregale', 'haz', 'hazme', 'sube', 'subeme', 'baja', 'transfiere', 'transfierele',
+  'asigna', 'pon', 'ponle', 'quita', 'agrega', 'agregale', 'haz que', 'sube', 'subeme', 'baja', 'transfiere', 'transfierele',
   'otorga', 'otorgame', 'concede', 'habilita', 'inhabilita', 'resetea', 'reinicia', 'restablece', 'reemplaza', 'sustituye',
   'corrige', 'actualiza', 'marca', 'marcame', 'duplica', 'cancela', 'suspende', 'reactiva', 'renueva', 'paga', 'abona',
   'devuelve', 'reembolsa', 'invita', 'expulsa', 'bloquea', 'desbloquea', 'regala', 'perdona', 'dame permisos', 'dame acceso',
@@ -141,7 +141,7 @@ const VERBOS_CAMBIO = [
   'actualizar', 'marcar', 'duplicar', 'cancelar', 'suspender', 'reactivar', 'renovar', 'pagar', 'abonar', 'devolver',
   'reembolsar', 'invitar', 'expulsar', 'bloquear', 'desbloquear',
 ];
-const ENTRADA_CAMBIO = '(?:por favor |porfa |ahora |ya |oye |entonces |quiero que |necesito que |puedes |podrias |me puedes |me podrias |te pido que |haz que |hazme )*';
+const ENTRADA_CAMBIO = '(?:por favor |porfa |ahora |ya |oye |entonces |quiero que |necesito que |puedes |podrias |me puedes |me podrias |te pido que )*';
 const PIDE_CAMBIO = new RegExp(`^${ENTRADA_CAMBIO}(?:${VERBOS_CAMBIO.join('|')})\\b`);
 
 const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |declaro |programo |recibo |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|programar|recibir|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
