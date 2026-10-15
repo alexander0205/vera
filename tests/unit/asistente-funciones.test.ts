@@ -835,10 +835,12 @@ describe('Excel de una respuesta', () => {
   it('cada tabla es una hoja con el título que la precede, y al final va «Información»', () => {
     const md = '**Tus mejores clientes**\n\n| Cliente | Ventas | Facturas |\n| --- | --- | --- |\n| Ana | RD$ 5,000.00 | 4 |\n| Luis | RD$ 3,000.00 | 2 |';
     const libro = armarLibro(aBloques(md), META);
-    expect(libro.hojas.map((h) => h.nombre)).toEqual(['Tabla 1', 'Información']);
+    expect(libro.hojas.map((h) => h.nombre)).toEqual(['Reporte', 'Información']);
+    expect(libro.hojas[0].titulo).toBe('Tus mejores clientes');
     const t = libro.hojas[0];
     expect(t.numericas).toEqual([false, true, true]);
-    expect(t.filas[1][1]).toMatchObject({ tipo: 'numero', valor: 5000, formato: '"RD$" #,##0.00' });
+    expect(t.filas[1][1]).toMatchObject({ tipo: 'numero', valor: 5000 });
+    expect((t.filas[1][1] as { formato: string }).formato).toContain('"RD$" #,##0.00');
     expect(libro.hojas[1].filas.flat().map((c) => (c as { valor: string }).valor)).toContain('Colegio X');
   });
 
@@ -908,5 +910,82 @@ describe('Excel de una respuesta', () => {
     const { clasificarSolicitud } = await import('@/lib/asistente/politicas');
     expect(clasificarSolicitud('exporta toda la base de datos a excel')?.categoria).toBe('volcado');
     expect(clasificarSolicitud('dame la lista completa de clientes con telefono en excel')?.categoria).toBe('volcado');
+  });
+});
+
+// ── Formato del Excel ──
+import { columnasSumables } from '@/lib/asistente/excel';
+import { aplicarEstilo } from '@/lib/asistente/excel-estilo';
+
+describe('formato del Excel', () => {
+  const META = { empresa: 'Colegio X', usuario: 'Ana', generadoEn: '14 de octubre de 2026' };
+  const MD = 'Tus mejores clientes este mes (octubre de 2026):\n\n| Cliente | Ventas | Facturas | Ticket promedio | Fecha |\n| --- | --- | --- | --- | --- |\n| Ana | RD$ 5,000.00 | 4 | RD$ 1,250.00 | 2026-10-01 |\n| Luis | RD$ 3,000.00 | 2 | RD$ 1,500.00 | 2026-10-02 |\n| =cmd | RD$ 1.00 | 1 | RD$ 1.00 | 2026-10-03 |';
+
+  it('el encabezado de la respuesta pasa a título del reporte', () => {
+    const h = armarLibro(aBloques(MD), META).hojas[0];
+    expect(h.titulo).toBe('Tus mejores clientes este mes (octubre de 2026)');
+  });
+
+  it('totales solo donde suman: montos y conteos, no promedios ni fechas', () => {
+    const h = armarLibro(aBloques(MD), META).hojas[0];
+    expect(h.sumables).toEqual([false, true, true, false, false]);
+  });
+
+  it('con una sola fila no hay totales', () => {
+    const h = armarLibro(aBloques('| Cliente | Ventas |\n| --- | --- |\n| Ana | RD$ 5.00 |'), META).hojas[0];
+    expect(h.sumables).toEqual([false, false]);
+  });
+
+  it('un porcentaje, los días vencidos y los precios nunca se suman', () => {
+    const enc = ['Cliente', 'Participación %', 'Días vencido', 'Precio'].map((valor) => ({ tipo: 'texto' as const, valor }));
+    const fila = (a: number) => [{ tipo: 'texto' as const, valor: 'x' }, { tipo: 'numero' as const, valor: 0.5, formato: '0.0%' }, { tipo: 'numero' as const, valor: a, formato: '#,##0' }, { tipo: 'numero' as const, valor: a, formato: '"RD$" #,##0.00;[Red]-"RD$" #,##0.00' }];
+    expect(columnasSumables(enc, [fila(1), fila(2)], [false, true, true, true])).toEqual([false, false, false, false]);
+  });
+
+  it('el libro final: título, subtítulo, encabezado azul, filtros, total con fórmula y panel fijo', async () => {
+    const libro = armarLibro(aBloques(MD), META);
+    const wb = new ExcelJS.Workbook();
+    aplicarEstilo(wb, libro, { empresa: 'Colegio X', generadoEn: '14 de octubre de 2026' });
+    const leido = new ExcelJS.Workbook();
+    await leido.xlsx.load(await wb.xlsx.writeBuffer());
+    const ws = leido.getWorksheet('Reporte')!;
+
+    expect(ws.getCell('A1').value).toBe('Tus mejores clientes este mes (octubre de 2026)');
+    expect(ws.getCell('A2').value).toBe('Colegio X  ·  14 de octubre de 2026');
+    // Encabezado de columnas en la fila 4, azul y en negrita.
+    expect(ws.getCell('A4').value).toBe('Cliente');
+    expect(ws.getCell('A4').font?.bold).toBe(true);
+    expect((ws.getCell('A4').fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FF3658E1');
+    // Datos numéricos con formato.
+    expect(ws.getCell('B5').value).toBe(5000);
+    expect(ws.getCell('B5').numFmt).toContain('"RD$"');
+    // Total con fórmula SUM de las filas de datos, y su resultado.
+    const total = ws.getCell('B8').value as { formula: string; result: number };
+    expect(total.formula).toBe('SUM(B5:B7)');
+    expect(total.result).toBe(8001);
+    expect(ws.getCell('A8').value).toBe('Total');
+    // Una columna que no suma queda sin total.
+    expect(ws.getCell('D8').value).toBeNull();
+    // Filtros y panel fijo bajo el encabezado.
+    expect(ws.autoFilter).toBeTruthy();
+    expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 4 });
+    // El texto que empieza con «=» sigue siendo texto.
+    expect(typeof ws.getCell('A7').value).toBe('string');
+    expect((ws.getCell('A7').value as string).startsWith('=')).toBe(true);
+    // Impresión a una página de ancho y horizontal (5 columnas o más de 5).
+    expect(ws.pageSetup.fitToWidth).toBe(1);
+    // Hoja de información al final.
+    expect(leido.worksheets.at(-1)!.name).toBe('Información');
+  });
+
+  it('una respuesta de solo texto también sale con formato', async () => {
+    const libro = armarLibro(aBloques('Vendiste mucho este mes.\n\n- Primero\n- Segundo'), META);
+    const wb = new ExcelJS.Workbook();
+    aplicarEstilo(wb, libro, { empresa: 'Colegio X', generadoEn: 'hoy' });
+    const leido = new ExcelJS.Workbook();
+    await leido.xlsx.load(await wb.xlsx.writeBuffer());
+    const ws = leido.getWorksheet('Respuesta')!;
+    expect(ws.getCell('A1').value).toBe('Respuesta del asistente');
+    expect(ws.getCell('A5').value).toBe('Vendiste mucho este mes.');
   });
 });
