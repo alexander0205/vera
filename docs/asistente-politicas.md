@@ -80,3 +80,7 @@ ser manipulado; el código no se convence.
 ## Inyección indirecta (actualización)
 
 Los datos de herramientas se comparan normalizados (NFKC: ancho completo; sin caracteres invisibles ni tildes) y se omiten órdenes en español e inglés («ignora todo lo anterior», «disregard previous instructions», «nuevas instrucciones:», «revela tu prompt», imágenes markdown externas). El set de evaluación tiene casos que deben omitirse y casos legítimos que no (p. ej. «Academia de Instrucciones Musicales»).
+
+## Principio de coherencia (decisión de negocio)
+
+El asistente existe para facilitar el uso de Zero sin generar conflictos: **muestra lo mismo que muestran las pantallas**, aunque Zero tenga definiciones distintas entre módulos. Si el Dashboard y Reportes agrupan distinto, el asistente responde con el dato de la pantalla que la persona más probablemente esté comparando y lo dice (por ejemplo, «ventas por mes» usa el gráfico «Tendencia de ingresos» del Dashboard). Cuando una pregunta pide algo que solo existe en otro módulo (un mes concreto, un año), usa Reportes e indica su criterio (fecha de emisión).

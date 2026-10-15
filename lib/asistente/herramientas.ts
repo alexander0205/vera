@@ -66,6 +66,25 @@ function herramientasReportes(teamId: number, consultas: ConsultaHecha[]) {
       },
     }),
 
+    ingresos_por_mes: tool({
+      description:
+        'Ingresos de los últimos 6 meses, mes por mes, EXACTAMENTE como los muestra el gráfico «Tendencia de ingresos» del Dashboard de Zero ' +
+        '(por fecha de creación del comprobante, sin anulados ni compras). Úsala para «ventas por mes» o «cómo van los últimos meses».',
+      inputSchema: z.object({}),
+      execute: async () => {
+        // Import perezoso: esta consulta arrastra la capa de sesión de la app.
+        const { getDashboardStats } = await import('@/lib/db/queries');
+        const st = await getDashboardStats(teamId);
+        anotar('Ingresos por mes', 'últimos 6 meses (igual que el Dashboard)');
+        return {
+          periodo: 'los últimos 6 meses',
+          agrupadoPor: 'mes',
+          fuente: 'Dashboard › Tendencia de ingresos',
+          puntos: st.serieMeses.map((m) => ({ periodo: m.mes, ventas: pesos(m.montoCentavos) })),
+        };
+      },
+    }),
+
     tendencia_ventas: tool({
       description: 'Ventas por día, semana o mes dentro de un período, para ver cómo evolucionan o comparar.',
       inputSchema: z.object({ ...periodo, agrupar: z.enum(['dia', 'semana', 'mes']).default('dia') }),

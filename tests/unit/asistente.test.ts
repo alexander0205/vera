@@ -102,7 +102,7 @@ describe('herramientas del asistente', () => {
     expect(Object.keys(crearHerramientas(1, [])).sort()).toEqual([
       'buscar_clientes', 'buscar_empleados', 'buscar_estudiantes', 'buscar_facturas', 'buscar_productos',
       'cargos_escolares', 'catalogo_cuentas', 'clientes_con_mas_facturas', 'cobros_por_metodo', 'cuentas_por_cobrar', 'donde_encontrar',
-      'facturas_por_revisar', 'facturas_recurrentes', 'libro_diario', 'listar_cotizaciones', 'listar_gastos_compras',
+      'facturas_por_revisar', 'facturas_recurrentes', 'ingresos_por_mes', 'libro_diario', 'listar_cotizaciones', 'listar_gastos_compras',
       'pagos_recibidos', 'resumen_gastos', 'resumen_itbis', 'resumen_matriculas', 'resumen_nomina', 'resumen_ventas',
       'tendencia_ventas', 'turnos_caja', 'ventas_por_cliente', 'ventas_por_producto',
       'ventas_por_tipo_comprobante', 'ventas_por_usuario', 'ver_factura',

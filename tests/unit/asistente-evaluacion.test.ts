@@ -573,3 +573,42 @@ describe('evaluación: resumen del día', () => {
     expect(r).not.toContain('Turnos de caja abiertos');
   });
 });
+
+// ── El asistente muestra lo mismo que Zero ──
+describe('evaluación: coherencia con las pantallas de Zero', () => {
+  it('«ventas por mes» usa el mismo dato que el gráfico del Dashboard', async () => {
+    const { tools, llamadas } = herramientas({
+      ingresos_por_mes: {
+        periodo: 'los últimos 6 meses', agrupadoPor: 'mes', fuente: 'Dashboard › Tendencia de ingresos',
+        puntos: [{ periodo: '2026-06', ventas: 621870 }, { periodo: '2026-07', ventas: 1944600 }, { periodo: '2026-08', ventas: 1996444 }],
+      },
+      tendencia_ventas: { periodo: 'x', agrupadoPor: 'mes', puntos: [{ periodo: '2026-06-01', ventas: 456310, facturas: 80 }] },
+    });
+    const r = await responderLocal('ventas por mes', tools, { hoy: HOY });
+    expect(llamadas).toContain('ingresos_por_mes');
+    expect(llamadas).not.toContain('tendencia_ventas');
+    expect(r?.respuesta).toContain('jun 2026 | 621870');
+    expect(r?.respuesta).toContain('| jul 2026 | RD$ 1,944,600.00 |');
+    expect(r?.respuesta).toContain('Tendencia de ingresos');
+    expect(r?.respuesta).not.toContain('Facturas');
+  });
+
+  it('un año o mes concreto sigue yendo a Reportes (por fecha de emisión)', async () => {
+    const { tools, llamadas } = herramientas({
+      ingresos_por_mes: { periodo: 'x', agrupadoPor: 'mes', puntos: [{ periodo: '2026-06', ventas: 1 }] },
+      tendencia_ventas: { periodo: '2026-01-01 al 2026-12-31', agrupadoPor: 'mes', puntos: [{ periodo: '2026-01-01', ventas: 100, facturas: 1 }, { periodo: '2026-02-01', ventas: 200, facturas: 2 }] },
+    });
+    await responderLocal('ventas por mes de 2026', tools, { hoy: HOY });
+    expect(llamadas).not.toContain('ingresos_por_mes');
+  });
+
+  it('si el dato del Dashboard no llega, cae a la tendencia de Reportes', async () => {
+    const { tools, llamadas } = herramientas({
+      ingresos_por_mes: { error: 'No pude consultar' },
+      tendencia_ventas: { periodo: 'x', agrupadoPor: 'mes', puntos: [{ periodo: '2026-08-01', ventas: 120000, facturas: 40 }, { periodo: '2026-09-01', ventas: 98000, facturas: 35 }] },
+    });
+    const r = await responderLocal('ventas por mes', tools, { hoy: HOY });
+    expect(llamadas).toContain('tendencia_ventas');
+    expect(r?.intencion).toBe('tendencia');
+  });
+});

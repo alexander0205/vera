@@ -427,9 +427,13 @@ const PLANTILLAS: Record<string, Plantilla> = {
       `Vendiste **${rd(total)}** en ${r.periodo}, por ${unidad}. El más alto fue **${et(mejor)}** con ${rd(n(mejor.ventas))}.`,
       '',
       ...(grafico ? [grafico, ''] : []),
-      'Agrupado por fecha de emisión de la factura, igual que Reportes. El gráfico del Dashboard agrupa por fecha de creación, así que cerca de fin de mes puede repartir distinto.',
+      r.fuente
+        ? `Es el mismo dato del gráfico «Tendencia de ingresos» del Dashboard.`
+        : 'Agrupado por fecha de emisión de la factura (igual que Reportes).',
       '',
-      tabla(['Período', 'Ventas', 'Facturas'], pts.slice(-12).map((x) => [et(x), rd(n(x.ventas)), n(x.facturas)])),
+      pts.some((x) => x.facturas != null)
+        ? tabla(['Período', 'Ventas', 'Facturas'], pts.slice(-12).map((x) => [et(x), rd(n(x.ventas)), n(x.facturas)]))
+        : tabla(['Período', 'Ventas'], pts.slice(-12).map((x) => [et(x), rd(n(x.ventas))])),
     ].join('\n');
   },
 
@@ -811,6 +815,15 @@ export async function responderLocal(
   // «Qué cliente tiene más facturas»: salvo que diga un período, es todo el historial.
   if (it.id === 'cliente-mas-facturas' && periodo && /\b(este mes|hoy|ayer|semana|mes pasado|ano|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ultimos)\b/.test(t)) {
     Object.assign(input, { desde: periodo.desde, hasta: periodo.hasta });
+  }
+
+  // «Ventas por mes»: el mismo número que el gráfico del Dashboard, para que no haya dos versiones.
+  const pideFechaConcreta = /\b(ano|20\d\d|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/.test(t);
+  if (it.id === 'tendencia' && input.agrupar === 'mes' && tools.ingresos_por_mes && !pideFechaConcreta) {
+    const d = await ejecutar(tools, 'ingresos_por_mes', {});
+    if (d && !d.error && Array.isArray(d.puntos) && d.puntos.length) {
+      return { intencion: it.id, respuesta: PLANTILLAS[it.id](d, periodo, input) };
+    }
   }
 
   const r = await ejecutar(tools, it.herramienta, input);
