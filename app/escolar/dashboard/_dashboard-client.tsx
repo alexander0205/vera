@@ -543,7 +543,7 @@ export default function DashboardEscolarClient() {
                   {/* Se factura desde la familia: su ficha separa «Por facturar» de
                       «Por cobrar» y tiene el botón Facturar. */}
                   <Button asChild variant="outline" size="sm" className="mt-3">
-                    <Link href="/escolar/responsables?filtro=con-deuda">Ver familias con deuda</Link>
+                    <Link href="/escolar/responsables?filtro=por-facturar">Ver familias por facturar</Link>
                   </Button>
                 </>
               ) : (
@@ -554,7 +554,7 @@ export default function DashboardEscolarClient() {
                     comprobante: la familia nunca recibió nada que pagar.
                   </p>
                   <Button asChild variant="outline" size="sm" className="mt-3">
-                    <Link href="/escolar/responsables?filtro=con-deuda">Ver familias con deuda</Link>
+                    <Link href="/escolar/responsables?filtro=por-facturar">Ver familias por facturar</Link>
                   </Button>
                 </>
               )}

@@ -211,7 +211,7 @@ export default function ResponsablesClient() {
             {/* «Sin hijos activos» solo aparece si hay alguna: son las familias
                 que ya no tienen a nadie en el colegio ni deben nada. Salían
                 mezcladas con las que pagan este año y engordaban el contador. */}
-            {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['sin-contacto', 'Sin contacto'],
+            {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['por-facturar', 'Por facturar'], ['sin-contacto', 'Sin contacto'],
                ['sin-ficha', `Falta traerlas${data?.sinFicha ? ` (${data.sinFicha})` : ''}`],
                ...((data?.retiradas ?? 0) > 0 || filtro === 'retiradas'
                  ? [['retiradas', `Sin hijos activos${data?.retiradas ? ` (${data.retiradas})` : ''}`] as const]
@@ -293,6 +293,9 @@ export default function ResponsablesClient() {
                           {f.deudaEscolarCentavos > 0
                             ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
+                          {f.porFacturarCentavos > 0 && (
+                            <span className="block text-xs text-gray-500">{fmtDOP(f.porFacturarCentavos)} sin factura</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           {f.deudaFacturasCentavos > 0
