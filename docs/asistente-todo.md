@@ -31,8 +31,8 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 - [ ] 3.3 Reportes PDF programados por correo
 
 ## Fase 4 — canales y acciones
-- [ ] 4.1 Acciones reales con confirmación (cotización, recordatorio de cobro)
-- [ ] 4.2 WhatsApp (número verificado del dueño, mismas políticas)
+- [~] 4.1 ~~Acciones reales con confirmación~~ — descartada: el asistente se queda de solo lectura (decisión del negocio). La infraestructura propuesta→confirmar queda sin acciones registradas.
+- [~] 4.2 WhatsApp — solo diseño: docs/asistente-whatsapp-diseno.md (falta credenciales y número verificado)
 - [x] 4.3 Voz (dictado de la pregunta)
 
 ## Antes de producción
