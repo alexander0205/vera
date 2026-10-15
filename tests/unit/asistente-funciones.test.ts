@@ -314,3 +314,63 @@ describe('5.5 comparativos', () => {
     expect(r?.respuesta).toContain('+20%');
   });
 });
+
+// ── 5.6 Alertas ──
+import { construirAlertas } from '@/lib/asistente/alertas';
+
+describe('5.6 alertas al abrir el panel', () => {
+  const base = { hoy: '2026-10-14', rechazadas: 0, enProceso: 0, secuencias: [], certificado: null };
+
+  it('sin nada que atender no hay alertas', () => {
+    expect(construirAlertas(base)).toEqual([]);
+  });
+
+  it('facturas rechazadas: nivel alto y a la pantalla de facturas', () => {
+    const [a] = construirAlertas({ ...base, rechazadas: 3 });
+    expect(a).toMatchObject({ nivel: 'alto', enlace: '/dashboard/facturas' });
+    expect(a.titulo).toContain('3 facturas rechazadas');
+  });
+
+  it('una secuencia agotada es urgente; con otra activa del mismo tipo no se avisa', () => {
+    const agotada = { tipoEcf: '31', nombre: 'Crédito fiscal', disponibles: 0, fechaVencimiento: null, estado: 'agotada' as const };
+    expect(construirAlertas({ ...base, secuencias: [agotada] })[0]).toMatchObject({ nivel: 'alto', enlace: '/dashboard/secuencias' });
+    const activa = { ...agotada, disponibles: 500, estado: 'activa' as const };
+    expect(construirAlertas({ ...base, secuencias: [agotada, activa] })).toEqual([]);
+  });
+
+  it('por agotarse y por vencer son avisos medios', () => {
+    const poca = { tipoEcf: '32', nombre: 'Consumo', disponibles: 12, fechaVencimiento: null, estado: 'activa' as const };
+    expect(construirAlertas({ ...base, secuencias: [poca] })[0].titulo).toContain('Quedan 12 números');
+    const vence = { tipoEcf: '31', nombre: 'Crédito fiscal', disponibles: 900, fechaVencimiento: '2026-10-30T00:00:00.000Z', estado: 'activa' as const };
+    expect(construirAlertas({ ...base, secuencias: [vence] })[0]).toMatchObject({ nivel: 'medio' });
+  });
+
+  it('sin-ncf nunca alerta (es ilimitada)', () => {
+    const s = { tipoEcf: 'sin-ncf', nombre: 'Sin NCF', disponibles: -1, fechaVencimiento: null, estado: 'activa' as const };
+    expect(construirAlertas({ ...base, secuencias: [s] })).toEqual([]);
+  });
+
+  it('certificado: vencido es alto, a 7 días alto, a 20 días medio, a 90 días nada', () => {
+    const c = (vencimiento: string) => construirAlertas({ ...base, certificado: { tieneCertificado: true, vencimiento } })[0];
+    expect(c('2026-10-01T00:00:00Z')).toMatchObject({ nivel: 'alto', titulo: expect.stringContaining('vencido') });
+    expect(c('2026-10-20T00:00:00Z')).toMatchObject({ nivel: 'alto' });
+    expect(c('2026-11-03T00:00:00Z')).toMatchObject({ nivel: 'medio' });
+    expect(c('2027-01-20T00:00:00Z')).toBeUndefined();
+  });
+
+  it('máximo tres, lo urgente primero', () => {
+    const r = construirAlertas({
+      ...base, rechazadas: 2, enProceso: 9,
+      secuencias: [{ tipoEcf: '32', nombre: 'Consumo', disponibles: 5, fechaVencimiento: null, estado: 'activa' }],
+      certificado: { tieneCertificado: true, vencimiento: '2026-10-16T00:00:00Z' },
+    });
+    expect(r).toHaveLength(3);
+    expect(r[0].nivel).toBe('alto');
+    expect(r.map((x) => x.nivel)).toEqual([...r.map((x) => x.nivel)].sort());
+  });
+
+  it('todas las pantallas a las que manda existen', () => {
+    const rutas = new Set(['/dashboard/facturas', '/dashboard/secuencias', '/dashboard/certificado']);
+    for (const ruta of rutas) expect(rutaEsReal(ruta), ruta).toBe(true);
+  });
+});

@@ -362,3 +362,13 @@
 @media (prefers-reduced-motion: reduce) { .esqueleto { animation: none; } }
 .avisoAsistente { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 12px 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; background: color-mix(in srgb, var(--destructive) 8%, var(--card)); color: var(--foreground); border: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); }
 .avisoAsistente button { border: 0; background: none; color: var(--primary); font-weight: 600; cursor: pointer; font-size: 13px; }
+
+/* Alertas al abrir el panel */
+.alertas { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.alerta { display: flex; align-items: flex-start; gap: 10px; padding: 9px 11px; border-radius: 11px; text-decoration: none; color: var(--foreground); background: color-mix(in srgb, #f59e0b 10%, var(--card)); border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--border)); }
+.alertaAlta { background: color-mix(in srgb, var(--destructive) 8%, var(--card)); border-color: color-mix(in srgb, var(--destructive) 35%, var(--border)); }
+.alerta:hover { filter: brightness(0.98); }
+.alerta:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.alertaTexto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; font-size: 13px; }
+.alertaTexto small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
+.alertaAccion { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--primary); align-self: center; }

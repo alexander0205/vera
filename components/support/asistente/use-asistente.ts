@@ -60,6 +60,9 @@ export function useAsistente(activo: boolean) {
   const cargando = useRef(false);
   const empresaIdRef = useRef<number | null>(null);
   const [ia, setIa] = useState(false);
+  // Lo que conviene atender hoy. `null` = aún no se sabe; la ruta limita las consultas, y entonces se conserva lo anterior.
+  const [alertas, setAlertas] = useState<{ id: string; nivel: 'alto' | 'medio'; titulo: string; detalle: string; enlace: string; accion: string }[] | null>(null);
+  const alertasEn = useRef(0);
   const cargar = useCallback(async (opts: { silencioso?: boolean; soloSiCambio?: boolean } = {}) => {
     if (cargando.current) return;
     cargando.current = true;
@@ -137,6 +140,23 @@ export function useAsistente(activo: boolean) {
   useEffect(() => {
     if (activo && estadoRef.current === 'listo') void cargar({ silencioso: true, soloSiCambio: true });
   }, [activo, cargar]);
+
+  // Alertas: una vez por apertura del panel (y no más de una por minuto desde aquí).
+  useEffect(() => {
+    if (!activo || estado !== 'listo') return;
+    if (Date.now() - alertasEn.current < 60_000) return;
+    alertasEn.current = Date.now();
+    void (async () => {
+      try {
+        const r = await fetch('/api/asistente/alertas', { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (Array.isArray(d.alertas)) setAlertas(d.alertas);
+      } catch {
+        // Sin alertas por ahora: no es un error que mostrar.
+      }
+    })();
+  }, [activo, estado]);
 
   const preguntar = useCallback(async (texto: string, convId: number | null, reenvio = false, forzarIa = false): Promise<void> => {
     setEnviando(true);
@@ -304,7 +324,7 @@ export function useAsistente(activo: boolean) {
   const disponible = estado === 'listo' ? true : estado === 'no-aplica' ? false : null;
   const reintentar_carga = cargar;
 
-  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia };
+  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia, alertas };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
-  ArrowUp, Banknote, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  AlertTriangle, ArrowUp, Banknote, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
   Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -240,6 +241,21 @@ export function PanelAsistente({
                   : 'Pregúntame lo que necesites saber de tu negocio: ventas, cobros, cartera e impuestos.'}
               </p>
             </div>
+            {a.alertas && a.alertas.length > 0 && (
+              <div className={s.alertas} role="region" aria-label="Para revisar hoy">
+                <span className={s.etiqueta}>Para revisar</span>
+                {a.alertas.map((al) => (
+                  <Link key={al.id} href={al.enlace} className={`${s.alerta} ${al.nivel === 'alto' ? s.alertaAlta : ''}`}>
+                    <AlertTriangle size={16} aria-hidden />
+                    <span className={s.alertaTexto}>
+                      <strong>{al.titulo}</strong>
+                      <small>{al.detalle}</small>
+                    </span>
+                    <span className={s.alertaAccion}>{al.accion}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
             <div className={s.sugerencias}>
               <span className={s.etiqueta}>Prueba con</span>
               {(a.perfil.sugerencias?.length
