@@ -17,6 +17,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { RangoFechas } from '@/components/reportes/rango-fechas';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { notaDeCorte } from '@/lib/export/paginas';
 
 interface TurnoHistorial {
   id: number;
@@ -92,11 +93,16 @@ export default function HistorialPage() {
     const sp = new URLSearchParams({ limit: '2000', offset: '0' });
     if (desde) sp.set('desde', desde);
     if (hasta) sp.set('hasta', hasta);
-    const data = await fetch(`/api/caja/historial?${sp}`).then(r => r.json());
-    const filtro = desde && hasta ? `Apertura del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
+    const r = await fetch(`/api/caja/historial?${sp}`);
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data) throw new Error(data?.error ?? 'No se pudo leer el historial para exportarlo');
+    const turnos = (data.turnos ?? []) as TurnoHistorial[];
+    const total = Number(data.total ?? turnos.length);
+    const rango = desde && hasta ? `Apertura del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
       : desde ? `Apertura desde el ${fechaCorta(desde)}`
       : hasta ? `Apertura hasta el ${fechaCorta(hasta)}` : 'Todas las fechas';
-    return armarEnvioTabla(EXPORTAR, (data.turnos ?? []) as TurnoHistorial[], filtro);
+    const filtro = total > turnos.length ? `${rango} · ${notaDeCorte(turnos.length, total)}` : rango;
+    return armarEnvioTabla(EXPORTAR, turnos, filtro);
   }
 
   useEffect(() => { fetchHistorial(); }, [fetchHistorial]);

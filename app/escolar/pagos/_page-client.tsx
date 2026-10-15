@@ -16,6 +16,7 @@ import { ComprobantesClient } from './_comprobantes-client';
 import { RangoFechas } from '@/components/reportes/rango-fechas';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { traerPaginas, notaDeCorte } from '@/lib/export/paginas';
 
 interface Pago {
   id: number;
@@ -121,17 +122,14 @@ export default function PagosEscolaresClient() {
   // Para el export: todas las páginas del rango (la API da hasta 200 por
   // página), con el mismo filtro de búsqueda y método que la tabla.
   async function armarExport() {
-    const todos: Pago[] = [];
-    for (let pag = 1; pag <= 50; pag++) {
-      const data = await fetch(`/api/administracion-escolar/pagos?pagina=${pag}&porPagina=200${rangoQs}`).then(r => r.json());
-      todos.push(...((data.pagos ?? []) as Pago[]));
-      if (pag >= (data.paginas ?? 1)) break;
-    }
+    const { filas: todos, total, truncado } = await traerPaginas<Pago>(
+      (pag) => `/api/administracion-escolar/pagos?pagina=${pag}&porPagina=200${rangoQs}`, 'pagos');
     const partes = [
       desde && hasta ? `Del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
         : desde ? `Desde el ${fechaCorta(desde)}` : hasta ? `Hasta el ${fechaCorta(hasta)}` : 'Todas las fechas',
       query.trim() ? `Búsqueda: «${query.trim()}»` : null,
       metodo !== 'todos' ? `Método: ${METODO_LABEL[metodo] ?? metodo}` : null,
+      truncado ? notaDeCorte(todos.length, total) : null,
     ];
     return armarEnvioTabla(EXPORTAR, filtrarPagos(todos, query, metodo), partes.filter(Boolean).join(' · '));
   }

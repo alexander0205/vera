@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Paginador } from '@/components/ui/paginador';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { traerPaginas, notaDeCorte } from '@/lib/export/paginas';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -170,20 +171,18 @@ export default function MatriculasClient() {
 
   // Para el export: todas las páginas con el filtro de la pantalla.
   async function armarExport() {
-    const todas: Matricula[] = [];
-    for (let pag = 1; pag <= 50; pag++) {
+    const { filas: todas, total, truncado } = await traerPaginas<Matricula>((pag) => {
       const params = new URLSearchParams({ pagina: String(pag), porPagina: '200' });
       if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
       if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
       if (qUrl) params.set('q', qUrl);
-      const data = await fetch(`/api/administracion-escolar/matriculas?${params}`).then(r => r.json());
-      todas.push(...((data.matriculas ?? []) as Matricula[]));
-      if (pag >= (data.paginas ?? 1)) break;
-    }
+      return `/api/administracion-escolar/matriculas?${params}`;
+    }, 'matriculas');
     const partes = [
       filtroPeriodo !== 'todos' ? `Período: ${periodos.find(x => String(x.id) === filtroPeriodo)?.nombre ?? filtroPeriodo}` : 'Todos los períodos',
       filtroEstado !== 'todos' ? `Estado: ${ESTADOS.find(e => e.valor === filtroEstado)?.etiqueta ?? filtroEstado}` : null,
       qUrl ? `Búsqueda: «${qUrl}»` : null,
+      truncado ? notaDeCorte(todas.length, total) : null,
     ];
     return armarEnvioTabla(EXPORTAR, todas, partes.filter(Boolean).join(' · '));
   }
