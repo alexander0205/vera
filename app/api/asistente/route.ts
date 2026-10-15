@@ -102,7 +102,10 @@ export async function POST(req: NextRequest) {
   }
 
   const b = await req.json().catch(() => null);
-  const crudo = typeof b?.mensaje === 'string' ? b.mensaje.trim() : '';
+  const crudo = typeof b?.mensaje === 'string'
+    // eslint-disable-next-line no-control-regex
+    ? b.mensaje.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim()
+    : '';
   if (!crudo) return NextResponse.json({ error: 'Escribe tu pregunta' }, { status: 400 });
   if (crudo.length > MAX_LARGO) {
     return NextResponse.json(

@@ -25,7 +25,7 @@ export interface RespuestaPolitica {
   /** Para pruebas y registros. */
   categoria:
     | 'prompt' | 'secretos' | 'otra-empresa' | 'asesoria' | 'evasion' | 'ofensivo'
-    | 'capacidades' | 'identidad' | 'vacio' | 'cambio-de-reglas' | 'volcado' | 'malicioso';
+    | 'capacidades' | 'identidad' | 'vacio' | 'cambio-de-reglas' | 'volcado' | 'malicioso' | 'facturacion';
   respuesta: string;
 }
 
@@ -104,6 +104,10 @@ const REGLAS: Regla[] = [
 // Se comparan contra tres versiones del texto (ver `variantes`): normal, con
 // «leetspeak» desarmado (mu3str4) y con letras sueltas juntadas (m u e s t r a).
 // Cada categoría reutiliza la respuesta fija de la regla base.
+
+const RESPUESTA_FACTURACION =
+  'El plan, los cobros, los descuentos y los créditos no se tocan desde el chat. ' +
+  'Se gestionan en [Suscripción](/dashboard/suscripcion), o puedes pulsar «Hablar con una persona» para que te atienda el equipo.';
 
 const RESPUESTA_MALICIOSO =
   'No ayudo con código malicioso, ataques ni intentos de entrar a sistemas o datos sin autorización. ' +
@@ -200,10 +204,29 @@ const EXTRA: { categoria: RespuestaPolitica['categoria']; re: RegExp }[] = [
     re: /\bbloque de (codigo|texto)\b.{0,40}\b(instrucciones|prompt|reglas)\b|\b(instrucciones|prompt|reglas)\b.{0,40}\bbloque de (codigo|texto)\b|\bin a code (fence|block)\b/,
   },
 
+  // Más malware: verbos conjugados y nombres comunes.
+  {
+    categoria: 'malicioso',
+    re: /\b(virus|gusano informatico|worm|script malicioso|codigo malicioso|programa malicioso|software malicioso|stealer|infostealer|zero day|0day|cracker|crackea\w*)\b|\b(rob\w+|exfiltr\w+|sustra\w+|captur\w+) (las |los |sus |mis |tus )?(contrasenas|credenciales|cookies|sesiones|tokens|claves)\b/,
+  },
+  // Pedir que se toque el plan, el cobro o los créditos: no se hace desde el chat.
+  {
+    categoria: 'facturacion',
+    re: /\b(plan|suscripcion|membresia|licencia)\b.{0,40}\b(gratis|sin costo|gratuit\w+|descuento|rebaja|ilimitad\w+|premium gratis)\b|\b(creditos?|cuota|limite|limites)\b.{0,30}\b(gratis|gratuit\w+|ilimitad\w+|sin limite|extra|infinit\w+)\b|\b(quita\w*|sube|aumenta\w*|elimina\w*|resetea\w*)\b.{0,15}\b(limite|limites|cuota)\b.{0,25}\b(asistente|uso|plan|facturas|mensual)\b|\b(descuento|rebaja|gratis|sin costo)\b.{0,40}\b(plan|suscripcion|asistente|modulo|modulos|licencia)\b|\b(modulos?)\b.{0,25}\b(gratis|sin costo|sin pagar|gratuit\w+)\b/,
+  },
+  // «Pásame la clave»: pedir un secreto por rodeos.
+  {
+    categoria: 'secretos',
+    re: /\b(me )?(das|des|pasas|pases|compartes|compartas|envias|envies|mandas|mandes|dices|digas|muestras|muestres|revelas|reveles) (la|el|tu|tus|las|los) (clave|claves|contrasena|contrasenas|llave|llaves|token|tokens|password|passwords|secret\w*)\b/,
+  },
   // Más maneras de pedir el prompt, en inglés y por rodeos.
   {
     categoria: 'prompt',
     re: /\bwhat (rules|instructions|guidelines|prompt)\b.{0,25}\b(were you|you were|you have|do you have|are you)\b|\bwhat (were|have) you (been )?(told|given|instructed)\b|\bwhat is your (prompt|system|configuration|setup)\b|\brepeat\b.{0,20}\b(words|text|everything|message|above)\b|\b(texto|contenido|mensaje) de (tu|su) (configuracion|programacion|inicializacion|prompt)\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(que|cuales|cuantas|cuantos) (reglas|instrucciones|directrices|limites|restricciones|politicas|herramientas) (sigues|tienes|usas|manejas|aplicas|obedeces|te dieron|rigen|utilizas|puedes usar)\b|\b(enumera|enumeras|numera|cuenta|detalla)\b.{0,20}\b(tus|las) (reglas|instrucciones|directrices|limites|restricciones|herramientas)\b|\b(nombres?|esquemas?|parametros)\b.{0,25}\b(de )?(tus|las) herramientas\b/,
   },
   // Quitarle las reglas, con otras formas verbales y otras voces.
   {
@@ -239,6 +262,7 @@ const EXTRA: { categoria: RespuestaPolitica['categoria']; re: RegExp }[] = [
     re: /\b(empresas registradas|empresas del sistema|empresas de zero|clientes de zero|team ?id|teamid|tenant|id de (la )?empresa|empresa (con )?id|empresa numero|otro (team|tenant|negocio|colegio)|otra (cuenta|organizacion|institucion|compania)|otras (cuentas|organizaciones|instituciones|companias|empresas)|todas las (empresas|cuentas|organizaciones|instituciones|companias)|cualquier (empresa|cuenta|tenant)|another (company|tenant|account|organization)|other (companies|tenants|accounts|organizations)|all (companies|tenants|accounts))\b/,
   },
   { categoria: 'otra-empresa', re: /\b(team|tenant|empresa)\s+(id\s+)?\d+\b/ },
+  { categoria: 'otra-empresa', re: /\b(de|en) (todo|toda) (zero|el sistema|la plataforma|el pais|la red)\b|\bempresa (con|que tiene|que mas|que menos)\b/ },
 
   // Listados masivos de datos personales.
   {
@@ -301,7 +325,7 @@ export function clasificarSolicitud(texto: string): RespuestaPolitica | null {
   }
   const vs = variantes(texto);
   const respuestaBase = (c: RespuestaPolitica['categoria']) =>
-    c === 'malicioso' ? RESPUESTA_MALICIOSO : (REGLAS.find((r) => r.categoria === c)?.respuesta ?? AYUDA);
+    c === 'malicioso' ? RESPUESTA_MALICIOSO : c === 'facturacion' ? RESPUESTA_FACTURACION : (REGLAS.find((r) => r.categoria === c)?.respuesta ?? AYUDA);
 
   // Marcado de ataque que la normalización borraría (<script>, onerror=, ${…}, ../..).
   if (MALICIOSO_EN_BRUTO.test(texto.normalize('NFKC'))) return { categoria: 'malicioso', respuesta: RESPUESTA_MALICIOSO };
@@ -338,6 +362,12 @@ const INYECCION = new RegExp([
   /<\/?(script|iframe|system|assistant|tool)\b/.source,
   /\[\s*(system|inst|assistant)\s*\]|<\|im_start\|>|###\s*(system|instruction)/.source,
   /(confirmo|confirmado|autorizo|autorizado)\b.{0,15}(eliminar|borrar|anular|accion)/.source,
+  /(nota|mensaje|aviso|instruccion|instrucciones|orden|ordenes|recordatorio|comando) (para|al|del|de) (el |la |los )?(asistente|bot|chatbot|ia|modelo|sistema|administrador|admin)\b/.source,
+  /\[\s*(instruccion|instrucciones|instruction|system|sistema|admin\w*|nota para|assistant|asistente)\b/.source,
+  /\b(cuando|al|si) (muestres|muestre|veas|leas|respondas|menciones|listes|devuelvas|presentes|consultes|busques)\b.{0,70}\b(agrega|agregues|anade|anadas|incluye|incluyas|escribe|escribas|di|digas|responde|respondas|pon|pongas|menciona|menciones|inserta|insertes)\b/.source,
+  /\b(visita|abre|ingresa a|entra a|haz clic|haz click|click en|descarga|escanea|visit|open|click)\b.{0,40}(https?:\/\/|www\.)/.source,
+  /\b(revela|revelar|muestra|mostrar|imprime|imprimir|repite|repetir|reveal|print|show)\b.{0,25}\b(prompt|instrucciones|reglas|instructions|rules)\b/.source,
+  /(https?:\/\/\S+).{0,40}\b(pago|pagar|verifica|verificar|actualiza|actualizar|clave|contrasena|tarjeta|password)\b|\b(pago|pagar|verifica|verificar|actualiza|actualizar|clave|contrasena|tarjeta|password)\b.{0,60}(https?:\/\/\S+)/.source,
 ].join('|'), 'i');
 
 export const TEXTO_OMITIDO = '[texto omitido por seguridad]';

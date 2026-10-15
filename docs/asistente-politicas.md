@@ -84,3 +84,29 @@ Los datos de herramientas se comparan normalizados (NFKC: ancho completo; sin ca
 ## Principio de coherencia (decisión de negocio)
 
 El asistente existe para facilitar el uso de Zero sin generar conflictos: **muestra lo mismo que muestran las pantallas**, aunque Zero tenga definiciones distintas entre módulos. Si el Dashboard y Reportes agrupan distinto, el asistente responde con el dato de la pantalla que la persona más probablemente esté comparando y lo dice (por ejemplo, «ventas por mes» usa el gráfico «Tendencia de ingresos» del Dashboard). Cuando una pregunta pide algo que solo existe en otro módulo (un mes concreto, un año), usa Reportes e indica su criterio (fecha de emisión).
+
+## Pruebas ofensivas (`tests/unit/asistente-seguridad.test.ts`)
+
+Batería de ~160 ataques (`tests/unit/_ataques.ts`) más ~55 consultas legítimas para
+vigilar falsos positivos. Cubre: extracción del prompt (ES/EN, rodeos, traducción,
+poemas, base64), jailbreak y juegos de rol, falsa autoridad, secretos, otra empresa,
+volcado, evasión, código malicioso, SSRF/XSS/SQL, billing y plan, ingeniería social,
+datos envenenados (inyección indirecta), disfraces (leetspeak, letras sueltas, ancho
+completo, caracteres invisibles) y un **modelo comprometido** simulado que obedece lo
+peor posible (exfiltración por enlaces, claves, fuga del prompt, rutas inventadas).
+
+Capas, de afuera hacia adentro:
+
+1. **Entrada**: políticas con respuesta fija, sin modelo y sin consultar datos
+   (`clasificarSolicitud`, comparando contra variantes del texto).
+2. **Límites**: 1500 caracteres, 12 preguntas por 2 minutos, 40 por hora; sin
+   caracteres de control; la empresa de la sesión manda (409 si la persona veía otra).
+3. **Modelo**: instrucciones con regla de secreto; herramientas de solo lectura sin
+   parámetros de empresa ni usuario; datos de herramientas neutralizados.
+4. **Salida**: enlaces solo a pantallas reales o a registros entregados por una
+   herramienta; claves, tarjetas, JWT, cadenas de conexión y .env enmascarados;
+   detector de fuga del prompt (ventanas de 9 palabras).
+
+Límite conocido: una paráfrasis corta de las reglas puede escapar al detector de fuga;
+la regla 8 del prompt y las políticas de entrada la cubren en la práctica, y lo que
+puede decir no incluye secretos (solo el estilo de respuesta del asistente).
