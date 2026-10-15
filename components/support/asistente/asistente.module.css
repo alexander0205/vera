@@ -404,3 +404,16 @@
 .tarjetaFilas > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 12.75px; }
 .tarjetaFilas dt { color: var(--muted-foreground); flex-shrink: 0; }
 .tarjetaFilas dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+
+/* Conversaciones anteriores */
+.historial { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.historialBoton { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--muted-foreground); font-size: 12px; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+.historialBoton:hover { background: var(--muted); color: var(--foreground); }
+.historialBoton:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.historialLista { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); max-height: 220px; overflow-y: auto; }
+.historialItem { width: 100%; display: flex; justify-content: space-between; gap: 10px; align-items: center; text-align: left; border: 0; background: none; color: var(--foreground); padding: 7px 9px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+.historialItem:hover { background: var(--muted); }
+.historialActual { background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
+.historialTitulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.historialFecha { flex-shrink: 0; color: var(--muted-foreground); font-size: 11.5px; }
+.historialVacio { padding: 8px 10px; color: var(--muted-foreground); font-size: 12.5px; }

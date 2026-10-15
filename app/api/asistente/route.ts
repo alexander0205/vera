@@ -46,6 +46,43 @@ export async function GET(req: NextRequest) {
   }
   const ia = asistenteIaDisponible();
 
+  // Historial: lista de conversaciones anteriores de esta persona en esta empresa, o una en concreto.
+  const sp = req.nextUrl.searchParams;
+  if (sp.get('conversaciones') === '1') {
+    const lista = await db.select({
+      id: asistenteConversaciones.id, titulo: asistenteConversaciones.titulo, actualizadaEn: asistenteConversaciones.actualizadaEn,
+    }).from(asistenteConversaciones)
+      .where(and(eq(asistenteConversaciones.teamId, acceso.teamId), eq(asistenteConversaciones.userId, acceso.user.id)))
+      .orderBy(desc(asistenteConversaciones.actualizadaEn))
+      .limit(15);
+    return NextResponse.json({ conversaciones: lista });
+  }
+  const idPedido = Number(sp.get('id'));
+  if (sp.has('id')) {
+    if (!Number.isInteger(idPedido) || idPedido <= 0) return NextResponse.json({ error: 'Conversación inválida' }, { status: 400 });
+    const [c] = await db.select().from(asistenteConversaciones)
+      .where(and(
+        eq(asistenteConversaciones.id, idPedido),
+        eq(asistenteConversaciones.teamId, acceso.teamId),
+        eq(asistenteConversaciones.userId, acceso.user.id),
+      )).limit(1);
+    if (!c) return NextResponse.json({ error: 'Conversación no encontrada' }, { status: 404 });
+    const ms = await db.select({
+      id: asistenteMensajes.id, rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido,
+      herramientas: asistenteMensajes.herramientas, creadoEn: asistenteMensajes.creadoEn,
+      valoracion: asistenteMensajes.valoracion, valoracionMotivo: asistenteMensajes.valoracionMotivo, origen: asistenteMensajes.origen,
+    }).from(asistenteMensajes)
+      .where(eq(asistenteMensajes.conversacionId, c.id))
+      .orderBy(asc(asistenteMensajes.id))
+      .limit(200);
+    return NextResponse.json({
+      conversacion: {
+        id: c.id, derivada: c.derivadaTicketId != null,
+        mensajes: ms.map((m) => ({ ...m, grande: m.rol === 'assistant' && esRespuestaGrande(m.contenido) })),
+      },
+    });
+  }
+
   // Para saludar por nombre y decir de qué empresa se habla.
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, acceso.teamId)).limit(1);
   // Lo que esta persona suele preguntar (solo sus propias preguntas, últimos 90 días).

@@ -61,7 +61,7 @@ Orden de trabajo; cada una con pruebas y commit.
 - [x] 5.12 Gráficos de línea y de torta
 - [x] 5.13 Cifras clicables
 - [x] 5.14 Respuesta que se va mostrando (streaming)
-- [ ] 5.15 Historial de conversaciones
+- [x] 5.15 Historial de conversaciones
 - [ ] 5.16 Modo ancho del panel
 - [ ] 5.17 Estados vacíos y de error cuidados
 

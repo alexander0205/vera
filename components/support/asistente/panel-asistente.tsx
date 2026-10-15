@@ -213,6 +213,7 @@ export function PanelAsistente({
   onIrASoporte: () => void;
 }) {
   const [texto, setTexto] = useState('');
+  const [verHistorial, setVerHistorial] = useState(false);
   const listaRef = useRef<HTMLDivElement>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
 
@@ -318,6 +319,31 @@ export function PanelAsistente({
             </div>
           </div>
         )}
+
+        <div className={s.historial}>
+          <button
+            type="button" className={s.historialBoton} aria-expanded={verHistorial}
+            onClick={() => { setVerHistorial((v) => !v); if (!verHistorial) void a.cargarConversaciones(); }}
+          >
+            <History size={13} aria-hidden /> Conversaciones anteriores
+          </button>
+          {verHistorial && (
+            <ul className={s.historialLista}>
+              {a.conversaciones.length === 0 && <li className={s.historialVacio}>Todavía no hay conversaciones anteriores.</li>}
+              {a.conversaciones.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button" className={`${s.historialItem} ${c.id === a.conversacionId ? s.historialActual : ''}`}
+                    onClick={async () => { if (await a.abrirConversacion(c.id)) setVerHistorial(false); }}
+                  >
+                    <span className={s.historialTitulo}>{c.titulo || 'Conversación'}</span>
+                    <span className={s.historialFecha}>{new Date(c.actualizadaEn).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {a.mensajes.map((m) => (
           <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar}
