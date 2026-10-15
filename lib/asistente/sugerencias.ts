@@ -9,7 +9,7 @@ import type { ModuleKey } from '@/lib/auth/modules';
 import type { Permission } from '@/lib/config/roles';
 
 export type IconoSugerencia =
-  | 'ventas' | 'cartera' | 'cobros' | 'clientes' | 'itbis' | 'revisar'
+  | 'resumen' | 'ventas' | 'cartera' | 'cobros' | 'clientes' | 'itbis' | 'revisar'
   | 'borradores' | 'inventario' | 'escolar' | 'nomina' | 'caja' | 'guia';
 
 export interface Sugerencia {
@@ -39,6 +39,7 @@ export function sugerenciasPara(c: Capacidades): Sugerencia[] {
   }
 
   const base: Sugerencia[] = [
+    { texto: 'Dame el resumen de hoy', icono: 'resumen', intencion: 'resumen-dia' },
     { texto: '¿Cuánto he vendido este mes?', icono: 'ventas', intencion: 'ventas' },
   ];
   if (c.puede('facturas:ver')) base.push({ texto: '¿Quién me debe y cuánto?', icono: 'cartera', intencion: 'cartera' });
@@ -51,6 +52,6 @@ export function sugerenciasPara(c: Capacidades): Sugerencia[] {
   if (c.puede('cotizaciones:ver')) base.push({ texto: '¿Dónde veo mis cotizaciones?', icono: 'guia', intencion: 'guia' });
 
   // Lo propio de la empresa primero (entre las dos primeras de siempre), luego el resto.
-  const [ventas, ...resto] = base;
-  return [ventas, ...propias, ...resto].slice(0, MAXIMO);
+  const [resumen, ventas, ...resto] = base;
+  return [resumen, ventas, ...propias, ...resto].slice(0, MAXIMO);
 }

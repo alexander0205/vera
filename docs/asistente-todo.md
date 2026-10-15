@@ -23,7 +23,7 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 - [x] 2.1 Contexto de pantalla (el asistente sabe en qué página/registro estás)
 - [x] 2.2 Gráficos simples en el chat (barras/línea de ventas por mes)
 - [x] 2.3 👎 con motivo → cola de casos para el set de evaluación
-- [ ] 2.4 Resumen del día (por cobrar vencidas, borradores, turnos abiertos)
+- [x] 2.4 Resumen del día (por cobrar vencidas, borradores, turnos abiertos)
 
 ## Fase 3 — control y alcance
 - [ ] 3.1 Bitácora visible para el dueño (quién preguntó qué y cuándo)

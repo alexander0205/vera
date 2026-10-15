@@ -547,6 +547,69 @@ function entradaTendencia(t: string, periodo: Periodo | null, hoy?: string): Rec
   return { desde: ini, hasta: h, agrupar: porMes || !dicho ? 'mes' : 'dia' };
 }
 
+// ── Resumen del día ───────────────────────────────────────────────
+
+const RESUMEN_DIA = /\b(resumen (del|de|para) (dia|hoy)|resumen de hoy|como va (el|mi) dia|como (va|vamos|amanecio|esta|estamos) (el )?(negocio|hoy|hoy dia)|que paso hoy|que (hay|tengo|queda) (pendiente )?(para )?hoy|panorama (de hoy|del dia)|como (va|anda) todo)\b/;
+
+/** Una consulta que puede fallar o no existir sin tumbar el resumen. */
+async function intentar(tools: ToolSet, nombre: string, input: Record<string, unknown>): Promise<Fila | null> {
+  try {
+    const r = await ejecutar(tools, nombre, input);
+    return r && !r.error ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resumenDelDia(tools: ToolSet, hoy: string): Promise<string | null> {
+  const [ventas, cobros, cartera, borradores, porRevisar, turnos, stock] = await Promise.all([
+    tools.resumen_ventas ? intentar(tools, 'resumen_ventas', { desde: hoy, hasta: hoy }) : null,
+    tools.pagos_recibidos ? intentar(tools, 'pagos_recibidos', { desde: hoy, hasta: hoy, limite: 1 }) : null,
+    tools.cuentas_por_cobrar ? intentar(tools, 'cuentas_por_cobrar', { soloVencidas: false, limite: 3 }) : null,
+    tools.buscar_facturas ? intentar(tools, 'buscar_facturas', { estado: 'BORRADOR', limite: 1 }) : null,
+    tools.facturas_por_revisar ? intentar(tools, 'facturas_por_revisar', { limite: 1 }) : null,
+    tools.turnos_caja ? intentar(tools, 'turnos_caja', { estado: 'ABIERTO', limite: 10 }) : null,
+    tools.buscar_productos ? intentar(tools, 'buscar_productos', { soloBajoMinimo: true, limite: 1 }) : null,
+  ]);
+  if (![ventas, cobros, cartera, borradores, porRevisar, turnos, stock].some(Boolean)) return null;
+
+  const hoyLinea: string[] = [];
+  if (ventas) {
+    hoyLinea.push(n(ventas.facturas)
+      ? `- Ventas: **${rd(n(ventas.ventasNetas))}** en ${n(ventas.facturas)} factura${n(ventas.facturas) === 1 ? '' : 's'}` : '- Ventas: todavía no hay facturas emitidas hoy');
+  }
+  if (cobros) {
+    hoyLinea.push(n(cobros.cantidad)
+      ? `- Cobrado: **${rd(n(cobros.totalCobrado))}** en ${n(cobros.cantidad)} pago${n(cobros.cantidad) === 1 ? '' : 's'}` : '- Cobrado: todavía no se ha registrado ningún pago hoy');
+  }
+
+  const atencion: string[] = [];
+  if (cartera && n(cartera.totalPorCobrar)) {
+    const vencido = n(cartera.vencido0a30) + n(cartera.vencido31a60) + n(cartera.vencido61a90) + n(cartera.vencidoMasDe90);
+    atencion.push(`- Por cobrar: **${rd(n(cartera.totalPorCobrar))}** entre ${n(cartera.clientesConDeuda)} cliente${n(cartera.clientesConDeuda) === 1 ? '' : 's'}${vencido ? `, de los cuales ${rd(vencido)} ya están vencidos` : ''}`);
+  }
+  if (borradores && n(borradores.coinciden)) {
+    atencion.push(`- Facturas en borrador sin emitir: **${n(borradores.coinciden)}** (${enlazar('ver borradores', borradores.enlaceLista)})`);
+  }
+  if (porRevisar && n(porRevisar.totalPorRevisar)) {
+    atencion.push(`- Facturas de proveedor por revisar: **${n(porRevisar.totalPorRevisar)}** (${enlazar('revisarlas', porRevisar.enlace)})`);
+  }
+  if (turnos && !turnos.nota && ((turnos.turnos as Fila[]) ?? []).length) {
+    const k = ((turnos.turnos as Fila[]) ?? []).length;
+    atencion.push(`- Turnos de caja abiertos: **${k}** (${enlazar('ver caja', turnos.enlaceLista)})`);
+  }
+  if (stock && n(stock.coinciden)) {
+    atencion.push(`- Productos en o bajo su mínimo de inventario: **${n(stock.coinciden)}**`);
+  }
+
+  return [
+    `**Resumen de hoy, ${fechaLarga(hoy)}**`,
+    '',
+    ...(hoyLinea.length ? ['**Lo de hoy**', '', ...hoyLinea, ''] : []),
+    ...(atencion.length ? ['**Lo que requiere atención**', '', ...atencion] : ['No hay nada pendiente que requiera atención: todo está al día.']),
+  ].join('\n').trim();
+}
+
 // ── Pantalla actual ──────────────────────────────────────────────
 
 const DONDE_ESTOY = /\b(que (puedo|podemos|se puede) hacer (en|aqui|desde|con) (esta|este|aqui|esto)?\s*(pantalla|pagina|seccion|modulo)?|que hago aqui|para que sirve (esta|este|esto)( pantalla| pagina| seccion)?|en que (pantalla|pagina|parte|modulo|seccion) (estoy|estamos)|que (estoy|estamos) (viendo|mirando)|donde (estoy|estamos)|que (es|veo) (esto|esta pantalla|esta pagina|aqui))\b/;
@@ -640,6 +703,12 @@ export async function responderLocal(
     && !INTENCIONES.some((i) => i.re.test(t))) {
     const r = await responderLocal(`${opts.preguntaPrevia} ${texto}`, tools, { ...opts, preguntaPrevia: undefined });
     if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+  }
+
+  // «Resumen de hoy»: varias consultas juntas, cada una opcional.
+  if (RESUMEN_DIA.test(t)) {
+    const r = await resumenDelDia(tools, opts.hoy ?? hoyRd());
+    if (r) return { intencion: 'resumen-dia', respuesta: r };
   }
 
   // «¿En qué pantalla estamos?», «¿qué estoy viendo?»: se contesta con la pantalla real.

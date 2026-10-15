@@ -17,7 +17,7 @@ import s from './asistente.module.css';
  */
 
 const ICONOS: Record<string, LucideIcon> = {
-  ventas: TrendingUp, cartera: Users, cobros: CreditCard, clientes: Wallet, itbis: Receipt, revisar: ScanSearch,
+  resumen: Sparkles, ventas: TrendingUp, cartera: Users, cobros: CreditCard, clientes: Wallet, itbis: Receipt, revisar: ScanSearch,
   borradores: FilePen, inventario: PackageSearch, escolar: GraduationCap, nomina: UserCog, caja: Banknote, guia: BookOpen,
 };
 

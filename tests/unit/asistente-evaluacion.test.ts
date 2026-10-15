@@ -184,7 +184,7 @@ describe('evaluación: atajos al abrir el chat', () => {
   it('un colegio ve matrículas entre los primeros atajos', async () => {
     const { sugerenciasPara } = await import('@/lib/asistente/sugerencias');
     const colegio = { tieneModulo: (m: string) => m === 'escolar', puede: () => true };
-    expect(sugerenciasPara(colegio as never).slice(0, 2).map((s) => s.icono)).toContain('escolar');
+    expect(sugerenciasPara(colegio as never).slice(0, 3).map((s) => s.icono)).toContain('escolar');
   });
 });
 
@@ -512,5 +512,64 @@ describe('evaluación: casos que salen de las valoraciones negativas', () => {
 
   it('sin valoraciones, el informe lo dice', () => {
     expect(informeMarkdown([], '2026-10-01')).toContain('Sin valoraciones negativas');
+  });
+});
+
+// ── 2.4 Resumen del día ──
+describe('evaluación: resumen del día', () => {
+  const DATOS = {
+    resumen_ventas: { ventasNetas: 12500, facturas: 4, porCobrarHoy: 0, vencidoHoy: 0 },
+    pagos_recibidos: { cantidad: 3, totalCobrado: 9000, pagos: [] },
+    cuentas_por_cobrar: { totalPorCobrar: 155194.03, clientesConDeuda: 96, vencido0a30: 1000, vencido31a60: 500, vencido61a90: 0, vencidoMasDe90: 200, mayoresDeudores: [] },
+    buscar_facturas: { coinciden: 792, enlaceLista: '/dashboard/facturas', facturas: [] },
+    facturas_por_revisar: { totalPorRevisar: 2, enlace: '/dashboard/gastos', facturas: [] },
+    turnos_caja: { enlaceLista: '/dashboard/caja', turnos: [{ cajero: 'Ana' }, { cajero: 'Luis' }] },
+    buscar_productos: { coinciden: 5, productos: [] },
+  };
+
+  it.each(['dame el resumen de hoy', 'como va el dia', 'que paso hoy', 'como va todo'])('«%s» arma el resumen', async (p) => {
+    const { tools } = herramientas(DATOS);
+    const r = await responderLocal(p, tools, { hoy: HOY });
+    expect(r?.intencion).toBe('resumen-dia');
+  });
+
+  it('junta lo de hoy y lo que requiere atención, con enlaces reales', async () => {
+    const { tools } = herramientas(DATOS);
+    const r = (await responderLocal('resumen de hoy', tools, { hoy: HOY }))!.respuesta;
+    expect(r).toContain('13 de octubre de 2026');
+    expect(r).toContain('Ventas: **RD$ 12,500.00** en 4 facturas');
+    expect(r).toContain('Cobrado: **RD$ 9,000.00** en 3 pagos');
+    expect(r).toContain('RD$ 1,700.00 ya están vencidos');
+    expect(r).toContain('[ver borradores](/dashboard/facturas)');
+    expect(r).toContain('[revisarlas](/dashboard/gastos)');
+    expect(r).toContain('Turnos de caja abiertos: **2**');
+  });
+
+  it('un día sin movimiento ni pendientes lo dice sin inventar', async () => {
+    const { tools } = herramientas({
+      resumen_ventas: { ventasNetas: 0, facturas: 0 }, pagos_recibidos: { cantidad: 0 },
+      cuentas_por_cobrar: { totalPorCobrar: 0 }, buscar_facturas: { coinciden: 0 }, facturas_por_revisar: { totalPorRevisar: 0 },
+    });
+    const r = (await responderLocal('resumen de hoy', tools, { hoy: HOY }))!.respuesta;
+    expect(r).toContain('todavía no hay facturas emitidas hoy');
+    expect(r).toContain('todo está al día');
+  });
+
+  it('si una consulta falla, el resto del resumen sale igual', async () => {
+    const { tools } = herramientas({ ...DATOS, pagos_recibidos: { error: 'No pude consultar los pagos' } });
+    const r = (await responderLocal('resumen de hoy', tools, { hoy: HOY }))!.respuesta;
+    expect(r).toContain('Ventas: **RD$ 12,500.00**');
+    expect(r).not.toContain('Cobrado');
+  });
+
+  it('«resumen de ventas de hoy» sigue siendo una pregunta de ventas', async () => {
+    const { tools } = herramientas(DATOS);
+    expect((await responderLocal('resumen de ventas de hoy', tools, { hoy: HOY }))?.intencion).toBe('ventas');
+  });
+
+  it('el turno de «solo el mío» no se presenta como el total de la empresa', async () => {
+    const { tools } = herramientas({ ...DATOS, turnos_caja: { nota: 'Solo informa el turno de quien pregunta', enlaceLista: '/dashboard/caja', turnos: [{ cajero: 'Tú' }] } });
+    const r = (await responderLocal('resumen de hoy', tools, { hoy: HOY }))!.respuesta;
+    expect(r).not.toContain('Turnos de caja abiertos');
   });
 });
