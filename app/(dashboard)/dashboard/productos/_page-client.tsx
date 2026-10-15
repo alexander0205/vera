@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Upload, PackagePlus,
 } from 'lucide-react';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
 import { ProductoFormModal } from '@/components/productos/ProductoFormModal';
 
@@ -50,6 +50,23 @@ const TASA_LABELS: Record<string, string> = {
  *   del negocio, que es lo que tiene que ver Facturación —ahí SÍ se muestran
  *   todos, o no habría forma de editar un ítem oculto ni de volver a mostrarlo.
  */
+/** Imprimir / PDF / Excel del catálogo, como lo filtra la tabla. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Producto> = {
+  titulo: 'Productos y servicios',
+  archivo: 'productos',
+  tachada: p => p.activo === 'false',
+  columnas: [
+    { titulo: 'Nombre', valor: p => p.nombre, sub: p => p.descripcion, ancho: 2.2 },
+    { titulo: 'Referencia', valor: p => p.referencia ?? p.codigoBarras, ancho: 1 },
+    { titulo: 'Tipo', valor: p => (p.tipo === 'servicio' ? 'Servicio' : 'Bien'), ancho: 0.7 },
+    { titulo: 'Unidad', valor: p => p.unidadMedida, ancho: 0.7 },
+    { titulo: 'ITBIS', valor: p => TASA_LABELS[p.tasaItbis] ?? p.tasaItbis, ancho: 0.7 },
+    { titulo: 'Stock', valor: p => (p.controlaInventario ? p.stockActual : null), tipo: 'numero', ancho: 0.6 },
+    { titulo: 'Costo', valor: p => Math.round(p.costoDOP * 100) || null, tipo: 'moneda', ancho: 0.9 },
+    { titulo: 'Precio', valor: p => Math.round(p.precioDOP * 100), tipo: 'moneda', ancho: 0.9 },
+  ],
+};
+
 export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
   const soloPos = canal === 'pos';
   const [productos, setProductos]       = useState<Producto[]>([]);
@@ -245,6 +262,7 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         rowActions={rowActions}
         emptyState={{
           icon: Package,

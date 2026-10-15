@@ -16,6 +16,8 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 /**
  * Las familias que pagan.
@@ -59,6 +61,23 @@ const traer = (u: string) => fetch(u).then((r) => {
 
 const POR_PAGINA = 25;
 
+
+/** Imprimir / PDF / Excel de las familias filtradas (todas las páginas). Sin filtro de fecha: es un padrón. */
+const EXPORTAR: ExportTabla<FilaResponsable> = {
+  titulo: 'Responsables de pago',
+  archivo: 'responsables-pago',
+  columnas: [
+    { titulo: 'Responsable', valor: f => f.razonSocial, sub: f => f.rnc, ancho: 2 },
+    // Los canales salen de la misma regla que el motor de avisos (destinoDeContacto).
+    { titulo: 'WhatsApp', valor: f => destinoDeContacto(f, 'whatsapp'), sub: f => destinoDeContacto(f, 'correo'), ancho: 1.3 },
+    { titulo: 'SMS / teléfono', valor: f => destinoDeContacto(f, 'sms') ?? f.telefono, ancho: 1 },
+    { titulo: 'Hijos', valor: f => f.alumnos, tipo: 'numero', total: true, ancho: 0.5 },
+    { titulo: 'Deuda escolar', valor: f => f.deudaEscolarCentavos, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Otras facturas', valor: f => f.deudaFacturasCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Vence más viejo', valor: f => (f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : null), ancho: 0.9 },
+  ],
+};
+
 export default function ResponsablesClient() {
   const { params, setParams } = useUrlParams();
   const filtro = params.get('filtro') ?? 'todos';
@@ -77,6 +96,16 @@ export default function ResponsablesClient() {
    * `dedupingInterval` para que volver de la ficha de una familia no repita la
    * consulta pesada del listado: son cuatro LATERAL por contacto.
    */
+  async function armarExport() {
+    const filas: FilaResponsable[] = [];
+    for (let offset = 0; offset < 10000; offset += 200) {
+      const d = await fetch(`/api/administracion-escolar/responsables?filtro=${filtro}&limit=200&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`).then(r => r.json()) as Resp;
+      filas.push(...(d.filas ?? []));
+      if ((d.filas ?? []).length < 200 || filas.length >= (d.total ?? 0)) break;
+    }
+    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, q ? `Búsqueda: «${q}»` : null].filter(Boolean).join(' · '));
+  }
+
   const { data, isLoading, error } = useSWR<Resp>(url, traer, {
     keepPreviousData: true,
     revalidateOnFocus: false,
@@ -121,6 +150,7 @@ export default function ResponsablesClient() {
             Las familias que pagan, con sus hijos y su deuda junta.
           </p>
         </div>
+        <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-responsables" />
       </div>
 
       {/* Las cifras del colegio, como en Estudiantes: del team entero, no de
