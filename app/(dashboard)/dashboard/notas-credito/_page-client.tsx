@@ -7,7 +7,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import { Plus, FileText, Download, TrendingDown, CheckCircle, Clock, FileX } from 'lucide-react';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 export interface NotaCredito {
@@ -57,6 +57,24 @@ function EstadoChip({ estado, padreEmitido }: { estado: string; padreEmitido: bo
   }
 }
 
+const ESTADO_LABEL: Record<string, string> = Object.fromEntries(ESTADO_OPTIONS.map(o => [o.value, o.label]));
+
+/** Imprimir / PDF / Excel: las notas tal como las filtra la tabla. */
+const EXPORTAR: ExportTabla<NotaCredito> = {
+  titulo: 'Notas de crédito',
+  archivo: 'notas-credito',
+  tachada: r => r.estado === 'ANULADO',
+  columnas: [
+    { titulo: 'Fecha', valor: r => fmtFechaCorta(r.fechaEmision), ancho: 0.8 },
+    { titulo: 'Nota', valor: r => r.codigo ?? `#${r.id}`, sub: r => (r.encf && !r.encf.startsWith('BOR-') ? r.encf : null), ancho: 1.4 },
+    { titulo: 'Factura origen', valor: r => r.ncfModificado, ancho: 1.2 },
+    { titulo: 'Motivo', valor: r => r.razonModificacion || (r.codigoModificacion != null ? COD_MODIFICACION_LABEL[r.codigoModificacion] : null), ancho: 1.6 },
+    { titulo: 'Cliente', valor: r => r.razonSocialComprador ?? 'Consumidor final', ancho: 2 },
+    { titulo: 'Estado', valor: r => (r.estado === 'BORRADOR' && r.padreEmitido ? 'Pendiente DGII' : ESTADO_LABEL[r.estado] ?? r.estado), ancho: 1 },
+    { titulo: 'Monto', valor: r => r.montoTotal, tipo: 'moneda', total: true, ancho: 1.1 },
+  ],
+};
+
 function exportCSV(rows: NotaCredito[]) {
   const headers = ['e-NCF', 'Factura origen', 'Motivo', 'Comprador', 'Monto (DOP)', 'Estado', 'Fecha'];
   const body = rows.map(r => [
@@ -64,7 +82,8 @@ function exportCSV(rows: NotaCredito[]) {
     r.ncfModificado ?? '',
     r.razonModificacion || (r.codigoModificacion != null ? (COD_MODIFICACION_LABEL[r.codigoModificacion] ?? '') : ''),
     r.razonSocialComprador ?? 'Consumidor final',
-    r.montoTotal.toFixed(2),
+    // monto_total va en centavos: sin /100 el CSV decía 150000.00 por RD$1,500.
+    (r.montoTotal / 100).toFixed(2),
     r.estado,
     r.fechaEmision.slice(0, 10),
   ]);
@@ -239,6 +258,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         emptyState={{
           icon: FileText,
           title: filtered.length === 0 && docs.length > 0 ? 'Sin resultados para estos filtros' : 'Sin notas de crédito aún',
