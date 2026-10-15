@@ -8,19 +8,14 @@
  * Los totales salen del mismo resumen que las tarjetas de la pantalla, así que
  * cuadran con lo que el usuario tiene delante aunque la lista se corte.
  */
-import { NextRequest, NextResponse } from 'next/server';
-import { renderToBuffer } from '@react-pdf/renderer';
-import { createElement } from 'react';
-import { eq } from 'drizzle-orm';
+import { NextRequest } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { db } from '@/lib/db/drizzle';
-import { teams } from '@/lib/db/schema';
 import { resumenGastos } from '@/lib/compras/consultas';
 import { cargarFilasGastos, estadoPagoTexto, METODO_LABEL } from '@/lib/compras/lista-gastos';
 import { leerFiltroGastos, describirFiltroGastos } from '@/lib/compras/filtro-gastos';
 import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx } from '@/lib/contabilidad/export-xlsx';
-import { GastosPDF, type GastosPDFData } from '@/lib/pdf/GastosPDF';
-import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 
 export const maxDuration = 60;
 
@@ -36,10 +31,9 @@ export async function GET(req: NextRequest) {
   const formato = sp.get('formato') === 'pdf' ? 'pdf' : 'xlsx';
   const filtro = leerFiltroGastos(sp);
 
-  const [todas, resumen, [team]] = await Promise.all([
+  const [todas, resumen] = await Promise.all([
     cargarFilasGastos(teamId, filtro, TOPE),
     resumenGastos(teamId, filtro),
-    db.select({ name: teams.name, razonSocial: teams.razonSocial, rnc: teams.rnc }).from(teams).where(eq(teams.id, teamId)).limit(1),
   ]);
   // Cada fuente trae hasta TOPE; juntas pueden pasarse.
   const filas = todas.slice(0, TOPE);
@@ -47,41 +41,47 @@ export async function GET(req: NextRequest) {
   const sufijo = [filtro.desde, filtro.hasta].filter(Boolean).join('_') || hoyRD();
 
   if (formato === 'pdf') {
-    const data: GastosPDFData = {
-      empresa: team?.razonSocial || team?.name || 'Empresa',
-      rnc: team?.rnc ?? null,
-      filtroTexto,
+    const { empresa, rnc } = await empresaParaPdf(teamId);
+    return respuestaListadoPdf({
+      empresa, rnc, filtroTexto,
+      titulo: 'Reporte de gastos',
       generado: fmtFechaCorta(hoyRD()),
-      totales: {
-        gastado: resumen.totalCents / 100,
-        cantidad: resumen.vivas,
-        itbisAdelantar: resumen.itbisPorAdelantarCents / 100,
-        retenciones: resumen.retencionesCents / 100,
-        porPagar: resumen.porPagarCents / 100,
-      },
-      filas: filas.map((f) => ({
-        fecha: fmtFechaCorta(f.fecha),
-        proveedor: f.proveedor,
-        rnc: f.rnc,
-        comprobante: f.comprobante || '—',
-        tipo: f.borrador ? `${f.tipo} · sin emitir` : f.tipo,
-        categoria: f.categoria,
-        estado: estadoPagoTexto(f),
-        anulado: f.anulado,
-        retenciones: f.retencionesCents / 100,
-        monto: f.montoCents / 100,
-      })),
-      totalFilas: resumen.cantidad,
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buffer = await renderToBuffer(createElement(GastosPDF, { data }) as any);
-    const disposicion = sp.get('inline') === '1' ? 'inline' : 'attachment';
-    return new NextResponse(new Uint8Array(buffer), {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `${disposicion}; filename="gastos_${sufijo}.pdf"`,
-      },
-    });
+      kpis: [
+        { label: 'Gastado', valor: fmtDOP(resumen.totalCents), sub: `${resumen.vivas} gasto${resumen.vivas === 1 ? '' : 's'}` },
+        { label: 'ITBIS por adelantar', valor: fmtDOP(resumen.itbisPorAdelantarCents) },
+        { label: 'Retenciones', valor: fmtDOP(resumen.retencionesCents) },
+        { label: 'Por pagar', valor: fmtDOP(resumen.porPagarCents) },
+      ],
+      columnas: [
+        { titulo: 'Fecha', ancho: '8%' },
+        { titulo: 'Proveedor', ancho: '22%' },
+        { titulo: 'Comprobante', ancho: '14%', mono: true },
+        { titulo: 'Tipo', ancho: '13%' },
+        { titulo: 'Categoría', ancho: '15%' },
+        { titulo: 'Pago', ancho: '8%' },
+        { titulo: 'Retenciones', ancho: '9%', alinear: 'right' },
+        { titulo: 'Monto', ancho: '11%', alinear: 'right', negrita: true },
+      ],
+      grupos: [{
+        filas: filas.map((f) => ({
+          tachada: f.anulado,
+          celdas: [
+            fmtFechaCorta(f.fecha),
+            { texto: f.proveedor, sub: f.rnc },
+            f.comprobante || '—',
+            f.borrador ? `${f.tipo} · sin emitir` : f.tipo,
+            f.categoria,
+            estadoPagoTexto(f),
+            f.retencionesCents ? fmtDOP(f.retencionesCents) : '—',
+            fmtDOP(f.montoCents),
+          ],
+        })),
+      }],
+      totales: { etiqueta: 'Total gastado (sin anulados)', valores: { 6: fmtDOP(resumen.retencionesCents), 7: fmtDOP(resumen.totalCents) } },
+      nota: resumen.cantidad > filas.length
+        ? `Se muestran ${filas.length} de ${resumen.cantidad} gastos. Acota el filtro para verlos todos; los totales sí incluyen todos.`
+        : undefined,
+    }, `gastos_${sufijo}.pdf`, sp.get('inline') === '1');
   }
 
   const { wb, ws } = nuevaHoja('Gastos');

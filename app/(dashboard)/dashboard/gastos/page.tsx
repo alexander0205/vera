@@ -12,7 +12,7 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Receipt, ArrowUpRight, Printer, Download, FileText } from 'lucide-react';
+import { Receipt, ArrowUpRight } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Table from '@mui/material/Table';
@@ -34,33 +34,7 @@ import { BandejaCapturas } from './_bandeja-capturas';
 import { PaginadorGastos } from './_paginador';
 import { paginaDe } from '@/lib/compras/orden-gastos';
 import { listarCapturas } from '@/lib/compras/captura/consultas';
-
-/**
- * Imprimir, PDF y Excel de lo que está filtrado (todo, no solo la página).
- * Mismos botones que los reportes de Ingresos. «Imprimir» abre el PDF en el
- * visor del navegador, que ya trae su botón de imprimir.
- */
-function BotonesExportar({ filtro }: { filtro: string }) {
-  const base = `/api/gastos/export?${filtro ? `${filtro}&` : ''}`;
-  const sx = {
-    display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.5, height: 36, borderRadius: '8px',
-    fontSize: '0.8125rem', fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap',
-    border: '1px solid #d1d5db', color: '#374151', bgcolor: '#fff', '&:hover': { bgcolor: '#f9fafb' },
-  } as const;
-  return (
-    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }} data-testid="exportar-gastos">
-      <Box component="a" href={`${base}formato=pdf&inline=1`} target="_blank" rel="noopener" sx={sx}>
-        <Printer size={15} /> Imprimir
-      </Box>
-      <Box component="a" href={`${base}formato=pdf`} sx={sx}>
-        <FileText size={15} /> PDF
-      </Box>
-      <Box component="a" href={`${base}formato=xlsx`} sx={sx}>
-        <Download size={15} /> Excel
-      </Box>
-    </Box>
-  );
-}
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 
 function Chip({ label, bg, color, icon }: { label: string; bg: string; color: string; icon?: ReactNode }) {
   return (
@@ -151,7 +125,7 @@ export default async function GastosPage({ searchParams }: { searchParams: Promi
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <BotonesExportar filtro={filtroQs} />
+          <BotonesExportar ruta="/api/gastos/export" filtro={filtroQs} testId="exportar-gastos" />
           <EnlaceFotos />
           <SubirComprobante />
           <NuevoGasto />
