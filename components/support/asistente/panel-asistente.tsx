@@ -48,7 +48,7 @@ const MOTIVOS: [string, string][] = [
  * hacia abajo, en menos de un segundo. Con movimiento reducido, o si es corta,
  * aparece entera. Lo que no es nuevo (historial) nunca se anima.
  */
-function TextoRevelado({ texto, nuevo, alCrecer }: { texto: string; nuevo: boolean; alCrecer: () => void }) {
+function TextoRevelado({ texto, nuevo, alCrecer, clave }: { texto: string; nuevo: boolean; alCrecer: () => void; clave?: string }) {
   const bloques = useMemo(() => bloquesDeRevelado(texto), [texto]);
   const [visibles, setVisibles] = useState(() => {
     const reducido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -60,7 +60,7 @@ function TextoRevelado({ texto, nuevo, alCrecer }: { texto: string; nuevo: boole
     return () => clearTimeout(t);
   }, [visibles, bloques.length]);
   useEffect(() => { alCrecer(); }, [visibles, alCrecer]);
-  return <Markdown texto={visibles >= bloques.length ? texto : bloques.slice(0, visibles).join('\n\n')} />;
+  return <Markdown texto={visibles >= bloques.length ? texto : bloques.slice(0, visibles).join('\n\n')} clave={clave} />;
 }
 
 /** Un error con explicación y la salida que corresponde (reintentar, esperar o hablar con alguien). */
@@ -205,7 +205,7 @@ function MensajeAsistenteVista({
       <span className={s.avatar} aria-hidden><Sparkles size={13} /></span>
       <div className={s.cuerpo}>
         <div className={`${s.burbuja} ${s.burbujaAsistente} ${m.error ? s.burbujaError : ''}`}>
-          {m.error ? <ErrorVista texto={m.contenido} esElUltimo={ultimoError} onReintentar={onReintentar} onPersona={onPersona} /> : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} />}
+          {m.error ? <ErrorVista texto={m.contenido} esElUltimo={ultimoError} onReintentar={onReintentar} onPersona={onPersona} /> : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} clave={m.id > 0 ? `msg-${m.id}` : undefined} />}
         </div>
         {m.propuestas?.map((p) => (
           <div key={p.token} className={`${s.propuesta} ${p.destructiva ? s.propuestaPeligro : ''}`} role="group" aria-label="Confirmar acción">

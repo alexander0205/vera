@@ -1185,6 +1185,8 @@ export async function responderLocal(
       ? `Claro. Sube el archivo aquí mismo y te muestro un resumen antes de importar nada.`
       : form.id === 'gasto'
         ? `Claro. Sube aquí la foto o el PDF del comprobante; queda en «por revisar» para que lo confirmes.`
+        : form.id === 'anulacion'
+          ? `Claro. Elige la factura y el motivo; antes de anular te pido confirmación.`
         : form.id === 'factura'
           ? `Claro. Llena la factura aquí mismo: puedes guardarla como borrador o emitirla.`
           : `Claro. Llena este formulario aquí mismo: ${def.titulo.toLowerCase()}.`;

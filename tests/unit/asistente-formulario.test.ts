@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   armarPayload, bloqueFormulario, defFormulario, detectarFormulario, endpointDe, FORMULARIOS, guardarLineas, leerLineas,
-  limpiarValor, parsearFormulario, resultadoDeCreacion, resumenDeEmision, totalesDeLineas, validarFormulario,
+  limpiarValor, parsearFormulario, resultadoDeCreacion, resumenDeAnulacion, resumenDeEmision, totalesDeLineas, validarFormulario,
 } from '@/lib/asistente/formulario';
 import { calcularTotales } from '@/lib/ecf/types';
 import { aBloques } from '@/lib/asistente/bloques';
@@ -291,5 +291,28 @@ describe('cotización, factura, cobro y gasto', () => {
       expect(f.endpoint.startsWith('/api/')).toBe(true);
       expect(f.endpoint).not.toMatch(/\.\.|https?:/);
     }
+  });
+});
+
+describe('anular una factura', () => {
+  const def = FORMULARIOS.anulacion;
+  it('reconoce el pedido y no confunde preguntas', () => {
+    expect(detectarFormulario('anular una factura')?.id).toBe('anulacion');
+    expect(detectarFormulario('quiero anular la factura')?.id).toBe('anulacion');
+    expect(detectarFormulario('cómo anulo una factura')).toBeNull();
+    expect(detectarFormulario('cuántas facturas anuladas tengo')).toBeNull();
+  });
+  it('exige factura y motivo; arma el cuerpo y la dirección', () => {
+    expect(validarFormulario(def, {})).toMatchObject({ documento: expect.any(String), tipoAnulacion: expect.any(String) });
+    const v = { documentoId: '77', tipoAnulacion: '04', motivo: ' error de digitación ' };
+    expect(validarFormulario(def, v)).toEqual({});
+    expect(armarPayload(def, v)).toEqual({ tipoAnulacion: '04', motivo: 'error de digitación' });
+    expect(endpointDe(def, v)).toBe('/api/facturas/77/anular');
+  });
+  it('la confirmación nombra la factura', () => {
+    expect(resumenDeAnulacion({ documentoNombre: 'E320000000001 · Ana' })).toContain('E320000000001 · Ana');
+  });
+  it('el asistente no adelanta la factura a anular', () => {
+    expect(parsearFormulario('tipo: anulacion\ndocumento: 5\ndocumentoId: 5\ntipoAnulacion: 04')?.valores).toEqual({ tipoAnulacion: '04' });
   });
 });

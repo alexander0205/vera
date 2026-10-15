@@ -38,7 +38,7 @@ export interface Campo {
 
 export type Valores = Record<string, string>;
 export type IdFormulario =
-  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto'
+  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion'
   | 'importar-productos' | 'importar-clientes';
 
 export interface DefFormulario {
@@ -167,6 +167,29 @@ export const FORMULARIOS: Record<IdFormulario, DefFormulario> = {
       { id: 'metodo', etiqueta: 'Método', tipo: 'select', requerido: true, opciones: METODOS_COBRO },
       { id: 'fechaPago', etiqueta: 'Fecha del cobro', tipo: 'fecha', requerido: true },
       { id: 'referencia', etiqueta: 'Referencia', tipo: 'texto', max: 100, ayuda: 'Número de transferencia, cheque o aprobación (opcional).' },
+    ],
+  },
+  anulacion: {
+    id: 'anulacion',
+    titulo: 'Anular una factura',
+    descripcion: 'La factura queda anulada y no cuenta en tus ventas. Si tiene cobros registrados, no se anula desde aquí.',
+    boton: 'Anular factura…',
+    endpoint: '/api/facturas/{documentoId}/anular',
+    modo: 'json',
+    pantalla: '/dashboard/facturas',
+    campos: [
+      { id: 'documento', etiqueta: 'Factura', tipo: 'documento', requerido: true, ayuda: 'Busca por número, código o nombre del cliente.' },
+      {
+        id: 'tipoAnulacion', etiqueta: 'Motivo', tipo: 'select', requerido: true,
+        opciones: [
+          { valor: '04', etiqueta: 'Cesación de operaciones' },
+          { valor: '03', etiqueta: 'Impresión defectuosa' },
+          { valor: '02', etiqueta: 'Errores de impresión' },
+          { valor: '01', etiqueta: 'Deterioro de factura pre-impresa' },
+          { valor: '05', etiqueta: 'Pérdida o hurto de talonarios' },
+        ],
+      },
+      { id: 'motivo', etiqueta: 'Nota interna', tipo: 'area', max: 500, ayuda: 'Opcional: por qué se anula.' },
     ],
   },
   gasto: {
@@ -465,6 +488,13 @@ export function armarPayload(def: DefFormulario, valores: Valores, modo: ModoEmi
     };
   }
 
+  if (def.id === 'anulacion') {
+    return {
+      tipoAnulacion: valores.tipoAnulacion,
+      ...((valores.motivo ?? '').trim() ? { motivo: valores.motivo.trim() } : {}),
+    };
+  }
+
   if (def.id === 'pago') {
     return {
       montoDOP: aNumero(valores.monto ?? '0'),
@@ -497,6 +527,12 @@ export function resumenDeEmision(valores: Valores): string {
   const cliente = (valores.clienteNombre ?? '').trim() || 'consumo final';
   const total = t.total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `Se emitirá una factura por RD$ ${total} a ${cliente} y se enviará a la DGII. No se puede deshacer.`;
+}
+
+/** Confirmación antes de anular, con la factura a la vista. */
+export function resumenDeAnulacion(valores: Valores): string {
+  const f = (valores.documentoNombre ?? '').trim() || 'la factura elegida';
+  return `Se anulará ${f}. Deja de contar en tus ventas y no se puede deshacer desde aquí.`;
 }
 
 /** Qué se le dice a la persona cuando la API responde bien. */
@@ -536,6 +572,8 @@ export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown, modo
     }
     case 'pago':
       return { mensaje: 'Listo: registré el cobro.', enlace: def.pantalla };
+    case 'anulacion':
+      return { mensaje: 'Listo: la factura quedó anulada.', enlace: def.pantalla };
     case 'gasto':
       return {
         mensaje: r.repetida ? 'Ese comprobante ya estaba subido.' : 'Listo: subí el comprobante. Quedó en «por revisar» para que lo confirmes.',
@@ -561,6 +599,7 @@ const RE_PAGO = new RegExp(
   `^${CORTESIA}(?:${VERBO_CREAR}|anotar|anota|cargar|carga|aplicar|aplica|ingresar|ingresa)\\s+${ARTICULO}(?:cobro|pago recibido|pago|abono)\\b(.*)$`,
 );
 const RE_COBRAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |ayudame a )*(?:cobrar|cobra|cobrale)\s+(?:una |la |esa )?factura\b(.*)$/;
+const RE_ANULAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |podrias |me puedes |ayudame a )*(?:anular|anula|anulame|cancelar|cancela)\s+(?:una |la |esa |otra )?factura\b(.*)$/;
 const RE_GASTO = new RegExp(
   `^${CORTESIA}(?:${VERBO_CREAR}|subir|sube|cargar|carga|mandar|manda|enviar|envia|adjuntar|adjunta)\\s+${ARTICULO}(?:factura|facturas|comprobante|comprobantes|recibo|recibos|ticket|tickets|compra|compras)\\s+(?:de |del |para )?(?:gasto|gastos|proveedor|proveedores|compra|compras)\\b(.*)$`,
 );
@@ -584,6 +623,7 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
   const imp = t.match(RE_IMPORTAR);
   if (imp) return { id: imp[1] === 'clientes' ? 'importar-clientes' : 'importar-productos', valores: {} };
 
+  if (RE_ANULAR.test(t)) return { id: 'anulacion', valores: {} };
   if (RE_GASTO.test(t) || RE_GASTO_2.test(t)) return { id: 'gasto', valores: {} };
   if (RE_PAGO.test(t) || RE_COBRAR.test(t)) return { id: 'pago', valores: {} };
 

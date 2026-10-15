@@ -88,7 +88,7 @@ const CASOS: Caso[] = [
   { p: 'como declaro el itbis de mis compras', intencion: 'guia' },
 
   // ── Pedidos de cambio: nunca se ejecutan desde el chat ──
-  { p: 'anula la factura E310000000045', intencion: 'cambio' },
+  { p: 'anula la factura E310000000045', intencion: 'formulario' },
   { p: 'elimina todos los borradores', intencion: 'cambio' },
   { p: 'crea una factura para Ana por 5000', intencion: 'formulario' },
 

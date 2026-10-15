@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import {
   armarPayload, endpointDe, guardarLineas, leerLineas, lineaVacia, resultadoDeCreacion, resumenDeEmision,
-  totalesDeLineas, validarFormulario,
+  resumenDeAnulacion, totalesDeLineas, validarFormulario,
   type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
 import s from './asistente.module.css';
@@ -24,13 +24,30 @@ interface ResumenImportacion {
 type Fase =
   | { t: 'editando' }
   | { t: 'enviando' }
-  | { t: 'confirmar-emision' }
+  | { t: 'confirmar'; texto: string; accion: 'emitir' | 'anular' }
   | { t: 'duplicado'; nombre: string }
   | { t: 'previa'; resumen: ResumenImportacion }
   | { t: 'listo'; mensaje: string; enlace: string }
-  | { t: 'error'; mensaje: string; enlace?: string };
+  | { t: 'error'; mensaje: string; enlace?: string; enlaceTexto?: string };
 
 const MAX_ARCHIVO = 8 * 1024 * 1024;
+
+/** Lo que ya se hizo con este formulario, para que recargar la página no lo muestre vacío otra vez. */
+function leerHecho(clave: string | undefined): { mensaje: string; enlace: string } | null {
+  if (!clave) return null;
+  try {
+    const crudo = window.localStorage.getItem(`asistente-form:${clave}`);
+    if (!crudo) return null;
+    const d = JSON.parse(crudo) as { mensaje?: unknown; enlace?: unknown };
+    return typeof d.mensaje === 'string' && typeof d.enlace === 'string' && d.enlace.startsWith('/') && !d.enlace.startsWith('//')
+      ? { mensaje: d.mensaje.slice(0, 300), enlace: d.enlace }
+      : null;
+  } catch { return null; }
+}
+function guardarHecho(clave: string | undefined, h: { mensaje: string; enlace: string }) {
+  if (!clave) return;
+  try { window.localStorage.setItem(`asistente-form:${clave}`, JSON.stringify(h)); } catch { /* sin almacenamiento: no pasa nada */ }
+}
 const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
 const pesos = (n: number) => n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -315,15 +332,19 @@ function EditorLineas({ id, valor, cambiar, deshabilitado }: {
   );
 }
 
-export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: Valores }) {
+export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; inicial: Valores; clave?: string }) {
   const base = useId();
   const [valores, setValores] = useState<Valores>(() => ({
     ...(def.id === 'pago' ? { fechaPago: hoy(), metodo: 'efectivo' } : {}),
     ...(def.id === 'factura' ? { tipoEcf: 'sin-ncf' } : {}),
+    ...(def.id === 'anulacion' ? { tipoAnulacion: '04' } : {}),
     ...inicial,
   }));
   const [errores, setErrores] = useState<Record<string, string>>({});
-  const [fase, setFase] = useState<Fase>({ t: 'editando' });
+  const [fase, setFase] = useState<Fase>(() => {
+    const hecho = typeof window !== 'undefined' ? leerHecho(clave) : null;
+    return hecho ? { t: 'listo', ...hecho } : { t: 'editando' };
+  });
   const [archivos, setArchivos] = useState<File[]>([]);
   const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
@@ -331,6 +352,11 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
   const ocupado = fase.t === 'enviando';
   const esArchivo = def.modo !== 'json';
   const campoArchivo = def.campos.find((c) => c.tipo === 'archivo');
+
+  function terminar(h: { mensaje: string; enlace: string }) {
+    guardarHecho(clave, h);
+    setFase({ t: 'listo', ...h });
+  }
 
   function poner(p: Valores) {
     setValores((x) => ({ ...x, ...p }));
@@ -363,11 +389,15 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
       }
       if (!r.ok) {
         const doc = typeof d?.docId === 'number' ? `/dashboard/facturas/${d.docId}` : undefined;
-        setFase({ t: 'error', mensaje: mensajeDeError(r.status, d), enlace: doc });
+        const caja = typeof d?.code === 'string' && d.code.startsWith('CAJA_');
+        setFase({
+          t: 'error', mensaje: mensajeDeError(r.status, d),
+          enlace: caja ? '/dashboard/caja' : doc,
+          enlaceTexto: caja ? 'Abrir la caja' : 'Abrir en Zero',
+        });
         return;
       }
-      const res = resultadoDeCreacion(def, d, modo);
-      setFase({ t: 'listo', mensaje: res.mensaje, enlace: res.enlace });
+      terminar(resultadoDeCreacion(def, d, modo));
     } catch {
       setFase({ t: 'error', mensaje: 'No hay conexión. No se guardó nada; revisa tu internet e intenta de nuevo.' });
     }
@@ -378,7 +408,14 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
     setErrores(e);
     if (Object.keys(e).length) return;
     if (valores.tipoEcf === 'sin-ncf') { setErrores({ tipoEcf: 'Sin comprobante fiscal solo se guarda como borrador. Elige consumo o crédito fiscal para emitir.' }); return; }
-    setFase({ t: 'confirmar-emision' });
+    setFase({ t: 'confirmar', texto: resumenDeEmision(valores), accion: 'emitir' });
+  }
+
+  function pedirAnulacion() {
+    const e = validarFormulario(def, valores);
+    setErrores(e);
+    if (Object.keys(e).length) return;
+    setFase({ t: 'confirmar', texto: resumenDeAnulacion(valores), accion: 'anular' });
   }
 
   async function subirCsv(modo: 'preview' | 'commit') {
@@ -397,8 +434,8 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
         skipped: Number(d?.skipped ?? 0), errors: Array.isArray(d?.errors) ? d.errors.slice(0, 5).map(String) : [],
       };
       if (modo === 'preview') { setFase({ t: 'previa', resumen }); return; }
-      setFase({
-        t: 'listo', enlace: def.pantalla,
+      terminar({
+        enlace: def.pantalla,
         mensaje: `Listo: importé ${resumen.created} ${def.id === 'importar-clientes' ? 'clientes' : 'productos'}` +
           (resumen.skipped ? ` (omití ${resumen.skipped}).` : '.'),
       });
@@ -418,8 +455,7 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
       const r = await fetch(def.endpoint, { method: 'POST', body: fd });
       const d = await r.json().catch(() => null);
       if (!r.ok) { setFase({ t: 'error', mensaje: mensajeDeError(r.status, d) }); return; }
-      const res = resultadoDeCreacion(def, d);
-      setFase({ t: 'listo', mensaje: res.mensaje, enlace: res.enlace });
+      terminar(resultadoDeCreacion(def, d));
     } catch {
       setFase({ t: 'error', mensaje: 'No hay conexión. No se subió nada; intenta de nuevo.' });
     }
@@ -518,9 +554,10 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
         noValidate
         onSubmit={(ev) => {
           ev.preventDefault();
-          if (ocupado || fase.t === 'confirmar-emision') return;
+          if (ocupado || fase.t === 'confirmar') return;
           if (def.modo === 'csv') void subirCsv('preview');
           else if (def.modo === 'captura') void subirCaptura();
+          else if (def.id === 'anulacion') pedirAnulacion();
           else void enviarJson();
         }}
       >
@@ -575,13 +612,15 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
           </div>
         )}
 
-        {fase.t === 'confirmar-emision' && (
-          <div className={s.avisoForm} role="alertdialog" aria-label="Confirmar emisión">
+        {fase.t === 'confirmar' && (
+          <div className={s.avisoForm} role="alertdialog" aria-label={fase.accion === 'emitir' ? 'Confirmar emisión' : 'Confirmar anulación'}>
             <AlertTriangle size={16} aria-hidden />
             <div>
-              <strong>{resumenDeEmision(valores)}</strong>
+              <strong>{fase.texto}</strong>
               <div className={s.avisoAcciones}>
-                <button type="button" className={s.peligro} onClick={() => void enviarJson({ modo: 'emitir' })}>Sí, emitir</button>
+                <button type="button" className={s.peligro} onClick={() => void enviarJson({ modo: fase.accion === 'emitir' ? 'emitir' : 'borrador' })}>
+                  {fase.accion === 'emitir' ? 'Sí, emitir' : 'Sí, anular'}
+                </button>
                 <button type="button" onClick={() => setFase({ t: 'editando' })}>Volver</button>
               </div>
             </div>
@@ -591,11 +630,11 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
         {fase.t === 'error' && (
           <p className={s.campoError} role="alert">
             <AlertTriangle size={14} aria-hidden /> {fase.mensaje}
-            {fase.enlace && <> <Link href={fase.enlace}>Abrir en Zero</Link></>}
+            {fase.enlace && <> <Link href={fase.enlace}>{fase.enlaceTexto ?? 'Abrir en Zero'}</Link></>}
           </p>
         )}
 
-        {fase.t !== 'duplicado' && fase.t !== 'confirmar-emision' && (
+        {fase.t !== 'duplicado' && fase.t !== 'confirmar' && (
           <div className={s.formularioAcciones}>
             {fase.t === 'previa' && fase.resumen.created > 0 && (
               <button type="button" className={s.primario} onClick={() => void subirCsv('commit')}>

@@ -144,7 +144,7 @@ function TarjetaVista({ t }: { t: Tarjeta }) {
   );
 }
 
-export function Markdown({ texto }: { texto: string }) {
+export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
   const lineas = texto.replace(/\r/g, '').split('\n');
   const bloques: ReactNode[] = [];
   let i = 0;
@@ -168,7 +168,7 @@ export function Markdown({ texto }: { texto: string }) {
       const tj = lenguaje === 'tarjeta' ? parsearTarjeta(cuerpo.join('\n')) : null;
       const fm = lenguaje === 'formulario' ? parsearFormulario(cuerpo.join('\n')) : null;
       if (fm) {
-        bloques.push(<FormularioChat key={`b${n++}`} def={fm.def} inicial={fm.valores} />);
+        bloques.push(<FormularioChat key={`b${n}`} def={fm.def} inicial={fm.valores} clave={clave ? `${clave}:${n++}` : undefined} />);
       } else if (g) {
         bloques.push(<GraficoVista key={`b${n++}`} g={g} />);
       } else if (tj) {

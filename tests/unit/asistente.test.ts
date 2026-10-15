@@ -384,9 +384,16 @@ describe('contestador local', () => {
 
   it('un pedido de cambio no se ejecuta: explica y guía a la pantalla', async () => {
     const tools = crearHerramientas(contextoDePrueba(1), []);
-    const r = await responderLocal('anula la factura E310000000045', tools, { hoy: HOY });
+    const r = await responderLocal('elimina la factura E310000000045', tools, { hoy: HOY });
     expect(r?.intencion).toBe('cambio');
     expect(r?.respuesta).toMatch(/no lo hago desde (aquí|el chat)/);
+  });
+
+  it('pedir anular una factura abre el formulario: no anula nada por sí solo', async () => {
+    const tools = crearHerramientas(contextoDePrueba(1), []);
+    const r = await responderLocal('anula la factura E310000000045', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('formulario');
+    expect(r?.respuesta).toContain('tipo: anulacion');
   });
 
   it('las preguntas que piden razonar van a la IA', async () => {
