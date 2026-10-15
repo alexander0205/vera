@@ -6,6 +6,7 @@ import { MAPA_SISTEMA } from './mapa-sistema';
 import { DISPARA_FLUJO_COTIZACION, DISPARA_FLUJO_FACTURA, FLUJOS, formatearFlujo, type EstadoConfiguracion } from './guias-paso';
 import { explicarMensajesDgii, significadoDelEstado, type MensajeDgii } from './dgii';
 import { textoGrafico } from './grafico';
+import { textoTarjeta, type TonoTarjeta } from './tarjeta';
 import { formatearComparacion, type Metrica } from './comparar';
 
 /**
@@ -273,7 +274,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const m = ((r.metodos as Fila[]) ?? []).filter((x) => n(x.cobrado) > 0);
     if (!m.length) return `No hay cobros registrados ${p!.etiqueta}.`;
     const total = m.reduce((s, x) => s + n(x.cobrado), 0);
-    const grafico = textoGrafico(`Cobros por método ${p!.etiqueta}`, 'RD$', m.map((x) => ({ etiqueta: String(x.metodo), valor: n(x.cobrado) })));
+    const grafico = textoGrafico(`Cobros por método ${p!.etiqueta}`, 'RD$', m.map((x) => ({ etiqueta: String(x.metodo), valor: n(x.cobrado) })), 'torta');
     return [
       `Cobraste **${rd(total)}** ${p!.etiqueta}:`,
       '',
@@ -447,7 +448,7 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const total = pts.reduce((s, x) => s + n(x.ventas), 0);
     const mejor = con.reduce((a, x) => (n(x.ventas) > n(a.ventas) ? x : a));
     const et = (x: Fila) => etiquetaPeriodo(String(x.periodo), por);
-    const grafico = textoGrafico(`Ventas por ${unidad}`, 'RD$', pts.map((x) => ({ etiqueta: et(x), valor: n(x.ventas) })));
+    const grafico = textoGrafico(`Ventas por ${unidad}`, 'RD$', pts.map((x) => ({ etiqueta: et(x), valor: n(x.ventas) })), 'linea');
     return [
       `Vendiste **${rd(total)}** en ${r.periodo}, por ${unidad}. El más alto fue **${et(mejor)}** con ${rd(n(mejor.ventas))}.`,
       '',
@@ -883,7 +884,17 @@ function plantillaFacturaActual(r: Fila, t: string): string {
   const cola = pagos.length
     ? ['', '**Pagos recibidos**', '', tabla(['Fecha', 'Método', 'Monto'], pagos.map((p) => [String(p.fecha ?? ''), String(p.metodo ?? ''), rd(n(p.monto))]))]
     : [];
-  return [titular, '', tabla(['Dato', 'Detalle'], datos), ...cola].join('\n');
+  const estadoDgii = String(r.estado);
+  const tono: TonoTarjeta = estadoDgii === 'ACEPTADO' ? 'ok' : estadoDgii === 'RECHAZADO' || estadoDgii === 'ANULADO' ? 'malo'
+    : estadoDgii === 'EN_PROCESO' || estadoDgii === 'ACEPTADO_CONDICIONAL' ? 'aviso' : 'neutro';
+  const tarjeta = textoTarjeta({
+    titulo: numero,
+    subtitulo: [r.cliente, r.dependiente ? `estudiante: ${r.dependiente}` : null].filter(Boolean).join(' · ') || null,
+    valor: rd(total),
+    estado: { texto: ETIQUETA_ESTADO[estadoDgii] ?? estadoDgii, tono },
+    filas: datos.filter(([k]) => !['Cliente', 'Estudiante', 'Estado', 'Total'].includes(k)),
+  });
+  return [titular, '', tarjeta, ...cola].join('\n');
 }
 
 
@@ -924,7 +935,18 @@ function plantillaClienteActual(r: Fila, t: string): string {
   const filas = ultimas.slice(0, 5).map((x) => [
     enlazar(String(x.numero || `Borrador ${corta(x.fecha)}`), x.enlace), String(x.fecha ?? ''), String(x.estado ?? ''), rd(n(x.total)),
   ]);
-  return [titular, '', datos, ...(filas.length ? ['', '**Últimas facturas**', '', tabla(['Número', 'Fecha', 'Estado', 'Total'], filas)] : [])].join('\n');
+  void datos;
+  const tarjeta = textoTarjeta({
+    titulo: nombre,
+    subtitulo: [r.rnc, r.telefono].filter(Boolean).join(' · ') || null,
+    valor: debe > 0 ? rd(debe) : null,
+    estado: debe > 0 ? { texto: n(r.diasVencidoMaximo) > 0 ? 'Con deuda vencida' : 'Con saldo pendiente', tono: n(r.diasVencidoMaximo) > 0 ? 'malo' : 'aviso' } : { texto: 'Al día', tono: 'ok' },
+    filas: [
+      ['Correo', r.email as string | null], ['Dirección', r.direccion as string | null],
+      ['Facturas recientes', `${recientes}${recientes >= 20 ? ' (las 20 más recientes)' : ''} · ${rd(n(r.totalRecientes))}`],
+    ],
+  });
+  return [titular, '', tarjeta, ...(filas.length ? ['', '**Últimas facturas**', '', tabla(['Número', 'Fecha', 'Estado', 'Total'], filas)] : [])].join('\n');
 }
 
 function plantillaCotizacionActual(r: Fila): string {

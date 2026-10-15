@@ -15,7 +15,11 @@
 
 export interface DatoGrafico { etiqueta: string; valor: number }
 
+export type TipoGrafico = 'barras' | 'linea' | 'torta';
+
 export interface Grafico {
+  /** barras (por defecto), línea (evolución en el tiempo) o torta (partes de un total). */
+  tipo: TipoGrafico;
   titulo: string | null;
   /** «RD$» → montos; vacío → cantidades. */
   unidad: 'RD$' | '';
@@ -29,12 +33,15 @@ const limpiaEtiqueta = (t: string) => limpia(t, 40);
 const limpiaTitulo = (t: string) => limpia(t, 90);
 
 /** Texto del bloque a partir de datos ya calculados. `null` si no hay qué graficar. */
-export function textoGrafico(titulo: string, unidad: 'RD$' | '', datos: DatoGrafico[]): string | null {
+export function textoGrafico(titulo: string, unidad: 'RD$' | '', datos: DatoGrafico[], tipo: TipoGrafico = 'barras'): string | null {
   const validos = datos.filter((d) => Number.isFinite(d.valor) && d.valor > 0).slice(0, MAX_BARRAS);
   // Una sola barra no dice nada que la frase no diga.
   if (validos.length < 2) return null;
+  // Una línea con dos puntos es una raya; una torta de una sola parte, un círculo: se usan barras.
+  const real: TipoGrafico = tipo === 'linea' && validos.length < 3 ? 'barras' : tipo === 'torta' && validos.length > 8 ? 'barras' : tipo;
   return [
     '```grafico',
+    ...(real !== 'barras' ? [`tipo: ${real}`] : []),
     `titulo: ${limpiaTitulo(titulo)}`,
     ...(unidad ? [`unidad: ${unidad}`] : []),
     ...validos.map((d) => `${limpiaEtiqueta(d.etiqueta) || '—'} | ${Math.round(d.valor * 100) / 100}`),
@@ -45,14 +52,17 @@ export function textoGrafico(titulo: string, unidad: 'RD$' | '', datos: DatoGraf
 /** El cuerpo del bloque (sin las vallas) a datos. `null` si no se entiende. */
 export function parsearGrafico(cuerpo: string): Grafico | null {
   let titulo: string | null = null;
+  let tipo: TipoGrafico = 'barras';
   let unidad: 'RD$' | '' = '';
   const datos: DatoGrafico[] = [];
   for (const crudo of cuerpo.replace(/\r/g, '').split('\n')) {
     const linea = crudo.trim();
     if (!linea) continue;
-    const meta = linea.match(/^(titulo|unidad)\s*:\s*(.*)$/i);
+    const meta = linea.match(/^(titulo|unidad|tipo)\s*:\s*(.*)$/i);
     if (meta) {
-      if (meta[1].toLowerCase() === 'titulo') titulo = limpiaTitulo(meta[2]) || null;
+      const k = meta[1].toLowerCase();
+      if (k === 'titulo') titulo = limpiaTitulo(meta[2]) || null;
+      else if (k === 'tipo') tipo = /^(linea|torta)$/i.test(meta[2].trim()) ? (meta[2].trim().toLowerCase() as TipoGrafico) : 'barras';
       else unidad = /^rd\$?$/i.test(meta[2].trim()) ? 'RD$' : '';
       continue;
     }
@@ -63,7 +73,7 @@ export function parsearGrafico(cuerpo: string): Grafico | null {
     datos.push({ etiqueta: limpiaEtiqueta(linea.slice(0, i)) || '—', valor });
   }
   if (datos.length < 2 || datos.length > MAX_BARRAS) return null;
-  return { titulo, unidad, datos };
+  return { tipo, titulo, unidad, datos };
 }
 
 export const valorGrafico = (g: Grafico, v: number) =>

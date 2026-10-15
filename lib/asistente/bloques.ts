@@ -4,6 +4,7 @@
  */
 
 import { parsearGrafico, type Grafico } from './grafico';
+import { parsearTarjeta } from './tarjeta';
 
 export interface Tramo { texto: string; negrita?: boolean }
 
@@ -58,7 +59,12 @@ export function aBloques(md: string): Bloque[] {
       while (i < L.length && !/^\s*```/.test(L[i])) { cuerpo.push(L[i]); i++; }
       i++;
       const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
-      if (g) out.push({ tipo: 'grafico', grafico: g });
+      const tj = lenguaje === 'tarjeta' ? parsearTarjeta(cuerpo.join('\n')) : null;
+      if (tj) {
+        out.push({ tipo: 'titulo', tramos: [{ texto: tj.titulo + (tj.valor ? ' — ' + tj.valor : ''), negrita: true }] });
+        const datos = [...(tj.subtitulo ? [['Detalle', tj.subtitulo]] : []), ...(tj.estado ? [['Estado', tj.estado.texto]] : []), ...tj.filas.map((f) => [f.etiqueta, f.valor])];
+        if (datos.length) out.push({ tipo: 'tabla', cabecera: [[{ texto: 'Dato' }], [{ texto: 'Detalle' }]], filas: datos.map(([k, v]) => [[{ texto: k }], [{ texto: v }]]) });
+      } else if (g) out.push({ tipo: 'grafico', grafico: g });
       else if (cuerpo.some((x) => x.trim())) out.push({ tipo: 'parrafo', tramos: tramos(cuerpo.join(' ')) });
       continue;
     }

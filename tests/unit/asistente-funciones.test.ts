@@ -567,3 +567,88 @@ describe('5.10 sugerencias después de cada respuesta', () => {
     expect(seguimientosDe('seguimiento:cartera')).toEqual(seguimientosDe('cartera'));
   });
 });
+
+// ── 5.11 Tarjetas y 5.12 gráficos de línea y torta ──
+import { parsearTarjeta, textoTarjeta } from '@/lib/asistente/tarjeta';
+import { parsearGrafico, textoGrafico } from '@/lib/asistente/grafico';
+import { aBloques } from '@/lib/asistente/bloques';
+
+describe('5.11 tarjetas', () => {
+  const T = textoTarjeta({
+    titulo: 'E320000000304', subtitulo: 'Johan Antonio', valor: 'RD$ 3,300.00',
+    estado: { texto: 'Aceptada por la DGII', tono: 'ok' },
+    filas: [['Estudiante', 'Jelani'], ['Pagado', 'RD$ 3,300.00'], ['Vence', null]],
+  });
+
+  it('ida y vuelta, sin las filas vacías', () => {
+    const cuerpo = T.split('\n').slice(1, -1).join('\n');
+    expect(parsearTarjeta(cuerpo)).toEqual({
+      titulo: 'E320000000304', subtitulo: 'Johan Antonio', valor: 'RD$ 3,300.00',
+      estado: { texto: 'Aceptada por la DGII', tono: 'ok' },
+      filas: [{ etiqueta: 'Estudiante', valor: 'Jelani' }, { etiqueta: 'Pagado', valor: 'RD$ 3,300.00' }],
+    });
+  });
+
+  it('un valor con barras, saltos o vallas no rompe el bloque', () => {
+    const t = textoTarjeta({ titulo: 'x', filas: [['a|b', 'c\n```\nfila: Inyectada | x']] });
+    expect(t.match(/```/g)).toHaveLength(2);
+    expect(t.split('\n')).toHaveLength(4);
+  });
+
+  it('un tono desconocido es neutro; lo mal formado no es tarjeta', () => {
+    expect(parsearTarjeta('titulo: x\nestado: algo | rojo-fosforito')?.estado?.tono).toBe('neutro');
+    expect(parsearTarjeta('esto no es una tarjeta')).toBeNull();
+    expect(parsearTarjeta('subtitulo: sin titulo')).toBeNull();
+  });
+
+  it('para el PDF es un título y una tabla de datos', () => {
+    const b = aBloques(T);
+    expect(b.map((x) => x.tipo)).toEqual(['titulo', 'tabla']);
+  });
+
+  it('la factura abierta sale como tarjeta, con el estado y el estudiante', async () => {
+    const { tools } = herramientas({ ver_factura: {
+      enlace: '/dashboard/facturas/3993', numero: 'E320000000304', codigoInterno: 'FA-X', estado: 'ACEPTADO', estadoPago: 'PAGADA',
+      cliente: 'Johan', rnc: null, dependiente: 'Jelani', fecha: '2026-10-08', vence: null, total: 3300, pagado: 3300, notasDeCredito: 0, pendiente: 0, pagos: [], mensajesDgii: [],
+    } });
+    const r = await responderLocal('de quien es esta factura', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/facturas/3993') });
+    expect(r?.respuesta).toContain('titulo: E320000000304');
+    expect(r?.respuesta).toContain('valor: RD$ 3,300.00');
+    expect(r?.respuesta).toContain('estado: Emitida y aceptada por la DGII | ok');
+    expect(r?.respuesta).toContain('fila: Pagado | RD$ 3,300.00');
+  });
+});
+
+describe('5.12 gráficos de línea y de torta', () => {
+  const datos = [{ etiqueta: 'jun', valor: 10 }, { etiqueta: 'jul', valor: 30 }, { etiqueta: 'ago', valor: 20 }];
+
+  it('ida y vuelta del tipo', () => {
+    for (const tipo of ['linea', 'torta'] as const) {
+      const t = textoGrafico('x', 'RD$', datos, tipo)!;
+      expect(t).toContain(`tipo: ${tipo}`);
+      expect(parsearGrafico(t.split('\n').slice(1, -1).join('\n'))?.tipo).toBe(tipo);
+    }
+    expect(parsearGrafico(textoGrafico('x', '', datos)!.split('\n').slice(1, -1).join('\n'))?.tipo).toBe('barras');
+  });
+
+  it('con pocos puntos una línea se vuelve barras; una torta con demasiadas partes también', () => {
+    expect(textoGrafico('x', '', datos.slice(0, 2), 'linea')).not.toContain('tipo:');
+    const muchas = Array.from({ length: 10 }, (_, i) => ({ etiqueta: 'p' + i, valor: i + 1 }));
+    expect(textoGrafico('x', '', muchas, 'torta')).not.toContain('tipo: torta');
+  });
+
+  it('un tipo desconocido cae a barras', () => {
+    expect(parsearGrafico('tipo: radar\nA | 1\nB | 2')?.tipo).toBe('barras');
+  });
+
+  it('la tendencia usa línea y los cobros por método usan torta', async () => {
+    const { tools } = herramientas({
+      tendencia_ventas: { periodo: 'x', agrupadoPor: 'dia', puntos: [{ periodo: '2026-10-01', ventas: 1 }, { periodo: '2026-10-02', ventas: 3 }, { periodo: '2026-10-03', ventas: 2 }] },
+      cobros_por_metodo: { metodos: [{ metodo: 'efectivo', cobrado: 100, pagos: 2 }, { metodo: 'tarjeta', cobrado: 300, pagos: 3 }] },
+    });
+    const a = await responderLocal('tendencia de ventas de este mes', tools, { hoy: HOY });
+    expect(a?.respuesta).toContain('tipo: linea');
+    const b = await responderLocal('cobros por metodo de pago este mes', tools, { hoy: HOY });
+    expect(b?.respuesta).toContain('tipo: torta');
+  });
+});

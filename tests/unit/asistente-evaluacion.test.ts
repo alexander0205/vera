@@ -366,7 +366,7 @@ describe('evaluación: gráficos en la respuesta', () => {
     ])!;
     const cuerpo = txt.split('\n').slice(1, -1).join('\n');
     expect(parsearGrafico(cuerpo)).toEqual({
-      titulo: 'Ventas por mes', unidad: 'RD$',
+      tipo: 'barras', titulo: 'Ventas por mes', unidad: 'RD$',
       datos: [{ etiqueta: 'Agosto', valor: 120000 }, { etiqueta: 'Septiembre', valor: 98000.5 }],
     });
   });
@@ -464,8 +464,9 @@ describe('evaluación: formato de la factura en pantalla y cambio de pantalla', 
     // Una negrita que abre y queda vacía o con espacio: «** de Fulano**».
     expect(r?.respuesta).not.toMatch(/(^|\s)\*\*\s|\*\*\*\*/);
     expect(r?.respuesta).toContain('FA-2026-CACH-NQGM7-001128');
-    expect(r?.respuesta).toContain('| Estudiante | Smeily Paola Acosta Henriquez |');
-    expect(r?.respuesta).toContain('| Estado | Borrador (sin emitir) |');
+    expect(r?.respuesta).toContain('```tarjeta');
+    expect(r?.respuesta).toContain('estudiante: Smeily Paola Acosta Henriquez');
+    expect(r?.respuesta).toContain('estado: Borrador (sin emitir) | neutro');
   });
 
   it('«¿qué puedo hacer en esta pantalla?» en Reportes habla de Reportes, no de la factura anterior', async () => {

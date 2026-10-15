@@ -57,8 +57,8 @@ Orden de trabajo; cada una con pruebas y commit.
 
 ### Diseño
 - [x] 5.10 Sugerencias después de cada respuesta (chips)
-- [ ] 5.11 Tarjetas para una factura / un cliente
-- [ ] 5.12 Gráficos de línea y de torta
+- [x] 5.11 Tarjetas para una factura / un cliente
+- [x] 5.12 Gráficos de línea y de torta
 - [ ] 5.13 Cifras clicables
 - [ ] 5.14 Respuesta que se va mostrando (streaming)
 - [ ] 5.15 Historial de conversaciones

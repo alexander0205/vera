@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
-import { anchoBarra, parsearGrafico, valorGrafico } from '@/lib/asistente/grafico';
+import { anchoBarra, parsearGrafico, valorGrafico, type Grafico } from '@/lib/asistente/grafico';
+import { parsearTarjeta, type Tarjeta } from '@/lib/asistente/tarjeta';
 import s from './asistente.module.css';
 
 /**
@@ -52,6 +53,95 @@ const esNumero = (t: string) => /^(RD\$\s?)?-?[\d,]+(\.\d+)?%?$/.test(t.trim());
 const RE_VINETA = /^\s*([-*•])\s+/;
 const RE_NUMERADA = /^\s*\d+[.)]\s+/;
 
+const PALETA = ['#3658e1', '#16a34a', '#f59e0b', '#dc2626', '#8b5cf6', '#0891b2', '#db2777', '#64748b'];
+
+function GraficoVista({ g }: { g: Grafico }) {
+  const titulo = g.titulo ?? 'Gráfico';
+
+  if (g.tipo === 'linea') {
+    const W = 300; const H = 112; const PX = 10; const PT = 12; const PB = 22;
+    const max = Math.max(...g.datos.map((d) => d.valor), 1);
+    const paso = (W - PX * 2) / (g.datos.length - 1);
+    const pts = g.datos.map((d, i) => [PX + i * paso, PT + (H - PT - PB) * (1 - d.valor / max)] as const);
+    const alto = g.datos.reduce((a, d) => (d.valor > a.valor ? d : a), g.datos[0]);
+    return (
+      <figure className={s.grafico} aria-label={titulo}>
+        <figcaption className={s.graficoTitulo}>{titulo}</figcaption>
+        <svg viewBox={`0 0 ${W} ${H}`} className={s.lineaSvg} role="img" aria-label={`${titulo}: de ${g.datos[0].etiqueta} a ${g.datos[g.datos.length - 1].etiqueta}`}>
+          <line x1={PX} y1={H - PB} x2={W - PX} y2={H - PB} className={s.lineaEje} />
+          <polyline points={pts.map((p) => p.join(',')).join(' ')} className={s.lineaTrazo} />
+          {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={3} className={s.lineaPunto}><title>{`${g.datos[i].etiqueta}: ${valorGrafico(g, g.datos[i].valor)}`}</title></circle>)}
+          <text x={PX} y={H - 6} className={s.lineaTexto}>{g.datos[0].etiqueta}</text>
+          <text x={W - PX} y={H - 6} textAnchor="end" className={s.lineaTexto}>{g.datos[g.datos.length - 1].etiqueta}</text>
+        </svg>
+        <p className={s.graficoNota}>Más alto: <strong>{alto.etiqueta}</strong> · {valorGrafico(g, alto.valor)}</p>
+      </figure>
+    );
+  }
+
+  if (g.tipo === 'torta') {
+    const total = g.datos.reduce((a, d) => a + d.valor, 0) || 1;
+    let acc = 0;
+    const tramos = g.datos.map((d, i) => {
+      const ini = (acc / total) * 100;
+      acc += d.valor;
+      return `${PALETA[i % PALETA.length]} ${ini.toFixed(2)}% ${((acc / total) * 100).toFixed(2)}%`;
+    });
+    return (
+      <figure className={s.grafico} aria-label={titulo}>
+        <figcaption className={s.graficoTitulo}>{titulo}</figcaption>
+        <div className={s.tortaCaja}>
+          <span className={s.torta} style={{ background: `conic-gradient(${tramos.join(', ')})` }} role="img" aria-label={titulo} />
+          <ul className={s.tortaLeyenda}>
+            {g.datos.map((d, i) => (
+              <li key={i}>
+                <span className={s.tortaMuestra} style={{ background: PALETA[i % PALETA.length] }} aria-hidden />
+                <span className={s.tortaEtiqueta} title={d.etiqueta}>{d.etiqueta}</span>
+                <span className={s.barraValor}>{Math.round((d.valor / total) * 100)}% · {valorGrafico(g, d.valor)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </figure>
+    );
+  }
+
+  return (
+    <figure className={s.grafico} aria-label={titulo}>
+      {g.titulo && <figcaption className={s.graficoTitulo}>{g.titulo}</figcaption>}
+      {g.datos.map((d, j) => (
+        <div className={s.barraFila} key={j}>
+          <span className={s.barraEtiqueta} title={d.etiqueta}>{d.etiqueta}</span>
+          <span className={s.barraRiel}><span className={s.barra} style={{ width: `${anchoBarra(g, d.valor)}%` }} /></span>
+          <span className={s.barraValor}>{valorGrafico(g, d.valor)}</span>
+        </div>
+      ))}
+    </figure>
+  );
+}
+
+function TarjetaVista({ t }: { t: Tarjeta }) {
+  return (
+    <section className={s.tarjeta} aria-label={t.titulo}>
+      <header className={s.tarjetaCabecera}>
+        <div>
+          <p className={s.tarjetaTitulo}>{t.titulo}</p>
+          {t.subtitulo && <p className={s.tarjetaSub}>{t.subtitulo}</p>}
+        </div>
+        {t.estado && <span className={`${s.tarjetaEstado} ${s[`tono_${t.estado.tono}`] ?? ''}`}>{t.estado.texto}</span>}
+      </header>
+      {t.valor && <p className={s.tarjetaValor}>{t.valor}</p>}
+      {t.filas.length > 0 && (
+        <dl className={s.tarjetaFilas}>
+          {t.filas.map((f, i) => (
+            <div key={i}><dt>{f.etiqueta}</dt><dd>{f.valor}</dd></div>
+          ))}
+        </dl>
+      )}
+    </section>
+  );
+}
+
 export function Markdown({ texto }: { texto: string }) {
   const lineas = texto.replace(/\r/g, '').split('\n');
   const bloques: ReactNode[] = [];
@@ -73,19 +163,11 @@ export function Markdown({ texto }: { texto: string }) {
       while (i < lineas.length && !/^\s*```/.test(lineas[i])) { cuerpo.push(lineas[i]); i++; }
       i++;
       const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
+      const tj = lenguaje === 'tarjeta' ? parsearTarjeta(cuerpo.join('\n')) : null;
       if (g) {
-        bloques.push(
-          <figure className={s.grafico} key={`b${n++}`} aria-label={g.titulo ?? 'Gráfico'}>
-            {g.titulo && <figcaption className={s.graficoTitulo}>{g.titulo}</figcaption>}
-            {g.datos.map((d, j) => (
-              <div className={s.barraFila} key={j}>
-                <span className={s.barraEtiqueta} title={d.etiqueta}>{d.etiqueta}</span>
-                <span className={s.barraRiel}><span className={s.barra} style={{ width: `${anchoBarra(g, d.valor)}%` }} /></span>
-                <span className={s.barraValor}>{valorGrafico(g, d.valor)}</span>
-              </div>
-            ))}
-          </figure>,
-        );
+        bloques.push(<GraficoVista key={`b${n++}`} g={g} />);
+      } else if (tj) {
+        bloques.push(<TarjetaVista key={`b${n++}`} t={tj} />);
       } else if (cuerpo.some((x) => x.trim())) {
         bloques.push(<pre className={s.codigo} key={`b${n++}`}>{cuerpo.join('\n')}</pre>);
       }
