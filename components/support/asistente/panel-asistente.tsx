@@ -233,7 +233,7 @@ function MensajeAsistenteVista({
                 {m.herramientas.map((h) => h.nombre).filter((n, i, a) => a.indexOf(n) === i).join(' · ')}
               </span>
             )}
-            <div className={s.accionesMensaje}>
+            <div className={s.accionesMensaje} style={m.contenido.includes('```formulario') ? { display: 'none' } : undefined}>
               {m.id > 0 && <MenuDescarga mensajeId={m.id} conExcel={tieneDatosTabulares(m.contenido)} destacado={m.grande === true} />}
               {m.id > 0 && (
                 <>
@@ -256,7 +256,7 @@ function MensajeAsistenteVista({
                 ))}
               </div>
             )}
-            {puedeIa && probarConIa && m.origen === 'local' && m.id > 0 && (
+            {puedeIa && probarConIa && m.origen === 'local' && m.id > 0 && !m.contenido.includes('```formulario') && (
               <div className={s.motivos}>
                 <button type="button" className={s.motivo} onClick={probarConIa}>
                   ¿No es lo que buscabas? Preguntar a la IA

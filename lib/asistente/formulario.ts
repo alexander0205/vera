@@ -10,12 +10,16 @@
  *    datos a la vista, y viaja a la MISMA ruta de la API que usa la pantalla
  *    equivalente, con su sesión: mismos permisos, mismas validaciones y mismo
  *    registro de auditoría. No hay una vía paralela para escribir.
+ *  - Emitir un comprobante a la DGII es el único paso que no se deshace: pide
+ *    una segunda confirmación con el total y el cliente a la vista.
  *
  * Este módulo es puro: lo usan el servidor (para reconocer el pedido) y el
- * panel (para dibujar y validar).
+ * panel (para dibujar, validar y armar lo que se envía).
  */
 
-export type TipoCampo = 'texto' | 'numero' | 'email' | 'select' | 'area' | 'archivo';
+export type TipoCampo =
+  | 'texto' | 'numero' | 'email' | 'select' | 'area' | 'fecha' | 'archivo'
+  | 'cliente' | 'documento' | 'lineas';
 
 export interface Campo {
   id: string;
@@ -28,27 +32,50 @@ export interface Campo {
   opciones?: { valor: string; etiqueta: string }[];
   /** Solo `archivo`: extensiones aceptadas. */
   accept?: string;
+  /** Solo `archivo`: cuántos admite. */
+  multiple?: boolean;
 }
 
 export type Valores = Record<string, string>;
+export type IdFormulario =
+  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto'
+  | 'importar-productos' | 'importar-clientes';
 
 export interface DefFormulario {
-  id: 'cliente' | 'producto' | 'importar-productos' | 'importar-clientes';
+  id: IdFormulario;
   titulo: string;
   descripcion: string;
   boton: string;
-  /** Ruta de la API de la app (la misma de la pantalla). */
+  /** Ruta de la API de la app (la misma de la pantalla). `{documentoId}` se completa al enviar. */
   endpoint: string;
-  /** `json`: campos → cuerpo JSON. `archivo`: sube el archivo en dos tiempos (vista previa y confirmar). */
-  modo: 'json' | 'archivo';
+  /**
+   * `json`: los campos viajan como cuerpo JSON.
+   * `csv`: sube el archivo en dos tiempos (resumen y confirmar).
+   * `captura`: sube el archivo tal cual a la bandeja de gastos por revisar.
+   */
+  modo: 'json' | 'csv' | 'captura';
   campos: Campo[];
   /** Pantalla donde se ve lo creado, para el enlace del resultado. */
   pantalla: string;
 }
 
 const MAX_TEXTO = 255;
+const MAX_LINEAS = 30;
 
-export const FORMULARIOS: Record<DefFormulario['id'], DefFormulario> = {
+const TASAS = [
+  { valor: '0.18', etiqueta: '18 %' }, { valor: '0.16', etiqueta: '16 %' },
+  { valor: '0', etiqueta: '0 %' }, { valor: 'exento', etiqueta: 'Exento' },
+];
+
+/** Métodos con los que se registra un cobro (los que ofrece la pantalla). */
+export const METODOS_COBRO = [
+  { valor: 'efectivo', etiqueta: 'Efectivo' },
+  { valor: 'transferencia', etiqueta: 'Transferencia' },
+  { valor: 'tarjeta', etiqueta: 'Tarjeta' },
+  { valor: 'cheque', etiqueta: 'Cheque' },
+];
+
+export const FORMULARIOS: Record<IdFormulario, DefFormulario> = {
   cliente: {
     id: 'cliente',
     titulo: 'Nuevo cliente',
@@ -80,15 +107,79 @@ export const FORMULARIOS: Record<DefFormulario['id'], DefFormulario> = {
         opciones: [{ valor: 'servicio', etiqueta: 'Servicio' }, { valor: 'bien', etiqueta: 'Producto (bien)' }],
       },
       { id: 'precio', etiqueta: 'Precio (RD$)', tipo: 'numero', requerido: true, placeholder: '0.00', ayuda: 'Antes de ITBIS.' },
-      {
-        id: 'tasaItbis', etiqueta: 'ITBIS', tipo: 'select', requerido: true,
-        opciones: [
-          { valor: '0.18', etiqueta: '18 %' }, { valor: '0.16', etiqueta: '16 %' },
-          { valor: '0', etiqueta: '0 %' }, { valor: 'exento', etiqueta: 'Exento' },
-        ],
-      },
+      { id: 'tasaItbis', etiqueta: 'ITBIS', tipo: 'select', requerido: true, opciones: TASAS },
       { id: 'referencia', etiqueta: 'Referencia o código', tipo: 'texto', max: 100 },
       { id: 'descripcion', etiqueta: 'Descripción', tipo: 'area', max: 1000 },
+    ],
+  },
+  cotizacion: {
+    id: 'cotizacion',
+    titulo: 'Nueva cotización',
+    descripcion: 'Se guarda como borrador; después la envías o la conviertes en factura.',
+    boton: 'Crear cotización',
+    endpoint: '/api/cotizaciones',
+    modo: 'json',
+    pantalla: '/dashboard/cotizaciones',
+    campos: [
+      { id: 'cliente', etiqueta: 'Cliente', tipo: 'cliente', ayuda: 'Búscalo por nombre o RNC, o escribe un nombre libre.' },
+      { id: 'fechaVencimiento', etiqueta: 'Válida hasta', tipo: 'fecha' },
+      { id: 'lineas', etiqueta: 'Qué cotizas', tipo: 'lineas', requerido: true },
+      { id: 'notas', etiqueta: 'Notas', tipo: 'area', max: 1000 },
+    ],
+  },
+  factura: {
+    id: 'factura',
+    titulo: 'Nueva factura',
+    descripcion: 'Guárdala como borrador para revisarla, o emítela. Emitir un e-CF se envía a la DGII y no se deshace.',
+    boton: 'Guardar borrador',
+    endpoint: '/api/ecf/emitir',
+    modo: 'json',
+    pantalla: '/dashboard/facturas',
+    campos: [
+      {
+        id: 'tipoEcf', etiqueta: 'Tipo de comprobante', tipo: 'select', requerido: true,
+        opciones: [
+          { valor: 'sin-ncf', etiqueta: 'Factura sin comprobante fiscal' },
+          { valor: '32', etiqueta: 'Factura de consumo (e-CF)' },
+          { valor: '31', etiqueta: 'Crédito fiscal (e-CF) — pide RNC' },
+        ],
+      },
+      { id: 'cliente', etiqueta: 'Cliente', tipo: 'cliente', ayuda: 'Para crédito fiscal debe tener RNC o cédula.' },
+      { id: 'lineas', etiqueta: 'Qué facturas', tipo: 'lineas', requerido: true },
+      {
+        id: 'pagoMetodo', etiqueta: '¿Ya te pagó?', tipo: 'select',
+        opciones: [{ valor: '', etiqueta: 'No, queda por cobrar' }, ...METODOS_COBRO.map((m) => ({ valor: m.valor, etiqueta: `Sí, en ${m.etiqueta.toLowerCase()}` }))],
+      },
+      { id: 'notas', etiqueta: 'Notas', tipo: 'area', max: 1000 },
+    ],
+  },
+  pago: {
+    id: 'pago',
+    titulo: 'Registrar un cobro',
+    descripcion: 'Busca la factura y anota lo que te pagaron. Si no es el total, queda como pago parcial.',
+    boton: 'Registrar cobro',
+    endpoint: '/api/cuentas-por-cobrar/{documentoId}/pagos',
+    modo: 'json',
+    pantalla: '/dashboard/cuentas-por-cobrar',
+    campos: [
+      { id: 'documento', etiqueta: 'Factura', tipo: 'documento', requerido: true, ayuda: 'Busca por número, código o nombre del cliente.' },
+      { id: 'monto', etiqueta: 'Monto cobrado (RD$)', tipo: 'numero', requerido: true, placeholder: '0.00' },
+      { id: 'metodo', etiqueta: 'Método', tipo: 'select', requerido: true, opciones: METODOS_COBRO },
+      { id: 'fechaPago', etiqueta: 'Fecha del cobro', tipo: 'fecha', requerido: true },
+      { id: 'referencia', etiqueta: 'Referencia', tipo: 'texto', max: 100, ayuda: 'Número de transferencia, cheque o aprobación (opcional).' },
+    ],
+  },
+  gasto: {
+    id: 'gasto',
+    titulo: 'Subir una factura de gasto',
+    descripcion: 'Sube la foto o el PDF del comprobante de tu proveedor. Queda en «por revisar» para que lo confirmes.',
+    boton: 'Subir comprobante',
+    endpoint: '/api/gastos/capturas',
+    modo: 'captura',
+    pantalla: '/dashboard/gastos',
+    campos: [
+      { id: 'archivos', etiqueta: 'Comprobante (PDF o imagen)', tipo: 'archivo', requerido: true, accept: '.pdf,image/*', multiple: true },
+      { id: 'nota', etiqueta: 'Nota', tipo: 'texto', max: 300, ayuda: 'Opcional: para qué fue el gasto.' },
     ],
   },
   'importar-productos': {
@@ -97,7 +188,7 @@ export const FORMULARIOS: Record<DefFormulario['id'], DefFormulario> = {
     descripcion: 'Sube un CSV con las columnas Nombre, Referencia, Precio, ITBIS y Tipo. Verás un resumen antes de importar.',
     boton: 'Revisar archivo',
     endpoint: '/api/import/productos',
-    modo: 'archivo',
+    modo: 'csv',
     pantalla: '/dashboard/productos',
     campos: [{ id: 'archivo', etiqueta: 'Archivo CSV', tipo: 'archivo', requerido: true, accept: '.csv,text/csv' }],
   },
@@ -107,14 +198,71 @@ export const FORMULARIOS: Record<DefFormulario['id'], DefFormulario> = {
     descripcion: 'Sube un CSV con las columnas Nombre, RNC o cédula, Correo y Teléfono. Verás un resumen antes de importar.',
     boton: 'Revisar archivo',
     endpoint: '/api/import/clientes',
-    modo: 'archivo',
+    modo: 'csv',
     pantalla: '/dashboard/clientes',
     campos: [{ id: 'archivo', etiqueta: 'Archivo CSV', tipo: 'archivo', requerido: true, accept: '.csv,text/csv' }],
   },
 };
 
 export const defFormulario = (id: string | null | undefined): DefFormulario | null =>
-  id && Object.prototype.hasOwnProperty.call(FORMULARIOS, id) ? FORMULARIOS[id as DefFormulario['id']] : null;
+  id && Object.prototype.hasOwnProperty.call(FORMULARIOS, id) ? FORMULARIOS[id as IdFormulario] : null;
+
+// ── Líneas (cotización y factura) ───────────────────────────────────────────
+
+export interface Linea {
+  nombre: string;
+  cantidad: number;
+  /** Precio unitario en RD$, antes de ITBIS. */
+  precio: number;
+  tasa: '0.18' | '0.16' | '0' | 'exento';
+  productoId?: number;
+  /** true = bien, false = servicio. */
+  bien?: boolean;
+}
+
+export const lineaVacia = (): Linea => ({ nombre: '', cantidad: 1, precio: 0, tasa: '0.18' });
+
+const redondear = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** Lee las líneas guardadas en el valor del campo (JSON); `[]` si no son válidas. */
+export function leerLineas(valor: string | undefined): Linea[] {
+  if (!valor) return [];
+  let crudo: unknown;
+  try { crudo = JSON.parse(valor); } catch { return []; }
+  if (!Array.isArray(crudo)) return [];
+  const out: Linea[] = [];
+  for (const x of crudo.slice(0, MAX_LINEAS)) {
+    if (!x || typeof x !== 'object') continue;
+    const o = x as Record<string, unknown>;
+    const cantidad = Number(o.cantidad);
+    const precio = Number(o.precio);
+    const tasa = String(o.tasa ?? '0.18');
+    out.push({
+      nombre: limpiarValor(String(o.nombre ?? ''), MAX_TEXTO),
+      cantidad: Number.isFinite(cantidad) ? cantidad : 0,
+      precio: Number.isFinite(precio) ? precio : 0,
+      tasa: (['0.18', '0.16', '0', 'exento'] as const).includes(tasa as never) ? (tasa as Linea['tasa']) : '0.18',
+      ...(Number.isInteger(o.productoId) && Number(o.productoId) > 0 ? { productoId: Number(o.productoId) } : {}),
+      ...(typeof o.bien === 'boolean' ? { bien: o.bien } : {}),
+    });
+  }
+  return out;
+}
+
+export const guardarLineas = (l: Linea[]) => JSON.stringify(l);
+
+/** Subtotal, ITBIS y total, con la misma cuenta que el documento (por línea, tasa sobre la base). */
+export function totalesDeLineas(lineas: Linea[]): { subtotal: number; itbis: number; total: number } {
+  let subtotal = 0;
+  let itbis = 0;
+  for (const l of lineas) {
+    const base = l.cantidad * l.precio;
+    subtotal += base;
+    if (l.tasa === '0.18') itbis += base * 0.18;
+    else if (l.tasa === '0.16') itbis += base * 0.16;
+  }
+  return { subtotal: redondear(subtotal), itbis: redondear(itbis), total: redondear(subtotal + itbis) };
+}
 
 // ── Valores adelantados por el asistente ────────────────────────────────────
 
@@ -128,6 +276,9 @@ export function limpiarValor(v: string, max = MAX_TEXTO): string {
     .slice(0, max);
 }
 
+/** Campos que solo la persona llena (el asistente nunca los adelanta). */
+const SOLO_PERSONA = new Set<TipoCampo>(['archivo', 'documento', 'lineas']);
+
 /**
  * Lee el cuerpo de un bloque ```formulario:
  *
@@ -135,8 +286,8 @@ export function limpiarValor(v: string, max = MAX_TEXTO): string {
  *   razonSocial: Colegio Andrés Bello
  *
  * Devuelve `null` si el tipo no existe. Solo se aceptan campos del formulario;
- * un `select` solo admite valores de sus opciones, y los archivos nunca se
- * adelantan.
+ * un `select` solo admite valores de sus opciones. El cliente adelantado es
+ * solo un texto de búsqueda: nunca un id, que la persona elige de la lista.
  */
 export function parsearFormulario(cuerpo: string): { def: DefFormulario; valores: Valores } | null {
   const lineas = cuerpo.replace(/\r/g, '').split('\n');
@@ -145,7 +296,7 @@ export function parsearFormulario(cuerpo: string): { def: DefFormulario; valores
   for (const l of lineas) {
     const m = l.match(/^\s*([A-Za-z][A-Za-z0-9_]*)\s*:\s*(.*)$/);
     if (!m) continue;
-    if (m[1].toLowerCase() === 'tipo') tipo = m[2].trim().toLowerCase();
+    if (m[1].toLowerCase() === 'tipo' && tipo === null) tipo = m[2].trim().toLowerCase();
     else crudos[m[1]] = m[2];
   }
   const def = defFormulario(tipo);
@@ -153,31 +304,37 @@ export function parsearFormulario(cuerpo: string): { def: DefFormulario; valores
 
   const valores: Valores = {};
   for (const c of def.campos) {
-    if (c.tipo === 'archivo') continue;
-    const crudo = crudos[c.id];
+    if (SOLO_PERSONA.has(c.tipo)) continue;
+    const clave = c.tipo === 'cliente' ? 'clienteNombre' : c.id;
+    const crudo = crudos[c.tipo === 'cliente' ? c.id : c.id] ?? (c.tipo === 'cliente' ? crudos.clienteNombre : undefined);
     if (crudo == null) continue;
     const v = limpiarValor(crudo, c.max ?? MAX_TEXTO);
     if (!v) continue;
     if (c.tipo === 'select') {
-      if (c.opciones?.some((o) => o.valor === v)) valores[c.id] = v;
+      if (c.opciones?.some((o) => o.valor === v)) valores[clave] = v;
       continue;
     }
     if (c.tipo === 'numero') {
       const n = Number(v.replace(/,/g, ''));
-      if (Number.isFinite(n) && n >= 0) valores[c.id] = String(n);
+      if (Number.isFinite(n) && n >= 0) valores[clave] = String(n);
       continue;
     }
-    valores[c.id] = v;
+    if (c.tipo === 'fecha') {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) valores[clave] = v;
+      continue;
+    }
+    valores[clave] = v;
   }
   return { def, valores };
 }
 
 /** El bloque de markdown con el que el asistente muestra un formulario. */
-export function bloqueFormulario(id: DefFormulario['id'], valores: Valores = {}): string {
+export function bloqueFormulario(id: IdFormulario, valores: Valores = {}): string {
   const def = FORMULARIOS[id];
   const lineas = [`tipo: ${id}`];
   for (const c of def.campos) {
-    const v = valores[c.id];
+    if (SOLO_PERSONA.has(c.tipo)) continue;
+    const v = c.tipo === 'cliente' ? valores.clienteNombre : valores[c.id];
     if (v) lineas.push(`${c.id}: ${limpiarValor(v, c.max ?? MAX_TEXTO)}`);
   }
   return '```formulario\n' + lineas.join('\n') + '\n```';
@@ -187,12 +344,25 @@ export function bloqueFormulario(id: DefFormulario['id'], valores: Valores = {})
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DOC = /^(\d{9}|\d{11}|(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{5,20})$/;
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Errores por campo (vacío = se puede enviar). Mismas reglas de fondo que la API. */
 export function validarFormulario(def: DefFormulario, valores: Valores): Record<string, string> {
   const e: Record<string, string> = {};
   for (const c of def.campos) {
     if (c.tipo === 'archivo') continue;
+    if (c.tipo === 'lineas') {
+      const ls = leerLineas(valores[c.id]).filter((l) => l.nombre || l.precio > 0);
+      if (!ls.length) { e[c.id] = 'Agrega al menos una línea'; continue; }
+      const mala = ls.find((l) => !l.nombre || !(l.cantidad > 0) || !(l.precio > 0));
+      if (mala) e[c.id] = 'Cada línea necesita descripción, cantidad y un precio mayor a 0';
+      continue;
+    }
+    if (c.tipo === 'documento') {
+      if (c.requerido && !valores.documentoId) e[c.id] = 'Elige la factura de la lista';
+      continue;
+    }
+    if (c.tipo === 'cliente') continue;
     const v = (valores[c.id] ?? '').trim();
     if (!v) {
       if (c.requerido) e[c.id] = 'Este dato es obligatorio';
@@ -200,9 +370,11 @@ export function validarFormulario(def: DefFormulario, valores: Valores): Record<
     }
     if (c.max && v.length > c.max) e[c.id] = `Máximo ${c.max} caracteres`;
     if (c.tipo === 'email' && !EMAIL.test(v)) e[c.id] = 'Correo inválido';
+    if (c.tipo === 'fecha' && !FECHA.test(v)) e[c.id] = 'Fecha inválida';
     if (c.tipo === 'numero') {
       const n = Number(v.replace(/,/g, ''));
       if (!Number.isFinite(n) || n < 0) e[c.id] = 'Escribe un número mayor o igual a 0';
+      else if (def.id === 'pago' && n <= 0) e[c.id] = 'El monto debe ser mayor a 0';
     }
     if (c.tipo === 'select' && !c.opciones?.some((o) => o.valor === v)) e[c.id] = 'Elige una opción';
     if (def.id === 'cliente' && c.id === 'rnc') {
@@ -210,36 +382,168 @@ export function validarFormulario(def: DefFormulario, valores: Valores): Record<
       if (!DOC.test(d)) e[c.id] = 'RNC (9 dígitos), cédula (11) o pasaporte';
     }
   }
+  if (def.id === 'factura' && valores.tipoEcf === '31' && !(valores.clienteRnc ?? '').trim()) {
+    e.cliente = 'El crédito fiscal necesita un cliente con RNC o cédula';
+  }
   return e;
 }
 
+const aNumero = (v: string) => Number(v.replace(/,/g, ''));
+
+function itemsDeLineas(lineas: Linea[], conCatalogo: boolean) {
+  return lineas.map((l) => ({
+    nombreItem: l.nombre,
+    cantidadItem: l.cantidad,
+    precioUnitarioItem: l.precio,
+    ...(l.tasa === 'exento' ? {} : { tasaItbis: Number(l.tasa) }),
+    indicadorBienoServicio: l.bien ? 1 : 2,
+    ...(conCatalogo && l.productoId ? { productoId: l.productoId } : {}),
+  }));
+}
+
+const lineasLlenas = (valores: Valores) => leerLineas(valores.lineas).filter((l) => l.nombre && l.cantidad > 0 && l.precio > 0);
+
+/** Datos del cliente elegido (o el nombre libre) tal como los pide cada API. */
+function datosDeCliente(valores: Valores) {
+  const id = Number(valores.clienteId);
+  const nombre = (valores.clienteNombre ?? '').trim();
+  return {
+    clientId: Number.isInteger(id) && id > 0 ? id : null,
+    razonSocial: nombre || null,
+    rnc: (valores.clienteRnc ?? '').trim() || null,
+    email: (valores.clienteEmail ?? '').trim() || null,
+  };
+}
+
+export type ModoEmision = 'borrador' | 'emitir';
+
 /** Cuerpo JSON que recibe la API; solo los campos del formulario. */
-export function armarPayload(def: DefFormulario, valores: Valores): Record<string, unknown> {
+export function armarPayload(def: DefFormulario, valores: Valores, modo: ModoEmision = 'borrador'): Record<string, unknown> {
+  if (def.id === 'cotizacion') {
+    const lineas = lineasLlenas(valores);
+    const t = totalesDeLineas(lineas);
+    const c = datosDeCliente(valores);
+    return {
+      clientId: c.clientId,
+      razonSocialComprador: c.razonSocial,
+      rncComprador: c.rnc,
+      emailComprador: c.email,
+      fechaVencimiento: valores.fechaVencimiento || null,
+      montoSubtotal: t.subtotal,
+      montoDescuento: 0,
+      totalItbis: t.itbis,
+      montoTotal: t.total,
+      items: lineas.map((l) => ({
+        productoId: l.productoId ?? null,
+        nombreItem: l.nombre,
+        cantidadItem: l.cantidad,
+        precioUnitarioItem: l.precio,
+        tasaItbis: l.tasa === 'exento' ? undefined : Number(l.tasa),
+        indicadorBienoServicio: l.bien ? 1 : 2,
+        unidadMedida: '',
+      })),
+      notas: (valores.notas ?? '').trim() || null,
+    };
+  }
+
+  if (def.id === 'factura') {
+    const lineas = lineasLlenas(valores);
+    const t = totalesDeLineas(lineas);
+    const c = datosDeCliente(valores);
+    const paga = (valores.pagoMetodo ?? '').trim();
+    return {
+      modo,
+      tipoEcf: valores.tipoEcf,
+      ...(c.rnc ? { rncComprador: c.rnc.replace(/[-\s]/g, '').toUpperCase() } : {}),
+      ...(c.razonSocial ? { razonSocialComprador: c.razonSocial } : {}),
+      ...(c.email ? { emailComprador: c.email } : {}),
+      ...(c.clientId ? { clientId: c.clientId } : {}),
+      tipoPago: 1,
+      items: itemsDeLineas(lineas, true),
+      ...((valores.notas ?? '').trim() ? { notas: valores.notas.trim() } : {}),
+      ...(paga ? { pagoRecibido: true, pagoMetodo: paga, pagoValor: t.total } : {}),
+    };
+  }
+
+  if (def.id === 'pago') {
+    return {
+      montoDOP: aNumero(valores.monto ?? '0'),
+      metodo: valores.metodo,
+      fechaPago: valores.fechaPago,
+      ...((valores.referencia ?? '').trim() ? { referencia: valores.referencia.trim() } : {}),
+    };
+  }
+
   const out: Record<string, unknown> = {};
   for (const c of def.campos) {
-    if (c.tipo === 'archivo') continue;
+    if (c.tipo === 'archivo' || SOLO_PERSONA.has(c.tipo) || c.tipo === 'cliente') continue;
     const v = (valores[c.id] ?? '').trim();
     if (!v) continue;
-    out[c.id] = c.tipo === 'numero' ? Number(v.replace(/,/g, '')) : v;
+    out[c.id] = c.tipo === 'numero' ? aNumero(v) : v;
   }
   return out;
 }
 
+/** La dirección a la que se envía (completa `{documentoId}` con el id elegido). */
+export function endpointDe(def: DefFormulario, valores: Valores): string | null {
+  if (!def.endpoint.includes('{documentoId}')) return def.endpoint;
+  const id = Number(valores.documentoId);
+  return Number.isInteger(id) && id > 0 ? def.endpoint.replace('{documentoId}', String(id)) : null;
+}
+
+/** Qué dice la confirmación antes de emitir (con el total y el cliente a la vista). */
+export function resumenDeEmision(valores: Valores): string {
+  const t = totalesDeLineas(lineasLlenas(valores));
+  const cliente = (valores.clienteNombre ?? '').trim() || 'consumo final';
+  const total = t.total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `Se emitirá una factura por RD$ ${total} a ${cliente} y se enviará a la DGII. No se puede deshacer.`;
+}
+
 /** Qué se le dice a la persona cuando la API responde bien. */
-export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown): { mensaje: string; enlace: string } {
-  const r = (respuesta ?? {}) as { cliente?: { id?: number; razonSocial?: string }; producto?: { id?: number; nombre?: string } };
-  if (def.id === 'cliente') {
-    const c = r.cliente;
-    return {
-      mensaje: `Listo: creé el cliente ${c?.razonSocial ?? ''}`.trim() + '.',
-      enlace: c?.id ? `/dashboard/clientes/${c.id}/editar` : def.pantalla,
-    };
-  }
-  const p = r.producto;
-  return {
-    mensaje: `Listo: creé ${p?.nombre ?? 'el producto'}.`,
-    enlace: p?.id ? `/dashboard/productos/${p.id}` : def.pantalla,
+export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown, modo: ModoEmision = 'borrador'): { mensaje: string; enlace: string } {
+  const r = (respuesta ?? {}) as {
+    cliente?: { id?: number; razonSocial?: string };
+    producto?: { id?: number; nombre?: string };
+    cotizacion?: { id?: number; numero?: string };
+    documentoId?: number; encf?: string | null; codigo?: string | null; estado?: string;
+    id?: number; repetida?: boolean;
   };
+  switch (def.id) {
+    case 'cliente': {
+      const c = r.cliente;
+      return {
+        mensaje: `Listo: creé el cliente ${c?.razonSocial ?? ''}`.trim() + '.',
+        enlace: c?.id ? `/dashboard/clientes/${c.id}/editar` : def.pantalla,
+      };
+    }
+    case 'producto': {
+      const p = r.producto;
+      return { mensaje: `Listo: creé ${p?.nombre ?? 'el producto'}.`, enlace: p?.id ? `/dashboard/productos/${p.id}` : def.pantalla };
+    }
+    case 'cotizacion': {
+      const c = r.cotizacion;
+      return {
+        mensaje: `Listo: creé la cotización ${c?.numero ?? ''}`.trim() + ' como borrador.',
+        enlace: c?.id ? `/dashboard/cotizaciones/${c.id}` : def.pantalla,
+      };
+    }
+    case 'factura': {
+      const num = r.encf || r.codigo || '';
+      const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
+      return modo === 'emitir'
+        ? { mensaje: `Listo: emití la factura ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
+        : { mensaje: `Listo: guardé la factura ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace };
+    }
+    case 'pago':
+      return { mensaje: 'Listo: registré el cobro.', enlace: def.pantalla };
+    case 'gasto':
+      return {
+        mensaje: r.repetida ? 'Ese comprobante ya estaba subido.' : 'Listo: subí el comprobante. Quedó en «por revisar» para que lo confirmes.',
+        enlace: def.pantalla,
+      };
+    default:
+      return { mensaje: 'Listo.', enlace: def.pantalla };
+  }
 }
 
 // ── Reconocer el pedido en lo que escribe la persona ────────────────────────
@@ -247,33 +551,60 @@ export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown): { m
 const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const CORTESIA = '(?:por favor |porfa |ahora |ya |oye |entonces |quiero |necesito |puedes |podrias |me puedes |me podrias |ayudame a |vamos a |hay que )*';
-const ARTICULO = '(?:un |una |el |la |mi |mis |los |las |unos |unas |nuevo |nueva |nuevos |nuevas )*';
-const RE_CREAR = new RegExp(
-  `^${CORTESIA}(?:crear|crea|creame|registrar|registra|registrame|agregar|agrega|agregame|anadir|anade|dar de alta|dame de alta|nuevo|nueva)\\s+${ARTICULO}(cliente|producto|servicio|articulo|item)\\b(.*)$`,
+const ARTICULO = '(?:un |una |el |la |mi |mis |los |las |unos |unas |nuevo |nueva |nuevos |nuevas |otro |otra )*';
+const VERBO_CREAR = '(?:crear|crea|creame|registrar|registra|registrame|agregar|agrega|agregame|anadir|anade|dar de alta|dame de alta|nuevo|nueva|hacer|haz|hazme|preparar|prepara|preparame|armar|arma|armame|generar|genera)';
+const RE_CREAR = new RegExp(`^${CORTESIA}${VERBO_CREAR}\\s+${ARTICULO}(cliente|producto|servicio|articulo|item)\\b(.*)$`);
+const RE_COTIZACION = new RegExp(`^${CORTESIA}${VERBO_CREAR}\\s+${ARTICULO}(?:cotizacion|presupuesto|proforma)\\b(.*)$`);
+const RE_FACTURA = new RegExp(`^${CORTESIA}(?:${VERBO_CREAR}|emitir|emite|emiteme|facturar|factura)\\s+${ARTICULO}(?:factura|facturas)\\b(.*)$`);
+const RE_FACTURAR_A = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |ayudame a )*(?:(?:facturar|facturale|facturame)\s+(?:a |para )?|factura\s+(?:a|para)\s+)([a-z][^0-9]{1,79})$/;
+const RE_PAGO = new RegExp(
+  `^${CORTESIA}(?:${VERBO_CREAR}|anotar|anota|cargar|carga|aplicar|aplica|ingresar|ingresa)\\s+${ARTICULO}(?:cobro|pago recibido|pago|abono)\\b(.*)$`,
 );
+const RE_COBRAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |ayudame a )*(?:cobrar|cobra|cobrale)\s+(?:una |la |esa )?factura\b(.*)$/;
+const RE_GASTO = new RegExp(
+  `^${CORTESIA}(?:${VERBO_CREAR}|subir|sube|cargar|carga|mandar|manda|enviar|envia|adjuntar|adjunta)\\s+${ARTICULO}(?:factura|facturas|comprobante|comprobantes|recibo|recibos|ticket|tickets|compra|compras)\\s+(?:de |del |para )?(?:gasto|gastos|proveedor|proveedores|compra|compras)\\b(.*)$`,
+);
+const RE_GASTO_2 = new RegExp(`^${CORTESIA}(?:${VERBO_CREAR}|subir|sube|cargar|carga|anotar|anota)\\s+${ARTICULO}(?:gasto|gastos)\\b(.*)$`);
 const RE_IMPORTAR = new RegExp(
   `^${CORTESIA}(?:importar|importa|cargar|carga|subir|sube|traer|trae)\\s+${ARTICULO}(?:lista de |archivo de |excel de |csv de )?(productos|servicios|clientes|catalogo|inventario)\\b`,
 );
 
 /**
- * ¿Pidió crear un cliente o un producto, o importarlos desde un archivo?
+ * ¿Pidió crear algo de facturación, o importarlo desde un archivo?
  * Las preguntas de «cómo» no entran: esas las contesta la guía.
  */
-export function detectarFormulario(texto: string): { id: DefFormulario['id']; valores: Valores } | null {
+export function detectarFormulario(texto: string): { id: IdFormulario; valores: Valores } | null {
   const t = normalizar(texto);
   if (!t || t.length > 200) return null;
+  const original = texto.replace(/\s+/g, ' ').trim();
+  const nombreDe = (patron: RegExp) => original.match(patron)?.[1];
+  const llamado = /\b(?:llamad[oa]|de nombre|que se llama|se llama)\s+(.{2,80})$/i;
+  const para = /\b(?:para|a nombre de|de)\s+(?!la |el |los |las |un |una )(.{2,80})$/i;
 
   const imp = t.match(RE_IMPORTAR);
   if (imp) return { id: imp[1] === 'clientes' ? 'importar-clientes' : 'importar-productos', valores: {} };
 
+  if (RE_GASTO.test(t) || RE_GASTO_2.test(t)) return { id: 'gasto', valores: {} };
+  if (RE_PAGO.test(t) || RE_COBRAR.test(t)) return { id: 'pago', valores: {} };
+
+  if (RE_COTIZACION.test(t)) {
+    const n = nombreDe(para) ?? nombreDe(llamado);
+    return { id: 'cotizacion', valores: n ? { clienteNombre: limpiarValor(n) } : {} };
+  }
+  if (RE_FACTURA.test(t)) {
+    const n = nombreDe(para) ?? nombreDe(llamado);
+    return { id: 'factura', valores: n ? { clienteNombre: limpiarValor(n) } : {} };
+  }
+  const fa = t.match(RE_FACTURAR_A);
+  if (fa && !/\b(factura|cotizacion|cliente|producto)\b/.test(fa[1])) {
+    const n = original.match(/(?:facturar|factura|facturale|facturame)\s+(?:a |para )?(.{2,80})$/i)?.[1];
+    return { id: 'factura', valores: n ? { clienteNombre: limpiarValor(n) } : {} };
+  }
+
   const cre = t.match(RE_CREAR);
   if (!cre) return null;
-  const id: DefFormulario['id'] = cre[1] === 'cliente' ? 'cliente' : 'producto';
-
-  // «…llamado Juan Pérez», «…de nombre Uniforme»: adelanta el nombre, como lo escribió.
-  const resto = texto.replace(/\s+/g, ' ').trim();
-  const nombre = resto.match(/\b(?:llamad[oa]|de nombre|que se llama|se llama)\s+(.{2,80})$/i)?.[1];
+  const id: IdFormulario = cre[1] === 'cliente' ? 'cliente' : 'producto';
+  const nombre = nombreDe(llamado);
   const campo = id === 'cliente' ? 'razonSocial' : 'nombre';
-  const valores: Valores = nombre ? { [campo]: limpiarValor(nombre, MAX_TEXTO) } : {};
-  return { id, valores };
+  return { id, valores: nombre ? { [campo]: limpiarValor(nombre, MAX_TEXTO) } : {} };
 }

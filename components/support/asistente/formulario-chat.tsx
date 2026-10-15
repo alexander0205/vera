@@ -1,11 +1,12 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import {
-  armarPayload, resultadoDeCreacion, validarFormulario,
-  type DefFormulario, type Valores,
+  armarPayload, endpointDe, guardarLineas, leerLineas, lineaVacia, resultadoDeCreacion, resumenDeEmision,
+  totalesDeLineas, validarFormulario,
+  type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
 import s from './asistente.module.css';
 
@@ -13,6 +14,7 @@ import s from './asistente.module.css';
  * Formulario dentro del chat. Envía a la MISMA ruta de la API que la pantalla
  * equivalente, con la sesión de quien lo llena; no hay una vía propia del
  * asistente. Los valores que adelantó el asistente son solo un punto de partida.
+ * Emitir un comprobante a la DGII pide una segunda confirmación a la vista.
  */
 
 interface ResumenImportacion {
@@ -22,48 +24,336 @@ interface ResumenImportacion {
 type Fase =
   | { t: 'editando' }
   | { t: 'enviando' }
+  | { t: 'confirmar-emision' }
   | { t: 'duplicado'; nombre: string }
   | { t: 'previa'; resumen: ResumenImportacion }
   | { t: 'listo'; mensaje: string; enlace: string }
-  | { t: 'error'; mensaje: string };
+  | { t: 'error'; mensaje: string; enlace?: string };
 
-const MAX_ARCHIVO = 5 * 1024 * 1024;
+const MAX_ARCHIVO = 8 * 1024 * 1024;
+const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
+const pesos = (n: number) => n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function mensajeDeError(status: number, cuerpo: unknown): string {
-  const c = (cuerpo ?? {}) as { error?: string; detalles?: { fieldErrors?: Record<string, string[]> } };
+  const c = (cuerpo ?? {}) as { error?: string; mensaje?: string; detalles?: { fieldErrors?: Record<string, string[]> } };
   const campos = c.detalles?.fieldErrors ? Object.values(c.detalles.fieldErrors).flat().filter(Boolean) : [];
   if (campos.length) return campos.join(' · ');
   if (status === 401) return 'Tu sesión venció. Recarga la página e inicia sesión de nuevo.';
-  if (status === 403) return 'Tu usuario no tiene permiso para hacer esto.';
+  if (status === 403) return c.error && c.error.length < 200 ? c.error : 'Tu usuario no tiene permiso para hacer esto.';
   if (status === 429) return 'Demasiados intentos seguidos. Espera un momento.';
-  return c.error && c.error.length < 200 ? c.error : 'No se pudo completar. No se guardó nada; revisa los datos e intenta de nuevo.';
+  const texto = c.error ?? c.mensaje;
+  return texto && texto.length < 240 ? texto : 'No se pudo completar. No se guardó nada; revisa los datos e intenta de nuevo.';
+}
+
+/** Busca en una ruta de la API con una pausa corta y cancela la búsqueda anterior. */
+function useBusqueda<T>(url: (q: string) => string, leer: (d: unknown) => T[], q: string, activo: boolean) {
+  const [items, setItems] = useState<T[]>([]);
+  const [cargando, setCargando] = useState(false);
+  useEffect(() => {
+    const t = q.trim();
+    if (!activo || t.length < 2) { setItems([]); return; }
+    const ac = new AbortController();
+    const espera = setTimeout(async () => {
+      setCargando(true);
+      try {
+        const r = await fetch(url(t), { signal: ac.signal, cache: 'no-store' });
+        setItems(r.ok ? leer(await r.json()).slice(0, 6) : []);
+      } catch {
+        if (!ac.signal.aborted) setItems([]);
+      } finally {
+        if (!ac.signal.aborted) setCargando(false);
+      }
+    }, 300);
+    return () => { clearTimeout(espera); ac.abort(); };
+    // `url` y `leer` son estables por uso.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, activo]);
+  return { items, cargando };
+}
+
+interface ClienteApi { id: number; razonSocial: string; rnc?: string | null; email?: string | null }
+interface ProductoApi { id: number; nombre: string; precioDOP?: number; tasaItbis?: string; tipo?: string }
+interface FacturaApi { id: number; codigo?: string | null; encf?: string | null; razonSocialComprador?: string | null; montoTotal: number; pagado?: number; estadoPago?: string | null }
+
+function SelectorCliente({ id, valores, poner, deshabilitado }: {
+  id: string; valores: Valores; poner: (p: Valores) => void; deshabilitado: boolean;
+}) {
+  const [texto, setTexto] = useState(valores.clienteNombre ?? '');
+  const [abierto, setAbierto] = useState(false);
+  const elegido = Boolean(valores.clienteId);
+  const { items, cargando } = useBusqueda<ClienteApi>(
+    (q) => `/api/clientes?q=${encodeURIComponent(q)}&limit=8`,
+    (d) => ((d as { clientes?: ClienteApi[] }).clientes ?? []),
+    texto, abierto && !elegido,
+  );
+  return (
+    <div className={s.selector}>
+      <input
+        id={id}
+        value={texto}
+        disabled={deshabilitado}
+        maxLength={200}
+        autoComplete="off"
+        placeholder="Nombre o RNC del cliente"
+        role="combobox"
+        aria-expanded={abierto && items.length > 0}
+        aria-autocomplete="list"
+        onFocus={() => setAbierto(true)}
+        onBlur={() => setTimeout(() => setAbierto(false), 150)}
+        onChange={(ev) => {
+          setTexto(ev.target.value);
+          setAbierto(true);
+          // Escribir otra vez deshace la elección: queda como nombre libre.
+          poner({ clienteId: '', clienteRnc: '', clienteEmail: '', clienteNombre: ev.target.value });
+        }}
+      />
+      {elegido && (
+        <p className={s.campoAyuda}>
+          Cliente registrado{valores.clienteRnc ? ` · ${valores.clienteRnc}` : ' · sin RNC'}
+        </p>
+      )}
+      {abierto && !elegido && (items.length > 0 || cargando) && (
+        <ul className={s.sugeridos} role="listbox">
+          {cargando && items.length === 0 && <li className={s.sugeridoVacio}>Buscando…</li>}
+          {items.map((c) => (
+            <li key={c.id} role="option" aria-selected={false}>
+              <button
+                type="button"
+                onMouseDown={(ev) => ev.preventDefault()}
+                onClick={() => {
+                  setTexto(c.razonSocial);
+                  setAbierto(false);
+                  poner({ clienteId: String(c.id), clienteNombre: c.razonSocial, clienteRnc: c.rnc ?? '', clienteEmail: c.email ?? '' });
+                }}
+              >
+                <strong>{c.razonSocial}</strong>
+                <small>{c.rnc || 'sin RNC'}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SelectorFactura({ id, valores, poner, deshabilitado }: {
+  id: string; valores: Valores; poner: (p: Valores) => void; deshabilitado: boolean;
+}) {
+  const [texto, setTexto] = useState(valores.documentoNombre ?? '');
+  const [abierto, setAbierto] = useState(false);
+  const elegido = Boolean(valores.documentoId);
+  const { items, cargando } = useBusqueda<FacturaApi>(
+    (q) => `/api/facturas?search=${encodeURIComponent(q)}&limit=8`,
+    (d) => ((d as { docs?: FacturaApi[] }).docs ?? []),
+    texto, abierto && !elegido,
+  );
+  return (
+    <div className={s.selector}>
+      <input
+        id={id}
+        value={texto}
+        disabled={deshabilitado}
+        maxLength={100}
+        autoComplete="off"
+        placeholder="Número, código o cliente"
+        role="combobox"
+        aria-expanded={abierto && items.length > 0}
+        aria-autocomplete="list"
+        onFocus={() => setAbierto(true)}
+        onBlur={() => setTimeout(() => setAbierto(false), 150)}
+        onChange={(ev) => {
+          setTexto(ev.target.value);
+          setAbierto(true);
+          poner({ documentoId: '', documentoNombre: ev.target.value, documentoSaldo: '' });
+        }}
+      />
+      {elegido && valores.documentoSaldo && (
+        <p className={s.campoAyuda}>Saldo pendiente: RD$ {valores.documentoSaldo}</p>
+      )}
+      {abierto && !elegido && (items.length > 0 || cargando) && (
+        <ul className={s.sugeridos} role="listbox">
+          {cargando && items.length === 0 && <li className={s.sugeridoVacio}>Buscando…</li>}
+          {items.map((f) => {
+            const saldo = Math.max(0, (f.montoTotal - (f.pagado ?? 0)) / 100);
+            const nombre = `${f.encf || f.codigo || `#${f.id}`} · ${f.razonSocialComprador ?? 'consumo final'}`;
+            return (
+              <li key={f.id} role="option" aria-selected={false}>
+                <button
+                  type="button"
+                  onMouseDown={(ev) => ev.preventDefault()}
+                  onClick={() => {
+                    setTexto(nombre);
+                    setAbierto(false);
+                    poner({ documentoId: String(f.id), documentoNombre: nombre, documentoSaldo: pesos(saldo), ...(saldo > 0 ? { monto: String(saldo) } : {}) });
+                  }}
+                >
+                  <strong>{nombre}</strong>
+                  <small>{saldo > 0 ? `debe RD$ ${pesos(saldo)}` : 'pagada'}</small>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function EditorLineas({ id, valor, cambiar, deshabilitado }: {
+  id: string; valor: string; cambiar: (v: string) => void; deshabilitado: boolean;
+}) {
+  const lineas = leerLineas(valor);
+  const filas: Linea[] = lineas.length ? lineas : [lineaVacia()];
+  const [buscando, setBuscando] = useState<number | null>(null);
+  const q = buscando !== null ? filas[buscando]?.nombre ?? '' : '';
+  const { items } = useBusqueda<ProductoApi>(
+    (t) => `/api/productos?contexto=facturacion&q=${encodeURIComponent(t)}&limit=8`,
+    (d) => ((d as { productos?: ProductoApi[] }).productos ?? []),
+    q, buscando !== null && !filas[buscando]?.productoId,
+  );
+  const t = totalesDeLineas(filas.filter((l) => l.nombre && l.cantidad > 0 && l.precio > 0));
+
+  const poner = (i: number, p: Partial<Linea>) => cambiar(guardarLineas(filas.map((l, j) => (j === i ? { ...l, ...p } : l))));
+
+  return (
+    <div className={s.lineas}>
+      {filas.map((l, i) => (
+        <div className={s.linea} key={i}>
+          <div className={s.lineaNombre}>
+            <input
+              id={i === 0 ? id : undefined}
+              aria-label={`Descripción de la línea ${i + 1}`}
+              placeholder="Producto o servicio"
+              value={l.nombre}
+              disabled={deshabilitado}
+              maxLength={200}
+              autoComplete="off"
+              onFocus={() => setBuscando(i)}
+              onBlur={() => setTimeout(() => setBuscando((x) => (x === i ? null : x)), 150)}
+              // Escribir de nuevo suelta el producto del catálogo: es texto libre otra vez.
+              onChange={(ev) => poner(i, { nombre: ev.target.value, productoId: undefined })}
+            />
+            {buscando === i && !l.productoId && items.length > 0 && (
+              <ul className={s.sugeridos} role="listbox">
+                {items.map((p) => (
+                  <li key={p.id} role="option" aria-selected={false}>
+                    <button
+                      type="button"
+                      onMouseDown={(ev) => ev.preventDefault()}
+                      onClick={() => {
+                        const tasa = (['0.18', '0.16', '0', 'exento'] as const).find((x) => x === p.tasaItbis) ?? '0.18';
+                        poner(i, { nombre: p.nombre, productoId: p.id, precio: p.precioDOP ?? l.precio, tasa, bien: p.tipo === 'bien' });
+                        setBuscando(null);
+                      }}
+                    >
+                      <strong>{p.nombre}</strong>
+                      <small>RD$ {pesos(p.precioDOP ?? 0)}</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <input
+            className={s.lineaNum}
+            aria-label={`Cantidad de la línea ${i + 1}`}
+            inputMode="decimal"
+            value={l.cantidad ? String(l.cantidad) : ''}
+            disabled={deshabilitado}
+            onChange={(ev) => poner(i, { cantidad: Number(ev.target.value.replace(/,/g, '')) || 0 })}
+            placeholder="Cant."
+          />
+          <input
+            className={s.lineaNum}
+            aria-label={`Precio de la línea ${i + 1}`}
+            inputMode="decimal"
+            value={l.precio ? String(l.precio) : ''}
+            disabled={deshabilitado}
+            onChange={(ev) => poner(i, { precio: Number(ev.target.value.replace(/,/g, '')) || 0 })}
+            placeholder="Precio"
+          />
+          <select
+            className={s.lineaTasa}
+            aria-label={`ITBIS de la línea ${i + 1}`}
+            value={l.tasa}
+            disabled={deshabilitado}
+            onChange={(ev) => poner(i, { tasa: ev.target.value as Linea['tasa'] })}
+          >
+            <option value="0.18">18 %</option>
+            <option value="0.16">16 %</option>
+            <option value="0">0 %</option>
+            <option value="exento">Exento</option>
+          </select>
+          <button
+            type="button"
+            className={s.lineaQuitar}
+            aria-label={`Quitar la línea ${i + 1}`}
+            disabled={deshabilitado || filas.length === 1}
+            onClick={() => cambiar(guardarLineas(filas.filter((_, j) => j !== i)))}
+          >
+            <Trash2 size={15} aria-hidden />
+          </button>
+        </div>
+      ))}
+      <div className={s.lineasPie}>
+        <button
+          type="button"
+          className={s.lineaAgregar}
+          disabled={deshabilitado || filas.length >= 30}
+          onClick={() => cambiar(guardarLineas([...filas, lineaVacia()]))}
+        >
+          <Plus size={14} aria-hidden /> Agregar línea
+        </button>
+        <dl className={s.totales}>
+          <div><dt>Subtotal</dt><dd>RD$ {pesos(t.subtotal)}</dd></div>
+          <div><dt>ITBIS</dt><dd>RD$ {pesos(t.itbis)}</dd></div>
+          <div className={s.totalFinal}><dt>Total</dt><dd>RD$ {pesos(t.total)}</dd></div>
+        </dl>
+      </div>
+    </div>
+  );
 }
 
 export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: Valores }) {
   const base = useId();
-  const [valores, setValores] = useState<Valores>(inicial);
+  const [valores, setValores] = useState<Valores>(() => ({
+    ...(def.id === 'pago' ? { fechaPago: hoy(), metodo: 'efectivo' } : {}),
+    ...(def.id === 'factura' ? { tipoEcf: 'sin-ncf' } : {}),
+    ...inicial,
+  }));
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [fase, setFase] = useState<Fase>({ t: 'editando' });
-  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
   const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
 
   const ocupado = fase.t === 'enviando';
-  const cerrado = fase.t === 'listo';
+  const esArchivo = def.modo !== 'json';
+  const campoArchivo = def.campos.find((c) => c.tipo === 'archivo');
 
-  function cambiar(id: string, v: string) {
-    setValores((x) => ({ ...x, [id]: v }));
-    if (errores[id]) setErrores((e) => { const n = { ...e }; delete n[id]; return n; });
+  function poner(p: Valores) {
+    setValores((x) => ({ ...x, ...p }));
+    setErrores((e) => {
+      const n = { ...e };
+      for (const k of Object.keys(p)) delete n[k];
+      if ('clienteId' in p || 'clienteNombre' in p) delete n.cliente;
+      if ('documentoId' in p) delete n.documento;
+      return n;
+    });
   }
 
-  async function enviarJson(forzar = false) {
+  async function enviarJson(opts: { modo?: ModoEmision; forzar?: boolean } = {}) {
+    const modo = opts.modo ?? 'borrador';
     const e = validarFormulario(def, valores);
     setErrores(e);
-    if (Object.keys(e).length) return;
+    if (Object.keys(e).length) { setFase({ t: 'editando' }); return; }
+    const destino = endpointDe(def, valores);
+    if (!destino) { setErrores({ documento: 'Elige la factura de la lista' }); setFase({ t: 'editando' }); return; }
     setFase({ t: 'enviando' });
     try {
-      const cuerpo = { ...armarPayload(def, valores), ...(forzar ? { force: true } : {}) };
-      const r = await fetch(def.endpoint, {
+      const cuerpo = { ...armarPayload(def, valores, modo), ...(opts.forzar ? { force: true } : {}) };
+      const r = await fetch(destino, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo),
       });
       const d = await r.json().catch(() => null);
@@ -71,15 +361,28 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
         setFase({ t: 'duplicado', nombre: String(d.duplicado.razonSocial ?? 'otro cliente') });
         return;
       }
-      if (!r.ok) { setFase({ t: 'error', mensaje: mensajeDeError(r.status, d) }); return; }
-      const res = resultadoDeCreacion(def, d);
+      if (!r.ok) {
+        const doc = typeof d?.docId === 'number' ? `/dashboard/facturas/${d.docId}` : undefined;
+        setFase({ t: 'error', mensaje: mensajeDeError(r.status, d), enlace: doc });
+        return;
+      }
+      const res = resultadoDeCreacion(def, d, modo);
       setFase({ t: 'listo', mensaje: res.mensaje, enlace: res.enlace });
     } catch {
       setFase({ t: 'error', mensaje: 'No hay conexión. No se guardó nada; revisa tu internet e intenta de nuevo.' });
     }
   }
 
-  async function subir(modo: 'preview' | 'commit') {
+  function pedirEmision() {
+    const e = validarFormulario(def, valores);
+    setErrores(e);
+    if (Object.keys(e).length) return;
+    if (valores.tipoEcf === 'sin-ncf') { setErrores({ tipoEcf: 'Sin comprobante fiscal solo se guarda como borrador. Elige consumo o crédito fiscal para emitir.' }); return; }
+    setFase({ t: 'confirmar-emision' });
+  }
+
+  async function subirCsv(modo: 'preview' | 'commit') {
+    const archivo = archivos[0];
     if (!archivo) { setErrorArchivo('Elige un archivo CSV'); return; }
     setFase({ t: 'enviando' });
     try {
@@ -104,16 +407,39 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
     }
   }
 
-  function elegirArchivo(f: File | null) {
-    setErrorArchivo(null);
-    setFase({ t: 'editando' });
-    if (!f) { setArchivo(null); return; }
-    if (f.size > MAX_ARCHIVO) { setArchivo(null); setErrorArchivo('El archivo pesa más de 5 MB'); return; }
-    if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') { setArchivo(null); setErrorArchivo('Debe ser un archivo CSV (.csv)'); return; }
-    setArchivo(f);
+  async function subirCaptura() {
+    if (!archivos.length) { setErrorArchivo('Elige el PDF o la imagen del comprobante'); return; }
+    setFase({ t: 'enviando' });
+    try {
+      const fd = new FormData();
+      for (const f of archivos) fd.append('archivos', f);
+      const nota = (valores.nota ?? '').trim();
+      if (nota) fd.set('nota', nota);
+      const r = await fetch(def.endpoint, { method: 'POST', body: fd });
+      const d = await r.json().catch(() => null);
+      if (!r.ok) { setFase({ t: 'error', mensaje: mensajeDeError(r.status, d) }); return; }
+      const res = resultadoDeCreacion(def, d);
+      setFase({ t: 'listo', mensaje: res.mensaje, enlace: res.enlace });
+    } catch {
+      setFase({ t: 'error', mensaje: 'No hay conexión. No se subió nada; intenta de nuevo.' });
+    }
   }
 
-  if (cerrado && fase.t === 'listo') {
+  function elegirArchivos(lista: FileList | null) {
+    setErrorArchivo(null);
+    setFase({ t: 'editando' });
+    const fs = Array.from(lista ?? []);
+    if (!fs.length) { setArchivos([]); return; }
+    const ok = def.modo === 'csv'
+      ? (f: File) => /\.csv$/i.test(f.name) || f.type === 'text/csv'
+      : (f: File) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf' || f.type.startsWith('image/');
+    const mala = fs.find((f) => !ok(f));
+    if (mala) { setArchivos([]); setErrorArchivo(def.modo === 'csv' ? 'Debe ser un archivo CSV (.csv)' : 'Debe ser un PDF o una imagen'); return; }
+    if (fs.some((f) => f.size > MAX_ARCHIVO)) { setArchivos([]); setErrorArchivo('Cada archivo debe pesar menos de 8 MB'); return; }
+    setArchivos(fs.slice(0, campoArchivo?.multiple ? 5 : 1));
+  }
+
+  if (fase.t === 'listo') {
     return (
       <section className={`${s.formulario} ${s.formularioListo}`} aria-live="polite">
         <CheckCircle2 size={18} aria-hidden />
@@ -125,7 +451,61 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
     );
   }
 
-  const esArchivo = def.modo === 'archivo';
+  const idCampo = (c: Campo) => `${base}-${c.id}`;
+
+  function renderCampo(c: Campo) {
+    const id = idCampo(c);
+    const err = errores[c.id];
+    const comun = {
+      id, value: valores[c.id] ?? '', disabled: ocupado,
+      'aria-invalid': err ? true : undefined,
+      'aria-describedby': err ? `${id}-e` : c.ayuda ? `${id}-a` : undefined,
+    };
+    let control: React.ReactNode;
+    if (c.tipo === 'select') {
+      control = (
+        <select {...comun} onChange={(ev) => poner({ [c.id]: ev.target.value })}>
+          {c.requerido && def.id === 'producto' ? <option value="">Elige…</option> : null}
+          {c.opciones?.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+        </select>
+      );
+    } else if (c.tipo === 'area') {
+      control = <textarea {...comun} rows={2} maxLength={c.max} placeholder={c.placeholder} onChange={(ev) => poner({ [c.id]: ev.target.value })} />;
+    } else if (c.tipo === 'fecha') {
+      control = <input {...comun} type="date" onChange={(ev) => poner({ [c.id]: ev.target.value })} />;
+    } else if (c.tipo === 'cliente') {
+      control = <SelectorCliente id={id} valores={valores} poner={poner} deshabilitado={ocupado} />;
+    } else if (c.tipo === 'documento') {
+      control = <SelectorFactura id={id} valores={valores} poner={poner} deshabilitado={ocupado} />;
+    } else if (c.tipo === 'lineas') {
+      control = <EditorLineas id={id} valor={valores[c.id] ?? ''} cambiar={(v) => poner({ [c.id]: v })} deshabilitado={ocupado} />;
+    } else {
+      control = (
+        <input
+          {...comun}
+          type={c.tipo === 'email' ? 'email' : 'text'}
+          inputMode={c.tipo === 'numero' ? 'decimal' : undefined}
+          maxLength={c.max}
+          placeholder={c.placeholder}
+          onChange={(ev) => poner({ [c.id]: ev.target.value })}
+        />
+      );
+    }
+    const etiqueta = c.tipo === 'lineas' || c.tipo === 'cliente' || c.tipo === 'documento'
+      ? <span className={s.etiquetaCampo}>{c.etiqueta}{c.requerido && <span aria-hidden> *</span>}</span>
+      : <label htmlFor={id}>{c.etiqueta}{c.requerido && <span aria-hidden> *</span>}</label>;
+    return (
+      <div className={s.campo} key={c.id}>
+        {etiqueta}
+        {control}
+        {err ? <p id={`${id}-e`} className={s.campoError} role="alert">{err}</p>
+          : c.ayuda ? <p id={`${id}-a`} className={s.campoAyuda}>{c.ayuda}</p> : null}
+      </div>
+    );
+  }
+
+  const esFactura = def.id === 'factura';
+  const puedeEmitir = esFactura && valores.tipoEcf !== 'sin-ncf' && Boolean(valores.tipoEcf);
 
   return (
     <section className={s.formulario} aria-label={def.titulo}>
@@ -138,64 +518,37 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
         noValidate
         onSubmit={(ev) => {
           ev.preventDefault();
-          if (ocupado) return;
-          if (esArchivo) void subir('preview'); else void enviarJson();
+          if (ocupado || fase.t === 'confirmar-emision') return;
+          if (def.modo === 'csv') void subirCsv('preview');
+          else if (def.modo === 'captura') void subirCaptura();
+          else void enviarJson();
         }}
       >
-        {esArchivo ? (
+        {esArchivo && campoArchivo && (
           <div className={s.campo}>
-            <label htmlFor={`${base}-archivo`}>{def.campos[0].etiqueta}</label>
+            <label htmlFor={`${base}-archivo`}>{campoArchivo.etiqueta}{campoArchivo.requerido && <span aria-hidden> *</span>}</label>
             <div className={s.archivo}>
               <button type="button" onClick={() => entrada.current?.click()} disabled={ocupado}>
-                {archivo ? <FileSpreadsheet size={16} aria-hidden /> : <Upload size={16} aria-hidden />}
-                <span>{archivo ? archivo.name : 'Elegir archivo…'}</span>
+                {archivos.length ? <FileSpreadsheet size={16} aria-hidden /> : <Upload size={16} aria-hidden />}
+                <span>
+                  {archivos.length === 0 ? 'Elegir archivo…' : archivos.length === 1 ? archivos[0].name : `${archivos.length} archivos`}
+                </span>
               </button>
               <input
                 id={`${base}-archivo`}
                 ref={entrada}
                 type="file"
-                accept={def.campos[0].accept}
+                accept={campoArchivo.accept}
+                multiple={campoArchivo.multiple}
                 hidden
-                onChange={(ev) => elegirArchivo(ev.target.files?.[0] ?? null)}
+                onChange={(ev) => elegirArchivos(ev.target.files)}
               />
             </div>
             {errorArchivo && <p className={s.campoError} role="alert">{errorArchivo}</p>}
           </div>
-        ) : (
-          def.campos.map((c) => {
-            const id = `${base}-${c.id}`;
-            const err = errores[c.id];
-            const comun = {
-              id, value: valores[c.id] ?? '', disabled: ocupado,
-              'aria-invalid': err ? true : undefined,
-              'aria-describedby': err ? `${id}-e` : c.ayuda ? `${id}-a` : undefined,
-            };
-            return (
-              <div className={s.campo} key={c.id}>
-                <label htmlFor={id}>{c.etiqueta}{c.requerido && <span aria-hidden> *</span>}</label>
-                {c.tipo === 'select' ? (
-                  <select {...comun} onChange={(ev) => cambiar(c.id, ev.target.value)}>
-                    <option value="">Elige…</option>
-                    {c.opciones?.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
-                  </select>
-                ) : c.tipo === 'area' ? (
-                  <textarea {...comun} rows={2} maxLength={c.max} placeholder={c.placeholder} onChange={(ev) => cambiar(c.id, ev.target.value)} />
-                ) : (
-                  <input
-                    {...comun}
-                    type={c.tipo === 'email' ? 'email' : 'text'}
-                    inputMode={c.tipo === 'numero' ? 'decimal' : undefined}
-                    maxLength={c.max}
-                    placeholder={c.placeholder}
-                    onChange={(ev) => cambiar(c.id, ev.target.value)}
-                  />
-                )}
-                {err ? <p id={`${id}-e`} className={s.campoError} role="alert">{err}</p>
-                  : c.ayuda ? <p id={`${id}-a`} className={s.campoAyuda}>{c.ayuda}</p> : null}
-              </div>
-            );
-          })
         )}
+
+        {def.campos.filter((c) => c.tipo !== 'archivo').map(renderCampo)}
 
         {fase.t === 'previa' && (
           <div className={s.previa} role="status">
@@ -215,22 +568,43 @@ export function FormularioChat({ def, inicial }: { def: DefFormulario; inicial: 
             <div>
               <strong>Ya existe «{fase.nombre}» con ese RNC.</strong>
               <div className={s.avisoAcciones}>
-                <button type="button" onClick={() => void enviarJson(true)}>Crear de todos modos</button>
+                <button type="button" onClick={() => void enviarJson({ forzar: true })}>Crear de todos modos</button>
                 <button type="button" onClick={() => setFase({ t: 'editando' })}>Corregir</button>
               </div>
             </div>
           </div>
         )}
 
-        {fase.t === 'error' && (
-          <p className={s.campoError} role="alert"><AlertTriangle size={14} aria-hidden /> {fase.mensaje}</p>
+        {fase.t === 'confirmar-emision' && (
+          <div className={s.avisoForm} role="alertdialog" aria-label="Confirmar emisión">
+            <AlertTriangle size={16} aria-hidden />
+            <div>
+              <strong>{resumenDeEmision(valores)}</strong>
+              <div className={s.avisoAcciones}>
+                <button type="button" className={s.peligro} onClick={() => void enviarJson({ modo: 'emitir' })}>Sí, emitir</button>
+                <button type="button" onClick={() => setFase({ t: 'editando' })}>Volver</button>
+              </div>
+            </div>
+          </div>
         )}
 
-        {fase.t !== 'duplicado' && (
+        {fase.t === 'error' && (
+          <p className={s.campoError} role="alert">
+            <AlertTriangle size={14} aria-hidden /> {fase.mensaje}
+            {fase.enlace && <> <Link href={fase.enlace}>Abrir en Zero</Link></>}
+          </p>
+        )}
+
+        {fase.t !== 'duplicado' && fase.t !== 'confirmar-emision' && (
           <div className={s.formularioAcciones}>
             {fase.t === 'previa' && fase.resumen.created > 0 && (
-              <button type="button" className={s.primario} onClick={() => void subir('commit')}>
+              <button type="button" className={s.primario} onClick={() => void subirCsv('commit')}>
                 Importar {fase.resumen.created}
+              </button>
+            )}
+            {puedeEmitir && (
+              <button type="button" className={s.secundario} disabled={ocupado} onClick={pedirEmision}>
+                Emitir a la DGII…
               </button>
             )}
             {fase.t === 'previa' ? (

@@ -514,3 +514,31 @@
 .girar { animation: girarForm 0.9s linear infinite; }
 @keyframes girarForm { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .girar { animation: none; } }
+
+/* Selectores y líneas de los formularios */
+.etiquetaCampo { font-size: 12.5px; font-weight: 600; }
+.selector { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.sugeridos { position: absolute; z-index: 5; top: 100%; left: 0; right: 0; margin: 4px 0 0; padding: 4px; list-style: none; max-height: 220px; overflow: auto; border-radius: 10px; border: 1px solid var(--border); background: var(--card); box-shadow: 0 10px 24px -10px rgba(15, 23, 42, 0.35); }
+.sugeridos button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; padding: 7px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.sugeridos button:hover, .sugeridos button:focus-visible { background: var(--muted); outline: none; }
+.sugeridos small { font-size: 11.5px; color: var(--muted-foreground); }
+.sugeridoVacio { padding: 7px 9px; font-size: 12.5px; color: var(--muted-foreground); }
+.lineas { display: flex; flex-direction: column; gap: 8px; }
+.linea { display: grid; grid-template-columns: minmax(0, 1fr) 54px 74px 72px 30px; gap: 6px; align-items: start; }
+.lineaNombre { position: relative; min-width: 0; }
+.linea input, .linea select { width: 100%; min-width: 0; padding: 8px 8px; border-radius: 9px; border: 1px solid var(--border); background: var(--background, var(--card)); color: var(--foreground); font: inherit; font-size: 13px; }
+.lineaNum { text-align: right; }
+.lineaQuitar { display: grid; place-items: center; width: 30px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.lineaQuitar:hover:not(:disabled) { background: var(--muted); color: var(--destructive); }
+.lineaQuitar:disabled { opacity: 0.35; cursor: not-allowed; }
+.lineasPie { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.lineaAgregar { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 8px; border: 1px dashed color-mix(in srgb, var(--primary) 45%, var(--border)); background: transparent; color: var(--primary); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.lineaAgregar:disabled { opacity: 0.5; cursor: not-allowed; }
+.totales { margin: 0; display: grid; gap: 2px; min-width: 150px; font-size: 12.5px; }
+.totales div { display: flex; justify-content: space-between; gap: 14px; }
+.totales dt { color: var(--muted-foreground); }
+.totales dd { margin: 0; font-variant-numeric: tabular-nums; }
+.totalFinal { font-weight: 700; font-size: 13.5px; padding-top: 3px; border-top: 1px solid var(--border); }
+.totalFinal dt { color: var(--foreground); }
+.avisoAcciones .peligro { background: var(--destructive); border-color: var(--destructive); color: #fff; }
+@media (max-width: 420px) { .linea { grid-template-columns: minmax(0, 1fr) 48px 64px 30px; } .lineaTasa { display: none; } }

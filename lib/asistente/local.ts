@@ -1183,7 +1183,11 @@ export async function responderLocal(
     const def = FORMULARIOS[form.id];
     const intro = form.id.startsWith('importar')
       ? `Claro. Sube el archivo aquí mismo y te muestro un resumen antes de importar nada.`
-      : `Claro. Llena este formulario aquí mismo: ${def.titulo.toLowerCase()}.`;
+      : form.id === 'gasto'
+        ? `Claro. Sube aquí la foto o el PDF del comprobante; queda en «por revisar» para que lo confirmes.`
+        : form.id === 'factura'
+          ? `Claro. Llena la factura aquí mismo: puedes guardarla como borrador o emitirla.`
+          : `Claro. Llena este formulario aquí mismo: ${def.titulo.toLowerCase()}.`;
     return { intencion: 'formulario', respuesta: `${intro}\n\n${bloqueFormulario(form.id, form.valores)}` };
   }
 
