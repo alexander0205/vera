@@ -14,6 +14,8 @@ export interface MensajeAsistente {
   valoracion?: 1 | -1 | null;
   /** Por qué no sirvió (solo con 👎). */
   valoracionMotivo?: string | null;
+  /** Quién respondió: el contestador automático o la IA. */
+  origen?: 'local' | 'ia' | null;
   /** Acciones que esperan «Confirmar». Viven solo mientras el token es válido (5 min). */
   propuestas?: { token: string; tipo: 'crear' | 'modificar' | 'eliminar'; destructiva: boolean; resumen: string; estado?: 'pendiente' | 'confirmando' | 'hecha' | 'cancelada' | 'error'; resultado?: string; enlace?: string }[];
   /** La respuesta falló: se muestra como error con «Reintentar». */
@@ -57,6 +59,7 @@ export function useAsistente(activo: boolean) {
   // pisar una conversación en curso.
   const cargando = useRef(false);
   const empresaIdRef = useRef<number | null>(null);
+  const [ia, setIa] = useState(false);
   const cargar = useCallback(async (opts: { silencioso?: boolean; soloSiCambio?: boolean } = {}) => {
     if (cargando.current) return;
     cargando.current = true;
@@ -74,6 +77,7 @@ export function useAsistente(activo: boolean) {
           const empresaId = typeof d.empresaId === 'number' ? d.empresaId : null;
           if (opts.soloSiCambio && empresaId === empresaIdRef.current) return;
           empresaIdRef.current = empresaId;
+          setIa(Boolean(d.ia));
           setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null });
           // La conversación es de la empresa: al cambiar de empresa se muestra
           // la última de esa empresa, o una vacía si no hay ninguna.
@@ -82,7 +86,7 @@ export function useAsistente(activo: boolean) {
             setDerivada(Boolean(d.conversacion.derivada));
             setMensajes(d.conversacion.mensajes.map((m: MensajeAsistente) => ({
               id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande,
-              valoracion: m.valoracion ?? null, valoracionMotivo: m.valoracionMotivo ?? null,
+              valoracion: m.valoracion ?? null, valoracionMotivo: m.valoracionMotivo ?? null, origen: m.origen ?? null,
             })));
           } else {
             setConversacionId(null);
@@ -134,13 +138,13 @@ export function useAsistente(activo: boolean) {
     if (activo && estadoRef.current === 'listo') void cargar({ silencioso: true, soloSiCambio: true });
   }, [activo, cargar]);
 
-  const preguntar = useCallback(async (texto: string, convId: number | null, reenvio = false): Promise<void> => {
+  const preguntar = useCallback(async (texto: string, convId: number | null, reenvio = false, forzarIa = false): Promise<void> => {
     setEnviando(true);
     try {
       const r = await fetch('/api/asistente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje: texto, conversacionId: convId, empresaId: empresaIdRef.current, pantalla: window.location.pathname }),
+        body: JSON.stringify({ mensaje: texto, conversacionId: convId, empresaId: empresaIdRef.current, pantalla: window.location.pathname, forzarIa }),
       });
       const d = await r.json().catch(() => ({}));
       // La empresa cambió desde otra pestaña: se carga la conversación de la empresa actual
@@ -161,6 +165,7 @@ export function useAsistente(activo: boolean) {
       }
       setMensajes((m) => [...m, {
         id: d.mensaje.id, rol: 'assistant', contenido: d.mensaje.contenido, herramientas: d.mensaje.herramientas, grande: d.mensaje.grande,
+        origen: d.mensaje.origen ?? null,
         propuestas: (d.mensaje.propuestas ?? []).map((p: NonNullable<MensajeAsistente['propuestas']>[number]) => ({ ...p, estado: 'pendiente' as const })),
       }]);
       if (typeof d.descargarMensajeId === 'number') descargarPdf(d.descargarMensajeId);
@@ -180,6 +185,14 @@ export function useAsistente(activo: boolean) {
     setMensajes((m) => [...m, { id: idTemporal.current--, rol: 'user', contenido: limpio }]);
     await preguntar(limpio, conversacionId);
   }, [enviando, preguntar, conversacionId]);
+
+  /** «No es lo que buscaba»: la IA vuelve a responder la pregunta anterior. */
+  const probarConIa = useCallback(async () => {
+    if (enviando || !conversacionId) return;
+    // El servidor no guarda este texto (la pregunta ya está en la conversación); solo no puede ir vacío.
+    const ultima = [...mensajes].reverse().find((m) => m.rol === 'user')?.contenido ?? 'repite la respuesta';
+    await preguntar(ultima, conversacionId, false, true);
+  }, [enviando, mensajes, preguntar, conversacionId]);
 
   /** Reintenta la última pregunta tras un error (quita el mensaje de error). */
   const reintentar = useCallback(async () => {
@@ -291,7 +304,7 @@ export function useAsistente(activo: boolean) {
   const disponible = estado === 'listo' ? true : estado === 'no-aplica' ? false : null;
   const reintentar_carga = cargar;
 
-  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar };
+  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;

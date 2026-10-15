@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
     id: asistenteMensajes.id, rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido,
     herramientas: asistenteMensajes.herramientas, creadoEn: asistenteMensajes.creadoEn,
     valoracion: asistenteMensajes.valoracion, valoracionMotivo: asistenteMensajes.valoracionMotivo,
+    origen: asistenteMensajes.origen,
   }).from(asistenteMensajes)
     .where(eq(asistenteMensajes.conversacionId, conv.id))
     .orderBy(asc(asistenteMensajes.id))
@@ -110,6 +111,8 @@ export async function POST(req: NextRequest) {
     );
   }
   const texto = crudo;
+  // «No es lo que buscaba»: la IA responde de nuevo, sin pasar por el contestador automático.
+  const forzarIa = b?.forzarIa === true;
   // La pantalla mostraba otra empresa (se cambió en otra pestaña): nada se guarda ni se consulta.
   if (Number.isInteger(b?.empresaId) && b.empresaId !== teamId) {
     return NextResponse.json({ error: 'Cambiaste de empresa.', cambioEmpresa: true, empresaId: teamId }, { status: 409 });
@@ -143,7 +146,7 @@ export async function POST(req: NextRequest) {
     .where(eq(asistenteMensajes.conversacionId, conversacionId))
     .orderBy(desc(asistenteMensajes.id))
     .limit(1);
-  if (!(ultimo?.rol === 'user' && ultimo.contenido === texto)) {
+  if (!forzarIa && !(ultimo?.rol === 'user' && ultimo.contenido === texto)) {
     await db.insert(asistenteMensajes).values({ conversacionId, rol: 'user', contenido: texto });
   }
 
@@ -156,7 +159,18 @@ export async function POST(req: NextRequest) {
     role: m.rol === 'assistant' ? 'assistant' : 'user', content: m.contenido,
   }));
 
-  const quierePdf = pidePdf(texto);
+  if (forzarIa) {
+    // La pregunta ya está en la conversación; solo se le pide a la IA que la vuelva a interpretar.
+    if (!historial.some((m) => m.role === 'user')) {
+      return NextResponse.json({ error: 'No hay una pregunta anterior que repetir.' }, { status: 400 });
+    }
+    historial.push({
+      role: 'user',
+      content: 'La respuesta anterior no era lo que buscaba. Vuelve a interpretar mi pregunta anterior y respóndela bien.',
+    });
+  }
+
+  const quierePdf = !forzarIa && pidePdf(texto);
   if (quierePdf && texto.split(/\s+/).length <= 7) {
     // «Pásalo a PDF»: es la respuesta anterior, no una pregunta nueva.
     const [prev] = await db.select({ id: asistenteMensajes.id }).from(asistenteMensajes)
@@ -183,10 +197,12 @@ export async function POST(req: NextRequest) {
     const r = await conversar(ctx, historial, {
       empresa: team?.nombre ?? null, usuario: user.name ?? null, usuarioId: user.id,
       pantalla: interpretarPantalla(b?.pantalla),
+      forzarIa,
     });
     const [guardado] = await db.insert(asistenteMensajes).values({
       conversacionId, rol: 'assistant', contenido: r.respuesta,
       herramientas: r.consultas.length ? r.consultas : null,
+      origen: r.origen,
     }).returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
     await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() })
       .where(eq(asistenteConversaciones.id, conversacionId));
@@ -197,7 +213,7 @@ export async function POST(req: NextRequest) {
       // Pidió el PDF en la misma pregunta: el panel lo descarga solo.
       descargarMensajeId: quierePdf ? guardado.id : undefined,
       mensaje: {
-        id: guardado.id, rol: 'assistant', contenido: r.respuesta,
+        id: guardado.id, rol: 'assistant', contenido: r.respuesta, origen: r.origen,
         herramientas: r.consultas, creadoEn: guardado.creadoEn, grande: esRespuestaGrande(r.respuesta),
         propuestas: r.propuestas ?? [],
       },

@@ -3801,6 +3801,8 @@ export const asistenteMensajes = pgTable('asistente_mensajes', {
   valoracion:     smallint('valoracion'),
   valoracionMotivo: varchar('valoracion_motivo', { length: 40 }),
   valoradoEn:     timestamp('valorado_en'),
+  /** 'local' (contestador automático) o 'ia' (modelo); null en mensajes anteriores a 0196. */
+  origen:         varchar('origen', { length: 8 }),
   creadoEn:       timestamp('creado_en').notNull().defaultNow(),
 }, (t) => ({
   convIdx: index('asistente_msg_conv_idx').on(t.conversacionId, t.id),

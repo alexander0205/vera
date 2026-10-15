@@ -723,3 +723,24 @@ describe('evaluación: pantallas nombradas sin enlace', () => {
     expect(enlazarNombresDePantalla('El preregistro de actividades no cuenta')).not.toContain('](');
   });
 });
+
+// ── «No es lo que buscaba»: la IA responde de nuevo ──
+import { usaContestadorLocal } from '@/lib/asistente/agente';
+
+describe('evaluación: pedir la respuesta a la IA', () => {
+  it('normalmente se intenta primero el contestador automático', () => {
+    expect(usaContestadorLocal({ modeloPrueba: false, forzarIa: false, hayIa: true })).toBe(true);
+  });
+
+  it('con «preguntar a la IA» el automático no interviene', () => {
+    expect(usaContestadorLocal({ modeloPrueba: false, forzarIa: true, hayIa: true })).toBe(false);
+  });
+
+  it('sin IA configurada, el automático sigue siendo lo único que hay', () => {
+    expect(usaContestadorLocal({ modeloPrueba: false, forzarIa: true, hayIa: false })).toBe(true);
+  });
+
+  it('con un modelo de prueba nunca se usa el automático', () => {
+    expect(usaContestadorLocal({ modeloPrueba: true, forzarIa: false, hayIa: true })).toBe(false);
+  });
+});

@@ -63,12 +63,15 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar, resolver, valorar, motivar,
+  m, ultimoError, onReintentar, resolver, valorar, motivar, probarConIa, puedeIa,
 }: {
   m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
   resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
   valorar: (mensajeId: number, valor: 1 | -1) => void;
   motivar: (mensajeId: number, motivo: string) => void;
+  /** Ofrecer «Preguntar a la IA» (solo en la última respuesta automática). */
+  probarConIa?: () => void;
+  puedeIa?: boolean;
 }) {
   if (m.rol === 'user') {
     return (
@@ -139,6 +142,13 @@ function MensajeAsistenteVista({
               )}
               <BotonCopiar texto={m.contenido} />
             </div>
+            {puedeIa && probarConIa && m.origen === 'local' && m.id > 0 && (
+              <div className={s.motivos}>
+                <button type="button" className={s.motivo} onClick={probarConIa}>
+                  ¿No es lo que buscabas? Preguntar a la IA
+                </button>
+              </div>
+            )}
             {m.valoracion === -1 && m.id > 0 && (
               <div className={s.motivos} role="group" aria-label="¿Qué falló?">
                 {m.valoracionMotivo ? (
@@ -205,6 +215,8 @@ export function PanelAsistente({
 
   const vacio = a.mensajes.length === 0;
   const ultimoEsError = a.mensajes[a.mensajes.length - 1]?.error === true;
+  // «Preguntar a la IA» solo en la última respuesta: es la que la persona acaba de ver.
+  const ultimaRespuestaId = [...a.mensajes].reverse().find((m) => m.rol === 'assistant' && !m.error)?.id;
   const nombre = a.perfil.usuario;
   const empresa = a.perfil.empresa;
 
@@ -244,7 +256,8 @@ export function PanelAsistente({
         )}
 
         {a.mensajes.map((m) => (
-          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar} />
+          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar}
+            probarConIa={m.id === ultimaRespuestaId ? () => void a.probarConIa() : undefined} puedeIa={a.ia && !a.enviando} />
         ))}
 
         {a.enviando && (

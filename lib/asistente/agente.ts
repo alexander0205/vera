@@ -43,7 +43,7 @@ export const asistenteIaDisponible = () =>
 export interface MensajeChat { role: 'user' | 'assistant'; content: string }
 
 
-function instrucciones(empresa: string | null, quien: string | null): string {
+function instrucciones(empresa: string | null, quien: string | null, insistencia = false): string {
   return `Eres el asistente de Zero para ${empresa ? `«${empresa}»` : 'la empresa'}. Ayudas ${quien ? `a ${quien}` : 'al dueño o administrador'} a entender cómo va su negocio (ventas, cobros, gastos, inventario, colegio, nómina, contabilidad, según los módulos que tenga) y a encontrar dónde está cada cosa en Zero y cómo se hace. Hablas en español dominicano, claro, directo y breve.
 
 Hoy es ${hoyRd()} (hora de República Dominicana). Los períodos se interpretan así: «este mes» es del 1 de este mes a hoy o a fin de mes; «mes pasado» es el mes calendario anterior completo; «esta semana» empieza el lunes; «hoy» y «ayer» son un solo día (desde = hasta).
@@ -133,10 +133,25 @@ function conPantalla(historial: MensajeChat[], p?: PantallaActual | null): { rol
   return base;
 }
 
+/**
+ * ¿Se intenta primero el contestador automático? No si hay un modelo de prueba
+ * y no si la persona pidió otra respuesta (y hay IA que se la dé: sin IA, el
+ * automático es lo único que hay).
+ */
+export function usaContestadorLocal(o: { modeloPrueba: boolean; forzarIa: boolean; hayIa: boolean }): boolean {
+  if (o.modeloPrueba) return false;
+  if (o.forzarIa && o.hayIa) return false;
+  return true;
+}
+
+const NOTA_INSISTENCIA =
+  '\n\nLA PERSONA PIDIÓ OTRA RESPUESTA: la respuesta automática anterior no era lo que buscaba. ' +
+  'No la repitas; interpreta la pregunta de nuevo, usa las herramientas que hagan falta y responde lo que realmente pidió.';
+
 export async function conversar(
   ctx: ContextoAsistente | number,
   historial: MensajeChat[],
-  contexto: { empresa: string | null; usuario: string | null; usuarioId?: number; pantalla?: PantallaActual | null },
+  contexto: { empresa: string | null; usuario: string | null; usuarioId?: number; pantalla?: PantallaActual | null; forzarIa?: boolean },
   /** Solo para pruebas: un modelo en lugar de Gemini (salta el contestador local). */
   modeloPrueba?: LanguageModel,
 ): Promise<RespuestaConOrigen> {
@@ -160,7 +175,7 @@ export async function conversar(
 
   // 1. Lo claro y frecuente se contesta aquí, sin gastar una llamada a la IA.
   //    Sin IA configurada, con más tolerancia: es lo único que hay.
-  if (!modeloPrueba) {
+  if (usaContestadorLocal({ modeloPrueba: Boolean(modeloPrueba), forzarIa: contexto.forzarIa === true, hayIa })) {
     const local = await responderLocal(pregunta, tools, { tolerante: !hayIa, previa, preguntaPrevia, pantalla: contexto.pantalla });
     if (local) {
       console.info(`[asistente] respondido sin IA: ${local.intencion}`);
@@ -183,7 +198,7 @@ export async function conversar(
       : undefined;
     const { text } = await generateText({
       model,
-      instructions: instrucciones(contexto.empresa, contexto.usuario) + descripcionPantalla(contexto.pantalla),
+      instructions: instrucciones(contexto.empresa, contexto.usuario) + descripcionPantalla(contexto.pantalla) + (contexto.forzarIa ? NOTA_INSISTENCIA : ''),
       messages: conPantalla(historial, contexto.pantalla),
       tools,
       stopWhen: stepCountIs(8),
