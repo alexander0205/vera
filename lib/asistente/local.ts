@@ -1185,6 +1185,8 @@ export async function responderLocal(
       ? `Claro. Sube el archivo aquí mismo y te muestro un resumen antes de importar nada.`
       : form.id === 'gasto'
         ? `Claro. Sube aquí la foto o el PDF del comprobante; queda en «por revisar» para que lo confirmes.`
+        : form.id === 'notadebito'
+          ? `Claro. Elige la factura y el motivo, y anota los cargos nuevos que le sumas.`
         : form.id === 'notacredito'
           ? `Claro. Elige la factura y el motivo; las líneas vienen de la factura y ajustas lo que acreditas.`
         : form.id === 'anulacion'

@@ -38,7 +38,7 @@ export interface Campo {
 
 export type Valores = Record<string, string>;
 export type IdFormulario =
-  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion' | 'notacredito'
+  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion' | 'notacredito' | 'notadebito'
   | 'importar-productos' | 'importar-clientes';
 
 export interface DefFormulario {
@@ -84,6 +84,17 @@ export const MOTIVOS_NOTA = [
   { valor: 'anulacion', etiqueta: 'Anulación de la operación', codigo: 1 },
   { valor: 'otro', etiqueta: 'Otro (explícalo)', codigo: 3 },
 ] as const;
+
+/** Motivos de una nota de débito (cargos sobre una factura ya emitida). */
+export const MOTIVOS_DEBITO = [
+  { valor: 'cargo', etiqueta: 'Cargo adicional', codigo: 3 },
+  { valor: 'error_precio', etiqueta: 'Corrección de monto a favor tuyo', codigo: 3 },
+  { valor: 'mora', etiqueta: 'Interés o recargo por mora', codigo: 3 },
+  { valor: 'otro', etiqueta: 'Otro (explícalo)', codigo: 3 },
+] as const;
+
+/** ¿Es una nota (crédito o débito) que modifica una factura? */
+export const esNota = (id: string) => id === 'notacredito' || id === 'notadebito';
 
 export const FORMULARIOS: Record<IdFormulario, DefFormulario> = {
   cliente: {
@@ -192,6 +203,21 @@ export const FORMULARIOS: Record<IdFormulario, DefFormulario> = {
       { id: 'motivo', etiqueta: 'Motivo', tipo: 'select', requerido: true, opciones: MOTIVOS_NOTA.map((m) => ({ valor: m.valor, etiqueta: m.etiqueta })) },
       { id: 'razonModificacion', etiqueta: 'Explica el motivo', tipo: 'texto', max: 200, ayuda: 'Obligatorio si elegiste «Otro».' },
       { id: 'lineas', etiqueta: 'Lo que acreditas', tipo: 'lineas', requerido: true },
+    ],
+  },
+  notadebito: {
+    id: 'notadebito',
+    titulo: 'Nota de débito',
+    descripcion: 'Agrega un cargo a una factura con comprobante e-CF (mora, un cargo olvidado, una corrección a tu favor). Las líneas son los cargos nuevos.',
+    boton: 'Guardar borrador',
+    endpoint: '/api/ecf/emitir',
+    modo: 'json',
+    pantalla: '/dashboard/notas-debito',
+    campos: [
+      { id: 'documento', etiqueta: 'Factura a la que cargas', tipo: 'documento', requerido: true, ayuda: 'Debe tener comprobante e-CF (31, 32…). Busca por número o cliente.' },
+      { id: 'motivo', etiqueta: 'Motivo', tipo: 'select', requerido: true, opciones: MOTIVOS_DEBITO.map((m) => ({ valor: m.valor, etiqueta: m.etiqueta })) },
+      { id: 'razonModificacion', etiqueta: 'Explica el motivo', tipo: 'texto', max: 200, ayuda: 'Obligatorio si elegiste «Otro».' },
+      { id: 'lineas', etiqueta: 'Qué cargas', tipo: 'lineas', requerido: true },
     ],
   },
   anulacion: {
@@ -435,14 +461,14 @@ export function validarFormulario(def: DefFormulario, valores: Valores): Record<
       if (!DOC.test(d)) e[c.id] = 'RNC (9 dígitos), cédula (11) o pasaporte';
     }
   }
-  if (def.id === 'notacredito') {
+  if (esNota(def.id)) {
     if (valores.documentoId && !(valores.ncfModificado ?? '').trim() && !e.documento) {
-      e.documento = valores.documentoError || 'Esa factura no tiene comprobante e-CF; la nota se hace desde la pantalla de notas de crédito.';
+      e.documento = valores.documentoError || 'Esa factura no tiene comprobante e-CF; la nota se hace desde su pantalla.';
     }
     if (valores.motivo === 'otro' && !(valores.razonModificacion ?? '').trim()) e.razonModificacion = 'Explica el motivo';
     const total = totalesDeLineas(lineasLlenas(valores)).total;
     const tope = Number(valores.documentoTotal);
-    if (!e.lineas && Number.isFinite(tope) && tope > 0 && total > tope + 0.005) {
+    if (def.id === 'notacredito' && !e.lineas && Number.isFinite(tope) && tope > 0 && total > tope + 0.005) {
       e.lineas = `La nota no puede ser mayor que la factura (RD$ ${tope.toLocaleString('es-DO', { minimumFractionDigits: 2 })}).`;
     }
   }
@@ -530,14 +556,15 @@ export function armarPayload(def: DefFormulario, valores: Valores, modo: ModoEmi
     };
   }
 
-  if (def.id === 'notacredito') {
+  if (esNota(def.id)) {
     const lineas = lineasLlenas(valores);
     const c = datosDeCliente(valores);
-    const motivo = MOTIVOS_NOTA.find((m) => m.valor === valores.motivo);
+    const motivos: readonly { valor: string; etiqueta: string; codigo: number }[] = def.id === 'notadebito' ? MOTIVOS_DEBITO : MOTIVOS_NOTA;
+    const motivo = motivos.find((m) => m.valor === valores.motivo);
     const razon = valores.motivo === 'otro' ? (valores.razonModificacion ?? '').trim() : (motivo?.etiqueta ?? '');
     return {
       modo,
-      tipoEcf: '34',
+      tipoEcf: def.id === 'notadebito' ? '33' : '34',
       origenDocumentoId: Number(valores.documentoId),
       ncfModificado: valores.ncfModificado,
       fechaNcfModificado: valores.fechaNcfModificado,
@@ -594,15 +621,15 @@ export function resumenDeEmision(valores: Valores): string {
 }
 
 /** Confirmación antes de emitir una nota de crédito, con el monto y la factura a la vista. */
-export function resumenDeNota(valores: Valores): string {
+export function resumenDeNota(valores: Valores, tipo: 'credito' | 'debito' = 'credito'): string {
   const t = totalesDeLineas(lineasLlenas(valores));
   const total = t.total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const f = (valores.documentoNombre ?? '').trim() || 'la factura elegida';
-  return `Se emitirá una nota de crédito por RD$ ${total} sobre ${f} y se enviará a la DGII. No se puede deshacer.`;
+  return `Se emitirá una nota de ${tipo === 'debito' ? 'débito' : 'crédito'} por RD$ ${total} sobre ${f} y se enviará a la DGII. No se puede deshacer.`;
 }
 
 /** Lo que trae la ficha de una factura (GET /api/facturas/{id}) para preparar la nota de crédito. */
-export function prefillDeNota(api: unknown): { valores: Valores; error: string | null } {
+export function prefillDeNota(api: unknown, copiarLineas = true): { valores: Valores; error: string | null } {
   const p = (api ?? {}) as {
     id?: number; encf?: string | null; tipoEcf?: string; estado?: string; fechaEmision?: string | null;
     montos?: { montoTotalDOP?: string | number };
@@ -616,7 +643,7 @@ export function prefillDeNota(api: unknown): { valores: Valores; error: string |
   if (p.tipoEcf === '33' || p.tipoEcf === '34') return fallo('No se puede hacer una nota sobre otra nota.');
   const encf = typeof p.encf === 'string' ? p.encf : '';
   if (!/^E\d{10,12}$/.test(encf) || p.tipoEcf === 'sin-ncf') {
-    return fallo('Esa factura no tiene comprobante e-CF; la nota se hace desde la pantalla de notas de crédito.');
+    return fallo('Esa factura no tiene comprobante e-CF; la nota se hace desde su pantalla.');
   }
   const total = Number(String(p.montos?.montoTotalDOP ?? '').replace(/,/g, ''));
   const lineas: Linea[] = leerLineas(JSON.stringify((p.lineas ?? []).map((l) => ({
@@ -635,7 +662,7 @@ export function prefillDeNota(api: unknown): { valores: Valores; error: string |
       fechaNcfModificado: p.fechaEmision ? String(p.fechaEmision).slice(0, 10) : '',
       documentoTotal: Number.isFinite(total) ? String(total) : '',
       documentoError: '',
-      lineas: guardarLineas(lineas),
+      ...(copiarLineas ? { lineas: guardarLineas(lineas) } : {}),
       clienteId: c.clienteId ? String(c.clienteId) : '',
       clienteNombre: c.razonSocial ?? '',
       clienteRnc: c.rnc ?? '',
@@ -689,12 +716,14 @@ export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown, modo
       return { mensaje: 'Listo: registré el cobro.', enlace: def.pantalla };
     case 'anulacion':
       return { mensaje: 'Listo: la factura quedó anulada.', enlace: def.pantalla };
-    case 'notacredito': {
+    case 'notacredito':
+    case 'notadebito': {
+      const nombre = def.id === 'notadebito' ? 'nota de débito' : 'nota de crédito';
       const num = r.encf || r.codigo || '';
       const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
       return modo === 'emitir'
-        ? { mensaje: `Listo: emití la nota de crédito ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
-        : { mensaje: `Listo: guardé la nota de crédito ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace };
+        ? { mensaje: `Listo: emití la ${nombre} ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
+        : { mensaje: `Listo: guardé la ${nombre} ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace };
     }
     case 'gasto':
       return {
@@ -721,7 +750,7 @@ const RE_PAGO = new RegExp(
   `^${CORTESIA}(?:${VERBO_CREAR}|anotar|anota|cargar|carga|aplicar|aplica|ingresar|ingresa)\\s+${ARTICULO}(?:cobro|pago recibido|pago|abono)\\b(.*)$`,
 );
 const RE_COBRAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |ayudame a )*(?:cobrar|cobra|cobrale)\s+(?:una |la |esa )?factura\b(.*)$/;
-const RE_NOTA = new RegExp(`^${CORTESIA}(?:${VERBO_CREAR}|emitir|emite|emiteme)\\s+${ARTICULO}nota de credito\\b(.*)$`);
+const RE_NOTA = new RegExp(`^${CORTESIA}(?:${VERBO_CREAR}|emitir|emite|emiteme)\\s+${ARTICULO}nota de (?:credito|debito)\\b(.*)$`);
 const RE_ANULAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |podrias |me puedes |ayudame a )*(?:anular|anula|anulame|cancelar|cancela)\s+(?:una |la |esa |otra )?factura\b(.*)$/;
 const RE_GASTO = new RegExp(
   `^${CORTESIA}(?:${VERBO_CREAR}|subir|sube|cargar|carga|mandar|manda|enviar|envia|adjuntar|adjunta)\\s+${ARTICULO}(?:factura|facturas|comprobante|comprobantes|recibo|recibos|ticket|tickets|compra|compras)\\s+(?:de |del |para )?(?:gasto|gastos|proveedor|proveedores|compra|compras)\\b(.*)$`,
@@ -746,7 +775,8 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
   const imp = t.match(RE_IMPORTAR);
   if (imp) return { id: imp[1] === 'clientes' ? 'importar-clientes' : 'importar-productos', valores: {} };
 
-  if (RE_NOTA.test(t)) return { id: 'notacredito', valores: {} };
+  const nota = t.match(RE_NOTA);
+  if (nota) return { id: /nota de debito/.test(t) ? 'notadebito' : 'notacredito', valores: {} };
   if (RE_ANULAR.test(t)) return { id: 'anulacion', valores: {} };
   if (RE_GASTO.test(t) || RE_GASTO_2.test(t)) return { id: 'gasto', valores: {} };
   if (RE_PAGO.test(t) || RE_COBRAR.test(t)) return { id: 'pago', valores: {} };

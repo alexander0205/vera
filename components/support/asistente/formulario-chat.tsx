@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import {
-  armarPayload, endpointDe, guardarLineas, leerLineas, lineaVacia, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
+  armarPayload, endpointDe, esNota, guardarLineas, leerLineas, lineaVacia, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
   resumenDeAnulacion, resumenDeNota, totalesDeLineas, validarFormulario,
   type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
@@ -352,13 +352,13 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
   // Nota de crédito: al elegir la factura se traen sus líneas, su comprobante y su cliente.
   const documentoElegido = valores.documentoId;
   useEffect(() => {
-    if (def.id !== 'notacredito' || !documentoElegido) return;
+    if (!esNota(def.id) || !documentoElegido) return;
     const ac = new AbortController();
     (async () => {
       try {
         const r = await fetch(`/api/facturas/${encodeURIComponent(documentoElegido)}`, { signal: ac.signal, cache: 'no-store' });
         const d = await r.json().catch(() => null);
-        const p = r.ok ? prefillDeNota(d) : { valores: { ncfModificado: '', fechaNcfModificado: '', documentoTotal: '', documentoError: 'No pude leer esa factura.' }, error: 'No pude leer esa factura.' };
+        const p = r.ok ? prefillDeNota(d, def.id === 'notacredito') : { valores: { ncfModificado: '', fechaNcfModificado: '', documentoTotal: '', documentoError: 'No pude leer esa factura.' }, error: 'No pude leer esa factura.' };
         setValores((x) => ({ ...x, ...p.valores }));
         setErrores((e) => (p.error ? { ...e, documento: p.error } : (({ documento: _d, ...resto }) => resto)(e)));
       } catch { /* cancelado */ }
@@ -425,7 +425,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     setErrores(e);
     if (Object.keys(e).length) return;
     if (def.id === 'factura' && valores.tipoEcf === 'sin-ncf') { setErrores({ tipoEcf: 'Sin comprobante fiscal solo se guarda como borrador. Elige consumo o crédito fiscal para emitir.' }); return; }
-    setFase({ t: 'confirmar', texto: def.id === 'notacredito' ? resumenDeNota(valores) : resumenDeEmision(valores), accion: 'emitir' });
+    setFase({ t: 'confirmar', texto: def.id === 'notacredito' ? resumenDeNota(valores) : def.id === 'notadebito' ? resumenDeNota(valores, 'debito') : resumenDeEmision(valores), accion: 'emitir' });
   }
 
   function pedirAnulacion() {
@@ -558,7 +558,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
   }
 
   const puedeEmitir = (def.id === 'factura' && valores.tipoEcf !== 'sin-ncf' && Boolean(valores.tipoEcf))
-    || (def.id === 'notacredito' && Boolean(valores.ncfModificado));
+    || (esNota(def.id) && Boolean(valores.ncfModificado));
 
   return (
     <section className={s.formulario} aria-label={def.titulo}>
@@ -636,7 +636,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
               <strong>{fase.texto}</strong>
               <div className={s.avisoAcciones}>
                 <button type="button" className={s.peligro} onClick={() => void enviarJson({ modo: fase.accion === 'emitir' ? 'emitir' : 'borrador' })}>
-                  {fase.accion === 'emitir' ? (def.id === 'notacredito' ? 'Sí, emitir la nota' : 'Sí, emitir') : 'Sí, anular'}
+                  {fase.accion === 'emitir' ? (esNota(def.id) ? 'Sí, emitir la nota' : 'Sí, emitir') : 'Sí, anular'}
                 </button>
                 <button type="button" onClick={() => setFase({ t: 'editando' })}>Volver</button>
               </div>
@@ -660,7 +660,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
             )}
             {puedeEmitir && (
               <button type="button" className={s.secundario} disabled={ocupado} onClick={pedirEmision}>
-                {def.id === 'notacredito' ? 'Emitir la nota…' : 'Emitir a la DGII…'}
+                {esNota(def.id) ? 'Emitir la nota…' : 'Emitir a la DGII…'}
               </button>
             )}
             {fase.t === 'previa' ? (

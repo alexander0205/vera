@@ -392,3 +392,58 @@ describe('nota de crédito', () => {
     expect(parsearFormulario('tipo: notacredito\ndocumentoId: 5\nncfModificado: E320000000001\nlineas: []\nmotivo: devolucion')?.valores).toEqual({ motivo: 'devolucion' });
   });
 });
+
+describe('nota de débito', () => {
+  const def = FORMULARIOS.notadebito;
+  const padre = {
+    id: 3985, encf: 'E310000000045', tipoEcf: '31', estado: 'ACEPTADO', fechaEmision: '2026-10-02T14:00:00.000Z',
+    montos: { montoTotalDOP: '1180' },
+    comprador: { clienteId: 7, razonSocial: 'Ana Pérez', rnc: '132274741' },
+    lineas: [{ nombreItem: 'Uniforme', cantidadItem: 1, precioUnitarioItem: 1000, tasaItbis: '0.18', indicadorBienoServicio: '1' }],
+  };
+  const cargos = guardarLineas([{ nombre: 'Recargo por mora', cantidad: 1, precio: 500, tasa: 'exento' as const }]);
+
+  it('reconoce el pedido y distingue crédito de débito', () => {
+    expect(detectarFormulario('crea una nota de débito')?.id).toBe('notadebito');
+    expect(detectarFormulario('quiero emitir una nota de debito')?.id).toBe('notadebito');
+    expect(detectarFormulario('crea una nota de crédito')?.id).toBe('notacredito');
+    expect(detectarFormulario('qué es una nota de débito')).toBeNull();
+  });
+
+  it('prepara la nota con el comprobante y el cliente, pero SIN copiar las líneas', () => {
+    const p = prefillDeNota(padre, false);
+    expect(p.error).toBeNull();
+    expect(p.valores).toMatchObject({ ncfModificado: 'E310000000045', fechaNcfModificado: '2026-10-02', clienteId: '7' });
+    expect(p.valores).not.toHaveProperty('lineas');
+  });
+
+  it('valida sin tope contra la factura (un cargo puede ser mayor) pero con motivo y líneas', () => {
+    const v = { ...prefillDeNota(padre, false).valores, documentoId: '3985', documentoNombre: 'E310000000045 · Ana', motivo: 'mora', lineas: cargos };
+    expect(validarFormulario(def, v)).toEqual({});
+    const grande = guardarLineas([{ nombre: 'Cargo', cantidad: 1, precio: 50000, tasa: 'exento' }]);
+    expect(validarFormulario(def, { ...v, lineas: grande })).toEqual({});
+    expect(validarFormulario(def, { ...v, lineas: '' })).toHaveProperty('lineas');
+    expect(validarFormulario(def, { ...v, motivo: 'otro' })).toHaveProperty('razonModificacion');
+    expect(validarFormulario(def, { ...v, ncfModificado: '' })).toHaveProperty('documento');
+  });
+
+  it('arma el cuerpo del e-CF 33 con el vínculo', () => {
+    const v = { ...prefillDeNota(padre, false).valores, documentoId: '3985', motivo: 'mora', lineas: cargos };
+    const p = armarPayload(def, v, 'emitir');
+    expect(p).toMatchObject({
+      modo: 'emitir', tipoEcf: '33', origenDocumentoId: 3985, ncfModificado: 'E310000000045',
+      fechaNcfModificado: '2026-10-02', codigoModificacion: 3, razonModificacion: 'Interés o recargo por mora', clientId: 7,
+    });
+    expect((p.items as unknown[]).length).toBe(1);
+  });
+
+  it('la confirmación y el resultado hablan de débito', () => {
+    expect(resumenDeNota({ lineas: cargos, documentoNombre: 'E310000000045 · Ana' }, 'debito')).toContain('nota de débito por RD$ 500.00');
+    expect(resultadoDeCreacion(def, { documentoId: 9, codigo: 'ND-1' }).mensaje).toContain('nota de débito');
+  });
+
+  it('la nota de crédito sigue copiando líneas y con tope', () => {
+    expect(prefillDeNota(padre).valores).toHaveProperty('lineas');
+    expect(FORMULARIOS.notacredito.campos.find((c) => c.id === 'lineas')?.etiqueta).toBe('Lo que acreditas');
+  });
+});
