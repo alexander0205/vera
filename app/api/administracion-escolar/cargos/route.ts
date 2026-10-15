@@ -237,6 +237,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const emisionCuota = cuota != null ? String(cuotas.find((c) => c.id === cuota)?.fechaEmision ?? '') : '';
+  const mesDeCuota = /^\d{4}-\d{2}/.test(emisionCuota)
+    ? { anio: Number(emisionCuota.slice(0, 4)), mes: Number(emisionCuota.slice(5, 7)) }
+    : null;
+
   // Se insertan los ids YA normalizados por validarPertenencia, no los crudos
   // del JSON: son los mismos que se comprobaron contra el team.
   const [row] = await db.insert(adminEscolarCargos).values({
@@ -246,8 +251,10 @@ export async function POST(req: NextRequest) {
     periodoId:    refs.ids.periodo!,
     conceptoId:   refs.ids.concepto!,
     cuotaId:      cuota,
-    mes: mes ?? null,
-    anio,
+    // Atado a una cuota, el cargo va en el mes de su emisión, como el que
+    // crea el devengo: así sale en ese mes de «Mensualidades» y no suelto.
+    mes: mes ?? mesDeCuota?.mes ?? null,
+    anio: mes == null && mesDeCuota ? mesDeCuota.anio : anio,
     montoCentavos: montoFinal,
     saldoCentavos: montoFinal,
     fechaVencimiento: fechaVencimiento || null,
