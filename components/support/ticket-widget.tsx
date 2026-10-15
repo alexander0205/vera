@@ -38,8 +38,24 @@ export function TicketWidget() {
   const chat = useTicketChat(open);
   // El asistente (solo lectura) es para dueños y administradores: si no aplica,
   // `disponible` queda en false y todo sigue siendo el soporte de siempre.
-  const asistente = useAsistente(open);
-  const conAsistente = asistente.disponible === true;
+  // Se precarga poco después de montar: al abrir el panel ya se sabe si hay asistente
+  // y las pestañas aparecen de una vez, sin pasar antes por la vista de soporte.
+  const [precarga, setPrecarga] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setPrecarga(true), 800);
+    return () => clearTimeout(t);
+  }, []);
+  const asistente = useAsistente(open || precarga);
+  const conAsistente = asistente.estado === 'listo';
+  // Si la carga había fallado, ABRIR el panel es motivo para volver a intentarlo (una vez por apertura).
+  const { estado: estadoAsistente, reintentarCarga } = asistente;
+  const estadoAsistenteRef = useRef(estadoAsistente);
+  estadoAsistenteRef.current = estadoAsistente;
+  const estabaAbierto = useRef(false);
+  useEffect(() => {
+    if (open && !estabaAbierto.current && estadoAsistenteRef.current === 'error') void reintentarCarga();
+    estabaAbierto.current = open;
+  }, [open, reintentarCarga]);
   // En pantallas anchas el panel es una columna fija a la derecha y la página
   // se hace a un lado; en pantallas angostas flota encima, como antes.
   const anclado = useAnclado(open);
@@ -102,7 +118,9 @@ export function TicketWidget() {
     if (call?.status === 'activa' || call?.status === 'pendiente') setModo('soporte');
   }, [call?.status]);
 
-  const modoEfectivo = conAsistente ? modo : 'soporte';
+  // Mientras se averigua si hay asistente no se muestra el soporte para cambiarlo después.
+  const modoEfectivo: 'asistente' | 'soporte' | 'cargando' =
+    asistente.estado === 'cargando' ? 'cargando' : conAsistente ? modo : 'soporte';
 
   // Punto en «Soporte» cuando un agente respondió y no lo has visto.
   const ultimoAgenteId = [...chat.messages].reverse().find((m) => m.senderType === 'agent')?.id ?? null;
@@ -161,14 +179,16 @@ export function TicketWidget() {
     <div ref={panelRef} className={`${est.panel} ${anclado ? est.panelFijo : ''}`} role="dialog" aria-label="Asistencia y soporte">
       <div className={est.cabecera}>
         <span className={est.marca} aria-hidden>
-          {modoEfectivo === 'asistente' ? <Sparkles size={17} /> : <MessageCircle size={17} />}
+          {modoEfectivo === 'soporte' ? <MessageCircle size={17} /> : <Sparkles size={17} />}
         </span>
         <div className={est.titulos}>
-          <p className={est.titulo}>{modoEfectivo === 'asistente' ? 'Asistente de Zero' : 'Soporte'}</p>
+          <p className={est.titulo}>{modoEfectivo === 'asistente' ? 'Asistente de Zero' : modoEfectivo === 'cargando' ? 'Asistencia' : 'Soporte'}</p>
           <p className={est.subtitulo}>
             {modoEfectivo === 'asistente'
               ? (asistente.perfil.empresa ?? 'Tu negocio, a una pregunta')
-              : 'Te atiende una persona del equipo'}
+              : modoEfectivo === 'cargando'
+                ? 'Un momento…'
+                : 'Te atiende una persona del equipo'}
           </p>
         </div>
         <div className={est.acciones}>
@@ -192,6 +212,23 @@ export function TicketWidget() {
           </button>
         </div>
       </div>
+
+      {modoEfectivo === 'cargando' && (
+        <div className={est.cargandoAsistencia} role="status" aria-live="polite">
+          <span className={est.esqueleto} style={{ width: '100%', height: 36 }} />
+          <span className={est.esqueleto} style={{ width: '70%' }} />
+          <span className={est.esqueleto} style={{ width: '85%' }} />
+          <span className={est.esqueleto} style={{ width: '55%' }} />
+          <span className="sr-only">Cargando el asistente…</span>
+        </div>
+      )}
+
+      {asistente.estado === 'error' && (
+        <div className={est.avisoAsistente} role="alert">
+          <span>No pude cargar el asistente.</span>
+          <button type="button" onClick={() => void asistente.reintentarCarga()}>Reintentar</button>
+        </div>
+      )}
 
       {conAsistente && (
         <div className={est.segmentos} role="tablist" aria-label="Con quién hablar">

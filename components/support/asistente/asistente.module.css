@@ -362,3 +362,11 @@
 .microfonoOn { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, var(--card)); animation: latido 1.2s ease-in-out infinite; }
 @keyframes latido { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--destructive) 14%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .microfonoOn { animation: none; } }
+
+/* Carga del asistente al abrir el panel */
+.cargandoAsistencia { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.esqueleto { display: block; height: 14px; border-radius: 8px; background: var(--muted); animation: parpadeo 1.2s ease-in-out infinite; }
+@keyframes parpadeo { 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .esqueleto { animation: none; } }
+.avisoAsistente { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 12px 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; background: color-mix(in srgb, var(--destructive) 8%, var(--card)); color: var(--foreground); border: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border)); }
+.avisoAsistente button { border: 0; background: none; color: var(--primary); font-weight: 600; cursor: pointer; font-size: 13px; }

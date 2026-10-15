@@ -35,7 +35,10 @@ export function descargarPdf(mensajeId: number) {
  * abre (`activo`): así quien nunca abre el chat no paga ni una petición.
  */
 export function useAsistente(activo: boolean) {
-  const [disponible, setDisponible] = useState<boolean | null>(null);
+  // cargando → listo | no-aplica (no es dueño/admin) | error (la red o el servidor fallaron).
+  const [estado, setEstado] = useState<'cargando' | 'listo' | 'no-aplica' | 'error'>('cargando');
+  const estadoRef = useRef<'cargando' | 'listo' | 'no-aplica' | 'error'>('cargando');
+  const fijarEstado = useCallback((e: 'cargando' | 'listo' | 'no-aplica' | 'error') => { estadoRef.current = e; setEstado(e); }, []);
   const [mensajes, setMensajes] = useState<MensajeAsistente[]>([]);
   const [conversacionId, setConversacionId] = useState<number | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -43,43 +46,53 @@ export function useAsistente(activo: boolean) {
   const [derivada, setDerivada] = useState(false);
   const [errorDerivar, setErrorDerivar] = useState<string | null>(null);
   const [perfil, setPerfil] = useState<{ usuario: string | null; empresa: string | null; sugerencias: { texto: string; icono: string }[] | null }>({ usuario: null, empresa: null, sugerencias: null });
-  const cargado = useRef(false);
   const idTemporal = useRef(-1);
 
-  // Se marca como cargado solo si la respuesta llegó: un corte de red al abrir
-  // no deja el asistente apagado hasta recargar; se reintenta al reabrir.
+  // La carga reintenta sola (la primera compilación o un corte breve no deben
+  // dejar la persona sin asistente hasta recargar) y, si igual falla, queda en
+  // «error» con un botón para reintentar en vez de esconder las pestañas.
   const cargando = useRef(false);
-  useEffect(() => {
-    if (!activo || cargado.current || cargando.current) return;
+  const cargar = useCallback(async () => {
+    if (cargando.current) return;
     cargando.current = true;
-    (async () => {
-      try {
-        const r = await fetch('/api/asistente', { cache: 'no-store' });
-        if (!r.ok) {
-          // 401/403: no aplica para esta persona, y eso no cambia al reabrir.
-          if (r.status < 500) cargado.current = true;
-          setDisponible(false);
+    fijarEstado('cargando');
+    try {
+      for (const espera of [0, 1000, 2500]) {
+        if (espera) await new Promise((r) => setTimeout(r, espera));
+        try {
+          const r = await fetch('/api/asistente', { cache: 'no-store' });
+          // 401/403: no aplica para esta persona, y reintentar no lo cambia.
+          if (r.status === 401 || r.status === 403) { fijarEstado('no-aplica'); return; }
+          if (!r.ok) continue;
+          const d = await r.json();
+          if (!d.disponible) { fijarEstado('no-aplica'); return; }
+          setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null });
+          if (d.conversacion) {
+            setConversacionId(d.conversacion.id);
+            setDerivada(Boolean(d.conversacion.derivada));
+            setMensajes(d.conversacion.mensajes.map((m: MensajeAsistente) => ({
+              id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande,
+              valoracion: m.valoracion ?? null, valoracionMotivo: m.valoracionMotivo ?? null,
+            })));
+          }
+          fijarEstado('listo');
           return;
+        } catch {
+          // Sin red por un momento: se reintenta.
         }
-        const d = await r.json();
-        cargado.current = true;
-        setDisponible(Boolean(d.disponible));
-        setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null });
-        if (d.conversacion) {
-          setConversacionId(d.conversacion.id);
-          setDerivada(Boolean(d.conversacion.derivada));
-          setMensajes(d.conversacion.mensajes.map((m: MensajeAsistente) => ({
-            id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande, valoracion: m.valoracion ?? null, valoracionMotivo: m.valoracionMotivo ?? null,
-          })));
-        }
-      } catch {
-        // Sin red: por ahora el soporte de siempre; se reintenta al reabrir.
-        setDisponible(false);
-      } finally {
-        cargando.current = false;
       }
-    })();
-  }, [activo]);
+      fijarEstado('error');
+    } finally {
+      cargando.current = false;
+    }
+  }, [fijarEstado]);
+
+  // Carga cuando hace falta (al abrir o al precargar) y no estaba ya resuelto.
+  useEffect(() => {
+    if (!activo) return;
+    if (estadoRef.current === 'listo' || estadoRef.current === 'no-aplica') return;
+    void cargar();
+  }, [activo, cargar]);
 
   const preguntar = useCallback(async (texto: string, convId: number | null) => {
     setEnviando(true);
@@ -225,7 +238,10 @@ export function useAsistente(activo: boolean) {
     }
   }, [derivando, conversacionId]);
 
-  return { disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar };
+  const disponible = estado === 'listo' ? true : estado === 'no-aplica' ? false : null;
+  const reintentar_carga = cargar;
+
+  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;
