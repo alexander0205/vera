@@ -228,22 +228,33 @@ export default function ResponsablesClient() {
             </Badge>
           </div>
 
+          {/* Buscador y concepto arriba; las pastillas en su propia línea: las
+              tres cosas juntas dejaban el buscador sin ancho. */}
+          <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
+            <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input className="pl-8" placeholder="Buscar por nombre, cédula o RNC…"
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setParams({ q: texto || null, p: null }); }} />
             </div>
-            <NativeSelect aria-label="Concepto" className="sm:w-56" value={concepto}
+            <NativeSelect aria-label="Concepto" className="sm:!w-60 sm:shrink-0" value={concepto}
               onChange={(e) => setParams({ concepto: e.target.value || null, p: null })}>
               <option value="">Todos los conceptos</option>
+              {/* Mientras llega el catálogo, el concepto del enlace tiene su
+                  opción: sin ella el selector quedaba sin valor y el filtro se
+                  perdía al abrir un enlace con ?concepto=. */}
+              {concepto && !conceptos.some((c) => String(c.id) === concepto) && (
+                <option value={concepto}>Concepto seleccionado</option>
+              )}
               {/* Los inactivos también: uno retirado del catálogo puede seguir con cargos vivos. */}
               {conceptos.map((c) => (
                 <option key={c.id} value={String(c.id)}>{c.nombre}{c.activo === false ? ' (inactivo)' : ''}</option>
               ))}
             </NativeSelect>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {/* «Sin hijos activos» solo aparece si hay alguna: son las familias
                 que ya no tienen a nadie en el colegio ni deben nada. Salían
                 mezcladas con las que pagan este año y engordaban el contador. */}
@@ -255,7 +266,7 @@ export default function ResponsablesClient() {
               .map(([v, etiqueta]) => (
                 <button key={v} type="button"
                   onClick={() => setParams({ filtro: v === 'todos' ? null : v, p: null })}
-                  className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                  className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                     filtro === v
                       ? 'border-zero-600 bg-zero-600 font-medium text-white'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
@@ -263,6 +274,7 @@ export default function ResponsablesClient() {
                   {etiqueta}
                 </button>
               ))}
+          </div>
           </div>
 
           {error ? (
