@@ -760,3 +760,40 @@ describe('5.17 estados de espera y de error', () => {
     expect(mensajeDeEspera(45)).toMatch(/tardando demasiado/);
   });
 });
+
+// ── 5.18 Calidad con gente real ──
+import { informeCalidad, resumirCalidad } from '@/lib/asistente/calidad';
+
+describe('5.18 informe de calidad', () => {
+  const filas = [
+    { pregunta: 'cuanto vendi este mes', origen: 'local' as const, valoracion: 1 as const, motivo: null },
+    { pregunta: 'cuanto vendi este mes', origen: 'local' as const, valoracion: null, motivo: null },
+    { pregunta: 'quien me debe', origen: 'local' as const, valoracion: -1 as const, motivo: 'dato-incorrecto' },
+    { pregunta: 'que clientes de Maria Perez 809-555-1234 no han pagado', origen: 'ia' as const, valoracion: -1 as const, motivo: 'no-entendio' },
+    { pregunta: 'que clientes de Maria Perez 809-555-1234 no han pagado', origen: 'ia' as const, valoracion: null, motivo: null },
+    { pregunta: 'respuesta vieja', origen: null, valoracion: null, motivo: null },
+  ];
+
+  it('cuenta lo resuelto sin IA y lo valorado', () => {
+    const r = resumirCalidad(filas);
+    expect(r).toMatchObject({ total: 6, local: 3, ia: 2, sinOrigen: 1, valoradas: 3, utiles: 1, malas: 2 });
+    expect(r.pctLocal).toBe(60);
+    expect(r.pctMalas).toBe(66.7);
+    expect(r.porMotivo).toEqual({ 'dato-incorrecto': 1, 'no-entendio': 1 });
+  });
+
+  it('lo que más cae a la IA va agrupado y sin datos personales', () => {
+    const r = resumirCalidad(filas);
+    expect(r.masAIa).toHaveLength(1);
+    expect(r.masAIa[0].veces).toBe(2);
+    expect(r.masAIa[0].pregunta).not.toMatch(/809-555-1234/);
+    expect(r.masAIa[0].pregunta).toContain('[teléfono]');
+  });
+
+  it('el informe en markdown trae las tres secciones y no revienta con cero filas', () => {
+    expect(informeCalidad(resumirCalidad(filas), 30)).toMatch(/Resueltas sin IA: \*\*60%\*\*/);
+    const vacio = informeCalidad(resumirCalidad([]), 7);
+    expect(vacio).toContain('sin datos');
+    expect(vacio).toContain('(nada)');
+  });
+});

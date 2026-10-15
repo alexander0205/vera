@@ -66,5 +66,10 @@ Orden de trabajo; cada una con pruebas y commit.
 - [x] 5.17 Estados vacíos y de error cuidados
 
 ### Calidad
-- [ ] 5.18 Tablero interno de calidad (👎, caídas a la IA, % sin IA)
-- [ ] 5.19 Evaluación contra el modelo real (script nocturno)
+- [x] 5.18 Tablero interno de calidad (👎, caídas a la IA, % sin IA)
+- [x] 5.19 Evaluación contra el modelo real (script nocturno)
+
+### Cómo correr las herramientas de calidad
+- Informe con gente real: `npx tsx scripts/calidad-asistente.ts [días] [salida.md]`
+- Casos 👎 para el set de evaluación: `npx tsx scripts/exportar-casos-asistente.ts [días] [salida.md]`
+- Evaluación contra el modelo real: `npx tsx --conditions react-server scripts/evaluar-asistente.ts [salida.md]` (sale con código 1 si algo falla; pensado para correrse de noche o antes de publicar)
