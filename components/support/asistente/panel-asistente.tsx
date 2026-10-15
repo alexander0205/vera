@@ -384,11 +384,11 @@ export function PanelAsistente({
                     return (
                       <li key={p.titulo} className={`${s.paso} ${p.estado === 'hecho' ? s.pasoHecho : ''} ${actual ? s.pasoActual : ''}`}>
                         {p.estado === 'hecho' ? <CheckCircle2 size={16} aria-hidden /> : <Circle size={16} aria-hidden />}
-                        <Link href={p.ruta}>
+                        <Link href={p.tour}>
                           <strong>{p.titulo}{p.opcional ? ' (opcional)' : ''}</strong>
                           {actual && <small>{p.detalle}</small>}
                         </Link>
-                        {actual && <ArrowRight size={16} aria-hidden />}
+                        {actual && <span className={s.mostrar}>Mostrarme <ArrowRight size={14} aria-hidden /></span>}
                       </li>
                     );
                   })}

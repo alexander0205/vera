@@ -234,7 +234,7 @@ export default function SecuenciasPage() {
               <RefreshCw style={{ width: 16, height: 16, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             </IconButton>
             <Link href="/dashboard/secuencias/nueva" style={{ textDecoration: 'none' }}>
-              <MuiButton variant="contained" disableElevation
+              <MuiButton variant="contained" disableElevation data-tour="secuencias-nueva"
                 startIcon={<Plus style={{ width: 14, height: 14 }} />}
                 sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
                 Nueva numeración

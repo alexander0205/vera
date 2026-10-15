@@ -61,7 +61,7 @@ export function BottomActionBar({
   };
 
   return (
-    <Box sx={{ position: 'sticky', bottom: 0, zIndex: 30, mx: { xs: -1.5, sm: -2, md: -2.5 }, mb: { xs: -1.5, sm: -2, md: -2.5 }, px: { xs: 1.5, sm: 2, md: 2.5 }, mt: 'auto', bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e5e7eb', boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, py: 1.5 }}>
+    <Box data-tour="factura-emitir" sx={{ position: 'sticky', bottom: 0, zIndex: 30, mx: { xs: -1.5, sm: -2, md: -2.5 }, mb: { xs: -1.5, sm: -2, md: -2.5 }, px: { xs: 1.5, sm: 2, md: 2.5 }, mt: 'auto', bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e5e7eb', boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, py: 1.5 }}>
       {paso === 2 ? (
         <Button
           type="button"

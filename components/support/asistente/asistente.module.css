@@ -475,3 +475,5 @@
 .vende input:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .vende button { border: 0; border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 600; background: var(--primary); color: var(--primary-foreground); cursor: pointer; white-space: nowrap; }
 .vende button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mostrar { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--primary); white-space: nowrap; }

@@ -8,6 +8,7 @@
  */
 
 import { FLUJOS, type EstadoConfiguracion } from './guias-paso';
+import { tourDeRuta, urlDeTour } from './tour';
 
 export interface PasoPrimerosPasos {
   titulo: string;
@@ -15,6 +16,8 @@ export interface PasoPrimerosPasos {
   ruta: string;
   estado: 'hecho' | 'falta' | 'desconocido';
   opcional: boolean;
+  /** Pantalla con el tour de este paso resaltado (`?tour=`); si no hay, la pantalla a secas. */
+  tour: string;
 }
 
 export interface PrimerosPasos {
@@ -24,7 +27,7 @@ export interface PrimerosPasos {
   total: number;
   /** 0–100, sobre los pasos obligatorios. */
   porcentaje: number;
-  siguiente: { indice: number; titulo: string; detalle: string; ruta: string } | null;
+  siguiente: { indice: number; titulo: string; detalle: string; ruta: string; tour: string } | null;
   pasos: PasoPrimerosPasos[];
 }
 
@@ -38,6 +41,7 @@ export function construirPrimerosPasos(e: EstadoConfiguracion): PrimerosPasos {
     const m = p.listo(e);
     return {
       titulo: p.titulo, detalle: p.detalle, ruta: p.ruta,
+      tour: urlDeTour(tourDeRuta(p.ruta) ?? '') ?? p.ruta,
       estado: m === true ? 'hecho' : m === false ? 'falta' : 'desconocido',
       opcional: Boolean(p.opcional),
     };
@@ -54,7 +58,9 @@ export function construirPrimerosPasos(e: EstadoConfiguracion): PrimerosPasos {
     hechos,
     total: obligatorios.length,
     porcentaje: obligatorios.length ? Math.round((hechos / obligatorios.length) * 100) : 0,
-    siguiente: indice >= 0 ? { indice, titulo: pasos[indice].titulo, detalle: pasos[indice].detalle, ruta: pasos[indice].ruta } : null,
+    siguiente: indice >= 0
+      ? { indice, titulo: pasos[indice].titulo, detalle: pasos[indice].detalle, ruta: pasos[indice].ruta, tour: pasos[indice].tour }
+      : null,
     pasos,
   };
 }
