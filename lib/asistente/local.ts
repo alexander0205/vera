@@ -3,6 +3,7 @@ import { normalizar, rd, hoyRd } from './util';
 import { clasificarSolicitud } from './politicas';
 import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import { MAPA_SISTEMA } from './mapa-sistema';
+import { DISPARA_FLUJO_COTIZACION, DISPARA_FLUJO_FACTURA, FLUJOS, formatearFlujo, type EstadoConfiguracion } from './guias-paso';
 import { explicarMensajesDgii, significadoDelEstado, type MensajeDgii } from './dgii';
 import { textoGrafico } from './grafico';
 import { formatearComparacion, type Metrica } from './comparar';
@@ -1052,6 +1053,13 @@ export async function responderLocal(
   if (DISPARA_COMPARACION.test(t)) {
     const c = await compararPeriodos(tools, t, opts.hoy ?? hoyRd());
     if (c) return { intencion: 'comparativo', respuesta: c };
+  }
+
+  // «¿Qué me falta para emitir mi primera factura?»: pasos reales con lo que ya está hecho.
+  if ((DISPARA_FLUJO_FACTURA.test(t) || DISPARA_FLUJO_COTIZACION.test(t)) && tools.estado_configuracion) {
+    const flujo = FLUJOS.find((f) => f.id === (DISPARA_FLUJO_COTIZACION.test(t) ? 'primera-cotizacion' : 'primera-factura'))!;
+    const estado = await intentar(tools, 'estado_configuracion', {});
+    if (estado) return { intencion: 'guia-paso', respuesta: formatearFlujo(flujo, estado as unknown as EstadoConfiguracion) };
   }
 
   // «Resumen de la semana»: ventas, cobros, gastos, mejores clientes y lo vencido.

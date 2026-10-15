@@ -240,6 +240,7 @@ export function crearHerramientas(
   dar(ctx.puede('pagos:ver'), ['pagos_recibidos']);
   dar(ctx.puede('productos:ver'), ['buscar_productos', 'ver_producto']);
   dar(ctx.puede('clientes:ver'), ['ver_cliente']);
+  dar(true, ['estado_configuracion']);
   dar(ctx.puede('cotizaciones:ver'), ['listar_cotizaciones', 'ver_cotizacion']);
   dar(ctx.tieneModulo('contabilidad') && ctx.puede('contabilidad:ver'), ['libro_diario', 'catalogo_cuentas']);
   dar(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver'), ['buscar_estudiantes', 'resumen_matriculas', 'cargos_escolares']);

@@ -423,3 +423,56 @@ describe('5.7 resumen de la semana', () => {
     expect(r === null || /Ventas: no hubo|Resumen/.test(r.respuesta)).toBe(true);
   });
 });
+
+// ── 5.8 Ayuda guiada ──
+import { FLUJOS, formatearFlujo } from '@/lib/asistente/guias-paso';
+
+describe('5.8 ayuda guiada para tareas largas', () => {
+  const VACIO = { certificado: false, secuencias: 0, clientes: 0, productos: 0, facturasEmitidas: 0 };
+
+  it('todas las pantallas de los pasos existen', () => {
+    for (const f of FLUJOS) for (const p of f.pasos) expect(rutaEsReal(p.ruta), p.ruta).toBe(true);
+  });
+
+  it('empresa nueva: marca el primer paso como el siguiente', () => {
+    const t = formatearFlujo(FLUJOS[0], VACIO);
+    expect(t).toContain('Llevas 0 de 5 pasos. El siguiente es el **1**.');
+    expect(t).toContain('1. 👉 [Subir el certificado digital](/dashboard/certificado)');
+    expect(t).toContain('Empieza por [Subir el certificado digital]');
+  });
+
+  it('con certificado y secuencias, el siguiente es el producto (el cliente es opcional)', () => {
+    const t = formatearFlujo(FLUJOS[0], { ...VACIO, certificado: true, secuencias: 2 });
+    expect(t).toContain('1. ✅');
+    expect(t).toContain('2. ✅');
+    expect(t).toContain('_(opcional)_');
+    expect(t).toContain('El siguiente es el **4**');
+  });
+
+  it('todo listo: lo dice', () => {
+    const t = formatearFlujo(FLUJOS[0], { certificado: true, secuencias: 1, clientes: 3, productos: 4, facturasEmitidas: 10 });
+    expect(t).toContain('Completaste todos los pasos');
+    const casi = formatearFlujo(FLUJOS[0], { certificado: true, secuencias: 1, clientes: 0, productos: 1, facturasEmitidas: null });
+    expect(casi).toContain('Ya tienes todo lo necesario');
+  });
+
+  it('lo que no se pudo consultar no se marca ni como hecho ni como faltante', () => {
+    const t = formatearFlujo(FLUJOS[0], { certificado: null, secuencias: null, clientes: null, productos: null, facturasEmitidas: null });
+    expect(t).not.toMatch(/✅|👉|⬜/);
+    expect(t).not.toContain('Llevas');
+  });
+
+  it('«¿qué me falta para emitir?» lo contesta con el estado real', async () => {
+    const { tools, llamadas } = herramientas({ estado_configuracion: { certificado: true, secuencias: 0, clientes: 5, productos: 2, facturasEmitidas: 0 } });
+    const r = await responderLocal('que me falta para emitir mi primera factura', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('guia-paso');
+    expect(llamadas.map((l) => l.nombre)).toContain('estado_configuracion');
+    expect(r?.respuesta).toContain('2. 👉 [Registrar tus secuencias de NCF](/dashboard/secuencias)');
+  });
+
+  it('«cómo creo una cotización» sigue siendo la guía normal, no el flujo', async () => {
+    const { tools } = herramientas({ estado_configuracion: VACIO });
+    const r = await responderLocal('como creo una cotizacion', tools, { hoy: HOY });
+    expect(r?.intencion).not.toBe('guia-paso');
+  });
+});
