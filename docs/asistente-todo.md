@@ -33,7 +33,7 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 ## Fase 4 — canales y acciones
 - [ ] 4.1 Acciones reales con confirmación (cotización, recordatorio de cobro)
 - [ ] 4.2 WhatsApp (número verificado del dueño, mismas políticas)
-- [ ] 4.3 Voz (dictado de la pregunta)
+- [x] 4.3 Voz (dictado de la pregunta)
 
 ## Antes de producción
 - [ ] Aplicar migraciones 0193 y 0194 en producción

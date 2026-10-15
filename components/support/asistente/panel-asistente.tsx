@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp, Banknote, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
-  Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
+  Mic, MicOff, Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
 import { Markdown } from './markdown';
+import { useDictado } from './use-dictado';
 import s from './asistente.module.css';
 
 /**
@@ -172,6 +173,7 @@ export function PanelAsistente({
   const [texto, setTexto] = useState('');
   const listaRef = useRef<HTMLDivElement>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
+  const dictado = useDictado(setTexto);
 
   // Siempre ver lo último: respuesta nueva o «consultando…».
   useEffect(() => {
@@ -261,6 +263,7 @@ export function PanelAsistente({
       <div className={s.pie}>
         {a.derivada && <p className={s.derivada}>Ya abriste un ticket con esta conversación.</p>}
         {a.errorDerivar && <p className={s.errorDerivar} role="alert">{a.errorDerivar}</p>}
+        {dictado.error && <p className={s.errorDerivar} role="alert">{dictado.error}</p>}
         <div className={s.compositor}>
           <textarea
             id="asistente-texto"
@@ -269,7 +272,7 @@ export function PanelAsistente({
             rows={1}
             value={texto}
             maxLength={1500}
-            placeholder="Escribe tu pregunta…"
+            placeholder={dictado.escuchando ? 'Te escucho…' : 'Escribe tu pregunta…'}
             aria-label="Pregunta para el asistente"
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => {
@@ -279,6 +282,19 @@ export function PanelAsistente({
               }
             }}
           />
+          {dictado.soportado && (
+            <button
+              type="button"
+              className={`${s.microfono} ${dictado.escuchando ? s.microfonoOn : ''}`}
+              onClick={() => (dictado.escuchando ? dictado.detener() : dictado.iniciar(texto))}
+              aria-pressed={dictado.escuchando}
+              aria-label={dictado.escuchando ? 'Dejar de escuchar' : 'Dictar la pregunta'}
+              title={dictado.escuchando ? 'Dejar de escuchar' : 'Dictar la pregunta (la transcribe tu navegador)'}
+              disabled={a.enviando}
+            >
+              {dictado.escuchando ? <MicOff size={17} aria-hidden /> : <Mic size={17} aria-hidden />}
+            </button>
+          )}
           <button
             type="button"
             className={s.enviar}
