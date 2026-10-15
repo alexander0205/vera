@@ -73,7 +73,7 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         anotar('Detalle de factura', d.encf ?? d.codigo ?? ('id ' + id));
         return {
           enlace: enlaceFactura(d.id),
-          numero: d.encf ?? d.codigo ?? ('Borrador del ' + (ymd(d.fechaEmision) ?? '')),
+          numero: d.encf?.trim() || d.codigo?.trim() || ('Borrador del ' + (ymd(d.fechaEmision) ?? '')),
           tipo: d.tipoNombre ?? d.tipoEcf,
           estado: d.estado,
           estadoPago: pendiente === 0 && total > 0 ? 'PAGADA' : pagado > 0 || nc > 0 ? 'PARCIAL' : 'PENDIENTE',

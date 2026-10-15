@@ -323,7 +323,7 @@ describe('evaluación: contexto de pantalla', () => {
     expect(r?.intencion).toBe('registro-actual');
     expect(llamadas).toContain('ver_factura');
     expect(r?.respuesta).toContain('E310000000045');
-    expect(r?.respuesta).toMatch(/faltan \*\*RD\$ 1,000\.00\*\*/);
+    expect(r?.respuesta).toMatch(/faltan RD\$ 1,000\.00 de RD\$ 1,500\.00/);
   });
 
   it('el id sale de la pantalla, no de lo que escriba la persona', async () => {
@@ -447,5 +447,33 @@ describe('evaluación: «¿de quién es?» en un colegio y «¿dónde estoy?»',
     const r = await responderLocal('en que pantalla estoy', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/reportes') });
     expect(r?.intencion).toBe('pantalla');
     expect(r?.respuesta).toContain('Reportes');
+  });
+});
+
+describe('evaluación: formato de la factura en pantalla y cambio de pantalla', () => {
+  const BORRADOR = {
+    enlace: '/dashboard/facturas/3000', numero: '', codigoInterno: 'FA-2026-CACH-NQGM7-001128', tipo: 'Factura', estado: 'BORRADOR',
+    estadoPago: 'PARCIAL', cliente: 'Manolo Acosta Polanco', rnc: '117063628', dependiente: 'Smeily Paola Acosta Henriquez',
+    fecha: '2026-10-08', vence: null, total: 7000, itbis: 0, pagado: 6500, notasDeCredito: 0, pendiente: 500,
+    pagos: [{ fecha: '2026-10-09', metodo: 'efectivo', monto: 6500 }], lineas: [],
+  };
+
+  it('un borrador sin e-NCF no deja negritas vacías ni «**» sueltos', async () => {
+    const { tools } = herramientas({ ver_factura: BORRADOR });
+    const r = await responderLocal('en que pantalla estamos', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/facturas/3000') });
+    // Una negrita que abre y queda vacía o con espacio: «** de Fulano**».
+    expect(r?.respuesta).not.toMatch(/(^|\s)\*\*\s|\*\*\*\*/);
+    expect(r?.respuesta).toContain('FA-2026-CACH-NQGM7-001128');
+    expect(r?.respuesta).toContain('| Estudiante | Smeily Paola Acosta Henriquez |');
+    expect(r?.respuesta).toContain('| Estado | Borrador (sin emitir) |');
+  });
+
+  it('«¿qué puedo hacer en esta pantalla?» en Reportes habla de Reportes, no de la factura anterior', async () => {
+    const { tools, llamadas } = herramientas({ ver_factura: BORRADOR });
+    const r = await responderLocal('que puedo hacer en esta pantalla? ayudame', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/reportes') });
+    expect(r?.intencion).toBe('pantalla');
+    expect(r?.respuesta).toContain('Reportes');
+    expect(r?.respuesta).toMatch(/606/);
+    expect(llamadas).not.toContain('ver_factura');
   });
 });

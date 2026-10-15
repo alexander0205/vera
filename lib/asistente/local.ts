@@ -549,42 +549,50 @@ function entradaTendencia(t: string, periodo: Periodo | null, hoy?: string): Rec
 
 // ── Pantalla actual ──────────────────────────────────────────────
 
-const DONDE_ESTOY = /\b(en que (pantalla|pagina|parte|modulo|seccion) (estoy|estamos)|que (estoy|estamos) (viendo|mirando)|donde (estoy|estamos)|que (es|veo) (esto|esta pantalla|esta pagina|aqui))\b/;
+const DONDE_ESTOY = /\b(que (puedo|podemos|se puede) hacer (en|aqui|desde|con) (esta|este|aqui|esto)?\s*(pantalla|pagina|seccion|modulo)?|que hago aqui|para que sirve (esta|este|esto)( pantalla| pagina| seccion)?|en que (pantalla|pagina|parte|modulo|seccion) (estoy|estamos)|que (estoy|estamos) (viendo|mirando)|donde (estoy|estamos)|que (es|veo) (esto|esta pantalla|esta pagina|aqui))\b/;
 const quitarPeriodo = (t: string) => t.replace(/\b(este|esta|estos|estas) (mes|ano|semana|trimestre|periodo|dia)\b/g, ' ');
 const DEICTICO_FACTURA = /\b(esta|esa|aqui|actual|la que (estoy|estamos) viendo)\b|\best[ao]\b/;
 const PREGUNTA_FACTURA = /\b(pagad[ao]|pago|pagos|debe|deben|adeuda|saldo|pendiente|total|cuanto|cliente|de quien|a quien|estado|vence|vencimiento|fecha|detalle|resumen|itbis|numero|ncf|ecf|aceptad[ao]|dgii|items?|lineas|productos?|que (dice|tiene|lleva))\b/;
 
 const ETIQUETA_PAGO: Record<string, string> = { PAGADA: 'pagada', PARCIAL: 'con pago parcial', PENDIENTE: 'pendiente de pago' };
+const ETIQUETA_ESTADO: Record<string, string> = {
+  BORRADOR: 'Borrador (sin emitir)', ACEPTADO: 'Emitida y aceptada por la DGII', ACEPTADO_CONDICIONAL: 'Aceptada condicionalmente por la DGII',
+  EN_PROCESO: 'En proceso ante la DGII', RECHAZADO: 'Rechazada por la DGII', ANULADO: 'Anulada', HISTORICA: 'Histórica',
+};
 
 function plantillaFacturaActual(r: Fila, t: string): string {
-  const numero = String(r.numero);
+  const numero = String(r.numero || r.codigoInterno || 'sin número');
   const borrador = r.estado === 'BORRADOR';
   const total = n(r.total);
   const pendiente = n(r.pendiente);
+  const de = r.cliente ? ` de ${r.cliente}` : '';
   let titular: string;
   if (/\b(pagad[ao]|pago|pagos|pague|debe|deben|adeuda|saldo|pendiente)\b/.test(t)) {
-    titular = borrador
-      ? `Esta factura (**${numero}**) es un borrador: todavía no se emite ni se cobra.`
+    titular = borrador && n(r.pagado) === 0
+      ? `La factura ${numero} es un borrador: todavía no se emite ni se cobra.`
       : r.estadoPago === 'PAGADA'
-        ? `Sí, la factura **${numero}** está **pagada** por completo (${rd(total)}).`
-        : `La factura **${numero}** está ${ETIQUETA_PAGO[String(r.estadoPago)] ?? 'sin pagar'}: faltan **${rd(pendiente)}** de ${rd(total)}.`;
+        ? `Sí, la factura ${numero} está pagada por completo (${rd(total)}).`
+        : `La factura ${numero} está ${ETIQUETA_PAGO[String(r.estadoPago)] ?? 'sin pagar'}: faltan ${rd(pendiente)} de ${rd(total)}.`;
   } else {
-    titular = `Esta es la factura **${numero}**${r.cliente ? ` de **${r.cliente}**` : ''}${r.dependiente ? ` (estudiante: **${r.dependiente}**)` : ''}, por **${rd(total)}**.`;
+    titular = `Estás viendo la factura ${numero}${de}.`;
   }
-  const filas: string[] = [
-    `- Estado: ${r.estado}${borrador ? ' (sin emitir)' : ''}`,
-    `- Cobro: ${ETIQUETA_PAGO[String(r.estadoPago)] ?? r.estadoPago} — pagado ${rd(n(r.pagado))}, pendiente ${rd(pendiente)}`,
-  ];
-  if (n(r.notasDeCredito)) filas.push(`- Notas de crédito aplicadas: ${rd(n(r.notasDeCredito))}`);
-  if (r.cliente) filas.push(`- Cliente: ${r.cliente}${r.rnc ? ` (RNC ${r.rnc})` : ''}`);
-  if (r.dependiente) filas.push(`- Estudiante: ${r.dependiente}`);
-  if (r.codigoInterno && r.codigoInterno !== r.numero) filas.push(`- Código interno: ${r.codigoInterno}`);
-  if (r.fecha) filas.push(`- Fecha: ${r.fecha}${r.vence ? ` · vence ${r.vence}` : ''}`);
+  const datos: [string, string][] = [];
+  if (r.cliente) datos.push(['Cliente', `${r.cliente}${r.rnc ? ` (RNC ${r.rnc})` : ''}`]);
+  if (r.dependiente) datos.push(['Estudiante', String(r.dependiente)]);
+  datos.push(['Estado', ETIQUETA_ESTADO[String(r.estado)] ?? String(r.estado)]);
+  datos.push(['Total', rd(total)]);
+  datos.push(['Pagado', rd(n(r.pagado))]);
+  if (n(r.notasDeCredito)) datos.push(['Notas de crédito', rd(n(r.notasDeCredito))]);
+  datos.push(['Pendiente', rd(pendiente)]);
+  if (r.fecha) datos.push(['Fecha', String(r.fecha)]);
+  if (r.vence) datos.push(['Vence', String(r.vence)]);
+  if (r.codigoInterno && r.codigoInterno !== r.numero) datos.push(['Código interno', String(r.codigoInterno)]);
+
   const pagos = (r.pagos as Fila[] | undefined) ?? [];
   const cola = pagos.length
-    ? ['', tabla(['Fecha de pago', 'Método', 'Monto'], pagos.map((p) => [String(p.fecha ?? ''), String(p.metodo ?? ''), rd(n(p.monto))]))]
+    ? ['', '**Pagos recibidos**', '', tabla(['Fecha', 'Método', 'Monto'], pagos.map((p) => [String(p.fecha ?? ''), String(p.metodo ?? ''), rd(n(p.monto))]))]
     : [];
-  return [titular, '', ...filas, ...cola].join('\n');
+  return [titular, '', tabla(['Dato', 'Detalle'], datos), ...cola].join('\n');
 }
 
 // ── Saludos ─────────────────────────────────────────────────────────────────
@@ -644,7 +652,8 @@ export async function responderLocal(
     if (p.registro) return { intencion: 'pantalla', respuesta: `Estás viendo ${NOMBRE_REGISTRO[p.registro.tipo]} (su pantalla de detalle).` };
     if (p.titulo) {
       const e = MAPA_SISTEMA.find((x) => x.ruta === p.ruta);
-      return { intencion: 'pantalla', respuesta: `Estás en **${p.titulo}** (menú ${p.menu}).${e?.que ? `\n\n${e.que}` : ''}` };
+      const pasos = e?.como?.length ? ['', 'Desde aquí puedes:', '', ...e.como.map((x, i) => `${i + 1}. ${x}`)] : [];
+      return { intencion: 'pantalla', respuesta: [`Estás en **${p.titulo}** (menú ${p.menu}).`, ...(e?.que ? ['', e.que] : []), ...pasos].join('\n') };
     }
   }
 

@@ -116,6 +116,23 @@ function descripcionPantalla(p?: PantallaActual | null): string {
   return `\n\nPANTALLA ACTUAL: la persona está en «${p.titulo}» (${p.menu}). Si pregunta «cómo hago esto aquí» o «qué es esto», se refiere a esa pantalla.`;
 }
 
+/**
+ * El historial puede venir de otra pantalla (la persona navegó entre mensajes):
+ * lo que vale es dónde está AHORA, y eso se pega al último mensaje suyo.
+ */
+function conPantalla(historial: MensajeChat[], p?: PantallaActual | null): { role: 'user' | 'assistant'; content: string }[] {
+  const base = historial.map((h) => ({ role: h.role, content: h.content }));
+  if (!p) return base;
+  const donde = p.registro ? `${NOMBRE_REGISTRO[p.registro.tipo]} (id ${p.registro.id})` : `la pantalla «${p.titulo}»`;
+  const i = base.map((m) => m.role).lastIndexOf('user');
+  if (i < 0) return base;
+  base[i] = {
+    role: 'user',
+    content: `${base[i].content}\n\n[Contexto: en este momento la persona está en ${donde}. Lo dicho antes pudo ser en otra pantalla; «aquí», «esto» o «esta» se refieren a esta.]`,
+  };
+  return base;
+}
+
 export async function conversar(
   ctx: ContextoAsistente | number,
   historial: MensajeChat[],
@@ -167,7 +184,7 @@ export async function conversar(
     const { text } = await generateText({
       model,
       instructions: instrucciones(contexto.empresa, contexto.usuario) + descripcionPantalla(contexto.pantalla),
-      messages: historial.map((h) => ({ role: h.role, content: h.content })),
+      messages: conPantalla(historial, contexto.pantalla),
       tools,
       stopWhen: stepCountIs(8),
       abortSignal: AbortSignal.timeout(Math.max(1_000, tiempoMs)),
