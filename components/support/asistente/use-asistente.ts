@@ -51,11 +51,16 @@ export function useAsistente(activo: boolean) {
   // La carga reintenta sola (la primera compilación o un corte breve no deben
   // dejar la persona sin asistente hasta recargar) y, si igual falla, queda en
   // «error» con un botón para reintentar en vez de esconder las pestañas.
+  //
+  // `silencioso`: re-sincroniza sin pasar por «cargando» (cambio de empresa).
+  // `soloSiCambio`: no toca nada si la empresa sigue siendo la misma, para no
+  // pisar una conversación en curso.
   const cargando = useRef(false);
-  const cargar = useCallback(async () => {
+  const empresaIdRef = useRef<number | null>(null);
+  const cargar = useCallback(async (opts: { silencioso?: boolean; soloSiCambio?: boolean } = {}) => {
     if (cargando.current) return;
     cargando.current = true;
-    fijarEstado('cargando');
+    if (!opts.silencioso) fijarEstado('cargando');
     try {
       for (const espera of [0, 1000, 2500]) {
         if (espera) await new Promise((r) => setTimeout(r, espera));
@@ -66,7 +71,12 @@ export function useAsistente(activo: boolean) {
           if (!r.ok) continue;
           const d = await r.json();
           if (!d.disponible) { fijarEstado('no-aplica'); return; }
+          const empresaId = typeof d.empresaId === 'number' ? d.empresaId : null;
+          if (opts.soloSiCambio && empresaId === empresaIdRef.current) return;
+          empresaIdRef.current = empresaId;
           setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null });
+          // La conversación es de la empresa: al cambiar de empresa se muestra
+          // la última de esa empresa, o una vacía si no hay ninguna.
           if (d.conversacion) {
             setConversacionId(d.conversacion.id);
             setDerivada(Boolean(d.conversacion.derivada));
@@ -74,6 +84,10 @@ export function useAsistente(activo: boolean) {
               id: m.id, rol: m.rol, contenido: m.contenido, herramientas: m.herramientas ?? null, grande: m.grande,
               valoracion: m.valoracion ?? null, valoracionMotivo: m.valoracionMotivo ?? null,
             })));
+          } else {
+            setConversacionId(null);
+            setDerivada(false);
+            setMensajes([]);
           }
           fijarEstado('listo');
           return;
@@ -81,7 +95,7 @@ export function useAsistente(activo: boolean) {
           // Sin red por un momento: se reintenta.
         }
       }
-      fijarEstado('error');
+      if (!opts.silencioso) fijarEstado('error');
     } finally {
       cargando.current = false;
     }
@@ -94,15 +108,51 @@ export function useAsistente(activo: boolean) {
     void cargar();
   }, [activo, cargar]);
 
-  const preguntar = useCallback(async (texto: string, convId: number | null) => {
+  // Cambio de empresa: desde el selector (mismo navegador) se avisa con un
+  // evento; desde otra pestaña o ventana se detecta al abrir el panel y al
+  // volver a la ventana. En los dos casos se re-sincroniza solo si cambió.
+  useEffect(() => {
+    const alCambiar = () => {
+      empresaIdRef.current = null;
+      setMensajes([]);
+      setConversacionId(null);
+      setDerivada(false);
+      if (estadoRef.current === 'listo') void cargar({ silencioso: true });
+    };
+    const alVolver = () => {
+      if (estadoRef.current === 'listo') void cargar({ silencioso: true, soloSiCambio: true });
+    };
+    window.addEventListener('zero:empresa-cambiada', alCambiar);
+    window.addEventListener('focus', alVolver);
+    return () => {
+      window.removeEventListener('zero:empresa-cambiada', alCambiar);
+      window.removeEventListener('focus', alVolver);
+    };
+  }, [cargar]);
+
+  useEffect(() => {
+    if (activo && estadoRef.current === 'listo') void cargar({ silencioso: true, soloSiCambio: true });
+  }, [activo, cargar]);
+
+  const preguntar = useCallback(async (texto: string, convId: number | null, reenvio = false): Promise<void> => {
     setEnviando(true);
     try {
       const r = await fetch('/api/asistente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje: texto, conversacionId: convId, pantalla: window.location.pathname }),
+        body: JSON.stringify({ mensaje: texto, conversacionId: convId, empresaId: empresaIdRef.current, pantalla: window.location.pathname }),
       });
       const d = await r.json().catch(() => ({}));
+      // La empresa cambió desde otra pestaña: se carga la conversación de la empresa actual
+      // y la pregunta se vuelve a mandar ahí, en vez de mezclar las dos empresas.
+      if (r.status === 409 && d.cambioEmpresa && !reenvio) {
+        empresaIdRef.current = null;
+        cargando.current = false;
+        await cargar({ silencioso: true });
+        setMensajes((m) => [...m, { id: idTemporal.current--, rol: 'user', contenido: texto }]);
+        await preguntar(texto, null, true);
+        return;
+      }
       if (typeof d.conversacionId === 'number') setConversacionId(d.conversacionId);
       if (!r.ok) {
         const msg = d.error ?? 'No pude responder. Intenta de nuevo.';
@@ -122,7 +172,7 @@ export function useAsistente(activo: boolean) {
     } finally {
       setEnviando(false);
     }
-  }, []);
+  }, [cargar]);
 
   const enviar = useCallback(async (texto: string) => {
     const limpio = texto.trim();

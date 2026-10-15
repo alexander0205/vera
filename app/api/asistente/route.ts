@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     .orderBy(desc(asistenteConversaciones.actualizadaEn))
     .limit(1);
 
-  if (!conv) return NextResponse.json({ disponible: true, ia, ...perfil, conversacion: null });
+  if (!conv) return NextResponse.json({ disponible: true, ia, empresaId: acceso.teamId, ...perfil, conversacion: null });
 
   const mensajes = await db.select({
     id: asistenteMensajes.id, rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido,
@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     disponible: true,
     ia,
+    empresaId: acceso.teamId,
     ...perfil,
     conversacion: {
       id: conv.id,
@@ -109,6 +110,10 @@ export async function POST(req: NextRequest) {
     );
   }
   const texto = crudo;
+  // La pantalla mostraba otra empresa (se cambió en otra pestaña): nada se guarda ni se consulta.
+  if (Number.isInteger(b?.empresaId) && b.empresaId !== teamId) {
+    return NextResponse.json({ error: 'Cambiaste de empresa.', cambioEmpresa: true, empresaId: teamId }, { status: 409 });
+  }
   if (clasificarSolicitud(texto)?.categoria === 'volcado') {
     logAudit({ teamId, userId: user.id, actor: user.email, action: 'ASISTENTE_ABUSO', resource: 'volcado', meta: { texto: texto.slice(0, 200) } });
   }
