@@ -216,7 +216,7 @@ export function crearHerramientas(
   const t: ToolSet = { ...herramientasReportes(teamId, consultas) };
 
   const dar = (condicion: boolean, nombres: string[]) => { if (condicion) Object.assign(t, solo(api, nombres)); };
-  dar(ctx.puede('facturas:ver'), ['buscar_facturas', 'clientes_con_mas_facturas', 'cuentas_por_cobrar', 'facturas_recurrentes']);
+  dar(ctx.puede('facturas:ver'), ['buscar_facturas', 'ver_factura', 'clientes_con_mas_facturas', 'cuentas_por_cobrar', 'facturas_recurrentes']);
   dar(true, ['facturas_por_revisar', 'resumen_gastos', 'listar_gastos_compras', 'buscar_clientes']);
   dar(ctx.puede('pagos:ver'), ['pagos_recibidos']);
   dar(ctx.puede('productos:ver'), ['buscar_productos']);

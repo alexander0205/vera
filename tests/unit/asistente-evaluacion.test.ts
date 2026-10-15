@@ -285,3 +285,72 @@ describe('evaluación: inyección escondida en datos', () => {
     expect(depurarSalida('Nota del cliente: clave sk-abcdefghijklmnop1234').texto).not.toContain('sk-abcdefghijklmnop1234');
   });
 });
+
+// ── 2.1 Contexto de pantalla ──
+import { interpretarPantalla } from '@/lib/asistente/pantalla';
+
+describe('evaluación: contexto de pantalla', () => {
+  it('reconoce una pantalla del mapa y un registro', () => {
+    expect(interpretarPantalla('/dashboard/facturas/3985')?.registro).toEqual({ tipo: 'factura', id: 3985 });
+    expect(interpretarPantalla('/dashboard/cotizaciones/7?x=1')?.registro).toEqual({ tipo: 'cotizacion', id: 7 });
+    expect(interpretarPantalla('/dashboard/reportes')?.titulo).toMatch(/Reportes/);
+  });
+
+  it.each([
+    'https://evil.example/dashboard/facturas/1',
+    '//evil.example/x',
+    '/dashboard/facturas/abc',
+    '/dashboard/facturas/0',
+    '/ruta/que/no/existe',
+    '/dashboard/facturas/99999999999999999999',
+    42,
+    null,
+  ])('rechaza lo que no es una pantalla real: %s', (cruda) => {
+    expect(interpretarPantalla(cruda as never)).toBeNull();
+  });
+
+  const FACTURA = {
+    enlace: '/dashboard/facturas/3985', numero: 'E310000000045', tipo: 'Factura de Crédito Fiscal', estado: 'ACEPTADO',
+    estadoPago: 'PARCIAL', cliente: 'Ana Pérez', rnc: null, fecha: '2026-10-08', vence: '2026-11-07',
+    total: 1500, itbis: 228.81, pagado: 500, notasDeCredito: 0, pendiente: 1000,
+    pagos: [{ fecha: '2026-10-09', metodo: 'efectivo', monto: 500 }], lineas: [],
+  };
+  const pantalla = interpretarPantalla('/dashboard/facturas/3985');
+
+  it('«¿está pagada esta factura?» en la factura abierta se contesta con SUS datos, sin IA', async () => {
+    const { tools, llamadas } = herramientas({ ver_factura: FACTURA });
+    const r = await responderLocal('¿está pagada esta factura?', tools, { hoy: HOY, pantalla });
+    expect(r?.intencion).toBe('registro-actual');
+    expect(llamadas).toContain('ver_factura');
+    expect(r?.respuesta).toContain('E310000000045');
+    expect(r?.respuesta).toMatch(/faltan \*\*RD\$ 1,000\.00\*\*/);
+  });
+
+  it('el id sale de la pantalla, no de lo que escriba la persona', async () => {
+    const llamadas: unknown[] = [];
+    const reales = crearHerramientas(contextoDePrueba(1), []) as Record<string, { inputSchema?: unknown }>;
+    const tools = { ...reales, ver_factura: { inputSchema: reales.ver_factura.inputSchema, execute: async (i: unknown) => { llamadas.push(i); return FACTURA; } } };
+    await responderLocal('cuanto debe esta factura 777', tools as never, { hoy: HOY, pantalla });
+    expect(llamadas).toEqual([{ id: 3985 }]);
+  });
+
+  it('«este mes» no se confunde con «esta factura»', async () => {
+    const { tools, llamadas } = herramientas({ resumen_ventas: { ventasNetas: 10, facturas: 1 } });
+    const r = await responderLocal('cuanto vendi este mes', tools, { hoy: HOY, pantalla });
+    expect(r?.intencion).toBe('ventas');
+    expect(llamadas).not.toContain('ver_factura');
+  });
+
+  it('en una pantalla que no es una factura no se inventa registro', async () => {
+    const { tools, llamadas } = herramientas({});
+    const r = await responderLocal('esta pagada esta factura', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/reportes') });
+    expect(r?.intencion).not.toBe('registro-actual');
+    expect(llamadas).not.toContain('ver_factura');
+  });
+
+  it('un borrador se dice borrador, no «pendiente de pago»', async () => {
+    const { tools } = herramientas({ ver_factura: { ...FACTURA, numero: 'Borrador del 2026-10-08', estado: 'BORRADOR', estadoPago: 'PENDIENTE', pagado: 0, pendiente: 1500 } });
+    const r = await responderLocal('esta factura esta pagada?', tools, { hoy: HOY, pantalla });
+    expect(r?.respuesta).toMatch(/borrador/i);
+  });
+});

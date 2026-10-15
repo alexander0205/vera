@@ -85,7 +85,7 @@ export function useAsistente(activo: boolean) {
       const r = await fetch('/api/asistente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje: texto, conversacionId: convId }),
+        body: JSON.stringify({ mensaje: texto, conversacionId: convId, pantalla: window.location.pathname }),
       });
       const d = await r.json().catch(() => ({}));
       if (typeof d.conversacionId === 'number') setConversacionId(d.conversacionId);

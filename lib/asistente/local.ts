@@ -1,6 +1,7 @@
 import type { ToolSet } from 'ai';
 import { normalizar, rd, hoyRd } from './util';
 import { clasificarSolicitud } from './politicas';
+import type { PantallaActual } from './pantalla';
 
 /**
  * Contestador local: responde SIN llamar a la IA las preguntas claras y
@@ -492,6 +493,43 @@ function plantillaGuia(g: ResGuia, tolerante: boolean, cambio: boolean): string 
   ].join('\n');
 }
 
+// ── Pantalla actual ──────────────────────────────────────────────
+
+const quitarPeriodo = (t: string) => t.replace(/\b(este|esta|estos|estas) (mes|ano|semana|trimestre|periodo|dia)\b/g, ' ');
+const DEICTICO_FACTURA = /\b(esta|esa|aqui|actual|la que (estoy|estamos) viendo)\b|\best[ao]\b/;
+const PREGUNTA_FACTURA = /\b(pagad[ao]|pago|pagos|debe|deben|adeuda|saldo|pendiente|total|cuanto|cliente|de quien|a quien|estado|vence|vencimiento|fecha|detalle|resumen|itbis|numero|ncf|ecf|aceptad[ao]|dgii|items?|lineas|productos?|que (dice|tiene|lleva))\b/;
+
+const ETIQUETA_PAGO: Record<string, string> = { PAGADA: 'pagada', PARCIAL: 'con pago parcial', PENDIENTE: 'pendiente de pago' };
+
+function plantillaFacturaActual(r: Fila, t: string): string {
+  const numero = String(r.numero);
+  const borrador = r.estado === 'BORRADOR';
+  const total = n(r.total);
+  const pendiente = n(r.pendiente);
+  let titular: string;
+  if (/\b(pagad[ao]|pago|pagos|pague|debe|deben|adeuda|saldo|pendiente)\b/.test(t)) {
+    titular = borrador
+      ? `Esta factura (**${numero}**) es un borrador: todavía no se emite ni se cobra.`
+      : r.estadoPago === 'PAGADA'
+        ? `Sí, la factura **${numero}** está **pagada** por completo (${rd(total)}).`
+        : `La factura **${numero}** está ${ETIQUETA_PAGO[String(r.estadoPago)] ?? 'sin pagar'}: faltan **${rd(pendiente)}** de ${rd(total)}.`;
+  } else {
+    titular = `Esta es la factura **${numero}**${r.cliente ? ` de **${r.cliente}**` : ''}, por **${rd(total)}**.`;
+  }
+  const filas: string[] = [
+    `- Estado: ${r.estado}${borrador ? ' (sin emitir)' : ''}`,
+    `- Cobro: ${ETIQUETA_PAGO[String(r.estadoPago)] ?? r.estadoPago} — pagado ${rd(n(r.pagado))}, pendiente ${rd(pendiente)}`,
+  ];
+  if (n(r.notasDeCredito)) filas.push(`- Notas de crédito aplicadas: ${rd(n(r.notasDeCredito))}`);
+  if (r.cliente) filas.push(`- Cliente: ${r.cliente}${r.rnc ? ` (RNC ${r.rnc})` : ''}`);
+  if (r.fecha) filas.push(`- Fecha: ${r.fecha}${r.vence ? ` · vence ${r.vence}` : ''}`);
+  const pagos = (r.pagos as Fila[] | undefined) ?? [];
+  const cola = pagos.length
+    ? ['', tabla(['Fecha de pago', 'Método', 'Monto'], pagos.map((p) => [String(p.fecha ?? ''), String(p.metodo ?? ''), rd(n(p.monto))]))]
+    : [];
+  return [titular, '', ...filas, ...cola].join('\n');
+}
+
 // ── Saludos ─────────────────────────────────────────────────────────────────
 
 const SALUDO = /^(hola|buenas|buenos dias|buenas tardes|buenas noches|saludos|hey|que tal)( (zero|asistente))?$/;
@@ -518,7 +556,7 @@ export async function responderLocal(
   texto: string,
   tools: ToolSet,
   /** `previa`: la última respuesta del asistente, para entender «¿dónde la veo?». */
-  opts: { tolerante?: boolean; hoy?: string; previa?: string; /** La pregunta anterior de la persona, para «¿y el mes pasado?». */ preguntaPrevia?: string } = {},
+  opts: { tolerante?: boolean; hoy?: string; previa?: string; /** La pregunta anterior de la persona, para «¿y el mes pasado?». */ preguntaPrevia?: string; /** La pantalla en la que está la persona (ya validada). */ pantalla?: PantallaActual | null } = {},
 ): Promise<RespuestaLocal | null> {
   const t = normalizar(texto);
   const tolerante = opts.tolerante ?? false;
@@ -537,6 +575,13 @@ export async function responderLocal(
     && !INTENCIONES.some((i) => i.re.test(t))) {
     const r = await responderLocal(`${opts.preguntaPrevia} ${texto}`, tools, { ...opts, preguntaPrevia: undefined });
     if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+  }
+
+  // «¿Está pagada esta factura?» con una factura abierta en pantalla.
+  const reg = opts.pantalla?.registro;
+  if (reg?.tipo === 'factura' && DEICTICO_FACTURA.test(quitarPeriodo(t)) && PREGUNTA_FACTURA.test(t) && tools.ver_factura) {
+    const r = await ejecutar(tools, 'ver_factura', { id: reg.id });
+    if (r && !r.error) return { intencion: 'registro-actual', respuesta: plantillaFacturaActual(r, t) };
   }
 
   if (SALUDO.test(t)) {

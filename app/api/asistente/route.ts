@@ -21,6 +21,7 @@ import { rateLimitDb } from '@/lib/rate-limit';
 import { logAudit } from '@/lib/audit';
 import { clasificarSolicitud } from '@/lib/asistente/politicas';
 import { sugerenciasPara } from '@/lib/asistente/sugerencias';
+import { interpretarPantalla } from '@/lib/asistente/pantalla';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
@@ -176,6 +177,7 @@ export async function POST(req: NextRequest) {
     const ctx = await construirContexto(teamId, user.platformRole, acceso.teamRole, api);
     const r = await conversar(ctx, historial, {
       empresa: team?.nombre ?? null, usuario: user.name ?? null, usuarioId: user.id,
+      pantalla: interpretarPantalla(b?.pantalla),
     });
     const [guardado] = await db.insert(asistenteMensajes).values({
       conversacionId, rol: 'assistant', contenido: r.respuesta,

@@ -58,6 +58,42 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
 
   return {
     // ── Facturas ──────────────────────────────────────────────────────────
+    ver_factura: tool({
+      description:
+        'El detalle de UNA factura por su id (el de la pantalla que la persona está viendo, o el «enlace» de una búsqueda): ' +
+        'número, cliente, estado ante la DGII, estado de pago, total, pagado, saldo pendiente, vencimiento, pagos y líneas. ' +
+        'Úsala para «¿está pagada esta factura?», «¿cuánto debe?», «¿de quién es?».',
+      inputSchema: z.object({ id: z.number().int().positive() }),
+      execute: seguro('la factura', async ({ id }) => {
+        const d = await api.get<FacturaDetalleApi>('/api/facturas/' + id);
+        const total = Number(d.montos?.montoTotal ?? 0);
+        const pagado = Number(d.pago?.valorCts ?? 0);
+        const nc = Number(d.montos?.ncAplicado ?? 0);
+        const pendiente = Math.max(0, total - pagado - nc);
+        anotar('Detalle de factura', d.encf ?? d.codigo ?? ('id ' + id));
+        return {
+          enlace: enlaceFactura(d.id),
+          numero: d.encf ?? d.codigo ?? ('Borrador del ' + (ymd(d.fechaEmision) ?? '')),
+          tipo: d.tipoNombre ?? d.tipoEcf,
+          estado: d.estado,
+          estadoPago: pendiente === 0 && total > 0 ? 'PAGADA' : pagado > 0 || nc > 0 ? 'PARCIAL' : 'PENDIENTE',
+          cliente: d.comprador?.razonSocial ?? null,
+          rnc: d.comprador?.rnc ?? null,
+          fecha: ymd(d.fechaEmision),
+          vence: ymd(d.fechaLimitePago),
+          total: pesos(total),
+          itbis: pesos(d.montos?.totalItbis),
+          pagado: pesos(pagado),
+          notasDeCredito: pesos(nc),
+          pendiente: pesos(pendiente),
+          pagos: (d.pago?.lineas ?? []).slice(0, 8).map((p) => ({ fecha: ymd(p.fechaPago), metodo: p.metodo, monto: Number(p.valor) })),
+          lineas: (d.lineas ?? []).slice(0, 8).map((l) => ({
+            nombre: String(l.nombreItem ?? ''), cantidad: Number(l.cantidadItem ?? 0), precio: Number(l.precioUnitarioItem ?? 0),
+          })),
+        };
+      }),
+    }),
+
     buscar_facturas: tool({
       description:
         'Busca facturas de venta por la MISMA API que la pantalla de Facturas: por texto (número o e-NCF, nombre del cliente), estado o fechas. ' +
@@ -698,6 +734,14 @@ interface CompraApi {
 interface ProductoApi {
   id: number; nombre: string; referencia?: string | null; tipo: string; precio: number; costo: number; precioDOP?: number; costoDOP?: number;
   stockActual: number; stockMinimo: number; controlaInventario: boolean; activo?: string;
+}
+interface FacturaDetalleApi {
+  id: number; encf: string | null; codigo?: string | null; tipoEcf?: string; tipoNombre?: string; estado: string;
+  fechaEmision: string; fechaLimitePago?: string | null;
+  comprador?: { razonSocial?: string | null; rnc?: string | null };
+  montos?: { montoTotal?: number; totalItbis?: number; ncAplicado?: number };
+  pago?: { valorCts?: number; lineas?: { fechaPago?: string | null; metodo?: string; valor?: string }[] };
+  lineas?: { nombreItem?: unknown; cantidadItem?: unknown; precioUnitarioItem?: unknown }[];
 }
 interface CotizacionApi { id: number; numero: string; estado: string; razonSocialComprador?: string | null; montoTotal: number; fechaEmision?: string | null; fechaVencimiento?: string | null }
 interface RecurrenteApi { id: number; nombre: string; clienteRazonSocial?: string | null; frecuencia: string; proximaEmision: string; estado: string; totalEstimado: number; facturasEmitidas: number }

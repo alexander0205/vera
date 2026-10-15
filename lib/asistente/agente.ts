@@ -7,6 +7,7 @@ import { responderLocal } from './local';
 import { hoyRd } from './util';
 import { sanitizarEnlaces, registrarEnlacesDeHerramientas, rutaLimpia } from './enlaces';
 import { depurarSalida } from './politicas';
+import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import type { Propuesta } from './acciones';
 
 export { hoyRd };
@@ -105,10 +106,20 @@ export interface RespuestaConOrigen extends RespuestaAsistente {
   propuestas?: Propuesta[];
 }
 
+/** Lo que ve la persona, para entender «esta factura» o «aquí». Solo una pista; los datos salen de las herramientas. */
+function descripcionPantalla(p?: PantallaActual | null): string {
+  if (!p) return '';
+  if (p.registro) {
+    const r = p.registro;
+    return `\n\nPANTALLA ACTUAL: la persona está viendo ${NOMBRE_REGISTRO[r.tipo]} (id ${r.id}). Si dice «esta», «esto», «aquí» o «la actual», se refiere a ella.${r.tipo === 'factura' ? ' Para sus datos usa ver_factura con ese id.' : ''}`;
+  }
+  return `\n\nPANTALLA ACTUAL: la persona está en «${p.titulo}» (${p.menu}). Si pregunta «cómo hago esto aquí» o «qué es esto», se refiere a esa pantalla.`;
+}
+
 export async function conversar(
   ctx: ContextoAsistente | number,
   historial: MensajeChat[],
-  contexto: { empresa: string | null; usuario: string | null; usuarioId?: number },
+  contexto: { empresa: string | null; usuario: string | null; usuarioId?: number; pantalla?: PantallaActual | null },
   /** Solo para pruebas: un modelo en lugar de Gemini (salta el contestador local). */
   modeloPrueba?: LanguageModel,
 ): Promise<RespuestaConOrigen> {
@@ -133,7 +144,7 @@ export async function conversar(
   // 1. Lo claro y frecuente se contesta aquí, sin gastar una llamada a la IA.
   //    Sin IA configurada, con más tolerancia: es lo único que hay.
   if (!modeloPrueba) {
-    const local = await responderLocal(pregunta, tools, { tolerante: !hayIa, previa, preguntaPrevia });
+    const local = await responderLocal(pregunta, tools, { tolerante: !hayIa, previa, preguntaPrevia, pantalla: contexto.pantalla });
     if (local) {
       console.info(`[asistente] respondido sin IA: ${local.intencion}`);
       return { respuesta: sanitizarEnlaces(local.respuesta, enlacesTurno).texto, consultas, origen: 'local' };
@@ -155,7 +166,7 @@ export async function conversar(
       : undefined;
     const { text } = await generateText({
       model,
-      instructions: instrucciones(contexto.empresa, contexto.usuario),
+      instructions: instrucciones(contexto.empresa, contexto.usuario) + descripcionPantalla(contexto.pantalla),
       messages: historial.map((h) => ({ role: h.role, content: h.content })),
       tools,
       stopWhen: stepCountIs(8),
