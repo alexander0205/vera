@@ -658,3 +658,68 @@ function herramientasConPermisos(permisos: Parameters<typeof contextoDePrueba>[1
   return { tools: tools as never };
 }
 
+
+// ── Enlaces: toda ruta real debe quedar como hipervínculo ──
+describe('evaluación: enlaces siempre como hipervínculo', () => {
+  const S = (t: string, permitidos?: string[]) => sanitizarEnlaces(t, permitidos ? new Set(permitidos) : undefined).texto;
+
+  it.each([
+    ['ruta suelta', 'Ve a /dashboard/cotizaciones para verlas.', 'Ve a [Cotizaciones](/dashboard/cotizaciones) para verlas.'],
+    ['ruta suelta con punto final', 'Está en /dashboard/reportes.', 'Está en [Reportes (DGII y análisis comercial)](/dashboard/reportes).'],
+    ['entre comillas de código', 'Abre `/dashboard/cotizaciones` ahora', 'Abre [Cotizaciones](/dashboard/cotizaciones) ahora'],
+    ['URL absoluta suelta', 'Entra a https://app.zero.com.do/dashboard/cotizaciones y listo', 'Entra a [Cotizaciones](/dashboard/cotizaciones) y listo'],
+    ['URL absoluta de localhost', 'http://localhost:3000/dashboard/cotizaciones', '[Cotizaciones](/dashboard/cotizaciones)'],
+    ['autoenlace <…>', 'Mira <https://app.zero.com.do/dashboard/cotizaciones>', 'Mira [Cotizaciones](/dashboard/cotizaciones)'],
+    ['enlace con título', '[aquí](/dashboard/cotizaciones "Cotizaciones")', '[aquí](/dashboard/cotizaciones)'],
+    ['enlace dentro de negritas', '**[Cotizaciones](/dashboard/cotizaciones)**', '[Cotizaciones](/dashboard/cotizaciones)'],
+    ['negritas dentro del enlace', '[**Cotizaciones**](/dashboard/cotizaciones)', '[Cotizaciones](/dashboard/cotizaciones)'],
+    ['enlace absoluto en markdown', '[x](https://app.zero.com.do/dashboard/cotizaciones?a=1)', '[x](/dashboard/cotizaciones)'],
+    ['barra final', '[x](/dashboard/cotizaciones/)', '[x](/dashboard/cotizaciones)'],
+  ])('%s', (_n, entrada, esperado) => {
+    expect(S(entrada)).toBe(esperado);
+  });
+
+  it('una ruta inventada no queda como enlace ni como texto engañoso', () => {
+    const t = S('Ve a /dashboard/pantalla-que-no-existe y a [x](/dashboard/otra-falsa)');
+    expect(t).not.toContain('](');
+    expect(t).toContain('(pantalla no verificada)');
+  });
+
+  it('un registro que ninguna herramienta entregó no se enlaza (el número de factura no es el id)', () => {
+    const t = S('Mira /dashboard/facturas/0100000216', ['/dashboard/facturas/3985']);
+    expect(t).not.toContain('](');
+    expect(t).toContain('(pantalla no verificada)');
+    expect(S('Mira /dashboard/facturas/3985', ['/dashboard/facturas/3985'])).toBe('Mira [Ver la factura](/dashboard/facturas/3985)');
+  });
+
+  it('no toca enlaces ya válidos ni los parte en dos', () => {
+    const t = '[Cotizaciones](/dashboard/cotizaciones) y [Reportes](/dashboard/reportes)';
+    expect(S(t)).toBe(t);
+  });
+
+  it('un enlace externo no se convierte en enlace interno ni conserva la URL', () => {
+    const t = S('Descarga en [aquí](https://evil.example/malware.exe) o https://evil.example/x');
+    expect(t).not.toContain('](https://evil');
+  });
+});
+
+import { enlazarNombresDePantalla } from '@/lib/asistente/enlaces';
+
+describe('evaluación: pantallas nombradas sin enlace', () => {
+  it('enlaza la primera mención de una pantalla por su nombre exacto', () => {
+    const t = enlazarNombresDePantalla('Mira el Registro de actividad para ver quién hizo qué. El registro de actividad guarda 6 meses.');
+    expect(t).toContain('[Registro de actividad](/dashboard/activity)');
+    expect(t.match(/\]\(\/dashboard\/activity\)/g)).toHaveLength(1);
+  });
+
+  it('no enlaza pantallas que la persona no puede abrir', () => {
+    const t = enlazarNombresDePantalla('Mira el Registro de actividad', (e) => e.modulo !== 'facturacion');
+    expect(t).not.toContain('](');
+  });
+
+  it('no parte palabras ni toca lo que ya es enlace', () => {
+    const ya = '[Registro de actividad](/dashboard/activity) y más';
+    expect(enlazarNombresDePantalla(ya)).toBe(ya);
+    expect(enlazarNombresDePantalla('El preregistro de actividades no cuenta')).not.toContain('](');
+  });
+});

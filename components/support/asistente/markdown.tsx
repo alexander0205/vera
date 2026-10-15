@@ -35,9 +35,9 @@ function enLinea(texto: string, clave: string): ReactNode[] {
       } else {
         partes.push(t);
       }
-    } else if (t.startsWith('**')) partes.push(<strong key={k}>{t.slice(2, -2)}</strong>);
+    } else if (t.startsWith('**')) partes.push(<strong key={k}>{enLinea(t.slice(2, -2), `${k}s`)}</strong>);
     else if (t.startsWith('`')) partes.push(<code key={k}>{t.slice(1, -1)}</code>);
-    else partes.push(<em key={k}>{t.slice(1, -1)}</em>);
+    else partes.push(<em key={k}>{enLinea(t.slice(1, -1), `${k}e`)}</em>);
     ultimo = idx + t.length;
   }
   if (ultimo < texto.length) partes.push(texto.slice(ultimo));

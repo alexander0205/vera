@@ -109,32 +109,116 @@ export interface ResultadoSaneado {
   descartados: string[];
 }
 
+const PREFIJOS = '(?:dashboard|contabilidad|escolar|nomina|pos|cuenta)';
+const RE_ENLACE_MD = /\[[^\]]+\]\([^)]*\)/g;
+
+const ROTULO_REGISTRO: [RegExp, string][] = [
+  [/^\/dashboard\/facturas-recurrentes\/\d+$/, 'Ver la factura recurrente'],
+  [/^\/dashboard\/facturas\/\d+$/, 'Ver la factura'],
+  [/^\/dashboard\/cotizaciones\/\d+$/, 'Ver la cotización'],
+  [/^\/dashboard\/compras\/local\/\d+$/, 'Ver la compra'],
+  [/^\/dashboard\/productos\/\d+$/, 'Ver el producto'],
+  [/^\/escolar\/estudiantes\/\d+$/, 'Ver el estudiante'],
+];
+
+/** Texto del enlace para una ruta que la respuesta escribió suelta. */
+function etiquetaDeRuta(ruta: string): string {
+  const e = MAPA_SISTEMA.find((x) => x.ruta === ruta);
+  if (e) return e.titulo;
+  return ROTULO_REGISTRO.find(([re]) => re.test(ruta))?.[1] ?? ruta;
+}
+
+/** Aplica `fn` solo a los tramos que NO son ya un enlace markdown. */
+function fueraDeEnlaces(t: string, fn: (tramo: string) => string): string {
+  let salida = '';
+  let i = 0;
+  for (const m of t.matchAll(RE_ENLACE_MD)) {
+    const idx = m.index ?? 0;
+    salida += fn(t.slice(i, idx)) + m[0];
+    i = idx + m[0].length;
+  }
+  return salida + fn(t.slice(i));
+}
+
+/**
+ * Formas en que un modelo escribe un enlace que el chat no sabe mostrar:
+ * título después del destino, autoenlace <…>, enlace dentro de negritas.
+ * Se llevan a `[texto](/ruta)`.
+ */
+function normalizarMarkup(t: string): string {
+  return t
+    // [texto](/ruta "título") → [texto](/ruta)
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\s+["'][^)]*["']\)/g, '[$1]($2)')
+    // <https://host/dashboard/x> → https://host/dashboard/x
+    .replace(/<((?:https?:\/\/[^\s>]+|\/[^\s>]+))>/g, '$1')
+    // **[texto](/ruta)** y *[texto](/ruta)* → [texto](/ruta)
+    .replace(/\*{1,2}(\[[^\]]+\]\([^)\s]+\))\*{1,2}/g, '$1')
+    // [**texto**](/ruta) → [texto](/ruta)
+    .replace(/\[\*{1,2}([^\]*]+)\*{1,2}\]\(/g, '[$1](');
+}
+
 /**
  * Deja solo enlaces a rutas reales (y los vuelve relativos). Un enlace
- * inventado se reemplaza por su texto, sin vínculo.
+ * inventado se reemplaza por su texto, sin vínculo. Una ruta real escrita
+ * suelta («/dashboard/cotizaciones», con o sin origen, o entre comillas de
+ * código) se convierte en hipervínculo: la persona no debería tener que
+ * copiarla.
  */
 export function sanitizarEnlaces(texto: string, permitidos?: ReadonlySet<string>): ResultadoSaneado {
   const descartados: string[] = [];
 
   // [texto](destino)
-  let salida = texto.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, etiqueta: string, destino: string) => {
+  let salida = normalizarMarkup(texto).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, etiqueta: string, destino: string) => {
     const r = rutaLimpia(destino);
     if (r && rutaEsReal(r, permitidos)) return `[${etiqueta}](${r})`;
     descartados.push(destino);
     return etiqueta;
   });
 
-  // Rutas sueltas del sistema escritas en el texto: «/dashboard/algo». Las
-  // reales pasan; las que no existen se marcan para no mandar a un 404.
-  salida = salida.replace(/(^|[\s(«"'])(\/(?:dashboard|contabilidad|escolar|nomina|pos|cuenta)(?:\/[A-Za-z0-9_\-.]+)*)/g,
-    (m, previo: string, cruda: string) => {
-      // El punto o la coma que cierra la oración no es parte de la ruta.
-      const ruta = cruda.replace(/[.,;:]+$/, '');
-      const resto = cruda.slice(ruta.length);
-      if (rutaEsReal(ruta, permitidos)) return m;
+  // Rutas sueltas del sistema: «/dashboard/algo» o «https://app/dashboard/algo».
+  // Las reales pasan a ser enlaces; las que no existen se marcan para no mandar a un 404.
+  const re = new RegExp(`(^|[\\s(«"'])((?:https?:\\/\\/[^\\s/<>"')]+)?(\\/${PREFIJOS}(?:\\/[A-Za-z0-9_\\-.]*[A-Za-z0-9_])*))`, 'g');
+  salida = fueraDeEnlaces(salida, (tramo) => tramo
+    // Una ruta entre comillas de código: se muestra como enlace, no como código.
+    .replace(new RegExp(`\\x60((?:https?:\\/\\/[^\\s/\\x60]+)?\\/${PREFIJOS}(?:\\/[A-Za-z0-9_\\-.]*[A-Za-z0-9_])*)\\x60`, 'g'), ' $1')
+    .replace(re, (_m, previo: string, _completa: string, ruta: string) => {
+      if (rutaEsReal(ruta, permitidos)) return `${previo}[${etiquetaDeRuta(ruta)}](${ruta})`;
       descartados.push(ruta);
-      return `${previo}(pantalla no verificada)${resto}`;
-    });
+      return `${previo}(pantalla no verificada)`;
+    }));
 
-  return { texto: salida, descartados };
+  return { texto: salida.replace(/ {2,}/g, ' ').replace(/^ /, ''), descartados };
+}
+
+/**
+ * Cuando la respuesta nombra una pantalla por su nombre exacto («Registro de
+ * actividad») sin enlazarla, se le pone el enlace en la primera mención. Solo
+ * nombres largos (los cortos como «Facturas» se confundirían con una palabra
+ * común) y solo pantallas que la persona puede abrir.
+ */
+export function enlazarNombresDePantalla(
+  texto: string,
+  puedeAbrir: (e: { modulo: string; permiso?: string }) => boolean = () => true,
+): string {
+  const yaEnlazadas = new Set<string>();
+  for (const m of texto.matchAll(/\]\((\/[^)\s]+)\)/g)) yaEnlazadas.add(m[1]);
+
+  const candidatas = MAPA_SISTEMA
+    .filter((e) => e.titulo.length >= 12 && !yaEnlazadas.has(e.ruta) && puedeAbrir(e))
+    .sort((a, b) => b.titulo.length - a.titulo.length);
+
+  const escapar = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let salida = texto;
+  for (const e of candidatas) {
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${escapar(e.titulo)})(?![\\p{L}\\p{N}])`, 'iu');
+    let hecho = false;
+    salida = fueraDeEnlaces(salida, (tramo) => {
+      if (hecho) return tramo;
+      return tramo.replace(re, (_m, previo: string, nombre: string) => {
+        hecho = true;
+        return `${previo}[${nombre}](${e.ruta})`;
+      });
+    });
+  }
+  return salida;
 }
