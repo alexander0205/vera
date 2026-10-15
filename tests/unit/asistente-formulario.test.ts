@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   armarPayload, bloqueFormulario, defFormulario, detectarFormulario, endpointDe, FORMULARIOS, guardarLineas, leerLineas,
-  limpiarValor, parsearFormulario, resultadoDeCreacion, resumenDeAnulacion, resumenDeEmision, totalesDeLineas, validarFormulario,
+  limpiarValor, parsearFormulario, prefillDeNota, resultadoDeCreacion, resumenDeAnulacion, resumenDeEmision, resumenDeNota, totalesDeLineas, validarFormulario,
 } from '@/lib/asistente/formulario';
 import { calcularTotales } from '@/lib/ecf/types';
 import { aBloques } from '@/lib/asistente/bloques';
@@ -314,5 +314,81 @@ describe('anular una factura', () => {
   });
   it('el asistente no adelanta la factura a anular', () => {
     expect(parsearFormulario('tipo: anulacion\ndocumento: 5\ndocumentoId: 5\ntipoAnulacion: 04')?.valores).toEqual({ tipoAnulacion: '04' });
+  });
+});
+
+describe('nota de crédito', () => {
+  const def = FORMULARIOS.notacredito;
+  const padre = {
+    id: 3985, encf: 'E320000000045', tipoEcf: '32', estado: 'ACEPTADO', fechaEmision: '2026-10-02T14:00:00.000Z',
+    montos: { montoTotalDOP: '1,180.00' },
+    comprador: { clienteId: 7, razonSocial: 'Ana Pérez', rnc: '00103514550', email: 'ana@x.com' },
+    lineas: [
+      { productoId: 4, nombreItem: 'Uniforme', cantidadItem: 1, precioUnitarioItem: 1000, tasaItbis: '0.18', indicadorBienoServicio: '1', dependienteId: 12, dependienteNombre: 'Luis' },
+    ],
+  };
+
+  it('reconoce el pedido', () => {
+    expect(detectarFormulario('crea una nota de crédito')?.id).toBe('notacredito');
+    expect(detectarFormulario('quiero emitir una nota de crédito')?.id).toBe('notacredito');
+    expect(detectarFormulario('cómo hago una nota de crédito')).toBeNull();
+    expect(detectarFormulario('cuántas notas de crédito tengo')).toBeNull();
+  });
+
+  it('prepara la nota con la factura: comprobante, fecha, cliente y líneas con beneficiario', () => {
+    const p = prefillDeNota(padre);
+    expect(p.error).toBeNull();
+    expect(p.valores).toMatchObject({
+      ncfModificado: 'E320000000045', fechaNcfModificado: '2026-10-02', documentoTotal: '1180',
+      clienteId: '7', clienteNombre: 'Ana Pérez', clienteRnc: '00103514550',
+    });
+    expect(leerLineas(p.valores.lineas)[0]).toMatchObject({ nombre: 'Uniforme', productoId: 4, dependienteId: 12, dependienteNombre: 'Luis', bien: true });
+  });
+
+  it.each([
+    [{ ...padre, estado: 'ANULADO' }, /anulada/],
+    [{ ...padre, tipoEcf: '34' }, /otra nota/],
+    [{ ...padre, encf: 'FA-2026-1' }, /no tiene comprobante/],
+    [{ ...padre, tipoEcf: 'sin-ncf', encf: 'BOR-1' }, /no tiene comprobante/],
+    [{}, /No pude leer/],
+  ])('rechaza facturas que no admiten nota (%#)', (api, re) => {
+    expect(prefillDeNota(api).error).toMatch(re);
+  });
+
+  const base = () => ({
+    ...prefillDeNota(padre).valores,
+    documentoId: '3985', documentoNombre: 'E320000000045 · Ana Pérez', motivo: 'devolucion',
+  });
+
+  it('valida: motivo, explicación si es «otro» y tope del total de la factura', () => {
+    expect(validarFormulario(def, base())).toEqual({});
+    expect(validarFormulario(def, { ...base(), motivo: '' })).toHaveProperty('motivo');
+    expect(validarFormulario(def, { ...base(), motivo: 'otro' })).toHaveProperty('razonModificacion');
+    const grande = guardarLineas([{ nombre: 'x', cantidad: 5, precio: 1000, tasa: '0.18' }]);
+    expect(validarFormulario(def, { ...base(), lineas: grande })).toHaveProperty('lineas');
+    expect(validarFormulario(def, { ...base(), ncfModificado: '' })).toHaveProperty('documento');
+  });
+
+  it('arma el cuerpo del e-CF 34 con el vínculo y el código de modificación', () => {
+    const b = armarPayload(def, base(), 'borrador');
+    expect(b).toMatchObject({
+      modo: 'borrador', tipoEcf: '34', origenDocumentoId: 3985, ncfModificado: 'E320000000045',
+      fechaNcfModificado: '2026-10-02', codigoModificacion: 3, razonModificacion: 'Devolución de mercancía',
+      clientId: 7, tipoPago: 1,
+    });
+    expect((b.items as Record<string, unknown>[])[0]).toMatchObject({ productoId: 4, dependienteId: 12, dependienteNombre: 'Luis' });
+    expect(armarPayload(def, { ...base(), motivo: 'anulacion' }, 'emitir')).toMatchObject({ modo: 'emitir', codigoModificacion: 1 });
+    expect(armarPayload(def, { ...base(), motivo: 'otro', razonModificacion: ' me equivoqué ' })).toMatchObject({ razonModificacion: 'me equivoqué' });
+  });
+
+  it('la confirmación de emisión dice monto y factura', () => {
+    const t = resumenDeNota(base());
+    expect(t).toContain('RD$ 1,180.00');
+    expect(t).toContain('E320000000045 · Ana Pérez');
+    expect(t).toContain('DGII');
+  });
+
+  it('el asistente no adelanta factura, motivo ni líneas', () => {
+    expect(parsearFormulario('tipo: notacredito\ndocumentoId: 5\nncfModificado: E320000000001\nlineas: []\nmotivo: devolucion')?.valores).toEqual({ motivo: 'devolucion' });
   });
 });
