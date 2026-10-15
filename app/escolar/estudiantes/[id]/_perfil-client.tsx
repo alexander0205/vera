@@ -87,6 +87,11 @@ interface FichaResp {
   facturasSueltas: FacturaSuelta[];
   /** Lo que se debe de esas facturas. No lo cuenta `deudaCentavos`. */
   deudaFacturasCentavos: number;
+  /**
+   * Lo que la familia debe en Facturación por facturas que no son de este
+   * alumno. Se enseña aparte: no es deuda suya.
+   */
+  deudaFamiliar: { saldoCentavos: number; facturas: number };
   /** Pagos de esas facturas: no pasan por ningún cargo. */
   pagosSueltos: PagoSuelto[];
   /** Recordatorios ya mandados: constancia, y marca por canal en cada cargo. */
@@ -143,6 +148,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   const cobro      = data?.cobro ?? null;
   const facturasSueltas = data?.facturasSueltas ?? [];
   const deudaFacturas = data?.deudaFacturasCentavos ?? 0;
+  const deudaFamiliar = data?.deudaFamiliar ?? { saldoCentavos: 0, facturas: 0 };
   const pagosSueltos = data?.pagosSueltos ?? [];
   const avisos = data?.avisos ?? [];
   const avisosProgramados = data?.avisosProgramados ?? [];
@@ -419,6 +425,31 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                 )}
               </div>
       </div>
+
+      {/* Lo que la familia debe en Facturación por facturas que no son de este
+          alumno —a nombre del padre, sin beneficiario, o de un hermano—.
+          Sin esto la ficha decía «Al día» y había que ir a Cuentas por cobrar
+          para enterarse. Va aparte y NO se suma al «Pendiente» del alumno:
+          repartirla entre los hermanos sería inventar de quién es. */}
+      {responsable && deudaFamiliar.saldoCentavos > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          <p className="flex items-start gap-2">
+            <Receipt className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <span>
+              La familia debe <b>{fmtDOP(deudaFamiliar.saldoCentavos)}</b> en Facturación
+              <span className="block text-xs text-amber-800/80">
+                {deudaFamiliar.facturas} {deudaFamiliar.facturas === 1 ? 'factura' : 'facturas'} a
+                nombre de {responsable.razonSocial} que no {deudaFamiliar.facturas === 1 ? 'es' : 'son'} de
+                este alumno. No se {deudaFamiliar.facturas === 1 ? 'suma' : 'suman'} a su pendiente.
+              </span>
+            </span>
+          </p>
+          <Link href={`/escolar/responsables/${responsable.clientId}?v=facturas`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-amber-900 hover:underline">
+            Ver en la familia<ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Filtro de período — padre global: filtra el detalle de "Por período".
           Al lado va lo que se hace con el alumno que se tiene delante: al que

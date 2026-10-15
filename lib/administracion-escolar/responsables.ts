@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { avisosProgramadosDeEstudiante } from '@/lib/administracion-escolar/ficha-estudiante';
 import { coincideDocumento } from '@/lib/busqueda/documento';
+import { esVentaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
 
 export interface FilaResponsable {
   clientId: number;
@@ -122,15 +123,13 @@ export async function listarResponsables(
       ) b ON true
       LEFT JOIN LATERAL (
         -- Facturas del contacto sin cargo escolar detrás: lo que se le cobró
-        -- por fuera del plan y que ninguna pantalla del módulo contaba.
-        SELECT SUM(GREATEST(0, x.monto_total - COALESCE(p.pagado, 0))) AS saldo
+        -- por fuera del plan y que ninguna pantalla del módulo contaba. El
+        -- saldo con la regla de Cuentas por cobrar, para que las dos cuadren.
+        SELECT SUM(${saldoFacturaSql('x')}) AS saldo
           FROM ecf_documents x
-          LEFT JOIN LATERAL (
-            SELECT SUM(pr.monto_centavos) AS pagado FROM pagos_recibidos pr
-             WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}
-          ) p ON true
          WHERE x.client_id = c.id AND x.team_id = ${teamId}
-           AND x.estado <> 'ANULADO'
+           AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
+           AND ${esVentaSql('x')}
            AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g2 WHERE g2.ecf_document_id = x.id)
       ) f ON true
      WHERE c.team_id = ${teamId}
@@ -278,7 +277,9 @@ export interface DetalleResponsable {
   /** Facturas suyas sin cargo escolar detrás, con su saldo. */
   facturas: {
     id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number;
+    estado: string; montoTotal: number; pagadoCentavos: number;
+    /** Lo que debe de ella, con la misma regla que Cuentas por cobrar. */
+    saldoCentavos: number;
   }[];
   /** Los que TODAVÍA no han salido, con la fecha en que les toca. */
   avisosProgramados: {
@@ -362,12 +363,14 @@ export async function detalleResponsable(
        ORDER BY (e.estado = 'activo') DESC, e.nombres`),
 
     db.execute(sql`
-      SELECT x.id, x.codigo, x.encf, x.fecha_emision, x.monto_total,
+      SELECT x.id, x.codigo, x.encf, x.estado, x.fecha_emision, x.monto_total,
              COALESCE((SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
-                        WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}), 0)::int AS pagado
+                        WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}), 0)::int AS pagado,
+             ${saldoFacturaSql('x')} AS saldo
         FROM ecf_documents x
        WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
-         AND x.estado <> 'ANULADO'
+         AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
+         AND ${esVentaSql('x')}
          AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g WHERE g.ecf_document_id = x.id)
        ORDER BY x.fecha_emision DESC
        LIMIT 50`),
@@ -484,8 +487,10 @@ export async function detalleResponsable(
       codigo: (f.codigo as string) ?? null,
       encf: (f.encf as string) ?? null,
       fecha: new Date(f.fecha_emision as string).toISOString(),
+      estado: String(f.estado ?? ''),
       montoTotal: Number(f.monto_total ?? 0),
       pagadoCentavos: Number(f.pagado ?? 0),
+      saldoCentavos: Number(f.saldo ?? 0),
     })),
     cargos: filas(cargos).map((g) => ({
       id: Number(g.id),
