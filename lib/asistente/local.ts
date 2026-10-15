@@ -1,7 +1,8 @@
 import type { ToolSet } from 'ai';
 import { normalizar, rd, hoyRd } from './util';
 import { clasificarSolicitud } from './politicas';
-import type { PantallaActual } from './pantalla';
+import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
+import { MAPA_SISTEMA } from './mapa-sistema';
 import { textoGrafico } from './grafico';
 
 /**
@@ -548,6 +549,7 @@ function entradaTendencia(t: string, periodo: Periodo | null, hoy?: string): Rec
 
 // ── Pantalla actual ──────────────────────────────────────────────
 
+const DONDE_ESTOY = /\b(en que (pantalla|pagina|parte|modulo|seccion) (estoy|estamos)|que (estoy|estamos) (viendo|mirando)|donde (estoy|estamos)|que (es|veo) (esto|esta pantalla|esta pagina|aqui))\b/;
 const quitarPeriodo = (t: string) => t.replace(/\b(este|esta|estos|estas) (mes|ano|semana|trimestre|periodo|dia)\b/g, ' ');
 const DEICTICO_FACTURA = /\b(esta|esa|aqui|actual|la que (estoy|estamos) viendo)\b|\best[ao]\b/;
 const PREGUNTA_FACTURA = /\b(pagad[ao]|pago|pagos|debe|deben|adeuda|saldo|pendiente|total|cuanto|cliente|de quien|a quien|estado|vence|vencimiento|fecha|detalle|resumen|itbis|numero|ncf|ecf|aceptad[ao]|dgii|items?|lineas|productos?|que (dice|tiene|lleva))\b/;
@@ -567,7 +569,7 @@ function plantillaFacturaActual(r: Fila, t: string): string {
         ? `Sí, la factura **${numero}** está **pagada** por completo (${rd(total)}).`
         : `La factura **${numero}** está ${ETIQUETA_PAGO[String(r.estadoPago)] ?? 'sin pagar'}: faltan **${rd(pendiente)}** de ${rd(total)}.`;
   } else {
-    titular = `Esta es la factura **${numero}**${r.cliente ? ` de **${r.cliente}**` : ''}, por **${rd(total)}**.`;
+    titular = `Esta es la factura **${numero}**${r.cliente ? ` de **${r.cliente}**` : ''}${r.dependiente ? ` (estudiante: **${r.dependiente}**)` : ''}, por **${rd(total)}**.`;
   }
   const filas: string[] = [
     `- Estado: ${r.estado}${borrador ? ' (sin emitir)' : ''}`,
@@ -575,6 +577,8 @@ function plantillaFacturaActual(r: Fila, t: string): string {
   ];
   if (n(r.notasDeCredito)) filas.push(`- Notas de crédito aplicadas: ${rd(n(r.notasDeCredito))}`);
   if (r.cliente) filas.push(`- Cliente: ${r.cliente}${r.rnc ? ` (RNC ${r.rnc})` : ''}`);
+  if (r.dependiente) filas.push(`- Estudiante: ${r.dependiente}`);
+  if (r.codigoInterno && r.codigoInterno !== r.numero) filas.push(`- Código interno: ${r.codigoInterno}`);
   if (r.fecha) filas.push(`- Fecha: ${r.fecha}${r.vence ? ` · vence ${r.vence}` : ''}`);
   const pagos = (r.pagos as Fila[] | undefined) ?? [];
   const cola = pagos.length
@@ -628,6 +632,20 @@ export async function responderLocal(
     && !INTENCIONES.some((i) => i.re.test(t))) {
     const r = await responderLocal(`${opts.preguntaPrevia} ${texto}`, tools, { ...opts, preguntaPrevia: undefined });
     if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+  }
+
+  // «¿En qué pantalla estamos?», «¿qué estoy viendo?»: se contesta con la pantalla real.
+  if (opts.pantalla && DONDE_ESTOY.test(t)) {
+    const p = opts.pantalla;
+    if (p.registro?.tipo === 'factura' && tools.ver_factura) {
+      const r = await ejecutar(tools, 'ver_factura', { id: p.registro.id });
+      if (r && !r.error) return { intencion: 'registro-actual', respuesta: `Estás viendo el detalle de una factura.\n\n${plantillaFacturaActual(r, 'detalle')}` };
+    }
+    if (p.registro) return { intencion: 'pantalla', respuesta: `Estás viendo ${NOMBRE_REGISTRO[p.registro.tipo]} (su pantalla de detalle).` };
+    if (p.titulo) {
+      const e = MAPA_SISTEMA.find((x) => x.ruta === p.ruta);
+      return { intencion: 'pantalla', respuesta: `Estás en **${p.titulo}** (menú ${p.menu}).${e?.que ? `\n\n${e.que}` : ''}` };
+    }
   }
 
   // «¿Está pagada esta factura?» con una factura abierta en pantalla.

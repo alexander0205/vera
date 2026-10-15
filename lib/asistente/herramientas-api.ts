@@ -79,6 +79,9 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
           estadoPago: pendiente === 0 && total > 0 ? 'PAGADA' : pagado > 0 || nc > 0 ? 'PARCIAL' : 'PENDIENTE',
           cliente: d.comprador?.razonSocial ?? null,
           rnc: d.comprador?.rnc ?? null,
+          // En un colegio la factura es del responsable, pero la pantalla la muestra por el estudiante.
+          dependiente: d.dependienteNombre ?? null,
+          codigoInterno: d.codigo ?? null,
           fecha: ymd(d.fechaEmision),
           vence: ymd(d.fechaLimitePago),
           total: pesos(total),
@@ -736,6 +739,7 @@ interface ProductoApi {
   stockActual: number; stockMinimo: number; controlaInventario: boolean; activo?: string;
 }
 interface FacturaDetalleApi {
+  dependienteNombre?: string | null;
   id: number; encf: string | null; codigo?: string | null; tipoEcf?: string; tipoNombre?: string; estado: string;
   fechaEmision: string; fechaLimitePago?: string | null;
   comprador?: { razonSocial?: string | null; rnc?: string | null };

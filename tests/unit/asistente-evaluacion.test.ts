@@ -418,3 +418,34 @@ describe('evaluación: gráficos en la respuesta', () => {
     expect(r?.respuesta).not.toContain('```');
   });
 });
+
+describe('evaluación: «¿de quién es?» en un colegio y «¿dónde estoy?»', () => {
+  const FACTURA_ESCOLAR = {
+    enlace: '/dashboard/facturas/3993', numero: 'E320000000304', codigoInterno: 'FA-2026-CACH-J74E7-001137', tipo: 'Factura de Consumo', estado: 'ACEPTADO',
+    estadoPago: 'PAGADA', cliente: 'Johan Antonio Mendez Polanco', rnc: '22500318552', dependiente: 'Jelani Maria Mendez Dominguez',
+    fecha: '2026-10-08', vence: null, total: 3300, itbis: 0, pagado: 3300, notasDeCredito: 0, pendiente: 0, pagos: [], lineas: [],
+  };
+
+  it('«de quién es esta factura» nombra al responsable Y al estudiante', async () => {
+    const { tools } = herramientas({ ver_factura: FACTURA_ESCOLAR });
+    const r = await responderLocal('de quien es esta factura', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/facturas/3993') });
+    expect(r?.respuesta).toContain('Johan Antonio Mendez Polanco');
+    expect(r?.respuesta).toContain('Jelani Maria Mendez Dominguez');
+    expect(r?.respuesta).toContain('FA-2026-CACH-J74E7-001137');
+  });
+
+  it('«¿en qué pantalla estamos?» en una factura describe la factura, no un listado', async () => {
+    const { tools, llamadas } = herramientas({ ver_factura: FACTURA_ESCOLAR });
+    const r = await responderLocal('en que pantalla estamos?', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/facturas/3993') });
+    expect(r?.intencion).toBe('registro-actual');
+    expect(llamadas).toContain('ver_factura');
+    expect(r?.respuesta).toContain('E320000000304');
+  });
+
+  it('«¿en qué pantalla estamos?» en una pantalla del mapa dice cuál es y qué hace', async () => {
+    const { tools } = herramientas({});
+    const r = await responderLocal('en que pantalla estoy', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/reportes') });
+    expect(r?.intencion).toBe('pantalla');
+    expect(r?.respuesta).toContain('Reportes');
+  });
+});
