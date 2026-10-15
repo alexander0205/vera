@@ -1,5 +1,5 @@
 /**
- * GET /api/contabilidad/mayor/export — mayor de UNA cuenta a Excel (.xlsx) o,
+ * GET /api/contabilidad/mayor/export — mayor de UNA cuenta a Excel, CSV o,
  * con `formato=pdf` (`inline=1` para imprimir), a PDF.
  *
  * Requiere `cuentaId`; acepta el periodo (desde/hasta) de la pantalla. Exporta
@@ -13,7 +13,7 @@ import { mayorGeneral } from '@/lib/contabilidad/reportes';
 import { fechaValidaISO, fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
 import {
-  DOP, ORIGEN_LABEL, nuevaHoja, estilarEncabezado, respuestaXlsx,
+  DOP, ORIGEN_LABEL, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv,
 } from '@/lib/contabilidad/export-xlsx';
 
 export const maxDuration = 60;
@@ -108,5 +108,7 @@ export async function GET(req: NextRequest) {
   fin.font = { bold: true };
 
   estilarEncabezado(ws);
-  return respuestaXlsx(wb, `mayor-${mayor.cuenta.codigo}.xlsx`);
+  return sp.get('formato') === 'csv'
+    ? respuestaCsv(wb, `mayor-${mayor.cuenta.codigo}.csv`)
+    : respuestaXlsx(wb, `mayor-${mayor.cuenta.codigo}.xlsx`);
 }

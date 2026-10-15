@@ -25,6 +25,7 @@ import {
   filtrarPagos, grupoDePago, leerFiltroPagos, filtroPagosAParams, ORIGEN_LABEL,
 } from '@/lib/pagos/filtro-listado';
 import { BotonesExportar } from '@/components/reportes/botones-exportar';
+import { protegerFormulaCsv } from '@/lib/export/csv';
 
 interface Pago {
   id:            number;
@@ -185,8 +186,10 @@ export default function PagosPage() {
 
   function exportarCSV() {
     const header = ['Fecha', 'Documento', 'NCF', 'Cliente', 'RNC', 'Método', 'Origen', 'DGII', 'Referencia', 'Registrado por', 'Monto'];
-    const escape = (v: string | number | null) => {
-      const s = String(v ?? '');
+    const escape = (v: string | number | null, indice: number) => {
+      // El monto calculado conserva su signo y sus dos decimales; solo los
+      // textos recibidos del negocio necesitan protección contra fórmulas.
+      const s = indice === 10 || typeof v === 'number' ? String(v ?? '') : protegerFormulaCsv(String(v ?? ''));
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = pagosFiltrados.map(p => [
@@ -422,6 +425,7 @@ export default function PagosPage() {
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
           <BotonesExportar ruta="/api/pagos/export" filtro={filtroQs}
+            mostrarCsv={false}
             deshabilitado={loading || pagosFiltrados.length === 0} testId="exportar-pagos" />
           <Button
             onClick={exportarCSV}

@@ -1,5 +1,5 @@
 /**
- * GET /api/contabilidad/libro-diario/export — libro diario a Excel (.xlsx) o,
+ * GET /api/contabilidad/libro-diario/export — libro diario a Excel, CSV o,
  * con `formato=pdf` (`inline=1` para imprimir), a PDF con un bloque por asiento.
  *
  * Acepta los MISMOS filtros que la pantalla (origenTipo, desde, hasta,
@@ -16,7 +16,7 @@ import {
 import { fechaValidaISO, fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
 import {
-  DOP, ORIGEN_LABEL, nuevaHoja, estilarEncabezado, respuestaXlsx,
+  DOP, ORIGEN_LABEL, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv,
 } from '@/lib/contabilidad/export-xlsx';
 
 export const maxDuration = 60;
@@ -111,5 +111,7 @@ export async function GET(req: NextRequest) {
   fin.font = { bold: true };
 
   estilarEncabezado(ws);
-  return respuestaXlsx(wb, 'libro-diario.xlsx');
+  return sp.get('formato') === 'csv'
+    ? respuestaCsv(wb, 'libro-diario.csv')
+    : respuestaXlsx(wb, 'libro-diario.xlsx');
 }

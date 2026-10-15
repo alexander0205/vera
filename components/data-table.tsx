@@ -139,13 +139,15 @@ export interface DataTableProps<T> {
    *  detalle para recorrer la lista con flechas. */
   onVisibleRowsChange?: (ids: (string | number)[]) => void;
   /**
-   * Botones Imprimir / PDF / Excel en el header. Exportan TODAS las filas que
+   * Botones Imprimir / PDF / Excel / CSV en el header. Exportan TODAS las filas que
    * la tabla tiene (filtradas y ordenadas como se ven, agrupadas si hay
    * `groupBy`), no solo la página. Regla: toda pantalla con listado lo lleva.
    * Para tablas paginadas en el servidor no sirve (solo tienen una página):
    * esas usan su propia ruta de export.
    */
   exportar?:      ExportTabla<T>;
+  /** Ocultar el CSV genérico cuando la pantalla conserva uno especializado. */
+  mostrarCsv?:    boolean;
 }
 
 // ─── Breakpoint helpers ───────────────────────────────────────────────────────
@@ -192,6 +194,7 @@ export function DataTable<T>({
   renderGroupHeader,
   onVisibleRowsChange,
   exportar,
+  mostrarCsv = true,
 }: DataTableProps<T>) {
   const router = useRouter();
   // Filter state
@@ -444,6 +447,7 @@ export function DataTable<T>({
               {exportar && (
                 <ExportarListado
                   deshabilitado={loading || sortedData.length === 0}
+                  mostrarCsv={mostrarCsv}
                   testId="exportar-tabla"
                   armar={() => armarEnvioTabla(
                     exportar, sortedData,

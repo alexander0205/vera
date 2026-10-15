@@ -67,6 +67,13 @@ describe('validar lo que llega del navegador', () => {
     expect(v.grupos[0].filas[0].celdas).toEqual(['a', 12.5]);
   });
 
+  it('acepta CSV con las mismas filas y filtros que Excel', () => {
+    const v = validarEnvio({ ...base, formato: 'csv', filtroTexto: 'Desde el 01/10/2026' });
+    expect(v?.formato).toBe('csv');
+    expect(v?.filtroTexto).toBe('Desde el 01/10/2026');
+    expect(v?.grupos[0].filas[0].celdas).toEqual(['a', 12.5]);
+  });
+
   it('rechaza formatos raros, sin columnas o demasiadas filas', () => {
     expect(validarEnvio({ ...base, formato: 'docx' })).toBeNull();
     expect(validarEnvio({ ...base, columnas: [] })).toBeNull();

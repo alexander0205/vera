@@ -9,6 +9,7 @@ import Chip from '@mui/material/Chip';
 import { Plus, FileText, Download, TrendingUp, CheckCircle, Clock, FileX } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { protegerFormulaCsv } from '@/lib/export/csv';
 
 export interface NotaDebito {
   id:                   number;
@@ -103,7 +104,7 @@ function exportCSV(rows: NotaDebito[]) {
     r.fechaEmision.slice(0, 10),
   ]);
   const csv = [headers, ...body]
-    .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .map(row => row.map((v, i) => `"${(i === 4 ? String(v) : protegerFormulaCsv(String(v))).replace(/"/g, '""')}"`).join(','))
     .join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -287,6 +288,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
         filterValues={filterValues}
         onFilterChange={setFilterValues}
         exportar={EXPORTAR}
+        mostrarCsv={false}
         emptyState={{
           icon: FileText,
           title: filtered.length === 0 && docs.length > 0 ? 'Sin resultados para estos filtros' : 'Sin notas de débito aún',
@@ -304,13 +306,12 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
         }}
         headerActions={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {docs.length > 0 && (
-              <Button variant="outlined" size="small" startIcon={<FileX size={16} />}
+            <Button variant="outlined" size="small" startIcon={<FileX size={16} />}
                 onClick={() => exportCSV(filtered)}
+                disabled={filtered.length === 0}
                 sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}>
                 Exportar CSV
-              </Button>
-            )}
+            </Button>
             <Link href="/dashboard/notas-debito/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation startIcon={<Plus size={18} />}
                 sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>

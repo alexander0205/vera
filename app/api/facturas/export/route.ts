@@ -20,6 +20,7 @@ import { condicionesListadoFacturas, sqlPagado, sqlMoraPendiente, sqlNdPendiente
 import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx } from '@/lib/contabilidad/export-xlsx';
 import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, fmtCodigoCorto, hoyRD } from '@/lib/utils/format';
+import { protegerFormulaCsv } from '@/lib/export/csv';
 
 export const maxDuration = 60;
 
@@ -45,7 +46,7 @@ const ESTADO_DGII_LABELS: Record<string, string> = {
 };
 
 const cts = (n: number) => (n / 100).toFixed(2);
-const csv = (v: string | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+const csv = (v: string | null | undefined) => `"${protegerFormulaCsv(String(v ?? '')).replace(/"/g, '""')}"`;
 /** e-NCF real de la DGII; los borradores (BOR-…) no lo son. */
 const ncfReal = (encf: string) => (/^BOR/i.test(encf) ? '' : encf);
 
@@ -112,13 +113,13 @@ export async function GET(req: NextRequest) {
     ].join(',');
     const lines = docs.map((d) => [
       csv(d.codigo),
-      ncfReal(d.encf),
-      TIPO_LABELS[d.tipoEcf] ?? d.tipoEcf,
-      d.ep.etiqueta,
-      ...(hasEcf ? [ESTADO_DGII_LABELS[d.estado] ?? d.estado] : []),
+      csv(ncfReal(d.encf)),
+      csv(TIPO_LABELS[d.tipoEcf] ?? d.tipoEcf),
+      csv(d.ep.etiqueta),
+      ...(hasEcf ? [csv(ESTADO_DGII_LABELS[d.estado] ?? d.estado)] : []),
       csv(d.razonSocialComprador),
-      d.rncComprador ?? '',
-      TIPO_PAGO_LABELS[d.tipoPago ?? 1] ?? '',
+      csv(d.rncComprador),
+      csv(TIPO_PAGO_LABELS[d.tipoPago ?? 1] ?? ''),
       cts(d.montoTotal),
       cts(d.pagado),
       cts(d.ep.saldo),
@@ -132,6 +133,7 @@ export async function GET(req: NextRequest) {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="facturas_${sufijo}.csv"`,
+        'Cache-Control': 'private, no-store',
       },
     });
   }

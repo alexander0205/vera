@@ -448,6 +448,7 @@ export default function FacturasPage() {
             )}
             {canExportar && (
               <BotonesExportar ruta="/api/facturas/export" filtro={filtroQs}
+                mostrarCsv={false}
                 deshabilitado={loading || total === 0} testId="exportar-facturas" />
             )}
             {canExportar && (

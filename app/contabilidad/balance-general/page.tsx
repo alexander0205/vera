@@ -6,6 +6,7 @@ import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
 import { balanceGeneral, type SeccionBalanceGeneral } from '@/lib/contabilidad/balance-general';
 import { FiltrosPeriodo } from '../_filtros-periodo';
 import { PrintButton } from '@/components/reportes/print-button';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
@@ -48,7 +49,6 @@ export default async function BalanceGeneralPage({
   const qs = new URLSearchParams();
   if (desde) qs.set('desde', desde);
   if (hasta) qs.set('hasta', hasta);
-  const exportHref = `/api/contabilidad/balance-general/export${qs.toString() ? `?${qs}` : ''}`;
 
   /** Una sección (Activo, o Pasivo, o Patrimonio) con su encabezado y total. */
   const Seccion = ({ titulo, seccion, totalLabel }: {
@@ -104,19 +104,10 @@ export default async function BalanceGeneralPage({
             vale. El activo siempre iguala al pasivo más el patrimonio.
           </Typography>
         </Box>
-        {bg.hayDatos && (
-          <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-          <PrintButton />
-          <Box component="a" href={exportHref}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
-              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
-              '&:hover': { bgcolor: '#e0e7fd' } }}
-          >
-            Exportar a Excel
-          </Box>
-          </Box>
-        )}
+        <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <PrintButton disabled={!bg.hayDatos} />
+          <BotonesExportar ruta="/api/contabilidad/balance-general/export" filtro={qs.toString()} mostrarImprimir={false} deshabilitado={!bg.hayDatos} />
+        </Box>
       </Box>
 
       <div className="no-print"><FiltrosPeriodo ruta="/contabilidad/balance-general" periodo={{ desde, hasta }} /></div>

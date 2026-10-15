@@ -6,6 +6,7 @@ import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
 import { balanceComprobacion } from '@/lib/contabilidad/reportes';
 import { FiltrosPeriodo } from '../_filtros-periodo';
 import { PrintButton } from '@/components/reportes/print-button';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
@@ -50,7 +51,6 @@ export default async function BalancePage({
   const qs = new URLSearchParams();
   if (desde) qs.set('desde', desde);
   if (hasta) qs.set('hasta', hasta);
-  const exportHref = `/api/contabilidad/balance/export${qs.toString() ? `?${qs}` : ''}`;
 
   const celdaMonto = {
     whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: '#111827',
@@ -76,19 +76,10 @@ export default async function BalancePage({
             exactamente lo mismo.
           </Typography>
         </Box>
-        {balance.filas.length > 0 && (
-          <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-          <PrintButton />
-          <Box component="a" href={exportHref}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
-              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
-              '&:hover': { bgcolor: '#e0e7fd' } }}
-          >
-            Exportar a Excel
-          </Box>
-          </Box>
-        )}
+        <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <PrintButton disabled={balance.filas.length === 0} />
+          <BotonesExportar ruta="/api/contabilidad/balance/export" filtro={qs.toString()} mostrarImprimir={false} deshabilitado={balance.filas.length === 0} />
+        </Box>
       </Box>
 
       <div className="no-print"><FiltrosPeriodo ruta="/contabilidad/balance" periodo={{ desde, hasta }} /></div>

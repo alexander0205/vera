@@ -1,5 +1,5 @@
 /**
- * POST /api/export/listado — pinta a PDF o Excel un listado que manda la
+ * POST /api/export/listado — pinta a PDF, Excel o CSV un listado que manda la
  * pantalla, con las filas tal como se ven (filtradas, ordenadas, agrupadas).
  *
  * Lo usa `DataTable` con su prop `exportar`. No lee datos del negocio: solo el
@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { validarEnvio, totalesEnvio, anchosPorcentaje, type CeldaEnvio } from '@/lib/export/listado';
-import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx } from '@/lib/contabilidad/export-xlsx';
+import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv } from '@/lib/contabilidad/export-xlsx';
 import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
 import type { CeldaPDF } from '@/lib/pdf/ListadoPDF';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
@@ -115,5 +115,7 @@ export async function POST(req: NextRequest) {
   ws.addRow({ c0: e.filtroTexto });
   if (agrupado) ws.addRow({ c0: 'Agrupado como en pantalla; los subtotales van en la fila de cada grupo.' });
 
-  return respuestaXlsx(wb, `${e.archivo}_${hoy}.xlsx`);
+  return e.formato === 'csv'
+    ? respuestaCsv(wb, `${e.archivo}_${hoy}.csv`)
+    : respuestaXlsx(wb, `${e.archivo}_${hoy}.xlsx`);
 }

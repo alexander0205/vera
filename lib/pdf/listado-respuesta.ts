@@ -24,6 +24,7 @@ export async function respuestaListadoPdf(data: ListadoPDFData, filename: string
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${filename}"`,
+      'Cache-Control': 'private, no-store',
     },
   });
 }

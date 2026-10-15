@@ -1,5 +1,5 @@
 /**
- * Exportar cualquier listado de pantalla (Imprimir / PDF / Excel).
+ * Exportar cualquier listado de pantalla (Imprimir / PDF / Excel / CSV).
  *
  * Regla de producto (Alex, 15-oct): toda pantalla con un listado lleva filtro
  * por fecha y forma de imprimir y exportar. Casi todas filtran en el navegador
@@ -28,7 +28,7 @@ export type CeldaEnvio = string | number | null | { texto: string; sub?: string 
 export interface FilaEnvio { celdas: CeldaEnvio[]; tachada?: boolean }
 
 export interface ListadoEnvio {
-  formato: 'pdf' | 'xlsx';
+  formato: 'pdf' | 'xlsx' | 'csv';
   /** Abrir el PDF en el visor (botón «Imprimir») en vez de descargarlo. */
   inline?: boolean;
   titulo: string;
@@ -49,7 +49,7 @@ const texto = (v: unknown, max = 300) => String(v ?? '').slice(0, max);
 export function validarEnvio(raw: unknown): ListadoEnvio | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  if (r.formato !== 'pdf' && r.formato !== 'xlsx') return null;
+  if (r.formato !== 'pdf' && r.formato !== 'xlsx' && r.formato !== 'csv') return null;
   if (!Array.isArray(r.columnas) || r.columnas.length === 0 || r.columnas.length > MAX_COLUMNAS) return null;
   if (!Array.isArray(r.grupos)) return null;
 

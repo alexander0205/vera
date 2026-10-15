@@ -1,8 +1,8 @@
 /**
- * GET /api/gastos/export?formato=xlsx|pdf[&inline=1]&<filtro de la pantalla>
+ * GET /api/gastos/export?formato=xlsx|pdf|csv[&inline=1]&<filtro de la pantalla>
  *
  * Los gastos con el mismo filtro que la pantalla de Gastos (fechas, búsqueda,
- * categoría, tipo, estado), a Excel o a PDF. `inline=1` abre el PDF en el
+ * categoría, tipo, estado), a Excel, CSV o PDF. `inline=1` abre el PDF en el
  * visor del navegador en vez de descargarlo: es el botón «Imprimir».
  *
  * Los totales salen del mismo resumen que las tarjetas de la pantalla, así que
@@ -13,7 +13,7 @@ import { requirePermission } from '@/lib/auth/api-guard';
 import { resumenGastos } from '@/lib/compras/consultas';
 import { cargarFilasGastos, estadoPagoTexto, METODO_LABEL } from '@/lib/compras/lista-gastos';
 import { leerFiltroGastos, describirFiltroGastos } from '@/lib/compras/filtro-gastos';
-import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx } from '@/lib/contabilidad/export-xlsx';
+import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv } from '@/lib/contabilidad/export-xlsx';
 import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const teamId = auth.teamId;
 
   const sp = req.nextUrl.searchParams;
-  const formato = sp.get('formato') === 'pdf' ? 'pdf' : 'xlsx';
+  const formato = sp.get('formato') === 'pdf' ? 'pdf' : sp.get('formato') === 'csv' ? 'csv' : 'xlsx';
   const filtro = leerFiltroGastos(sp);
 
   const [todas, resumen] = await Promise.all([
@@ -128,5 +128,7 @@ export async function GET(req: NextRequest) {
     ws.addRow({ proveedor: `Se muestran ${filas.length} de ${resumen.cantidad} gastos; los totales incluyen todos.` });
   }
 
-  return respuestaXlsx(wb, `gastos_${sufijo}.xlsx`);
+  return formato === 'csv'
+    ? respuestaCsv(wb, `gastos_${sufijo}.csv`)
+    : respuestaXlsx(wb, `gastos_${sufijo}.xlsx`);
 }
