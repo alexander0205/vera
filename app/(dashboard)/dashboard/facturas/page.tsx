@@ -12,7 +12,8 @@ import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { guardarListaNavegacion } from '@/lib/hooks/useListaNavegacion';
-import { calcularEstadoPago, retencionesQueSaldan } from '@/lib/facturas/estado-pago-calc';
+import { estadoPagoFactura, filtroDesdeValores, filtroFacturasAParams } from '@/lib/facturas/filtro-listado';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -130,19 +131,10 @@ export default function FacturasPage() {
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
-    const sp = new URLSearchParams({
-      limit: String(limit),
-      offset: String((page - 1) * limit),
-      ...(filterValues.q     && { search: filterValues.q }),
-      ...(filterValues.estado && { estado: filterValues.estado }),
-      ...(filterValues.fecha_desde && { desde: filterValues.fecha_desde }),
-      ...(filterValues.fecha_hasta && { hasta: filterValues.fecha_hasta }),
-      ...(filterValues.conNcs === '1' && { conNcs: '1' }),
-    });
-    // Filtros dinámicos por maestro (claves 'm_<maestroId>' → valorId).
-    for (const [k, v] of Object.entries(filterValues)) {
-      if (k.startsWith('m_') && v) sp.append('maestroValorId', v);
-    }
+    // Mismo filtro que los archivos (CSV/Excel/PDF): lib/facturas/filtro-listado.
+    const sp = filtroFacturasAParams(filtroDesdeValores(filterValues));
+    sp.set('limit', String(limit));
+    sp.set('offset', String((page - 1) * limit));
     const res = await fetch(`/api/facturas?${sp}`).catch(() => null);
     if (res?.ok) {
       const data = await res.json();
@@ -169,13 +161,11 @@ export default function FacturasPage() {
     }
   }
 
+  // El filtro de la tabla, tal cual, para el CSV/Excel/PDF. Antes el CSV solo
+  // llevaba fechas y estado y traía otras facturas que las de la tabla.
+  const filtroQs = filtroFacturasAParams(filtroDesdeValores(filterValues)).toString();
   function exportCsv() {
-    const sp = new URLSearchParams({
-      ...(filterValues.estado && { estado: filterValues.estado }),
-      ...(filterValues.fecha_desde && { desde: filterValues.fecha_desde }),
-      ...(filterValues.fecha_hasta && { hasta: filterValues.fecha_hasta }),
-    });
-    window.location.href = `/api/facturas/export?${sp}`;
+    window.location.href = `/api/facturas/export?${filtroQs}`;
   }
 
   // ─── Columns ────────────────────────────────────────────────────────────────
@@ -319,33 +309,19 @@ export default function FacturasPage() {
       // estado_pago persistida y podía quedar stale (listado "Pendiente" vs
       // detalle "Pagada") si algún path no la recalculaba.
       render: doc => {
-        const pagado  = doc.pagado ?? 0;
-        const retenido = retencionesQueSaldan(doc.tipoEcf, doc.totalRetenciones);
-        const ep      = calcularEstadoPago({
-          estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal, totalPagado: pagado,
-          totalRetenciones: retenido,
-        });
-        const saldo   = doc.montoTotal - retenido - pagado;
-        const esCred  = doc.tipoPago === 2;
-        const dias    = diasVencido(doc.fechaLimitePago);
-        // Cualquier nota de débito viva sobre esta factura —mora automática o
-        // cargo manual— es deuda de la misma cuenta.
-        const ndPend = Number(doc.moraPendiente ?? 0) + Number(doc.ndPendiente ?? 0);
-        if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
-        if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
+        const { etiqueta, saldo, detalle } = estadoPagoFactura({ ...doc, pagado: doc.pagado ?? 0 });
+        if (etiqueta === 'Gratuita') return <Badge color="gray">Gratuita</Badge>;
+        if (etiqueta === 'Uso')      return <Badge color="gray">Uso</Badge>;
         // Capital saldado pero con notas de débito sin pagar: la factura no
         // está cobrada del todo, así que no puede anunciarse como Pagada.
-        if (ep === 'PAGADA' && ndPend > 0) {
-          return <Badge color="orange" title={`Capital pagado; falta ${fmtDOP(ndPend)} en notas de débito`}>Parcial</Badge>;
+        if (etiqueta === 'Parcial' && detalle === 'notas de débito') {
+          return <Badge color="orange" title={`Capital pagado; falta ${fmtDOP(saldo)} en notas de débito`}>Parcial</Badge>;
         }
-        if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
-        if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
-        if (ep === 'PENDIENTE' && esCred && dias > 0) {
-          return <Badge color="red" title={`Vencida hace ${dias}d`}>Vencida</Badge>;
-        }
-        if (ep === 'PENDIENTE') return <Badge color="amber">Pendiente</Badge>;
-        if (ep === 'ANULADA')   return <Badge color="gray">—</Badge>;
-        return <Badge color="red" title="Sin estado">—</Badge>;
+        if (etiqueta === 'Pagada')   return <Badge color="green">Pagada</Badge>;
+        if (etiqueta === 'Parcial')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
+        if (etiqueta === 'Vencida')  return <Badge color="red" title={`Vencida ${detalle}`}>Vencida</Badge>;
+        if (etiqueta === 'Pendiente') return <Badge color="amber">Pendiente</Badge>;
+        return <Badge color="gray">—</Badge>;
       },
     },
     {
@@ -469,6 +445,10 @@ export default function FacturasPage() {
                 className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
                 <Upload className="h-4 w-4" /> Importar CSV
               </button>
+            )}
+            {canExportar && (
+              <BotonesExportar ruta="/api/facturas/export" filtro={filtroQs}
+                deshabilitado={loading || total === 0} testId="exportar-facturas" />
             )}
             {canExportar && (
               <button onClick={exportCsv}
