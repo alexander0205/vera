@@ -28,7 +28,7 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 ## Fase 3 — control y alcance
 - [ ] 3.1 Bitácora visible para el dueño (quién preguntó qué y cuándo)
 - [x] 3.2 Alcance por rol (por permisos y módulos; protegido con pruebas)
-- [ ] 3.3 Reportes PDF programados por correo
+- [~] 3.3 Reportes por correo — retirado por ahora (decisión del negocio); queda en el historial de git (5964fb61)
 
 ## Fase 4 — canales y acciones
 - [~] 4.1 ~~Acciones reales con confirmación~~ — descartada: el asistente se queda de solo lectura (decisión del negocio). La infraestructura propuesta→confirmar queda sin acciones registradas.
