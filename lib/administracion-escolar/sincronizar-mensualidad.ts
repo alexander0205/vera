@@ -1,0 +1,132 @@
+/**
+ * Qué hacer con las mensualidades de UNA matrícula cuando se cambia su
+ * mensualidad («Configuración mensual»: otra generación, un monto propio o un
+ * descuento). Sin base de datos: la ruta lee, esto decide, la ruta escribe.
+ *
+ * Antes la ruta creaba un cargo por mes del recurrente, vencido el día 5 y sin
+ * `cuota_id`, y solo miraba los cargos del concepto NUEVO. Tres agujeros, los
+ * tres vistos en Mi Casita (Keiry, 6.000 → 8.000):
+ *
+ *  - Sin `cuota_id` la ficha no sabe que el cargo ES la cuota del calendario y
+ *    enseña además el «Previsto» del mismo mes: el doble de deuda en pantalla.
+ *    El devengo, por su lado, solo frena por mes los cargos manuales: el
+ *    vencimiento quedaba el 5 en vez de emisión + días para pagar.
+ *  - El mes que ya tenía cargo con la generación VIEJA se quedaba vivo y se le
+ *    sumaba otro con la nueva: el mismo mes cobrado dos veces.
+ *  - Los cargos pendientes del mismo concepto se quedaban al precio viejo.
+ *
+ * La regla, mes a mes del calendario:
+ *  - Ya hay cargo de esta mensualidad → se reutiliza: se ata a la cuota si no lo
+ *    estaba y, si nadie lo ha tocado (sin factura ni pagos), toma el precio nuevo.
+ *  - Hay cargo de OTRA mensualidad (la generación vieja):
+ *      · sin factura ni pagos → se anula y se crea el nuevo;
+ *      · con factura o pagos → NO se crea el nuevo y se avisa. Un cargo con
+ *        factura no se toca desde aquí: decidir si esa factura se anula es de
+ *        la secretaria, no de un guardado de precio.
+ *  - No hay nada → se crea, atado a la cuota y con su vencimiento.
+ */
+
+export interface CuotaObjetivo {
+  /** 0 = el concepto no tiene calendario (cargo suelto por mes). */
+  cuotaId: number;
+  mes: number;
+  anio: number;
+  montoCentavos: number;
+  fechaVencimiento: string | null;
+}
+
+export interface CargoExistente {
+  id: number;
+  conceptoId: number;
+  cuotaId: number | null;
+  mes: number | null;
+  anio: number | null;
+  montoCentavos: number;
+  saldoCentavos: number;
+  estado: string;
+  ecfDocumentId: number | null;
+  /** Código visible de la factura, para el aviso. */
+  facturaCodigo: string | null;
+  tienePagos: boolean;
+}
+
+export interface MesBloqueado {
+  mes: number;
+  anio: number;
+  cargoId: number;
+  motivo: 'facturado' | 'con-pagos';
+  facturaCodigo: string | null;
+}
+
+export interface PlanSincronizacion {
+  crear: CuotaObjetivo[];
+  anular: number[];
+  /** Cargos de esta mensualidad que se atan a su cuota y/o toman el precio nuevo. */
+  actualizar: { id: number; cuotaId?: number; fechaVencimiento?: string | null; montoCentavos?: number }[];
+  bloqueados: MesBloqueado[];
+}
+
+/** Ni factura ni dinero aplicado: se puede reescribir sin perder rastro. */
+function intacto(c: CargoExistente): boolean {
+  return c.ecfDocumentId == null && !c.tienePagos
+    && c.estado !== 'pagado' && c.saldoCentavos === c.montoCentavos;
+}
+
+export function planificarMensualidades(args: {
+  conceptoId: number;
+  objetivo: CuotaObjetivo[];
+  /** Cargos vivos (no anulados) de conceptos de tipo mensualidad de la matrícula. */
+  existentes: CargoExistente[];
+}): PlanSincronizacion {
+  const { conceptoId, objetivo } = args;
+  const vivos = args.existentes.filter((c) => c.estado !== 'anulado');
+  const plan: PlanSincronizacion = { crear: [], anular: [], actualizar: [], bloqueados: [] };
+  const usados = new Set<number>();
+
+  for (const cuota of objetivo) {
+    const delMes = vivos.filter((c) => !usados.has(c.id) && (
+      (cuota.cuotaId > 0 && c.cuotaId === cuota.cuotaId)
+      || (c.mes === cuota.mes && c.anio === cuota.anio)
+    ));
+
+    const propio = delMes.find((c) => c.conceptoId === conceptoId);
+    if (propio) {
+      usados.add(propio.id);
+      const cambio: PlanSincronizacion['actualizar'][number] = { id: propio.id };
+      if (cuota.cuotaId > 0 && propio.cuotaId == null) {
+        cambio.cuotaId = cuota.cuotaId;
+        cambio.fechaVencimiento = cuota.fechaVencimiento;
+      }
+      if (intacto(propio) && propio.montoCentavos !== cuota.montoCentavos) {
+        cambio.montoCentavos = cuota.montoCentavos;
+      }
+      if (Object.keys(cambio).length > 1) plan.actualizar.push(cambio);
+      continue;
+    }
+
+    const ajenos = delMes.filter((c) => c.conceptoId !== conceptoId);
+    const tocado = ajenos.find((c) => !intacto(c));
+    if (tocado) {
+      for (const c of ajenos) usados.add(c.id);
+      plan.bloqueados.push({
+        mes: cuota.mes,
+        anio: cuota.anio,
+        cargoId: tocado.id,
+        motivo: tocado.ecfDocumentId != null ? 'facturado' : 'con-pagos',
+        facturaCodigo: tocado.facturaCodigo,
+      });
+      continue;
+    }
+    for (const c of ajenos) { usados.add(c.id); plan.anular.push(c.id); }
+    plan.crear.push(cuota);
+  }
+
+  return plan;
+}
+
+/** «septiembre 2026», para los avisos. */
+export function nombreMes(mes: number, anio: number): string {
+  const nombres = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+    'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${nombres[mes - 1] ?? mes} ${anio}`;
+}

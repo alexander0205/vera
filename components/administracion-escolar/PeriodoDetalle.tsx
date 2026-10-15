@@ -28,6 +28,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
+import { nombreMes } from '@/lib/administracion-escolar/sincronizar-mensualidad';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -2542,14 +2543,36 @@ function TarifaEstudianteDialog({
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setError(json.error ?? 'No se pudo guardar.'); return; }
 
-      // Poblar Cuentas por cobrar al instante: crea las cuotas del año alineadas
-      // al recurrente, al monto recién guardado. Silencioso si no hay recurrente
-      // (nada a lo que alinear) — el precio igual quedó guardado.
+      // Poner Cuentas por cobrar al día: crea las cuotas del año (atadas al
+      // calendario), cambia las de la generación vieja que nadie ha tocado y
+      // sube el plan recurrente al precio nuevo. Silencioso si no hay
+      // recurrente (nada a lo que alinear) — el precio igual quedó guardado.
       let generadas = 0;
+      const avisos: string[] = [];
       try {
-        const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, { method: 'POST' });
+        const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // La generación de antes: sus meses sin tocar se pasan a la nueva y
+          // los ya facturados no se duplican.
+          body: JSON.stringify({ conceptoAnteriorId: conceptoMensualidadId ?? null }),
+        });
         const gj = await g.json().catch(() => ({}));
-        if (g.ok) generadas = gj.cargosCreados ?? 0;
+        if (g.ok) {
+          generadas = gj.cargosCreados ?? 0;
+          const bloqueados = (gj.mesesBloqueados ?? []) as { mes: number; anio: number; motivo: string; facturaCodigo: string | null }[];
+          if (bloqueados.length > 0) {
+            const meses = bloqueados.map((b) => `${nombreMes(b.mes, b.anio)}${b.facturaCodigo ? ` (factura ${b.facturaCodigo})` : b.motivo === 'con-pagos' ? ' (con pagos)' : ''}`);
+            avisos.push(`${meses.join(', ')} ya se cobra con la mensualidad anterior y no se cambió. Si debe ir al precio nuevo, anula esa factura (si no tiene pagos) y vuelve a guardar.`);
+          }
+          if (gj.recurrente === 'actualizado' && gj.precioRecurrenteAnterior != null) {
+            avisos.push(`La facturación automática pasa de ${fmtDOP(gj.precioRecurrenteAnterior)} a ${fmtDOP(gj.monto)} al mes.`);
+          } else if (gj.recurrente === 'varias-lineas') {
+            avisos.push('La facturación automática tiene varias líneas y no se cambió: revisa su precio en Facturas recurrentes.');
+          }
+        } else if (gj.error) {
+          avisos.push(gj.error);
+        }
       } catch { /* no bloquea el guardado del precio */ }
 
       onOpenChange(false);
@@ -2557,6 +2580,7 @@ function TarifaEstudianteDialog({
       toast.success(generadas > 0
         ? `Guardado. ${generadas} mensualidad${generadas === 1 ? '' : 'es'} en «Mensualidades».`
         : (modo === 'normal' ? 'Vuelve a la tarifa de su generación.' : 'Tarifa personal guardada.'));
+      for (const a of avisos) toast.warning(a, { duration: 12_000 });
     } catch {
       setError('No se pudo guardar.');
     } finally {
