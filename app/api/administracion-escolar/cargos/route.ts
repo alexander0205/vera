@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCargos,
+  adminEscolarConceptoCuotas,
   adminEscolarEstudiantes,
   adminEscolarConceptosPago,
   adminEscolarPeriodos,
@@ -10,7 +11,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, ne, asc } from 'drizzle-orm';
 import { armarPagina, leerPaginacion } from '@/lib/api/paginacion';
 
 export async function GET(req: NextRequest) {
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
   );
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
-  const { estudianteId, matriculaId, periodoId, conceptoId, mes, anio, montoCentavos, fechaVencimiento } = await req.json();
+  const { estudianteId, matriculaId, periodoId, conceptoId, mes, anio, montoCentavos, fechaVencimiento, cuotaId } = await req.json();
   if (!estudianteId || !matriculaId || !periodoId || !conceptoId) {
     return NextResponse.json({ error: 'estudianteId, matriculaId, periodoId y conceptoId son requeridos' }, { status: 400 });
   }
@@ -163,6 +164,79 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'El mes seleccionado no pertenece al calendario de este período' }, { status: 400 });
   }
 
+  /**
+   * La cuota del calendario que es este cargo.
+   *
+   * Sin ella el devengo no sabe que la cuota ya se cobró y la vuelve a crear
+   * cuando llega su mes: el mismo cobro dos veces. El devengo solo reconoce
+   * por mes los cargos de mensualidad; uno repartido en cuotas sin mes
+   * (evaluación en 3 pagos) quedaba suelto. Se ata a la que eligió el
+   * formulario, a la del mes en una mensualidad, o a la única si solo hay una.
+   */
+  const cuotas = await db
+    .select({ id: adminEscolarConceptoCuotas.id, fechaEmision: adminEscolarConceptoCuotas.fechaEmision })
+    .from(adminEscolarConceptoCuotas)
+    .where(and(
+      eq(adminEscolarConceptoCuotas.teamId, teamId),
+      eq(adminEscolarConceptoCuotas.conceptoId, refs.ids.concepto!),
+      eq(adminEscolarConceptoCuotas.periodoId, refs.ids.periodo!),
+      eq(adminEscolarConceptoCuotas.activo, true),
+    ))
+    .orderBy(asc(adminEscolarConceptoCuotas.numero));
+  let cuota: number | null = null;
+  if (cuotaId != null) {
+    cuota = cuotas.find((c) => c.id === Number(cuotaId))?.id ?? null;
+    if (cuota == null) {
+      return NextResponse.json({ error: 'Esa cuota no es de este concepto en este año escolar.' }, { status: 400 });
+    }
+  } else if (mes != null) {
+    cuota = cuotas.find((c) => String(c.fechaEmision).slice(0, 7) === `${anio}-${String(mes).padStart(2, '0')}`)?.id ?? null;
+  } else if (cuotas.length === 1) {
+    cuota = cuotas[0].id;
+  } else if (cuotas.length > 1) {
+    return NextResponse.json({ error: 'Este concepto se cobra en varias cuotas: elige cuál es este cargo.' }, { status: 400 });
+  }
+  if (cuota != null) {
+    const ya = await db
+      .select({ id: adminEscolarCargos.id, estado: adminEscolarCargos.estado })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.matriculaId, refs.ids.matricula!),
+        eq(adminEscolarCargos.cuotaId, cuota),
+      ));
+    if (ya.some((c) => c.estado !== 'anulado')) {
+      return NextResponse.json(
+        { error: 'El alumno ya tiene el cargo de esa cuota. Edítalo o anúlalo en vez de crear otro.' },
+        { status: 409 },
+      );
+    }
+    // Solo queda uno anulado: el índice único no deja repetir la cuota, y ese
+    // anulado ya le dice al devengo que no la cree. El nuevo va suelto.
+    if (ya.length > 0) cuota = null;
+  }
+  if (mes != null) {
+    // Por mes también: los cargos de antes del enlace por cuota no la llevan.
+    const [mismoMes] = await db
+      .select({ id: adminEscolarCargos.id })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.matriculaId, refs.ids.matricula!),
+        eq(adminEscolarCargos.conceptoId, refs.ids.concepto!),
+        eq(adminEscolarCargos.anio, anio),
+        eq(adminEscolarCargos.mes, mes),
+        ne(adminEscolarCargos.estado, 'anulado'),
+      ))
+      .limit(1);
+    if (mismoMes) {
+      return NextResponse.json(
+        { error: 'El alumno ya tiene el cargo de ese mes. Edítalo o anúlalo en vez de crear otro.' },
+        { status: 409 },
+      );
+    }
+  }
+
   // Se insertan los ids YA normalizados por validarPertenencia, no los crudos
   // del JSON: son los mismos que se comprobaron contra el team.
   const [row] = await db.insert(adminEscolarCargos).values({
@@ -171,6 +245,7 @@ export async function POST(req: NextRequest) {
     matriculaId:  refs.ids.matricula!,
     periodoId:    refs.ids.periodo!,
     conceptoId:   refs.ids.concepto!,
+    cuotaId:      cuota,
     mes: mes ?? null,
     anio,
     montoCentavos: montoFinal,

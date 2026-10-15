@@ -51,6 +51,28 @@ describe('sugerirMontoDelCargo', () => {
   });
 });
 
+describe('sugerirMontoDelCargo · qué cuota es el cargo (revisión PR #126)', () => {
+  const Q = (id: number, etiqueta: string, mes: number, cargada = false, pct = tercio) =>
+    ({ id, etiqueta, mes, porcentajeMilesimas: pct, cargada });
+  const tarifa = { montoCentavos: 60000, origen: 'grado' as const };
+
+  it('devuelve el id de la cuota para atar el cargo', () => {
+    const s = sugerirMontoDelCargo('actividad', tarifa, [Q(1, 'P1', 10, false, 33334), Q(2, 'P2', 1), Q(3, 'P3', 4)], 1);
+    expect(s?.cuota).toEqual({ id: 2, etiqueta: 'P2', de: 3 });
+  });
+
+  it('no propone la cuota del mes si ya tiene cargo: toma la primera libre', () => {
+    const s = sugerirMontoDelCargo('actividad', tarifa, [Q(1, 'P1', 10, true, 33334), Q(2, 'P2', 1, true), Q(3, 'P3', 4)], 1);
+    expect(s?.cuota?.id).toBe(3);
+  });
+
+  it('respeta la cuota que eligió la secretaria', () => {
+    const s = sugerirMontoDelCargo('actividad', tarifa, [Q(1, 'P1', 10, false, 33334), Q(2, 'P2', 1), Q(3, 'P3', 4)], 1, 3);
+    expect(s?.cuota?.id).toBe(3);
+    expect(s?.montoCentavos).toBe(20000);
+  });
+});
+
 describe('deDondeSaleElPrecio', () => {
   it('dice cada origen en palabras de la secretaria', () => {
     expect(deDondeSaleElPrecio('estudiante')).toBe('su precio personal');
@@ -80,7 +102,7 @@ describe('la ruta del precio usa la misma cadena que cobra el servidor', () => {
 describe('el diálogo rellena el monto y lo deja editable', () => {
   it('pide el precio al elegir concepto o mes', () => {
     expect(dialogo).toContain('/api/administracion-escolar/matriculas/${matriculaId}/precio?');
-    expect(dialogo).toContain('[open, matriculaId, form.conceptoId, form.mes]');
+    expect(dialogo).toContain('[open, matriculaId, form.conceptoId, form.mes, form.cuotaId]');
   });
 
   it('otro concepto trae su precio; un monto escrito a mano para el mismo se respeta', () => {

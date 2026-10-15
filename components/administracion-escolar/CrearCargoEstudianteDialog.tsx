@@ -37,6 +37,8 @@ interface Props {
   anioInicial?: number | null;
 }
 
+interface CuotaElegible { id: number; etiqueta: string; montoCentavos: number; cargada: boolean }
+
 const NOMBRE_MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -76,7 +78,7 @@ export function CrearCargoEstudianteDialog({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ conceptoId: '', mes: '', anio: '', monto: '', fechaVencimiento: hoy() });
+  const [form, setForm] = useState({ conceptoId: '', cuotaId: '', mes: '', anio: '', monto: '', fechaVencimiento: hoy() });
   /**
    * Facturarlo en el mismo gesto.
    *
@@ -95,6 +97,12 @@ export function CrearCargoEstudianteDialog({
    * `null` = el concepto no tiene precio para este curso y se escribe a mano.
    */
   const [precio, setPrecio] = useState<{ curso: string; sugerencia: SugerenciaDeMonto | null } | undefined>(undefined);
+  /**
+   * Las cuotas de un concepto repartido (evaluación en 3 pagos). El cargo se
+   * ata a la que se elija: sin eso el devengo no sabía que esa cuota ya estaba
+   * cobrada y la volvía a crear en su mes.
+   */
+  const [cuotas, setCuotas] = useState<CuotaElegible[]>([]);
   const [buscandoPrecio, setBuscandoPrecio] = useState(false);
   /** Lo último que se rellenó solo: si el monto sigue igual, nadie lo tocó. */
   const montoSugerido = useRef('');
@@ -114,6 +122,7 @@ export function CrearCargoEstudianteDialog({
       : (meses.find((m) => m.mes === actual.getMonth() + 1 && m.anio === actual.getFullYear()) ?? meses[0] ?? null);
     setForm({
       conceptoId: '',
+      cuotaId: '',
       mes: preseleccion ? String(preseleccion.mes) : '',
       anio: String(preseleccion?.anio ?? anioInicial ?? actual.getFullYear()),
       monto: '',
@@ -140,7 +149,7 @@ export function CrearCargoEstudianteDialog({
   // era para el anterior. Con el mismo concepto, un monto escrito a mano se
   // respeta y solo se reemplaza el que se puso solo.
   useEffect(() => {
-    if (!open || !matriculaId || !form.conceptoId) { setPrecio(undefined); return; }
+    if (!open || !matriculaId || !form.conceptoId) { setPrecio(undefined); setCuotas([]); return; }
     const otroConcepto = conceptoDelMonto.current !== form.conceptoId;
     conceptoDelMonto.current = form.conceptoId;
     if (otroConcepto) {
@@ -149,28 +158,40 @@ export function CrearCargoEstudianteDialog({
       // puede guardar el concepto nuevo con el monto del viejo, ni tomar por
       // exonerado (beca del 100 %) lo que era del otro.
       setPrecio(undefined);
-      setForm((f) => ({ ...f, monto: '' }));
+      setCuotas([]);
+      setForm((f) => ({ ...f, monto: '', cuotaId: '' }));
       montoSugerido.current = '';
     }
     let vigente = true;
     setBuscandoPrecio(true);
-    const qs = new URLSearchParams({ conceptoId: form.conceptoId, ...(form.mes ? { mes: form.mes } : {}) });
+    // Al cambiar de concepto la cuota elegida era del otro: no se manda.
+    const cuotaPedida = otroConcepto ? '' : form.cuotaId;
+    const qs = new URLSearchParams({
+      conceptoId: form.conceptoId,
+      ...(form.mes ? { mes: form.mes } : {}),
+      ...(cuotaPedida ? { cuotaId: cuotaPedida } : {}),
+    });
     fetch(`/api/administracion-escolar/matriculas/${matriculaId}/precio?${qs}`)
       .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
       .then(({ ok, data }) => {
         if (!vigente) return;
         if (!ok) throw new Error(data.error ?? 'No se pudo leer el precio del concepto');
         setPrecio({ curso: data.curso, sugerencia: data.sugerencia });
+        setCuotas(Array.isArray(data.cuotas) ? data.cuotas : []);
         const nuevo = data.sugerencia ? (data.sugerencia.montoCentavos / 100).toFixed(2) : '';
-        setForm((f) => (otroConcepto || f.monto === '' || f.monto === montoSugerido.current
-          ? { ...f, monto: nuevo } : f));
+        const cuotaSugerida = data.sugerencia?.cuota?.id != null ? String(data.sugerencia.cuota.id) : '';
+        setForm((f) => ({
+          ...f,
+          ...(otroConcepto || f.monto === '' || f.monto === montoSugerido.current ? { monto: nuevo } : {}),
+          ...(f.cuotaId === '' && cuotaSugerida ? { cuotaId: cuotaSugerida } : {}),
+        }));
         montoSugerido.current = nuevo;
       })
       // Si no se pudo leer, no se afirma nada: el campo queda para escribirlo.
       .catch(() => { if (vigente) setPrecio(undefined); })
       .finally(() => { if (vigente) setBuscandoPrecio(false); });
     return () => { vigente = false; };
-  }, [open, matriculaId, form.conceptoId, form.mes]);
+  }, [open, matriculaId, form.conceptoId, form.mes, form.cuotaId]);
 
   async function guardar() {
     if (!matriculaId || !periodoId) {
@@ -184,6 +205,10 @@ export function CrearCargoEstudianteDialog({
       && precio.sugerencia.montoCentavos === 0;
     if (!form.conceptoId || (montoCentavos <= 0 && !exonerado)) {
       setError('Concepto y monto son obligatorios');
+      return;
+    }
+    if (cuotas.length > 1 && !form.cuotaId) {
+      setError('Elige qué cuota es este cargo');
       return;
     }
     if (concepto?.tipo === 'mensualidad' && !form.mes) {
@@ -202,6 +227,7 @@ export function CrearCargoEstudianteDialog({
           periodoId,
           conceptoId: Number(form.conceptoId),
           mes: concepto?.tipo === 'mensualidad' ? Number(form.mes) : null,
+          ...(cuotas.length > 1 && form.cuotaId ? { cuotaId: Number(form.cuotaId) } : {}),
           anio: Number(form.anio),
           ...(exonerado ? {} : { montoCentavos }),
           fechaVencimiento: form.fechaVencimiento || null,
@@ -253,6 +279,19 @@ export function CrearCargoEstudianteDialog({
                   {meses.map((m) => <option key={m.key} value={m.key}>{new Intl.DateTimeFormat('es-DO', { month: 'long', year: 'numeric' }).format(new Date(m.anio, m.mes - 1, 1))}</option>)}
                 </NativeSelect>
               </div> : <p className="text-sm text-amber-700">Configura fechas de inicio y fin del período antes de crear una mensualidad.</p>
+            )}
+            {cuotas.length > 1 && concepto?.tipo !== 'mensualidad' && (
+              <div className="space-y-1.5">
+                <Label>Cuota *</Label>
+                <NativeSelect value={form.cuotaId} onChange={(e) => setForm((f) => ({ ...f, cuotaId: e.target.value }))}>
+                  <option value="" disabled>Elegir cuota</option>
+                  {cuotas.map((c) => (
+                    <option key={c.id} value={String(c.id)} disabled={c.cargada}>
+                      {c.etiqueta} · {fmtDOP(c.montoCentavos)}{c.cargada ? ' (ya tiene cargo)' : ''}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Monto (RD$) *</Label><Input type="number" step="0.01" value={form.monto} onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} /></div>

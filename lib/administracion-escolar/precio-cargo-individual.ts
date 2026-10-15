@@ -15,10 +15,14 @@ import { montosPorCuota } from './repartir';
 import type { OrigenTarifa } from './tarifas';
 
 export interface CuotaDelConcepto {
+  /** Id de la cuota del calendario; el cargo se ata a ella. */
+  id?: number;
   etiqueta: string;
   /** Mes en que se emite (1-12), o null si es un pago sin mes. */
   mes: number | null;
   porcentajeMilesimas: number;
+  /** El alumno ya tiene un cargo vivo de esta cuota. */
+  cargada?: boolean;
 }
 
 export interface SugerenciaDeMonto {
@@ -28,7 +32,7 @@ export interface SugerenciaDeMonto {
   tarifaCentavos: number;
   origen: OrigenTarifa;
   /** La cuota que representa este cargo, cuando la tarifa se reparte. */
-  cuota: { etiqueta: string; de: number } | null;
+  cuota: { id?: number; etiqueta: string; de: number } | null;
 }
 
 /**
@@ -38,14 +42,16 @@ export interface SugerenciaDeMonto {
  * cada cuota; lo demás toma la tarifa como el total del año y la reparte. Una
  * evaluación de RD$600 en tres cuotas es un cargo de RD$200, no de RD$600.
  *
- * Si el concepto se reparte, la cuota elegida es la del mes del cargo; si
- * ninguna cae en ese mes, la primera.
+ * Si el concepto se reparte, la cuota es la que eligió la secretaria; si no
+ * eligió, la del mes del cargo que aún no tenga cargo, luego la primera que no
+ * lo tenga, y si todas lo tienen, la del mes o la primera.
  */
 export function sugerirMontoDelCargo(
   tipoDeConcepto: string,
   tarifa: { montoCentavos: number; origen: OrigenTarifa } | null,
   cuotas: CuotaDelConcepto[],
   mes: number | null,
+  elegida: number | null = null,
 ): SugerenciaDeMonto | null {
   if (!tarifa) return null;
   const base = { tarifaCentavos: tarifa.montoCentavos, origen: tarifa.origen };
@@ -54,9 +60,26 @@ export function sugerirMontoDelCargo(
   }
   const montos = montosPorCuota(
     tipoDeConcepto, tarifa.montoCentavos, cuotas.map((c) => c.porcentajeMilesimas));
-  const delMes = mes == null ? -1 : cuotas.findIndex((c) => c.mes === mes);
-  const i = delMes >= 0 ? delMes : 0;
-  return { ...base, montoCentavos: montos[i], cuota: { etiqueta: cuotas[i].etiqueta, de: cuotas.length } };
+  const i = indiceCuota(cuotas, mes, elegida);
+  return {
+    ...base,
+    montoCentavos: montos[i],
+    cuota: { ...(cuotas[i].id != null ? { id: cuotas[i].id } : {}), etiqueta: cuotas[i].etiqueta, de: cuotas.length },
+  };
+}
+
+function indiceCuota(cuotas: CuotaDelConcepto[], mes: number | null, elegida: number | null): number {
+  const candidatos = [
+    (c: CuotaDelConcepto) => elegida != null && c.id === elegida,
+    (c: CuotaDelConcepto) => mes != null && c.mes === mes && !c.cargada,
+    (c: CuotaDelConcepto) => !c.cargada,
+    (c: CuotaDelConcepto) => mes != null && c.mes === mes,
+  ];
+  for (const regla of candidatos) {
+    const i = cuotas.findIndex(regla);
+    if (i >= 0) return i;
+  }
+  return 0;
 }
 
 /** De dónde sale el precio, dicho como lo diría la secretaria. */
