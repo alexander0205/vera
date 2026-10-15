@@ -731,18 +731,3 @@ describe('evaluación: reportes programados', () => {
     expect(r?.respuesta ?? '').toContain('](/dashboard/asistente)');
   });
 });
-
-// ── 4.3 Dictado por voz ──
-import { unirDictado } from '@/components/support/asistente/use-dictado';
-
-describe('evaluación: dictado por voz', () => {
-  it('agrega lo dictado a lo escrito con un solo espacio', () => {
-    expect(unirDictado('cuanto vendi', '  este   mes ')).toBe('cuanto vendi este mes');
-    expect(unirDictado('', 'quien me debe')).toBe('quien me debe');
-    expect(unirDictado('hola ', '')).toBe('hola');
-  });
-
-  it('respeta el tope del campo', () => {
-    expect(unirDictado('a'.repeat(1400), 'b'.repeat(400)).length).toBe(1500);
-  });
-});

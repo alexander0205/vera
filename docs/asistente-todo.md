@@ -33,7 +33,7 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 ## Fase 4 — canales y acciones
 - [~] 4.1 ~~Acciones reales con confirmación~~ — descartada: el asistente se queda de solo lectura (decisión del negocio). La infraestructura propuesta→confirmar queda sin acciones registradas.
 - [~] 4.2 WhatsApp — solo diseño: docs/asistente-whatsapp-diseno.md (falta credenciales y número verificado)
-- [x] 4.3 Voz (dictado de la pregunta)
+- [~] 4.3 Voz — retirada por ahora (decisión del negocio); el código se quitó, queda en el historial de git
 
 ## Antes de producción
 - [ ] Aplicar migraciones 0193 y 0194 en producción
