@@ -3719,6 +3719,12 @@ export const whatsappPlantillas = pgTable('whatsapp_plantillas', {
   /** NULL = disponible para todos los negocios. */
   teamId: integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
 
+  /**
+   * El aviso al que se asignará cuando Meta la apruebe. NULL = ninguno.
+   * Ver lib/whatsapp/plantillas-servicio.ts.
+   */
+  avisoDestino: varchar('aviso_destino', { length: 32 }),
+
   /** Mientras es borrador no existe en Meta y se puede editar. */
   borrador:   boolean('borrador').notNull().default(true),
   metaId:     varchar('meta_id', { length: 128 }),
