@@ -120,7 +120,29 @@ export function interpretarPeriodo(t: string, hoy = hoyRd()): Periodo | null {
 /** Preguntas que necesitan razonar: van a la IA aunque nombren un tema conocido. */
 const COMPLEJA = /\b(compar\w*|versus|vs|diferencia|por que|porque|analiz\w*|explica\w*|recomiend\w*|recomendacion|proyecc\w*|predic\w*|deberia|estrategia|conviene|mejorar|aumentar|reducir|bajar|subir|crecio|cayo|subio|bajo mas|cual fue el mejor|cual fue el peor|y tambien|ademas)\b/;
 
-const PIDE_CAMBIO = /^(por favor )?(cambia|cambiale|borra|elimina|anula|modifica|deshabilita|desactiva|activa|edita|envia|enviale|manda|mandale|crea|creame|registra|emite|cobra|aplica|asigna|pon|ponle|quita|agrega|agregale)\b/;
+const VERBOS_CAMBIO = [
+  // imperativo
+  'cambia', 'cambiale', 'borra', 'elimina', 'anula', 'modifica', 'deshabilita', 'desactiva', 'activa', 'edita',
+  'envia', 'enviale', 'enviame', 'manda', 'mandale', 'mandame', 'crea', 'creame', 'registra', 'emite', 'cobra', 'aplica', 'aplicame',
+  'asigna', 'pon', 'ponle', 'quita', 'agrega', 'agregale', 'haz', 'hazme', 'sube', 'subeme', 'baja', 'transfiere', 'transfierele',
+  'otorga', 'otorgame', 'concede', 'habilita', 'inhabilita', 'resetea', 'reinicia', 'restablece', 'reemplaza', 'sustituye',
+  'corrige', 'actualiza', 'marca', 'marcame', 'duplica', 'cancela', 'suspende', 'reactiva', 'renueva', 'paga', 'abona',
+  'devuelve', 'reembolsa', 'invita', 'expulsa', 'bloquea', 'desbloquea', 'regala', 'perdona', 'dame permisos', 'dame acceso',
+  // subjuntivo («quiero que cambies…»)
+  'cambies', 'borres', 'elimines', 'anules', 'modifiques', 'deshabilites', 'desactives', 'actives', 'edites', 'envies', 'mandes',
+  'crees', 'registres', 'emitas', 'cobres', 'apliques', 'asignes', 'pongas', 'quites', 'agregues', 'hagas', 'subas', 'bajes',
+  'transfieras', 'otorgues', 'habilites', 'resetees', 'reinicies', 'restablezcas', 'reemplaces', 'sustituyas', 'corrijas',
+  'actualices', 'marques', 'dupliques', 'canceles', 'suspendas', 'reactives', 'renueves', 'pagues', 'abones', 'devuelvas',
+  'reembolses', 'invites', 'expulses', 'bloquees', 'desbloquees',
+  // infinitivo («puedes cambiar…»)
+  'cambiar', 'borrar', 'eliminar', 'anular', 'modificar', 'deshabilitar', 'desactivar', 'activar', 'editar', 'enviar', 'mandar',
+  'crear', 'registrar', 'emitir', 'cobrar', 'aplicar', 'asignar', 'poner', 'quitar', 'agregar', 'hacer', 'subir', 'bajar',
+  'transferir', 'otorgar', 'habilitar', 'resetear', 'reiniciar', 'restablecer', 'reemplazar', 'sustituir', 'corregir',
+  'actualizar', 'marcar', 'duplicar', 'cancelar', 'suspender', 'reactivar', 'renovar', 'pagar', 'abonar', 'devolver',
+  'reembolsar', 'invitar', 'expulsar', 'bloquear', 'desbloquear',
+];
+const ENTRADA_CAMBIO = '(?:por favor |porfa |ahora |ya |oye |entonces |quiero que |necesito que |puedes |podrias |me puedes |me podrias |te pido que |haz que |hazme )*';
+const PIDE_CAMBIO = new RegExp(`^${ENTRADA_CAMBIO}(?:${VERBOS_CAMBIO.join('|')})\\b`);
 
 const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |declaro |programo |recibo |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|programar|recibir|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
 

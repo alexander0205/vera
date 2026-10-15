@@ -25,7 +25,7 @@ export interface RespuestaPolitica {
   /** Para pruebas y registros. */
   categoria:
     | 'prompt' | 'secretos' | 'otra-empresa' | 'asesoria' | 'evasion' | 'ofensivo'
-    | 'capacidades' | 'identidad' | 'vacio' | 'cambio-de-reglas' | 'volcado';
+    | 'capacidades' | 'identidad' | 'vacio' | 'cambio-de-reglas' | 'volcado' | 'malicioso';
   respuesta: string;
 }
 
@@ -98,12 +98,200 @@ const REGLAS: Regla[] = [
   },
 ];
 
+
+// ── Ataques: patrones más amplios (se evalúan ANTES que los de arriba) ───────
+//
+// Se comparan contra tres versiones del texto (ver `variantes`): normal, con
+// «leetspeak» desarmado (mu3str4) y con letras sueltas juntadas (m u e s t r a).
+// Cada categoría reutiliza la respuesta fija de la regla base.
+
+const RESPUESTA_MALICIOSO =
+  'No ayudo con código malicioso, ataques ni intentos de entrar a sistemas o datos sin autorización. ' +
+  'Si tienes una duda de seguridad de tu cuenta, revisa [Seguridad](/dashboard/security) o pulsa «Hablar con una persona». ' + AYUDA;
+
+const EXTRA: { categoria: RespuestaPolitica['categoria']; re: RegExp }[] = [
+  // Código malicioso, ataques, ejecución y peticiones a infraestructura.
+  {
+    categoria: 'malicioso',
+    re: /\b(keylogger|ransomware|malware|spyware|rootkit|botnet|troyano|trojan|backdoor|puerta trasera|exploit|payload|shellcode|reverse shell|webshell|phishing|ddos|denegacion de servicio|denial of service|inyeccion sql|sql injection|xss|csrf|crackear|crackeo|brute force|fuerza bruta|escalar privilegios|privilege escalation)\b/,
+  },
+  {
+    categoria: 'malicioso',
+    re: /\b(hackear|hackeo|hackeame|hackea|vulnerar|romper la seguridad|saltar la seguridad|burlar la seguridad|robar (contrasenas|credenciales|cookies|sesiones|datos|tokens)|acceder sin autorizacion|entrar sin permiso)\b/,
+  },
+  {
+    categoria: 'malicioso',
+    re: /\b(ejecuta|ejecutar|ejecutame|corre|run|execute|eval)\b.{0,30}\b(comando|codigo|script|command|code|shell|bash|powershell|sql)\b/,
+  },
+  {
+    categoria: 'malicioso',
+    re: /\b(rm rf|drop table|drop database|delete from|union select|child process|sudo|chmod|wget|etc passwd|etc shadow|system32|proc self environ|169 254 169 254|metadata google internal|127 0 0 1|localhost)\b/,
+  },
+  {
+    categoria: 'malicioso',
+    re: /\b(visita|abre|navega|accede|descarga|haz (una )?(peticion|request)|fetch|get|post|curl)\b.{0,40}\b(http|https|www|ftp|file)\b/,
+  },
+
+  // Cambiar las reglas, jailbreak, juegos de rol, falsa autoridad.
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(eres|ser|como|soy|modo)\s+dan\b|\bdan (mode|prompt|jailbreak)\b|\b(jailbreak|jailbroken|do anything now|modo (desarrollador|developer|dios|god|admin\w*|debug|sin filtros|libre|mantenimiento|prueba)|developer mode|god mode|debug mode)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\bsin (reglas|restricciones|limites|filtros|censura|politicas|guardrails|supervision)\b|\bwithout (rules|restrictions|limits|filters|censorship)\b|\bno (rules|restrictions|limits|filters|guardrails)\b|\bunrestricted\b|\buncensored\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(pretend|finge|fingir|simula|simular|imagina|supon|suponte|roleplay|rol de|juego de rol|juguemos|haz de cuenta|actua como|actues como|comportate como|act as|play the role|from now on|a partir de ahora|desde ahora|desde este momento|de ahora en adelante|responde como si)\b.{0,80}\b(reglas|restricciones|limites|filtros|no tienes (reglas|restricciones|limites|filtros)|ignor\w+|prompt|instrucciones|rules|restrictions|unrestricted|otra ia|otro bot|otra inteligencia)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(tus|sus|las|estas|esas) (reglas|restricciones|limites|filtros|politicas) (ya )?(no|dejan de|quedan sin|no aplican|no valen)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(desactiva\w*|deshabilita\w*|quita\w*|elimina\w*|apaga\w*|salta\w*|evita\w*|bypass\w*|disable|remove|turn off) (tus |los |las |el |la )?(filtros?|restricciones?|reglas|seguridad|guardrails?|safety|politicas|protecciones|limites)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(system override|override (your|the) (rules|instructions|safety)|new instructions|nuevas (reglas|instrucciones|ordenes|directrices)|reglas nuevas)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(soy|somos|i am|im) (el |la |un |una )?(desarrollador|programador|developer|creador|ingeniero|administrador|admin|dueno|ceo|gerente|soporte|equipo)( de| del| of)? (zero|anthropic|google|openai|la plataforma|el sistema)\b|\bsoy de soporte\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(autoriz\w+|permiso|consentimiento|aprobacion|prueba autorizada|auditoria interna|pentest)\b.{0,60}\b(ignor\w+|desactiv\w+|salt\w+|reglas|filtros|restricciones|instrucciones|prompt|configuracion|sin reglas)\b|\b(ignor\w+|desactiv\w+|saltar|reglas|filtros|restricciones|instrucciones|prompt)\b.{0,60}\b(autoriz\w+|permiso|consentimiento|prueba autorizada)\b/,
+  },
+
+  // Sacar el prompt o las reglas, por cualquier camino.
+  {
+    categoria: 'prompt',
+    re: /\b(repite|repeat|imprime|print|escribe|write|muestra|muestrame|show|dame|give|dime|tell|revela|reveal|filtra|leak|copia|copy|echo|output|devuelve|return|lista|list|traduce|translate|resume|resumeme|summari[sz]e|parafrasea|explica|describe|cita|quote)\b.{0,40}\b(tus|tu|your|del asistente|del sistema|que te dieron|que recibiste|que tienes)\s+(prompt|instrucciones|reglas|directrices|indicaciones|configuracion|instructions|rules|guidelines|system message|mensaje del sistema)\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(repite|repeat|imprime|print|escribe|write|muestra|muestrame|show|dame|give|dime|tell|revela|reveal|copia|copy|echo|output|devuelve|return|traduce|translate)\b.{0,40}\bprompt\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(repite|repeat|imprime|print|escribe|write|muestra|muestrame|show|dame|give|copia|copy|echo|output|devuelve|return|traduce|translate)\b.{0,40}\b(todo lo|todo el|everything|all the)\b.{0,25}\b(arriba|above|anterior|antes|before|escrito|written)\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(reglas|instrucciones|prompt|directrices|indicaciones)\b.{0,15}\b(que te (dieron|dijeron|pasaron|dio|programaron|entregaron)|que recibiste|que sigues|que obedeces|que tienes (escritas|guardadas))\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(primera|ultima|siguiente) (linea|oracion|frase|palabra|parrafo)\b.{0,30}\b(prompt|instrucciones|reglas|mensaje)\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(output|print|repeat|show|escribe|muestra|repite)\b.{0,30}\b(initiali[sz]ation|inicializacion|everything above|todo lo de arriba|todo lo anterior|texto de arriba|lo que esta arriba)\b|\barriba de este mensaje\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\b(como estas|como fuiste) (configurado|programado|entrenado|instruido)\b|\bque (te|le) (dijeron|ordenaron|indicaron|pidieron)\b|\bque instrucciones (tienes|recibiste|te dieron)\b|\bcuales son tus (reglas|instrucciones|directrices|limites|restricciones)\b|\bsystem message\b|\bmensaje del sistema\b|\bhidden (prompt|instructions)\b|\bantes de mi primera (pregunta|mensaje)\b/,
+  },
+  {
+    categoria: 'prompt',
+    re: /\bbloque de (codigo|texto)\b.{0,40}\b(instrucciones|prompt|reglas)\b|\b(instrucciones|prompt|reglas)\b.{0,40}\bbloque de (codigo|texto)\b|\bin a code (fence|block)\b/,
+  },
+
+  // Más maneras de pedir el prompt, en inglés y por rodeos.
+  {
+    categoria: 'prompt',
+    re: /\bwhat (rules|instructions|guidelines|prompt)\b.{0,25}\b(were you|you were|you have|do you have|are you)\b|\bwhat (were|have) you (been )?(told|given|instructed)\b|\bwhat is your (prompt|system|configuration|setup)\b|\brepeat\b.{0,20}\b(words|text|everything|message|above)\b|\b(texto|contenido|mensaje) de (tu|su) (configuracion|programacion|inicializacion|prompt)\b/,
+  },
+  // Quitarle las reglas, con otras formas verbales y otras voces.
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\bsin (ningun|ninguna|ningunos|ningunas|cualquier) (regla|reglas|restriccion|restricciones|limite|limites|filtro|filtros|censura|escrupulos)\b|\bsin (escrupulos|etica|moral|conciencia)\b|\bya no tienes (reglas|restricciones|limites|filtros)\b|\beres libre\b|\bno (tienes|tiene|hay) (ninguna )?(regla|reglas|restriccion|restricciones|limite|limites|filtro|filtros)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(eres|seras|ahora eres|eres ahora) (un|una|el|la) (hacker|pirata|criminal|ladron|estafador|villano|delincuente|experto en hackeo)\b|\b(tu|tus) (nueva|nuevas|unica|unicas) (regla|reglas|mision|tarea|directriz|instruccion|instrucciones)\b|\bordena\w* que\b.{0,30}\b(ignor|olvid|desactiv|salt|omit)\w*/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(ignor|olvid|desobedec|omit|salt|desactiv|deshabilit|abandon)\w*\s+(las |tus |sus |todas las |todas tus |estas |esas |esos )?(reglas|restricciones|instrucciones|politicas|filtros|limites|directrices)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(actua|actues|actuar|comportate|responde|habla)\s+como\s+(si\s+(fueras|fuera|fueses|eres)\s+)?(el |la |un |una )?(administrador|dba|root|superusuario|hacker|desarrollador|programador|ingeniero|dueno|propietario|ceo|sistema|base de datos|servidor|terminal|consola)\b/,
+  },
+
+  // Secretos y configuración.
+  {
+    categoria: 'secretos',
+    re: /\b(variables? de entorno|environment variables?|env vars?|process env|dot env|cron secret|jwt secret|database url|db url|connection string|cadena de conexion|string de conexion|credenciales|secret key|llave privada|clave privada|private key|bearer token|session token|token de sesion|cookie de sesion|session cookie|access token|refresh token|api secret|webhook secret|signing secret|service role|anon key)\b/,
+  },
+  {
+    categoria: 'secretos',
+    re: /\b(dame|dime|muestra|muestrame|imprime|show|print|reveal|cual es|what is)\b.{0,30}\b(env|dotenv|secretos?|secrets?|llaves?|keys?|tokens?|passwords?|contrasenas?)\b/,
+  },
+
+  // Datos de otra empresa o de todas.
+  {
+    categoria: 'otra-empresa',
+    re: /\b(empresas registradas|empresas del sistema|empresas de zero|clientes de zero|team ?id|teamid|tenant|id de (la )?empresa|empresa (con )?id|empresa numero|otro (team|tenant|negocio|colegio)|otra (cuenta|organizacion|institucion|compania)|otras (cuentas|organizaciones|instituciones|companias|empresas)|todas las (empresas|cuentas|organizaciones|instituciones|companias)|cualquier (empresa|cuenta|tenant)|another (company|tenant|account|organization)|other (companies|tenants|accounts|organizations)|all (companies|tenants|accounts))\b/,
+  },
+  { categoria: 'otra-empresa', re: /\b(team|tenant|empresa)\s+(id\s+)?\d+\b/ },
+
+  // Listados masivos de datos personales.
+  {
+    categoria: 'volcado',
+    re: /\b(todos|todas)\b.{0,30}\b(estudiantes|alumnos|clientes|empleados|proveedores|padres|tutores|usuarios|contactos)\b.{0,30}\b(con|y sus|incluyendo|incluye)\b.{0,30}\b(telefonos?|cedulas?|correos?|emails?|direcciones|direccion|salarios?|sueldos?|rnc|datos|contrasenas?)\b/,
+  },
+  {
+    categoria: 'volcado',
+    re: /\b(todos los|todas las|toda la)\b.{0,15}\b(datos|informacion|registros)\b.{0,25}\b(de|del|de la)\b.{0,15}\b(empresa|sistema|base|clientes|usuarios)\b/,
+  },
+
+  // Evasión, falsificación, borrar rastros.
+  {
+    categoria: 'evasion',
+    re: /\b(alter\w+|falsific\w*|adultera\w*|retroced\w*|backdat\w*) (la |el |una |un |los |las )?(fecha|factura|facturas|comprobante|comprobantes|ncf|ecf|e ncf|documento|monto|total|recibo)\b|\b(genera\w*|fabrica\w*|inventa\w*|simula\w*|crea\w*|haz|hazme) (la |el |una |un |los |las |unas |unos )?(ncf|ecf|e ncf|comprobantes?|facturas?|recibos?) (falsos?|falsas?|apocrifos?|apocrifas?|ficticios?|ficticias?|inventad[oa]s?)\b/,
+  },
+  {
+    categoria: 'evasion',
+    re: /\b(ncf|ecf|e ncf|comprobantes?|facturas?)\b.{0,15}\b(falsos?|falsas?|apocrifos?|ficticios?|inventados?)\b|\b(declar\w+)\b.{0,15}\bmenos\b/,
+  },
+  {
+    categoria: 'evasion',
+    re: /\b(sin (que )?(se )?(entere|sepa|vea|enteren|sepan|detecte|detecten)|para que no (se )?(sepa|vea|detecten|detecte)|sin dejar rastro|borra\w* (el )?(rastro|huella|auditoria|log))\b/,
+  },
+];
+
+/** Marcado en bruto: lo que `normalizar` borraría (< > : = ) y delata un ataque. */
+const MALICIOSO_EN_BRUTO =
+  /<\s*\/?\s*(script|iframe|img|svg|object|embed|link|meta|style)\b|javascript\s*:|data\s*:\s*text\/html|\bon[a-z]{3,}\s*=|\$\{|\{\{|<%|;\s*(drop|delete|select|insert|update)\b|(^|\n)\s*(\[|#{1,4}\s*|<\|?)(system|assistant|developer|inst)\b|\.\.\/\.\.|file:\/\//i;
+
+const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', $: 's', '!': 'i' };
+
+/**
+ * El texto como lo leería una persona, en las formas con las que se intenta
+ * esquivar un filtro: ancho completo y caracteres invisibles, «leetspeak»
+ * (mu3str4) y letras separadas (m u e s t r a).
+ */
+export function variantes(texto: string): string[] {
+  const limpio = texto.normalize('NFKC').replace(/[​-‏⁠﻿­]/g, '');
+  const base = normalizar(limpio);
+  const leet = normalizar(limpio.replace(/[013457@$!]/g, (c) => LEET[c] ?? c));
+  const base2 = normalizar(limpio.split(/\s{2,}/)
+    .map((seg) => seg.replace(/(?<![\p{L}\p{N}])(?:[\p{L}\p{N}][ .\-_*·]){2,}[\p{L}\p{N}](?![\p{L}\p{N}])/gu, (m) => m.replace(/[ .\-_*·]/g, '')))
+    .join(' '));
+  return [...new Set([base, leet, base2])].filter(Boolean);
+}
+
 /**
  * ¿Esta solicitud la responde una política en vez del modelo? Devuelve la
  * respuesta fija, o null para que siga el flujo normal.
  */
 export function clasificarSolicitud(texto: string): RespuestaPolitica | null {
-  const t = normalizar(texto);
+  const t = normalizar(texto.normalize('NFKC').replace(/[\u200b-\u200f\u2060\ufeff\u00ad]/g, ''));
   // Solo signos, emojis o una sola letra: no hay nada que entender.
   if (t.length < 2) {
     return {
@@ -111,7 +299,18 @@ export function clasificarSolicitud(texto: string): RespuestaPolitica | null {
       respuesta: 'No alcancé a entender tu mensaje. Escríbeme tu pregunta, por ejemplo «¿cuánto vendí este mes?» o «¿dónde veo las cotizaciones?».',
     };
   }
-  for (const r of REGLAS) if (r.re.test(t)) return { categoria: r.categoria, respuesta: r.respuesta };
+  const vs = variantes(texto);
+  const respuestaBase = (c: RespuestaPolitica['categoria']) =>
+    c === 'malicioso' ? RESPUESTA_MALICIOSO : (REGLAS.find((r) => r.categoria === c)?.respuesta ?? AYUDA);
+
+  // Marcado de ataque que la normalización borraría (<script>, onerror=, ${…}, ../..).
+  if (MALICIOSO_EN_BRUTO.test(texto.normalize('NFKC'))) return { categoria: 'malicioso', respuesta: RESPUESTA_MALICIOSO };
+  // Lo delicado se compara también contra las formas disfrazadas (leetspeak, letras sueltas).
+  for (const r of EXTRA) if (vs.some((v) => r.re.test(v))) return { categoria: r.categoria, respuesta: respuestaBase(r.categoria) };
+  for (const r of REGLAS) {
+    const disfrazable = r.categoria !== 'ofensivo' && r.categoria !== 'identidad' && r.categoria !== 'capacidades';
+    if ((disfrazable ? vs : [t]).some((v) => r.re.test(v))) return { categoria: r.categoria, respuesta: r.respuesta };
+  }
   return null;
 }
 
@@ -199,5 +398,36 @@ export function depurarSalida(texto: string): { texto: string; enmascarados: num
     return m;
   });
   salida = salida.replace(/\b(?:sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{20,}|AQ\.[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b/g, () => { n++; return '[llave oculta]'; });
+  // Credenciales con otra forma: JWT, cadenas de conexión con usuario y clave, Bearer,
+  // bloques de llave privada y asignaciones tipo .env.
+  const secretos: RegExp[] = [
+    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+    /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s:@\/]+:[^\s@\/]+@[^\s]+/gi,
+    /\bBearer\s+[A-Za-z0-9._~+\/-]{20,}=*/g,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+    /\b[A-Z][A-Z0-9_]{3,}_(?:SECRET|KEY|TOKEN|PASSWORD|PASS|URL)\s*=\s*\S+/g,
+  ];
+  for (const re of secretos) salida = salida.replace(re, () => { n++; return '[llave oculta]'; });
   return { texto: salida, enmascarados: n };
+}
+
+// ── Fuga del prompt ─────────────────────────────────────────────────────────
+
+/**
+ * Detector de «el modelo repitió mis instrucciones». Compara ventanas de
+ * palabras de la respuesta con las de las instrucciones reales: si una ventana
+ * larga coincide, la respuesta contiene un trozo del prompt, sin importar en
+ * qué idioma la haya pedido la persona ni cómo la haya disfrazado.
+ * (Una traducción no se detecta por esto; para eso está la regla de entrada.)
+ */
+export function crearDetectorFuga(instrucciones: string, ventana = 9): (salida: string) => boolean {
+  const palabras = (t: string) => normalizar(t).split(' ').filter(Boolean);
+  const base = palabras(instrucciones);
+  const huellas = new Set<string>();
+  for (let i = 0; i + ventana <= base.length; i++) huellas.add(base.slice(i, i + ventana).join(' '));
+  return (salida: string) => {
+    const p = palabras(salida);
+    for (let i = 0; i + ventana <= p.length; i++) if (huellas.has(p.slice(i, i + ventana).join(' '))) return true;
+    return false;
+  };
 }
