@@ -6,9 +6,13 @@
  * y una fila de totales. A4 apaisado para que quepan las columnas. Sirve para
  * descargar y para imprimir (el botón «Imprimir» lo abre en el visor del
  * navegador). Encabezado y cabecera de la tabla se repiten en cada página.
+ *
+ * Las páginas se arman antes de llegar a react-pdf (ver paginar-listado): con
+ * todo en un solo <Page> el tiempo crecía cuadrático con las filas.
  */
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { paginar, altoFila, MEDIDAS, type ItemListado } from './paginar-listado';
 
 export interface ColumnaPDF {
   titulo: string;
@@ -89,88 +93,131 @@ function Celda({ c, col, tachada }: { c: CeldaPDF; col: ColumnaPDF; tachada?: bo
   );
 }
 
+type Item = ItemListado<GrupoPDF, FilaPDF>;
+
+/** Los grupos y filas aplanados en el orden en que se pintan. */
+function aplanar(data: ListadoPDFData): Item[] {
+  const items: Item[] = [];
+  for (const g of data.grupos) {
+    if (g.titulo) items.push({ tipo: 'grupo', grupo: g });
+    for (const f of g.filas) items.push({ tipo: 'fila', fila: f });
+  }
+  if (items.every((i) => i.tipo !== 'fila')) items.push({ tipo: 'vacio' });
+  if (data.totales) items.push({ tipo: 'total' });
+  if (data.nota) items.push({ tipo: 'nota' });
+  return items;
+}
+
+function Encabezado({ data }: { data: ListadoPDFData }) {
+  return (
+    <View style={s.header}>
+      <View>
+        <Text style={s.empresa}>{data.empresa}</Text>
+        {data.rnc ? <Text style={s.muted}>RNC {data.rnc}</Text> : null}
+      </View>
+      <View>
+        <Text style={s.titulo}>{data.titulo}</Text>
+        <Text style={[s.muted, { textAlign: 'right' }]}>Generado el {data.generado}</Text>
+      </View>
+    </View>
+  );
+}
+
+function CabeceraTabla({ columnas }: { columnas: ColumnaPDF[] }) {
+  return (
+    <View style={s.thead}>
+      {columnas.map((c, i) => (
+        <Text key={i} style={[s.th, { width: c.ancho, textAlign: c.alinear ?? 'left' }]}>{c.titulo}</Text>
+      ))}
+    </View>
+  );
+}
+
+function FilaTotales({ data }: { data: ListadoPDFData }) {
+  const { columnas } = data;
+  const totales = data.totales!;
+  // La etiqueta ocupa las columnas hasta el primer valor.
+  const indices = Object.keys(totales.valores).map(Number).sort((a, b) => a - b);
+  const primero = indices[0] ?? columnas.length;
+  const anchoEtiqueta = columnas.slice(0, primero).reduce((t, c) => t + parseFloat(c.ancho), 0);
+  return (
+    <View style={s.totalRow} wrap={false}>
+      <Text style={[s.td, { width: `${anchoEtiqueta}%` }]}>{totales.etiqueta}</Text>
+      {columnas.slice(primero).map((c, i) => (
+        <Text key={i} style={[s.td, { width: c.ancho, textAlign: c.alinear ?? 'left' }]}>
+          {totales.valores[primero + i] ?? ''}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 export function ListadoPDF({ data }: { data: ListadoPDFData }) {
   const { columnas } = data;
+  const items = aplanar(data);
+  const alto = (i: Item) => {
+    switch (i.tipo) {
+      case 'grupo': return MEDIDAS.grupo;
+      case 'fila': return altoFila(i.fila.celdas, columnas);
+      case 'total': return MEDIDAS.total;
+      case 'nota': return MEDIDAS.nota;
+      case 'vacio': return MEDIDAS.vacio;
+    }
+  };
+  const paginas = paginar(items, alto, data.kpis.length > 0);
+  const total = paginas.length;
+
   return (
     <Document title={data.titulo} author={data.empresa}>
-      <Page size="A4" orientation="landscape" style={s.page}>
-        <View style={s.header} fixed>
-          <View>
-            <Text style={s.empresa}>{data.empresa}</Text>
-            {data.rnc ? <Text style={s.muted}>RNC {data.rnc}</Text> : null}
+      {paginas.map((pagina, n) => (
+        <Page key={n} size="A4" orientation="landscape" style={s.page}>
+          <Encabezado data={data} />
+          {n === 0 && (
+            <>
+              <Text style={s.filtro}>{data.filtroTexto}</Text>
+              {data.kpis.length > 0 && (
+                <View style={s.kpis}>
+                  {data.kpis.map((k, i) => (
+                    <View key={i} style={s.kpi}>
+                      <Text style={s.kpiLabel}>{k.label}</Text>
+                      <Text style={s.kpiValor}>{k.valor}</Text>
+                      {k.sub ? <Text style={s.muted}>{k.sub}</Text> : null}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+          <CabeceraTabla columnas={columnas} />
+          {pagina.map((it, i) => {
+            switch (it.tipo) {
+              case 'grupo':
+                return (
+                  <View key={i} style={s.grupo} wrap={false}>
+                    <Text style={s.grupoTitulo}>{it.grupo.titulo}</Text>
+                    {it.grupo.resumen ? <Text style={s.grupoTitulo}>{it.grupo.resumen}</Text> : null}
+                  </View>
+                );
+              case 'fila':
+                return (
+                  <View key={i} style={s.row} wrap={false}>
+                    {it.fila.celdas.map((c, ci) => <Celda key={ci} c={c} col={columnas[ci]} tachada={it.fila.tachada} />)}
+                  </View>
+                );
+              case 'total':
+                return <FilaTotales key={i} data={data} />;
+              case 'nota':
+                return <Text key={i} style={[s.muted, { marginTop: 6 }]}>{data.nota}</Text>;
+              case 'vacio':
+                return <Text key={i} style={[s.muted, { paddingVertical: 12, textAlign: 'center' }]}>No hay registros con este filtro.</Text>;
+            }
+          })}
+          <View style={s.footer} fixed>
+            <Text>{data.empresa} · {data.titulo}</Text>
+            <Text>Página {n + 1} de {total}</Text>
           </View>
-          <View>
-            <Text style={s.titulo}>{data.titulo}</Text>
-            <Text style={[s.muted, { textAlign: 'right' }]}>Generado el {data.generado}</Text>
-          </View>
-        </View>
-
-        <Text style={s.filtro}>{data.filtroTexto}</Text>
-
-        {data.kpis.length > 0 && (
-          <View style={s.kpis}>
-            {data.kpis.map((k, i) => (
-              <View key={i} style={s.kpi}>
-                <Text style={s.kpiLabel}>{k.label}</Text>
-                <Text style={s.kpiValor}>{k.valor}</Text>
-                {k.sub ? <Text style={s.muted}>{k.sub}</Text> : null}
-              </View>
-            ))}
-          </View>
-        )}
-
-        <View style={s.thead} fixed>
-          {columnas.map((c, i) => (
-            <Text key={i} style={[s.th, { width: c.ancho, textAlign: c.alinear ?? 'left' }]}>{c.titulo}</Text>
-          ))}
-        </View>
-
-        {data.grupos.map((g, gi) => (
-          <View key={gi}>
-            {g.titulo ? (
-              <View style={s.grupo} wrap={false}>
-                <Text style={s.grupoTitulo}>{g.titulo}</Text>
-                {g.resumen ? <Text style={s.grupoTitulo}>{g.resumen}</Text> : null}
-              </View>
-            ) : null}
-            {g.filas.map((f, fi) => (
-              <View key={fi} style={s.row} wrap={false}>
-                {f.celdas.map((c, ci) => <Celda key={ci} c={c} col={columnas[ci]} tachada={f.tachada} />)}
-              </View>
-            ))}
-          </View>
-        ))}
-
-        {data.grupos.every((g) => g.filas.length === 0) ? (
-          <Text style={[s.muted, { paddingVertical: 12, textAlign: 'center' }]}>No hay registros con este filtro.</Text>
-        ) : null}
-
-        {data.totales ? (
-          <View style={s.totalRow} wrap={false}>
-            {(() => {
-              // La etiqueta ocupa las columnas hasta el primer valor.
-              const indices = Object.keys(data.totales.valores).map(Number).sort((a, b) => a - b);
-              const primero = indices[0] ?? columnas.length;
-              const anchoEtiqueta = columnas.slice(0, primero).reduce((t, c) => t + parseFloat(c.ancho), 0);
-              return [
-                <Text key="e" style={[s.td, { width: `${anchoEtiqueta}%` }]}>{data.totales.etiqueta}</Text>,
-                ...columnas.slice(primero).map((c, i) => (
-                  <Text key={i} style={[s.td, { width: c.ancho, textAlign: c.alinear ?? 'left' }]}>
-                    {data.totales!.valores[primero + i] ?? ''}
-                  </Text>
-                )),
-              ];
-            })()}
-          </View>
-        ) : null}
-
-        {data.nota ? <Text style={[s.muted, { marginTop: 6 }]}>{data.nota}</Text> : null}
-
-        <View style={s.footer} fixed>
-          <Text>{data.empresa} · {data.titulo}</Text>
-          <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
-        </View>
-      </Page>
+        </Page>
+      ))}
     </Document>
   );
 }
