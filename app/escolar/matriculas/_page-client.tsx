@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Paginador } from '@/components/ui/paginador';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,6 +81,25 @@ const ESTADOS = [
 
 // El badge de estado vive en MatriculaFicha: fila y ficha comparten definición.
 
+/**
+ * Imprimir / PDF / Excel de las matrículas filtradas (todas las páginas). Sin
+ * filtro de fecha: el período escolar es el filtro de tiempo, y la fecha de
+ * inscripción falta en casi todas las matrículas migradas.
+ */
+const EXPORTAR: ExportTabla<Matricula> = {
+  titulo: 'Matrículas',
+  archivo: 'matriculas',
+  tachada: m => m.estado === 'anulada',
+  columnas: [
+    { titulo: 'Estudiante', valor: m => `${m.estudiante ?? ''} ${m.estudianteApellidos ?? ''}`.trim() || null, sub: m => m.codigoMatricula, ancho: 2 },
+    { titulo: 'Período', valor: m => m.periodo, ancho: 0.9 },
+    { titulo: 'Curso', valor: m => nombreCurso(m), ancho: 1.8 },
+    { titulo: 'Servicio', valor: m => m.servicio, ancho: 1.1 },
+    { titulo: 'Inscripción', valor: m => (m.fechaInscripcion ? fmtFechaCorta(m.fechaInscripcion) : null), ancho: 0.8 },
+    { titulo: 'Estado', valor: m => ESTADOS.find(e => e.valor === m.estado)?.etiqueta ?? m.estado, ancho: 0.8 },
+  ],
+};
+
 export default function MatriculasClient() {
   const router = useRouter();
   const { permissions } = usePermissions();
@@ -146,6 +167,26 @@ export default function MatriculasClient() {
     setPaginaInfo({ total: data.total ?? 0, paginas: data.paginas ?? 1, porPagina: data.porPagina ?? 50 });
     setStats(data.stats ?? { total: 0, activas: 0, cursos: 0 });
   }, [filtroPeriodo, filtroEstado, qUrl, pagina]);
+
+  // Para el export: todas las páginas con el filtro de la pantalla.
+  async function armarExport() {
+    const todas: Matricula[] = [];
+    for (let pag = 1; pag <= 50; pag++) {
+      const params = new URLSearchParams({ pagina: String(pag), porPagina: '200' });
+      if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
+      if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
+      if (qUrl) params.set('q', qUrl);
+      const data = await fetch(`/api/administracion-escolar/matriculas?${params}`).then(r => r.json());
+      todas.push(...((data.matriculas ?? []) as Matricula[]));
+      if (pag >= (data.paginas ?? 1)) break;
+    }
+    const partes = [
+      filtroPeriodo !== 'todos' ? `Período: ${periodos.find(x => String(x.id) === filtroPeriodo)?.nombre ?? filtroPeriodo}` : 'Todos los períodos',
+      filtroEstado !== 'todos' ? `Estado: ${ESTADOS.find(e => e.valor === filtroEstado)?.etiqueta ?? filtroEstado}` : null,
+      qUrl ? `Búsqueda: «${qUrl}»` : null,
+    ];
+    return armarEnvioTabla(EXPORTAR, todas, partes.filter(Boolean).join(' · '));
+  }
 
   const cargarCatalogos = useCallback(async () => {
     const [periodosRes, cursosRes, estudiantesRes] = await Promise.all([
@@ -288,6 +329,8 @@ export default function MatriculasClient() {
           <h1 className="text-2xl font-bold text-gray-900">Matriculación</h1>
           <p className="text-sm text-gray-500 mt-1">Quién está inscrito en qué curso, y qué debe de ese período</p>
         </div>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <ExportarListado armar={armarExport} deshabilitado={loading || paginaInfo.total === 0} testId="exportar-matriculas" />
         {puedeGestionar && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowLote(true)} disabled={loading || sinCatalogos}>
@@ -298,6 +341,7 @@ export default function MatriculasClient() {
             </Button>
           </div>
         )}
+        </div>
       </div>
 
       {/* Contadores del team, no de la página: los cuenta el servidor sobre

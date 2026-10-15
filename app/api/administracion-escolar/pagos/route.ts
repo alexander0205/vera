@@ -37,6 +37,14 @@ export async function GET(req: NextRequest) {
 
   const pag = leerPaginacion(req.nextUrl);
 
+  // Rango por fecha de pago (regla: todo listado se filtra por fecha).
+  const fecha = (k: string) => {
+    const v = req.nextUrl.searchParams.get(k);
+    return v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  };
+  const desde = fecha('desde');
+  const hasta = fecha('hasta');
+
   /**
    * Un cobro por fila. `datos` resume los cargos que salda esa factura: de ahí
    * salen el alumno y los conceptos.
@@ -80,6 +88,8 @@ export async function GET(req: NextRequest) {
         ${estudianteId ? sql`AND g.estudiante_id = ${estudianteId}` : sql``}
     ) d ON d.estudiante_id IS NOT NULL
     WHERE p.team_id = ${teamId}
+      ${desde ? sql`AND p.fecha_pago >= ${desde}` : sql``}
+      ${hasta ? sql`AND p.fecha_pago <= ${hasta}` : sql``}
   `;
 
   const [filas, totales] = await Promise.all([

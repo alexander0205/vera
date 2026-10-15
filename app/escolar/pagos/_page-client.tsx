@@ -13,6 +13,9 @@ import {
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { CalendarDays, Loader2, Receipt, Search, UserRound, Wallet } from 'lucide-react';
 import { ComprobantesClient } from './_comprobantes-client';
+import { RangoFechas } from '@/components/reportes/rango-fechas';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Pago {
   id: number;
@@ -48,6 +51,33 @@ function conceptoLabel(p: Pago): string {
   return p.anio ? `${p.concepto} · ${p.anio}` : p.concepto;
 }
 
+/** Imprimir / PDF / Excel de los pagos del rango (todas las páginas). */
+const EXPORTAR: ExportTabla<Pago> = {
+  titulo: 'Pagos escolares',
+  archivo: 'pagos-escolares',
+  columnas: [
+    { titulo: 'Fecha', valor: p => fmtFechaCorta(p.fechaPago), ancho: 0.8 },
+    { titulo: 'Estudiante', valor: p => `${p.estudiante ?? ''} ${p.estudianteApellidos ?? ''}`.trim() || null, ancho: 2 },
+    { titulo: 'Aplicado a', valor: p => conceptoLabel(p), ancho: 2 },
+    { titulo: 'Método', valor: p => (p.metodo ? METODO_LABEL[p.metodo] ?? p.metodo : null), ancho: 0.9 },
+    { titulo: 'Referencia', valor: p => p.referencia, ancho: 1.1 },
+    { titulo: 'Monto', valor: p => p.montoCentavos, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
+
+const fechaCorta = (iso: string) => iso.split('-').reverse().join('/');
+
+/** El mismo filtro de búsqueda y método que la tabla. */
+function filtrarPagos(pagos: Pago[], query: string, metodo: string): Pago[] {
+  const q = query.trim().toLowerCase();
+  return pagos.filter((p) => {
+    if (metodo !== 'todos' && p.metodo !== metodo) return false;
+    if (!q) return true;
+    const hay = `${p.estudiante ?? ''} ${p.estudianteApellidos ?? ''} ${p.concepto ?? ''} ${p.referencia ?? ''} ${p.metodo ?? ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+}
+
 export default function PagosEscolaresClient() {
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,12 +98,15 @@ export default function PagosEscolaresClient() {
 
   const [pagina, setPagina] = useState(1);
   const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const rangoQs = `${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`;
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/api/administracion-escolar/pagos?pagina=${pagina}`);
+      const res = await fetch(`/api/administracion-escolar/pagos?pagina=${pagina}${rangoQs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando pagos');
       setPagos(data.pagos ?? []);
@@ -83,7 +116,25 @@ export default function PagosEscolaresClient() {
     } finally {
       setLoading(false);
     }
-  }, [pagina]);
+  }, [pagina, rangoQs]);
+
+  // Para el export: todas las páginas del rango (la API da hasta 200 por
+  // página), con el mismo filtro de búsqueda y método que la tabla.
+  async function armarExport() {
+    const todos: Pago[] = [];
+    for (let pag = 1; pag <= 50; pag++) {
+      const data = await fetch(`/api/administracion-escolar/pagos?pagina=${pag}&porPagina=200${rangoQs}`).then(r => r.json());
+      todos.push(...((data.pagos ?? []) as Pago[]));
+      if (pag >= (data.paginas ?? 1)) break;
+    }
+    const partes = [
+      desde && hasta ? `Del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
+        : desde ? `Desde el ${fechaCorta(desde)}` : hasta ? `Hasta el ${fechaCorta(hasta)}` : 'Todas las fechas',
+      query.trim() ? `Búsqueda: «${query.trim()}»` : null,
+      metodo !== 'todos' ? `Método: ${METODO_LABEL[metodo] ?? metodo}` : null,
+    ];
+    return armarEnvioTabla(EXPORTAR, filtrarPagos(todos, query, metodo), partes.filter(Boolean).join(' · '));
+  }
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -92,15 +143,7 @@ export default function PagosEscolaresClient() {
     [pagos],
   );
 
-  const filtrados = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return pagos.filter((p) => {
-      if (metodo !== 'todos' && p.metodo !== metodo) return false;
-      if (!q) return true;
-      const hay = `${p.estudiante ?? ''} ${p.estudianteApellidos ?? ''} ${p.concepto ?? ''} ${p.referencia ?? ''} ${p.metodo ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [metodo, pagos, query]);
+  const filtrados = useMemo(() => filtrarPagos(pagos, query, metodo), [metodo, pagos, query]);
 
   const totalPagado = pagos.reduce((sum, p) => sum + p.montoCentavos, 0);
   const estudiantesUnicos = new Set(pagos.map((p) => p.estudianteId)).size;
@@ -110,7 +153,7 @@ export default function PagosEscolaresClient() {
 
   return (
     <section className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Pagos escolares</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -119,6 +162,9 @@ export default function PagosEscolaresClient() {
               : 'Transferencias que las familias dicen haber hecho, esperando que las verifiques'}
           </p>
         </div>
+        {tab === 'aplicados' && (
+          <ExportarListado armar={armarExport} deshabilitado={loading || paginaInfo.total === 0} testId="exportar-pagos-escolares" />
+        )}
       </div>
 
       <div className="flex gap-1 border-b border-gray-200">
@@ -159,6 +205,7 @@ export default function PagosEscolaresClient() {
               </SelectContent>
             </Select>
           </div>
+          <RangoFechas label="Fecha de pago" desde={desde} hasta={hasta} onCambiar={(d, h) => { setDesde(d); setHasta(h); setPagina(1); }} />
 
           {loadError ? (
             <div className="text-center py-16">
