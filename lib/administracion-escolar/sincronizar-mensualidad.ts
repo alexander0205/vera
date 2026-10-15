@@ -56,6 +56,8 @@ export interface CargoExistente {
   facturaAnulada?: boolean;
   /** La factura tiene cobros registrados (no se puede anular sin revertirlos). */
   facturaConPagos?: boolean;
+  /** Estado de la factura ante la DGII (BORRADOR = aún no se envió). */
+  facturaEstado?: string | null;
   tienePagos: boolean;
 }
 
@@ -68,6 +70,11 @@ export interface MesBloqueado {
   facturaCodigo: string | null;
   /** Se puede ofrecer anular la factura: está viva y nadie la ha pagado. */
   facturaAnulable: boolean;
+  /**
+   * Por qué no se ofrece anularla. Un e-CF ya enviado a la DGII no se anula
+   * desde aquí: se corrige con una nota de crédito.
+   */
+  noAnulablePor: 'con-pagos' | 'enviada-dgii' | null;
 }
 
 export interface PlanSincronizacion {
@@ -126,6 +133,9 @@ export function planificarMensualidades(args: {
     if (tocado) {
       for (const c of ajenos) usados.add(c.id);
       const facturaViva = tocado.ecfDocumentId != null && !tocado.facturaAnulada;
+      const conPagos = tocado.tienePagos || !!tocado.facturaConPagos;
+      // Solo un borrador (no enviado a la DGII) se ofrece anular.
+      const enviada = facturaViva && (tocado.facturaEstado ?? 'BORRADOR') !== 'BORRADOR';
       plan.bloqueados.push({
         mes: cuota.mes,
         anio: cuota.anio,
@@ -133,7 +143,8 @@ export function planificarMensualidades(args: {
         motivo: facturaViva ? 'facturado' : 'con-pagos',
         ecfDocumentId: facturaViva ? tocado.ecfDocumentId : null,
         facturaCodigo: facturaViva ? tocado.facturaCodigo : null,
-        facturaAnulable: facturaViva && !tocado.tienePagos && !tocado.facturaConPagos,
+        facturaAnulable: facturaViva && !conPagos && !enviada,
+        noAnulablePor: !facturaViva ? null : conPagos ? 'con-pagos' : enviada ? 'enviada-dgii' : null,
       });
       if (cuota.cuotaId > 0) plan.marcar.push(cuota);
       continue;

@@ -38,7 +38,7 @@ describe('planificarMensualidades', () => {
     expect(plan.anular).toEqual([]);
     expect(plan.bloqueados).toEqual([{
       mes: 9, anio: 2026, cargoId: 1, motivo: 'facturado',
-      ecfDocumentId: 506, facturaCodigo: '000506', facturaAnulable: true,
+      ecfDocumentId: 506, facturaCodigo: '000506', facturaAnulable: true, noAnulablePor: null,
     }]);
     // La cuota nueva de septiembre queda marcada: ni el devengo ni el
     // «Previsto» la vuelven a sacar.
@@ -52,6 +52,17 @@ describe('planificarMensualidades', () => {
       existentes: [cargo({ id: 1, mes: 9, ecfDocumentId: 506, facturaCodigo: '000506', facturaConPagos: true })],
     });
     expect(plan.bloqueados[0].facturaAnulable).toBe(false);
+    expect(plan.bloqueados[0].noAnulablePor).toBe('con-pagos');
+  });
+
+  it('no ofrece anular un e-CF ya enviado a la DGII (va con nota de crédito)', () => {
+    const plan = planificarMensualidades({
+      conceptoId: NUEVO,
+      objetivo: [cuota(9)],
+      existentes: [cargo({ id: 1, mes: 9, ecfDocumentId: 506, facturaEstado: 'ACEPTADO' })],
+    });
+    expect(plan.bloqueados[0]).toMatchObject({ facturaAnulable: false, noAnulablePor: 'enviada-dgii' });
+    expect(plan.marcar.map((c) => c.cuotaId)).toEqual([59]);
   });
 
   it('con la factura vieja ya anulada, el mes pasa a la mensualidad nueva', () => {

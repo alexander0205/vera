@@ -166,6 +166,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         ecfDocumentId: adminEscolarCargos.ecfDocumentId,
         facturaCodigo: sql<string | null>`coalesce(${ecfDocuments.codigo}, ${ecfDocuments.encf})`,
         facturaAnulada: sql<boolean>`coalesce(${ecfDocuments.estado} = 'ANULADO', false)`,
+        facturaEstado: ecfDocuments.estado,
         // Cobros en la factura: con alguno no se ofrece anularla.
         facturaConPagos: sql<boolean>`(${adminEscolarCargos.ecfDocumentId} is not null and (
           exists (select 1 from ${pagosRecibidos} where ${pagosRecibidos.ecfDocumentId} = ${adminEscolarCargos.ecfDocumentId})

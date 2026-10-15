@@ -2347,6 +2347,7 @@ interface MesBloqueadoUI {
   ecfDocumentId: number | null;
   facturaCodigo: string | null;
   facturaAnulable: boolean;
+  noAnulablePor: 'con-pagos' | 'enviada-dgii' | null;
 }
 
 function TarifaEstudianteDialog({
@@ -2663,7 +2664,11 @@ function TarifaEstudianteDialog({
                     <p className="font-medium capitalize">{nombreMes(b.mes, b.anio)}</p>
                     <p className="text-xs">
                       {b.motivo === 'facturado'
-                        ? <>Factura {b.facturaCodigo ?? ''}{b.facturaAnulable ? ', sin pagos.' : ', con pagos: no se puede anular desde aquí.'}</>
+                        ? <>Factura {b.facturaCodigo ?? ''}{b.facturaAnulable
+                            ? ', sin pagos.'
+                            : b.noAnulablePor === 'enviada-dgii'
+                              ? ': ya se envió a la DGII, se corrige con una nota de crédito.'
+                              : ', con pagos: no se puede anular desde aquí.'}</>
                         : 'Tiene pagos aplicados: se queda como está.'}
                     </p>
                   </div>
