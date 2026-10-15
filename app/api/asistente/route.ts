@@ -28,7 +28,6 @@ import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
 import { esRespuestaGrande, pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
-import { nombrePeriodo, pedidoFiscal } from '@/lib/asistente/reporte-fiscal-pedido';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
 // Principal 35 s + respaldo 25 s + consultas a la base: cabe en 60.
@@ -230,22 +229,6 @@ export async function POST(req: NextRequest) {
   // «Pásalo a Excel»: es la respuesta anterior, no una pregunta nueva.
   const esPolitica = clasificarSolicitud(texto) != null;
   const quiereExcel = !forzarIa && !esPolitica && pideExcel(texto);
-
-  // «Genera el 606 y 607 de septiembre en Excel»: el paquete fiscal del mes, armado con los datos de la empresa.
-  const fiscal = !forzarIa && !esPolitica ? pedidoFiscal(texto) : null;
-  if (fiscal) {
-    const contenido = fiscal.tipo === 'mes'
-      ? `Listo, te preparé el reporte fiscal de **${nombrePeriodo(fiscal.anio, fiscal.mes)}** en Excel: ingresos cobrados, facturas parciales y sin pago, resumen, ventas (607), gastos (606) y notas. Si no se descargó solo, vuelve a pedirlo o usa el botón del navegador para permitir descargas.`
-      : 'El reporte fiscal se arma por mes. Dime cuál: por ejemplo «genera el 606 y 607 de septiembre en Excel» o «reporte fiscal del mes pasado».';
-    const [g] = await db.insert(asistenteMensajes).values({ conversacionId, rol: 'assistant', contenido, origen: 'local' })
-      .returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
-    await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() }).where(eq(asistenteConversaciones.id, conversacionId));
-    return NextResponse.json({
-      conversacionId, origen: 'local',
-      descargarFiscal: fiscal.tipo === 'mes' ? { anio: fiscal.anio, mes: fiscal.mes } : undefined,
-      mensaje: { id: g.id, rol: 'assistant', contenido, herramientas: [], creadoEn: g.creadoEn, grande: false, origen: 'local', seguimientos: [] },
-    });
-  }
   if (quiereExcel && texto.split(/\s+/).length <= 8) {
     const [prev] = await db.select({ id: asistenteMensajes.id, contenido: asistenteMensajes.contenido }).from(asistenteMensajes)
       .where(and(eq(asistenteMensajes.conversacionId, conversacionId), eq(asistenteMensajes.rol, 'assistant')))

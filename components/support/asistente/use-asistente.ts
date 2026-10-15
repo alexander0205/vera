@@ -46,16 +46,6 @@ export function descargarExcel(mensajeId: number) {
   a.remove();
 }
 
-/** Descarga el reporte fiscal (606/607 y cobros) de un mes. */
-export function descargarReporteFiscal(anio: number, mes: number) {
-  const a = document.createElement('a');
-  a.href = `/api/asistente/reporte-fiscal?anio=${anio}&mes=${mes}`;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
 /**
  * Estado del asistente de solo lectura. No hace nada hasta que el panel se
  * abre (`activo`): así quien nunca abre el chat no paga ni una petición.
@@ -247,9 +237,6 @@ export function useAsistente(activo: boolean) {
       }]);
       if (typeof d.descargarMensajeId === 'number') descargarPdf(d.descargarMensajeId);
       if (typeof d.descargarExcelId === 'number') descargarExcel(d.descargarExcelId);
-      if (d.descargarFiscal && Number.isInteger(d.descargarFiscal.anio) && Number.isInteger(d.descargarFiscal.mes)) {
-        descargarReporteFiscal(d.descargarFiscal.anio, d.descargarFiscal.mes);
-      }
     } catch {
       setMensajes((m) => [...m, {
         id: idTemporal.current--, rol: 'assistant', error: true,
