@@ -38,7 +38,7 @@ export interface Campo {
 
 export type Valores = Record<string, string>;
 export type IdFormulario =
-  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion' | 'notacredito' | 'notadebito' | 'borrador'
+  | 'cliente' | 'producto' | 'cotizacion' | 'factura' | 'pago' | 'gasto' | 'anulacion' | 'notacredito' | 'notadebito' | 'borrador' | 'convertir'
   | 'importar-productos' | 'importar-clientes';
 
 export interface DefFormulario {
@@ -188,6 +188,18 @@ export const FORMULARIOS: Record<IdFormulario, DefFormulario> = {
       { id: 'metodo', etiqueta: 'Método', tipo: 'select', requerido: true, opciones: METODOS_COBRO },
       { id: 'fechaPago', etiqueta: 'Fecha del cobro', tipo: 'fecha', requerido: true },
       { id: 'referencia', etiqueta: 'Referencia', tipo: 'texto', max: 100, ayuda: 'Número de transferencia, cheque o aprobación (opcional).' },
+    ],
+  },
+  convertir: {
+    id: 'convertir',
+    titulo: 'Convertir una cotización en factura',
+    descripcion: 'Crea un borrador de factura con los datos y las líneas de la cotización. No emite nada: lo revisas y lo emites cuando quieras.',
+    boton: 'Crear la factura…',
+    endpoint: '/api/cotizaciones/{documentoId}/convertir',
+    modo: 'json',
+    pantalla: '/dashboard/facturas',
+    campos: [
+      { id: 'documento', etiqueta: 'Cotización', tipo: 'documento', requerido: true, ayuda: 'Busca por número (COT-0001) o por cliente. Solo las borrador, enviadas o aceptadas.' },
     ],
   },
   borrador: {
@@ -813,6 +825,14 @@ export function prefillDeNota(api: unknown, copiarLineas = true): { valores: Val
   };
 }
 
+/** Confirmación antes de convertir una cotización en borrador de factura. */
+export function resumenDeConversion(valores: Valores): string {
+  const c = (valores.documentoNombre ?? '').trim() || 'la cotización elegida';
+  const t = Number(valores.documentoTotal);
+  const monto = Number.isFinite(t) && t > 0 ? ' (RD$ ' + t.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')' : '';
+  return 'Se creará un borrador de factura con los datos de ' + c + monto + '. No se emite nada; queda para que lo revises.';
+}
+
 /** Confirmación antes de anular, con la factura a la vista. */
 export function resumenDeAnulacion(valores: Valores): string {
   const f = (valores.documentoNombre ?? '').trim() || 'la factura elegida';
@@ -858,6 +878,13 @@ export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown, modo
       return { mensaje: 'Listo: registré el cobro.', enlace: def.pantalla };
     case 'anulacion':
       return { mensaje: 'Listo: la factura quedó anulada.', enlace: def.pantalla };
+    case 'convertir': {
+      const id = (respuesta as { facturaId?: number } | null)?.facturaId;
+      return {
+        mensaje: 'Listo: creé el borrador de factura a partir de la cotización. Revísalo y emítelo cuando quieras (puedes pedirme «editar un borrador»).',
+        enlace: id ? `/dashboard/facturas/${id}` : def.pantalla,
+      };
+    }
     case 'borrador': {
       const num = r.encf || r.codigo || '';
       const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
@@ -899,6 +926,13 @@ const RE_PAGO = new RegExp(
   `^${CORTESIA}(?:${VERBO_CREAR}|anotar|anota|cargar|carga|aplicar|aplica|ingresar|ingresa)\\s+${ARTICULO}(?:cobro|pago recibido|pago|abono)\\b(.*)$`,
 );
 const RE_COBRAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |ayudame a )*(?:cobrar|cobra|cobrale)\s+(?:una |la |esa )?factura\b(.*)$/;
+const RE_CONVERTIR = new RegExp(
+  `^${CORTESIA}(?:` +
+    `(?:convertir|convierte|convierteme|pasar|pasa|pasame|transformar|transforma)\\s+${ARTICULO}cotizacion(?:\\s+(?:a|en|como))?\\s*(?:${ARTICULO})?factura|` +
+    `(?:facturar|factura|facturame)\\s+${ARTICULO}(?:cotizacion|presupuesto|proforma)|` +
+    `${VERBO_CREAR}\\s+${ARTICULO}factura\\s+(?:de|desde|a partir de|con)\\s+${ARTICULO}(?:cotizacion|presupuesto|proforma)` +
+  `)\\b(.*)$`,
+);
 const RE_EDITAR_BORRADOR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |podrias |me puedes |ayudame a )*(?:editar|edita|modificar|modifica|corregir|corrige|cambiar|cambia|actualizar|actualiza|retomar|retoma|abrir|abre|continuar|continua|seguir con)\s+(?:un |una |el |la |mi |mis |ese |esa |otro |otra |los |las )*(?:borrador(?:es)?|factura en borrador|factura borrador)\b(.*)$/;
 const RE_NOTA = new RegExp(`^${CORTESIA}(?:${VERBO_CREAR}|emitir|emite|emiteme)\\s+${ARTICULO}nota de (?:credito|debito)\\b(.*)$`);
 const RE_ANULAR = /^(?:por favor |porfa |ahora |ya |oye |quiero |necesito |puedes |podrias |me puedes |ayudame a )*(?:anular|anula|anulame|cancelar|cancela)\s+(?:una |la |esa |otra )?factura\b(.*)$/;
@@ -925,6 +959,7 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
   const imp = t.match(RE_IMPORTAR);
   if (imp) return { id: imp[1] === 'clientes' ? 'importar-clientes' : 'importar-productos', valores: {} };
 
+  if (RE_CONVERTIR.test(t)) return { id: 'convertir', valores: {} };
   if (RE_EDITAR_BORRADOR.test(t)) return { id: 'borrador', valores: {} };
   const nota = t.match(RE_NOTA);
   if (nota) return { id: /nota de debito/.test(t) ? 'notadebito' : 'notacredito', valores: {} };

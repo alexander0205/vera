@@ -1185,6 +1185,8 @@ export async function responderLocal(
       ? `Claro. Sube el archivo aquí mismo y te muestro un resumen antes de importar nada.`
       : form.id === 'gasto'
         ? `Claro. Sube aquí la foto o el PDF del comprobante; queda en «por revisar» para que lo confirmes.`
+        : form.id === 'convertir'
+          ? `Claro. Elige la cotización y te creo un borrador de factura con sus datos.`
         : form.id === 'borrador'
           ? `Claro. Elige el borrador y cambia lo que necesites; lo demás se conserva.`
         : form.id === 'notadebito'

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import {
   armarPayload, endpointDe, esNota, guardarLineas, leerLineas, lineaVacia, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
-  resumenDeAnulacion, resumenDeNota, totalesDeLineas, validarFormulario,
+  resumenDeAnulacion, resumenDeConversion, resumenDeNota, totalesDeLineas, validarFormulario,
   type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
 import s from './asistente.module.css';
@@ -24,7 +24,7 @@ interface ResumenImportacion {
 type Fase =
   | { t: 'editando' }
   | { t: 'enviando' }
-  | { t: 'confirmar'; texto: string; accion: 'emitir' | 'anular' }
+  | { t: 'confirmar'; texto: string; accion: 'emitir' | 'anular' | 'convertir' }
   | { t: 'duplicado'; nombre: string }
   | { t: 'previa'; resumen: ResumenImportacion }
   | { t: 'listo'; mensaje: string; enlace: string }
@@ -90,6 +90,7 @@ function useBusqueda<T>(url: (q: string) => string, leer: (d: unknown) => T[], q
 
 interface ClienteApi { id: number; razonSocial: string; rnc?: string | null; email?: string | null }
 interface ProductoApi { id: number; nombre: string; precioDOP?: number; tasaItbis?: string; tipo?: string }
+interface CotizacionApi { id: number; numero: string; razonSocialComprador?: string | null; montoTotal: number; estado: string }
 interface FacturaApi { id: number; codigo?: string | null; encf?: string | null; razonSocialComprador?: string | null; montoTotal: number; pagado?: number; estadoPago?: string | null }
 
 function SelectorCliente({ id, valores, poner, deshabilitado }: {
@@ -154,15 +155,22 @@ function SelectorCliente({ id, valores, poner, deshabilitado }: {
   );
 }
 
-function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores }: {
-  id: string; valores: Valores; poner: (p: Valores) => void; deshabilitado: boolean; soloBorradores?: boolean;
+function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores, cotizaciones }: {
+  id: string; valores: Valores; poner: (p: Valores) => void; deshabilitado: boolean; soloBorradores?: boolean; cotizaciones?: boolean;
 }) {
   const [texto, setTexto] = useState(valores.documentoNombre ?? '');
   const [abierto, setAbierto] = useState(false);
   const elegido = Boolean(valores.documentoId);
   const { items, cargando } = useBusqueda<FacturaApi>(
-    (q) => `/api/facturas?search=${encodeURIComponent(q)}&limit=8${soloBorradores ? '&estado=BORRADOR' : ''}`,
-    (d) => ((d as { docs?: FacturaApi[] }).docs ?? []),
+    (q) => cotizaciones
+      ? `/api/cotizaciones?q=${encodeURIComponent(q)}`
+      : `/api/facturas?search=${encodeURIComponent(q)}&limit=8${soloBorradores ? '&estado=BORRADOR' : ''}`,
+    (d) => cotizaciones
+      // Una cotización se muestra con la forma de una factura: número, cliente y total; solo las convertibles.
+      ? ((d as { cotizaciones?: CotizacionApi[] }).cotizaciones ?? [])
+          .filter((c) => ['borrador', 'enviada', 'aceptada'].includes(c.estado))
+          .map((c): FacturaApi => ({ id: c.id, codigo: c.numero, razonSocialComprador: c.razonSocialComprador, montoTotal: c.montoTotal, pagado: 0, estadoPago: c.estado }))
+      : ((d as { docs?: FacturaApi[] }).docs ?? []),
     texto, abierto && !elegido,
   );
   return (
@@ -185,7 +193,7 @@ function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores }: 
           poner({ documentoId: '', documentoNombre: ev.target.value, documentoSaldo: '' });
         }}
       />
-      {elegido && valores.documentoSaldo && (
+      {elegido && !cotizaciones && valores.documentoSaldo && (
         <p className={s.campoAyuda}>Saldo pendiente: RD$ {valores.documentoSaldo}</p>
       )}
       {abierto && !elegido && (items.length > 0 || cargando) && (
@@ -202,11 +210,11 @@ function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores }: 
                   onClick={() => {
                     setTexto(nombre);
                     setAbierto(false);
-                    poner({ documentoId: String(f.id), documentoNombre: nombre, documentoSaldo: pesos(saldo), ...(saldo > 0 ? { monto: String(saldo) } : {}) });
+                    poner({ documentoId: String(f.id), documentoNombre: nombre, documentoSaldo: pesos(saldo), documentoTotal: String(f.montoTotal / 100), ...(saldo > 0 && !cotizaciones ? { monto: String(saldo) } : {}) });
                   }}
                 >
                   <strong>{nombre}</strong>
-                  <small>{saldo > 0 ? `debe RD$ ${pesos(saldo)}` : 'pagada'}</small>
+                  <small>{cotizaciones ? `RD$ ${pesos(f.montoTotal / 100)} · ${f.estadoPago}` : saldo > 0 ? `debe RD$ ${pesos(saldo)}` : 'pagada'}</small>
                 </button>
               </li>
             );
@@ -467,6 +475,13 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     setFase({ t: 'confirmar', texto: def.id === 'borrador' ? resumenDeEmision(valores) : def.id === 'notacredito' ? resumenDeNota(valores) : def.id === 'notadebito' ? resumenDeNota(valores, 'debito') : resumenDeEmision(valores), accion: 'emitir' });
   }
 
+  function pedirConversion() {
+    const e = validarFormulario(def, valores);
+    setErrores(e);
+    if (Object.keys(e).length) return;
+    setFase({ t: 'confirmar', texto: resumenDeConversion(valores), accion: 'convertir' });
+  }
+
   function pedirAnulacion() {
     const e = validarFormulario(def, valores);
     setErrores(e);
@@ -568,7 +583,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     } else if (c.tipo === 'cliente') {
       control = <SelectorCliente id={id} valores={valores} poner={poner} deshabilitado={ocupado} />;
     } else if (c.tipo === 'documento') {
-      control = <SelectorFactura id={id} valores={valores} poner={poner} deshabilitado={ocupado} soloBorradores={def.id === 'borrador'} />;
+      control = <SelectorFactura id={id} valores={valores} poner={poner} deshabilitado={ocupado} soloBorradores={def.id === 'borrador'} cotizaciones={def.id === 'convertir'} />;
     } else if (c.tipo === 'lineas') {
       control = <EditorLineas id={id} valor={valores[c.id] ?? ''} cambiar={(v) => poner({ [c.id]: v })} deshabilitado={ocupado} />;
     } else {
@@ -615,6 +630,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
           if (def.modo === 'csv') void subirCsv('preview');
           else if (def.modo === 'captura') void subirCaptura();
           else if (def.id === 'anulacion') pedirAnulacion();
+          else if (def.id === 'convertir') pedirConversion();
           else void enviarJson();
         }}
       >
@@ -674,13 +690,13 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
         )}
 
         {fase.t === 'confirmar' && (
-          <div className={s.avisoForm} role="alertdialog" aria-label={fase.accion === 'emitir' ? 'Confirmar emisión' : 'Confirmar anulación'}>
+          <div className={s.avisoForm} role="alertdialog" aria-label={fase.accion === 'emitir' ? 'Confirmar emisión' : fase.accion === 'convertir' ? 'Confirmar conversión' : 'Confirmar anulación'}>
             <AlertTriangle size={16} aria-hidden />
             <div>
               <strong>{fase.texto}</strong>
               <div className={s.avisoAcciones}>
                 <button type="button" className={s.peligro} onClick={() => void enviarJson({ modo: fase.accion === 'emitir' ? 'emitir' : 'borrador' })}>
-                  {fase.accion === 'emitir' ? (esNota(def.id) ? 'Sí, emitir la nota' : 'Sí, emitir') : 'Sí, anular'}
+                  {fase.accion === 'emitir' ? (esNota(def.id) ? 'Sí, emitir la nota' : 'Sí, emitir') : fase.accion === 'convertir' ? 'Sí, crear el borrador' : 'Sí, anular'}
                 </button>
                 <button type="button" onClick={() => setFase({ t: 'editando' })}>Volver</button>
               </div>

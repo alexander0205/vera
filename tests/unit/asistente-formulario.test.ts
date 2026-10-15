@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   armarPayload, bloqueFormulario, defFormulario, detectarFormulario, endpointDe, FORMULARIOS, guardarLineas, leerLineas,
-  limpiarValor, parsearFormulario, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeAnulacion, resumenDeEmision, resumenDeNota, totalesDeLineas, validarFormulario,
+  limpiarValor, parsearFormulario, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeAnulacion, resumenDeConversion, resumenDeEmision, resumenDeNota, totalesDeLineas, validarFormulario,
 } from '@/lib/asistente/formulario';
 import { calcularTotales } from '@/lib/ecf/types';
 import { aBloques } from '@/lib/asistente/bloques';
@@ -518,5 +518,44 @@ describe('editar un borrador', () => {
   it('el resultado dice guardado o emitido', () => {
     expect(resultadoDeCreacion(def, { documentoId: 4001, codigo: 'FA-1' }).mensaje).toContain('guardé los cambios');
     expect(resultadoDeCreacion(def, { documentoId: 4001, encf: 'E320000000999', estado: 'EN_PROCESO' }, 'emitir').mensaje).toContain('emití');
+  });
+});
+
+describe('convertir una cotización en factura', () => {
+  const def = FORMULARIOS.convertir;
+  it.each([
+    'convertir una cotización en factura',
+    'convierte la cotización a factura',
+    'quiero pasar una cotización a factura',
+    'facturar una cotización',
+    'crea una factura desde una cotización',
+    'crear factura a partir de la cotización',
+  ])('«%s» abre la conversión', (t) => {
+    expect(detectarFormulario(t)?.id).toBe('convertir');
+  });
+
+  it.each([
+    'crea una cotización',
+    'cómo convierto una cotización en factura',
+    'cuántas cotizaciones tengo',
+    'crea una factura',
+    'qué es una cotización',
+  ])('«%s» no es una conversión', (t) => {
+    expect(detectarFormulario(t)?.id).not.toBe('convertir');
+  });
+
+  it('exige elegir la cotización y arma la dirección con su id', () => {
+    expect(validarFormulario(def, {})).toHaveProperty('documento');
+    expect(validarFormulario(def, { documentoId: '81' })).toEqual({});
+    expect(endpointDe(def, { documentoId: '81' })).toBe('/api/cotizaciones/81/convertir');
+    expect(endpointDe(def, {})).toBeNull();
+    expect(endpointDe(def, { documentoId: '81/../../x' })).toBeNull();
+    expect(armarPayload(def, { documentoId: '81' })).toEqual({});
+  });
+
+  it('la confirmación aclara que no emite y el resultado enlaza al borrador', () => {
+    expect(resumenDeConversion({ documentoNombre: 'COT-0001 · Ana', documentoTotal: '3540' })).toContain('RD$ 3,540.00');
+    expect(resumenDeConversion({ documentoNombre: 'COT-0001 · Ana' })).toContain('No se emite nada');
+    expect(resultadoDeCreacion(def, { ok: true, facturaId: 4002, redirect: '/x' }).enlace).toBe('/dashboard/facturas/4002');
   });
 });
