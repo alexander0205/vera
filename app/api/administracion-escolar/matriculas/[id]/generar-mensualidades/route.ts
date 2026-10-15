@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // que el devengo y la ficha. Nunca se teclea.
   const ctx = await contextoDeSeccion(teamId, mat.periodoId, mat.cursoId, {
     tipo: mat.becaTipo, valor: mat.becaValor,
-  }, mat.estudianteId);
+  }, mat.estudianteId, conceptoId);
   // Sin fecha de inscripción se toma el arranque del recurrente: es desde
   // cuándo se le está cobrando.
   const desde = String(mat.fechaInscripcion ?? fr.fechaInicio);
