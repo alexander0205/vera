@@ -14,6 +14,9 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import { RangoFechas } from '@/components/reportes/rango-fechas';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface TurnoHistorial {
   id: number;
@@ -43,16 +46,38 @@ function duracion(desde: string, hasta: string | null) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
+/** Imprimir / PDF / Excel de los turnos del rango (todos, no solo la página). */
+const EXPORTAR: ExportTabla<TurnoHistorial> = {
+  titulo: 'Historial de caja',
+  archivo: 'historial-caja',
+  columnas: [
+    { titulo: 'Cierre', valor: t => t.numeroCierre ?? `#${t.id}`, sub: t => (t.aprobadoAt ? `Aprobado ${fmtDatetime(t.aprobadoAt)}` : null), ancho: 1.3 },
+    { titulo: 'Cajero', valor: t => t.cajero ?? t.cajeroEmail, ancho: 1.4 },
+    { titulo: 'Apertura', valor: t => fmtDatetime(t.aperturaAt), ancho: 1.1 },
+    { titulo: 'Duración', valor: t => duracion(t.aperturaAt, t.aprobadoAt), ancho: 0.7 },
+    { titulo: 'Esperado', valor: t => t.montoEsperadoCentavos ?? 0, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Contado', valor: t => t.efectivoContadoCentavos ?? 0, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Diferencia', valor: t => t.diferenciaCentavos ?? 0, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Observación', valor: t => t.cierreObs ?? t.aprobacionObs, ancho: 1.5 },
+  ],
+};
+
+const fechaCorta = (iso: string) => iso.split('-').reverse().join('/');
+
 export default function HistorialPage() {
   const [loading, setLoading] = useState(true);
   const [turnos, setTurnos]   = useState<TurnoHistorial[]>([]);
   const [total, setTotal]     = useState(0);
   const [page, setPage]       = useState(1);
+  const [desde, setDesde]     = useState('');
+  const [hasta, setHasta]     = useState('');
   const limit = 20;
 
   const fetchHistorial = useCallback(async () => {
     setLoading(true);
     const sp = new URLSearchParams({ limit: String(limit), offset: String((page - 1) * limit) });
+    if (desde) sp.set('desde', desde);
+    if (hasta) sp.set('hasta', hasta);
     const res = await fetch(`/api/caja/historial?${sp}`).catch(() => null);
     if (res?.ok) {
       const data = await res.json();
@@ -60,7 +85,19 @@ export default function HistorialPage() {
       setTotal(data.total ?? 0);
     }
     setLoading(false);
-  }, [page]);
+  }, [page, desde, hasta]);
+
+  // Para el export: el rango entero, no la página de 20.
+  async function armarExport() {
+    const sp = new URLSearchParams({ limit: '2000', offset: '0' });
+    if (desde) sp.set('desde', desde);
+    if (hasta) sp.set('hasta', hasta);
+    const data = await fetch(`/api/caja/historial?${sp}`).then(r => r.json());
+    const filtro = desde && hasta ? `Apertura del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
+      : desde ? `Apertura desde el ${fechaCorta(desde)}`
+      : hasta ? `Apertura hasta el ${fechaCorta(hasta)}` : 'Todas las fechas';
+    return armarEnvioTabla(EXPORTAR, (data.turnos ?? []) as TurnoHistorial[], filtro);
+  }
 
   useEffect(() => { fetchHistorial(); }, [fetchHistorial]);
 
@@ -68,9 +105,15 @@ export default function HistorialPage() {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1100 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Historial de caja</Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>Turnos cerrados y aprobados</Typography>
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Historial de caja</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>Turnos cerrados y aprobados</Typography>
+        </Box>
+        <ExportarListado armar={armarExport} deshabilitado={loading || total === 0} testId="exportar-caja" />
+      </Box>
+      <Box sx={{ mb: 2 }}>
+        <RangoFechas label="Apertura" desde={desde} hasta={hasta} onCambiar={(d, h) => { setDesde(d); setHasta(h); setPage(1); }} />
       </Box>
 
       {loading ? (
@@ -80,7 +123,7 @@ export default function HistorialPage() {
       ) : turnos.length === 0 ? (
         <Box sx={{ bgcolor: 'grey.50', borderRadius: '16px', border: '1px solid #e5e7eb', py: 8, textAlign: 'center' }}>
           <Wallet style={{ width: 40, height: 40, color: '#d1d5db', margin: '0 auto 12px' }} />
-          <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.secondary' }}>Sin turnos cerrados aún</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.secondary' }}>{desde || hasta ? 'Sin turnos en este rango' : 'Sin turnos cerrados aún'}</Typography>
           <Typography variant="body2" sx={{ color: 'text.disabled', mt: 0.5 }}>Los turnos aparecerán aquí una vez cerrados y aprobados.</Typography>
         </Box>
       ) : (

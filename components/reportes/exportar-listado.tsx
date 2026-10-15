@@ -24,8 +24,12 @@ const sx = {
 type Accion = 'imprimir' | 'pdf' | 'xlsx';
 
 export function ExportarListado({ armar, deshabilitado, testId }: {
-  /** Arma el envío en el momento del clic (con el filtro y orden vigentes). */
-  armar: () => Omit<ListadoEnvio, 'formato' | 'inline'>;
+  /**
+   * Arma el envío en el momento del clic (con el filtro y orden vigentes).
+   * Puede ser asíncrono: las pantallas paginadas en el servidor piden ahí
+   * todo el rango filtrado, no solo la página que enseñan.
+   */
+  armar: () => Omit<ListadoEnvio, 'formato' | 'inline'> | Promise<Omit<ListadoEnvio, 'formato' | 'inline'>>;
   deshabilitado?: boolean;
   testId?: string;
 }) {
@@ -37,7 +41,7 @@ export function ExportarListado({ armar, deshabilitado, testId }: {
     const ventana = accion === 'imprimir' ? window.open('', '_blank') : null;
     setOcupado(accion);
     try {
-      const envio: ListadoEnvio = { ...armar(), formato: accion === 'xlsx' ? 'xlsx' : 'pdf', inline: accion === 'imprimir' };
+      const envio: ListadoEnvio = { ...(await armar()), formato: accion === 'xlsx' ? 'xlsx' : 'pdf', inline: accion === 'imprimir' };
       const res = await fetch('/api/export/listado', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envio),
       });
