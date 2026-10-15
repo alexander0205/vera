@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, gte } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/schema';
 import { rateLimitDb } from '@/lib/rate-limit';
@@ -22,6 +22,7 @@ import { logAudit } from '@/lib/audit';
 import { clasificarSolicitud } from '@/lib/asistente/politicas';
 import { sugerenciasPara } from '@/lib/asistente/sugerencias';
 import { interpretarPantalla } from '@/lib/asistente/pantalla';
+import { frecuentesDe } from '@/lib/asistente/frecuentes';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
@@ -32,6 +33,8 @@ import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeC
 export const maxDuration = 60;
 
 const MAX_LARGO = 1500;
+/** Las de los atajos por defecto: no tiene sentido repetirlas como «las que sueles preguntar». */
+const SUGERENCIAS_FIJAS = ['¿Cuánto he vendido este mes?', '¿Quién me debe y cuánto?', 'Dame el resumen de hoy', '¿Cuáles son mis mejores clientes?', 'Resumen de ITBIS del mes'];
 const MAX_HISTORIAL = 20;
 
 export async function GET(req: NextRequest) {
@@ -44,7 +47,19 @@ export async function GET(req: NextRequest) {
 
   // Para saludar por nombre y decir de qué empresa se habla.
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, acceso.teamId)).limit(1);
+  // Lo que esta persona suele preguntar (solo sus propias preguntas, últimos 90 días).
+  const propias = await db.select({ contenido: asistenteMensajes.contenido }).from(asistenteMensajes)
+    .innerJoin(asistenteConversaciones, eq(asistenteConversaciones.id, asistenteMensajes.conversacionId))
+    .where(and(
+      eq(asistenteConversaciones.teamId, acceso.teamId),
+      eq(asistenteConversaciones.userId, acceso.user.id),
+      eq(asistenteMensajes.rol, 'user'),
+      gte(asistenteMensajes.creadoEn, new Date(Date.now() - 90 * 86_400_000)),
+    ))
+    .orderBy(desc(asistenteMensajes.id))
+    .limit(400);
   const perfil = {
+    frecuentes: frecuentesDe(propias.map((p) => p.contenido), { excluir: SUGERENCIAS_FIJAS }),
     usuario: (acceso.user.name ?? '').trim().split(/\s+/)[0] || null,
     empresa: team?.nombre ?? null,
     // Los atajos dependen de los módulos y permisos: un colegio ve matrículas, no turnos de caja.

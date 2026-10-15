@@ -53,7 +53,7 @@ Orden de trabajo; cada una con pruebas y commit.
 - [x] 5.6 Alertas al abrir el panel (rechazadas, secuencia por agotarse, certificado por vencer)
 - [x] 5.7 Resumen semanal en el chat
 - [x] 5.8 Ayuda guiada para tareas largas
-- [ ] 5.9 Atajos que aprenden de lo que más pregunta cada dueño
+- [x] 5.9 Atajos que aprenden de lo que más pregunta cada dueño
 
 ### Diseño
 - [ ] 5.10 Sugerencias después de cada respuesta (chips)

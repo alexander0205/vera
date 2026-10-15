@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, ArrowUp, Banknote, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  AlertTriangle, ArrowUp, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
   Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -253,6 +253,17 @@ export function PanelAsistente({
                     </span>
                     <span className={s.alertaAccion}>{al.accion}</span>
                   </Link>
+                ))}
+              </div>
+            )}
+            {a.perfil.frecuentes.length > 0 && (
+              <div className={s.sugerencias}>
+                <span className={s.etiqueta}>Lo que sueles preguntar</span>
+                {a.perfil.frecuentes.map((q) => (
+                  <button key={q} type="button" className={s.chip} onClick={() => mandar(q)}>
+                    <History size={16} aria-hidden />
+                    <span>{q}</span>
+                  </button>
                 ))}
               </div>
             )}

@@ -47,7 +47,7 @@ export function useAsistente(activo: boolean) {
   const [derivando, setDerivando] = useState(false);
   const [derivada, setDerivada] = useState(false);
   const [errorDerivar, setErrorDerivar] = useState<string | null>(null);
-  const [perfil, setPerfil] = useState<{ usuario: string | null; empresa: string | null; sugerencias: { texto: string; icono: string }[] | null }>({ usuario: null, empresa: null, sugerencias: null });
+  const [perfil, setPerfil] = useState<{ usuario: string | null; empresa: string | null; sugerencias: { texto: string; icono: string }[] | null; frecuentes: string[] }>({ usuario: null, empresa: null, sugerencias: null, frecuentes: [] });
   const idTemporal = useRef(-1);
 
   // La carga reintenta sola (la primera compilación o un corte breve no deben
@@ -81,7 +81,7 @@ export function useAsistente(activo: boolean) {
           if (opts.soloSiCambio && empresaId === empresaIdRef.current) return;
           empresaIdRef.current = empresaId;
           setIa(Boolean(d.ia));
-          setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null });
+          setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null, frecuentes: Array.isArray(d.frecuentes) ? d.frecuentes : [] });
           // La conversación es de la empresa: al cambiar de empresa se muestra
           // la última de esa empresa, o una vacía si no hay ninguna.
           if (d.conversacion) {
