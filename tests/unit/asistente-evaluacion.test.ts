@@ -612,3 +612,44 @@ describe('evaluación: coherencia con las pantallas de Zero', () => {
     expect(r?.intencion).toBe('tendencia');
   });
 });
+
+// ── 3.1 Historial del asistente para el dueño ──
+import { emparejar, resumirRespuesta } from '@/lib/asistente/bitacora';
+
+describe('evaluación: historial del asistente', () => {
+  const t = (min: number) => new Date(Date.UTC(2026, 9, 14, 12, min));
+  const preguntas = [
+    { id: 1, conversacionId: 10, contenido: 'cuanto vendi este mes', creadoEn: t(0), usuarioId: 5, usuario: 'Ana' },
+    { id: 3, conversacionId: 10, contenido: 'quien me debe', creadoEn: t(5), usuarioId: 5, usuario: 'Ana' },
+    { id: 4, conversacionId: 20, contenido: 'hola', creadoEn: t(7), usuarioId: 6, usuario: 'Luis' },
+  ];
+  const respuestas = [
+    { id: 2, conversacionId: 10, contenido: 'Vendiste **RD$ 1,000.00** [ver](/dashboard/facturas)', herramientas: [{ nombre: 'Resumen de ventas' }], valoracion: 1, valoracionMotivo: null },
+    { id: 6, conversacionId: 20, contenido: 'Hola', herramientas: null, valoracion: null, valoracionMotivo: null },
+    { id: 5, conversacionId: 10, contenido: 'Te deben mucho', herramientas: null, valoracion: -1, valoracionMotivo: 'dato-incorrecto' },
+  ];
+
+  it('cada pregunta lleva SU respuesta (la siguiente de su conversación), recientes primero', () => {
+    const e = emparejar(preguntas, respuestas);
+    expect(e.map((x) => x.id)).toEqual([4, 3, 1]);
+    expect(e.find((x) => x.id === 1)).toMatchObject({ respuesta: 'Vendiste RD$ 1,000.00 ver', valoracion: 1, consultas: ['Resumen de ventas'] });
+    expect(e.find((x) => x.id === 3)).toMatchObject({ respuesta: 'Te deben mucho', valoracion: -1, motivo: 'dato-incorrecto' });
+    expect(e.find((x) => x.id === 4)).toMatchObject({ usuario: 'Luis', respuesta: 'Hola' });
+  });
+
+  it('una pregunta sin respuesta aparece igual', () => {
+    const e = emparejar([preguntas[0]], []);
+    expect(e[0].respuesta).toBeNull();
+  });
+
+  it('enmascara tarjetas y llaves, y no muestra gráficos ni tablas crudas', () => {
+    expect(resumirRespuesta('Tarjeta 4111 1111 1111 1111 y clave sk-abcdefghijklmnop1234')).not.toMatch(/4111 1111 1111 1111|sk-abcdefghijklmnop1234/);
+    const r = resumirRespuesta('Ventas:\n\n```grafico\ntitulo: x\nA | 1\nB | 2\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |');
+    expect(r).toContain('[gráfico]');
+    expect(r).not.toContain('|');
+  });
+
+  it('recorta lo largo', () => {
+    expect(resumirRespuesta('palabra '.repeat(100), 50).length).toBeLessThanOrEqual(51);
+  });
+});

@@ -928,6 +928,16 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
     palabras: ['actividad', 'registro de actividad', 'auditoria', 'bitacora', 'log', 'quien hizo que', 'historial de acciones'],
   },
   {
+    id: 'fact-asistente-historial',
+    modulo: 'facturacion',
+    titulo: 'Historial del asistente',
+    ruta: '/dashboard/asistente',
+    menu: 'Asistencia › Asistente › ícono del reloj (arriba del chat)',
+    que: 'Qué le han preguntado al asistente en tu empresa y qué respondió, con quién preguntó, cuándo y si la respuesta sirvió.',
+    palabras: ['historial del asistente', 'preguntas al asistente', 'que le preguntan al asistente', 'quien uso el asistente', 'uso del asistente', 'bitacora del asistente', 'conversaciones del asistente'],
+    permiso: 'configuracion:gestionar',
+  },
+  {
     id: 'fact-suscripcion',
     modulo: 'facturacion',
     titulo: 'Suscripción y plan',
