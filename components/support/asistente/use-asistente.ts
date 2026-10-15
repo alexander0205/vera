@@ -40,7 +40,7 @@ export function useAsistente(activo: boolean) {
   const [derivando, setDerivando] = useState(false);
   const [derivada, setDerivada] = useState(false);
   const [errorDerivar, setErrorDerivar] = useState<string | null>(null);
-  const [perfil, setPerfil] = useState<{ usuario: string | null; empresa: string | null }>({ usuario: null, empresa: null });
+  const [perfil, setPerfil] = useState<{ usuario: string | null; empresa: string | null; sugerencias: { texto: string; icono: string }[] | null }>({ usuario: null, empresa: null, sugerencias: null });
   const cargado = useRef(false);
   const idTemporal = useRef(-1);
 
@@ -62,7 +62,7 @@ export function useAsistente(activo: boolean) {
         const d = await r.json();
         cargado.current = true;
         setDisponible(Boolean(d.disponible));
-        setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null });
+        setPerfil({ usuario: d.usuario ?? null, empresa: d.empresa ?? null, sugerencias: Array.isArray(d.sugerencias) ? d.sugerencias : null });
         if (d.conversacion) {
           setConversacionId(d.conversacion.id);
           setDerivada(Boolean(d.conversacion.derivada));

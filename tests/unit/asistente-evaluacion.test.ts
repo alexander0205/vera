@@ -129,3 +129,34 @@ describe('evaluación: lo que nunca se responde sin IA ni con relleno', () => {
     if (r) expect(r.respuesta).not.toMatch(/RD\$\s?[1-9][\d,]*\.\d{2}/);
   });
 });
+
+describe('evaluación: atajos al abrir el chat', () => {
+  const todo = { tieneModulo: () => true, puede: () => true };
+  const nada = { tieneModulo: () => false, puede: () => false };
+
+  it('todo atajo se contesta sin IA y con la intención declarada', async () => {
+    const { sugerenciasPara } = await import('@/lib/asistente/sugerencias');
+    const lista = sugerenciasPara(todo);
+    expect(lista.length).toBeGreaterThanOrEqual(5);
+    for (const s of lista) {
+      const { tools } = herramientas();
+      const r = await responderLocal(s.texto, tools, { hoy: HOY });
+      expect(r?.intencion, s.texto).toBe(s.intencion);
+    }
+  });
+
+  it('sin módulos ni permisos solo quedan los atajos generales, nunca de otros módulos', async () => {
+    const { sugerenciasPara } = await import('@/lib/asistente/sugerencias');
+    const textos = sugerenciasPara(nada).map((s) => s.icono);
+    expect(textos).not.toContain('escolar');
+    expect(textos).not.toContain('nomina');
+    expect(textos).not.toContain('caja');
+    expect(textos).toContain('ventas');
+  });
+
+  it('un colegio ve matrículas entre los primeros atajos', async () => {
+    const { sugerenciasPara } = await import('@/lib/asistente/sugerencias');
+    const colegio = { tieneModulo: (m: string) => m === 'escolar', puede: () => true };
+    expect(sugerenciasPara(colegio as never).slice(0, 2).map((s) => s.icono)).toContain('escolar');
+  });
+});

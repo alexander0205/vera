@@ -20,6 +20,7 @@ import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/sche
 import { rateLimitDb } from '@/lib/rate-limit';
 import { logAudit } from '@/lib/audit';
 import { clasificarSolicitud } from '@/lib/asistente/politicas';
+import { sugerenciasPara } from '@/lib/asistente/sugerencias';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
@@ -32,7 +33,7 @@ export const maxDuration = 60;
 const MAX_LARGO = 1500;
 const MAX_HISTORIAL = 20;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const acceso = await evaluarAcceso();
   // Quien no es dueño/admin no ve el asistente: no es un error, es «no aplica».
   if (!acceso.ok) {
@@ -45,6 +46,11 @@ export async function GET() {
   const perfil = {
     usuario: (acceso.user.name ?? '').trim().split(/\s+/)[0] || null,
     empresa: team?.nombre ?? null,
+    // Los atajos dependen de los módulos y permisos: un colegio ve matrículas, no turnos de caja.
+    sugerencias: sugerenciasPara(await construirContexto(
+      acceso.teamId, acceso.user.platformRole, acceso.teamRole,
+      crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') }),
+    )).map(({ texto, icono }) => ({ texto, icono })),
   };
 
   const [conv] = await db.select().from(asistenteConversaciones)

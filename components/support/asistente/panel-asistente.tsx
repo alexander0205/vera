@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowUp, Check, Copy, CreditCard, FileDown, Receipt, Sparkles, ThumbsDown, ThumbsUp, TrendingUp, Users, Wallet,
+  ArrowUp, Banknote, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
@@ -15,6 +16,12 @@ import s from './asistente.module.css';
  * la vista de soporte humano.
  */
 
+const ICONOS: Record<string, LucideIcon> = {
+  ventas: TrendingUp, cartera: Users, cobros: CreditCard, clientes: Wallet, itbis: Receipt, revisar: ScanSearch,
+  borradores: FilePen, inventario: PackageSearch, escolar: GraduationCap, nomina: UserCog, caja: Banknote, guia: BookOpen,
+};
+
+// Respaldo: el servidor manda los atajos según los módulos y permisos de la empresa.
 const SUGERENCIAS: { texto: string; icono: LucideIcon }[] = [
   { texto: '¿Cuánto he vendido este mes?', icono: TrendingUp },
   { texto: '¿Quién me debe y cuánto?', icono: Users },
@@ -200,7 +207,10 @@ export function PanelAsistente({
             </div>
             <div className={s.sugerencias}>
               <span className={s.etiqueta}>Prueba con</span>
-              {SUGERENCIAS.map(({ texto: q, icono: Icono }) => (
+              {(a.perfil.sugerencias?.length
+                ? a.perfil.sugerencias.map((x) => ({ texto: x.texto, icono: ICONOS[x.icono] ?? Sparkles }))
+                : SUGERENCIAS
+              ).map(({ texto: q, icono: Icono }) => (
                 <button key={q} type="button" className={s.chip} onClick={() => mandar(q)}>
                   <Icono size={16} aria-hidden />
                   <span>{q}</span>
