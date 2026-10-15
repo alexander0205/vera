@@ -3790,6 +3790,24 @@ export const asistenteConversaciones = pgTable('asistente_conversaciones', {
   userIdx: index('asistente_conv_user_idx').on(t.teamId, t.userId, t.actualizadaEn),
 }));
 
+/**
+ * Reportes que el asistente envía por correo a quien los programó (migración 0195).
+ * Solo a la dirección de esa persona.
+ */
+export const asistenteReportesProgramados = pgTable('asistente_reportes_programados', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  userId:        integer('user_id').notNull().references(() => users.id),
+  tipo:          varchar('tipo', { length: 16 }).notNull(),
+  frecuencia:    varchar('frecuencia', { length: 10 }).notNull(),
+  activo:        boolean('activo').notNull().default(true),
+  ultimoEnvioEn: timestamp('ultimo_envio_en'),
+  ultimoError:   varchar('ultimo_error', { length: 200 }),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+}, (t) => ({
+  unico: uniqueIndex('asistente_reportes_unico_idx').on(t.teamId, t.userId, t.tipo, t.frecuencia),
+}));
+
 export const asistenteMensajes = pgTable('asistente_mensajes', {
   id:             serial('id').primaryKey(),
   conversacionId: integer('conversacion_id').notNull()

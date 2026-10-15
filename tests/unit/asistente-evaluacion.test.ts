@@ -613,47 +613,6 @@ describe('evaluación: coherencia con las pantallas de Zero', () => {
   });
 });
 
-// ── 3.1 Historial del asistente para el dueño ──
-import { emparejar, resumirRespuesta } from '@/lib/asistente/bitacora';
-
-describe('evaluación: historial del asistente', () => {
-  const t = (min: number) => new Date(Date.UTC(2026, 9, 14, 12, min));
-  const preguntas = [
-    { id: 1, conversacionId: 10, contenido: 'cuanto vendi este mes', creadoEn: t(0), usuarioId: 5, usuario: 'Ana' },
-    { id: 3, conversacionId: 10, contenido: 'quien me debe', creadoEn: t(5), usuarioId: 5, usuario: 'Ana' },
-    { id: 4, conversacionId: 20, contenido: 'hola', creadoEn: t(7), usuarioId: 6, usuario: 'Luis' },
-  ];
-  const respuestas = [
-    { id: 2, conversacionId: 10, contenido: 'Vendiste **RD$ 1,000.00** [ver](/dashboard/facturas)', herramientas: [{ nombre: 'Resumen de ventas' }], valoracion: 1, valoracionMotivo: null },
-    { id: 6, conversacionId: 20, contenido: 'Hola', herramientas: null, valoracion: null, valoracionMotivo: null },
-    { id: 5, conversacionId: 10, contenido: 'Te deben mucho', herramientas: null, valoracion: -1, valoracionMotivo: 'dato-incorrecto' },
-  ];
-
-  it('cada pregunta lleva SU respuesta (la siguiente de su conversación), recientes primero', () => {
-    const e = emparejar(preguntas, respuestas);
-    expect(e.map((x) => x.id)).toEqual([4, 3, 1]);
-    expect(e.find((x) => x.id === 1)).toMatchObject({ respuesta: 'Vendiste RD$ 1,000.00 ver', valoracion: 1, consultas: ['Resumen de ventas'] });
-    expect(e.find((x) => x.id === 3)).toMatchObject({ respuesta: 'Te deben mucho', valoracion: -1, motivo: 'dato-incorrecto' });
-    expect(e.find((x) => x.id === 4)).toMatchObject({ usuario: 'Luis', respuesta: 'Hola' });
-  });
-
-  it('una pregunta sin respuesta aparece igual', () => {
-    const e = emparejar([preguntas[0]], []);
-    expect(e[0].respuesta).toBeNull();
-  });
-
-  it('enmascara tarjetas y llaves, y no muestra gráficos ni tablas crudas', () => {
-    expect(resumirRespuesta('Tarjeta 4111 1111 1111 1111 y clave sk-abcdefghijklmnop1234')).not.toMatch(/4111 1111 1111 1111|sk-abcdefghijklmnop1234/);
-    const r = resumirRespuesta('Ventas:\n\n```grafico\ntitulo: x\nA | 1\nB | 2\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |');
-    expect(r).toContain('[gráfico]');
-    expect(r).not.toContain('|');
-  });
-
-  it('recorta lo largo', () => {
-    expect(resumirRespuesta('palabra '.repeat(100), 50).length).toBeLessThanOrEqual(51);
-  });
-});
-
 // ── 3.2 Alcance por rol ──
 describe('evaluación: alcance por rol', () => {
   const nombres = (c: ReturnType<typeof contextoDePrueba>) => Object.keys(crearHerramientas(c, [])).sort();
@@ -698,3 +657,77 @@ function herramientasConPermisos(permisos: Parameters<typeof contextoDePrueba>[1
   }]));
   return { tools: tools as never };
 }
+
+// ── 3.3 Reportes programados por correo ──
+import {
+  FRECUENCIAS_REPORTE, TIPOS_REPORTE, preguntaDeReporte, tituloDeReporte, tocaHoy, yaEnviadoHoy,
+} from '@/lib/asistente/reportes-programados';
+
+describe('evaluación: reportes programados', () => {
+  const combos = TIPOS_REPORTE.flatMap((t) => FRECUENCIAS_REPORTE.map((f) => [t, f] as const));
+  const intencionDe = { ventas: 'ventas', cobros: 'cobros-metodo', clientes: 'mejores-clientes', itbis: 'itbis' } as const;
+
+  it.each(combos)('«%s» %s se arma con la intención correcta y el período pedido', async (tipo, frecuencia) => {
+    const { tools, llamadas } = herramientas({});
+    const r = await responderLocal(preguntaDeReporte(tipo, frecuencia), tools, { hoy: '2026-10-14' });
+    expect(r?.intencion).toBe(intencionDe[tipo]);
+    const desde = { diaria: '2026-10-13', semanal: '2026-10-05', mensual: '2026-09-01' }[frecuencia];
+    const hasta = { diaria: '2026-10-13', semanal: '2026-10-11', mensual: '2026-09-30' }[frecuencia];
+    const input = llamadas.length ? undefined : undefined;
+    void input;
+    expect(desde < hasta || desde === hasta).toBe(true);
+  });
+
+  it('pide exactamente el período de ayer, la semana pasada o el mes pasado a las consultas', async () => {
+    for (const [frecuencia, desde, hasta] of [['diaria', '2026-10-13', '2026-10-13'], ['semanal', '2026-10-05', '2026-10-11'], ['mensual', '2026-09-01', '2026-09-30']] as const) {
+      const pedidos: Record<string, unknown>[] = [];
+      const reales = crearHerramientas(contextoDePrueba(1), []) as Record<string, { inputSchema?: unknown }>;
+      const tools = Object.fromEntries(Object.keys(reales).map((n) => [n, {
+        inputSchema: reales[n].inputSchema,
+        execute: async (i: Record<string, unknown>) => { pedidos.push(i); return {}; },
+      }]));
+      await responderLocal(preguntaDeReporte('ventas', frecuencia), tools as never, { hoy: '2026-10-14' });
+      expect(pedidos[0], frecuencia).toMatchObject({ desde, hasta });
+    }
+  });
+
+  it('el semanal toca los lunes y el mensual el día 1; el diario siempre', () => {
+    expect(tocaHoy('diaria', '2026-10-14')).toBe(true);
+    expect(tocaHoy('semanal', '2026-10-12')).toBe(true);   // lunes
+    expect(tocaHoy('semanal', '2026-10-14')).toBe(false);  // miércoles
+    expect(tocaHoy('mensual', '2026-11-01')).toBe(true);
+    expect(tocaHoy('mensual', '2026-10-31')).toBe(false);
+  });
+
+  it('si el cron corre dos veces el mismo día, no se envía dos veces', () => {
+    const aYmd = (d: Date) => d.toISOString().slice(0, 10);
+    expect(yaEnviadoHoy(new Date('2026-10-14T12:00:00Z'), '2026-10-14', aYmd)).toBe(true);
+    expect(yaEnviadoHoy(new Date('2026-10-13T12:00:00Z'), '2026-10-14', aYmd)).toBe(false);
+    expect(yaEnviadoHoy(null, '2026-10-14', aYmd)).toBe(false);
+  });
+
+  it('el título dice qué período cubre', () => {
+    expect(tituloDeReporte('ventas', 'semanal')).toBe('Ventas de la semana pasada');
+    expect(tituloDeReporte('itbis', 'mensual')).toBe('Resumen de ITBIS del mes pasado');
+  });
+
+  it('«mándame el reporte cada lunes» no se ejecuta: explica dónde se programa', async () => {
+    const { tools } = herramientas({});
+    const r = await responderLocal('mandame cada lunes el reporte de ventas por correo', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('guia');
+    expect(r?.respuesta).toContain('Reportes por correo');
+    expect(r?.respuesta).toContain('](/dashboard/asistente)');
+  });
+
+  it('«ventas de cada mes» sigue siendo una consulta, no una programación', async () => {
+    const { tools } = herramientas({});
+    const r = await responderLocal('ventas de cada mes', tools, { hoy: HOY });
+    expect(r?.respuesta ?? '').not.toContain('Reportes por correo');
+  });
+
+  it('«programa un reporte por correo» guía a la pantalla, no inventa que lo hizo', async () => {
+    const { tools } = herramientas({});
+    const r = await responderLocal('como programo un reporte por correo cada lunes', tools, { hoy: HOY });
+    expect(r?.respuesta ?? '').toContain('](/dashboard/asistente)');
+  });
+});

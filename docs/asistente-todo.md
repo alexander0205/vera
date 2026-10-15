@@ -27,7 +27,7 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 
 ## Fase 3 — control y alcance
 - [ ] 3.1 Bitácora visible para el dueño (quién preguntó qué y cuándo)
-- [ ] 3.2 Alcance por rol (contador: contabilidad y tributario, sin nómina)
+- [x] 3.2 Alcance por rol (por permisos y módulos; protegido con pruebas)
 - [ ] 3.3 Reportes PDF programados por correo
 
 ## Fase 4 — canales y acciones

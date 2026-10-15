@@ -928,13 +928,18 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
     palabras: ['actividad', 'registro de actividad', 'auditoria', 'bitacora', 'log', 'quien hizo que', 'historial de acciones'],
   },
   {
-    id: 'fact-asistente-historial',
+    id: 'fact-asistente-reportes',
     modulo: 'facturacion',
-    titulo: 'Historial del asistente',
+    titulo: 'Reportes por correo',
     ruta: '/dashboard/asistente',
-    menu: 'Asistencia › Asistente › ícono del reloj (arriba del chat)',
-    que: 'Qué le han preguntado al asistente en tu empresa y qué respondió, con quién preguntó, cuándo y si la respuesta sirvió.',
-    palabras: ['historial del asistente', 'preguntas al asistente', 'que le preguntan al asistente', 'quien uso el asistente', 'uso del asistente', 'bitacora del asistente', 'conversaciones del asistente'],
+    menu: 'Asistencia › Asistente › ícono del sobre (arriba del chat)',
+    que: 'Programa que te llegue por correo, en PDF, un reporte de ventas, cobros, mejores clientes o ITBIS: cada día, cada lunes o el día 1.',
+    como: [
+      'Elige el reporte.',
+      'Elige la frecuencia: cada día, cada lunes o el día 1.',
+      'Pulsa «Programar envío». Llega solo a tu correo y lo puedes quitar cuando quieras.',
+    ],
+    palabras: ['reporte por correo', 'reportes por correo', 'programar reporte', 'enviar reporte por correo', 'reporte automatico', 'recibir reporte', 'reporte semanal', 'reporte diario', 'reporte mensual', 'reporte en mi correo'],
     permiso: 'configuracion:gestionar',
   },
   {

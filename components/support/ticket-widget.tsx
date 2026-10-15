@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Maximize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, History, LifeBuoy, Phone } from 'lucide-react';
+import { Maximize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, Mail, LifeBuoy, Phone } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
@@ -173,8 +173,8 @@ export function TicketWidget() {
         </div>
         <div className={est.acciones}>
           {modoEfectivo === 'asistente' && (
-            <Link href="/dashboard/asistente" className={est.icono} title="Historial del asistente" aria-label="Historial del asistente">
-              <History size={16} />
+            <Link href="/dashboard/asistente" className={est.icono} title="Reportes por correo" aria-label="Reportes por correo">
+              <Mail size={16} />
             </Link>
           )}
           {modoEfectivo === 'asistente' && asistente.mensajes.length > 0 && (

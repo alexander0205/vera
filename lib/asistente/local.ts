@@ -122,7 +122,7 @@ const COMPLEJA = /\b(compar\w*|versus|vs|diferencia|por que|porque|analiz\w*|exp
 
 const PIDE_CAMBIO = /^(por favor )?(cambia|cambiale|borra|elimina|anula|modifica|deshabilita|desactiva|activa|edita|envia|enviale|manda|mandale|crea|creame|registra|emite|cobra|aplica|asigna|pon|ponle|quita|agrega|agregale)\b/;
 
-const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |declaro |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
+const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |declaro |programo |recibo |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|programar|recibir|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
 
 interface Intencion {
   id: string;
@@ -551,6 +551,27 @@ function entradaTendencia(t: string, periodo: Periodo | null, hoy?: string): Rec
   return { desde: ini, hasta: h, agrupar: porMes || !dicho ? 'mes' : 'dia' };
 }
 
+// ── Reportes por correo ───────────────────────────────────────────
+
+const PROGRAMAR_REPORTE = new RegExp([
+  /\b(cada|todos los|todas las) (dia|dias|lunes|semana|semanas|mes|meses|manana|mananas)\b.*\b(reporte|resumen|informe|ventas|cobros|itbis)\b/.source,
+  /\b(reporte|resumen|informe|ventas|cobros|itbis)\b.*\b(cada|todos los|todas las) (dia|dias|lunes|semana|semanas|mes|meses|manana|mananas)\b/.source,
+  /\b(programa\w*|agenda\w*|automatic\w*)\b.*\b(reporte|informe|resumen)\b/.source,
+  /\b(reporte|informe|resumen)\b.*\b(por (correo|email|mail)|al (correo|email))\b/.source,
+  /\b(envia\w*|manda\w*)(me|nos)?\b.*\b(por (correo|email|mail)|al (correo|email))\b/.source,
+].join('|'));
+
+/** «Ventas de cada mes» es una consulta; para ser un envío tiene que pedir que llegue o se mande. */
+const QUIERE_ENVIO = /\b(manda\w*|envia\w*|llegu\w*|recib\w*|programa\w*|agenda\w*|automatic\w*|correo|email|mail)\b/;
+
+const RESPUESTA_PROGRAMAR =
+  'Puedes recibir un reporte en PDF en tu correo sin tener que pedirlo. Se programa en ' +
+  '[Historial del asistente](/dashboard/asistente), sección **Reportes por correo**:\n\n' +
+  '1. Elige el reporte: ventas, cobros por método de pago, mejores clientes o resumen de ITBIS.\n' +
+  '2. Elige la frecuencia: cada día (con lo de ayer), cada lunes (con la semana pasada) o el día 1 (con el mes pasado).\n' +
+  '3. Pulsa **Programar envío**.\n\n' +
+  'Solo se envía a tu propio correo, y desde esa misma pantalla puedes quitarlo cuando quieras.';
+
 // ── Resumen del día ───────────────────────────────────────────────
 
 const RESUMEN_DIA = /\b(resumen (del|de|para) (dia|hoy)|resumen de hoy|como va (el|mi) dia|como (va|vamos|amanecio|esta|estamos) (el )?(negocio|hoy|hoy dia)|que paso hoy|que (hay|tengo|queda) (pendiente )?(para )?hoy|panorama (de hoy|del dia)|como (va|anda) todo)\b/;
@@ -707,6 +728,11 @@ export async function responderLocal(
     && !INTENCIONES.some((i) => i.re.test(t))) {
     const r = await responderLocal(`${opts.preguntaPrevia} ${texto}`, tools, { ...opts, preguntaPrevia: undefined });
     if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+  }
+
+  // «Mándame el reporte cada lunes»: eso se programa en la pantalla, no desde el chat.
+  if (PROGRAMAR_REPORTE.test(t) && QUIERE_ENVIO.test(t)) {
+    return { intencion: 'guia', respuesta: RESPUESTA_PROGRAMAR };
   }
 
   // «Resumen de hoy»: varias consultas juntas, cada una opcional.

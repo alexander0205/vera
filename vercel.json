@@ -33,6 +33,10 @@
       "schedule": "0 8 * * 0"
     },
     {
+      "path": "/api/cron/asistente-reportes",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/cron/zero-tickets-auto-close",
       "schedule": "*/10 11-23 * * *"
     },
