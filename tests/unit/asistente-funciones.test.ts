@@ -715,3 +715,18 @@ describe('5.14 revelado por bloques', () => {
     expect(conviene(Array.from({ length: 20 }, (_, i) => 'párrafo número ' + i + ' con bastante texto para pasar el mínimo').join('\n\n'))).toBe(false);
   });
 });
+
+// ── 5.16 Modo ancho ──
+import { ANCHO_AMPLIO, ANCHO_ANCLADO, ANCHO_MINIMO_DE_PAGINA, minimoParaAnclar } from '@/components/support/asistente/use-anclado';
+
+describe('5.16 modo ancho del panel', () => {
+  it('con el modo amplio la ventana necesita más lugar y a la página le queda lo mismo', () => {
+    expect(ANCHO_AMPLIO).toBeGreaterThan(ANCHO_ANCLADO);
+    expect(minimoParaAnclar(ANCHO_ANCLADO)).toBe(ANCHO_ANCLADO + ANCHO_MINIMO_DE_PAGINA);
+    expect(minimoParaAnclar(ANCHO_AMPLIO) - ANCHO_AMPLIO).toBe(minimoParaAnclar(ANCHO_ANCLADO) - ANCHO_ANCLADO);
+  });
+
+  it('el ancho normal sigue anclando desde 1100 px, como antes', () => {
+    expect(minimoParaAnclar(ANCHO_ANCLADO)).toBe(1100);
+  });
+});

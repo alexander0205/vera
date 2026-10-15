@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Maximize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, LifeBuoy, Phone } from 'lucide-react';
+import { Maximize2, Minimize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, LifeBuoy, Phone } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
@@ -19,7 +19,7 @@ import { useSoporte } from './soporte-context';
 import { useAsistente } from './asistente/use-asistente';
 import { PanelAsistente } from './asistente/panel-asistente';
 import est from './asistente/asistente.module.css';
-import { useAnclado } from './asistente/use-anclado';
+import { ANCHO_AMPLIO, ANCHO_ANCLADO, useAnclado } from './asistente/use-anclado';
 import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
 import { useLlamadaGlobal } from '@/lib/webrtc/LlamadaGlobalProvider';
 import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
@@ -58,7 +58,18 @@ export function TicketWidget() {
   }, [open, reintentarCarga]);
   // En pantallas anchas el panel es una columna fija a la derecha y la página
   // se hace a un lado; en pantallas angostas flota encima, como antes.
-  const anclado = useAnclado(open);
+  // Modo amplio: la columna pasa de 420 a 640 px (se recuerda en este navegador).
+  const [amplio, setAmplio] = useState(false);
+  useEffect(() => {
+    try { setAmplio(localStorage.getItem('zero:asistente-amplio') === '1'); } catch { /* sin almacenamiento: normal */ }
+  }, []);
+  const alternarAmplio = () => setAmplio((v) => {
+    const n = !v;
+    try { localStorage.setItem('zero:asistente-amplio', n ? '1' : '0'); } catch { /* ignorado */ }
+    return n;
+  });
+  const anchoColumna = amplio ? ANCHO_AMPLIO : ANCHO_ANCLADO;
+  const anclado = useAnclado(open, anchoColumna);
   const [modo, setModo] = useState<'asistente' | 'soporte'>('asistente');
   // La conexión WebRTC vive en un provider único montado en el layout raíz
   // (LlamadaGlobalProvider) — nunca este componente. Si este widget se
@@ -176,7 +187,9 @@ export function TicketWidget() {
     {(chat.busyStage === 'capturando' || chat.busyStage === 'subiendo') && (
       <CapturaOverlay stage={chat.busyStage} />
     )}
-    <div ref={panelRef} className={`${est.panel} ${anclado ? est.panelFijo : ''}`} role="dialog" aria-label="Asistencia y soporte">
+    <div ref={panelRef} className={`${est.panel} ${anclado ? est.panelFijo : ''} ${amplio ? est.panelAmplio : ''}`}
+      style={{ '--asistente-ancho': `${anchoColumna}px` } as React.CSSProperties}
+      role="dialog" aria-label="Asistencia y soporte">
       <div className={est.cabecera}>
         <span className={est.marca} aria-hidden>
           {modoEfectivo === 'soporte' ? <MessageCircle size={17} /> : <Sparkles size={17} />}
@@ -192,6 +205,12 @@ export function TicketWidget() {
           </p>
         </div>
         <div className={est.acciones}>
+          <button
+            type="button" className={`${est.icono} ${est.botonAmplio}`} onClick={alternarAmplio}
+            title={amplio ? 'Reducir el panel' : 'Ampliar el panel'} aria-label={amplio ? 'Reducir el panel' : 'Ampliar el panel'} aria-pressed={amplio}
+          >
+            {amplio ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
           {modoEfectivo === 'asistente' && asistente.mensajes.length > 0 && (
             <button type="button" className={est.icono} onClick={asistente.nueva} title="Nueva conversación" aria-label="Nueva conversación">
               <RotateCcw size={16} />
