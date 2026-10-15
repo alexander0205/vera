@@ -10,6 +10,7 @@ import {
   Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Upload, PackagePlus,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ImportModal } from '@/components/import-modal';
 import { ProductoFormModal } from '@/components/productos/ProductoFormModal';
 
@@ -62,13 +63,27 @@ const EXPORTAR: ExportTabla<Producto> = {
     { titulo: 'Unidad', valor: p => p.unidadMedida, ancho: 0.7 },
     { titulo: 'ITBIS', valor: p => TASA_LABELS[p.tasaItbis] ?? p.tasaItbis, ancho: 0.7 },
     { titulo: 'Stock', valor: p => (p.controlaInventario ? p.stockActual : null), tipo: 'numero', ancho: 0.6 },
-    { titulo: 'Costo', valor: p => Math.round(p.costoDOP * 100) || null, tipo: 'moneda', ancho: 0.9 },
     { titulo: 'Precio', valor: p => Math.round(p.precioDOP * 100), tipo: 'moneda', ancho: 0.9 },
+  ],
+};
+
+/**
+ * El costo solo sale para quien gestiona productos. La tabla no lo enseña y
+ * `productos:ver` lo tienen también los cajeros: exportar el catálogo les
+ * daba el margen de cada artículo (revisión del PR #126).
+ */
+const EXPORTAR_CON_COSTO: ExportTabla<Producto> = {
+  ...EXPORTAR,
+  columnas: [
+    ...EXPORTAR.columnas.slice(0, -1),
+    { titulo: 'Costo', valor: p => Math.round(p.costoDOP * 100) || null, tipo: 'moneda', ancho: 0.9 },
+    ...EXPORTAR.columnas.slice(-1),
   ],
 };
 
 export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
   const soloPos = canal === 'pos';
+  const { can } = usePermissions();
   const [productos, setProductos]       = useState<Producto[]>([]);
   const [loading, setLoading]           = useState(true);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
@@ -262,7 +277,7 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
-        exportar={EXPORTAR}
+        exportar={can('productos:gestionar') ? EXPORTAR_CON_COSTO : EXPORTAR}
         rowActions={rowActions}
         emptyState={{
           icon: Package,
