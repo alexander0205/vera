@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCargos, adminEscolarMatriculas, adminEscolarPagos,
-  ecfDocuments, facturasRecurrentes,
+  ecfDocuments, facturasRecurrentes, pagosRecibidos,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
@@ -165,6 +165,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         estado:        adminEscolarCargos.estado,
         ecfDocumentId: adminEscolarCargos.ecfDocumentId,
         facturaCodigo: sql<string | null>`coalesce(${ecfDocuments.codigo}, ${ecfDocuments.encf})`,
+        facturaAnulada: sql<boolean>`coalesce(${ecfDocuments.estado} = 'ANULADO', false)`,
+        // Cobros en la factura: con alguno no se ofrece anularla.
+        facturaConPagos: sql<boolean>`(${adminEscolarCargos.ecfDocumentId} is not null and (
+          exists (select 1 from ${pagosRecibidos} where ${pagosRecibidos.ecfDocumentId} = ${adminEscolarCargos.ecfDocumentId})
+          or coalesce(${ecfDocuments.pagoRecibido} = 'true' and ${ecfDocuments.pagoValorCts} > 0, false)))`,
         tienePagos:    sql<boolean>`exists (select 1 from ${adminEscolarPagos} where ${adminEscolarPagos.cargoId} = ${adminEscolarCargos.id})`,
       })
       .from(adminEscolarCargos)
@@ -175,7 +180,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         ne(adminEscolarCargos.estado, 'anulado'),
         inArray(adminEscolarCargos.conceptoId, conceptosMirados),
       ));
-    const existentes: CargoExistente[] = filas.map((f) => ({ ...f, tienePagos: !!f.tienePagos }));
+    const existentes: CargoExistente[] = filas.map((f) => ({
+      ...f,
+      tienePagos: !!f.tienePagos,
+      facturaAnulada: !!f.facturaAnulada,
+      facturaConPagos: !!f.facturaConPagos,
+    }));
 
     const plan = planificarMensualidades({ conceptoId, objetivo, existentes });
 
@@ -193,9 +203,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         })
         .where(and(eq(adminEscolarCargos.id, a.id), eq(adminEscolarCargos.teamId, teamId)));
     }
+    /**
+     * Una cuota que ya tiene un cargo ANULADO de esta mensualidad —la marca de
+     * un mes bloqueado de antes, o uno anulado a mano— no admite otro: el
+     * índice único es (matrícula, cuota) y cuenta los anulados. Ese cargo se
+     * revive con el precio de ahora en vez de insertar uno nuevo, que chocaría
+     * y se perdería sin ruido.
+     */
+    const cuotasACrear = plan.crear.map((c) => c.cuotaId).filter((id) => id > 0);
+    const anuladosDeLaCuota = cuotasACrear.length === 0 ? [] : await tx
+      .select({ id: adminEscolarCargos.id, cuotaId: adminEscolarCargos.cuotaId })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.matriculaId, matriculaId),
+        eq(adminEscolarCargos.conceptoId, conceptoId),
+        eq(adminEscolarCargos.estado, 'anulado'),
+        isNull(adminEscolarCargos.ecfDocumentId),
+        inArray(adminEscolarCargos.cuotaId, cuotasACrear),
+      ));
+    const revivibles = new Map(anuladosDeLaCuota.map((c) => [c.cuotaId!, c.id]));
     let creados = 0;
-    if (plan.crear.length > 0) {
-      const ins = await tx.insert(adminEscolarCargos).values(plan.crear.map((c) => ({
+    for (const c of plan.crear) {
+      const id = c.cuotaId > 0 ? revivibles.get(c.cuotaId) : undefined;
+      if (id == null) continue;
+      await tx.update(adminEscolarCargos)
+        .set({
+          estado: 'pendiente', montoCentavos: c.montoCentavos, saldoCentavos: c.montoCentavos,
+          fechaVencimiento: c.fechaVencimiento, mes: c.mes, anio: c.anio, updatedAt: new Date(),
+        })
+        .where(and(eq(adminEscolarCargos.id, id), eq(adminEscolarCargos.teamId, teamId)));
+      creados++;
+    }
+    const nuevos = plan.crear.filter((c) => !(c.cuotaId > 0 && revivibles.has(c.cuotaId)));
+    if (nuevos.length > 0) {
+      const ins = await tx.insert(adminEscolarCargos).values(nuevos.map((c) => ({
         teamId,
         estudianteId: mat.estudianteId,
         matriculaId,
@@ -209,7 +251,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         fechaVencimiento: c.fechaVencimiento,
         estado: 'pendiente',
       }))).onConflictDoNothing().returning({ id: adminEscolarCargos.id });
-      creados = ins.length;
+      creados += ins.length;
+    }
+    // La marca de los meses bloqueados: la cuota nueva, anulada. Si la cuota ya
+    // tiene cualquier cargo, el índice único la deja como está.
+    if (plan.marcar.length > 0) {
+      await tx.insert(adminEscolarCargos).values(plan.marcar.map((c) => ({
+        teamId,
+        estudianteId: mat.estudianteId,
+        matriculaId,
+        periodoId: mat.periodoId,
+        conceptoId,
+        cuotaId: c.cuotaId,
+        mes: c.mes,
+        anio: c.anio,
+        montoCentavos: c.montoCentavos,
+        saldoCentavos: 0,
+        fechaVencimiento: c.fechaVencimiento,
+        estado: 'anulado',
+      }))).onConflictDoNothing();
     }
 
     // El recurrente congela el precio de su línea; el cron solo lo vuelve a

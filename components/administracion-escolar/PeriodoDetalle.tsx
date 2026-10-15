@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { nombreMes } from '@/lib/administracion-escolar/sincronizar-mensualidad';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -2338,6 +2339,16 @@ function PrevistoActionsMenu({ previsto, onPrevisto, onDetalle, tutorClientId }:
  * lo que la facturación y la vista financiera ya resuelven por encima de la
  * tarifa del grado. El motivo deja escrito el porqué (histórico, hermano…).
  */
+/** Lo que devuelve `generar-mensualidades` de un mes que se quedó como estaba. */
+interface MesBloqueadoUI {
+  mes: number;
+  anio: number;
+  motivo: 'facturado' | 'con-pagos';
+  ecfDocumentId: number | null;
+  facturaCodigo: string | null;
+  facturaAnulable: boolean;
+}
+
 function TarifaEstudianteDialog({
   open, onOpenChange, matriculaId, estudianteId, periodoId, becaTipo, becaValor, becaMotivo, conceptoMensualidadId, onGuardado,
 }: {
@@ -2364,6 +2375,52 @@ function TarifaEstudianteDialog({
   const [generacionSel, setGeneracionSel] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Los meses que siguen con la mensualidad de antes porque ya tenían factura
+   * (o cobros). Tras guardar, el diálogo no se cierra: los enseña y, si la
+   * factura no tiene pagos, ofrece anularla para pasar ese mes al precio nuevo
+   * (revisión del PR #126, caso Keiry). `anterior` es la generación de antes
+   * del guardado: el refresco ya trae la nueva.
+   */
+  const [bloqueados, setBloqueados] = useState<{ anterior: number | null; meses: MesBloqueadoUI[] } | null>(null);
+  const [anulandoFactura, setAnulandoFactura] = useState<number | null>(null);
+  const { can } = usePermissions();
+
+  async function sincronizar(anterior: number | null) {
+    const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conceptoAnteriorId: anterior }),
+    });
+    const gj = await g.json().catch(() => ({}));
+    if (!g.ok) throw new Error(gj.error ?? 'No se pudieron poner al día las mensualidades.');
+    return gj as {
+      cargosCreados?: number; mesesBloqueados?: MesBloqueadoUI[];
+      recurrente?: string; precioRecurrenteAnterior?: number | null; monto?: number;
+    };
+  }
+
+  async function anularYPasar(b: MesBloqueadoUI) {
+    if (!b.ecfDocumentId || !bloqueados) return;
+    setAnulandoFactura(b.ecfDocumentId);
+    try {
+      const res = await fetch(`/api/facturas/${b.ecfDocumentId}/anular`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: `Cambio de mensualidad: ${nombreMes(b.mes, b.anio)} pasa al precio nuevo` }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje ?? data.error ?? 'No se pudo anular la factura');
+      const gj = await sincronizar(bloqueados.anterior);
+      setBloqueados({ ...bloqueados, meses: gj.mesesBloqueados ?? [] });
+      onGuardado();
+      toast.success(`Factura ${b.facturaCodigo ?? ''} anulada. ${nombreMes(b.mes, b.anio)} queda con el precio nuevo, por facturar.`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anular la factura');
+    } finally {
+      setAnulandoFactura(null);
+    }
+  }
 
   // ── Sección «otro concepto»: precio personal de un concepto que no es la
   //    mensualidad (un uniforme, una actividad…), con su propio guardado.
@@ -2549,33 +2606,26 @@ function TarifaEstudianteDialog({
       // recurrente (nada a lo que alinear) — el precio igual quedó guardado.
       let generadas = 0;
       const avisos: string[] = [];
+      // La generación de antes: sus meses sin tocar se pasan a la nueva y los
+      // ya facturados no se duplican.
+      const anterior = conceptoMensualidadId ?? null;
+      let meses: MesBloqueadoUI[] = [];
       try {
-        const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // La generación de antes: sus meses sin tocar se pasan a la nueva y
-          // los ya facturados no se duplican.
-          body: JSON.stringify({ conceptoAnteriorId: conceptoMensualidadId ?? null }),
-        });
-        const gj = await g.json().catch(() => ({}));
-        if (g.ok) {
-          generadas = gj.cargosCreados ?? 0;
-          const bloqueados = (gj.mesesBloqueados ?? []) as { mes: number; anio: number; motivo: string; facturaCodigo: string | null }[];
-          if (bloqueados.length > 0) {
-            const meses = bloqueados.map((b) => `${nombreMes(b.mes, b.anio)}${b.facturaCodigo ? ` (factura ${b.facturaCodigo})` : b.motivo === 'con-pagos' ? ' (con pagos)' : ''}`);
-            avisos.push(`${meses.join(', ')} ya se cobra con la mensualidad anterior y no se cambió. Si debe ir al precio nuevo, anula esa factura (si no tiene pagos) y vuelve a guardar.`);
-          }
-          if (gj.recurrente === 'actualizado' && gj.precioRecurrenteAnterior != null) {
-            avisos.push(`La facturación automática pasa de ${fmtDOP(gj.precioRecurrenteAnterior)} a ${fmtDOP(gj.monto)} al mes.`);
-          } else if (gj.recurrente === 'varias-lineas') {
-            avisos.push('La facturación automática tiene varias líneas y no se cambió: revisa su precio en Facturas recurrentes.');
-          }
-        } else if (gj.error) {
-          avisos.push(gj.error);
+        const gj = await sincronizar(anterior);
+        generadas = gj.cargosCreados ?? 0;
+        meses = gj.mesesBloqueados ?? [];
+        if (gj.recurrente === 'actualizado' && gj.precioRecurrenteAnterior != null && gj.monto != null) {
+          avisos.push(`La facturación automática pasa de ${fmtDOP(gj.precioRecurrenteAnterior)} a ${fmtDOP(gj.monto)} al mes.`);
+        } else if (gj.recurrente === 'varias-lineas') {
+          avisos.push('La facturación automática tiene varias líneas y no se cambió: revisa su precio en Facturas recurrentes.');
         }
-      } catch { /* no bloquea el guardado del precio */ }
+      } catch (e: unknown) {
+        // El precio ya quedó guardado; lo que falló es ponerlo en la cuenta.
+        avisos.push(e instanceof Error ? e.message : 'No se pudieron poner al día las mensualidades.');
+      }
 
-      onOpenChange(false);
+      if (meses.length > 0) setBloqueados({ anterior, meses });
+      else onOpenChange(false);
       onGuardado();
       toast.success(generadas > 0
         ? `Guardado. ${generadas} mensualidad${generadas === 1 ? '' : 'es'} en «Mensualidades».`
@@ -2595,8 +2645,48 @@ function TarifaEstudianteDialog({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) setBloqueados(null); onOpenChange(v); }}>
       <DialogContent className="max-w-md">
+        {bloqueados ? (
+          <>
+            <ModalHeader
+              title="Meses con la mensualidad anterior"
+              subtitle="Se guardó. Estos meses ya estaban facturados o cobrados y no se cambiaron." />
+            <div className="space-y-2 px-6 pb-2">
+              {bloqueados.meses.length === 0 ? (
+                <p className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-sm text-emerald-800">
+                  Todos los meses quedaron con la mensualidad nueva.
+                </p>
+              ) : bloqueados.meses.map((b) => (
+                <div key={`${b.anio}-${b.mes}`} className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
+                  <div className="text-amber-900">
+                    <p className="font-medium capitalize">{nombreMes(b.mes, b.anio)}</p>
+                    <p className="text-xs">
+                      {b.motivo === 'facturado'
+                        ? <>Factura {b.facturaCodigo ?? ''}{b.facturaAnulable ? ', sin pagos.' : ', con pagos: no se puede anular desde aquí.'}</>
+                        : 'Tiene pagos aplicados: se queda como está.'}
+                    </p>
+                  </div>
+                  {b.facturaAnulable && b.ecfDocumentId != null && can('facturas:anular') && (
+                    <Button size="sm" variant="outline" className="shrink-0"
+                      disabled={anulandoFactura != null}
+                      onClick={() => void anularYPasar(b)}>
+                      {anulandoFactura === b.ecfDocumentId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                      Anular factura y pasar al precio nuevo
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <p className="text-xs text-gray-500">
+                Si no anulas la factura, ese mes se cobra con la mensualidad de antes y no se le crea otro cargo.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button className="bg-zero-600 hover:bg-zero-700" disabled={anulandoFactura != null}
+                onClick={() => { setBloqueados(null); onOpenChange(false); }}>Listo</Button>
+            </DialogFooter>
+          </>
+        ) : (<>
         <ModalHeader
           title="Configuración mensual"
           subtitle="La mensualidad de este estudiante. No cambia la de los demás." />
@@ -2739,6 +2829,7 @@ function TarifaEstudianteDialog({
             Guardar mensualidad
           </Button>
         </DialogFooter>
+        </>)}
       </DialogContent>
     </Dialog>
   );

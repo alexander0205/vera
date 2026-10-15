@@ -19,10 +19,15 @@
  *  - Ya hay cargo de esta mensualidad → se reutiliza: se ata a la cuota si no lo
  *    estaba y, si nadie lo ha tocado (sin factura ni pagos), toma el precio nuevo.
  *  - Hay cargo de OTRA mensualidad (la generación vieja):
- *      · sin factura ni pagos → se anula y se crea el nuevo;
- *      · con factura o pagos → NO se crea el nuevo y se avisa. Un cargo con
- *        factura no se toca desde aquí: decidir si esa factura se anula es de
- *        la secretaria, no de un guardado de precio.
+ *      · sin factura (o con la factura ya anulada) y sin pagos → se anula y
+ *        se crea el nuevo;
+ *      · con factura viva o pagos → NO se crea el nuevo y se avisa. Un cargo
+ *        con factura no se toca desde aquí: decidir si esa factura se anula es
+ *        de la secretaria (el formulario se lo ofrece si no tiene pagos).
+ *        La cuota nueva de ese mes queda MARCADA con un cargo anulado: el
+ *        devengo y el «Previsto» de la ficha cuentan un anulado como cuota
+ *        gastada, así que no la vuelven a crear ni a anunciar. Sin la marca,
+ *        el devengo le habría creado ese mes otra vez: el doble cobro de Keiry.
  *  - No hay nada → se crea, atado a la cuota y con su vencimiento.
  */
 
@@ -47,6 +52,10 @@ export interface CargoExistente {
   ecfDocumentId: number | null;
   /** Código visible de la factura, para el aviso. */
   facturaCodigo: string | null;
+  /** La factura está anulada: ya no cobra nada, el cargo vuelve a estar libre. */
+  facturaAnulada?: boolean;
+  /** La factura tiene cobros registrados (no se puede anular sin revertirlos). */
+  facturaConPagos?: boolean;
   tienePagos: boolean;
 }
 
@@ -55,7 +64,10 @@ export interface MesBloqueado {
   anio: number;
   cargoId: number;
   motivo: 'facturado' | 'con-pagos';
+  ecfDocumentId: number | null;
   facturaCodigo: string | null;
+  /** Se puede ofrecer anular la factura: está viva y nadie la ha pagado. */
+  facturaAnulable: boolean;
 }
 
 export interface PlanSincronizacion {
@@ -64,12 +76,17 @@ export interface PlanSincronizacion {
   /** Cargos de esta mensualidad que se atan a su cuota y/o toman el precio nuevo. */
   actualizar: { id: number; cuotaId?: number; fechaVencimiento?: string | null; montoCentavos?: number }[];
   bloqueados: MesBloqueado[];
+  /** Cuotas nuevas de los meses bloqueados: se marcan con un cargo anulado. */
+  marcar: CuotaObjetivo[];
 }
 
-/** Ni factura ni dinero aplicado: se puede reescribir sin perder rastro. */
+/** Ni factura viva ni dinero aplicado: se puede reescribir sin perder rastro. */
 function intacto(c: CargoExistente): boolean {
-  return c.ecfDocumentId == null && !c.tienePagos
-    && c.estado !== 'pagado' && c.saldoCentavos === c.montoCentavos;
+  if (c.tienePagos || c.estado === 'pagado') return false;
+  // Con la factura anulada el saldo puede haberse movido al sincronizar; lo
+  // que cuenta es que no entró dinero.
+  if (c.ecfDocumentId != null) return !!c.facturaAnulada;
+  return c.saldoCentavos === c.montoCentavos;
 }
 
 export function planificarMensualidades(args: {
@@ -80,7 +97,7 @@ export function planificarMensualidades(args: {
 }): PlanSincronizacion {
   const { conceptoId, objetivo } = args;
   const vivos = args.existentes.filter((c) => c.estado !== 'anulado');
-  const plan: PlanSincronizacion = { crear: [], anular: [], actualizar: [], bloqueados: [] };
+  const plan: PlanSincronizacion = { crear: [], anular: [], actualizar: [], bloqueados: [], marcar: [] };
   const usados = new Set<number>();
 
   for (const cuota of objetivo) {
@@ -108,13 +125,17 @@ export function planificarMensualidades(args: {
     const tocado = ajenos.find((c) => !intacto(c));
     if (tocado) {
       for (const c of ajenos) usados.add(c.id);
+      const facturaViva = tocado.ecfDocumentId != null && !tocado.facturaAnulada;
       plan.bloqueados.push({
         mes: cuota.mes,
         anio: cuota.anio,
         cargoId: tocado.id,
-        motivo: tocado.ecfDocumentId != null ? 'facturado' : 'con-pagos',
-        facturaCodigo: tocado.facturaCodigo,
+        motivo: facturaViva ? 'facturado' : 'con-pagos',
+        ecfDocumentId: facturaViva ? tocado.ecfDocumentId : null,
+        facturaCodigo: facturaViva ? tocado.facturaCodigo : null,
+        facturaAnulable: facturaViva && !tocado.tienePagos && !tocado.facturaConPagos,
       });
+      if (cuota.cuotaId > 0) plan.marcar.push(cuota);
       continue;
     }
     for (const c of ajenos) { usados.add(c.id); plan.anular.push(c.id); }

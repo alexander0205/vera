@@ -36,9 +36,34 @@ describe('planificarMensualidades', () => {
     });
     expect(plan.crear.map((c) => c.mes)).toEqual([10]);
     expect(plan.anular).toEqual([]);
-    expect(plan.bloqueados).toEqual([
-      { mes: 9, anio: 2026, cargoId: 1, motivo: 'facturado', facturaCodigo: '000506' },
-    ]);
+    expect(plan.bloqueados).toEqual([{
+      mes: 9, anio: 2026, cargoId: 1, motivo: 'facturado',
+      ecfDocumentId: 506, facturaCodigo: '000506', facturaAnulable: true,
+    }]);
+    // La cuota nueva de septiembre queda marcada: ni el devengo ni el
+    // «Previsto» la vuelven a sacar.
+    expect(plan.marcar.map((c) => c.cuotaId)).toEqual([59]);
+  });
+
+  it('no ofrece anular una factura que ya tiene cobros', () => {
+    const plan = planificarMensualidades({
+      conceptoId: NUEVO,
+      objetivo: [cuota(9)],
+      existentes: [cargo({ id: 1, mes: 9, ecfDocumentId: 506, facturaCodigo: '000506', facturaConPagos: true })],
+    });
+    expect(plan.bloqueados[0].facturaAnulable).toBe(false);
+  });
+
+  it('con la factura vieja ya anulada, el mes pasa a la mensualidad nueva', () => {
+    const plan = planificarMensualidades({
+      conceptoId: NUEVO,
+      objetivo: [cuota(9)],
+      existentes: [cargo({ id: 1, mes: 9, ecfDocumentId: 506, facturaAnulada: true, saldoCentavos: 0 })],
+    });
+    expect(plan.bloqueados).toEqual([]);
+    expect(plan.marcar).toEqual([]);
+    expect(plan.anular).toEqual([1]);
+    expect(plan.crear.map((c) => c.cuotaId)).toEqual([59]);
   });
 
   it('anula el cargo de la generación vieja que nadie tocó y crea el nuevo', () => {
@@ -90,7 +115,7 @@ describe('planificarMensualidades', () => {
       objetivo: [cuota(9)],
       existentes: [cargo({ id: 4, mes: 9, conceptoId: NUEVO, cuotaId: 59, montoCentavos: 800_000, saldoCentavos: 800_000 })],
     });
-    expect(plan).toEqual({ crear: [], anular: [], actualizar: [], bloqueados: [] });
+    expect(plan).toEqual({ crear: [], anular: [], actualizar: [], bloqueados: [], marcar: [] });
   });
 
   it('ignora cargos anulados', () => {
