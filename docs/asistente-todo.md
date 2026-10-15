@@ -16,8 +16,8 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 - [x] 1.1 Detección de abuso/volumen (ráfagas, vaciado de listados) + acción de auditoría
 - [x] 1.2 Atajos de preguntas frecuentes al abrir el chat (sin IA)
 - [x] 1.3 Más intenciones locales a partir de preguntas que caen a la IA
-- [ ] 1.4 Casos de inyección con datos reales en el set de evaluación
-- [ ] 1.5 Hueco de guía: «impuestos / ITBIS» sin entrada fuera de POS (mapa)
+- [x] 1.4 Casos de inyección con datos reales en el set de evaluación
+- [x] 1.5 Hueco de guía: «impuestos / ITBIS» sin entrada fuera de POS (mapa)
 
 ## Fase 2 — diferenciadores de demo
 - [ ] 2.1 Contexto de pantalla (el asistente sabe en qué página/registro estás)

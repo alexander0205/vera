@@ -125,6 +125,12 @@ const INYECCION = new RegExp([
   /ignora (todas )?(las |tus )?(instrucciones|reglas)/.source,
   /ignore (all |any |your |previous |the )*(instructions|rules)/.source,
   /olvida (todo|tus instrucciones|las reglas)/.source,
+  /ignora (todo|lo) (lo )?(anterior|previo|de arriba|que (te )?(dije|dijeron))/.source,
+  /(disregard|forget|override) (all |any |your |previous |the |these |those )*(instructions|rules|prompt)/.source,
+  /(nuevas|new|updated) (instrucciones|instructions)\s*:/.source,
+  /(revela|muestra|imprime|repite|dime|reveal|print|show|leak|dump) (me )?(tu|el|su|your|the)( system| del sistema| interno)? prompt/.source,
+  /(reglas|instrucciones) internas/.source,
+  /!\[[^\]]*\]\(\s*(https?:)?\/\//.source,
   /(a partir de ahora eres|ahora eres|eres ahora|actua como|act as|you are now)\b/.source,
   /system prompt|prompt del sistema/.source,
   /(responde|contesta|di|escribe) (solo |unicamente )?(con|que)\b/.source,
@@ -137,12 +143,19 @@ const INYECCION = new RegExp([
 
 export const TEXTO_OMITIDO = '[texto omitido por seguridad]';
 
+/**
+ * El texto como lo leería una persona: ancho completo → normal (ＩＧＮＯＲＡ),
+ * sin caracteres invisibles entre letras, sin tildes.
+ */
+const paraComparar = (t: string) =>
+  t.normalize('NFKC').replace(/[\u200b-\u200f\u2060\ufeff\u00ad]/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 /** Recorre un resultado de herramienta y omite los textos que parecen órdenes. */
 export function neutralizarDatos<T>(valor: T, profundidad = 0): T {
   if (profundidad > 8 || valor == null) return valor;
   if (typeof valor === 'string') {
     // Solo textos con alguna longitud: un «ok» no es una inyección.
-    if (valor.length >= 12 && INYECCION.test(valor.normalize('NFD').replace(/[̀-ͯ]/g, ''))) {
+    if (valor.length >= 12 && INYECCION.test(paraComparar(valor))) {
       return TEXTO_OMITIDO as unknown as T;
     }
     return valor;

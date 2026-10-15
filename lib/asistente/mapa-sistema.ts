@@ -324,7 +324,7 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
       'Pulsa «Nuevo ítem» para crear uno, o el lápiz para editar.',
       'Para ver cómo se mueve el stock, usa «Ver movimientos».',
     ],
-    palabras: ['productos', 'servicios', 'articulos', 'catalogo', 'items', 'precios', 'crear producto', 'nuevo producto', 'agregar producto', 'itbis del producto', 'editar precio'],
+    palabras: ['productos', 'servicios', 'articulos', 'catalogo', 'items', 'precios', 'crear producto', 'nuevo producto', 'agregar producto', 'itbis del producto', 'editar precio', 'impuestos', 'impuesto del producto', 'tasa de itbis', 'configurar itbis', 'exento de itbis', 'itbis'],
     permiso: 'productos:ver',
   },
   {
@@ -582,7 +582,7 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
       'Para la DGII, descarga el TXT del formato que necesitas (606, 607, 608 o 609).',
       'Para análisis, abre la tarjeta del reporte que quieras.',
     ],
-    palabras: ['reportes', 'informes', 'reportes dgii', 'formatos dgii', 'reporte de ventas', 'estadisticas', 'analisis'],
+    palabras: ['reportes', 'informes', 'reportes dgii', 'formatos dgii', 'reporte de ventas', 'estadisticas', 'analisis', 'impuestos', 'declaracion de impuestos', 'declarar impuestos', 'declaracion jurada'],
     permiso: 'reportes:ver',
   },
   {
@@ -598,7 +598,7 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
       'Descarga el Formato 606.',
       'Súbelo en la Oficina Virtual de la DGII antes del día 15 del mes siguiente.',
     ],
-    palabras: ['606', 'formato 606', 'reporte 606', 'compras dgii', 'gastos dgii', 'declarar compras', 'itbis adelantado'],
+    palabras: ['606', 'formato 606', 'reporte 606', 'compras dgii', 'gastos dgii', 'declarar compras', 'itbis adelantado', 'itbis de compras', 'impuestos de compras'],
     permiso: 'reportes:ver',
   },
   {
@@ -614,7 +614,7 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
       'Descarga el Formato 607.',
       'Súbelo en la Oficina Virtual de la DGII antes del día 15 del mes siguiente.',
     ],
-    palabras: ['607', 'formato 607', 'reporte 607', 'ventas dgii', 'declarar ventas', 'reporte de ventas dgii'],
+    palabras: ['607', 'formato 607', 'reporte 607', 'ventas dgii', 'declarar ventas', 'reporte de ventas dgii', 'itbis de ventas', 'itbis facturado', 'impuestos de ventas'],
     permiso: 'reportes:ver',
   },
   {

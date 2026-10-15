@@ -76,3 +76,7 @@ ser manipulado; el código no se convence.
   esperada que corra antes de cada cambio de prompt o modelo.
 - Detección de abuso por patrones (muchas consultas de volcado de datos).
 - Revisión de retención y base legal con el equipo legal.
+
+## Inyección indirecta (actualización)
+
+Los datos de herramientas se comparan normalizados (NFKC: ancho completo; sin caracteres invisibles ni tildes) y se omiten órdenes en español e inglés («ignora todo lo anterior», «disregard previous instructions», «nuevas instrucciones:», «revela tu prompt», imágenes markdown externas). El set de evaluación tiene casos que deben omitirse y casos legítimos que no (p. ej. «Academia de Instrucciones Musicales»).

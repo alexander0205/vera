@@ -119,7 +119,7 @@ const COMPLEJA = /\b(compar\w*|versus|vs|diferencia|por que|porque|tendencia|evo
 
 const PIDE_CAMBIO = /^(por favor )?(cambia|cambiale|borra|elimina|anula|modifica|deshabilita|desactiva|activa|edita|envia|enviale|manda|mandale|crea|creame|registra|emite|cobra|aplica|asigna|pon|ponle|quita|agrega|agregale)\b/;
 
-const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
+const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |declaro |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
 
 interface Intencion {
   id: string;
