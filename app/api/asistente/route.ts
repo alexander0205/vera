@@ -27,7 +27,7 @@ import { seguimientosDe } from '@/lib/asistente/seguimientos';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
-import { esRespuestaGrande, pidePdf } from '@/lib/asistente/bloques';
+import { esRespuestaGrande, pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
 // Principal 35 s + respaldo 25 s + consultas a la base: cabe en 60.
@@ -226,7 +226,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const quierePdf = !forzarIa && pidePdf(texto);
+  // «Pásalo a Excel»: es la respuesta anterior, no una pregunta nueva.
+  const esPolitica = clasificarSolicitud(texto) != null;
+  const quiereExcel = !forzarIa && !esPolitica && pideExcel(texto);
+  if (quiereExcel && texto.split(/\s+/).length <= 8) {
+    const [prev] = await db.select({ id: asistenteMensajes.id, contenido: asistenteMensajes.contenido }).from(asistenteMensajes)
+      .where(and(eq(asistenteMensajes.conversacionId, conversacionId), eq(asistenteMensajes.rol, 'assistant')))
+      .orderBy(desc(asistenteMensajes.id)).limit(1);
+    if (prev) {
+      const contenido = tieneDatosTabulares(prev.contenido)
+        ? 'Listo, aquí tienes el Excel de la respuesta anterior. Si no se descargó, usa el botón «Excel» debajo de ella.'
+        : 'La respuesta anterior es solo texto; te dejé el Excel con ese texto. Para una hoja con cifras, pídeme primero el dato (por ejemplo «ventas por cliente»).';
+      const [g] = await db.insert(asistenteMensajes).values({ conversacionId, rol: 'assistant', contenido, origen: 'local' })
+        .returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
+      await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() }).where(eq(asistenteConversaciones.id, conversacionId));
+      return NextResponse.json({
+        conversacionId, origen: 'local', descargarExcelId: prev.id,
+        mensaje: { id: g.id, rol: 'assistant', contenido, herramientas: [], creadoEn: g.creadoEn, grande: false, origen: 'local', seguimientos: [] },
+      });
+    }
+  }
+
+  const quierePdf = !forzarIa && !esPolitica && pidePdf(texto);
   if (quierePdf && texto.split(/\s+/).length <= 7) {
     // «Pásalo a PDF»: es la respuesta anterior, no una pregunta nueva.
     const [prev] = await db.select({ id: asistenteMensajes.id }).from(asistenteMensajes)
@@ -268,6 +289,8 @@ export async function POST(req: NextRequest) {
       origen: r.origen,
       // Pidió el PDF en la misma pregunta: el panel lo descarga solo.
       descargarMensajeId: quierePdf ? guardado.id : undefined,
+      // Pidió el Excel en la misma pregunta («ventas por cliente en excel»).
+      descargarExcelId: quiereExcel && tieneDatosTabulares(r.respuesta) ? guardado.id : undefined,
       mensaje: {
         id: guardado.id, rol: 'assistant', contenido: r.respuesta, origen: r.origen,
         herramientas: r.consultas, creadoEn: guardado.creadoEn, grande: esRespuestaGrande(r.respuesta),

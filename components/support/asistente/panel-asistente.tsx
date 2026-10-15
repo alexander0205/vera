@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle, AlertTriangle, ArrowUp, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  AlertCircle, AlertTriangle, ArrowUp, Sheet, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
   Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
+import { descargarExcel, descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
+import { tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { Markdown } from './markdown';
 import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
 import { describirError, mensajeDeEspera } from '@/lib/asistente/estados';
@@ -177,6 +178,15 @@ function MensajeAsistenteVista({
                 >
                   <FileDown size={13} aria-hidden />
                   {m.grande ? 'Descargar PDF' : 'PDF'}
+                </button>
+              )}
+              {m.id > 0 && tieneDatosTabulares(m.contenido) && (
+                <button
+                  type="button" className={s.copiar} onClick={() => descargarExcel(m.id)}
+                  aria-label="Descargar esta respuesta en Excel"
+                >
+                  <Sheet size={13} aria-hidden />
+                  Excel
                 </button>
               )}
               {m.id > 0 && (

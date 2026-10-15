@@ -550,7 +550,7 @@ describe('5.10 sugerencias después de cada respuesta', () => {
     for (const [intencion, lista] of TODOS_LOS_SEGUIMIENTOS) {
       const previa = PREVIA[intencion];
       for (const q of lista) {
-        if (/pdf/i.test(q)) continue; // «Pásalo a PDF» lo atiende la ruta, no el contestador.
+        if (/pdf|excel/i.test(q)) continue; // «Pásalo a PDF/Excel» lo atiende la ruta, no el contestador.
         const { tools } = herramientas(datos);
         const r = await responderLocal(q, tools, { hoy: HOY, previa: 'respuesta anterior', preguntaPrevia: previa });
         expect(r, `«${q}» tras «${intencion}»`).not.toBeNull();
@@ -795,5 +795,110 @@ describe('5.18 informe de calidad', () => {
     const vacio = informeCalidad(resumirCalidad([]), 7);
     expect(vacio).toContain('sin datos');
     expect(vacio).toContain('(nada)');
+  });
+});
+
+// ── Excel ──
+import ExcelJS from 'exceljs';
+import { aCelda, armarLibro, nombreDeHoja } from '@/lib/asistente/excel';
+import { pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
+
+describe('Excel de una respuesta', () => {
+  const META = { empresa: 'Colegio X', usuario: 'Ana', generadoEn: '14 de octubre de 2026', pregunta: 'mis mejores clientes', consultas: ['Ventas por cliente'] };
+
+  describe('celdas', () => {
+    it.each([
+      ['RD$ 1,234.50', { tipo: 'numero', valor: 1234.5 }],
+      ['RD$ 0.00', { tipo: 'numero', valor: 0 }],
+      ['-RD$ 500.00', { tipo: 'numero', valor: -500 }],
+      ['67%', { tipo: 'numero', valor: 0.67 }],
+      ['96', { tipo: 'numero', valor: 96 }],
+      ['1,234', { tipo: 'numero', valor: 1234 }],
+      ['45.5', { tipo: 'numero', valor: 45.5 }],
+    ])('«%s» es una cifra', (t, esperado) => {
+      expect(aCelda(t)).toMatchObject(esperado);
+    });
+
+    it('una fecha ISO es una fecha', () => {
+      const c = aCelda('2026-10-08');
+      expect(c.tipo).toBe('fecha');
+      expect((c as { valor: Date }).valor.toISOString().slice(0, 10)).toBe('2026-10-08');
+    });
+
+    it.each([
+      '131988032', '00112345678', 'E310000000045', 'FA-2026-CACH-KFBTU-001098', '0100000216', '2026-13-45', '1,23,4', 'Ana Pérez', '809-555-1234',
+    ])('«%s» se queda como texto (identificador o dato dudoso)', (t) => {
+      expect(aCelda(t).tipo).toBe('texto');
+    });
+  });
+
+  it('cada tabla es una hoja con el título que la precede, y al final va «Información»', () => {
+    const md = '**Tus mejores clientes**\n\n| Cliente | Ventas | Facturas |\n| --- | --- | --- |\n| Ana | RD$ 5,000.00 | 4 |\n| Luis | RD$ 3,000.00 | 2 |';
+    const libro = armarLibro(aBloques(md), META);
+    expect(libro.hojas.map((h) => h.nombre)).toEqual(['Tabla 1', 'Información']);
+    const t = libro.hojas[0];
+    expect(t.numericas).toEqual([false, true, true]);
+    expect(t.filas[1][1]).toMatchObject({ tipo: 'numero', valor: 5000, formato: '"RD$" #,##0.00' });
+    expect(libro.hojas[1].filas.flat().map((c) => (c as { valor: string }).valor)).toContain('Colegio X');
+  });
+
+  it('un gráfico es una hoja de etiqueta y valor, y una tarjeta es una tabla de datos', () => {
+    const md = '```grafico\ntitulo: Ventas por mes\nunidad: RD$\njun | 100\njul | 250\n```\n\n```tarjeta\ntitulo: E31000\nvalor: RD$ 3,300.00\nfila: Pagado | RD$ 3,300.00\n```';
+    const libro = armarLibro(aBloques(md), META);
+    const nombres = libro.hojas.map((h) => h.nombre);
+    expect(nombres[0]).toBe('Ventas por mes');
+    expect(nombres[1]).toMatch(/^E31000/);
+    expect(nombres[2]).toBe('Información');
+    expect(libro.hojas[0].filas[1]).toMatchObject([{ valor: 'jun' }, { tipo: 'numero', valor: 100 }]);
+  });
+
+  it('sin tablas, el texto de la respuesta en una hoja', () => {
+    const libro = armarLibro(aBloques('Vendiste mucho este mes.\n\n- Primero\n- Segundo'), META);
+    expect(libro.hojas[0].nombre).toBe('Respuesta');
+    expect(libro.hojas[0].filas.map((f) => (f[0] as { valor: string }).valor)).toEqual(['Respuesta', 'Vendiste mucho este mes.', '• Primero', '• Segundo']);
+  });
+
+  it('nombres de hoja válidos y sin repetirse', () => {
+    const usados = new Set<string>();
+    expect(nombreDeHoja('Ventas: [2026]/Q3*?', usados)).toBe('Ventas 2026 Q3');
+    expect(nombreDeHoja('Ventas: [2026]/Q3*?', usados)).toBe('Ventas 2026 Q3 (2)');
+    expect(nombreDeHoja('x'.repeat(50), usados)).toHaveLength(31);
+  });
+
+  it('inyección de fórmulas: un texto que empieza con = + - @ queda como texto en el archivo', async () => {
+    const md = '| Cliente | Total |\n| --- | --- |\n| =HYPERLINK("http://evil.example","clic") | RD$ 1.00 |\n| +cmd|calc | RD$ 2.00 |\n| @SUM(1+1) | RD$ 3.00 |';
+    const libro = armarLibro(aBloques(md), META);
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('t');
+    for (const f of libro.hojas[0].filas) ws.addRow(f.map((c) => c.valor));
+    const leido = new ExcelJS.Workbook();
+    await leido.xlsx.load(await wb.xlsx.writeBuffer());
+    const celda = leido.worksheets[0].getCell('A2');
+    expect(typeof celda.value).toBe('string');
+    expect((celda.value as string).startsWith('=')).toBe(true);
+    expect(celda.type).toBe(ExcelJS.ValueType.String);
+    expect((celda as unknown as { formula?: string }).formula).toBeUndefined();
+  });
+
+  describe('cuándo se pide', () => {
+    it.each(['pasalo a excel', 'dame esto en excel', 'descargar en hoja de calculo', 'exporta a xlsx', 'quiero una planilla'])('«%s» pide Excel y no PDF', (t) => {
+      expect(pideExcel(t)).toBe(true);
+      expect(pidePdf(t)).toBe(false);
+    });
+    it('«pásalo a PDF» sigue siendo PDF', () => {
+      expect(pideExcel('pasalo a pdf')).toBe(false);
+      expect(pidePdf('pasalo a pdf')).toBe(true);
+    });
+    it('solo ofrece Excel cuando la respuesta trae tablas, gráficos o tarjetas', () => {
+      expect(tieneDatosTabulares('Hola, vendiste mucho')).toBe(false);
+      expect(tieneDatosTabulares('| a | b |\n| --- | --- |\n| 1 | 2 |')).toBe(true);
+      expect(tieneDatosTabulares('```grafico\nA | 1\nB | 2\n```')).toBe(true);
+    });
+  });
+
+  it('«exporta toda la base de datos a excel» sigue siendo una política, no un Excel', async () => {
+    const { clasificarSolicitud } = await import('@/lib/asistente/politicas');
+    expect(clasificarSolicitud('exporta toda la base de datos a excel')?.categoria).toBe('volcado');
+    expect(clasificarSolicitud('dame la lista completa de clientes con telefono en excel')?.categoria).toBe('volcado');
   });
 });

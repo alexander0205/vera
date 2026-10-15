@@ -36,6 +36,16 @@ export function descargarPdf(mensajeId: number) {
   a.remove();
 }
 
+/** Descarga el Excel de una respuesta. */
+export function descargarExcel(mensajeId: number) {
+  const a = document.createElement('a');
+  a.href = `/api/asistente/excel?mensajeId=${mensajeId}`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /**
  * Estado del asistente de solo lectura. No hace nada hasta que el panel se
  * abre (`activo`): así quien nunca abre el chat no paga ni una petición.
@@ -226,6 +236,7 @@ export function useAsistente(activo: boolean) {
         propuestas: (d.mensaje.propuestas ?? []).map((p: NonNullable<MensajeAsistente['propuestas']>[number]) => ({ ...p, estado: 'pendiente' as const })),
       }]);
       if (typeof d.descargarMensajeId === 'number') descargarPdf(d.descargarMensajeId);
+      if (typeof d.descargarExcelId === 'number') descargarExcel(d.descargarExcelId);
     } catch {
       setMensajes((m) => [...m, {
         id: idTemporal.current--, rol: 'assistant', error: true,

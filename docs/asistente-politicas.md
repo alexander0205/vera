@@ -110,3 +110,15 @@ Capas, de afuera hacia adentro:
 Límite conocido: una paráfrasis corta de las reglas puede escapar al detector de fuga;
 la regla 8 del prompt y las políticas de entrada la cubren en la práctica, y lo que
 puede decir no incluye secretos (solo el estilo de respuesta del asistente).
+
+## Excel de una respuesta
+
+`GET /api/asistente/excel?mensajeId=` genera un .xlsx con lo que ESA respuesta ya mostró
+(tablas, gráficos, tarjetas o el texto). No consulta datos nuevos: no es un camino para
+sacar más información de la que la persona ya vio, y una petición masiva
+(«exporta toda la base de datos a Excel») sigue siendo una política de volcado.
+
+- Misma regla de acceso que el PDF: solo respuestas propias, de su empresa; 30 por hora.
+- Los textos van como texto (nunca fórmula): un nombre que empiece con `=`, `+`, `-` o `@` no se ejecuta.
+- Montos, porcentajes y fechas pasan a celdas numéricas con formato; RNC, cédulas, e-NCF y códigos con ceros a la izquierda se quedan como texto.
+- Una hoja por tabla o gráfico, y al final «Información» (empresa, quién, cuándo, consulta y datos consultados).

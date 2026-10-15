@@ -104,8 +104,20 @@ export function esRespuestaGrande(md: string): boolean {
   return filas >= 6 || md.length > 1500;
 }
 
+/** ¿La persona está pidiendo un Excel / hoja de cálculo? Tiene prioridad sobre «exportar» a secas. */
+export function pideExcel(texto: string): boolean {
+  const t = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /\b(excel|xlsx|xls|hoja de calculo|hoja electronica|spreadsheet|planilla)\b/.test(t);
+}
+
+/** ¿La respuesta trae datos que valen en una hoja (tabla, gráfico o tarjeta)? */
+export function tieneDatosTabulares(md: string): boolean {
+  return /^\|.+\|\s*$/m.test(md) && /^\|?\s*:?-{2,}/m.test(md) || /```(grafico|tarjeta)/.test(md);
+}
+
 /** ¿La persona está pidiendo un PDF / reporte descargable? */
 export function pidePdf(texto: string): boolean {
+  if (pideExcel(texto)) return false;
   const t = texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   return /\b(pdf|en pdf|como pdf|imprimir|imprimible|descargar|descargable|exportar|exporta|reporte (imprimible|en archivo)|genera(me)? un (reporte|documento))\b/.test(t);
 }
