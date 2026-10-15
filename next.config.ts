@@ -99,6 +99,8 @@ const nextConfig: NextConfig = {
       // debe cada familia está en Responsables con el filtro «Con deuda». Los
       // marcadores y enlaces viejos llegan ahí en vez de a un 404. Temporal,
       // por la misma razón que la de arriba.
+      // El cobro a un grupo volvió, en su propia ruta: el enlace viejo va ahí.
+      { source: '/escolar/cargos/lote', destination: '/escolar/cobrar-grupo', permanent: false },
       { source: '/escolar/cargos/:resto*', destination: '/escolar/responsables?filtro=con-deuda', permanent: false },
     ];
   },

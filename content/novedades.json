@@ -33,6 +33,18 @@
     "titulo": "Tu colegio, cobrado solo",
     "cambios": [
       {
+        "tipo": "arreglo",
+        "titulo": "Cambiar la mensualidad de un alumno ya no le cobra un mes dos veces",
+        "detalle": "Al cambiarle la generación o el monto a un alumno, los meses que no se han facturado pasan al precio nuevo y la facturación automática también. Si un mes ya tenía factura, no se duplica: te lo dice y, si nadie la ha pagado, te deja anularla para pasarla al precio nuevo.",
+        "desde": "2026-10-15"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Cóbrale lo mismo a un grupo de alumnos",
+        "detalle": "El paseo, las fotos o el uniforme se le cargan a un curso o a los alumnos que elijas de una vez, desde Responsables con el botón «Cobrar a un grupo». Antes de crear los cargos ves a quién se le va a cobrar.",
+        "desde": "2026-10-15"
+      },
+      {
         "tipo": "mejora",
         "titulo": "Imprime o descarga en PDF y Excel casi cualquier lista",
         "detalle": "Facturas, pagos, gastos, compras, inventario, caja, nómina, contabilidad, el colegio y los catálogos tienen ahora Imprimir, PDF, Excel y CSV. El archivo trae lo mismo que ves en pantalla, con tus filtros y fechas.",
@@ -53,7 +65,7 @@
       {
         "tipo": "mejora",
         "titulo": "Lo que debe cada familia, en Responsables",
-        "detalle": "Quitamos la sección «Cargos y deudas» porque repetía lo que ya está en las fichas. Para ver quién debe, entra a Responsables y usa el filtro «Con deuda».",
+        "detalle": "Quitamos la sección «Cargos y deudas» porque repetía lo que ya está en las fichas. En Responsables usa «Con deuda» para ver quién debe, «Por facturar» para lo que todavía no tiene factura, o elige un concepto para ver a quién se le cobró.",
         "desde": "2026-10-15"
       },
       {
