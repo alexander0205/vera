@@ -65,6 +65,7 @@ export function aBloques(md: string): Bloque[] {
         const datos = [...(tj.subtitulo ? [['Detalle', tj.subtitulo]] : []), ...(tj.estado ? [['Estado', tj.estado.texto]] : []), ...tj.filas.map((f) => [f.etiqueta, f.valor])];
         if (datos.length) out.push({ tipo: 'tabla', cabecera: [[{ texto: 'Dato' }], [{ texto: 'Detalle' }]], filas: datos.map(([k, v]) => [[{ texto: k }], [{ texto: v }]]) });
       } else if (g) out.push({ tipo: 'grafico', grafico: g });
+      else if (lenguaje === 'formulario') { /* el formulario no va en el reporte */ }
       else if (cuerpo.some((x) => x.trim())) out.push({ tipo: 'parrafo', tramos: tramos(cuerpo.join(' ')) });
       continue;
     }

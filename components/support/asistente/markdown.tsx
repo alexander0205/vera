@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 import { anchoBarra, parsearGrafico, valorGrafico, type Grafico } from '@/lib/asistente/grafico';
+import { parsearFormulario } from '@/lib/asistente/formulario';
+import { FormularioChat } from './formulario-chat';
 import { parsearTarjeta, type Tarjeta } from '@/lib/asistente/tarjeta';
 import s from './asistente.module.css';
 
@@ -164,7 +166,10 @@ export function Markdown({ texto }: { texto: string }) {
       i++;
       const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
       const tj = lenguaje === 'tarjeta' ? parsearTarjeta(cuerpo.join('\n')) : null;
-      if (g) {
+      const fm = lenguaje === 'formulario' ? parsearFormulario(cuerpo.join('\n')) : null;
+      if (fm) {
+        bloques.push(<FormularioChat key={`b${n++}`} def={fm.def} inicial={fm.valores} />);
+      } else if (g) {
         bloques.push(<GraficoVista key={`b${n++}`} g={g} />);
       } else if (tj) {
         bloques.push(<TarjetaVista key={`b${n++}`} t={tj} />);

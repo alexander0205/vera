@@ -3,6 +3,7 @@ import { normalizar, rd, hoyRd } from './util';
 import { clasificarSolicitud } from './politicas';
 import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import { MAPA_SISTEMA } from './mapa-sistema';
+import { bloqueFormulario, detectarFormulario, FORMULARIOS } from './formulario';
 import { DISPARA_FLUJO_COTIZACION, DISPARA_FLUJO_FACTURA, FLUJOS, formatearFlujo, type EstadoConfiguracion } from './guias-paso';
 import { explicarMensajesDgii, significadoDelEstado, type MensajeDgii } from './dgii';
 import { textoGrafico } from './grafico';
@@ -1175,6 +1176,16 @@ export async function responderLocal(
 
   const palabras = t.split(' ').length;
   const compleja = COMPLEJA.test(t) || palabras > 16;
+
+  // «Crea un cliente», «importar productos»: el formulario viene en el propio chat.
+  const form = detectarFormulario(texto);
+  if (form) {
+    const def = FORMULARIOS[form.id];
+    const intro = form.id.startsWith('importar')
+      ? `Claro. Sube el archivo aquí mismo y te muestro un resumen antes de importar nada.`
+      : `Claro. Llena este formulario aquí mismo: ${def.titulo.toLowerCase()}.`;
+    return { intencion: 'formulario', respuesta: `${intro}\n\n${bloqueFormulario(form.id, form.valores)}` };
+  }
 
   // «Cámbiale el rol a…», «anula la factura…»: no se hace desde el chat, pero se guía.
   const cambio = PIDE_CAMBIO.test(t);
