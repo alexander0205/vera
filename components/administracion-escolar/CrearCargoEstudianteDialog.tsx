@@ -143,6 +143,15 @@ export function CrearCargoEstudianteDialog({
     if (!open || !matriculaId || !form.conceptoId) { setPrecio(undefined); return; }
     const otroConcepto = conceptoDelMonto.current !== form.conceptoId;
     conceptoDelMonto.current = form.conceptoId;
+    if (otroConcepto) {
+      // El precio y el monto eran del concepto anterior. Se sueltan YA, no al
+      // llegar la respuesta: si la consulta falla —o mientras viaja— no se
+      // puede guardar el concepto nuevo con el monto del viejo, ni tomar por
+      // exonerado (beca del 100 %) lo que era del otro.
+      setPrecio(undefined);
+      setForm((f) => ({ ...f, monto: '' }));
+      montoSugerido.current = '';
+    }
     let vigente = true;
     setBuscandoPrecio(true);
     const qs = new URLSearchParams({ conceptoId: form.conceptoId, ...(form.mes ? { mes: form.mes } : {}) });

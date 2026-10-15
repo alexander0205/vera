@@ -7,7 +7,8 @@
  * «Imprimir».
  *
  * Mismos datos que la pantalla (`getPagosListado`, con su tope de 2000) y el
- * mismo filtro (`filtrarPagos`), así el archivo dice lo mismo que la tabla.
+ * mismo filtro (`filtrarPagos`), así el archivo dice lo mismo que la tabla. Si
+ * el rango llega al tope, el archivo lo dice.
  */
 import { NextRequest } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
@@ -21,6 +22,9 @@ import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 
 export const maxDuration = 60;
+
+/** El techo de `getPagosListado`: si llega a él, el rango trae más pagos. */
+const TECHO = 2000;
 
 export async function GET(req: NextRequest) {
   const auth = await requirePermission('pagos:ver');
@@ -40,13 +44,18 @@ export async function GET(req: NextRequest) {
   const promedio = pagos.length ? Math.round(total / pagos.length) : 0;
   const filtroTexto = describirFiltroPagos(filtro, fmtFechaCorta);
   const sufijo = [filtro.desde, filtro.hasta].filter(Boolean).join('_') || hoyRD();
+  // Sin esta nota, un rango con más de 2000 pagos salía con el total y el
+  // promedio bajos y nada que lo dijera.
+  const nota = todos.length >= TECHO
+    ? `Se muestran los ${TECHO.toLocaleString('es-DO')} pagos más recientes del rango y los totales son solo de esos; acota las fechas para ver el resto.`
+    : undefined;
   const documento = (p: (typeof pagos)[number]) => p.docCodigo ?? (p.docId ? `#${p.docId}` : '—');
   const registradoPor = (p: (typeof pagos)[number]) => p.registradoPor ?? p.registradoPorEmail ?? '';
 
   if (formato === 'pdf') {
     const { empresa, rnc } = await empresaParaPdf(teamId);
     return respuestaListadoPdf({
-      empresa, rnc, filtroTexto,
+      empresa, rnc, filtroTexto, nota,
       titulo: 'Pagos recibidos',
       generado: fmtFechaCorta(hoyRD()),
       kpis: [
@@ -134,6 +143,7 @@ export async function GET(req: NextRequest) {
   fila.font = { bold: true };
   ws.addRow({ cliente: `En efectivo: ${fmtDOP(efectivo)} · Promedio: ${fmtDOP(promedio)}` });
   ws.addRow({ cliente: filtroTexto });
+  if (nota) ws.addRow({ cliente: nota });
 
   return respuestaXlsx(wb, `pagos_${sufijo}.xlsx`);
 }

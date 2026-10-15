@@ -69,7 +69,9 @@ export async function POST(req: NextRequest) {
     }, `${e.archivo}_${hoy}.pdf`, e.inline === true);
   }
 
-  const { wb, ws } = nuevaHoja(e.titulo.slice(0, 31));
+  // Excel no admite : \ / ? * [ ] en el nombre de una hoja: exceljs lanza y
+  // el exporte respondía 500.
+  const { wb, ws } = nuevaHoja(e.titulo.replace(/[:\\/?*[\]]+/g, ' ').trim().slice(0, 31) || 'Listado');
   // Celdas con segunda línea (el RNC bajo el nombre…) van en su propia columna.
   const conSub = e.columnas.map((_, i) => todas.some((f) => {
     const c = f.celdas[i];

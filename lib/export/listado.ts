@@ -41,6 +41,12 @@ export interface ListadoEnvio {
 }
 
 export const MAX_FILAS = 10000;
+/**
+ * Cada grupo con título es un encabezado más en el PDF. Sin este tope, un
+ * cuerpo lleno de grupos vacíos pasaba la validación de filas y ocupaba la
+ * función el minuto entero armando páginas.
+ */
+export const MAX_GRUPOS = 2000;
 const MAX_COLUMNAS = 20;
 
 const texto = (v: unknown, max = 300) => String(v ?? '').slice(0, max);
@@ -51,7 +57,7 @@ export function validarEnvio(raw: unknown): ListadoEnvio | null {
   const r = raw as Record<string, unknown>;
   if (r.formato !== 'pdf' && r.formato !== 'xlsx' && r.formato !== 'csv') return null;
   if (!Array.isArray(r.columnas) || r.columnas.length === 0 || r.columnas.length > MAX_COLUMNAS) return null;
-  if (!Array.isArray(r.grupos)) return null;
+  if (!Array.isArray(r.grupos) || r.grupos.length > MAX_GRUPOS) return null;
 
   const columnas: ColumnaEnvio[] = r.columnas.map((c) => {
     const o = (c ?? {}) as Record<string, unknown>;

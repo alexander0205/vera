@@ -32,13 +32,30 @@ const inputFecha = {
 
 const selectSx = { fontSize: '0.875rem', borderRadius: '8px', minWidth: 150, bgcolor: '#ffffff' } as const;
 
+/**
+ * Una fecha que ya se puede aplicar: vacía (quitar el filtro) o completa. Al
+ * teclear el año en el campo de fecha, el navegador entrega «0002-…», «0020-…»
+ * y así hasta el año entero; navegar con cada una lanzaba una consulta por
+ * dígito y llenaba el historial.
+ */
+const fechaLista = (v: string) => v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && Number(v.slice(0, 4)) >= 2000);
+
 export function FiltrosGastos({ filtro, categorias, hoy }: { filtro: FiltroGastos; categorias: string[]; hoy: string }) {
   const router = useRouter();
   const [q, setQ] = useState(filtro.q ?? '');
+  // Las fechas llevan su propio estado: atadas solo a la URL, el campo volvía
+  // al valor viejo hasta que respondía el servidor.
+  const [desde, setDesde] = useState(filtro.desde ?? '');
+  const [hasta, setHasta] = useState(filtro.hasta ?? '');
+  useEffect(() => { setDesde(filtro.desde ?? ''); setHasta(filtro.hasta ?? ''); }, [filtro.desde, filtro.hasta]);
+  const busquedaPendiente = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Lo tecleado entra siempre, aunque la búsqueda aún no se haya aplicado: si
-  // no, cambiar un select a mitad de escribir la perdería.
+  // no, cambiar un select a mitad de escribir la perdería. Y como ya la lleva,
+  // la búsqueda en espera se cancela: al dispararse después navegaría con el
+  // filtro de antes y desharía el cambio del select.
   const ir = (cambios: Partial<FiltroGastos>) => {
+    clearTimeout(busquedaPendiente.current);
     const s = filtroGastosAParams({ ...filtro, q: q.trim() || undefined, ...cambios }).toString();
     router.push(`/dashboard/gastos${s ? `?${s}` : ''}`);
   };
@@ -52,6 +69,7 @@ export function FiltrosGastos({ filtro, categorias, hoy }: { filtro: FiltroGasto
     const t = setTimeout(() => {
       if ((filtro.q ?? '') !== q.trim()) ir({ q: q.trim() || undefined });
     }, 400);
+    busquedaPendiente.current = t;
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
@@ -101,11 +119,19 @@ export function FiltrosGastos({ filtro, categorias, hoy }: { filtro: FiltroGasto
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Filter style={{ width: 14, height: 14, color: '#9ca3af' }} />
-        <Box component="input" type="date" aria-label="Desde" value={filtro.desde ?? ''} sx={inputFecha}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => ir({ desde: e.target.value || undefined })} />
+        <Box component="input" type="date" aria-label="Desde" value={desde} sx={inputFecha}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            const v = e.target.value;
+            setDesde(v);
+            if (fechaLista(v) && v !== (filtro.desde ?? '')) ir({ desde: v || undefined });
+          }} />
         <Box component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>→</Box>
-        <Box component="input" type="date" aria-label="Hasta" value={filtro.hasta ?? ''} sx={inputFecha}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => ir({ hasta: e.target.value || undefined })} />
+        <Box component="input" type="date" aria-label="Hasta" value={hasta} sx={inputFecha}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            const v = e.target.value;
+            setHasta(v);
+            if (fechaLista(v) && v !== (filtro.hasta ?? '')) ir({ hasta: v || undefined });
+          }} />
       </Box>
 
       <Select size="small" displayEmpty value={filtro.categoria ?? ''} sx={selectSx} inputProps={{ 'aria-label': 'Categoría' }}

@@ -21,6 +21,14 @@ import {
 
 export const maxDuration = 60;
 
+/**
+ * Lo más que entra en el PDF. react-pdf tarda unos 3 s por cada 1,600 filas y
+ * la pantalla no trae fechas por defecto: sin tope, «Imprimir» sobre el libro
+ * entero de una empresa grande se pasa de `maxDuration` y el usuario ve un 504.
+ * Excel y CSV no tienen ese costo y siguen llevando todo.
+ */
+const TOPE_PDF = 4000;
+
 export async function GET(req: NextRequest) {
   const auth = await requirePermission('contabilidad:ver');
   if (!auth.ok) return auth.response;
@@ -43,20 +51,32 @@ export async function GET(req: NextRequest) {
     const grupos: { titulo: string; resumen: string; filas: { celdas: string[] }[] }[] = [];
     let actual: number | null = null;
     let debe = 0, haber = 0;
+    // Los totales cuentan todo lo filtrado; las filas paran en el tope, y nunca
+    // a mitad de un asiento (uno partido no cuadra y confunde).
+    let mostradas = 0;
+    let lleno = false;
+    const asientos = new Set<number>();
     for (const f of filas) {
       debe += f.debeCents; haber += f.haberCents;
+      asientos.add(f.asientoId);
       if (f.asientoId !== actual) {
         actual = f.asientoId;
-        grupos.push({ titulo: `${fmtFechaCorta(f.fecha)} · ${f.concepto}`, resumen: ORIGEN_LABEL[f.origenTipo] ?? f.origenTipo, filas: [] });
+        if (mostradas >= TOPE_PDF) lleno = true;
+        if (!lleno) grupos.push({ titulo: `${fmtFechaCorta(f.fecha)} · ${f.concepto}`, resumen: ORIGEN_LABEL[f.origenTipo] ?? f.origenTipo, filas: [] });
       }
+      if (lleno) continue;
+      mostradas++;
       grupos[grupos.length - 1].filas.push({ celdas: [
         `${f.cuentaCodigo} ${f.cuentaNombre}`, f.descripcion ?? '',
         f.debeCents > 0 ? fmtDOP(f.debeCents) : '', f.haberCents > 0 ? fmtDOP(f.haberCents) : '',
       ] });
     }
     const { empresa, rnc } = await empresaParaPdf(auth.teamId);
+    const nota = lleno
+      ? `El PDF trae los ${grupos.length.toLocaleString('es-DO')} asientos más recientes de ${asientos.size.toLocaleString('es-DO')}; los totales son de todo el filtro. Para el libro completo, acota las fechas o descarga Excel.`
+      : undefined;
     return respuestaListadoPdf({
-      empresa, rnc,
+      empresa, rnc, nota,
       titulo: 'Libro diario',
       generado: fmtFechaCorta(hoyRD()),
       filtroTexto: [
@@ -64,7 +84,7 @@ export async function GET(req: NextRequest) {
         origenRaw && ORIGENES.includes(origenRaw as OrigenTipo) ? `Origen: ${ORIGEN_LABEL[origenRaw] ?? origenRaw}` : null,
       ].filter(Boolean).join(' · '),
       kpis: [
-        { label: 'Asientos', valor: String(grupos.length) },
+        { label: 'Asientos', valor: String(asientos.size) },
         { label: 'Debe', valor: fmtDOP(debe) },
         { label: 'Haber', valor: fmtDOP(haber) },
         { label: debe === haber ? 'Cuadra' : 'Diferencia', valor: fmtDOP(Math.abs(debe - haber)) },

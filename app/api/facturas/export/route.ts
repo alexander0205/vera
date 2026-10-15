@@ -27,6 +27,9 @@ export const maxDuration = 60;
 /** Lo más que baja un archivo. */
 const TOPE = 5000;
 
+/** Compras, gastos menores y pagos al exterior: se listan, pero no son ventas. */
+const NO_SON_VENTA = new Set(['41', '43', '47']);
+
 const TIPO_LABELS: Record<string, string> = {
   '31': 'Factura de Crédito Fiscal', '32': 'Factura de Consumo', '33': 'Nota de Débito',
   '34': 'Nota de Crédito', '41': 'Compras', '43': 'Gastos Menores',
@@ -138,8 +141,11 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Totales de lo vivo (una anulada no se vendió).
-  const vivas = docs.filter((d) => !d.anulada);
+  // Totales de lo vivo y vendido: una anulada no se vendió, y los comprobantes
+  // de compras, gastos menores y pagos al exterior (41/43/47) son dinero que
+  // sale —la tabla los lista, pero sumarlos inflaría lo facturado y lo por
+  // cobrar, igual que evitan el panel y la cartera (`lib/db/queries.ts`).
+  const vivas = docs.filter((d) => !d.anulada && !NO_SON_VENTA.has(d.tipoEcf));
   const facturado = vivas.reduce((s, d) => s + d.montoTotal, 0);
   const cobrado = vivas.reduce((s, d) => s + d.pagado, 0);
   const porCobrar = vivas.reduce((s, d) => s + d.ep.saldo, 0);
@@ -156,7 +162,9 @@ export async function GET(req: NextRequest) {
   }
   const filtroTexto = describirFiltroFacturas(filtro, fmtFechaCorta, nombresMaestro);
   const pagoTexto = (d: (typeof docs)[number]) => (d.ep.detalle ? `${d.ep.etiqueta} (${d.ep.detalle})` : d.ep.etiqueta);
-  const nota = docs.length === TOPE ? `Se muestran las ${TOPE} facturas más recientes; acota el filtro para ver el resto.` : undefined;
+  const nota = docs.length === TOPE
+    ? `Se muestran las ${TOPE} facturas más recientes y los totales son solo de esas; acota el filtro para ver el resto.`
+    : undefined;
 
   if (formato === 'pdf') {
     const { empresa, rnc } = await empresaParaPdf(teamId);
@@ -202,7 +210,7 @@ export async function GET(req: NextRequest) {
         })),
       }],
       totales: {
-        etiqueta: 'Total (sin anuladas)',
+        etiqueta: 'Total (sin anuladas ni compras)',
         valores: { [iItbis]: fmtDOP(itbis), [iItbis + 1]: fmtDOP(facturado), [iItbis + 2]: fmtDOP(porCobrar) },
       },
     }, `facturas_${sufijo}.pdf`, sp.get('inline') === '1');
@@ -247,7 +255,7 @@ export async function GET(req: NextRequest) {
   }
   ws.addRow({});
   const tot = ws.addRow({
-    cliente: `Total (sin anuladas) · ${vivas.length} factura${vivas.length === 1 ? '' : 's'}`,
+    cliente: `Total (sin anuladas ni compras) · ${vivas.length} factura${vivas.length === 1 ? '' : 's'}`,
     itbis: itbis / 100, total: facturado / 100, cobrado: cobrado / 100, saldo: porCobrar / 100,
   });
   tot.font = { bold: true };

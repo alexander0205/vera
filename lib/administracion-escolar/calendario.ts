@@ -265,7 +265,20 @@ export function agregarCuota<T extends CuotaEditable>(
     fecha = opts.hoy;
   }
   // Una cuota fuera del año escolar no la cobra nadie: se queda en el último día.
-  if (opts.fechaFin && fecha > opts.fechaFin) fecha = opts.fechaFin;
+  if (opts.fechaFin && fecha > opts.fechaFin) {
+    fecha = opts.fechaFin;
+    // Pero si la última ya cae en ese mes, la «nueva» lo repetiría: en un cobro
+    // por período (cada mes, trimestre o semestre) sería cobrarle dos veces el
+    // mismo mes a cada alumno —un segundo «Junio»—, y en uno suelto, dos fechas
+    // iguales. Mejor decirlo que dejar guardar el duplicado.
+    const periodico = opts.frecuencia === 'mensual' || opts.frecuencia === 'trimestral' || opts.frecuencia === 'semestral';
+    if (ultima && (fecha <= ultima.fechaEmision || (periodico && fecha.slice(0, 7) === ultima.fechaEmision.slice(0, 7)))) {
+      const [a, m, d] = opts.fechaFin.split('-');
+      return {
+        error: `El año escolar termina el ${d}/${m}/${a} y la última cuota ya cae en ese mes: otra la repetiría. Si falta una fecha, cambia la de alguna fila.`,
+      };
+    }
+  }
 
   const n = filas.length + 1;
   const mes = Number(fecha.slice(5, 7));

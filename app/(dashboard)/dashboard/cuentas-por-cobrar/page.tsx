@@ -62,7 +62,7 @@ const EXPORTAR: ExportTabla<Cuenta> = {
   archivo: 'cuentas-por-cobrar',
   columnas: [
     { titulo: 'Emisión', valor: c => fmtFechaCorta(c.fechaEmision), ancho: 0.8 },
-    { titulo: 'Documento', valor: c => c.codigo ?? `#${c.id}`, sub: c => (/^Ed{12}$/.test(c.encf) ? c.encf : null), ancho: 1.4 },
+    { titulo: 'Documento', valor: c => c.codigo ?? `#${c.id}`, sub: c => (/^E\d{12}$/.test(c.encf) ? c.encf : null), ancho: 1.4 },
     { titulo: 'Cliente', valor: c => nombreCuenta(c) ?? 'Consumidor final', sub: c => c.rncComprador, ancho: 2 },
     { titulo: 'Vence', valor: c => (c.fechaLimitePago ? fmtFechaCorta(c.fechaLimitePago) : null), ancho: 0.8 },
     { titulo: 'Atraso', valor: c => (c.vencida ? `${c.diasVencido} d` : 'Al día'), ancho: 0.7 },

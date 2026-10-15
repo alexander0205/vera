@@ -14,9 +14,11 @@ import { sugerirMontoDelCargo } from '@/lib/administracion-escolar/precio-cargo-
  *
  * El precio que tiene `conceptoId` para el curso de ESTA matrícula, para que
  * «Agregar cargo» salga con el monto puesto. Usa `resolverTarifa`, la misma
- * cadena que aplica `POST /cargos` cuando no recibe monto (precio personal →
- * sección → grado → servicio, y la beca encima), así que lo que se enseña es
- * lo que el servidor habría cobrado.
+ * cadena de precios que el plan de cobro de la matrícula (precio personal →
+ * sección → grado → servicio, y la beca encima). En un concepto repartido en
+ * cuotas propone la cuota del mes, como haría el devengo; ojo que
+ * `POST /cargos` sin monto cobra la tarifa ENTERA, no la cuota, por eso el
+ * formulario manda siempre el monto (salvo el cero de una beca del 100 %).
  *
  * `sugerencia: null` significa que el concepto no tiene precio para este
  * curso: el formulario pide el monto a mano.

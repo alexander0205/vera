@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validarEnvio, totalesEnvio, anchosPorcentaje, MAX_FILAS } from '@/lib/export/listado';
+import { validarEnvio, totalesEnvio, anchosPorcentaje, MAX_FILAS, MAX_GRUPOS } from '@/lib/export/listado';
 import { armarEnvioTabla, describirFiltrosTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Nota { id: number; cliente: string | null; rnc: string | null; monto: number; estado: string }
@@ -78,6 +78,7 @@ describe('validar lo que llega del navegador', () => {
     expect(validarEnvio({ ...base, formato: 'docx' })).toBeNull();
     expect(validarEnvio({ ...base, columnas: [] })).toBeNull();
     expect(validarEnvio({ ...base, grupos: [{ filas: Array.from({ length: MAX_FILAS + 1 }, () => ({ celdas: [] })) }] })).toBeNull();
+    expect(validarEnvio({ ...base, grupos: Array.from({ length: MAX_GRUPOS + 1 }, () => ({ titulo: 'x', filas: [] })) })).toBeNull();
     expect(validarEnvio(null)).toBeNull();
   });
 

@@ -21,6 +21,16 @@ export const maxDuration = 60;
 /** Tope alto: un mayor de una cuenta cabe de sobra; exportamos todo. */
 const TODO = 100_000;
 
+/**
+ * Lo más que entra en el PDF. Una cuenta de banco o de ventas de una empresa
+ * grande pasa de decenas de miles de movimientos, y react-pdf tarda unos 3 s
+ * por cada 1,600 filas: sin tope se pasa de `maxDuration`. Excel y CSV llevan todo.
+ */
+const TOPE_PDF = 4000;
+
+/** El código de la cuenta, apto para nombre de archivo (admite cualquier carácter). */
+const paraArchivo = (codigo: string) => codigo.replace(/[^A-Za-z0-9._-]+/g, '-') || 'cuenta';
+
 export async function GET(req: NextRequest) {
   const auth = await requirePermission('contabilidad:ver');
   if (!auth.ok) return auth.response;
@@ -37,10 +47,17 @@ export async function GET(req: NextRequest) {
   const mayor = await mayorGeneral(auth.teamId, cuentaNum, { desde, hasta, limit: TODO });
   if (!mayor) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 });
 
+  const archivo = paraArchivo(mayor.cuenta.codigo);
+
   if (sp.get('formato') === 'pdf') {
     const { empresa, rnc } = await empresaParaPdf(auth.teamId);
+    // Los primeros del período: así el saldo corriente sigue desde el inicial.
+    const movimientos = mayor.movimientos.slice(0, TOPE_PDF);
+    const nota = movimientos.length < mayor.movimientos.length
+      ? `El PDF trae los primeros ${movimientos.length.toLocaleString('es-DO')} movimientos de ${mayor.movimientos.length.toLocaleString('es-DO')}; los totales y el saldo final son de todo el período. Para el mayor completo, acota las fechas o descarga Excel.`
+      : undefined;
     return respuestaListadoPdf({
-      empresa, rnc,
+      empresa, rnc, nota,
       titulo: `Mayor · ${mayor.cuenta.codigo} ${mayor.cuenta.nombre}`,
       generado: fmtFechaCorta(hoyRD()),
       filtroTexto: desde && hasta ? `Del ${fmtFechaCorta(desde)} al ${fmtFechaCorta(hasta)}` : desde ? `Desde el ${fmtFechaCorta(desde)}` : hasta ? `Hasta el ${fmtFechaCorta(hasta)}` : 'Todas las fechas',
@@ -61,13 +78,13 @@ export async function GET(req: NextRequest) {
       ],
       grupos: [{ filas: [
         { celdas: ['', 'Saldo inicial', '', '', '', '', fmtDOP(mayor.saldoInicialCents)] },
-        ...mayor.movimientos.map((m) => ({ celdas: [
+        ...movimientos.map((m) => ({ celdas: [
           fmtFechaCorta(m.fecha), m.concepto, ORIGEN_LABEL[m.origenTipo] ?? m.origenTipo, m.descripcion ?? '',
           m.debeCents > 0 ? fmtDOP(m.debeCents) : '', m.haberCents > 0 ? fmtDOP(m.haberCents) : '', fmtDOP(m.saldoCents),
         ] })),
       ] }],
       totales: { etiqueta: 'Totales', valores: { 4: fmtDOP(mayor.debeCents), 5: fmtDOP(mayor.haberCents), 6: fmtDOP(mayor.saldoFinalCents) } },
-    }, `mayor-${mayor.cuenta.codigo}_${hoyRD()}.pdf`, sp.get('inline') === '1');
+    }, `mayor-${archivo}_${hoyRD()}.pdf`, sp.get('inline') === '1');
   }
 
   const { wb, ws } = nuevaHoja('Mayor');
@@ -109,6 +126,6 @@ export async function GET(req: NextRequest) {
 
   estilarEncabezado(ws);
   return sp.get('formato') === 'csv'
-    ? respuestaCsv(wb, `mayor-${mayor.cuenta.codigo}.csv`)
-    : respuestaXlsx(wb, `mayor-${mayor.cuenta.codigo}.xlsx`);
+    ? respuestaCsv(wb, `mayor-${archivo}.csv`)
+    : respuestaXlsx(wb, `mayor-${archivo}.xlsx`);
 }

@@ -66,6 +66,19 @@ describe('agregarCuota', () => {
     expect(filas[1].fechaEmision).toBe('2027-06-30');
   });
 
+  it('con el año completo no repite el último mes: un mensual no gana un segundo «Junio»', () => {
+    const r = agregarCuota(
+      [fila('Mayo', '2027-05-05', 50000), fila('Junio', '2027-06-05', 50000)],
+      { ...ANIO, frecuencia: 'mensual', diaEmision: 5 },
+    );
+    expect('error' in r && r.error).toMatch(/termina el 30\/06\/2027/);
+  });
+
+  it('tampoco repite la fecha si la última ya está en el último día del año', () => {
+    const r = agregarCuota([fila('P1', '2027-06-30', 100000)], { ...ANIO, diaEmision: 5 });
+    expect('error' in r).toBe(true);
+  });
+
   it('un cobro mensual se llama como su mes', () => {
     const filas = ok(agregarCuota([fila('Junio', '2027-06-05', 100000)], { ...ANIO, fechaFin: '2027-07-31', frecuencia: 'mensual', diaEmision: 5 }));
     expect(filas[1]).toMatchObject({ etiqueta: 'Julio', fechaEmision: '2027-07-05' });

@@ -37,8 +37,15 @@ export function imprimirPdf(blob: Blob): Promise<void> {
         terminado = true;
         clearTimeout(espera);
         clearTimeout(respaldo);
-        // Mantener el documento vivo mientras el usuario usa el diálogo.
-        setTimeout(limpiar, 60_000);
+        // Mantener el documento vivo mientras el usuario usa el diálogo, y
+        // soltarlo cuando lo cierra. En Chrome `print()` del visor de PDF no
+        // espera al diálogo: con un plazo fijo de 60 s, quien seguía eligiendo
+        // impresora se quedaba sin documento. El plazo largo es solo por si el
+        // visor no avisa del `afterprint`.
+        let suelto = false;
+        const soltar = () => { if (!suelto) { suelto = true; limpiar(); } };
+        vista.addEventListener?.('afterprint', () => setTimeout(soltar, 1_000), { once: true });
+        setTimeout(soltar, 10 * 60_000);
         resolve();
       } catch (error) {
         fallo(error instanceof Error ? error : new Error('No se pudo abrir la impresión'));
