@@ -544,6 +544,8 @@ export function descuadradosDePagina(
  */
 /** Una fila plana del libro diario para exportar: un apunte con su encabezado. */
 export interface FilaExportLibro {
+  /** Para agrupar los apuntes por asiento (el PDF los enseña así). */
+  asientoId:    number;
   fecha:        string;
   concepto:     string;
   origenTipo:   string;
@@ -569,7 +571,7 @@ export async function asientosParaExportar(
 ): Promise<FilaExportLibro[]> {
   const where = condicionesLibro(teamId, opts);
   const filas = await db.execute(sql`
-    SELECT to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto,
+    SELECT a.id AS "asientoId", to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto,
            a.origen_tipo AS "origenTipo",
            c.codigo AS "cuentaCodigo", c.nombre AS "cuentaNombre",
            l.descripcion,
@@ -582,6 +584,7 @@ export async function asientosParaExportar(
   `);
   return (filas as unknown as FilaExportLibro[]).map((f) => ({
     ...f,
+    asientoId:  aNumero(f.asientoId),
     debeCents:  aNumero(f.debeCents),
     haberCents: aNumero(f.haberCents),
   }));

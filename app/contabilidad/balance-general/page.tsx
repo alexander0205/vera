@@ -5,6 +5,7 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
 import { balanceGeneral, type SeccionBalanceGeneral } from '@/lib/contabilidad/balance-general';
 import { FiltrosPeriodo } from '../_filtros-periodo';
+import { PrintButton } from '@/components/reportes/print-button';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
@@ -85,9 +86,9 @@ export default async function BalanceGeneralPage({
   );
 
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1000, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box component="section" className="print-area" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1000, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Breadcrumb */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box className="no-print" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Balance general</Typography>
@@ -104,6 +105,8 @@ export default async function BalanceGeneralPage({
           </Typography>
         </Box>
         {bg.hayDatos && (
+          <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <PrintButton />
           <Box component="a" href={exportHref}
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
               px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
@@ -112,10 +115,11 @@ export default async function BalanceGeneralPage({
           >
             Exportar a Excel
           </Box>
+          </Box>
         )}
       </Box>
 
-      <FiltrosPeriodo ruta="/contabilidad/balance-general" periodo={{ desde, hasta }} />
+      <div className="no-print"><FiltrosPeriodo ruta="/contabilidad/balance-general" periodo={{ desde, hasta }} /></div>
 
       {bg.hayDatos && (
         bg.cuadra ? (
