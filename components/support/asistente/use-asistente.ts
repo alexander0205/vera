@@ -1,5 +1,6 @@
 'use client';
 
+import type { PrimerosPasos } from '@/lib/asistente/primeros-pasos';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface MensajeAsistente {
@@ -77,6 +78,9 @@ export function useAsistente(activo: boolean) {
   // Lo que conviene atender hoy. `null` = aún no se sabe; la ruta limita las consultas, y entonces se conserva lo anterior.
   const [alertas, setAlertas] = useState<{ id: string; nivel: 'alto' | 'medio'; titulo: string; detalle: string; enlace: string; accion: string }[] | null>(null);
   const alertasEn = useRef(0);
+  // «Primeros pasos» de quien aún no factura. `null` = no aplica o aún no se sabe.
+  const [primerosPasos, setPrimerosPasos] = useState<PrimerosPasos | null>(null);
+  const primerosEn = useRef(0);
   const cargar = useCallback(async (opts: { silencioso?: boolean; soloSiCambio?: boolean } = {}) => {
     if (cargando.current) return;
     cargando.current = true;
@@ -168,6 +172,23 @@ export function useAsistente(activo: boolean) {
         if (Array.isArray(d.alertas)) setAlertas(d.alertas);
       } catch {
         // Sin alertas por ahora: no es un error que mostrar.
+      }
+    })();
+  }, [activo, estado]);
+
+  // Primeros pasos: una vez por apertura (la ruta limita las consultas).
+  useEffect(() => {
+    if (!activo || estado !== 'listo') return;
+    if (Date.now() - primerosEn.current < 60_000) return;
+    primerosEn.current = Date.now();
+    void (async () => {
+      try {
+        const r = await fetch('/api/asistente/primeros-pasos', { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.primerosPasos && typeof d.primerosPasos === 'object') setPrimerosPasos(d.primerosPasos.mostrar ? d.primerosPasos : null);
+      } catch {
+        // Sin tarjeta por ahora: no es un error que mostrar.
       }
     })();
   }, [activo, estado]);
@@ -372,7 +393,7 @@ export function useAsistente(activo: boolean) {
   const disponible = estado === 'listo' ? true : estado === 'no-aplica' ? false : null;
   const reintentar_carga = cargar;
 
-  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia, alertas, conversaciones, cargarConversaciones, abrirConversacion, conversacionId };
+  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia, alertas, primerosPasos, conversaciones, cargarConversaciones, abrirConversacion, conversacionId };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;

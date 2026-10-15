@@ -450,3 +450,28 @@
 .menuOpcion span { display: flex; flex-direction: column; line-height: 1.25; }
 .menuOpcion strong { font-size: 13px; font-weight: 600; }
 .menuOpcion small { font-size: 11.5px; color: var(--muted-foreground); }
+
+/* Primeros pasos (quien aún no emite su primera factura) */
+.primeros { display: flex; flex-direction: column; gap: 10px; width: 100%; padding: 12px; border-radius: 14px; background: color-mix(in srgb, var(--primary) 7%, var(--card)); border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); }
+.primerosCabecera { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--primary); }
+.primerosCabecera span { margin-left: auto; font-size: 12px; color: var(--muted-foreground); }
+.progreso { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 15%, var(--muted)); overflow: hidden; }
+.progreso span { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.4s ease; }
+@media (prefers-reduced-motion: reduce) { .progreso span { transition: none; } }
+.pasos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.paso { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 9px; font-size: 13px; color: var(--muted-foreground); }
+.paso a { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; text-decoration: none; color: inherit; }
+.paso a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
+.paso small { font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
+.pasoHecho { color: var(--muted-foreground); }
+.pasoHecho strong { font-weight: 500; text-decoration: line-through; }
+.pasoHecho svg { color: #16a34a; }
+.pasoActual { color: var(--foreground); background: var(--card); border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); }
+.pasoActual svg:first-child { color: var(--primary); }
+.vende { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.vende label { font-weight: 600; }
+.vende div { display: flex; gap: 6px; }
+.vende input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); font-size: 13px; }
+.vende input:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.vende button { border: 0; border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 600; background: var(--primary); color: var(--primary-foreground); cursor: pointer; white-space: nowrap; }
+.vende button:disabled { opacity: 0.5; cursor: not-allowed; }

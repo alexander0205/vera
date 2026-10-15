@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle, AlertTriangle, ArrowUp, ChevronDown, Sheet, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  AlertCircle, AlertTriangle, ArrowRight, ArrowUp, CheckCircle2, Circle, Rocket, ChevronDown, Sheet, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
   Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { descargarExcel, descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
 import { tieneDatosTabulares } from '@/lib/asistente/bloques';
+import { preguntaDeLoQueVende } from '@/lib/asistente/primeros-pasos';
 import { Markdown } from './markdown';
 import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
 import { describirError, mensajeDeEspera } from '@/lib/asistente/estados';
@@ -294,6 +295,7 @@ export function PanelAsistente({
 }) {
   const [texto, setTexto] = useState('');
   const [verHistorial, setVerHistorial] = useState(false);
+  const [vende, setVende] = useState('');
   const listaRef = useRef<HTMLDivElement>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
 
@@ -359,6 +361,62 @@ export function PanelAsistente({
                   : 'Pregúntame lo que necesites saber de tu negocio: ventas, cobros, cartera e impuestos.'}
               </p>
             </div>
+            {a.primerosPasos && (
+              <section className={s.primeros} aria-label="Primeros pasos">
+                <header className={s.primerosCabecera}>
+                  <Rocket size={16} aria-hidden />
+                  <strong>Primeros pasos</strong>
+                  <span>{a.primerosPasos.hechos} de {a.primerosPasos.total}</span>
+                </header>
+                <div
+                  className={s.progreso}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={a.primerosPasos.porcentaje}
+                  aria-label="Avance de primeros pasos"
+                >
+                  <span style={{ width: `${Math.max(4, a.primerosPasos.porcentaje)}%` }} />
+                </div>
+                <ol className={s.pasos}>
+                  {a.primerosPasos.pasos.map((p, i) => {
+                    const actual = a.primerosPasos?.siguiente?.indice === i;
+                    return (
+                      <li key={p.titulo} className={`${s.paso} ${p.estado === 'hecho' ? s.pasoHecho : ''} ${actual ? s.pasoActual : ''}`}>
+                        {p.estado === 'hecho' ? <CheckCircle2 size={16} aria-hidden /> : <Circle size={16} aria-hidden />}
+                        <Link href={p.ruta}>
+                          <strong>{p.titulo}{p.opcional ? ' (opcional)' : ''}</strong>
+                          {actual && <small>{p.detalle}</small>}
+                        </Link>
+                        {actual && <ArrowRight size={16} aria-hidden />}
+                      </li>
+                    );
+                  })}
+                </ol>
+                <form
+                  className={s.vende}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const t = vende.trim();
+                    if (!t) return;
+                    setVende('');
+                    mandar(preguntaDeLoQueVende(t));
+                  }}
+                >
+                  <label htmlFor="asistente-vende">¿Qué productos o servicios vendes?</label>
+                  <div>
+                    <input
+                      id="asistente-vende"
+                      value={vende}
+                      maxLength={300}
+                      onChange={(e) => setVende(e.target.value)}
+                      placeholder="Ej.: uniformes, útiles escolares y mensualidades"
+                    />
+                    <button type="submit" disabled={!vende.trim()}>Armar mi lista</button>
+                  </div>
+                </form>
+              </section>
+            )}
             {a.alertas && a.alertas.length > 0 && (
               <div className={s.alertas} role="region" aria-label="Para revisar hoy">
                 <span className={s.etiqueta}>Para revisar</span>

@@ -8,6 +8,7 @@ import {
   enlaceFactura, enlaceCliente, enlaceCotizacion, enlaceCompraLocal, enlaceProducto, enlaceRecurrente, enlaceEstudiante,
 } from './enlaces';
 import { leerMensajesDgii } from './dgii';
+import { leerEstadoConfiguracion } from './estado-configuracion';
 import { pesos, fechaYmd, ymd, normalizar, quitarTildes } from './util';
 
 /**
@@ -107,22 +108,9 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         'Solo conteos. Úsala para «¿qué me falta para emitir mi primera factura?».',
       inputSchema: z.object({}),
       execute: seguro('la configuración', async () => {
-        const lee = async <T,>(f: () => Promise<T>): Promise<T | null> => { try { return await f(); } catch { return null; } };
-        const [cert, seq, cli, prod, fac] = await Promise.all([
-          lee(() => api.get<{ tieneCertificado?: boolean }>('/api/equipo/certificado')),
-          lee(() => api.get<{ sequences?: { tipoEcf: string; estado: string }[] }>('/api/secuencias')),
-          lee(() => api.get<{ clientes?: unknown[] }>('/api/clientes', { limit: 1 })),
-          lee(() => api.get<{ productos?: unknown[] }>('/api/productos', { limit: 1 })),
-          lee(() => api.get<{ total?: number }>('/api/facturas', { estado: 'ACEPTADO', limit: 1, offset: 0 })),
-        ]);
+        const estado = await leerEstadoConfiguracion(api);
         anotar('Configuración de la empresa', 'certificado, secuencias, clientes, productos');
-        return {
-          certificado: cert == null ? null : Boolean(cert.tieneCertificado),
-          secuencias: seq == null ? null : (seq.sequences ?? []).filter((s) => s.estado === 'activa').length,
-          clientes: cli == null ? null : (cli.clientes ?? []).length,
-          productos: prod == null ? null : (prod.productos ?? []).length,
-          facturasEmitidas: fac == null ? null : Number(fac.total ?? 0),
-        };
+        return estado;
       }),
     }),
 
