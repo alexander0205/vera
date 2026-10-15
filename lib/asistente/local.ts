@@ -143,12 +143,16 @@ const INTENCIONES: Intencion[] = [
   { id: 'cobros-metodo', peso: 6, re: /\b(metodos? de pago|formas? de pago|por metodo|en efectivo|por transferencia|con tarjeta)\b/, herramienta: 'cobros_por_metodo', usaPeriodo: true },
   { id: 'mejores-clientes', peso: 6, re: /\b((mejores|principales|top) clientes|clientes que mas (compran|compraron|facturan)|quien(es)? (me )?compra(n)? mas)\b/, herramienta: 'ventas_por_cliente', usaPeriodo: true },
   { id: 'mas-vendidos', peso: 6, re: /\b((productos?|servicios?|conceptos?) (mas vendidos?|que mas (se )?vend\w*)|que (es lo que )?mas (se )?vend\w*|lo mas vendido)\b/, herramienta: 'ventas_por_producto', usaPeriodo: true },
-  { id: 'cartera', peso: 5, re: /\b(quien(es)? me debe(n)?|me deben|que me deben|cuentas? por cobrar|cartera|morosos?|deudores|vencid[oa]s?|pendiente de cobro|por cobrar)\b/, herramienta: 'cuentas_por_cobrar' },
+  { id: 'cartera', peso: 5, re: /\b(quien(es)? me debe(n)?|me deben|que me deben|cuentas? por cobrar|cartera|morosos?|deudores|vencid[oa]s?|pendiente de cobro|por cobrar|quien no me (ha )?pagado|facturas? sin pagar|facturas? pendientes? de pago|que mas me debe|mas me debe)\b/, herramienta: 'cuentas_por_cobrar' },
   { id: 'gastos', peso: 5, re: /\b(gast(o|os|e|ado|amos|aron)|cuanto (he |hemos )?gastado|egresos)\b/, herramienta: 'resumen_gastos', usaPeriodo: true },
-  { id: 'cobrado', peso: 4, re: /\b(cuanto (se )?(he |hemos )?(cobr\w*|recib\w*)|que (se )?(cobr\w*|entro)|cobros?|pagos recibidos)\b/, herramienta: 'pagos_recibidos', usaPeriodo: true },
+  { id: 'cobrado', peso: 4, re: /\b(cuanto (se )?(he |hemos )?(cobr\w*|recib\w*)|que (se )?(cobr\w*|entro)|cobros?|pagos recibidos|ultim[oa]s (pagos|cobros))\b/, herramienta: 'pagos_recibidos', usaPeriodo: true },
   { id: 'cliente-mas-facturas', peso: 7, re: /\b(cliente (con|que tiene|que tuvo) (mas|mayor)( cantidad de| numero de)? facturas|(quien|que cliente|cual cliente) (tiene|tuvo|se repite|repite)( mas)? facturas?|mas facturas (repetidas|por cliente)|facturas mas repetidas|cliente mas repetido|quien se repite mas)\b/, herramienta: 'clientes_con_mas_facturas', usaPeriodo: true },
   { id: 'recurrentes', peso: 6, re: /\b(facturas? recurrentes?|facturacion (automatica|recurrente)|cobros? automaticos?|mensualidades? automaticas?|recurrentes activas?)\b/, herramienta: 'facturas_recurrentes' },
-  { id: 'ventas', peso: 3, re: /\b(vend(i|ido|imos|ieron|emos)|ventas|facturad[oa]s?|factur(e|amos)|ingresos|cuanto (he |hemos )?factur\w*)\b/, herramienta: 'resumen_ventas', usaPeriodo: true },
+  { id: 'ventas', peso: 3, re: /\b(vend(i|ido|imos|ieron|emos)|ventas|facturad[oa]s?|factur(e|amos)|ingresos|ticket promedio|cuantas facturas (emiti|hice|genere|hicimos|emitimos)|cuanto (he |hemos )?factur\w*)\b/, herramienta: 'resumen_ventas', usaPeriodo: true },
+  { id: 'buscar-factura', peso: 12, re: /\bfactura (numero |no\.? |#)?(e\d{9,}|[a-z]{1,4}-[a-z0-9-]{4,})\b/, herramienta: 'buscar_facturas' },
+  { id: 'anuladas', peso: 8, re: /\b(facturas? anuladas?|anuladas)\b/, herramienta: 'buscar_facturas' },
+  { id: 'cotizaciones', peso: 7, re: /\b(cuantas cotizaciones|ultimas cotizaciones|mis cotizaciones|cotizaciones (pendientes|enviadas|aceptadas|rechazadas|vencidas|abiertas))\b/, herramienta: 'listar_cotizaciones' },
+  { id: 'por-pagar', peso: 7, re: /\b(cuentas por pagar|cuanto debo( a (mis )?proveedores)?|deuda con (mis )?proveedores|por pagar a proveedores)\b/, herramienta: 'resumen_gastos', usaPeriodo: true },
 ];
 
 // ── Plantillas ──────────────────────────────────────────────────────────────
@@ -160,7 +164,7 @@ const tabla = (cab: string[], filas: (string | number)[][]) =>
 
 /** 2026-10-08 → 08/10 (para etiquetas de enlace cortas). */
 const corta = (f: unknown) => {
-  const m = String(f ?? '').match(/^d{4}-(d{2})-(d{2})/);
+  const m = String(f ?? '').match(/^\d{4}-(\d{2})-(\d{2})/);
   return m ? `${m[2]}/${m[1]}` : '';
 };
 
@@ -365,6 +369,53 @@ const PLANTILLAS: Record<string, Plantilla> = {
     ].join('\n');
   },
 
+  'buscar-factura': (r) => {
+    const f = (r.facturas as Fila[]) ?? [];
+    if (!n(r.coinciden)) return 'No encontré ninguna factura con ese número. Revisa que esté bien escrito (con guiones, si los lleva).';
+    return [
+      n(r.coinciden) === 1 ? 'Encontré esta factura:' : `Encontré ${n(r.coinciden)} facturas que coinciden:`,
+      '',
+      tabla(['Número', 'Cliente', 'Total', 'Fecha', 'Estado'], f.slice(0, 5).map((x) => [
+        enlazar(String(x.numero || `Borrador ${corta(x.fecha)}`), x.enlace), String(x.cliente || '—'), rd(n(x.total)), String(x.fecha ?? ''), String(x.estado ?? ''),
+      ])),
+    ].join('\n');
+  },
+
+  anuladas: (r) => {
+    const f = (r.facturas as Fila[]) ?? [];
+    if (!n(r.coinciden)) return 'No hay facturas anuladas.';
+    return [
+      `Hay **${n(r.coinciden)}** factura${n(r.coinciden) === 1 ? '' : 's'} anulada${n(r.coinciden) === 1 ? '' : 's'}, por **${rd(n(r.sumaTotal))}** en total. Las más recientes:`,
+      '',
+      tabla(['Número', 'Cliente', 'Total', 'Fecha'], f.slice(0, 8).map((x) => [
+        enlazar(String(x.numero || `Borrador ${corta(x.fecha)}`), x.enlace), String(x.cliente || '—'), rd(n(x.total)), String(x.fecha ?? ''),
+      ])),
+    ].join('\n');
+  },
+
+  cotizaciones: (r, _p, pedido) => {
+    const c = (r.cotizaciones as Fila[]) ?? [];
+    const que = pedido.estado ? ` ${String(pedido.estado)}s` : '';
+    if (!n(r.coinciden)) return `No tienes cotizaciones${que}.`;
+    return [
+      `Tienes **${n(r.coinciden)}** cotización${n(r.coinciden) === 1 ? '' : 'es'}${que}, por **${rd(n(r.sumaTotal))}** en total.`,
+      '',
+      tabla(['Número', 'Cliente', 'Total', 'Estado', 'Vence'], c.slice(0, 8).map((x) => [
+        enlazar(String(x.numero), x.enlace), String(x.cliente || '—'), rd(n(x.total)), String(x.estado ?? ''), String(x.vence ?? '—'),
+      ])),
+    ].join('\n');
+  },
+
+  'por-pagar': (r, p) => {
+    const debo = n(r.porPagarAProveedores);
+    if (!debo) return `No tienes cuentas por pagar a proveedores ${p!.etiqueta}.`;
+    return [
+      `Debes **${rd(debo)}** a proveedores (facturas de compra de ${p!.etiqueta} sin pagar).`,
+      '',
+      `Gasto total del período: ${rd(n(r.totalGastado))}.`,
+    ].join('\n');
+  },
+
   'stock-bajo': (r) => {
     const p = (r.productos as Fila[]) ?? [];
     if (!n(r.coinciden)) return 'Ningún producto está por debajo de su mínimo de inventario.';
@@ -549,6 +600,13 @@ export async function responderLocal(
       : it.id === 'ultima-factura' ? { limite: 5 }
       : it.id === 'ultima-compra' ? { limite: 5, desde: '2000-01-01', hasta: '2100-12-31' }
       : it.id === 'borradores' ? { estado: 'BORRADOR', limite: 8 }
+      : it.id === 'anuladas' ? { estado: 'ANULADO', limite: 8 }
+      : it.id === 'buscar-factura' ? { q: t.match(/\bfactura (?:numero |no\.? |#)?([a-z0-9-]{6,})\b/)?.[1], limite: 5 }
+      : it.id === 'cotizaciones' ? {
+        estado: /\b(pendientes?|enviadas?|abiertas?)\b/.test(t) ? 'enviada' : /\baceptadas?\b/.test(t) ? 'aceptada'
+          : /\brechazadas?\b/.test(t) ? 'rechazada' : /\bvencidas?\b/.test(t) ? 'vencida' : undefined,
+        limite: 8,
+      }
       : it.id === 'stock-bajo' ? { soloBajoMinimo: true, limite: 10 }
         : it.id === 'turnos-caja' ? { estado: 'ABIERTO', limite: 10 }
           : it.id === 'cartera' ? { soloVencidas: /\b(vencid|moros)/.test(t), limite: 8 }

@@ -26,12 +26,12 @@ import { responderLocal } from '@/lib/asistente/local';
 
 const HOY = '2026-10-13';
 
-function herramientas() {
+function herramientas(salidas: Record<string, unknown> = {}) {
   const llamadas: string[] = [];
   const reales = crearHerramientas(contextoDePrueba(1), []) as Record<string, { inputSchema?: unknown }>;
   const tools = Object.fromEntries(Object.keys(reales).map((nombre) => [nombre, {
     inputSchema: reales[nombre].inputSchema,
-    execute: nombre === 'donde_encontrar' ? (reales[nombre] as unknown as { execute: unknown }).execute : async () => { llamadas.push(nombre); return {}; },
+    execute: nombre === 'donde_encontrar' ? (reales[nombre] as unknown as { execute: unknown }).execute : async () => { llamadas.push(nombre); return salidas[nombre] ?? {}; },
   }]));
   return { tools: tools as never, llamadas };
 }
@@ -56,6 +56,19 @@ const CASOS: Caso[] = [
   { p: 'cuantos empleados activos tengo', intencion: 'nomina' },
   { p: 'hay turnos de caja abiertos', intencion: 'turnos-caja' },
   { p: 'cuanto cobre por transferencia', intencion: 'cobros-metodo' },
+
+  // ── Más maneras de preguntar lo mismo (antes iban a la IA) ──
+  { p: 'quien no me ha pagado', intencion: 'cartera' },
+  { p: 'facturas sin pagar', intencion: 'cartera' },
+  { p: 'cual es el cliente que mas me debe', intencion: 'cartera' },
+  { p: 'cual es el ticket promedio', intencion: 'ventas' },
+  { p: 'cuantas facturas emiti este mes', intencion: 'ventas' },
+  { p: 'mis ultimos pagos', intencion: 'cobrado' },
+  { p: 'cuantas facturas anuladas hay', intencion: 'anuladas' },
+  { p: 'cuantas cotizaciones tengo pendientes', intencion: 'cotizaciones' },
+  { p: 'cuanto debo a proveedores', intencion: 'por-pagar' },
+  { p: 'tengo cuentas por pagar', intencion: 'por-pagar' },
+  { p: 'busca la factura E310000000045', intencion: 'buscar-factura', herramienta: 'buscar_facturas' },
 
   // ── Regresiones reales ──
   // El enlace debe ir al id del registro, no al número de factura.
@@ -158,5 +171,39 @@ describe('evaluación: atajos al abrir el chat', () => {
     const { sugerenciasPara } = await import('@/lib/asistente/sugerencias');
     const colegio = { tieneModulo: (m: string) => m === 'escolar', puede: () => true };
     expect(sugerenciasPara(colegio as never).slice(0, 2).map((s) => s.icono)).toContain('escolar');
+  });
+});
+
+describe('evaluación: respuestas con datos', () => {
+  it('buscar una factura por número devuelve el número como enlace', async () => {
+    const { tools, llamadas } = herramientas({ buscar_facturas: { coinciden: 1, facturas: [
+      { enlace: '/dashboard/facturas/3985', numero: 'E310000000045', cliente: 'Ana Pérez', total: 1500, fecha: '2026-10-08', estado: 'ACEPTADO' },
+    ] } });
+    const r = await responderLocal('busca la factura E310000000045', tools, { hoy: HOY });
+    expect(llamadas).toContain('buscar_facturas');
+    expect(r?.respuesta).toContain('[E310000000045](/dashboard/facturas/3985)');
+    expect(r?.respuesta).toContain('Ana Pérez');
+  });
+
+  it('número que no existe: lo dice, no inventa', async () => {
+    const { tools } = herramientas({ buscar_facturas: { coinciden: 0, facturas: [] } });
+    const r = await responderLocal('busca la factura E310000099999', tools, { hoy: HOY });
+    expect(r?.respuesta).toMatch(/No encontré/);
+  });
+
+  it('cotizaciones pendientes: cuenta, suma y enlaza por número', async () => {
+    const { tools } = herramientas({ listar_cotizaciones: { coinciden: 2, sumaTotal: 3000, cotizaciones: [
+      { enlace: '/dashboard/cotizaciones/7', numero: 'COT-7', estado: 'enviada', cliente: 'Luz', total: 1000, vence: '2026-11-01' },
+      { enlace: '/dashboard/cotizaciones/8', numero: 'COT-8', estado: 'enviada', cliente: 'Ana', total: 2000, vence: '2026-11-05' },
+    ] } });
+    const r = await responderLocal('cuantas cotizaciones tengo pendientes', tools, { hoy: HOY });
+    expect(r?.respuesta).toContain('[COT-7](/dashboard/cotizaciones/7)');
+    expect(r?.respuesta).toContain('RD$ 3,000.00');
+  });
+
+  it('cuentas por pagar usa lo por pagar a proveedores', async () => {
+    const { tools } = herramientas({ resumen_gastos: { gastos: 3, totalGastado: 9000, porPagarAProveedores: 4000 } });
+    const r = await responderLocal('cuanto debo a proveedores', tools, { hoy: HOY });
+    expect(r?.respuesta).toContain('RD$ 4,000.00');
   });
 });

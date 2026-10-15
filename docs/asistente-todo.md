@@ -14,8 +14,8 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 
 ## Fase 1 — base de calidad y seguridad
 - [x] 1.1 Detección de abuso/volumen (ráfagas, vaciado de listados) + acción de auditoría
-- [ ] 1.2 Atajos de preguntas frecuentes al abrir el chat (sin IA)
-- [ ] 1.3 Más intenciones locales a partir de preguntas que caen a la IA
+- [x] 1.2 Atajos de preguntas frecuentes al abrir el chat (sin IA)
+- [x] 1.3 Más intenciones locales a partir de preguntas que caen a la IA
 - [ ] 1.4 Casos de inyección con datos reales en el set de evaluación
 - [ ] 1.5 Hueco de guía: «impuestos / ITBIS» sin entrada fuera de POS (mapa)
 
