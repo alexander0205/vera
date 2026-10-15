@@ -804,7 +804,7 @@ import { aCelda, armarLibro, nombreDeHoja } from '@/lib/asistente/excel';
 import { pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
 
 describe('Excel de una respuesta', () => {
-  const META = { empresa: 'Colegio X', usuario: 'Ana', generadoEn: '14 de octubre de 2026', pregunta: 'mis mejores clientes', consultas: ['Ventas por cliente'] };
+  const META = { empresa: 'Colegio X', usuario: 'Ana', generadoEn: '14 de octubre de 2026' };
 
   describe('celdas', () => {
     it.each([
@@ -840,6 +840,14 @@ describe('Excel de una respuesta', () => {
     expect(t.numericas).toEqual([false, true, true]);
     expect(t.filas[1][1]).toMatchObject({ tipo: 'numero', valor: 5000, formato: '"RD$" #,##0.00' });
     expect(libro.hojas[1].filas.flat().map((c) => (c as { valor: string }).valor)).toContain('Colegio X');
+  });
+
+  it('el archivo trae solo el reporte: ni la pregunta ni los datos consultados', () => {
+    const info = armarLibro(aBloques('Hola\n\n| a | b |\n| --- | --- |\n| 1 | 2 |'), META).hojas.at(-1)!;
+    const textos = info.filas.flat().map((c) => (c as { valor: string }).valor);
+    expect(textos).toContain('Colegio X');
+    expect(textos).not.toContain('Consulta');
+    expect(textos).not.toContain('Datos consultados');
   });
 
   it('un gráfico es una hoja de etiqueta y valor, y una tarjeta es una tabla de datos', () => {

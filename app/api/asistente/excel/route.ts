@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/schema';
@@ -47,13 +47,6 @@ export async function GET(req: NextRequest) {
     )).limit(1);
   if (!m || m.rol !== 'assistant') return NextResponse.json({ error: 'Mensaje no encontrado' }, { status: 404 });
 
-  const [pregunta] = await db.select({ contenido: asistenteMensajes.contenido }).from(asistenteMensajes)
-    .where(and(
-      eq(asistenteMensajes.conversacionId, m.conversacionId),
-      eq(asistenteMensajes.rol, 'user'),
-      lt(asistenteMensajes.id, m.id),
-    ))
-    .orderBy(desc(asistenteMensajes.id)).limit(1);
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
 
   const generadoEn = new Date().toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'long', timeStyle: 'short' });
@@ -61,8 +54,6 @@ export async function GET(req: NextRequest) {
     empresa: team?.nombre ?? 'Mi empresa',
     usuario: user.name ?? null,
     generadoEn,
-    pregunta: pregunta?.contenido ? pregunta.contenido.slice(0, 300) : null,
-    consultas: (m.herramientas ?? []).map((h) => (h.resumen ? `${h.nombre} (${h.resumen})` : h.nombre)),
   });
 
   const wb = new ExcelJS.Workbook();

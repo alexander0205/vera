@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle, AlertTriangle, ArrowUp, Sheet, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  AlertCircle, AlertTriangle, ArrowUp, ChevronDown, Sheet, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
   Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -89,6 +89,70 @@ function Esperando() {
   return <>{mensajeDeEspera(seg)}</>;
 }
 
+/**
+ * «Descargar» con un menú: PDF o Excel (Excel solo si la respuesta trae tablas,
+ * gráficos o tarjetas). Sin datos tabulares no hay nada que elegir y el botón
+ * baja el PDF directo.
+ */
+function MenuDescarga({ mensajeId, conExcel, destacado }: { mensajeId: number; conExcel: boolean; destacado: boolean }) {
+  const [abierto, setAbierto] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+
+  // Se cierra al tocar fuera o con Escape.
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (e: MouseEvent) => { if (!caja.current?.contains(e.target as Node)) setAbierto(false); };
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setAbierto(false); };
+    document.addEventListener('mousedown', fuera);
+    document.addEventListener('keydown', tecla);
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', tecla); };
+  }, [abierto]);
+
+  if (!conExcel) {
+    return (
+      <button
+        type="button" className={`${s.copiar} ${destacado ? s.pdfGrande : ''}`}
+        onClick={() => descargarPdf(mensajeId)} aria-label="Descargar esta respuesta en PDF"
+      >
+        <FileDown size={13} aria-hidden />
+        {destacado ? 'Descargar PDF' : 'PDF'}
+      </button>
+    );
+  }
+
+  const elegir = (formato: 'pdf' | 'excel') => {
+    setAbierto(false);
+    if (formato === 'pdf') descargarPdf(mensajeId);
+    else descargarExcel(mensajeId);
+  };
+
+  return (
+    <div className={s.menuDescarga} ref={caja}>
+      <button
+        type="button" className={`${s.copiar} ${destacado ? s.pdfGrande : ''}`}
+        onClick={() => setAbierto((v) => !v)} aria-haspopup="menu" aria-expanded={abierto}
+        aria-label="Descargar esta respuesta"
+      >
+        <FileDown size={13} aria-hidden />
+        Descargar
+        <ChevronDown size={12} aria-hidden className={abierto ? s.chevronAbierto : undefined} />
+      </button>
+      {abierto && (
+        <div className={s.menuLista} role="menu" aria-label="Formato de descarga">
+          <button type="button" role="menuitem" className={s.menuOpcion} onClick={() => elegir('pdf')} autoFocus>
+            <FileDown size={14} aria-hidden />
+            <span><strong>PDF</strong><small>Para leer o imprimir</small></span>
+          </button>
+          <button type="button" role="menuitem" className={s.menuOpcion} onClick={() => elegir('excel')}>
+            <Sheet size={14} aria-hidden />
+            <span><strong>Excel</strong><small>Para filtrar o sumar</small></span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function saludo(): string {
   const h = new Date().getHours();
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -169,26 +233,7 @@ function MensajeAsistenteVista({
               </span>
             )}
             <div className={s.accionesMensaje}>
-              {m.id > 0 && (
-                <button
-                  type="button"
-                  className={`${s.copiar} ${m.grande ? s.pdfGrande : ''}`}
-                  onClick={() => descargarPdf(m.id)}
-                  aria-label="Descargar esta respuesta en PDF"
-                >
-                  <FileDown size={13} aria-hidden />
-                  {m.grande ? 'Descargar PDF' : 'PDF'}
-                </button>
-              )}
-              {m.id > 0 && tieneDatosTabulares(m.contenido) && (
-                <button
-                  type="button" className={s.copiar} onClick={() => descargarExcel(m.id)}
-                  aria-label="Descargar esta respuesta en Excel"
-                >
-                  <Sheet size={13} aria-hidden />
-                  Excel
-                </button>
-              )}
+              {m.id > 0 && <MenuDescarga mensajeId={m.id} conExcel={tieneDatosTabulares(m.contenido)} destacado={m.grande === true} />}
               {m.id > 0 && (
                 <>
                   <button

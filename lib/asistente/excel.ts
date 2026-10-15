@@ -98,8 +98,6 @@ export interface MetaLibro {
   empresa: string;
   usuario: string | null;
   generadoEn: string;
-  pregunta: string | null;
-  consultas: string[];
 }
 
 export interface Libro { hojas: Hoja[] }
@@ -171,8 +169,6 @@ export function armarLibro(bloques: Bloque[], meta: MetaLibro): Libro {
       info('Empresa', meta.empresa),
       ...(meta.usuario ? [info('Generado por', meta.usuario)] : []),
       info('Fecha', meta.generadoEn),
-      ...(meta.pregunta ? [info('Consulta', meta.pregunta)] : []),
-      ...(meta.consultas.length ? [info('Datos consultados', meta.consultas.join(' · '))] : []),
       info('Nota', 'Generado por el asistente de Zero. Revisa las cifras importantes antes de decidir.'),
     ],
     numericas: [false, false],

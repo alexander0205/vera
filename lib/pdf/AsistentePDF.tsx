@@ -12,9 +12,7 @@ export interface AsistentePDFData {
   empresa: string;
   usuario: string | null;
   generadoEn: string;
-  pregunta: string | null;
   bloques: Bloque[];
-  consultas: string[];
 }
 
 const s = StyleSheet.create({
@@ -23,7 +21,6 @@ const s = StyleSheet.create({
   marca: { fontSize: 9, color: '#6b7280', marginBottom: 3 },
   titulo: { fontSize: 16, fontFamily: 'Helvetica-Bold' },
   meta: { fontSize: 9, color: '#6b7280', marginTop: 3 },
-  pregunta: { backgroundColor: '#f3f4f6', padding: 8, borderRadius: 4, marginBottom: 12 },
   etiqueta: { fontSize: 8, color: '#6b7280', textTransform: 'uppercase', marginBottom: 2 },
   parrafo: { marginBottom: 8, lineHeight: 1.45 },
   h: { fontSize: 12, fontFamily: 'Helvetica-Bold', marginTop: 6, marginBottom: 5 },
@@ -100,13 +97,6 @@ export function AsistentePDF({ data }: { data: AsistentePDFData }) {
           </Text>
         </View>
 
-        {data.pregunta ? (
-          <View style={s.pregunta}>
-            <Text style={s.etiqueta}>Consulta</Text>
-            <Text>{data.pregunta}</Text>
-          </View>
-        ) : null}
-
         {data.bloques.map((b, i) => {
           if (b.tipo === 'titulo') return <Runs key={i} t={b.tramos} estilo={s.h} />;
           if (b.tipo === 'parrafo') return <Runs key={i} t={b.tramos} estilo={s.parrafo} />;
@@ -155,12 +145,6 @@ export function AsistentePDF({ data }: { data: AsistentePDFData }) {
             </View>
           );
         })}
-
-        {data.consultas.length ? (
-          <Text style={{ fontSize: 8, color: '#6b7280', marginTop: 10 }}>
-            Datos consultados: {data.consultas.join(' · ')}
-          </Text>
-        ) : null}
 
         <Text style={s.pie} fixed render={({ pageNumber, totalPages }) => `Zero · página ${pageNumber} de ${totalPages} · Revisa las cifras importantes antes de decidir`} />
       </Page>

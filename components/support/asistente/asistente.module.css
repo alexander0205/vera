@@ -428,3 +428,25 @@
 .errorTitulo { margin: 0; display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
 .errorDetalle { margin: 0; font-size: 13px; color: var(--foreground); opacity: 0.85; }
 .errorAcciones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* Menú «Descargar» (PDF o Excel) */
+.menuDescarga { position: relative; display: inline-flex; }
+.menuDescarga .copiar svg:last-child { transition: transform .12s ease; }
+.chevronAbierto { transform: rotate(180deg); }
+.menuLista {
+  position: absolute; z-index: 5; bottom: calc(100% + 6px); right: 0; min-width: 190px;
+  display: flex; flex-direction: column; gap: 2px; padding: 5px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 10px 28px rgb(15 23 42 / 0.16), 0 2px 6px rgb(15 23 42 / 0.06);
+  animation: menuEntra .12s ease-out;
+}
+@keyframes menuEntra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .menuLista { animation: none; } }
+.menuOpcion {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none;
+  padding: 8px 10px; border-radius: 8px; color: var(--foreground); cursor: pointer;
+}
+.menuOpcion:hover, .menuOpcion:focus-visible { background: var(--muted); outline: none; }
+.menuOpcion span { display: flex; flex-direction: column; line-height: 1.25; }
+.menuOpcion strong { font-size: 13px; font-weight: 600; }
+.menuOpcion small { font-size: 11.5px; color: var(--muted-foreground); }
