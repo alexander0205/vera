@@ -80,7 +80,7 @@
 .burbujaUsuario { background: var(--primary); color: var(--primary-foreground); border-bottom-right-radius: 5px; white-space: pre-wrap; }
 .burbujaAsistente { background: var(--card); border: 1px solid var(--border); border-top-left-radius: 5px; }
 .burbujaError { background: color-mix(in srgb, var(--destructive) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--border)); }
-.debajo { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; min-height: 22px; }
+.debajo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; min-height: 22px; }
 .consulto {
   font-size: 11.5px; color: var(--muted-foreground); min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -345,3 +345,11 @@
 .barra { display: block; height: 100%; border-radius: 5px; background: var(--primary); }
 .barraValor { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500; }
 .codigo { margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: var(--muted); font-size: 12px; overflow-x: auto; white-space: pre-wrap; }
+
+/* Motivo de un 👎 */
+.motivos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; flex: 1 1 100%; }
+.motivoEtiqueta { font-size: 12px; color: var(--muted-foreground); }
+.motivo { border: 1px solid var(--border); background: var(--card); color: var(--foreground); font-size: 12px; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
+.motivo:hover { background: var(--muted); }
+.motivo:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.motivoGracias { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted-foreground); }

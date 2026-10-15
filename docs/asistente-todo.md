@@ -22,7 +22,7 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 ## Fase 2 — diferenciadores de demo
 - [x] 2.1 Contexto de pantalla (el asistente sabe en qué página/registro estás)
 - [x] 2.2 Gráficos simples en el chat (barras/línea de ventas por mes)
-- [ ] 2.3 👎 con motivo → cola de casos para el set de evaluación
+- [x] 2.3 👎 con motivo → cola de casos para el set de evaluación
 - [ ] 2.4 Resumen del día (por cobrar vencidas, borradores, turnos abiertos)
 
 ## Fase 3 — control y alcance

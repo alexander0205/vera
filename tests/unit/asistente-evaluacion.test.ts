@@ -477,3 +477,40 @@ describe('evaluación: formato de la factura en pantalla y cambio de pantalla', 
     expect(llamadas).not.toContain('ver_factura');
   });
 });
+
+// ── 2.3 De un 👎 a un caso de evaluación ──
+import { anonimizar, juntarCasos, informeMarkdown } from '@/lib/asistente/casos';
+
+describe('evaluación: casos que salen de las valoraciones negativas', () => {
+  it('anonimiza correos, teléfonos, documentos y llaves, y deja los e-NCF', () => {
+    const t = anonimizar('factura E310000000045 de ana@correo.com tel 809-555-1234 RNC 131988032 clave sk-abcdefghijklmnop1234');
+    expect(t).toContain('E310000000045');
+    expect(t).not.toMatch(/ana@correo\.com|809-555-1234|131988032|sk-abcdefghijklmnop1234/);
+    expect(t).toContain('[correo]');
+    expect(t).toContain('[teléfono]');
+    expect(t).toContain('[documento]');
+  });
+
+  it('junta las preguntas repetidas (sin importar mayúsculas ni tildes) y ordena por frecuencia', () => {
+    const v = (pregunta: string, motivo = 'no-entendio') => ({ pregunta, respuesta: 'No encontré', consultas: [{ nombre: 'Búsqueda de facturas' }], motivo });
+    const casos = juntarCasos([v('¿Cuánto me debe Juan?'), v('otra cosa', 'otro'), v('cuanto me debe juan?'), v('¿Cuánto me debe Juan?')]);
+    expect(casos).toHaveLength(2);
+    expect(casos[0]).toMatchObject({ veces: 3, motivo: 'no-entendio', consultas: ['Búsqueda de facturas'] });
+  });
+
+  it('la fila generada se pega tal cual: comillas escapadas, intención pendiente', () => {
+    const [c] = juntarCasos([{ pregunta: "cuánto le debo a Pedro's", respuesta: 'x', consultas: null, motivo: 'dato-incorrecto' }]);
+    expect(c.fila).toBe("  { p: 'cuánto le debo a Pedro\\'s', intencion: null /* TODO: dato-incorrecto */ },");
+  });
+
+  it('el informe no trae datos personales y explica qué hacer', () => {
+    const md = informeMarkdown(juntarCasos([{ pregunta: 'facturas de ana@correo.com', respuesta: 'RNC 131988032', consultas: null, motivo: 'incompleto' }]), '2026-10-01');
+    expect(md).not.toMatch(/ana@correo\.com|131988032/);
+    expect(md).toContain('asistente-evaluacion.test.ts');
+    expect(md).toContain('Incompleta');
+  });
+
+  it('sin valoraciones, el informe lo dice', () => {
+    expect(informeMarkdown([], '2026-10-01')).toContain('Sin valoraciones negativas');
+  });
+});

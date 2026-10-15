@@ -30,6 +30,14 @@ const SUGERENCIAS: { texto: string; icono: LucideIcon }[] = [
   { texto: 'Resumen de ITBIS del mes', icono: Receipt },
 ];
 
+const MOTIVOS: [string, string][] = [
+  ['dato-incorrecto', 'Dato incorrecto'],
+  ['enlace-incorrecto', 'Enlace incorrecto'],
+  ['no-entendio', 'No me entendió'],
+  ['incompleto', 'Incompleta'],
+  ['otro', 'Otro'],
+];
+
 function saludo(): string {
   const h = new Date().getHours();
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -55,11 +63,12 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar, resolver, valorar,
+  m, ultimoError, onReintentar, resolver, valorar, motivar,
 }: {
   m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
   resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
   valorar: (mensajeId: number, valor: 1 | -1) => void;
+  motivar: (mensajeId: number, motivo: string) => void;
 }) {
   if (m.rol === 'user') {
     return (
@@ -130,6 +139,20 @@ function MensajeAsistenteVista({
               )}
               <BotonCopiar texto={m.contenido} />
             </div>
+            {m.valoracion === -1 && m.id > 0 && (
+              <div className={s.motivos} role="group" aria-label="¿Qué falló?">
+                {m.valoracionMotivo ? (
+                  <span className={s.motivoGracias}><Check size={13} aria-hidden /> Gracias, lo revisaremos.</span>
+                ) : (
+                  <>
+                    <span className={s.motivoEtiqueta}>¿Qué falló?</span>
+                    {MOTIVOS.map(([clave, texto]) => (
+                      <button key={clave} type="button" className={s.motivo} onClick={() => motivar(m.id, clave)}>{texto}</button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -221,7 +244,7 @@ export function PanelAsistente({
         )}
 
         {a.mensajes.map((m) => (
-          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} />
+          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar} />
         ))}
 
         {a.enviando && (
