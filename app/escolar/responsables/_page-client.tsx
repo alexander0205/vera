@@ -20,6 +20,7 @@ import type { FilaResponsable } from '@/lib/administracion-escolar/responsables'
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { notaDeCorte } from '@/lib/export/paginas';
 
 /**
  * Las familias que pagan.
@@ -112,14 +113,17 @@ export default function ResponsablesClient() {
    */
   async function armarExport() {
     const filas: FilaResponsable[] = [];
+    let totalFamilias = 0;
     for (let offset = 0; offset < 10000; offset += 200) {
       const r = await fetch(`/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}&limit=200&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
       const d = await r.json().catch(() => null) as (Resp & { error?: string }) | null;
       if (!r.ok || !d) throw new Error(d?.error ?? 'No se pudo leer el listado para exportarlo');
       filas.push(...(d.filas ?? []));
+      totalFamilias = d.total ?? filas.length;
       if ((d.filas ?? []).length < 200 || filas.length >= (d.total ?? 0)) break;
     }
-    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, nombreConcepto ? `Concepto: ${nombreConcepto}` : null, q ? `Búsqueda: «${q}»` : null].filter(Boolean).join(' · '));
+    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, nombreConcepto ? `Concepto: ${nombreConcepto}` : null, q ? `Búsqueda: «${q}»` : null,
+      totalFamilias > filas.length ? notaDeCorte(filas.length, totalFamilias) : null].filter(Boolean).join(' · '));
   }
 
   const { data, isLoading, error } = useSWR<Resp>(url, traer, {

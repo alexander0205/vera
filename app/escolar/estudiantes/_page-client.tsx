@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { notaDeCorte } from '@/lib/export/paginas';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 const PAGE_SIZE = 25;
@@ -170,17 +171,24 @@ export default function EstudiantesClient() {
 
   async function armarExport() {
     const todos: EstudianteEnriquecido[] = [];
+    let totalEstudiantes = 0;
     for (let offset = 0; offset < 10000; offset += 200) {
       const q = new URLSearchParams(params);
       q.set('limit', '200'); q.set('offset', String(offset));
-      const d = await fetch(`/api/administracion-escolar/estudiantes?${q}`).then(r => r.json()) as ListaResp;
+      // Un error del servidor corta el exporte con su mensaje: antes salía un
+      // archivo vacío o a medias como si fuera el padrón entero.
+      const r = await fetch(`/api/administracion-escolar/estudiantes?${q}`);
+      const d = await r.json().catch(() => null) as (ListaResp & { error?: string }) | null;
+      if (!r.ok || !d) throw new Error(d?.error ?? 'No se pudo leer el listado para exportarlo');
       todos.push(...(d.estudiantes ?? []));
+      totalEstudiantes = d.total ?? todos.length;
       if ((d.estudiantes ?? []).length < 200 || todos.length >= (d.total ?? 0)) break;
     }
     const partes = [
       filtroEstado && filtroEstado !== 'todos' ? `Estado: ${filtroEstado}` : 'Todos los estados',
       filtroCurso !== 'todos' ? `Curso: ${cursosData?.cursos.find(c => String(c.id) === filtroCurso)?.nombre ?? filtroCurso}` : null,
       qUrl ? `Búsqueda: «${qUrl}»` : null,
+      totalEstudiantes > todos.length ? notaDeCorte(todos.length, totalEstudiantes) : null,
     ];
     return armarEnvioTabla(EXPORTAR, todos, partes.filter(Boolean).join(' · '));
   }
