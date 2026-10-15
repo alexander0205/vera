@@ -40,3 +40,31 @@ pruebas (unitarias o fila en `tests/unit/asistente-evaluacion.test.ts`) y commit
 - [ ] Configurar gateway/clave y modelo vigente; `ASISTENTE_IA_SIMULADA` apagada
 - [ ] Revisar pasos del mapa con uso real
 - [ ] Validar retención (180 días) con legal
+
+## Fase 5 — ideas aprobadas (funcionalidad, diseño, calidad)
+Orden de trabajo; cada una con pruebas y commit.
+
+### Funcionalidad
+- [x] 5.1 Explicar el rechazo / estado ante la DGII de la factura en pantalla
+- [ ] 5.2 Contexto de pantalla: cliente (detalle, deuda, facturas)
+- [ ] 5.3 Contexto de pantalla: cotización, producto, estudiante
+- [ ] 5.4 Seguimiento natural («¿y de ese cliente?», «¿y los de septiembre?»)
+- [ ] 5.5 Comparativos (este mes vs el mes pasado, vs el año pasado)
+- [ ] 5.6 Alertas al abrir el panel (rechazadas, secuencia por agotarse, certificado por vencer)
+- [ ] 5.7 Resumen semanal en el chat
+- [ ] 5.8 Ayuda guiada para tareas largas
+- [ ] 5.9 Atajos que aprenden de lo que más pregunta cada dueño
+
+### Diseño
+- [ ] 5.10 Sugerencias después de cada respuesta (chips)
+- [ ] 5.11 Tarjetas para una factura / un cliente
+- [ ] 5.12 Gráficos de línea y de torta
+- [ ] 5.13 Cifras clicables
+- [ ] 5.14 Respuesta que se va mostrando (streaming)
+- [ ] 5.15 Historial de conversaciones
+- [ ] 5.16 Modo ancho del panel
+- [ ] 5.17 Estados vacíos y de error cuidados
+
+### Calidad
+- [ ] 5.18 Tablero interno de calidad (👎, caídas a la IA, % sin IA)
+- [ ] 5.19 Evaluación contra el modelo real (script nocturno)

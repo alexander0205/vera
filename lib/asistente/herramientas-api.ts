@@ -7,6 +7,7 @@ import type { ConsultaHecha } from './herramientas';
 import {
   enlaceFactura, enlaceCotizacion, enlaceCompraLocal, enlaceProducto, enlaceRecurrente, enlaceEstudiante,
 } from './enlaces';
+import { leerMensajesDgii } from './dgii';
 import { pesos, fechaYmd, ymd, normalizar, quitarTildes } from './util';
 
 /**
@@ -89,6 +90,9 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
           pagado: pesos(pagado),
           notasDeCredito: pesos(nc),
           pendiente: pesos(pendiente),
+          // Lo que respondió la DGII (para explicar un rechazo o un «en proceso»).
+          mensajesDgii: leerMensajesDgii(d.mensajesDgii),
+          trackId: d.trackId ?? null,
           pagos: (d.pago?.lineas ?? []).slice(0, 8).map((p) => ({ fecha: ymd(p.fechaPago), metodo: p.metodo, monto: Number(p.valor) })),
           lineas: (d.lineas ?? []).slice(0, 8).map((l) => ({
             nombre: String(l.nombreItem ?? ''), cantidad: Number(l.cantidadItem ?? 0), precio: Number(l.precioUnitarioItem ?? 0),
@@ -739,6 +743,8 @@ interface ProductoApi {
   stockActual: number; stockMinimo: number; controlaInventario: boolean; activo?: string;
 }
 interface FacturaDetalleApi {
+  mensajesDgii?: unknown;
+  trackId?: string | null;
   dependienteNombre?: string | null;
   id: number; encf: string | null; codigo?: string | null; tipoEcf?: string; tipoNombre?: string; estado: string;
   fechaEmision: string; fechaLimitePago?: string | null;

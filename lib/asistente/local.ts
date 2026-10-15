@@ -3,6 +3,7 @@ import { normalizar, rd, hoyRd } from './util';
 import { clasificarSolicitud } from './politicas';
 import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import { MAPA_SISTEMA } from './mapa-sistema';
+import { explicarMensajesDgii, significadoDelEstado, type MensajeDgii } from './dgii';
 import { textoGrafico } from './grafico';
 
 /**
@@ -641,6 +642,7 @@ async function resumenDelDia(tools: ToolSet, hoy: string): Promise<string | null
 const DONDE_ESTOY = /\b(que (puedo|podemos|se puede) hacer (en|aqui|desde|con) (esta|este|aqui|esto)?\s*(pantalla|pagina|seccion|modulo)?|que hago aqui|para que sirve (esta|este|esto)( pantalla| pagina| seccion)?|en que (pantalla|pagina|parte|modulo|seccion) (estoy|estamos)|que (estoy|estamos) (viendo|mirando)|donde (estoy|estamos)|que (es|veo) (esto|esta pantalla|esta pagina|aqui))\b/;
 const quitarPeriodo = (t: string) => t.replace(/\b(este|esta|estos|estas) (mes|ano|semana|trimestre|periodo|dia)\b/g, ' ');
 const DEICTICO_FACTURA = /\b(esta|esa|aqui|actual|la que (estoy|estamos) viendo)\b|\best[ao]\b/;
+const PREGUNTA_DGII = /\b(rechaz\w*|por que (no|fue|esta|se)|motivo|error(es)?|problema|que (paso|pasa|le paso|tiene|esta pasando)|no (se )?(emitio|acepto|envio|valido)|falla\w*|observacion\w*|en proceso|pendiente de la dgii|aceptad[ao] por|estado (ante|de la) dgii|dgii)\b/;
 const PREGUNTA_FACTURA = /\b(pagad[ao]|pago|pagos|debe|deben|adeuda|saldo|pendiente|total|cuanto|cliente|de quien|a quien|estado|vence|vencimiento|fecha|detalle|resumen|itbis|numero|ncf|ecf|aceptad[ao]|dgii|items?|lineas|productos?|que (dice|tiene|lleva))\b/;
 
 const ETIQUETA_PAGO: Record<string, string> = { PAGADA: 'pagada', PARCIAL: 'con pago parcial', PENDIENTE: 'pendiente de pago' };
@@ -682,6 +684,33 @@ function plantillaFacturaActual(r: Fila, t: string): string {
     ? ['', '**Pagos recibidos**', '', tabla(['Fecha', 'Método', 'Monto'], pagos.map((p) => [String(p.fecha ?? ''), String(p.metodo ?? ''), rd(n(p.monto))]))]
     : [];
   return [titular, '', tabla(['Dato', 'Detalle'], datos), ...cola].join('\n');
+}
+
+function plantillaEstadoDgii(r: Fila): string {
+  const numero = String(r.numero || r.codigoInterno || 'sin número');
+  const estado = String(r.estado);
+  const msgs = ((r.mensajesDgii as MensajeDgii[] | undefined) ?? []).filter((m) => m.mensaje);
+  const lineas: string[] = [`La factura ${numero}: ${significadoDelEstado(estado)}`];
+
+  if (estado === 'RECHAZADO' || estado === 'ACEPTADO_CONDICIONAL' || (estado !== 'ACEPTADO' && estado !== 'BORRADOR' && msgs.length)) {
+    if (!msgs.length) {
+      lineas.push('', 'La DGII no devolvió un mensaje que pueda leer aquí. Usa **Consultar DGII** en la factura para traer el detalle, o pulsa «Hablar con una persona».');
+    } else {
+      const ex = explicarMensajesDgii(msgs);
+      lineas.push('', ex.length === 1 ? '**Qué dijo la DGII**' : '**Qué dijo la DGII** (' + ex.length + ' mensajes)');
+      for (const e of ex) {
+        lineas.push('', `- «${e.mensaje}»`, `  - Causa: ${e.causa}`, `  - Qué hacer: ${e.solucion}${e.enlace ? ` ([${e.enlace.texto}](${e.enlace.ruta}))` : ''}`);
+      }
+    }
+  } else if (estado === 'EN_PROCESO') {
+    lineas.push('', 'Espera unos minutos y usa **Consultar DGII** para actualizar el estado. No emitas otra: podrías duplicarla.');
+  } else if (estado === 'ACEPTADO') {
+    lineas.push('', 'No hay nada que corregir.');
+  } else if (estado === 'BORRADOR') {
+    lineas.push('', 'Cuando la emitas se envía a la DGII y ahí verás si la aceptó.');
+  }
+  if (r.trackId) lineas.push('', `Referencia de la DGII (trackId): ${r.trackId}`);
+  return lineas.join('\n');
 }
 
 // ── Saludos ─────────────────────────────────────────────────────────────────
@@ -754,9 +783,14 @@ export async function responderLocal(
 
   // «¿Está pagada esta factura?» con una factura abierta en pantalla.
   const reg = opts.pantalla?.registro;
-  if (reg?.tipo === 'factura' && DEICTICO_FACTURA.test(quitarPeriodo(t)) && PREGUNTA_FACTURA.test(t) && tools.ver_factura) {
+  if (reg?.tipo === 'factura' && DEICTICO_FACTURA.test(quitarPeriodo(t)) && (PREGUNTA_FACTURA.test(t) || PREGUNTA_DGII.test(t)) && tools.ver_factura) {
     const r = await ejecutar(tools, 'ver_factura', { id: reg.id });
-    if (r && !r.error) return { intencion: 'registro-actual', respuesta: plantillaFacturaActual(r, t) };
+    if (r && !r.error) {
+      if (PREGUNTA_DGII.test(t) && !/\b(pagad[ao]|debe|saldo|pendiente de pago|cuanto)\b/.test(t)) {
+        return { intencion: 'estado-dgii', respuesta: plantillaEstadoDgii(r) };
+      }
+      return { intencion: 'registro-actual', respuesta: plantillaFacturaActual(r, t) };
+    }
   }
 
   if (SALUDO.test(t)) {
