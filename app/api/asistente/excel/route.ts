@@ -13,16 +13,14 @@ import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/schema';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { aBloques } from '@/lib/asistente/bloques';
-import { armarLibro, type Celda } from '@/lib/asistente/excel';
+import { armarLibro } from '@/lib/asistente/excel';
+import { aplicarEstilo } from '@/lib/asistente/excel-estilo';
 import { rateLimitDb } from '@/lib/rate-limit';
 
 export const maxDuration = 30;
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-function aValor(c: Celda): ExcelJS.CellValue {
-  return c.valor;
-}
 
 export async function GET(req: NextRequest) {
   const acceso = await evaluarAcceso();
@@ -59,32 +57,8 @@ export async function GET(req: NextRequest) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Zero';
   wb.created = new Date();
-  for (const h of libro.hojas) {
-    const ws = wb.addWorksheet(h.nombre);
-    h.filas.forEach((fila, i) => {
-      const row = ws.addRow(fila.map(aValor));
-      fila.forEach((c, j) => {
-        const cell = row.getCell(j + 1);
-        // Todo texto va como texto: nunca se interpreta como fórmula.
-        if (c.tipo === 'numero') cell.numFmt = c.formato;
-        else if (c.tipo === 'fecha') cell.numFmt = 'dd/mm/yyyy';
-        if (i > 0 && h.numericas[j]) cell.alignment = { horizontal: 'right' };
-      });
-    });
-    const enc = ws.getRow(1);
-    enc.font = { bold: true };
-    enc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-    ws.views = [{ state: 'frozen', ySplit: 1 }];
-    // Ancho según lo más largo de cada columna (con tope).
-    ws.columns.forEach((col, j) => {
-      const largo = Math.max(...h.filas.map((f) => {
-        const c = f[j];
-        if (!c) return 0;
-        return c.tipo === 'texto' ? c.valor.length : c.tipo === 'fecha' ? 10 : 16;
-      }), 8);
-      col.width = Math.min(60, largo + 3);
-    });
-  }
+  wb.title = libro.hojas.find((h) => h.tipo === 'datos')?.titulo ?? 'Reporte del asistente';
+  aplicarEstilo(wb, libro, { empresa: team?.nombre ?? 'Mi empresa', generadoEn });
 
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
   const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
