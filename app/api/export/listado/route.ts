@@ -4,11 +4,13 @@
  *
  * Lo usa `DataTable` con su prop `exportar`. No lee datos del negocio: solo el
  * nombre de la empresa para el encabezado. Lo que se exporta es lo que el
- * usuario ya tiene en pantalla, así que basta con que haya sesión.
+ * usuario ya tiene en pantalla; aun así se pide el permiso de «ver» de esa
+ * pantalla, que manda el navegador como `ruta` (lib/export/permiso-listado).
  * Contrato y validación: `lib/export/listado`.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
+import { permisosDeRuta } from '@/lib/export/permiso-listado';
 import { validarEnvio, totalesEnvio, anchosPorcentaje, type CeldaEnvio } from '@/lib/export/listado';
 import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv } from '@/lib/contabilidad/export-xlsx';
 import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
@@ -18,12 +20,19 @@ import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 400 });
+  const cuerpo = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const permisos = permisosDeRuta(cuerpo?.ruta);
+  if (!permisos) return NextResponse.json({ error: 'Esta pantalla no tiene exporte' }, { status: 400 });
+  // Basta uno de los permisos de la pantalla.
+  let auth = await requirePermission(permisos[0]);
+  for (const p of permisos.slice(1)) {
+    if (auth.ok) break;
+    auth = await requirePermission(p);
+  }
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
-  const e = validarEnvio(await req.json().catch(() => null));
+  const e = validarEnvio(cuerpo);
   if (!e) return NextResponse.json({ error: 'Listado inválido o demasiado grande' }, { status: 400 });
 
   const hoy = hoyRD();

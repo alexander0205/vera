@@ -43,7 +43,9 @@ export function ExportarListado({ armar, deshabilitado, testId, mostrarCsv = tru
     try {
       const envio: ListadoEnvio = { ...(await armar()), formato: accion === 'imprimir' ? 'pdf' : accion, inline: accion === 'imprimir' };
       const res = await fetch('/api/export/listado', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envio),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // La ruta decide qué permiso pide el servidor (lib/export/permiso-listado).
+        body: JSON.stringify({ ...envio, ruta: window.location.pathname }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo exportar');
       const blob = await res.blob();
