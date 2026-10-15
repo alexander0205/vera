@@ -619,6 +619,13 @@ export function reescribirSeguimiento(t: string, previaT: string): string | 'DON
     return `${previaT.replace(FRASE_PERIODO, ' ').replace(/\s+/g, ' ').trim()} ${ANTERIOR_A[ant[1]]}`;
   }
 
+  // «Compara con el mes pasado»: de lo que se estaba viendo (gastos, cobros, ITBIS o ventas).
+  const cmp = t.match(/^(?:y )?compara(?:lo|r)? (?:con|contra|vs) (.+)$/);
+  if (cmp) {
+    const que = /\bitbis\b/.test(previaT) ? 'itbis' : /\bgast\w*/.test(previaT) ? 'gastos' : /\bcobr\w*/.test(previaT) ? 'cobros' : 'ventas';
+    return `compara ${que} de ${frase || 'este mes'} con ${cmp[1]}`;
+  }
+
   if (MAS.test(t)) return 'DONDE';
   return null;
 }

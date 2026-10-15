@@ -372,3 +372,6 @@
 .alertaTexto { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; font-size: 13px; }
 .alertaTexto small { color: var(--muted-foreground); font-size: 12px; line-height: 1.35; }
 .alertaAccion { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--primary); align-self: center; }
+
+/* Qué preguntar después */
+.seguimientos { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; margin-top: 4px; }

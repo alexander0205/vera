@@ -221,6 +221,12 @@ describe('5.4 seguimiento natural', () => {
     expect(reescribirSeguimiento('ver todos', 'facturas por revisar')).toBe('DONDE');
   });
 
+  it('«compara con el mes pasado» conserva lo que se estaba viendo', () => {
+    expect(reescribirSeguimiento('compara con el mes pasado', 'cuanto gaste este mes')).toBe('compara gastos de este mes con el mes pasado');
+    expect(reescribirSeguimiento('compara con el mes pasado', 'cuanto cobre esta semana')).toBe('compara cobros de esta semana con el mes pasado');
+    expect(reescribirSeguimiento('compara con el mes pasado', 'cuanto vendi')).toBe('compara ventas de este mes con el mes pasado');
+  });
+
   it('lo que no es seguimiento no se toca', () => {
     expect(reescribirSeguimiento('cuanto vendi hoy', 'quien me debe')).toBeNull();
     expect(reescribirSeguimiento('hola', 'cuanto vendi')).toBeNull();
@@ -513,5 +519,51 @@ describe('5.9 lo que sueles preguntar', () => {
   it('respeta el máximo', () => {
     const base = ['uno dos tres cuatro', 'cinco seis siete ocho', 'nueve diez once doce', 'trece catorce quince dieciseis'];
     expect(frecuentesDe([...base, ...base], { max: 2 })).toHaveLength(2);
+  });
+});
+
+// ── 5.10 Qué preguntar después ──
+import { seguimientosDe, TODOS_LOS_SEGUIMIENTOS } from '@/lib/asistente/seguimientos';
+
+describe('5.10 sugerencias después de cada respuesta', () => {
+  it('cada botón se contesta sin IA con la pregunta anterior de su intención', async () => {
+    // Una pregunta anterior típica por intención: el seguimiento se reescribe sobre ella.
+    const PREVIA: Record<string, string> = {
+      ventas: 'cuanto vendi este mes', tendencia: 'ventas por mes', 'mejores-clientes': 'mis mejores clientes este mes',
+      'mas-vendidos': 'productos mas vendidos este mes', 'cobros-metodo': 'cobros por metodo de pago este mes',
+      cobrado: 'cuanto cobre este mes', gastos: 'cuanto gaste este mes', itbis: 'resumen de itbis de este mes',
+      cartera: 'quien me debe', comparativo: 'compara las ventas de este mes con el mes pasado',
+      'resumen-dia': 'resumen de hoy', 'resumen-semana': 'resumen de la semana', 'ultima-factura': 'mis ultimas facturas',
+      borradores: 'cuantos borradores tengo', 'por-revisar': 'facturas por revisar', 'estado-dgii': 'por que rechazaron esta factura',
+      'seguimiento:ventas': 'y por cliente',
+    };
+    const datos = {
+      resumen_ventas: { ventasNetas: 10, facturas: 1 }, ventas_por_cliente: { clientes: [{ cliente: 'A', ventas: 1, facturas: 1 }] },
+      ventas_por_producto: { productos: [{ nombre: 'P', ventas: 1, unidades: 1 }] }, cobros_por_metodo: { metodos: [{ metodo: 'x', cobrado: 1, pagos: 1 }] },
+      pagos_recibidos: { cantidad: 1, totalCobrado: 1 }, resumen_gastos: { gastos: 1, totalGastado: 1 }, resumen_itbis: { itbisAPagar: 1 },
+      cuentas_por_cobrar: { totalPorCobrar: 1, clientesConDeuda: 1, vencido0a30: 0, mayoresDeudores: [{ cliente: 'A', debe: 1, facturas: 1, diasVencidoMaximo: 0 }] },
+      tendencia_ventas: { periodo: 'x', agrupadoPor: 'mes', puntos: [{ periodo: '2026-09-01', ventas: 1, facturas: 1 }, { periodo: '2026-10-01', ventas: 2, facturas: 1 }] },
+      ingresos_por_mes: { puntos: [{ periodo: '2026-09', ventas: 1 }, { periodo: '2026-10', ventas: 2 }] },
+      buscar_facturas: { coinciden: 1, sumaTotal: 1, facturas: [{ enlace: '/dashboard/facturas/1', numero: 'E1', cliente: 'A', total: 1, fecha: '2026-10-01' }] },
+      facturas_por_revisar: { totalPorRevisar: 0 },
+    };
+    for (const [intencion, lista] of TODOS_LOS_SEGUIMIENTOS) {
+      const previa = PREVIA[intencion];
+      for (const q of lista) {
+        if (/pdf/i.test(q)) continue; // «Pásalo a PDF» lo atiende la ruta, no el contestador.
+        const { tools } = herramientas(datos);
+        const r = await responderLocal(q, tools, { hoy: HOY, previa: 'respuesta anterior', preguntaPrevia: previa });
+        expect(r, `«${q}» tras «${intencion}»`).not.toBeNull();
+      }
+    }
+  });
+
+  it('una intención sin seguimientos conocidos no ofrece nada', () => {
+    expect(seguimientosDe('politica:prompt')).toEqual([]);
+    expect(seguimientosDe(undefined)).toEqual([]);
+  });
+
+  it('«seguimiento:ventas» usa los de ventas si no tiene propios', () => {
+    expect(seguimientosDe('seguimiento:cartera')).toEqual(seguimientosDe('cartera'));
   });
 });

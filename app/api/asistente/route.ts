@@ -23,6 +23,7 @@ import { clasificarSolicitud } from '@/lib/asistente/politicas';
 import { sugerenciasPara } from '@/lib/asistente/sugerencias';
 import { interpretarPantalla } from '@/lib/asistente/pantalla';
 import { frecuentesDe } from '@/lib/asistente/frecuentes';
+import { seguimientosDe } from '@/lib/asistente/seguimientos';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
@@ -234,6 +235,8 @@ export async function POST(req: NextRequest) {
         id: guardado.id, rol: 'assistant', contenido: r.respuesta, origen: r.origen,
         herramientas: r.consultas, creadoEn: guardado.creadoEn, grande: esRespuestaGrande(r.respuesta),
         propuestas: r.propuestas ?? [],
+        // Qué preguntar después (solo si contestó el automático: sabe qué fue).
+        seguimientos: seguimientosDe(r.intencion),
       },
     });
   } catch (e) {

@@ -56,7 +56,7 @@ Orden de trabajo; cada una con pruebas y commit.
 - [x] 5.9 Atajos que aprenden de lo que más pregunta cada dueño
 
 ### Diseño
-- [ ] 5.10 Sugerencias después de cada respuesta (chips)
+- [x] 5.10 Sugerencias después de cada respuesta (chips)
 - [ ] 5.11 Tarjetas para una factura / un cliente
 - [ ] 5.12 Gráficos de línea y de torta
 - [ ] 5.13 Cifras clicables

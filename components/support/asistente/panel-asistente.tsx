@@ -64,7 +64,7 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar, resolver, valorar, motivar, probarConIa, puedeIa,
+  m, ultimoError, onReintentar, resolver, valorar, motivar, probarConIa, puedeIa, preguntar,
 }: {
   m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
   resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
@@ -73,6 +73,8 @@ function MensajeAsistenteVista({
   /** Ofrecer «Preguntar a la IA» (solo en la última respuesta automática). */
   probarConIa?: () => void;
   puedeIa?: boolean;
+  /** Mandar una pregunta (los botones de «qué preguntar después»). Solo en la última respuesta. */
+  preguntar?: (texto: string) => void;
 }) {
   if (m.rol === 'user') {
     return (
@@ -143,6 +145,13 @@ function MensajeAsistenteVista({
               )}
               <BotonCopiar texto={m.contenido} />
             </div>
+            {preguntar && m.seguimientos && m.seguimientos.length > 0 && m.id > 0 && (
+              <div className={s.seguimientos} role="group" aria-label="Qué preguntar después">
+                {m.seguimientos.map((q) => (
+                  <button key={q} type="button" className={s.motivo} onClick={() => preguntar(q)}>{q}</button>
+                ))}
+              </div>
+            )}
             {puedeIa && probarConIa && m.origen === 'local' && m.id > 0 && (
               <div className={s.motivos}>
                 <button type="button" className={s.motivo} onClick={probarConIa}>
@@ -284,7 +293,8 @@ export function PanelAsistente({
 
         {a.mensajes.map((m) => (
           <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar}
-            probarConIa={m.id === ultimaRespuestaId ? () => void a.probarConIa() : undefined} puedeIa={a.ia && !a.enviando} />
+            probarConIa={m.id === ultimaRespuestaId ? () => void a.probarConIa() : undefined} puedeIa={a.ia && !a.enviando}
+            preguntar={m.id === ultimaRespuestaId && !a.enviando ? (q) => mandar(q) : undefined} />
         ))}
 
         {a.enviando && (

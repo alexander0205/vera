@@ -103,6 +103,8 @@ const NO_ENTENDI =
 export interface RespuestaConOrigen extends RespuestaAsistente {
   /** local = respondió el contestador sin IA; ia = el modelo. */
   origen: 'local' | 'ia';
+  /** Intención con la que contestó el automático (para ofrecer qué preguntar después). */
+  intencion?: string;
   /** Acciones que la IA dejó listas y esperan el «Confirmar» de la persona. */
   propuestas?: Propuesta[];
 }
@@ -180,7 +182,7 @@ export async function conversar(
     const local = await responderLocal(pregunta, tools, { tolerante: !hayIa, previa, preguntaPrevia, pantalla: contexto.pantalla });
     if (local) {
       console.info(`[asistente] respondido sin IA: ${local.intencion}`);
-      return { respuesta: sanitizarEnlaces(local.respuesta, enlacesTurno).texto, consultas, origen: 'local' };
+      return { respuesta: sanitizarEnlaces(local.respuesta, enlacesTurno).texto, consultas, origen: 'local', intencion: local.intencion };
     }
     if (!hayIa) return { respuesta: NO_ENTENDI, consultas: [], origen: 'local' };
   }
@@ -249,7 +251,7 @@ export async function conversar(
       const local = await responderLocal(pregunta, tools, { tolerante: true, previa, preguntaPrevia }).catch(() => null);
       if (local) {
         console.info(`[asistente] IA no disponible; respondido sin IA: ${local.intencion}`);
-        return { respuesta: sanitizarEnlaces(local.respuesta, enlacesTurno).texto, consultas, origen: 'local' };
+        return { respuesta: sanitizarEnlaces(local.respuesta, enlacesTurno).texto, consultas, origen: 'local', intencion: local.intencion };
       }
     }
     throw e;

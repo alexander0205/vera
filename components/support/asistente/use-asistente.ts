@@ -16,6 +16,8 @@ export interface MensajeAsistente {
   valoracionMotivo?: string | null;
   /** Quién respondió: el contestador automático o la IA. */
   origen?: 'local' | 'ia' | null;
+  /** Qué preguntar a continuación (botones bajo la última respuesta). */
+  seguimientos?: string[];
   /** Acciones que esperan «Confirmar». Viven solo mientras el token es válido (5 min). */
   propuestas?: { token: string; tipo: 'crear' | 'modificar' | 'eliminar'; destructiva: boolean; resumen: string; estado?: 'pendiente' | 'confirmando' | 'hecha' | 'cancelada' | 'error'; resultado?: string; enlace?: string }[];
   /** La respuesta falló: se muestra como error con «Reintentar». */
@@ -186,6 +188,7 @@ export function useAsistente(activo: boolean) {
       setMensajes((m) => [...m, {
         id: d.mensaje.id, rol: 'assistant', contenido: d.mensaje.contenido, herramientas: d.mensaje.herramientas, grande: d.mensaje.grande,
         origen: d.mensaje.origen ?? null,
+        seguimientos: Array.isArray(d.mensaje.seguimientos) ? d.mensaje.seguimientos : [],
         propuestas: (d.mensaje.propuestas ?? []).map((p: NonNullable<MensajeAsistente['propuestas']>[number]) => ({ ...p, estado: 'pendiente' as const })),
       }]);
       if (typeof d.descargarMensajeId === 'number') descargarPdf(d.descargarMensajeId);
