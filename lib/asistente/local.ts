@@ -647,12 +647,12 @@ export async function responderLocal(
     const p = opts.pantalla;
     if (p.registro?.tipo === 'factura' && tools.ver_factura) {
       const r = await ejecutar(tools, 'ver_factura', { id: p.registro.id });
-      if (r && !r.error) return { intencion: 'registro-actual', respuesta: `Estás viendo el detalle de una factura.\n\n${plantillaFacturaActual(r, 'detalle')}` };
+      if (r && !r.error) return { intencion: 'registro-actual', respuesta: plantillaFacturaActual(r, 'detalle') };
     }
     if (p.registro) return { intencion: 'pantalla', respuesta: `Estás viendo ${NOMBRE_REGISTRO[p.registro.tipo]} (su pantalla de detalle).` };
     if (p.titulo) {
       const e = MAPA_SISTEMA.find((x) => x.ruta === p.ruta);
-      const pasos = e?.como?.length ? ['', 'Desde aquí puedes:', '', ...e.como.map((x, i) => `${i + 1}. ${x}`)] : [];
+      const pasos = e?.como?.length ? ['', 'Desde aquí puedes:', '', ...e.como.filter((x) => !/^entra a /i.test(x)).map((x, i) => `${i + 1}. ${x}`)] : [];
       return { intencion: 'pantalla', respuesta: [`Estás en **${p.titulo}** (menú ${p.menu}).`, ...(e?.que ? ['', e.que] : []), ...pasos].join('\n') };
     }
   }
