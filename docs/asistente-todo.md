@@ -63,7 +63,7 @@ Orden de trabajo; cada una con pruebas y commit.
 - [x] 5.14 Respuesta que se va mostrando (streaming)
 - [x] 5.15 Historial de conversaciones
 - [x] 5.16 Modo ancho del panel
-- [ ] 5.17 Estados vacíos y de error cuidados
+- [x] 5.17 Estados vacíos y de error cuidados
 
 ### Calidad
 - [ ] 5.18 Tablero interno de calidad (👎, caídas a la IA, % sin IA)

@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertTriangle, ArrowUp, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
+  AlertCircle, AlertTriangle, ArrowUp, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
   Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
 import { Markdown } from './markdown';
 import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
+import { describirError, mensajeDeEspera } from '@/lib/asistente/estados';
 import s from './asistente.module.css';
 
 /**
@@ -60,6 +61,33 @@ function TextoRevelado({ texto, nuevo, alCrecer }: { texto: string; nuevo: boole
   return <Markdown texto={visibles >= bloques.length ? texto : bloques.slice(0, visibles).join('\n\n')} />;
 }
 
+/** Un error con explicación y la salida que corresponde (reintentar, esperar o hablar con alguien). */
+function ErrorVista({ texto, esElUltimo, onReintentar, onPersona }: { texto: string; esElUltimo: boolean; onReintentar: () => void; onPersona: () => void }) {
+  const e = describirError(texto);
+  return (
+    <div className={s.errorCaja}>
+      <p className={s.errorTitulo}><AlertCircle size={15} aria-hidden /> {e.titulo}</p>
+      <p className={s.errorDetalle}>{e.detalle}</p>
+      {esElUltimo && (e.puedeReintentar || e.ofrecerPersona) && (
+        <div className={s.errorAcciones}>
+          {e.puedeReintentar && <button type="button" className={s.reintentar} onClick={onReintentar}>Reintentar</button>}
+          {e.ofrecerPersona && <button type="button" className={s.reintentar} onClick={onPersona}>Hablar con una persona</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** «Consultando…» que, si tarda, lo dice con honestidad en vez de quedarse igual. */
+function Esperando() {
+  const [seg, setSeg] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSeg((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <>{mensajeDeEspera(seg)}</>;
+}
+
 function saludo(): string {
   const h = new Date().getHours();
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -85,9 +113,9 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar, resolver, valorar, motivar, probarConIa, puedeIa, preguntar, alCrecer,
+  m, ultimoError, onReintentar, onPersona, resolver, valorar, motivar, probarConIa, puedeIa, preguntar, alCrecer,
 }: {
-  m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
+  m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void; onPersona: () => void;
   resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
   valorar: (mensajeId: number, valor: 1 | -1) => void;
   motivar: (mensajeId: number, motivo: string) => void;
@@ -111,10 +139,7 @@ function MensajeAsistenteVista({
       <span className={s.avatar} aria-hidden><Sparkles size={13} /></span>
       <div className={s.cuerpo}>
         <div className={`${s.burbuja} ${s.burbujaAsistente} ${m.error ? s.burbujaError : ''}`}>
-          {m.error ? m.contenido : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} />}
-          {m.error && ultimoError && (
-            <div><button type="button" className={s.reintentar} onClick={onReintentar}>Reintentar</button></div>
-          )}
+          {m.error ? <ErrorVista texto={m.contenido} esElUltimo={ultimoError} onReintentar={onReintentar} onPersona={onPersona} /> : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} />}
         </div>
         {m.propuestas?.map((p) => (
           <div key={p.token} className={`${s.propuesta} ${p.destructiva ? s.propuestaPeligro : ''}`} role="group" aria-label="Confirmar acción">
@@ -346,7 +371,7 @@ export function PanelAsistente({
         </div>
 
         {a.mensajes.map((m) => (
-          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar}
+          <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} onPersona={() => void hablarConPersona()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar}
             probarConIa={m.id === ultimaRespuestaId ? () => void a.probarConIa() : undefined} puedeIa={a.ia && !a.enviando}
             preguntar={m.id === ultimaRespuestaId && !a.enviando ? (q) => mandar(q) : undefined}
             alCrecer={irAlFinal} />
@@ -357,7 +382,7 @@ export function PanelAsistente({
             <span className={s.avatar} aria-hidden><Sparkles size={13} /></span>
             <div className={s.pensando}>
               <span className={s.puntos} aria-hidden><i /><i /><i /></span>
-              Consultando tus datos…
+              <Esperando />
             </div>
           </div>
         )}

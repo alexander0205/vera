@@ -730,3 +730,33 @@ describe('5.16 modo ancho del panel', () => {
     expect(minimoParaAnclar(ANCHO_ANCLADO)).toBe(1100);
   });
 });
+
+// ── 5.17 Estados de espera y de error ──
+import { describirError, mensajeDeEspera } from '@/lib/asistente/estados';
+
+describe('5.17 estados de espera y de error', () => {
+  it.each([
+    ['No hay conexión. Revisa tu internet e intenta de nuevo.', 'red', true, false],
+    ['Vas muy rápido. Espera un par de minutos y vuelve a preguntar.', 'ritmo', false, false],
+    ['Muchas consultas seguidas. Espera unos minutos.', 'ritmo', false, false],
+    ['El asistente alcanzó su límite de uso por ahora. Intenta más tarde o habla con una persona.', 'cuota', false, true],
+    ['Tu mensaje es muy largo (5000 caracteres; el máximo es 1500).', 'largo', false, false],
+    ['El asistente no pudo responder. Intenta de nuevo.', 'general', true, true],
+  ])('«%s»', (texto, tipo, reintentar, persona) => {
+    const e = describirError(texto);
+    expect(e.tipo).toBe(tipo);
+    expect(e.puedeReintentar).toBe(reintentar);
+    expect(e.ofrecerPersona).toBe(persona);
+  });
+
+  it('un mensaje demasiado largo conserva el texto exacto del servidor (dice cuánto sobra)', () => {
+    expect(describirError('Tu mensaje es muy largo (5000 caracteres; el máximo es 1500).').detalle).toContain('5000');
+  });
+
+  it('la espera cambia de mensaje con el tiempo y nunca promete lo que no sabe', () => {
+    expect(mensajeDeEspera(0)).toBe('Consultando tus datos…');
+    expect(mensajeDeEspera(8)).toMatch(/tardando un poco más/);
+    expect(mensajeDeEspera(20)).toMatch(/Sigo en ello/);
+    expect(mensajeDeEspera(45)).toMatch(/tardando demasiado/);
+  });
+});
