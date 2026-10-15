@@ -34,8 +34,17 @@ const s = StyleSheet.create({
   filaCab: { backgroundColor: '#f3f4f6' },
   celda: { padding: 4, fontSize: 8.5 },
   num: { textAlign: 'right' },
+  grafico: { marginBottom: 12, padding: 8, borderWidth: 1, borderColor: '#d1d5db' },
+  graficoTitulo: { fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 6 },
+  barraFila: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  barraEtiqueta: { width: '24%', fontSize: 8.5, paddingRight: 6 },
+  barraRiel: { width: '52%', height: 9, backgroundColor: '#f3f4f6' },
+  barra: { height: 9, backgroundColor: '#374151' },
+  barraValor: { width: '24%', fontSize: 8.5, textAlign: 'right', paddingLeft: 6 },
   pie: { position: 'absolute', bottom: 20, left: 36, right: 36, fontSize: 8, color: '#9ca3af', textAlign: 'center' },
 });
+
+import { anchoBarra, valorGrafico } from '@/lib/asistente/grafico';
 
 const esNumero = (t: string) => /^(RD\$\s?)?-?[\d,]+(\.\d+)?%?$/.test(t.trim());
 const plano = (t: Tramo[]) => t.map((x) => x.texto).join('');
@@ -108,6 +117,21 @@ export function AsistentePDF({ data }: { data: AsistentePDFData }) {
                   <View key={j} style={s.item} wrap={false}>
                     <Text style={s.vineta}>{b.ordenada ? `${j + 1}.` : '•'}</Text>
                     <Runs t={it} estilo={{ flex: 1 }} />
+                  </View>
+                ))}
+              </View>
+            );
+          }
+          if (b.tipo === 'grafico') {
+            const g = b.grafico;
+            return (
+              <View key={i} style={s.grafico} wrap={false}>
+                {g.titulo ? <Text style={s.graficoTitulo}>{g.titulo}</Text> : null}
+                {g.datos.map((d, j) => (
+                  <View key={j} style={s.barraFila}>
+                    <Text style={s.barraEtiqueta}>{d.etiqueta}</Text>
+                    <View style={s.barraRiel}><View style={[s.barra, { width: `${anchoBarra(g, d.valor)}%` }]} /></View>
+                    <Text style={s.barraValor}>{valorGrafico(g, d.valor)}</Text>
                   </View>
                 ))}
               </View>

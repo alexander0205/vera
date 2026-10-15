@@ -2,6 +2,7 @@ import type { ToolSet } from 'ai';
 import { normalizar, rd, hoyRd } from './util';
 import { clasificarSolicitud } from './politicas';
 import type { PantallaActual } from './pantalla';
+import { textoGrafico } from './grafico';
 
 /**
  * Contestador local: responde SIN llamar a la IA las preguntas claras y
@@ -116,7 +117,7 @@ export function interpretarPeriodo(t: string, hoy = hoyRd()): Periodo | null {
 // ── Qué se pregunta ─────────────────────────────────────────────────────────
 
 /** Preguntas que necesitan razonar: van a la IA aunque nombren un tema conocido. */
-const COMPLEJA = /\b(compar\w*|versus|vs|diferencia|por que|porque|tendencia|evolucion|analiz\w*|explica\w*|recomiend\w*|recomendacion|proyecc\w*|predic\w*|deberia|estrategia|conviene|mejorar|aumentar|reducir|bajar|subir|crecio|cayo|subio|bajo mas|cual fue el mejor|cual fue el peor|y tambien|ademas)\b/;
+const COMPLEJA = /\b(compar\w*|versus|vs|diferencia|por que|porque|analiz\w*|explica\w*|recomiend\w*|recomendacion|proyecc\w*|predic\w*|deberia|estrategia|conviene|mejorar|aumentar|reducir|bajar|subir|crecio|cayo|subio|bajo mas|cual fue el mejor|cual fue el peor|y tambien|ademas)\b/;
 
 const PIDE_CAMBIO = /^(por favor )?(cambia|cambiale|borra|elimina|anula|modifica|deshabilita|desactiva|activa|edita|envia|enviale|manda|mandale|crea|creame|registra|emite|cobra|aplica|asigna|pon|ponle|quita|agrega|agregale)\b/;
 
@@ -150,6 +151,7 @@ const INTENCIONES: Intencion[] = [
   { id: 'cliente-mas-facturas', peso: 7, re: /\b(cliente (con|que tiene|que tuvo) (mas|mayor)( cantidad de| numero de)? facturas|(quien|que cliente|cual cliente) (tiene|tuvo|se repite|repite)( mas)? facturas?|mas facturas (repetidas|por cliente)|facturas mas repetidas|cliente mas repetido|quien se repite mas)\b/, herramienta: 'clientes_con_mas_facturas', usaPeriodo: true },
   { id: 'recurrentes', peso: 6, re: /\b(facturas? recurrentes?|facturacion (automatica|recurrente)|cobros? automaticos?|mensualidades? automaticas?|recurrentes activas?)\b/, herramienta: 'facturas_recurrentes' },
   { id: 'ventas', peso: 3, re: /\b(vend(i|ido|imos|ieron|emos)|ventas|facturad[oa]s?|factur(e|amos)|ingresos|ticket promedio|cuantas facturas (emiti|hice|genere|hicimos|emitimos)|cuanto (he |hemos )?factur\w*)\b/, herramienta: 'resumen_ventas', usaPeriodo: true },
+  { id: 'tendencia', peso: 9, re: /\b(tendencia|evolucion|ventas por (mes|dia|semana)|mes a mes|dia a dia|grafic[ao]s? (de )?(las )?ventas|como (han ido|van|fueron) (mis |las )?ventas|ventas de los ultimos \d+ (meses|dias|semanas))\b/, herramienta: 'tendencia_ventas' },
   { id: 'buscar-factura', peso: 12, re: /\bfactura (numero |no\.? |#)?(e\d{9,}|[a-z]{1,4}-[a-z0-9-]{4,})\b/, herramienta: 'buscar_facturas' },
   { id: 'anuladas', peso: 8, re: /\b(facturas? anuladas?|anuladas)\b/, herramienta: 'buscar_facturas' },
   { id: 'cotizaciones', peso: 7, re: /\b(cuantas cotizaciones|ultimas cotizaciones|mis cotizaciones|cotizaciones (pendientes|enviadas|aceptadas|rechazadas|vencidas|abiertas))\b/, herramienta: 'listar_cotizaciones' },
@@ -245,9 +247,11 @@ const PLANTILLAS: Record<string, Plantilla> = {
     const m = ((r.metodos as Fila[]) ?? []).filter((x) => n(x.cobrado) > 0);
     if (!m.length) return `No hay cobros registrados ${p!.etiqueta}.`;
     const total = m.reduce((s, x) => s + n(x.cobrado), 0);
+    const grafico = textoGrafico(`Cobros por método ${p!.etiqueta}`, 'RD$', m.map((x) => ({ etiqueta: String(x.metodo), valor: n(x.cobrado) })));
     return [
       `Cobraste **${rd(total)}** ${p!.etiqueta}:`,
       '',
+      ...(grafico ? [grafico, ''] : []),
       tabla(['Método', 'Cobrado', 'Pagos', '%'], m.map((x) => [String(x.metodo), rd(n(x.cobrado)), n(x.pagos), pct(n(x.cobrado), total)])),
     ].join('\n');
   },
@@ -259,7 +263,8 @@ const PLANTILLAS: Record<string, Plantilla> = {
   'mejores-clientes': (r, p) => {
     const c = (r.clientes as Fila[]) ?? [];
     if (!c.length) return `No hay ventas a clientes ${p!.etiqueta}.`;
-    return [`Tus mejores clientes ${p!.etiqueta}:`, '', tabla(['Cliente', 'Ventas', 'Facturas'], c.slice(0, 8).map((x) => [String(x.cliente), rd(n(x.ventas)), n(x.facturas)]))].join('\n');
+    const grafico = textoGrafico(`Ventas por cliente ${p!.etiqueta}`, 'RD$', c.slice(0, 6).map((x) => ({ etiqueta: String(x.cliente), valor: n(x.ventas) })));
+    return [`Tus mejores clientes ${p!.etiqueta}:`, '', ...(grafico ? [grafico, ''] : []), tabla(['Cliente', 'Ventas', 'Facturas'], c.slice(0, 8).map((x) => [String(x.cliente), rd(n(x.ventas)), n(x.facturas)]))].join('\n');
   },
 
   'cliente-mas-facturas': (r) => {
@@ -407,6 +412,26 @@ const PLANTILLAS: Record<string, Plantilla> = {
     ].join('\n');
   },
 
+  tendencia: (r) => {
+    const pts = (r.puntos as Fila[]) ?? [];
+    const por = String(r.agrupadoPor ?? 'dia');
+    const unidad = por === 'mes' ? 'mes' : por === 'semana' ? 'semana' : 'día';
+    const con = pts.filter((x) => n(x.ventas) > 0);
+    if (!con.length) return `No hay ventas registradas en ${r.periodo}.`;
+    const total = pts.reduce((s, x) => s + n(x.ventas), 0);
+    const mejor = con.reduce((a, x) => (n(x.ventas) > n(a.ventas) ? x : a));
+    const et = (x: Fila) => etiquetaPeriodo(String(x.periodo), por);
+    const grafico = textoGrafico(`Ventas por ${unidad}`, 'RD$', pts.map((x) => ({ etiqueta: et(x), valor: n(x.ventas) })));
+    return [
+      `Vendiste **${rd(total)}** en ${r.periodo}, por ${unidad}. El más alto fue **${et(mejor)}** con ${rd(n(mejor.ventas))}.`,
+      '',
+      ...(grafico ? [grafico, ''] : []),
+      'Agrupado por fecha de emisión de la factura, igual que Reportes. El gráfico del Dashboard agrupa por fecha de creación, así que cerca de fin de mes puede repartir distinto.',
+      '',
+      tabla(['Período', 'Ventas', 'Facturas'], pts.slice(-12).map((x) => [et(x), rd(n(x.ventas)), n(x.facturas)])),
+    ].join('\n');
+  },
+
   'por-pagar': (r, p) => {
     const debo = n(r.porPagarAProveedores);
     if (!debo) return `No tienes cuentas por pagar a proveedores ${p!.etiqueta}.`;
@@ -491,6 +516,34 @@ function plantillaGuia(g: ResGuia, tolerante: boolean, cambio: boolean): string 
     '',
     'Dime cuál y te explico los pasos.',
   ].join('\n');
+}
+
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/** «2026-07-01» → «jul 2026» (por mes) o «06/07» (por día / semana). */
+function etiquetaPeriodo(periodo: string, por: string): string {
+  const m = periodo.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (!m) return periodo;
+  if (por === 'mes') return `${MES_CORTO[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
+  return m[3] ? `${m[3]}/${m[2]}` : periodo;
+}
+
+/**
+ * «Ventas por mes» sin período: los últimos 6 meses, por mes. Con período
+ * explícito se respeta, agrupando por día (hasta 45 días) o por mes.
+ */
+function entradaTendencia(t: string, periodo: Periodo | null, hoy?: string): Record<string, unknown> {
+  const h = hoy ?? hoyRd();
+  const dicho = /\b(este mes|hoy|ayer|semana|mes pasado|ano|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|ultimos)\b/.test(t);
+  const porMes = /\b(por mes|mes a mes|meses|evolucion|tendencia)\b/.test(t);
+  if (periodo && dicho) {
+    const dias = (Date.parse(periodo.hasta) - Date.parse(periodo.desde)) / 86_400_000 + 1;
+    const agrupar = /\bpor semana\b/.test(t) ? 'semana' : dias > 45 || /\bpor mes\b/.test(t) ? 'mes' : 'dia';
+    return { desde: periodo.desde, hasta: periodo.hasta, agrupar };
+  }
+  const [Y, M] = h.split('-').map(Number);
+  const ini = new Date(Date.UTC(Y, M - 1 - 5, 1)).toISOString().slice(0, 10);
+  return { desde: ini, hasta: h, agrupar: porMes || !dicho ? 'mes' : 'dia' };
 }
 
 // ── Pantalla actual ──────────────────────────────────────────────
@@ -645,6 +698,7 @@ export async function responderLocal(
       : it.id === 'ultima-factura' ? { limite: 5 }
       : it.id === 'ultima-compra' ? { limite: 5, desde: '2000-01-01', hasta: '2100-12-31' }
       : it.id === 'borradores' ? { estado: 'BORRADOR', limite: 8 }
+      : it.id === 'tendencia' ? entradaTendencia(t, periodo, opts.hoy)
       : it.id === 'anuladas' ? { estado: 'ANULADO', limite: 8 }
       : it.id === 'buscar-factura' ? { q: t.match(/\bfactura (?:numero |no\.? |#)?([a-z0-9-]{6,})\b/)?.[1], limite: 5 }
       : it.id === 'cotizaciones' ? {

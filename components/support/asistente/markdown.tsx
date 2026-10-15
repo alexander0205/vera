@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
+import { anchoBarra, parsearGrafico, valorGrafico } from '@/lib/asistente/grafico';
 import s from './asistente.module.css';
 
 /**
@@ -63,6 +64,33 @@ export function Markdown({ texto }: { texto: string }) {
   while (i < lineas.length) {
     const l = lineas[i];
     if (!l.trim()) { i++; continue; }
+
+    // Bloque con vallas: «grafico» se dibuja; cualquier otro se muestra como texto.
+    if (/^\s*```/.test(l)) {
+      const lenguaje = l.trim().slice(3).trim().toLowerCase();
+      const cuerpo: string[] = [];
+      i++;
+      while (i < lineas.length && !/^\s*```/.test(lineas[i])) { cuerpo.push(lineas[i]); i++; }
+      i++;
+      const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
+      if (g) {
+        bloques.push(
+          <figure className={s.grafico} key={`b${n++}`} aria-label={g.titulo ?? 'Gráfico'}>
+            {g.titulo && <figcaption className={s.graficoTitulo}>{g.titulo}</figcaption>}
+            {g.datos.map((d, j) => (
+              <div className={s.barraFila} key={j}>
+                <span className={s.barraEtiqueta} title={d.etiqueta}>{d.etiqueta}</span>
+                <span className={s.barraRiel}><span className={s.barra} style={{ width: `${anchoBarra(g, d.valor)}%` }} /></span>
+                <span className={s.barraValor}>{valorGrafico(g, d.valor)}</span>
+              </div>
+            ))}
+          </figure>,
+        );
+      } else if (cuerpo.some((x) => x.trim())) {
+        bloques.push(<pre className={s.codigo} key={`b${n++}`}>{cuerpo.join('\n')}</pre>);
+      }
+      continue;
+    }
 
     // Tabla: encabezado + separador + filas.
     if (empiezaTabla(i)) {

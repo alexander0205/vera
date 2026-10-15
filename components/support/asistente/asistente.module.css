@@ -335,3 +335,13 @@
 .valorarOn { color: #16a34a; background: color-mix(in srgb, #22c55e 14%, var(--card)); }
 .valorarMal { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 10%, var(--card)); }
 .valorar:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* Gráfico de barras */
+.grafico { margin: 6px 0 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.graficoTitulo { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.barraFila { display: grid; grid-template-columns: minmax(72px, 34%) 1fr auto; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12px; }
+.barraEtiqueta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
+.barraRiel { display: block; height: 10px; border-radius: 5px; background: var(--muted); overflow: hidden; }
+.barra { display: block; height: 100%; border-radius: 5px; background: var(--primary); }
+.barraValor { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500; }
+.codigo { margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: var(--muted); font-size: 12px; overflow-x: auto; white-space: pre-wrap; }

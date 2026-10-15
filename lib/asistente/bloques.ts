@@ -3,13 +3,16 @@
  * navegador): párrafos, títulos, listas y tablas, con negritas.
  */
 
+import { parsearGrafico, type Grafico } from './grafico';
+
 export interface Tramo { texto: string; negrita?: boolean }
 
 export type Bloque =
   | { tipo: 'parrafo'; tramos: Tramo[] }
   | { tipo: 'titulo'; tramos: Tramo[] }
   | { tipo: 'lista'; ordenada: boolean; items: Tramo[][] }
-  | { tipo: 'tabla'; cabecera: Tramo[][]; filas: Tramo[][][] };
+  | { tipo: 'tabla'; cabecera: Tramo[][]; filas: Tramo[][][] }
+  | { tipo: 'grafico'; grafico: Grafico };
 
 /** `**negrita**` y `[texto](/ruta)` → solo el texto (en PDF el enlace no sirve). */
 export function tramos(linea: string): Tramo[] {
@@ -46,6 +49,19 @@ export function aBloques(md: string): Bloque[] {
   while (i < L.length) {
     const l = L[i];
     if (!l.trim()) { i++; continue; }
+
+    // Bloque con vallas: «grafico» es una gráfica; cualquier otro, texto tal cual.
+    if (/^\s*```/.test(l)) {
+      const lenguaje = l.trim().slice(3).trim().toLowerCase();
+      const cuerpo: string[] = [];
+      i++;
+      while (i < L.length && !/^\s*```/.test(L[i])) { cuerpo.push(L[i]); i++; }
+      i++;
+      const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
+      if (g) out.push({ tipo: 'grafico', grafico: g });
+      else if (cuerpo.some((x) => x.trim())) out.push({ tipo: 'parrafo', tramos: tramos(cuerpo.join(' ')) });
+      continue;
+    }
 
     if (tabla(i)) {
       const cabecera = celdas(l).map(tramos);
