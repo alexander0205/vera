@@ -48,6 +48,8 @@ export interface FilaResponsable {
   deudaEscolarCentavos: number;
   /** La parte de esa deuda que todavía no tiene factura: nadie le ha mandado qué pagar. */
   porFacturarCentavos: number;
+  /** Con filtro por concepto: sus cargos vivos de ese concepto y lo que queda por pagar de ellos. */
+  delConcepto: { cargos: number; saldoCentavos: number } | null;
   /** Saldo de sus facturas que no salieron de ningún cargo. */
   deudaFacturasCentavos: number;
   /** El vencimiento más viejo sin pagar, para saber a quién llamar primero. */
@@ -85,7 +87,7 @@ export const FILTROS_RESPONSABLES: readonly FiltroResponsables[] =
 
 export async function listarResponsables(
   teamId: number,
-  opts: { q?: string; filtro?: FiltroResponsables; limit?: number; offset?: number } = {},
+  opts: { q?: string; filtro?: FiltroResponsables; conceptoId?: number | null; limit?: number; offset?: number } = {},
 ): Promise<ListaResponsables> {
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 200);
   const offset = Math.max(opts.offset ?? 0, 0);
@@ -196,7 +198,27 @@ export async function listarResponsables(
       : filtro === 'por-facturar'
         ? sql` AND por_facturar > 0`
         : sql``;
-  const conFiltro = sql`SELECT * FROM (${conBusqueda}) t WHERE ${delFiltro}${extra}`;
+  /**
+   * Por concepto: las familias con cargos vivos de UN concepto. Es lo que daba
+   * el filtro de «Cargos y deudas» antes de quitarla —los «Pago de más (a
+   * revisión)» de Mi Casita, o a quién se le cargó el paseo—. Mira todas las
+   * familias con ficha, no solo las vigentes: un retirado puede tener uno.
+   */
+  const conceptoId = opts.conceptoId && Number.isInteger(opts.conceptoId) && opts.conceptoId > 0
+    ? opts.conceptoId : null;
+  const conFiltro = conceptoId
+    ? sql`SELECT * FROM (
+        SELECT t.*, k.cargos AS cargos_concepto, k.saldo AS saldo_concepto
+          FROM (${conBusqueda}) t
+          CROSS JOIN LATERAL (
+            SELECT count(*)::int AS cargos, COALESCE(SUM(g.saldo_centavos), 0)::bigint AS saldo
+              FROM admin_escolar_cargos g
+              JOIN admin_escolar_estudiantes e ON e.id = g.estudiante_id AND e.team_id = ${teamId}
+             WHERE e.facturar_a_client_id = t.id AND g.team_id = ${teamId}
+               AND g.concepto_id = ${conceptoId} AND g.estado <> 'anulado'
+          ) k
+      ) t WHERE ${filtro === 'todos' ? conFicha : delFiltro}${extra} AND cargos_concepto > 0`
+    : sql`SELECT * FROM (${conBusqueda}) t WHERE ${delFiltro}${extra}`;
 
   const [filas, cuantas, conteo] = await Promise.all([
     db.execute(sql`
@@ -242,6 +264,8 @@ export async function listarResponsables(
       beneficiarios: Number(r.beneficiarios ?? 0),
       deudaEscolarCentavos: Number(r.deuda_escolar ?? 0),
       porFacturarCentavos: Number(r.por_facturar ?? 0),
+      delConcepto: r.cargos_concepto == null ? null
+        : { cargos: Number(r.cargos_concepto), saldoCentavos: Number(r.saldo_concepto ?? 0) },
       deudaFacturasCentavos: Number(r.deuda_facturas ?? 0),
       venceMasViejo: (r.vence_mas_viejo as string) ?? null,
     })),

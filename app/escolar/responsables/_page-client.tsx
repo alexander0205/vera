@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Paginador } from '@/components/ui/paginador';
+import { NativeSelect } from '@/components/ui/native-select';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
@@ -82,13 +84,25 @@ export default function ResponsablesClient() {
   const { params, setParams } = useUrlParams();
   const filtro = params.get('filtro') ?? 'todos';
   const pagina = Number(params.get('p')) || 1;
+  /**
+   * Por concepto: las familias con cargos de UN cobro (el paseo que se le
+   * cargó a un grupo, los «Pago de más» a revisión). Lo daba «Cargos y deudas»
+   * antes de quitarla.
+   */
+  const concepto = params.get('concepto') ?? '';
+  const { can } = usePermissions();
+  const { data: catalogo } = useSWR<{ conceptos?: { id: number; nombre: string; activo: boolean }[] }>(
+    '/api/administracion-escolar/conceptos', traer, { revalidateOnFocus: false, dedupingInterval: 60_000 });
+  const conceptos = catalogo?.conceptos ?? [];
+  const nombreConcepto = conceptos.find((c) => String(c.id) === concepto)?.nombre ?? null;
+  const qsConcepto = concepto ? `&concepto=${encodeURIComponent(concepto)}` : '';
 
   // Lo que se teclea va aparte de lo que viaja: una consulta por tecla sobre
   // seiscientos contactos no adelanta nada.
   const [texto, setTexto] = useState(params.get('q') ?? '');
   const q = params.get('q') ?? '';
 
-  const url = `/api/administracion-escolar/responsables?filtro=${filtro}`
+  const url = `/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}`
     + `&limit=${POR_PAGINA}&offset=${(pagina - 1) * POR_PAGINA}`
     + (q ? `&q=${encodeURIComponent(q)}` : '');
   /**
@@ -99,11 +113,13 @@ export default function ResponsablesClient() {
   async function armarExport() {
     const filas: FilaResponsable[] = [];
     for (let offset = 0; offset < 10000; offset += 200) {
-      const d = await fetch(`/api/administracion-escolar/responsables?filtro=${filtro}&limit=200&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`).then(r => r.json()) as Resp;
+      const r = await fetch(`/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}&limit=200&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+      const d = await r.json().catch(() => null) as (Resp & { error?: string }) | null;
+      if (!r.ok || !d) throw new Error(d?.error ?? 'No se pudo leer el listado para exportarlo');
       filas.push(...(d.filas ?? []));
       if ((d.filas ?? []).length < 200 || filas.length >= (d.total ?? 0)) break;
     }
-    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, q ? `Búsqueda: «${q}»` : null].filter(Boolean).join(' · '));
+    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, nombreConcepto ? `Concepto: ${nombreConcepto}` : null, q ? `Búsqueda: «${q}»` : null].filter(Boolean).join(' · '));
   }
 
   const { data, isLoading, error } = useSWR<Resp>(url, traer, {
@@ -150,7 +166,15 @@ export default function ResponsablesClient() {
             Las familias que pagan, con sus hijos y su deuda junta.
           </p>
         </div>
-        <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-responsables" />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Cobrarle lo mismo a un grupo (paseo, fotos): vivía en «Cargos y deudas». */}
+          {can('administracion-escolar:gestionar') && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/escolar/cobrar-grupo">Cobrar a un grupo</Link>
+            </Button>
+          )}
+          <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-responsables" />
+        </div>
       </div>
 
       {/* Las cifras del colegio, como en Estudiantes: del team entero, no de
@@ -208,6 +232,14 @@ export default function ResponsablesClient() {
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setParams({ q: texto || null, p: null }); }} />
             </div>
+            <NativeSelect aria-label="Concepto" className="sm:w-56" value={concepto}
+              onChange={(e) => setParams({ concepto: e.target.value || null, p: null })}>
+              <option value="">Todos los conceptos</option>
+              {/* Los inactivos también: uno retirado del catálogo puede seguir con cargos vivos. */}
+              {conceptos.map((c) => (
+                <option key={c.id} value={String(c.id)}>{c.nombre}{c.activo === false ? ' (inactivo)' : ''}</option>
+              ))}
+            </NativeSelect>
             {/* «Sin hijos activos» solo aparece si hay alguna: son las familias
                 que ya no tienen a nadie en el colegio ni deben nada. Salían
                 mezcladas con las que pagan este año y engordaban el contador. */}
@@ -293,6 +325,12 @@ export default function ResponsablesClient() {
                           {f.deudaEscolarCentavos > 0
                             ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
+                          {f.delConcepto && nombreConcepto && (
+                            <span className="block text-xs text-zero-700">
+                              {nombreConcepto}: {f.delConcepto.cargos} cargo{f.delConcepto.cargos === 1 ? '' : 's'}
+                              {f.delConcepto.saldoCentavos > 0 ? `, debe ${fmtDOP(f.delConcepto.saldoCentavos)}` : ', pagado'}
+                            </span>
+                          )}
                           {f.porFacturarCentavos > 0 && (
                             <span className="block text-xs text-gray-500">{fmtDOP(f.porFacturarCentavos)} sin factura</span>
                           )}
