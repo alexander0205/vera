@@ -94,6 +94,7 @@ export function BottomActionBar({
               disableElevation
               disabled={loading || loadingPreview}
               onClick={onVistaPrevia}
+              data-tour="factura-vista-previa"
               startIcon={loadingPreview ? <CircularProgress size={14} /> : undefined}
               sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
             >
@@ -117,6 +118,7 @@ export function BottomActionBar({
               disableElevation
               disabled={loading || loadingPreview}
               onClick={onVistaPrevia}
+              data-tour="factura-vista-previa"
               startIcon={loadingPreview ? <CircularProgress size={14} /> : undefined}
               sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
             >

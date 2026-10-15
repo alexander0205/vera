@@ -21,7 +21,7 @@ describe('primeros pasos', () => {
     const p = construirPrimerosPasos(E({ certificado: true, secuencias: 2 }));
     expect(p.hechos).toBe(2);
     expect(p.siguiente?.titulo).toMatch(/producto/i);
-    expect(p.pasos.find((x) => x.opcional)?.estado).toBe('falta');
+    expect(p.pasos.find((x) => x.opcional && x.titulo.includes('cliente'))?.estado).toBe('falta');
   });
 
   it('quien ya facturó no ve la tarjeta; tampoco si no se sabe', () => {

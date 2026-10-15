@@ -37,7 +37,15 @@ export function construirPrimerosPasos(e: EstadoConfiguracion): PrimerosPasos {
   const flujo = FLUJOS.find((f) => f.id === 'primera-factura');
   if (!flujo) return VACIO;
 
-  const pasos: PasoPrimerosPasos[] = flujo.pasos.map((p) => {
+  // Antes de todo: los datos del negocio (no se puede saber si ya están, y no frena nada).
+  const ruta = '/dashboard/configuracion';
+  const datosDelNegocio: PasoPrimerosPasos = {
+    titulo: 'Completar los datos de tu negocio',
+    detalle: 'Nombre, dirección, teléfono y logo: salen en todas tus facturas.',
+    ruta, tour: urlDeTour(tourDeRuta(ruta) ?? '') ?? ruta, estado: 'desconocido', opcional: true,
+  };
+
+  const pasosFlujo: PasoPrimerosPasos[] = flujo.pasos.map((p) => {
     const m = p.listo(e);
     return {
       titulo: p.titulo, detalle: p.detalle, ruta: p.ruta,
@@ -47,6 +55,7 @@ export function construirPrimerosPasos(e: EstadoConfiguracion): PrimerosPasos {
     };
   });
 
+  const pasos = [datosDelNegocio, ...pasosFlujo];
   const obligatorios = pasos.filter((p) => !p.opcional);
   const hechos = obligatorios.filter((p) => p.estado === 'hecho').length;
   const indice = pasos.findIndex((p) => p.estado === 'falta' && !p.opcional);

@@ -2,19 +2,26 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, X } from 'lucide-react';
-import { pasoTour, posicionTour, siguientePasoTour, urlDeTour } from '@/lib/asistente/tour';
+import { ArrowLeft, ArrowRight, Building2, Check, FileText, Lightbulb, Package, X, type LucideIcon } from 'lucide-react';
+import {
+  anteriorPasoTour, GRUPOS_TOUR, PASOS_TOUR, pasoTour, posicionTour, siguientePasoTour, urlDeTour, type GrupoTour,
+} from '@/lib/asistente/tour';
 import s from './tour-guiado.module.css';
 
 /**
  * Tour guiado: con `?tour=<paso>` en la URL oscurece la pantalla y resalta el
  * elemento marcado con `data-tour`. El elemento resaltado sigue siendo
- * clicable (el foco no lo tapa). Si el elemento no existe, el paso se explica
- * igual en el centro: el tour nunca bloquea la pantalla.
+ * clicable (la capa no captura clics). Si el elemento no existe, el paso se
+ * explica igual en el centro: el tour nunca bloquea la pantalla.
+ *
+ * Teclado: Flecha derecha/izquierda cambian de paso, Escape sale.
  */
 
 const ESPERA_MS = 10_000;
 const MARGEN = 8;
+const ALTO_CUADRO = 250;
+
+const ICONO: Record<GrupoTour, LucideIcon> = { empresa: Building2, catalogo: Package, factura: FileText };
 
 function buscar(destino: string): HTMLElement | null {
   const todos = document.querySelectorAll<HTMLElement>(`[data-tour="${destino}"]`);
@@ -47,6 +54,12 @@ function Tour() {
     const resto = q.toString();
     router.replace(resto ? `${pathname}?${resto}` : pathname, { scroll: false });
   }, [params, pathname, router]);
+
+  const ir = useCallback((destino: string | null) => {
+    const url = destino ? urlDeTour(destino) : null;
+    if (url) router.push(url);
+    else cerrar();
+  }, [cerrar, router]);
 
   // Encuentra el elemento (las pantallas cargan datos antes de pintarlo).
   useEffect(() => {
@@ -110,14 +123,21 @@ function Tour() {
     };
   }, [activo]);
 
-  // Escape cierra; el foco pasa al cuadro para que lo lea el lector de pantalla.
+  // Teclado: flechas para moverse, Escape para salir (sin pisar lo que se escribe en un campo).
   useEffect(() => {
     if (!activo) return;
-    const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') cerrar(); };
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { cerrar(); return; }
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === 'ArrowRight') ir(siguientePasoTour(activo.id)?.id ?? null);
+      if (e.key === 'ArrowLeft') { const a = anteriorPasoTour(activo.id); if (a) ir(a.id); }
+    };
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
-  }, [activo, cerrar]);
+  }, [activo, cerrar, ir]);
 
+  // El foco pasa al cuadro para que lo lea el lector de pantalla.
   useEffect(() => {
     if (activo && (rect || sinElemento)) popRef.current?.focus({ preventScroll: true });
   }, [activo, rect, sinElemento]);
@@ -125,25 +145,26 @@ function Tour() {
   if (!activo || (!rect && !sinElemento)) return null;
 
   const sig = siguientePasoTour(activo.id);
+  const ant = anteriorPasoTour(activo.id);
   const { actual, total } = posicionTour(activo.id);
+  const Icono = ICONO[activo.grupo];
+  const esUltimo = !sig;
 
-  function siguiente() {
-    if (!sig) { cerrar(); return; }
-    const url = urlDeTour(sig.id);
-    if (url) router.push(url);
-  }
-
-  // El cuadro va debajo del elemento; si no cabe, encima; sin elemento, al centro.
-  const ancho = Math.min(340, (typeof window !== 'undefined' ? window.innerWidth : 360) - 24);
-  let estiloCuadro: React.CSSProperties = { width: ancho, left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
+  // El cuadro va debajo del elemento; si no cabe, encima; sin elemento a la vista, al centro.
+  const ancho = Math.min(360, (typeof window !== 'undefined' ? window.innerWidth : 380) - 24);
   const aLaVista = !!rect && typeof window !== 'undefined' && rect.bottom > 0 && rect.top < window.innerHeight;
+  let estiloCuadro: React.CSSProperties = { width: ancho, left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
+  let lado: 'abajo' | 'arriba' | null = null;
+  let flecha = 24;
   if (rect && aLaVista) {
-    const alto = 200;
-    const debajo = rect.bottom + MARGEN + 12 + alto < window.innerHeight;
-    const crudo = debajo ? rect.bottom + MARGEN + 12 : rect.top - MARGEN - 12 - alto;
-    const top = Math.min(Math.max(12, crudo), Math.max(12, window.innerHeight - alto - 12));
+    const debajo = rect.bottom + MARGEN + 14 + ALTO_CUADRO < window.innerHeight;
+    lado = debajo ? 'abajo' : 'arriba';
+    const crudo = debajo ? rect.bottom + MARGEN + 14 : rect.top - MARGEN - 14 - ALTO_CUADRO;
+    const top = Math.min(Math.max(12, crudo), Math.max(12, window.innerHeight - ALTO_CUADRO - 12));
     const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - ancho - 12));
     estiloCuadro = { width: ancho, left, top };
+    // La flecha apunta al centro del elemento, sin salirse del cuadro.
+    flecha = Math.min(Math.max(16, rect.left + rect.width / 2 - left - 6), ancho - 28);
   }
 
   return (
@@ -163,22 +184,54 @@ function Tour() {
         style={estiloCuadro}
         role="dialog"
         aria-modal="false"
-        aria-label={activo.titulo}
+        aria-label={`${activo.titulo}. Paso ${actual} de ${total}`}
         tabIndex={-1}
       >
+        {lado && (
+          <span
+            className={`${s.flecha} ${lado === 'abajo' ? s.flechaArriba : s.flechaAbajo}`}
+            style={{ left: flecha }}
+            aria-hidden
+          />
+        )}
         <button type="button" className={s.cerrar} onClick={cerrar} aria-label="Salir de la guía">
           <X size={16} aria-hidden />
         </button>
-        <span className={s.paso}>Paso {actual} de {total}</span>
-        <h2>{activo.titulo}</h2>
+
+        <div className={s.cabecera}>
+          <span className={s.icono} aria-hidden><Icono size={18} /></span>
+          <div>
+            <span className={s.grupo}>{GRUPOS_TOUR[activo.grupo]}</span>
+            <h2>{activo.titulo}</h2>
+          </div>
+        </div>
+
         <p>{activo.texto}</p>
-        {sinElemento && <p className={s.aviso}>No veo ese botón en esta pantalla ahora mismo, pero aquí es donde se hace.</p>}
-        <div className={s.acciones}>
-          <button type="button" className={s.secundario} onClick={cerrar}>Salir</button>
-          <button type="button" className={s.primario} onClick={siguiente}>
-            {sig ? (activo.siguiente ?? 'Siguiente') : 'Terminar'}
-            {sig && <ArrowRight size={15} aria-hidden />}
-          </button>
+        {activo.consejo && (
+          <p className={s.consejo}><Lightbulb size={14} aria-hidden /><span>{activo.consejo}</span></p>
+        )}
+        {sinElemento && (
+          <p className={s.aviso}>No veo ese botón en esta pantalla ahora mismo, pero aquí es donde se hace.</p>
+        )}
+
+        <div className={s.progreso} role="progressbar" aria-valuemin={1} aria-valuemax={total} aria-valuenow={actual} aria-label="Avance de la guía">
+          {PASOS_TOUR.map((p, i) => (
+            <span key={p.id} className={`${s.punto} ${i < actual - 1 ? s.puntoHecho : ''} ${i === actual - 1 ? s.puntoActual : ''}`} />
+          ))}
+        </div>
+
+        <div className={s.pie}>
+          <span className={s.contador}>Paso {actual} de {total}</span>
+          <div className={s.acciones}>
+            {ant && (
+              <button type="button" className={s.secundario} onClick={() => ir(ant.id)} aria-label="Paso anterior">
+                <ArrowLeft size={15} aria-hidden />
+              </button>
+            )}
+            <button type="button" className={s.primario} onClick={() => ir(sig?.id ?? null)}>
+              {esUltimo ? <>Terminar <Check size={15} aria-hidden /></> : <>Siguiente <ArrowRight size={15} aria-hidden /></>}
+            </button>
+          </div>
         </div>
       </div>
     </div>

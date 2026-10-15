@@ -258,7 +258,7 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
         }}
         headerActions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowImport(true)}>
+            <Button variant="outline" onClick={() => setShowImport(true)} data-tour="producto-importar">
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
