@@ -677,3 +677,41 @@ describe('5.13 cifras clicables', () => {
     }
   });
 });
+
+// ── 5.14 Respuesta que se va mostrando ──
+import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
+
+describe('5.14 revelado por bloques', () => {
+  const TEXTO = 'Vendiste RD$ 1,000.\n\n```grafico\ntitulo: x\nA | 1\nB | 2\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nFin.';
+
+  it('parte por párrafos pero deja enteros los gráficos y las tablas', () => {
+    const b = bloquesDeRevelado(TEXTO);
+    expect(b).toHaveLength(4);
+    expect(b[1]).toBe('```grafico\ntitulo: x\nA | 1\nB | 2\n```');
+    expect(b[2]).toBe('| a | b |\n| --- | --- |\n| 1 | 2 |');
+  });
+
+  it('un bloque con una línea en blanco DENTRO de una valla no se parte', () => {
+    expect(bloquesDeRevelado('```tarjeta\ntitulo: x\n\nfila: a | b\n```')).toHaveLength(1);
+  });
+
+  it('unir los bloques reconstruye el texto', () => {
+    expect(bloquesDeRevelado(TEXTO).join('\n\n')).toBe(TEXTO);
+  });
+
+  it('el paso total no pasa de ~1 segundo ni de 220 ms por bloque', () => {
+    for (const n of [2, 3, 5, 10, 14]) {
+      const paso = pasoDeRevelado(n);
+      expect(paso).toBeLessThanOrEqual(220);
+      expect(paso * (n - 1)).toBeLessThanOrEqual(1000);
+    }
+    expect(pasoDeRevelado(1)).toBe(0);
+  });
+
+  it('solo conviene con varios bloques y texto largo', () => {
+    expect(conviene('Hola, ¿qué tal?')).toBe(false);
+    expect(conviene(TEXTO + ' '.repeat(10) + 'x'.repeat(200))).toBe(true);
+    // Demasiados bloques: se muestra entera en vez de tardar.
+    expect(conviene(Array.from({ length: 20 }, (_, i) => 'párrafo número ' + i + ' con bastante texto para pasar el mínimo').join('\n\n'))).toBe(false);
+  });
+});

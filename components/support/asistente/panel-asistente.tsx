@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, ArrowUp, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
 import { Markdown } from './markdown';
+import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
 import s from './asistente.module.css';
 
 /**
@@ -39,6 +40,26 @@ const MOTIVOS: [string, string][] = [
   ['otro', 'Otro'],
 ];
 
+/**
+ * La respuesta que acaba de llegar se muestra por bloques completos, de arriba
+ * hacia abajo, en menos de un segundo. Con movimiento reducido, o si es corta,
+ * aparece entera. Lo que no es nuevo (historial) nunca se anima.
+ */
+function TextoRevelado({ texto, nuevo, alCrecer }: { texto: string; nuevo: boolean; alCrecer: () => void }) {
+  const bloques = useMemo(() => bloquesDeRevelado(texto), [texto]);
+  const [visibles, setVisibles] = useState(() => {
+    const reducido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    return nuevo && !reducido && conviene(texto) ? 1 : bloques.length;
+  });
+  useEffect(() => {
+    if (visibles >= bloques.length) return;
+    const t = setTimeout(() => setVisibles((v) => v + 1), pasoDeRevelado(bloques.length));
+    return () => clearTimeout(t);
+  }, [visibles, bloques.length]);
+  useEffect(() => { alCrecer(); }, [visibles, alCrecer]);
+  return <Markdown texto={visibles >= bloques.length ? texto : bloques.slice(0, visibles).join('\n\n')} />;
+}
+
 function saludo(): string {
   const h = new Date().getHours();
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -64,7 +85,7 @@ function BotonCopiar({ texto }: { texto: string }) {
 }
 
 function MensajeAsistenteVista({
-  m, ultimoError, onReintentar, resolver, valorar, motivar, probarConIa, puedeIa, preguntar,
+  m, ultimoError, onReintentar, resolver, valorar, motivar, probarConIa, puedeIa, preguntar, alCrecer,
 }: {
   m: MensajeAsistente; ultimoError: boolean; onReintentar: () => void;
   resolver: (mensajeId: number, token: string, confirmar: boolean) => void;
@@ -75,6 +96,8 @@ function MensajeAsistenteVista({
   puedeIa?: boolean;
   /** Mandar una pregunta (los botones de «qué preguntar después»). Solo en la última respuesta. */
   preguntar?: (texto: string) => void;
+  /** Se llama cuando la respuesta crece (se va revelando): el panel baja al final. */
+  alCrecer: () => void;
 }) {
   if (m.rol === 'user') {
     return (
@@ -88,7 +111,7 @@ function MensajeAsistenteVista({
       <span className={s.avatar} aria-hidden><Sparkles size={13} /></span>
       <div className={s.cuerpo}>
         <div className={`${s.burbuja} ${s.burbujaAsistente} ${m.error ? s.burbujaError : ''}`}>
-          {m.error ? m.contenido : <Markdown texto={m.contenido} />}
+          {m.error ? m.contenido : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} />}
           {m.error && ultimoError && (
             <div><button type="button" className={s.reintentar} onClick={onReintentar}>Reintentar</button></div>
           )}
@@ -193,6 +216,11 @@ export function PanelAsistente({
   const listaRef = useRef<HTMLDivElement>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
 
+  const irAlFinal = useCallback(() => {
+    const el = listaRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
   // Siempre ver lo último: respuesta nueva o «consultando…».
   useEffect(() => {
     const el = listaRef.current;
@@ -294,7 +322,8 @@ export function PanelAsistente({
         {a.mensajes.map((m) => (
           <MensajeAsistenteVista key={m.id} m={m} ultimoError={ultimoEsError} onReintentar={() => a.reintentar()} resolver={a.resolverPropuesta} valorar={a.valorar} motivar={a.motivar}
             probarConIa={m.id === ultimaRespuestaId ? () => void a.probarConIa() : undefined} puedeIa={a.ia && !a.enviando}
-            preguntar={m.id === ultimaRespuestaId && !a.enviando ? (q) => mandar(q) : undefined} />
+            preguntar={m.id === ultimaRespuestaId && !a.enviando ? (q) => mandar(q) : undefined}
+            alCrecer={irAlFinal} />
         ))}
 
         {a.enviando && (
