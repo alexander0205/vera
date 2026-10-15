@@ -392,7 +392,7 @@ describe('contestador local', () => {
   it('las preguntas que piden razonar van a la IA', async () => {
     const { tools, llamadas } = herramientasFalsas({});
     for (const q of [
-      'compara las ventas de septiembre con las de agosto',
+      'compara las ventas de septiembre con las de agosto y explicame por que bajaron',
       '¿por qué bajaron las ventas este mes?',
       '¿cómo puedo mejorar mi cobranza?',
       'ventas y gastos de este mes',

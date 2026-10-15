@@ -49,7 +49,7 @@ Orden de trabajo; cada una con pruebas y commit.
 - [x] 5.2 Contexto de pantalla: cliente (detalle, deuda, facturas)
 - [x] 5.3 Contexto de pantalla: cotización, producto, estudiante
 - [x] 5.4 Seguimiento natural («¿y de ese cliente?», «¿y los de septiembre?»)
-- [ ] 5.5 Comparativos (este mes vs el mes pasado, vs el año pasado)
+- [x] 5.5 Comparativos (este mes vs el mes pasado, vs el año pasado)
 - [ ] 5.6 Alertas al abrir el panel (rechazadas, secuencia por agotarse, certificado por vencer)
 - [ ] 5.7 Resumen semanal en el chat
 - [ ] 5.8 Ayuda guiada para tareas largas

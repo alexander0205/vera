@@ -239,3 +239,78 @@ describe('5.4 seguimiento natural', () => {
     expect(llamadas[0]).toMatchObject({ nombre: 'ver_cliente' });
   });
 });
+
+// ── 5.5 Comparativos ──
+import { formatearComparacion, porcentaje } from '@/lib/asistente/comparar';
+import { parsearComparacion } from '@/lib/asistente/local';
+
+describe('5.5 comparativos', () => {
+  it.each([
+    ['compara las ventas de este mes con el mes pasado', 'ventas', '2026-10-01', '2026-09-01'],
+    ['este mes vs el mes pasado', 'ventas', '2026-10-01', '2026-09-01'],
+    ['compara los gastos de agosto y septiembre', 'gastos', '2026-08-01', '2026-09-01'],
+    ['cobros de octubre contra septiembre', 'cobros', '2026-10-01', '2026-09-01'],
+  ])('«%s»', (t, metrica, desdeA, desdeB) => {
+    const c = parsearComparacion(t, HOY);
+    expect(c?.metrica).toBe(metrica);
+    expect(c?.a.desde).toBe(desdeA);
+    expect(c?.b.desde).toBe(desdeB);
+  });
+
+  it('«comparado con el mes pasado» usa este mes como el otro lado', () => {
+    const c = parsearComparacion('como voy comparado con el mes pasado', HOY);
+    expect(c?.a.desde).toBe('2026-10-01');
+    expect(c?.b.desde).toBe('2026-09-01');
+  });
+
+  it('«vs el año pasado» compara el mismo tramo un año antes', () => {
+    const c = parsearComparacion('ventas de este mes vs el ano pasado', HOY);
+    expect(c?.a.desde).toBe('2026-10-01');
+    expect(c?.b.desde).toBe('2025-10-01');
+    expect(c?.b.hasta).toBe('2025-10-31');
+  });
+
+  it('lo que no tiene dos períodos claros va a la IA', () => {
+    expect(parsearComparacion('compara mis clientes', HOY)).toBeNull();
+    expect(parsearComparacion('cuanto vendi este mes', HOY)).toBeNull();
+  });
+
+  it('las cuentas: diferencia y porcentaje', () => {
+    expect(porcentaje(150, 100)).toBe(50);
+    expect(porcentaje(80, 100)).toBe(-20);
+    expect(porcentaje(10, 0)).toBeNull();
+  });
+
+  it('el texto dice si subió o bajó, con gráfico y tabla', () => {
+    const t = formatearComparacion({
+      metrica: 'ventas', hoy: '2026-10-14',
+      a: { etiqueta: 'octubre de 2026', hasta: '2026-10-31', valor: 120000 },
+      b: { etiqueta: 'septiembre de 2026', hasta: '2026-09-30', valor: 100000 },
+    });
+    expect(t).toContain('subió **+RD$ 20,000.00 (+20%)**');
+    expect(t).toContain('```grafico');
+    expect(t).toContain('| **Diferencia** | **+RD$ 20,000.00 (+20%)** |');
+  });
+
+  it('avisa cuando un período todavía no termina', () => {
+    const t = formatearComparacion({
+      metrica: 'ventas', hoy: '2026-10-14',
+      a: { etiqueta: 'este mes', hasta: '2026-10-14', valor: 50000 },
+      b: { etiqueta: 'septiembre', hasta: '2026-09-30', valor: 100000 },
+    });
+    expect(t).toContain('todavía no termina');
+  });
+
+  it('de punta a punta: pide los dos períodos y calcula', async () => {
+    const pedidos: Record<string, unknown>[] = [];
+    const reales = crearHerramientas(contextoDePrueba(1), []) as Record<string, { inputSchema?: unknown }>;
+    const tools = Object.fromEntries(Object.keys(reales).map((n) => [n, {
+      inputSchema: reales[n].inputSchema,
+      execute: async (i: Record<string, unknown>) => { pedidos.push(i); return { ventasNetas: i.desde === '2026-10-01' ? 120000 : 100000 }; },
+    }]));
+    const r = await responderLocal('compara las ventas de este mes con el mes pasado', tools as never, { hoy: HOY });
+    expect(r?.intencion).toBe('comparativo');
+    expect(pedidos).toHaveLength(2);
+    expect(r?.respuesta).toContain('+20%');
+  });
+});

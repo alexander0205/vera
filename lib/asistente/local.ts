@@ -5,6 +5,7 @@ import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import { MAPA_SISTEMA } from './mapa-sistema';
 import { explicarMensajesDgii, significadoDelEstado, type MensajeDgii } from './dgii';
 import { textoGrafico } from './grafico';
+import { formatearComparacion, type Metrica } from './comparar';
 
 /**
  * Contestador local: responde SIN llamar a la IA las preguntas claras y
@@ -621,6 +622,87 @@ export function reescribirSeguimiento(t: string, previaT: string): string | 'DON
   return null;
 }
 
+// ── Comparativos ─────────────────────────────────────────────────
+
+const DISPARA_COMPARACION = /\b(compar\w*|versus|vs|contra|frente a|respecto a|con relacion a|en relacion al)\b/;
+const SEPARADOR_COMPARACION = /\s+(?:con|y|vs|versus|contra|frente a|respecto a|con relacion a|en relacion al|comparad[oa] con|comparad[oa] al)\s+/;
+
+function metricaDe(t: string): Metrica {
+  if (/\b(itbis|impuesto)\b/.test(t)) return 'itbis';
+  if (/\b(gast\w*|compras|egresos)\b/.test(t)) return 'gastos';
+  if (/\b(cobr\w*|pagos? recibid\w*|recaud\w*)\b/.test(t)) return 'cobros';
+  return 'ventas';
+}
+
+/** El mismo tramo, un año antes. «Octubre 2026» → «Octubre 2025»; «este año» → «el año pasado». */
+function mismoPeriodoAnioAnterior(p: Periodo): Periodo {
+  const y = (f: string) => `${Number(f.slice(0, 4)) - 1}${f.slice(4)}`;
+  const desde = y(p.desde);
+  const hasta = y(p.hasta);
+  return { desde, hasta, etiqueta: `${p.etiqueta.replace(/\s*\(.*\)$/, '')} (${Number(p.desde.slice(0, 4)) - 1})` };
+}
+
+/**
+ * Lee «A vs B» o «comparado con B». Devuelve null si no entiende los períodos
+ * (entonces decide la IA). Con un solo lado, el otro es el período en curso.
+ */
+export function parsearComparacion(t: string, hoy: string): { metrica: Metrica; a: Periodo; b: Periodo } | null {
+  if (!DISPARA_COMPARACION.test(t)) return null;
+  // Si además pide explicar la causa, razonar es trabajo de la IA.
+  if (/\b(por que|porque|que (cambio|paso|causo)|a que se debe|explica\w*|motivo|razon)\b/.test(t)) return null;
+  const metrica = metricaDe(t);
+  const mismoMesAnioPasado = /\bmismo (mes|periodo|tramo)\b.{0,30}\bano (pasado|anterior)\b/.test(t);
+
+  const limpio = t.replace(/^(?:y |entonces )?(?:compara\w*|comparame|como (?:voy|vamos|estoy|estamos|van|va|me fue|nos fue)|que tal)\s+(?:mis |las |los |el |la )?(?:ventas|cobros|gastos|itbis|ingresos|facturacion|resultados)?\s*(?:de |del |en )?/, '');
+  const partes = limpio.replace(/^comparad[oa]\s+(?:con|al|a|contra)\s+/, '').split(SEPARADOR_COMPARACION).map((x) => x.trim()).filter(Boolean);
+
+  const leer = (frase: string): Periodo | null => {
+    // Sin ninguna palabra de tiempo, interpretarPeriodo devuelve «este mes»: no es lo que dijo.
+    if (!/\b(hoy|ayer|semana|mes|ano|trimestre|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|ultimos?)\b/.test(frase)) return null;
+    return interpretarPeriodo(frase, hoy);
+  };
+
+  let a: Periodo | null = null;
+  let b: Periodo | null = null;
+  if (partes.length >= 2) {
+    a = leer(partes[0]);
+    b = leer(partes[1]);
+    const esAnio = /\b(ano pasado|ano anterior)\b/.test(partes[1]) || mismoMesAnioPasado;
+    if (a && esAnio && a.etiqueta.indexOf('en lo que va de') < 0) b = mismoPeriodoAnioAnterior(a);
+  } else if (partes.length === 1) {
+    b = leer(partes[0]);
+    a = interpretarPeriodo('este mes', hoy);
+    if (b && (/\b(ano pasado|ano anterior)\b/.test(partes[0]) || mismoMesAnioPasado)) b = mismoPeriodoAnioAnterior(a!);
+  }
+  if (!a || !b) return null;
+  return { metrica, a, b };
+}
+
+const HERRAMIENTA_Y_CAMPO: Record<Metrica, [string, string, (d: Fila) => number]> = {
+  ventas: ['resumen_ventas', 'ventasNetas', (d) => n(d.ventasNetas)],
+  cobros: ['pagos_recibidos', 'totalCobrado', (d) => n(d.totalCobrado)],
+  gastos: ['resumen_gastos', 'totalGastado', (d) => n(d.totalGastado)],
+  itbis: ['resumen_itbis', 'itbisAPagar', (d) => n(d.itbisAPagar)],
+};
+
+async function compararPeriodos(tools: ToolSet, t: string, hoy: string): Promise<string | null> {
+  const c = parsearComparacion(t, hoy);
+  if (!c) return null;
+  const [herramienta, , leer] = HERRAMIENTA_Y_CAMPO[c.metrica];
+  if (!tools[herramienta]) return null;
+  const pedir = (p: Periodo) => ejecutar(tools, herramienta, c.metrica === 'cobros'
+    ? { desde: p.desde, hasta: p.hasta, limite: 1 }
+    : { desde: p.desde, hasta: p.hasta });
+  const [ra, rb] = await Promise.all([pedir(c.a), pedir(c.b)]);
+  if (!ra || !rb || ra.error || rb.error) return null;
+  const etiqueta = (p: Periodo) => p.etiqueta.replace(/^(el |la |los |las )/, '');
+  return formatearComparacion({
+    metrica: c.metrica, hoy,
+    a: { etiqueta: etiqueta(c.a), hasta: c.a.hasta, valor: leer(ra) },
+    b: { etiqueta: etiqueta(c.b), hasta: c.b.hasta, valor: leer(rb) },
+  });
+}
+
 // ── Resumen del día ───────────────────────────────────────────────
 
 const RESUMEN_DIA = /\b(resumen (del|de|para) (dia|hoy)|resumen de hoy|como va (el|mi) dia|como (va|vamos|amanecio|esta|estamos) (el )?(negocio|hoy|hoy dia)|que paso hoy|que (hay|tengo|queda) (pendiente )?(para )?hoy|panorama (de hoy|del dia)|como (va|anda) todo)\b/;
@@ -901,6 +983,12 @@ export async function responderLocal(
       const r = await responderLocal(reescrita, tools, { ...opts, preguntaPrevia: undefined });
       if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
     }
+  }
+
+  // «Este mes vs el mes pasado»: dos consultas y la diferencia, sin IA.
+  if (DISPARA_COMPARACION.test(t)) {
+    const c = await compararPeriodos(tools, t, opts.hoy ?? hoyRd());
+    if (c) return { intencion: 'comparativo', respuesta: c };
   }
 
   // «Resumen de hoy»: varias consultas juntas, cada una opcional.
