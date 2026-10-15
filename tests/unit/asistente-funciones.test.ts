@@ -196,3 +196,46 @@ describe('5.3 cotización y producto en pantalla', () => {
     expect(llamadas).toEqual([]);
   });
 });
+
+// ── 5.4 Seguimiento natural ──
+import { reescribirSeguimiento } from '@/lib/asistente/local';
+
+describe('5.4 seguimiento natural', () => {
+  it.each([
+    ['y por cliente', 'cuanto vendi este mes', 'mis mejores clientes este mes'],
+    ['por producto', 'cuanto vendi el mes pasado', 'productos mas vendidos el mes pasado'],
+    ['y por metodo de pago', 'cuanto cobre esta semana', 'cobros por metodo de pago esta semana'],
+    ['y por mes', 'cuanto vendi este ano', 'ventas por mes'],
+    ['y por dia', 'cuanto vendi este mes', 'ventas por dia'],
+  ])('«%s» tras «%s»', (t, previa, esperado) => {
+    expect(reescribirSeguimiento(t, previa)).toBe(esperado);
+  });
+
+  it('«el mes anterior» cambia el período de la pregunta previa', () => {
+    expect(reescribirSeguimiento('y el mes anterior', 'cuanto vendi este mes')).toBe('cuanto vendi el mes pasado');
+    expect(reescribirSeguimiento('la semana anterior', 'cobros por metodo esta semana')).toBe('cobros por metodo la semana pasada');
+  });
+
+  it('«dame más» manda a donde se ve completo', () => {
+    expect(reescribirSeguimiento('dame mas', 'mis mejores clientes')).toBe('DONDE');
+    expect(reescribirSeguimiento('ver todos', 'facturas por revisar')).toBe('DONDE');
+  });
+
+  it('lo que no es seguimiento no se toca', () => {
+    expect(reescribirSeguimiento('cuanto vendi hoy', 'quien me debe')).toBeNull();
+    expect(reescribirSeguimiento('hola', 'cuanto vendi')).toBeNull();
+  });
+
+  it('de punta a punta: «¿y por cliente?» responde la lista de clientes del mismo mes', async () => {
+    const { tools, llamadas } = herramientas({ ventas_por_cliente: { periodo: 'x', clientes: [{ cliente: 'Ana', ventas: 5000, facturas: 2 }, { cliente: 'Luis', ventas: 3000, facturas: 1 }] } });
+    const r = await responderLocal('y por cliente', tools, { hoy: HOY, preguntaPrevia: 'cuanto vendi el mes pasado' });
+    expect(r?.intencion).toBe('seguimiento:mejores-clientes');
+    expect(llamadas[0].input).toMatchObject({ desde: '2026-09-01', hasta: '2026-09-30' });
+  });
+
+  it('«sus facturas» con un cliente abierto no necesita «este»', async () => {
+    const { tools, llamadas } = herramientas({ ver_cliente: { enlace: '/dashboard/clientes/55/editar', nombre: 'Ana', debe: 0, facturasPendientes: 0, diasVencidoMaximo: 0, facturasRecientes: 0, totalRecientes: 0, ultimas: [] } });
+    await responderLocal('y sus facturas', tools, { hoy: HOY, pantalla: interpretarPantalla('/dashboard/clientes/55/editar') });
+    expect(llamadas[0]).toMatchObject({ nombre: 'ver_cliente' });
+  });
+});

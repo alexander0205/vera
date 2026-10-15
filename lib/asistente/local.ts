@@ -574,6 +574,53 @@ function entradaTendencia(t: string, periodo: Periodo | null, hoy?: string): Rec
   return { desde: ini, hasta: h, agrupar: porMes || !dicho ? 'mes' : 'dia' };
 }
 
+// ── Seguimiento ──────────────────────────────────────────────────
+
+const MESES_RE = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre';
+const FRASE_PERIODO = new RegExp(
+  `\\b(hoy|ayer|esta semana|la semana pasada|semana pasada|este mes|el mes pasado|mes pasado|este ano|el ano pasado|ano pasado|ultimos? \\d+ (?:dias|semanas|meses)|(?:en )?(?:${MESES_RE})(?: de \\d{4})?)\\b`,
+);
+const DIMENSION = /^(?:y |y de |y segun |y desglosado )?(?:por|segun|desglosado por|separado por|agrupado por) (?:el |la |cada )?(cliente|clientes|producto|productos|servicio|servicios|concepto|conceptos|metodos de pago|metodo de pago|metodos|metodo|forma de pago|formas de pago|mes|meses|dia|dias|semana|semanas)$/;
+const ANTERIOR = /^(?:y )?(?:el |la )?(mes|semana|ano|dia) (?:anterior|previo|pasado)$/;
+const MAS = /^(?:y )?(?:dame |muestrame |ver |quiero ver )?(?:mas|todos|todas)(?: el detalle| detalle| resultados| filas| clientes| facturas| productos)?$/;
+
+const BASE_POR_DIMENSION: Record<string, string> = {
+  cliente: 'mis mejores clientes', clientes: 'mis mejores clientes',
+  producto: 'productos mas vendidos', productos: 'productos mas vendidos', servicio: 'productos mas vendidos',
+  servicios: 'productos mas vendidos', concepto: 'productos mas vendidos', conceptos: 'productos mas vendidos',
+  metodo: 'cobros por metodo de pago', metodos: 'cobros por metodo de pago',
+  'metodo de pago': 'cobros por metodo de pago', 'metodos de pago': 'cobros por metodo de pago',
+  'forma de pago': 'cobros por metodo de pago', 'formas de pago': 'cobros por metodo de pago',
+  mes: 'ventas por mes', meses: 'ventas por mes', dia: 'ventas por dia', dias: 'ventas por dia',
+  semana: 'ventas por semana', semanas: 'ventas por semana',
+};
+const ANTERIOR_A: Record<string, string> = { mes: 'el mes pasado', semana: 'la semana pasada', ano: 'el ano pasado', dia: 'ayer' };
+
+/**
+ * «¿Y por cliente?» después de «cuánto vendí este mes» → «mis mejores clientes
+ * este mes». Devuelve la pregunta completa, 'DONDE' para «dame más», o null.
+ * Solo reordena lo que ya se preguntó; no adivina un tema nuevo.
+ */
+export function reescribirSeguimiento(t: string, previaT: string): string | 'DONDE' | null {
+  const frase = previaT.match(FRASE_PERIODO)?.[1] ?? '';
+
+  const dim = t.match(DIMENSION);
+  if (dim) {
+    const base = BASE_POR_DIMENSION[dim[1]];
+    // Por mes/día/semana el período lo decide la tendencia; con período, se respeta.
+    return base ? `${base}${frase && !/^ventas por (mes|dia|semana)$/.test(base) ? ` ${frase}` : ''}` : null;
+  }
+
+  const ant = t.match(ANTERIOR);
+  if (ant) {
+    if (!FRASE_PERIODO.test(previaT) && !/\b(vend|venta|cobr|gast|itbis|cliente|producto)\w*/.test(previaT)) return null;
+    return `${previaT.replace(FRASE_PERIODO, ' ').replace(/\s+/g, ' ').trim()} ${ANTERIOR_A[ant[1]]}`;
+  }
+
+  if (MAS.test(t)) return 'DONDE';
+  return null;
+}
+
 // ── Resumen del día ───────────────────────────────────────────────
 
 const RESUMEN_DIA = /\b(resumen (del|de|para) (dia|hoy)|resumen de hoy|como va (el|mi) dia|como (va|vamos|amanecio|esta|estamos) (el )?(negocio|hoy|hoy dia)|que paso hoy|que (hay|tengo|queda) (pendiente )?(para )?hoy|panorama (de hoy|del dia)|como (va|anda) todo)\b/;
@@ -689,7 +736,7 @@ function plantillaFacturaActual(r: Fila, t: string): string {
 
 // ── Cliente, cotización y producto en pantalla ───────────────────────────────
 
-const DEICTICO_REGISTRO = /\b(este|esta|ese|esa|esto|eso|aqui|actual|la que (estoy|estamos) viendo|el que (estoy|estamos) viendo)\b/;
+const DEICTICO_REGISTRO = /\b(este|esta|ese|esa|esto|eso|su|sus|aqui|actual|la que (estoy|estamos) viendo|el que (estoy|estamos) viendo)\b/;
 
 const PREGUNTA_CLIENTE = /\b(debe|deben|deuda|adeuda|saldo|pendiente|facturas?|compro|comprado|compras|facturado|telefono|celular|whatsapp|correo|email|rnc|cedula|direccion|contacto|datos|ultima|ultimas|resumen|quien es|detalle|cuanto|cliente)\b/;
 const PREGUNTA_COTIZACION = /\b(estado|total|monto|vence|vencida|vencimiento|cliente|de quien|fecha|aceptada|enviada|rechazada|detalle|resumen|cuanto|cotizacion)\b/;
@@ -841,6 +888,19 @@ export async function responderLocal(
     && !INTENCIONES.some((i) => i.re.test(t))) {
     const r = await responderLocal(`${opts.preguntaPrevia} ${texto}`, tools, { ...opts, preguntaPrevia: undefined });
     if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+  }
+
+  // Seguimiento con otra dimensión o «el anterior»: «¿y por cliente?», «¿y por método de pago?»,
+  // «¿y el mes anterior?», «dame más». Se reescribe sobre la pregunta anterior.
+  if (opts.preguntaPrevia && t.split(' ').length <= 8) {
+    const reescrita = reescribirSeguimiento(t, normalizar(opts.preguntaPrevia));
+    if (reescrita === 'DONDE') {
+      const r = await responderLocal('donde la veo', tools, { ...opts, preguntaPrevia: undefined });
+      if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+    } else if (reescrita) {
+      const r = await responderLocal(reescrita, tools, { ...opts, preguntaPrevia: undefined });
+      if (r) return { ...r, intencion: `seguimiento:${r.intencion}` };
+    }
   }
 
   // «Resumen de hoy»: varias consultas juntas, cada una opcional.
