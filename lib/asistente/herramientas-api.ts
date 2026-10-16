@@ -700,7 +700,7 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         return {
           coinciden: c.length,
           saldoTotal: pesos(c.reduce((s, x) => s + Number(x.saldoCentavos || 0), 0)),
-          enlaceLista: '/escolar/cargos',
+          enlaceLista: '/escolar/responsables?filtro=con-deuda',
           cargos: c.slice(0, limite).map((x) => ({
             enlace: x.ecfDocumentId ? enlaceFactura(x.ecfDocumentId) : undefined,
             estudiante: `${x.estudiante} ${x.estudianteApellidos}`.trim(), concepto: x.concepto, mes: x.mes, anio: x.anio,
