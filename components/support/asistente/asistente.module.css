@@ -297,8 +297,8 @@ ul.lista { list-style: disc; }
 @media (max-width: 900px) { .abrirEtiqueta { display: none; } .abrir { padding: 0 7px; } }
 @media (prefers-reduced-motion: reduce) { .abrirLatido { animation: none; } }
 
-.enlace { color: var(--primary); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
-.enlace:hover { text-decoration-thickness: 2px; }
+.enlace { color: var(--primary); font-weight: 600; text-decoration: none; }
+.enlace:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 .errorDerivar { margin: 0 0 8px; font-size: 12.5px; color: var(--destructive); text-align: center; }
 
@@ -545,17 +545,14 @@ ul.lista { list-style: disc; }
 .avisoAcciones .peligro { background: var(--destructive); border-color: var(--destructive); color: #fff; }
 @media (max-width: 420px) { .linea { grid-template-columns: minmax(0, 1fr) 48px 64px 30px; } .lineaTasa { display: none; } }
 
-.enlaceBoton { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.enlaceBoton:hover { text-decoration-thickness: 2px; }
+.enlaceBoton { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.enlaceBoton:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 /* Creación guiada: avance, opciones pulsables y resumen en tarjeta */
-.burbujaGuiada { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); border-left: 3px solid var(--primary); }
-.guiadoCab { margin: -2px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-.guiadoTitulo { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted-foreground); }
+.guiadoCab { margin: -2px 0 8px; }
+.guiadoTitulo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted-foreground); }
+.guiadoTitulo span { padding: 1px 8px; border-radius: 999px; background: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; }
 .guiadoTitulo strong { color: var(--foreground); font-size: 13px; }
-.guiadoRiel { height: 4px; margin-top: 6px; border-radius: 999px; background: var(--muted); overflow: hidden; }
-.guiadoRiel span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width .25s ease; }
-@media (prefers-reduced-motion: reduce) { .guiadoRiel span { transition: none; } }
 
 .opciones { list-style: none; margin: 6px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .opcion { width: 100%; display: flex; align-items: center; gap: 9px; text-align: left; padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font: inherit; font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s; }
@@ -573,3 +570,85 @@ ul.lista { list-style: disc; }
 .resumen dd ul { margin: 3px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 2px; }
 .resumenTotal { background: color-mix(in srgb, var(--primary) 8%, var(--card)); font-weight: 650; }
 .resumenTotal dt { color: var(--foreground); }
+
+
+/* Formularios: contenedor, encabezado y campos */
+.formulario { gap: 12px; padding: 14px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px -14px rgba(15, 23, 42, 0.25); }
+.formCab { display: flex; align-items: flex-start; gap: 10px; }
+.formIcono { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 11%, var(--card)); color: var(--primary); }
+.formTitulo { min-width: 0; }
+.formulario .formTitulo strong { font-size: 14.5px; line-height: 1.25; }
+.formulario .formTitulo p { margin: 3px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted-foreground); }
+.formAyuda:empty { display: none; }
+.formulario form { gap: 12px; }
+.campo { gap: 5px; }
+.campo label, .etiquetaCampo { font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--foreground); }
+.campo label span[aria-hidden], .etiquetaCampo span[aria-hidden] { color: var(--destructive); }
+.campo input, .campo select, .campo textarea { padding: 9px 11px; border-radius: 10px; transition: border-color .15s, box-shadow .15s; }
+.campo input::placeholder, .campo textarea::placeholder { color: color-mix(in srgb, var(--muted-foreground) 75%, transparent); }
+.campo input:hover:not(:disabled), .campo select:hover:not(:disabled), .campo textarea:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+.campo input:focus-visible, .campo select:focus-visible, .campo textarea:focus-visible { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+.campo [aria-invalid="true"]:focus-visible { border-color: var(--destructive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 16%, transparent); }
+.campoError { padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--destructive) 8%, var(--card)); }
+.elegido { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; margin: 0; padding: 2px 9px 2px 7px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #15803d; background: color-mix(in srgb, #16a34a 10%, var(--card)); }
+
+/* Líneas */
+.lineas { padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--muted) 40%, var(--card)); gap: 7px; }
+.lineaCab, .linea { grid-template-columns: minmax(0, 1fr) 54px 74px 72px 30px; }
+.lineaCab { display: grid; gap: 6px; padding: 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted-foreground); }
+.lineaCab span:nth-child(2), .lineaCab span:nth-child(3) { text-align: right; }
+.linea input, .linea select { padding: 8px 9px; border-radius: 9px; background: var(--card); transition: border-color .15s, box-shadow .15s; }
+.linea input:focus-visible, .linea select:focus-visible { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+.lineasPie { padding-top: 8px; border-top: 1px dashed var(--border); align-items: flex-end; }
+.lineaAgregar { border-radius: 9px; padding: 7px 11px; }
+.lineaAgregar:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.totales { min-width: 170px; padding: 8px 11px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); }
+.totalFinal { font-size: 14px; }
+@media (max-width: 420px) { .lineaCab { grid-template-columns: minmax(0, 1fr) 48px 64px 30px; } .lineaCab .lineaTasa { display: none; } .lineasPie { flex-direction: column; align-items: stretch; } .totales { min-width: 0; } }
+
+/* Selector con sugerencias */
+.sugeridos { border-radius: 12px; padding: 5px; box-shadow: 0 14px 30px -12px rgba(15, 23, 42, 0.4); }
+.sugeridos button { border-radius: 9px; padding: 8px 10px; }
+.sugeridos button strong { font-weight: 600; }
+
+/* Acciones */
+.formularioAcciones { padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.formularioAcciones button { min-height: 38px; padding: 8px 16px; border-radius: 10px; transition: background .15s, border-color .15s, transform .1s; }
+.formularioAcciones .primario { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18); }
+.formularioAcciones .primario:hover:not(:disabled) { filter: brightness(1.07); }
+.formularioAcciones .secundario:hover:not(:disabled) { background: var(--muted); }
+.formularioAcciones button:active:not(:disabled) { transform: translateY(1px); }
+@media (max-width: 480px) { .formularioAcciones { flex-direction: column-reverse; } .formularioAcciones button { width: 100%; } }
+.avisoForm { border-radius: 12px; }
+.avisoAcciones button { min-height: 34px; padding: 6px 12px; border-radius: 9px; }
+.previa { border-radius: 12px; }
+
+/* Cuando se crea algo */
+.exito { flex-direction: row; align-items: flex-start; gap: 12px; background: color-mix(in srgb, #16a34a 7%, var(--card)); border-color: color-mix(in srgb, #16a34a 32%, var(--border)); animation: exitoEntra .35s cubic-bezier(.2, .8, .2, 1); }
+.exitoIcono { flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: #16a34a; color: #fff; box-shadow: 0 0 0 5px color-mix(in srgb, #16a34a 16%, transparent); animation: exitoCheck .45s .08s cubic-bezier(.3, 1.6, .5, 1) both; }
+.exitoCuerpo { min-width: 0; display: flex; flex-direction: column; gap: 9px; padding-top: 2px; }
+.exitoCuerpo strong { font-size: 13.5px; line-height: 1.4; font-weight: 650; overflow-wrap: anywhere; }
+.exitoAcciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.exitoEnlace, .exitoOtro { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 12px; border-radius: 9px; font: inherit; font-size: 12.75px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .15s, transform .1s; }
+.exitoEnlace { background: var(--primary); color: var(--primary-foreground); border: 0; }
+.exitoEnlace:hover { filter: brightness(1.08); text-decoration: none; }
+.exitoOtro { background: var(--card); color: var(--foreground); border: 1px solid var(--border); }
+.exitoOtro:hover { background: var(--muted); }
+.exitoEnlace:focus-visible, .exitoOtro:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@keyframes exitoEntra { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes exitoCheck { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .exito, .exitoIcono { animation: none; } }
+
+/* Líneas en dos renglones: el panel es angosto, así que el nombre ocupa todo el ancho y debajo van cantidad, precio e ITBIS */
+.lineaCab { display: none; }
+.linea { grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr) 34px; grid-template-areas: "nombre nombre nombre quitar" "cant precio tasa tasa"; row-gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 11px; background: var(--card); }
+.linea > :nth-child(1) { grid-area: nombre; }
+.linea > :nth-child(2) { grid-area: cant; }
+.linea > :nth-child(3) { grid-area: precio; }
+.linea > :nth-child(4) { grid-area: tasa; }
+.linea > :nth-child(5) { grid-area: quitar; align-self: start; height: 36px; }
+.linea .lineaNum { text-align: left; }
+.linea .lineaTasa { display: block; }
+@media (max-width: 420px) { .linea { grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr) 34px; } .lineaTasa { display: block; } }
+.lineas { padding: 0; border: 0; background: none; }
+.lineasPie { border-top: 0; padding-top: 2px; }

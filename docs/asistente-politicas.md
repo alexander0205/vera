@@ -255,3 +255,7 @@ Sin cambio, por diseño: los montos y permisos los decide la API al enviar el fo
 - **«Cambiar algo»** desde el resumen: elige el dato (cliente, líneas, cobro, nota, motivo…), se rehace solo ese grupo de preguntas y se vuelve al resumen (`EDITABLES`, `conHistorial`).
 - **Más natural**: «3 uniformes» trae la cantidad; «una docena»; «quitar» borra la última línea; fechas «hoy», «ayer», «en 30 días», «15/10/2026», «31 de diciembre» (`leerFecha`).
 - **Seguridad del estado ampliado**: `h`, `q`, `c` y `r` se reconstruyen campo por campo (historial de un solo nivel, máx. 6; la pregunta guardada sin marcado; botones ≤ 40 caracteres) y siguen dentro de la firma HMAC.
+
+### Interfaz de formularios y de «listo» (2026-10-16)
+
+Sin subrayados ni barras azules en los mensajes (los enlaces se subrayan solo al pasar el cursor); formularios con encabezado con ícono, campos con foco suave, líneas en dos renglones (el panel es angosto), y una tarjeta de éxito con el enlace a lo creado y «Crear otro» para cliente, producto, cotización, factura y cobro. Solo estilos y presentación: ningún cambio en lo que se envía ni en las validaciones.

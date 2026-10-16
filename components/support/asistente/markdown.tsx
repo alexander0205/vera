@@ -204,7 +204,8 @@ export function Markdown({ texto, clave, alElegir }: { texto: string; clave?: st
         continue;
       }
       if (fx) {
-        bloques.push(<FormularioChat key={`b${n}`} def={fx.def} inicial={fx.valores} clave={clave ? `${clave}:${n++}` : undefined} />);
+        const k = n++;
+        bloques.push(<FormularioChat key={`b${k}`} def={fx.def} inicial={fx.valores} clave={clave ? `${clave}:${k}` : undefined} />);
       } else if (g) {
         bloques.push(<GraficoVista key={`b${n++}`} g={g} />);
       } else if (tj) {

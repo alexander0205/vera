@@ -55,10 +55,7 @@ function CabeceraPaso({ e }: { e: PasoGuiado }) {
   if (!p) return null;
   return (
     <div className={s.guiadoCab}>
-      <div className={s.guiadoTitulo}><strong>{p.titulo}</strong><span>Paso {p.n} de {p.total}</span></div>
-      <div className={s.guiadoRiel} role="progressbar" aria-label={`${p.titulo}: paso ${p.n} de ${p.total}`} aria-valuemin={1} aria-valuemax={p.total} aria-valuenow={p.n}>
-        <span style={{ width: `${Math.round((p.n / p.total) * 100)}%` }} />
-      </div>
+      <div className={s.guiadoTitulo}><strong>{p.titulo}</strong><span aria-label={`Paso ${p.n} de ${p.total}`}>{p.n}/{p.total}</span></div>
     </div>
   );
 }

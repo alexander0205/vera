@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Ban, Check, FileMinus, FilePlus, FileSpreadsheet, FileText, Loader2, Package, Pencil, Plus, Receipt, Repeat, Trash2, Upload, UserPlus, Wallet } from 'lucide-react';
 import {
   armarPayload, endpointDe, esEnlaceInterno, esNota, MAX_ARCHIVOS_GASTO, guardarLineas, leerLineas, lineaVacia, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
   resumenDeAnulacion, resumenDeConversion, resumenDeNota, totalesDeLineas, validarFormulario,
@@ -33,6 +33,13 @@ type Fase =
 
 const MAX_ARCHIVO = 8 * 1024 * 1024;
 
+/** Un ícono por trámite, para reconocer de un vistazo qué formulario es. */
+const ICONO_DE: Record<string, typeof FileText> = {
+  cliente: UserPlus, producto: Package, cotizacion: FileText, factura: Receipt, pago: Wallet, gasto: Upload, anulacion: Ban,
+  notacredito: FileMinus, notadebito: FilePlus, borrador: Pencil, convertir: Repeat, 'importar-productos': FileSpreadsheet, 'importar-clientes': FileSpreadsheet,
+};
+const CREA_OTRO = ['cliente', 'producto', 'cotizacion', 'factura', 'pago'];
+
 /** Lo que ya se hizo con este formulario, para que recargar la página no lo muestre vacío otra vez. */
 type Hecho = { mensaje: string; enlace: string; etiqueta?: string };
 
@@ -46,6 +53,10 @@ function leerHecho(clave: string | undefined): Hecho | null {
       ? { mensaje: d.mensaje.slice(0, 300), enlace: d.enlace, ...(typeof d.etiqueta === 'string' ? { etiqueta: d.etiqueta.slice(0, 60) } : {}) }
       : null;
   } catch { return null; }
+}
+function borrarHecho(clave: string | undefined) {
+  if (!clave) return;
+  try { window.localStorage.removeItem(`asistente-form:${clave}`); } catch { /* sin almacenamiento: no pasa nada */ }
 }
 function guardarHecho(clave: string | undefined, h: Hecho) {
   if (!clave) return;
@@ -129,8 +140,8 @@ function SelectorCliente({ id, valores, poner, deshabilitado }: {
         }}
       />
       {elegido && (
-        <p className={s.campoAyuda}>
-          Cliente registrado{valores.clienteRnc ? ` · ${valores.clienteRnc}` : ' · sin RNC'}
+        <p className={s.elegido}>
+          <Check size={13} aria-hidden /> Cliente registrado{valores.clienteRnc ? ` · ${valores.clienteRnc}` : ' · sin RNC'}
         </p>
       )}
       {abierto && !elegido && (items.length > 0 || cargando) && (
@@ -246,6 +257,9 @@ function EditorLineas({ id, valor, cambiar, deshabilitado }: {
 
   return (
     <div className={s.lineas}>
+      <div className={s.lineaCab} aria-hidden>
+        <span>Producto o servicio</span><span>Cant.</span><span>Precio</span><span className={s.lineaTasa}>ITBIS</span><span />
+      </div>
       {filas.map((l, i) => (
         <div className={s.linea} key={i}>
           <div className={s.lineaNombre}>
@@ -366,12 +380,21 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
   const soporte = useSoporte();
   // En pantallas angostas el panel tapa la pantalla a la que va el enlace: se cierra al abrirla.
   const alAbrirEnlace = () => { if (typeof window !== 'undefined' && window.innerWidth < 1100) soporte?.cerrar(); };
-  const [valores, setValores] = useState<Valores>(() => ({
+  const porDefecto = (): Valores => ({
     ...(def.id === 'pago' ? { fechaPago: hoy(), metodo: 'efectivo' } : {}),
     ...(def.id === 'factura' ? { tipoEcf: 'sin-ncf' } : {}),
     ...(def.id === 'anulacion' ? { tipoAnulacion: '04' } : {}),
-    ...inicial,
-  }));
+  });
+  const [valores, setValores] = useState<Valores>(() => ({ ...porDefecto(), ...inicial }));
+  // Un formulario nuevo y vacío, para registrar otro igual sin volver a pedirlo.
+  const [numero, setNumero] = useState(0);
+  function crearOtro() {
+    borrarHecho(clave);
+    setValores(porDefecto());
+    setErrores({});
+    setNumero((n) => n + 1);
+    setFase({ t: 'editando' });
+  }
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [fase, setFase] = useState<Fase>(() => {
     const hecho = typeof window !== 'undefined' ? leerHecho(clave) : null;
@@ -587,11 +610,20 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
 
   if (fase.t === 'listo') {
     return (
-      <section className={`${s.formulario} ${s.formularioListo}`} aria-live="polite">
-        <CheckCircle2 size={18} aria-hidden />
-        <div>
+      <section className={`${s.formulario} ${s.exito}`} aria-live="polite" aria-label={`${def.titulo}: listo`}>
+        <span className={s.exitoIcono} aria-hidden><Check size={18} strokeWidth={3} /></span>
+        <div className={s.exitoCuerpo}>
           <strong>{fase.mensaje}</strong>
-          <Link href={fase.enlace} onClick={alAbrirEnlace}>{fase.etiqueta ?? 'Ver en Zero'} →</Link>
+          <div className={s.exitoAcciones}>
+            <Link href={fase.enlace} onClick={alAbrirEnlace} className={s.exitoEnlace}>
+              {fase.etiqueta ?? 'Ver en Zero'} <ArrowRight size={14} aria-hidden />
+            </Link>
+            {CREA_OTRO.includes(def.id) && (
+              <button type="button" className={s.exitoOtro} onClick={crearOtro}>
+                <Plus size={14} aria-hidden /> Crear otro
+              </button>
+            )}
+          </div>
         </div>
       </section>
     );
@@ -655,16 +687,21 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     || (def.id === 'borrador' && ['31', '32', '44', '45', '46'].includes(valores.tipoEcf ?? ''));
 
   return (
-    <section className={s.formulario} aria-label={def.titulo}>
-      <header>
-        <strong>{def.titulo}</strong>
-        <p>{def.descripcion}</p>
+    <section className={s.formulario} aria-label={def.titulo} key={numero}>
+      <header className={s.formCab}>
+        <span className={s.formIcono} aria-hidden>{(() => { const Icono = ICONO_DE[def.id] ?? FileText; return <Icono size={17} />; })()}</span>
+        <div className={s.formTitulo}>
+          <strong>{def.titulo}</strong>
+          <p>{def.descripcion}</p>
+        </div>
+      </header>
+      <div className={s.formAyuda}>
         {fase.t === 'editando' && ['cliente', 'producto', 'cotizacion', 'factura', 'pago'].includes(def.id) && !inicial.lineas && !inicial.clienteId && !inicial.documentoId && !inicial.razonSocial && (
           <button type="button" className={s.enlaceBoton} onClick={() => window.dispatchEvent(new CustomEvent('asistente:enviar', { detail: `guíame paso a paso para crear ${FRASE_GUIADA[def.id] ?? 'esto'}` }))}>
             Prefiero que me preguntes paso a paso
           </button>
         )}
-      </header>
+      </div>
 
       <form
         noValidate
