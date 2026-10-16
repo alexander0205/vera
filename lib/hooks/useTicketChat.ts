@@ -67,6 +67,9 @@ export function useTicketChat(active: boolean) {
   const [busyStage, setBusyStage] = useState<'enviando' | 'capturando' | 'subiendo' | null>(null);
   const loading = busyStage !== null;
   const [status, setStatus] = useState<string | null>(null);
+  // Llegó la primera respuesta del servidor: hasta entonces no se sabe si hay
+  // conversación, y enseñar la bienvenida «sin mensajes» sería mentir un rato.
+  const [historialCargado, setHistorialCargado] = useState(false);
   const [onHold, setOnHold] = useState(false);
   const [agentTyping, setAgentTyping] = useState(false);
   const [espera, setEspera] = useState<Espera | null>(null);
@@ -158,6 +161,7 @@ export function useTicketChat(active: boolean) {
       }
       setEspera(data.espera);
       setCall(data.call ?? null);
+      setHistorialCargado(true);
     } catch {
       // Fetch de red caído o timeout — el próximo tick reintenta solo, no
       // hace falta propagar el error.
@@ -358,6 +362,7 @@ export function useTicketChat(active: boolean) {
   return {
     messages,
     pending,
+    historialCargado,
     input,
     loading,
     busyStage,

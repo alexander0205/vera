@@ -15,6 +15,9 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { Check, Clock, Loader2, Plus, X } from 'lucide-react';
+import { RangoFechas } from '@/components/reportes/rango-fechas';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Registro {
   id: number;
@@ -48,6 +51,23 @@ const BADGE: Record<Registro['estado'], { label: string; clase: string }> = {
   rechazada: { label: 'Rechazada', clase: 'border-red-400 text-red-700' },
 };
 
+/** Imprimir / PDF / Excel de las horas de la pestaña y el rango. */
+const EXPORTAR: ExportTabla<Registro> = {
+  titulo: 'Horas trabajadas',
+  archivo: 'horas-trabajadas',
+  columnas: [
+    { titulo: 'Empleado', valor: r => r.empleado, ancho: 2 },
+    { titulo: 'Fecha', valor: r => fmtFechaCorta(r.fecha), ancho: 0.8 },
+    { titulo: 'Horas', valor: r => r.horas, tipo: 'numero', total: true, ancho: 0.6 },
+    { titulo: 'Nocturnas', valor: r => r.horasNocturnas || null, tipo: 'numero', total: true, ancho: 0.7 },
+    { titulo: 'Feriado', valor: r => (r.feriado ? 'Sí' : null), ancho: 0.6 },
+    { titulo: 'Estado', valor: r => BADGE[r.estado].label, sub: r => r.motivoRechazo, ancho: 1 },
+    { titulo: 'Nota', valor: r => r.nota, ancho: 1.6 },
+  ],
+};
+
+const fechaCorta = (iso: string) => iso.split('-').reverse().join('/');
+
 /**
  * Horas de quien cobra por hora. Lo que sube cada empleado por su enlace llega
  * pendiente; aquí se aprueba o se rechaza (con motivo, que el empleado ve). La
@@ -57,7 +77,11 @@ export default function HorasNominaClient() {
   const { can } = usePermissions();
   const puedeRevisar = can('nomina:correr');
   const [estado, setEstado] = useState<Registro['estado']>('pendiente');
-  const { data, isLoading, mutate } = useSWR<{ horas: Registro[] }>(`/api/nomina/horas?estado=${estado}`, fetcher);
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const { data, isLoading, mutate } = useSWR<{ horas: Registro[] }>(
+    `/api/nomina/horas?estado=${estado}${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`, fetcher,
+  );
   const { data: dEmpleados } = useSWR<{ empleados: EmpleadoLista[] }>('/api/nomina/empleados', fetcher);
   const porHoras = (dEmpleados?.empleados ?? []).filter((e) => e.jornada === 'por_horas' && e.estado === 'activo');
 
@@ -132,11 +156,22 @@ export default function HorasNominaClient() {
             Lo que suben los empleados que cobran por hora. La nómina paga solo las horas aprobadas.
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <ExportarListado
+          deshabilitado={isLoading || registros.length === 0}
+          testId="exportar-horas"
+          armar={() => armarEnvioTabla(EXPORTAR, registros, [
+            ESTADOS.find((e) => e.clave === estado)?.label ?? estado,
+            desde && hasta ? `Del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
+              : desde ? `Desde el ${fechaCorta(desde)}` : hasta ? `Hasta el ${fechaCorta(hasta)}` : 'Todas las fechas',
+          ].join(' · '))}
+        />
         {puedeRevisar && (
           <Button onClick={() => setNuevo({ empleadoId: '', fecha: hoyRD(), horas: '', horasNocturnas: '', feriado: false, nota: '' })} className="gap-1.5">
             <Plus className="h-4 w-4" /> Registrar horas
           </Button>
         )}
+        </div>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -148,6 +183,7 @@ export default function HorasNominaClient() {
             </Button>
           ))}
         </div>
+        <RangoFechas desde={desde} hasta={hasta} onCambiar={(d, h) => { setDesde(d); setHasta(h); setSel(new Set()); }} />
         {puedeRevisar && estado === 'pendiente' && sel.size > 0 && (
           <div className="flex gap-2">
             <Button size="sm" onClick={() => revisar('aprobada', [...sel])} disabled={trabajando} className="gap-1.5">

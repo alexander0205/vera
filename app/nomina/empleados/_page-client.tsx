@@ -18,11 +18,32 @@ import {
   Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, HeartPulse, Clock, Copy,
 } from 'lucide-react';
 import {
-  Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA,
+  Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA, LABEL_CONTRATO,
 } from './shared';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 /** Cobra por hora: jornada por horas y tarifa cargada. */
 const cobraPorHora = (e: Empleado) => e.jornada === 'por_horas' && (e.tarifaHoraCents ?? 0) > 0;
+
+
+const fechaEmp = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
+
+/** Imprimir / PDF / Excel del directorio de empleados. Sin filtro de fecha: es un padrón. */
+const EXPORTAR: ExportTabla<Empleado> = {
+  titulo: 'Empleados',
+  archivo: 'empleados',
+  tachada: e => !esActivo(e.estado),
+  columnas: [
+    { titulo: 'Empleado', valor: e => nombreCompleto(e), sub: e => e.cedula, ancho: 2 },
+    { titulo: 'Cargo', valor: e => e.cargo, ancho: 1.3 },
+    { titulo: 'Contrato', valor: e => LABEL_CONTRATO[e.tipoContrato] ?? e.tipoContrato, ancho: 1 },
+    { titulo: 'Frecuencia', valor: e => LABEL_FRECUENCIA[e.frecuenciaPago] ?? e.frecuenciaPago, ancho: 0.9 },
+    { titulo: 'Ingreso', valor: e => (e.fechaIngreso ? fechaEmp(e.fechaIngreso) : null), sub: e => (e.fechaSalida ? `Salida ${fechaEmp(e.fechaSalida)}` : null), ancho: 0.9 },
+    { titulo: 'AFP / ARS', valor: e => [e.afp, e.ars].filter(Boolean).join(' / ') || null, ancho: 1.2 },
+    { titulo: 'Salario base', valor: e => e.salarioBaseCents || null, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
 
 export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar?: boolean }) {
   const router = useRouter();
@@ -129,6 +150,8 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
             El directorio del personal. Sobre estas fichas corren las nóminas.
           </p>
         </div>
+        <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, filtrados, busca.trim() ? `Búsqueda: «${busca.trim()}»` : 'Todos los empleados')}
+          deshabilitado={isLoading || filtrados.length === 0} testId="exportar-empleados" />
         {puedeGestionar && (
           <div className="flex flex-wrap gap-2">
             {tieneEscolar && (

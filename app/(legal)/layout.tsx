@@ -13,6 +13,8 @@
 import Link from 'next/link';
 import { LogoZero } from '@/components/marca-zero';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { CapturaOrigen } from '@/components/analytics/captura-origen';
+import { MicrosoftClarity } from '@/components/analytics/microsoft-clarity';
 
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -40,6 +42,8 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       </footer>
 
       <GoogleAnalytics />
+      <CapturaOrigen />
+      <MicrosoftClarity />
     </div>
   );
 }

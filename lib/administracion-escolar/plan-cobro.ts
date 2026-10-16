@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarConceptoCuotas, adminEscolarConceptosPago } from '@/lib/db/schema';
 import { vencimientoDe } from './calendario';
+import { montosPorCuota, repartir } from './repartir';
 import { resolverTarifas, type ContextoTarifa, type OrigenTarifa } from './tarifas';
 
 /**
@@ -83,21 +84,9 @@ export interface ReglasCobro {
   avisoSms: boolean;
 }
 
-/** Reparte un monto entre cuotas sin perder ni un centavo por redondeo. */
-function repartir(
-  montoCentavos: number,
-  pesos: number[],
-): number[] {
-  const suma = pesos.reduce((a, b) => a + b, 0);
-  if (suma <= 0) return pesos.map(() => 0);
-  const partes = pesos.map((p) => Math.floor((montoCentavos * p) / suma));
-  // Lo que se perdió al truncar se le da a la primera cuota, en vez de dejar
-  // que el total de las cuotas no cuadre con la tarifa. Un colegio que cobra
-  // 45.000 en tres partes tiene que ver 15.000 tres veces, no 14.999.
-  const resto = montoCentavos - partes.reduce((a, b) => a + b, 0);
-  if (partes.length > 0) partes[0] += resto;
-  return partes;
-}
+// El reparto vive en un módulo sin base de datos para que el navegador use el
+// mismo cálculo; se reexporta para no mover a quien ya lo importa de aquí.
+export { repartir };
 
 /**
  * Arma el plan de cobro de un estudiante.
@@ -186,12 +175,12 @@ export async function armarPlanDeCobro(
      *
      * En los demás conceptos es el TOTAL a repartir: "inscripción 3.500 en dos
      * pagos" son 1.750 y 1.750, no 3.500 dos veces.
+     *
+     * La regla vive en `montosPorCuota` para que el diálogo de Tarifas diga
+     * los mismos números que luego se cobran.
      */
-    const porCuota = concepto.tipo === 'mensualidad';
-
-    const montos = porCuota
-      ? plantilla.map(() => tarifa.montoCentavos)
-      : repartir(tarifa.montoCentavos, plantilla.map((c) => c.porcentajeMilesimas));
+    const montos = montosPorCuota(
+      concepto.tipo, tarifa.montoCentavos, plantilla.map((c) => c.porcentajeMilesimas));
 
     const detalle: CuotaPlan[] = plantilla.map((c, i) => {
       const fechaEmision = String(c.fechaEmision);
@@ -199,7 +188,10 @@ export async function armarPlanDeCobro(
         cuotaId: c.id,
         numero: c.numero,
         etiqueta: c.etiqueta,
-        mes: c.mes,
+        // Una fecha de emisión puede editarse después de generar el calendario.
+        // La ficha y el devengo deben poner esa cuota en el mismo mes.
+        mes: c.mes == null && suyas.length <= 1
+          ? null : Number(fechaEmision.slice(5, 7)),
         fechaEmision,
         fechaVencimiento: vencimientoDe(fechaEmision, concepto.diasParaPago),
         montoCentavos: montos[i],

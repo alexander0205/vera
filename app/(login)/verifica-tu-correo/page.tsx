@@ -14,6 +14,7 @@
  * veces lo mismo.
  */
 
+import { EventoAlLlegar } from '@/components/analytics/evento-al-llegar';
 import { redirect } from 'next/navigation';
 import { MailCheck } from 'lucide-react';
 import { IsotipoZero } from '@/components/marca-zero';
@@ -32,6 +33,7 @@ export default async function VerificaTuCorreoPage() {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-5 py-10">
+      <EventoAlLlegar evento="sign_up" param="alta" />
       <div className="w-full max-w-[440px]">
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
           <IsotipoZero lado={56} />

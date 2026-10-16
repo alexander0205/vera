@@ -35,6 +35,7 @@ export async function cargarPlan(teamId: number, matriculaId: number): Promise<P
       becaValor: adminEscolarMatriculas.becaValor,
       conceptosIds: adminEscolarMatriculas.conceptosIds,
       estado: adminEscolarMatriculas.estado,
+      conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
     })
     .from(adminEscolarMatriculas)
     .where(and(
@@ -54,7 +55,7 @@ export async function cargarPlan(teamId: number, matriculaId: number): Promise<P
   const ctx = await contextoDeSeccion(teamId, matricula.periodoId, matricula.cursoId, {
     tipo: matricula.becaTipo,
     valor: matricula.becaValor,
-  }, matricula.estudianteId);
+  }, matricula.estudianteId, matricula.conceptoMensualidadId);
   if (!ctx) return { ...base, lineas: [], devenga: false };
 
   const desde = String(matricula.fechaInscripcion ?? new Date().toISOString().slice(0, 10));

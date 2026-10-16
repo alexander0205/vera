@@ -187,7 +187,9 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   // A la sala de espera del correo. De ahí, cuando verifique, sale al
   // onboarding — no a la parrilla de ocho planes a ver si adivina.
-  redirect('/verifica-tu-correo');
+  // `?alta=correo` es la marca con la que esa pantalla le avisa a Analytics de
+  // la cuenta nueva (una vez: luego la quita de la barra).
+  redirect('/verifica-tu-correo?alta=correo');
 });
 
 export async function signOut() {

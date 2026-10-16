@@ -35,6 +35,7 @@ import { systemLogs } from '@/lib/db/schema';
 import { logError, logWarn } from '@/lib/logger';
 import { enviarAlertaEmail } from '@/lib/email';
 import { enviarAlertaSlack } from '@/lib/slack';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -119,7 +120,7 @@ function informe(revisiones: Revision[]): string {
 }
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(req.headers.get('authorization'))) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

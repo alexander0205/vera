@@ -14,6 +14,8 @@
 import type { Metadata } from 'next';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { CapturaOrigen } from '@/components/analytics/captura-origen';
+import { MicrosoftClarity } from '@/components/analytics/microsoft-clarity';
 import { CabeceraMarketing } from './_cabecera';
 import { PieMarketing } from './_pie';
 import { BarraPrueba } from './_barra-prueba';
@@ -103,6 +105,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <PieMarketing />
       <BarraPrueba />
       <GoogleAnalytics />
+      <CapturaOrigen />
+      <MicrosoftClarity />
     </div>
   );
 }

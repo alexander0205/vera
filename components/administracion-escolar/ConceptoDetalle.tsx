@@ -13,6 +13,10 @@ import {
   type Frecuencia,
 } from '@/lib/administracion-escolar/calendario';
 import { CANALES_DEL_AVISO, type Aviso, type Canal } from '@/lib/administracion-escolar/ciclo-cobro';
+import {
+  ETIQUETA_TIPO, PISTA_TIPO, TIPOS_DE_CONCEPTO, becaPorDefecto, esTipoDeConcepto,
+  type TipoDeConcepto,
+} from '@/lib/administracion-escolar/tipo-concepto';
 import { moduleUrl } from '@/lib/config/modules';
 import { CalendarioCuotas, type ApiCalendario } from './CalendarioCuotas';
 
@@ -282,6 +286,23 @@ export function ConceptoDetalle({
   const editar = <K extends keyof Concepto>(campo: K, valor: Concepto[K]) =>
     setBorrador((b) => (b ? { ...b, [campo]: valor } : b));
 
+  /**
+   * El tipo guardado, o «Otro cobro» si lo que hay en la fila no es ninguno de
+   * los cinco. No se inventa nada en la base: solo evita que el desplegable
+   * salga en blanco —y sin opción marcada, el primer guardado convertiría ese
+   * concepto en colegiatura sin que nadie lo pidiera.
+   */
+  const tipoDelBorrador: TipoDeConcepto = esTipoDeConcepto(borrador?.tipo) ? borrador.tipo : 'otro';
+
+  /**
+   * Cambiar qué es el cobro arrastra la beca, que es su consecuencia: la beca
+   * rebaja la colegiatura y no el uniforme ni la excursión. Arrastrarla aquí y
+   * no dejarla donde estaba —colgando del interruptor de recurrencia— es lo
+   * que hace que una evaluación trimestral deje de nacer descontando beca.
+   */
+  const cambiarTipo = (tipo: TipoDeConcepto) =>
+    setBorrador((b) => (b ? { ...b, tipo, admiteBeca: becaPorDefecto(tipo) } : b));
+
   // Estado de los canales que dependen de una cuenta enlazada. Solo hace falta
   // saber si se pueden ofrecer, no reconciliar nada.
   const { data: whatsapp } = useSWR<EstadoWhatsApp>('/api/whatsapp/estado', traerEstado);
@@ -391,11 +412,28 @@ export function ConceptoDetalle({
               <Label>Nombre</Label>
               <Input value={borrador.nombre} onChange={(e) => editar('nombre', e.target.value)} />
             </div>
+            {/* Qué ES el cobro, al lado del nombre y antes de la recurrencia.
+                Va aquí porque es la pregunta que de verdad abre el paso 1: lo
+                que se elija cambia cómo lo trata la facturación del mes, la
+                beca y el plan del año. Antes no se preguntaba en ninguna
+                pantalla —lo escribía a escondidas el interruptor de abajo— y
+                todo lo que se repetía durante el año acababa contando como
+                colegiatura. */}
+            <div className="w-full min-w-0 space-y-1.5 sm:w-56">
+              <Label htmlFor="concepto-tipo">¿Qué es este cobro?</Label>
+              <NativeSelect id="concepto-tipo" value={tipoDelBorrador}
+                onChange={(e) => cambiarTipo(e.target.value as TipoDeConcepto)}>
+                {TIPOS_DE_CONCEPTO.map((t) => (
+                  <option key={t} value={t}>{ETIQUETA_TIPO[t]}</option>
+                ))}
+              </NativeSelect>
+            </div>
             <Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
               className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
+          <p className="mt-1.5 text-xs text-gray-500">{PISTA_TIPO[tipoDelBorrador]}</p>
 
           {/* La recurrencia es un sí/no antes de un cada-cuánto, y no una
               opción más de la lista, porque son dos preguntas distintas: si el
@@ -409,12 +447,11 @@ export function ConceptoDetalle({
                 onCambiar={(v) => setBorrador((b) => b && ({
                   ...b,
                   frecuencia: v ? 'mensual' : 'unico',
-                  tipo: v ? 'mensualidad' : (b.tipo === 'mensualidad' ? 'otro' : b.tipo),
-                  // La beca escolar rebaja lo que se paga a lo largo del año;
-                  // la inscripción y los materiales se cobran completos. Se
-                  // deriva en vez de preguntarse: era una casilla que nadie
-                  // entendía.
-                  admiteBeca: v,
+                  // Este interruptor ya NO decide qué es el cobro. Lo hacía
+                  // —encenderlo lo pasaba a `mensualidad` y con él la beca—, y
+                  // por eso una evaluación en tres pagos quedaba guardada como
+                  // colegiatura: era la única forma de darle calendario. Qué
+                  // es se pregunta arriba; esto solo dice si se repite.
                   // Un cobro de una sola vez no tiene nada que adelantar.
                   descuentoAdelantoPct: v ? b.descuentoAdelantoPct : null,
                 }))} />
@@ -427,6 +464,28 @@ export function ConceptoDetalle({
                 </span>
               </span>
             </div>
+
+            {/* Qué significa el número de Tarifas cuando el cobro se repite.
+                Lo decide el tipo (`armarPlanDeCobro`): la colegiatura cobra la
+                tarifa entera en cada cuota; todo lo demás la toma como el total
+                del año y la reparte. Desde que el interruptor dejó de marcar
+                colegiatura, un concepto nuevo que se repite nace «Otro cobro»:
+                si era la colegiatura y nadie tocó el desplegable, 2.800 al mes
+                pasaban a 280 en silencio. Por eso, con «Otro cobro», ámbar. */}
+            {periodico && tipoDelBorrador !== 'mensualidad' && (
+              <div className="px-3 py-2.5">
+                <p className={tipoDelBorrador === 'otro'
+                  ? 'rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800'
+                  : 'text-xs text-gray-500'}>
+                  La tarifa que pongas en Tarifas es el <strong>total del año</strong> y se reparte entre
+                  las cuotas: con 2,800 y 10 cuotas, cada una sale de 280.
+                  {tipoDelBorrador === 'otro' && (
+                    <> Si es la colegiatura que se paga cada mes, elige <strong>«Colegiatura»</strong> en
+                    «¿Qué es este cobro?»: así cada cuota cobra la tarifa entera.</>
+                  )}
+                </p>
+              </div>
+            )}
 
             {periodico && (
               <div className="grid gap-3 px-3 py-2.5 sm:grid-cols-2">
@@ -470,6 +529,7 @@ export function ConceptoDetalle({
             <Paso n={paso.calendario} titulo="El calendario que genera" />
             <CalendarioCuotas conceptoId={borrador.id} nombre={borrador.nombre}
               frecuencia={borrador.frecuencia} api={calendario}
+              porCuota={tipoDelBorrador === 'mensualidad'}
               diaEmision={diaEmision} diasParaPago={borrador.diasParaPago} />
           </div>
         )}

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, Plus, Pencil, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { ImportModal } from '@/components/import-modal';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import MuiButton from '@mui/material/Button';
@@ -24,6 +24,19 @@ interface Cliente {
   direccion: string | null;
   descripcion: string | null;
 }
+
+/** Imprimir / PDF / Excel del directorio, como lo filtra la tabla. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Cliente> = {
+  titulo: 'Clientes',
+  archivo: 'clientes',
+  columnas: [
+    { titulo: 'Nombre / razón social', valor: c => c.razonSocial, sub: c => c.descripcion, ancho: 2.2 },
+    { titulo: 'RNC / Cédula', valor: c => c.rnc, ancho: 1 },
+    { titulo: 'Correo', valor: c => c.email, ancho: 1.6 },
+    { titulo: 'Teléfono', valor: c => c.telefono, ancho: 1 },
+    { titulo: 'Dirección', valor: c => c.direccion, ancho: 2 },
+  ],
+};
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -145,13 +158,14 @@ export default function ClientesPage() {
         filters={[{ type: 'search', id: 'q', placeholder: 'Buscar por nombre, RNC o email…' }]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         rowActions={rowActions}
         emptyState={{
           icon: Users,
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin clientes registrados',
           hint: search ? undefined : 'Crea tu primer cliente o aparecerán automáticamente al emitir facturas',
           cta: search ? undefined : (
-            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo} data-tour="cliente-nuevo"
               startIcon={<Plus style={{ width: 14, height: 14 }} />}
               sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
               Nuevo cliente
@@ -165,7 +179,7 @@ export default function ClientesPage() {
               sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
               Importar CSV
             </MuiButton>
-            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo} data-tour="cliente-nuevo"
               startIcon={<Plus style={{ width: 14, height: 14 }} />}
               sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
               Nuevo cliente

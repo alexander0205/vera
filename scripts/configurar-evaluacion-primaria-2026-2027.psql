@@ -1,0 +1,197 @@
+-- Configuración puntual de INFANTIL MI CASITA II SRL, año escolar 2026-2027.
+-- Cada evaluacion cuesta RD$200. El plan reparte el total anual:
+-- Inicial RD$600 / 3; Primaria RD$800 / 4. No asigna matrículas.
+--
+-- Ese reparto solo ocurre si el concepto NO es colegiatura: con
+-- tipo='mensualidad', `armarPlanDeCobro` cobra la tarifa ENTERA en cada cuota
+-- (3 x 600 en vez de 3 x 200). En prod «Evaluacion Inicial» quedó como
+-- mensualidad porque el interruptor de recurrencia lo marcaba solo; por eso
+-- este guion pasa los dos conceptos a 'actividad' antes de tocar tarifas.
+BEGIN;
+
+DO $config$
+DECLARE
+  v_team_id integer;
+  v_periodo_id integer;
+  v_primaria_id integer;
+  v_inicial_id integer;
+  v_primaria_concepto_id integer;
+  v_precios_movidos integer;
+BEGIN
+  SELECT id INTO STRICT v_team_id
+  FROM teams WHERE name = 'INFANTIL MI CASITA II SRL'
+    AND EXISTS (SELECT 1 FROM admin_escolar_periodos p
+      WHERE p.team_id = teams.id AND p.nombre = '2026-2027' AND p.activo);
+
+  SELECT id INTO STRICT v_periodo_id
+  FROM admin_escolar_periodos
+  WHERE team_id = v_team_id AND nombre = '2026-2027' AND activo;
+
+  SELECT id INTO STRICT v_primaria_id
+  FROM admin_escolar_servicios
+  WHERE team_id = v_team_id AND nombre = 'PRIMARIA' AND tanda = 'MATUTINA';
+
+  SELECT id INTO STRICT v_inicial_id
+  FROM admin_escolar_conceptos_pago
+  WHERE team_id = v_team_id AND nombre = 'Evaluacion Inicial' AND activo;
+
+  -- No trasladar precio si alguna matrícula de Primaria ya usa el concepto
+  -- antiguo: perdería su plan de pagos al cambiar la tarifa.
+  IF EXISTS (
+    SELECT 1 FROM admin_escolar_matriculas m
+    JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
+    JOIN admin_escolar_grados g ON g.id = cu.grado_id
+    WHERE m.team_id = v_team_id AND m.periodo_id = v_periodo_id
+      AND g.servicio_id = v_primaria_id
+      AND m.conceptos_ids @> jsonb_build_array(v_inicial_id)
+  ) THEN
+    RAISE EXCEPTION 'Hay alumnos de Primaria asociados a Evaluacion Inicial; revisar antes de mover la tarifa';
+  END IF;
+
+  SELECT id INTO v_primaria_concepto_id
+  FROM admin_escolar_conceptos_pago
+  WHERE team_id = v_team_id AND nombre = 'Evaluacion Primaria';
+
+  IF v_primaria_concepto_id IS NULL THEN
+    INSERT INTO admin_escolar_conceptos_pago (
+      team_id, nombre, tipo, frecuencia, aplica_por_defecto, admite_beca,
+      cobra_mora, dia_emision, dias_para_pago, avisos_activos,
+      aviso_dia_emision, aviso_antes_mora_dias, aviso_dia_vencimiento,
+      mora_dias_gracia, aviso_correo, aviso_whatsapp, aviso_sms,
+      descuento_adelanto_pct, product_id, activo, orden
+    )
+    -- Tipo y beca NO se copian: el origen puede estar como colegiatura.
+    SELECT team_id, 'Evaluacion Primaria', 'actividad', frecuencia,
+      aplica_por_defecto, false, cobra_mora, dia_emision,
+      dias_para_pago, avisos_activos, aviso_dia_emision,
+      aviso_antes_mora_dias, aviso_dia_vencimiento, mora_dias_gracia,
+      aviso_correo, aviso_whatsapp, aviso_sms, descuento_adelanto_pct,
+      product_id, activo, orden + 1
+    FROM admin_escolar_conceptos_pago WHERE id = v_inicial_id
+    RETURNING id INTO v_primaria_concepto_id;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM admin_escolar_concepto_precios
+    WHERE team_id = v_team_id AND concepto_id = v_inicial_id
+      AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+      AND objetivo_id = v_primaria_id
+  ) THEN
+    IF EXISTS (
+      SELECT 1 FROM admin_escolar_concepto_precios
+      WHERE team_id = v_team_id AND concepto_id = v_primaria_concepto_id
+        AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+        AND objetivo_id = v_primaria_id
+    ) THEN
+      RAISE EXCEPTION 'Ambos conceptos tienen tarifa de Primaria; revisar antes de mover';
+    END IF;
+    UPDATE admin_escolar_concepto_precios
+    SET concepto_id = v_primaria_concepto_id, updated_at = now()
+    WHERE team_id = v_team_id AND concepto_id = v_inicial_id
+      AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+      AND objetivo_id = v_primaria_id;
+    GET DIAGNOSTICS v_precios_movidos = ROW_COUNT;
+    IF v_precios_movidos <> 1 THEN
+      RAISE EXCEPTION 'Se esperaban exactamente una tarifa de Primaria; se movieron %', v_precios_movidos;
+    END IF;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM admin_escolar_concepto_precios
+    WHERE team_id = v_team_id AND concepto_id = v_primaria_concepto_id
+      AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+      AND objetivo_id = v_primaria_id AND monto_centavos IN (20000, 80000) AND activo
+  ) THEN
+    RAISE EXCEPTION 'Falta la tarifa activa de Evaluacion Primaria';
+  END IF;
+
+  IF (SELECT count(*) FROM admin_escolar_concepto_precios
+      WHERE team_id = v_team_id AND concepto_id = v_inicial_id
+        AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio' AND activo) <> 1
+     OR NOT EXISTS (SELECT 1 FROM admin_escolar_concepto_precios
+       WHERE team_id = v_team_id AND concepto_id = v_inicial_id
+         AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+         AND monto_centavos IN (20000, 60000) AND activo) THEN
+    RAISE EXCEPTION 'La tarifa de Evaluacion Inicial requiere revisión';
+  END IF;
+
+  -- Nunca reescribir un cargo facturado, pagado o con importe propio.
+  IF EXISTS (SELECT 1 FROM admin_escolar_cargos
+      WHERE team_id = v_team_id AND periodo_id = v_periodo_id
+        AND concepto_id IN (v_inicial_id, v_primaria_concepto_id)
+        AND monto_centavos <> 20000
+        AND (ecf_document_id IS NOT NULL OR estado <> 'pendiente'
+          OR saldo_centavos <> monto_centavos
+          OR (concepto_id = v_primaria_concepto_id AND monto_centavos <> 5000)
+          OR (concepto_id = v_inicial_id AND monto_centavos NOT IN (6666, 6667)))) THEN
+    RAISE EXCEPTION 'Hay cargos de evaluación modificados o facturados; revisar antes de corregir importes';
+  END IF;
+
+  -- Antes de subir tarifas al total del año: una evaluación es una actividad
+  -- (se reparte entre sus cuotas) y la beca no la rebaja.
+  UPDATE admin_escolar_conceptos_pago
+  SET tipo = 'actividad', admite_beca = false, updated_at = now()
+  WHERE team_id = v_team_id
+    AND id IN (v_inicial_id, v_primaria_concepto_id)
+    AND (tipo <> 'actividad' OR admite_beca);
+
+  UPDATE admin_escolar_concepto_precios
+  SET monto_centavos = 60000, updated_at = now()
+  WHERE team_id = v_team_id AND concepto_id = v_inicial_id
+    AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+    AND monto_centavos = 20000;
+
+  UPDATE admin_escolar_concepto_precios
+  SET monto_centavos = 80000, updated_at = now()
+  WHERE team_id = v_team_id AND concepto_id = v_primaria_concepto_id
+    AND periodo_id = v_periodo_id AND objetivo_tipo = 'servicio'
+    AND objetivo_id = v_primaria_id AND monto_centavos = 20000;
+
+  UPDATE admin_escolar_cargos
+  SET monto_centavos = 20000, saldo_centavos = 20000, updated_at = now()
+  WHERE team_id = v_team_id AND periodo_id = v_periodo_id
+    AND concepto_id IN (v_inicial_id, v_primaria_concepto_id)
+    AND monto_centavos <> 20000;
+
+  IF EXISTS (
+    SELECT 1 FROM admin_escolar_concepto_cuotas
+    WHERE team_id = v_team_id AND concepto_id = v_primaria_concepto_id
+      AND periodo_id = v_periodo_id
+  ) THEN
+    IF (
+      SELECT count(*) FROM admin_escolar_concepto_cuotas
+      WHERE team_id = v_team_id AND concepto_id = v_primaria_concepto_id
+        AND periodo_id = v_periodo_id
+    ) <> 4 OR EXISTS (
+      SELECT 1 FROM (VALUES
+        (1, 'Evaluacion P1', DATE '2026-10-13', 25000),
+        (2, 'Evaluacion P2', DATE '2027-01-19', 25000),
+        (3, 'Evaluacion P3', DATE '2027-03-15', 25000),
+        (4, 'Evaluacion final', DATE '2027-06-14', 25000)
+      ) AS esperado(numero, etiqueta, fecha, parte)
+      LEFT JOIN admin_escolar_concepto_cuotas q
+        ON q.team_id = v_team_id AND q.concepto_id = v_primaria_concepto_id
+        AND q.periodo_id = v_periodo_id AND q.numero = esperado.numero
+      WHERE q.id IS NULL OR (q.etiqueta <> esperado.etiqueta OR q.fecha_emision <> esperado.fecha
+          OR q.mes <> extract(month FROM esperado.fecha)::integer
+          OR q.porcentaje_milesimas <> esperado.parte OR NOT q.activo)
+    ) THEN
+      RAISE EXCEPTION 'El calendario de Evaluacion Primaria existe con otros datos; revisar';
+    END IF;
+  ELSE
+    INSERT INTO admin_escolar_concepto_cuotas (
+      team_id, concepto_id, periodo_id, numero, etiqueta, mes,
+      fecha_emision, porcentaje_milesimas, activo
+    ) VALUES
+      (v_team_id, v_primaria_concepto_id, v_periodo_id, 1, 'Evaluacion P1', 10, DATE '2026-10-13', 25000, true),
+      (v_team_id, v_primaria_concepto_id, v_periodo_id, 2, 'Evaluacion P2', 1, DATE '2027-01-19', 25000, true),
+      (v_team_id, v_primaria_concepto_id, v_periodo_id, 3, 'Evaluacion P3', 3, DATE '2027-03-15', 25000, true),
+      (v_team_id, v_primaria_concepto_id, v_periodo_id, 4, 'Evaluacion final', 6, DATE '2027-06-14', 25000, true);
+  END IF;
+
+  RAISE NOTICE 'Evaluacion Primaria configurada: concepto %, periodo %, servicio %',
+    v_primaria_concepto_id, v_periodo_id, v_primaria_id;
+END;
+$config$;
+
+COMMIT;

@@ -65,5 +65,7 @@ export const completarRegistro = validatedAction(esquema, async (data) => {
   // Google y contraseña desembocan en el mismo sitio: el onboarding. Que dos
   // formas de registrarse acaben en pantallas distintas es como se cuelan las
   // empresas a medio configurar.
-  redirect('/bienvenida');
+  // `?alta=google`: el onboarding le avisa a Analytics de la cuenta nueva y
+  // quita la marca de la barra (ver `EventoAlLlegar`).
+  redirect('/bienvenida?alta=google');
 });

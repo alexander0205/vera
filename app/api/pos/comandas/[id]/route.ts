@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { getComanda, guardarItems, cancelarComanda } from '@/lib/pos/restaurante';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission('pos:vender');
@@ -43,6 +44,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) {
     return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
   }
+  const errRefs = await validarReferenciasDeEmpresa(auth.teamId, {
+    miembroUserId: parsed.data.meseroId ?? null,
+    productoIds: parsed.data.items.map((i) => i.productoId),
+  });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
   try {
     const comanda = await guardarItems(auth.teamId, Number(id), parsed.data.items, parsed.data.meseroId ?? null);
     return NextResponse.json({ ok: true, comanda });
