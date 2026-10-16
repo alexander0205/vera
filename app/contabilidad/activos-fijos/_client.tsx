@@ -10,6 +10,9 @@
  */
 
 import { useState, useMemo } from 'react';
+import { RangoFechas } from '@/components/reportes/rango-fechas';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import { useRouter } from 'next/navigation';
 import { Plus, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -51,12 +54,38 @@ function vidaLegible(meses: number): string {
   return partes.join(' ') || `${meses} meses`;
 }
 
+const fechaCorta = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
+
+/** Imprimir / PDF / Excel de los activos del rango de adquisición. */
+const EXPORTAR: ExportTabla<ActivoFijo> = {
+  titulo: 'Activos fijos',
+  archivo: 'activos-fijos',
+  tachada: a => !a.activa,
+  columnas: [
+    { titulo: 'Activo', valor: a => a.nombre, sub: a => (a.activa ? null : 'Dada de baja'), ancho: 2 },
+    { titulo: 'Adquirido', valor: a => fechaCorta(a.fechaAdquisicion), ancho: 0.8 },
+    { titulo: 'Vida útil', valor: a => vidaLegible(a.vidaUtilMeses), sub: a => `${a.cuotasHechas} de ${a.vidaUtilMeses} cuotas`, ancho: 1.1 },
+    { titulo: 'Costo', valor: a => a.costoCents, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Depreciación acum.', valor: a => a.acumuladaCents, tipo: 'moneda', total: true, ancho: 1.1 },
+    { titulo: 'Valor en libros', valor: a => a.valorLibrosCents, tipo: 'moneda', total: true, ancho: 1.1 },
+  ],
+};
+
 const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 export function ActivosFijosClient({
   activos, hoy, puedeGestionar,
 }: { activos: ActivoFijo[]; hoy: string; puedeGestionar: boolean }) {
   const router = useRouter();
+  // Rango por fecha de adquisición.
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const visibles = useMemo(() => activos.filter(a => {
+    const f = a.fechaAdquisicion.slice(0, 10);
+    return (!desde || f >= desde) && (!hasta || f <= hasta);
+  }), [activos, desde, hasta]);
+  const filtroTexto = desde && hasta ? `Adquiridos del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
+    : desde ? `Adquiridos desde el ${fechaCorta(desde)}` : hasta ? `Adquiridos hasta el ${fechaCorta(hasta)}` : 'Todas las fechas';
 
   // Alta
   const [abierto, setAbierto] = useState(false);
@@ -149,6 +178,12 @@ export function ActivosFijosClient({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Acciones */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center', justifyContent: 'space-between' }}>
+      {activos.length > 0 && (
+        <RangoFechas label="Adquisición" desde={desde} hasta={hasta} onCambiar={(d, h) => { setDesde(d); setHasta(h); }} />
+      )}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, ml: 'auto' }}>
+      <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, visibles, filtroTexto)} deshabilitado={visibles.length === 0} testId="exportar-activos" />
       {puedeGestionar && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
           <Button
@@ -167,6 +202,8 @@ export function ActivosFijosClient({
           </Button>
         </Box>
       )}
+      </Box>
+      </Box>
 
       {aviso && (
         <Alert
@@ -239,9 +276,9 @@ export function ActivosFijosClient({
       )}
 
       {/* Listado */}
-      {activos.length === 0 ? (
+      {visibles.length === 0 ? (
         <Typography sx={{ ...CARD, px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
-          Todavía no hay activos fijos registrados.
+          {activos.length ? 'Ningún activo adquirido en estas fechas.' : 'Todavía no hay activos fijos registrados.'}
         </Typography>
       ) : (
         <Box sx={{ ...CARD, overflow: 'hidden' }}>
@@ -258,7 +295,7 @@ export function ActivosFijosClient({
                 </Box>
               </Box>
               <Box component="tbody">
-                {activos.map((a) => (
+                {visibles.map((a) => (
                   <Box component="tr" key={a.id} sx={{ borderBottom: '1px solid #f3f4f6' }}>
                     <Box component="td" sx={celda}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

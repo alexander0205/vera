@@ -18,6 +18,8 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import { FolderOpen, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Categoria {
   id: number;
@@ -28,6 +30,17 @@ interface Categoria {
 
 const EMPTY_FORM = { nombre: '', descripcion: '' };
 const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
+
+
+/** Imprimir / PDF / Excel de las categorías. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Categoria> = {
+  titulo: 'Categorías de productos',
+  archivo: 'categorias',
+  columnas: [
+    { titulo: 'Nombre', valor: c => c.nombre, ancho: 1.5 },
+    { titulo: 'Descripción', valor: c => c.descripcion, ancho: 3 },
+  ],
+};
 
 export default function CategoriasPage() {
   const [categorias, setCategorias]     = useState<Categoria[]>([]);
@@ -97,10 +110,13 @@ export default function CategoriasPage() {
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Categorías de Productos</Typography>
           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>Organiza tu catálogo por categorías</Typography>
         </Box>
-        <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, categorias, 'Todos los registros')} deshabilitado={categorias.length === 0} testId="exportar-categorias" />
+          <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
           sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nueva categoría
         </Button>
+        </Box>
       </Box>
 
       <Box sx={cardSx}>

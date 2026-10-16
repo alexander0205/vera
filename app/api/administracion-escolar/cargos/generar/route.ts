@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCargos,
+  adminEscolarConceptoCuotas,
   adminEscolarEstudiantes,
   adminEscolarMatriculas,
   adminEscolarPeriodos,
@@ -9,7 +10,7 @@ import {
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
-import { eq, and, inArray, isNull, ne } from 'drizzle-orm';
+import { eq, and, asc, inArray, isNull, ne } from 'drizzle-orm';
 
 /**
  * Generación masiva de cargos: el mismo concepto a un grupo de alumnos.
@@ -89,6 +90,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'El mes seleccionado no pertenece al calendario de este período' }, { status: 400 });
   }
 
+  /**
+   * Un concepto con calendario se ata a su cuota, como «Agregar cargo».
+   *
+   * Sin `cuota_id` el devengo no sabe que la cuota ya se cobró y la vuelve a
+   * crear en su mes: el mismo cobro dos veces a todo el grupo. La cuota es la
+   * del mes elegido, o la única si solo hay una. Un concepto repartido en
+   * varias cuotas sin mes no se cobra por aquí: ese lo cobra el plan, cuota a
+   * cuota (revisión del PR #126).
+   */
+  const cuotas = await db
+    .select({ id: adminEscolarConceptoCuotas.id, fechaEmision: adminEscolarConceptoCuotas.fechaEmision })
+    .from(adminEscolarConceptoCuotas)
+    .where(and(
+      eq(adminEscolarConceptoCuotas.teamId, teamId),
+      eq(adminEscolarConceptoCuotas.conceptoId, conceptoIdOk),
+      eq(adminEscolarConceptoCuotas.periodoId, periodoIdOk),
+      eq(adminEscolarConceptoCuotas.activo, true),
+    ))
+    .orderBy(asc(adminEscolarConceptoCuotas.numero));
+  let cuotaId: number | null = null;
+  if (mes != null) {
+    const clave = `${anio}-${String(mes).padStart(2, '0')}`;
+    cuotaId = cuotas.find((c) => String(c.fechaEmision).slice(0, 7) === clave)?.id ?? null;
+  } else if (cuotas.length === 1) {
+    cuotaId = cuotas[0].id;
+  } else if (cuotas.length > 1) {
+    return NextResponse.json(
+      { error: 'Este concepto se cobra en varias cuotas y ya lo carga el plan de cada alumno. Para un cobro a un grupo usa un concepto de una sola vez.' },
+      { status: 400 },
+    );
+  }
+
   const where = [
     eq(adminEscolarMatriculas.teamId, teamId),
     eq(adminEscolarMatriculas.periodoId, periodoIdOk),
@@ -153,6 +186,25 @@ export async function POST(req: NextRequest) {
     .from(adminEscolarCargos)
     .where(and(...existentesWhere));
   const estudiantesConCargo = new Set(existentes.map((e) => e.estudianteId));
+  // Con cuota: quien ya tiene un cargo de ESA cuota (aunque sea de otro mes o
+  // sin mes) también es duplicado. Si solo tiene uno anulado, el índice único
+  // (matrícula, cuota) no deja repetirla: el nuevo va sin cuota, y el anulado
+  // ya le dice al devengo que no la cree.
+  const conCuotaAnulada = new Set<number>();
+  if (cuotaId != null) {
+    const deLaCuota = await db
+      .select({ matriculaId: adminEscolarCargos.matriculaId, estudianteId: adminEscolarCargos.estudianteId, estado: adminEscolarCargos.estado })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.cuotaId, cuotaId),
+        inArray(adminEscolarCargos.matriculaId, matriculas.map((m) => m.id)),
+      ));
+    for (const c of deLaCuota) {
+      if (c.estado !== 'anulado') estudiantesConCargo.add(c.estudianteId);
+      else if (c.matriculaId != null) conCuotaAnulada.add(c.matriculaId);
+    }
+  }
   const pendientes = matriculas.filter((m) => !estudiantesConCargo.has(m.estudianteId));
 
   const detalles: DetalleGeneracion[] = matriculas
@@ -183,6 +235,7 @@ export async function POST(req: NextRequest) {
     matriculaId: m.id,
     periodoId: periodoIdOk,
     conceptoId: conceptoIdOk,
+    cuotaId: cuotaId != null && !conCuotaAnulada.has(m.id) ? cuotaId : null,
     mes: mes ?? null,
     anio,
     montoCentavos,

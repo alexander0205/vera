@@ -66,7 +66,6 @@ const EMPRESAS = {
     user: Number(process.env.DEMO_USER ?? 50),
     pantallas: [
       { ruta: '/escolar/dashboard', archivo: 'demo-colegio.png', espera: 5000 },
-      { ruta: '/escolar/cargos', archivo: 'demo-colegio-cargos.png', espera: 4500 },
       { ruta: '/escolar/estudiantes', archivo: 'demo-colegio-estudiantes.png', espera: 4000 },
     ],
     movil: [],

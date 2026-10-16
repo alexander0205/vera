@@ -21,7 +21,8 @@
 
 import Link from 'next/link';
 import { Contenedor, Flecha, Cheque } from './_piezas';
-import { Antetitulo, BotonPrimario, BotonSecundario } from './_bloques';
+import { Antetitulo, BotonSecundario } from './_bloques';
+import { BotonPrueba, GarantiasPrueba, textoPrueba } from './_llamados';
 import { DatosDeArticulo, DatosDePreguntas, DatosDeRuta } from './_datos-estructurados';
 import { Acordeon, type Pregunta } from './_acordeon';
 
@@ -65,6 +66,17 @@ export function Guia({
               <p className="m-0 mt-5 text-[12.5px] text-[#666d80]">
                 Actualizada el {fecha} · {minutos} min de lectura
               </p>
+              {/* Quien llega por la guía viene a resolver esto a mano. El
+                  atajo se le ofrece arriba, sin estorbar la lectura: una
+                  línea, no un banner. Las guías no llevaban a registrarse
+                  en ningún sitio, solo a la página del producto. */}
+              <Link
+                href="/sign-up"
+                className="mt-3 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-zero-600 underline-offset-2 hover:underline"
+              >
+                ¿Prefieres que Zero lo haga solo? {textoPrueba()}
+                <Flecha tamano={12} />
+              </Link>
             </div>
           </Contenedor>
         </section>
@@ -110,16 +122,24 @@ export function Guia({
           </Contenedor>
         )}
 
+        {/* El cierre lleva a PROBAR, que es lo que queremos que haga quien
+            llegó hasta aquí; la página del producto queda de segunda opción.
+            `data-llamado`: mientras se ve, la barra fija del teléfono se
+            esconde (ver `_barra-prueba.tsx`). */}
         <Contenedor className="pb-4 pt-12">
-          <div className="mx-auto max-w-[760px] rounded-2xl border border-[#e7edfb] bg-[#f5f8ff] p-6 sm:p-8">
+          <div data-llamado className="mx-auto max-w-[760px] rounded-2xl border border-[#e7edfb] bg-[#f5f8ff] p-6 sm:p-8">
             <p className="m-0 font-[family-name:var(--font-display)] text-[17px] font-semibold tracking-[-.025em] text-[#102a72]">
               {cta.titulo}
             </p>
             <p className="m-0 mt-2.5 text-pretty text-[14px] leading-[1.6] text-[#5c6373]">{cta.detalle}</p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <BotonPrimario href={cta.href}>{cta.accion}</BotonPrimario>
-              <BotonSecundario href="/guias">Ver las demás guías</BotonSecundario>
+              <BotonPrueba tamano="mediano" />
+              <BotonSecundario href={cta.href}>{cta.accion}</BotonSecundario>
             </div>
+            <GarantiasPrueba className="mt-4" />
+            <Link href="/guias" className="mt-4 inline-block text-[13px] font-medium text-[#5c6373] underline underline-offset-2 hover:text-zero-600">
+              Ver las demás guías
+            </Link>
           </div>
         </Contenedor>
       </article>

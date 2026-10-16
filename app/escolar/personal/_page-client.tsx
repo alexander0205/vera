@@ -16,6 +16,8 @@ import {
   Users, GraduationCap, Search, Loader2, IdCard, Cake, Phone, Mail, Globe, Briefcase,
   Plus, Pencil, Trash2, StickyNote, UserPlus,
 } from 'lucide-react';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Persona {
   key: string;
@@ -91,6 +93,21 @@ const SELECT_CLS =
   'h-10 w-full cursor-pointer rounded-lg border border-black/25 bg-transparent px-3 text-sm ' +
   'outline-none transition-colors hover:border-black/50 focus:border-primary focus:ring-1 focus:ring-primary ' +
   'dark:border-white/25 dark:hover:border-white/40';
+
+
+/** Imprimir / PDF / Excel del personal filtrado. Sin filtro de fecha: es un padrón. */
+const EXPORTAR: ExportTabla<Persona> = {
+  titulo: 'Personal',
+  archivo: 'personal',
+  columnas: [
+    { titulo: 'Nombre', valor: x => nombreCompleto(x), sub: x => x.cedula, ancho: 2 },
+    { titulo: 'Cargo', valor: x => x.cargo, ancho: 1.4 },
+    { titulo: 'Tipo', valor: x => (x.esProfesor ? 'Docente' : 'Otro personal'), ancho: 0.9 },
+    { titulo: 'Estado', valor: x => x.estado, ancho: 0.8 },
+    { titulo: 'Contacto', valor: x => x.telefono, sub: x => x.email, ancho: 1.4 },
+    { titulo: 'Origen', valor: x => (x.origen === 'sigerd' ? 'SIGERD' : 'Manual'), ancho: 0.7 },
+  ],
+};
 
 export default function PersonalClient() {
   const { data, isLoading, mutate } = useSWR<Respuesta>('/api/escolar/personal', fetcher);
@@ -208,9 +225,16 @@ export default function PersonalClient() {
             Personal del centro. Lo de SIGERD es solo lectura; puedes agregar personal a mano y editarlo.
           </p>
         </div>
-        <Button onClick={abrirAlta} className="shrink-0">
-          <Plus className="mr-1.5 h-4 w-4" /> Agregar personal
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportarListado deshabilitado={isLoading || lista.length === 0} testId="exportar-personal"
+            armar={() => armarEnvioTabla(EXPORTAR, lista, [
+              filtro === 'todos' ? 'Todo el personal' : filtro === 'profesores' ? 'Docentes' : filtro === 'otros' ? 'Otro personal' : 'Agregado a mano',
+              q.trim() ? `Búsqueda: «${q.trim()}»` : null,
+            ].filter(Boolean).join(' · '))} />
+          <Button onClick={abrirAlta} className="shrink-0">
+            <Plus className="mr-1.5 h-4 w-4" /> Agregar personal
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}

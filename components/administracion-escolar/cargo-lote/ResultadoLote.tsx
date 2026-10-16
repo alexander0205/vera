@@ -132,7 +132,8 @@ export function ResultadoLote({
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         {seCreo && (
           <Button asChild className="bg-zero-600 hover:bg-zero-700">
-            <Link href="/escolar/cargos">Ver los cargos</Link>
+            {/* Responsables filtrado por este cobro: las familias a las que se les cargó. */}
+            <Link href={`/escolar/responsables?concepto=${pedido.cuerpo.conceptoId}`}>Ver las familias con este cobro</Link>
           </Button>
         )}
         <Button variant="outline" onClick={onOtroGrupo}>Cobrar lo mismo a otro grupo</Button>

@@ -33,15 +33,45 @@
     "titulo": "Tu colegio, cobrado solo",
     "cambios": [
       {
-        "tipo": "nuevo",
-        "titulo": "Las novedades te salen al entrar",
-        "detalle": "Cada vez que mejoremos algo, al entrar verás una ventana con lo que cambió. La cierras y no vuelve a salir hasta la siguiente mejora. El historial completo sigue en Novedades.",
-        "desde": "2026-10-10"
+        "tipo": "arreglo",
+        "titulo": "Cambiar la mensualidad de un alumno ya no le cobra un mes dos veces",
+        "detalle": "Al cambiarle la generación o el monto a un alumno, los meses que no se han facturado pasan al precio nuevo y la facturación automática también. Si un mes ya tenía factura, no se duplica: te lo dice y, si nadie la ha pagado, te deja anularla para pasarla al precio nuevo.",
+        "desde": "2026-10-15"
       },
       {
         "tipo": "nuevo",
-        "titulo": "Cóbrale lo mismo a varios alumnos, en tres pasos",
-        "detalle": "Para el día de cine, la excursión o la foto del curso: eliges qué se cobra, a quién, revisas la lista y confirmas. Antes de crear nada te dice el total, y a quien ya lo tiene no se le cobra dos veces.",
+        "titulo": "Cóbrale lo mismo a un grupo de alumnos",
+        "detalle": "El paseo, las fotos o el uniforme se le cargan a un curso o a los alumnos que elijas de una vez, desde Responsables con el botón «Cobrar a un grupo». Antes de crear los cargos ves a quién se le va a cobrar.",
+        "desde": "2026-10-15"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Imprime o descarga en PDF y Excel casi cualquier lista",
+        "detalle": "Facturas, pagos, gastos, compras, inventario, caja, nómina, contabilidad, el colegio y los catálogos tienen ahora Imprimir, PDF, Excel y CSV. El archivo trae lo mismo que ves en pantalla, con tus filtros y fechas.",
+        "desde": "2026-10-15"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Al agregar un cargo, el precio ya viene puesto",
+        "detalle": "Al agregarle un cargo a un alumno, el sistema te propone el precio que tiene configurado su curso, con su beca si la tiene. Lo puedes cambiar antes de guardar.",
+        "desde": "2026-10-15"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Agrega una fecha más al calendario de un concepto",
+        "detalle": "Si a un concepto que se cobra por partes le falta una fecha, por ejemplo otra evaluación, la agregas con un botón y el porcentaje se reparte solo entre las que aún no se han facturado.",
+        "desde": "2026-10-15"
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Lo que debe cada familia, en Responsables",
+        "detalle": "Quitamos la sección «Cargos y deudas» porque repetía lo que ya está en las fichas. En Responsables usa «Con deuda» para ver quién debe, «Por facturar» para lo que todavía no tiene factura, o elige un concepto para ver a quién se le cobró.",
+        "desde": "2026-10-15"
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Las novedades te salen al entrar",
+        "detalle": "Cada vez que mejoremos algo, al entrar verás una ventana con lo que cambió. La cierras y no vuelve a salir hasta la siguiente mejora. El historial completo sigue en Novedades.",
         "desde": "2026-10-10"
       },
       {

@@ -7,7 +7,7 @@ import {
   X, Wallet, Loader2, Archive, Wallet2, Eye, PanelRightOpen,
 } from 'lucide-react';
 import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
 import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
@@ -56,6 +56,30 @@ const nombreCuenta = (c: Cuenta) => c.razonSocialComprador ?? c.clienteRazonSoci
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
+/** Imprimir / PDF / Excel: la cartera tal como la filtra (y agrupa) la tabla. */
+const EXPORTAR: ExportTabla<Cuenta> = {
+  titulo: 'Cuentas por cobrar',
+  archivo: 'cuentas-por-cobrar',
+  columnas: [
+    { titulo: 'Emisión', valor: c => fmtFechaCorta(c.fechaEmision), ancho: 0.8 },
+    { titulo: 'Documento', valor: c => c.codigo ?? `#${c.id}`, sub: c => (/^E\d{12}$/.test(c.encf) ? c.encf : null), ancho: 1.4 },
+    { titulo: 'Cliente', valor: c => nombreCuenta(c) ?? 'Consumidor final', sub: c => c.rncComprador, ancho: 2 },
+    { titulo: 'Vence', valor: c => (c.fechaLimitePago ? fmtFechaCorta(c.fechaLimitePago) : null), ancho: 0.8 },
+    { titulo: 'Atraso', valor: c => (c.vencida ? `${c.diasVencido} d` : 'Al día'), ancho: 0.7 },
+    { titulo: 'Total', valor: c => c.montoTotal, tipo: 'moneda', ancho: 1 },
+    { titulo: 'Cobrado', valor: c => c.pagado, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Mora', valor: c => c.moraSaldo || null, tipo: 'moneda', total: true, ancho: 0.9 },
+    { titulo: 'Saldo', valor: c => c.saldo, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+  kpis: rows => {
+    const vencidas = rows.filter(c => c.vencida);
+    return [
+      { label: 'Por cobrar', valor: fmtDOP(rows.reduce((s, c) => s + c.saldo, 0)), sub: `${rows.length} cuenta${rows.length === 1 ? '' : 's'}` },
+      { label: 'Vencido', valor: fmtDOP(vencidas.reduce((s, c) => s + c.saldo, 0)), sub: `${vencidas.length} vencida${vencidas.length === 1 ? '' : 's'}` },
+    ];
+  },
+};
+
 interface Totales {
   pendiente:     number;
   vencido:       number;
@@ -71,7 +95,7 @@ export default function CuentasPorCobrarPage() {
   const [error, setError]       = useState<string | null>(null);
   // Filtros 100% client-side sobre el dataset cargado (AR es acotado).
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    cliente: '', tipoDoc: '', estado: '', agrupar: '',
+    cliente: '', tipoDoc: '', estado: '', agrupar: '', fecha_desde: '', fecha_hasta: '',
   });
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [detalle, setDetalle] = useState<Cuenta | null>(null);
@@ -112,8 +136,12 @@ export default function CuentasPorCobrarPage() {
     if (filterValues.estado === 'vencidas')   rows = rows.filter(c => c.vencida);
     else if (filterValues.estado === 'al-dia') rows = rows.filter(c => !c.vencida);
 
+    // Por fecha de emisión de la factura.
+    if (filterValues.fecha_desde) rows = rows.filter(c => c.fechaEmision.slice(0, 10) >= filterValues.fecha_desde);
+    if (filterValues.fecha_hasta) rows = rows.filter(c => c.fechaEmision.slice(0, 10) <= filterValues.fecha_hasta);
+
     return rows;
-  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado]);
+  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado, filterValues.fecha_desde, filterValues.fecha_hasta]);
 
   // Totales reactivos al filtro (las tarjetas reflejan lo que se ve en la tabla).
   const totales: Totales = useMemo(() => ({
@@ -403,9 +431,11 @@ export default function CuentasPorCobrarPage() {
               { value: 'cliente', label: 'Agrupar por cliente' },
             ],
           },
+          { type: 'daterange', id: 'fecha', label: 'Emisión' },
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         // Abre por lo más atrasado: es el orden en que se trabaja la cartera.
         // Sin franjas ni fondos de color — la urgencia la comunica el dato en
         // rojo, no rayar la fila entera.

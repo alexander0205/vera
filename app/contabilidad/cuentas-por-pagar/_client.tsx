@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Wallet, History } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -15,12 +15,33 @@ import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
+import { RangoFechas } from '@/components/reportes/rango-fechas';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 type Cuenta = { id:number; proveedorNombre:string|null; referenciaEncf:string|null; fechaVencimiento:string|null; montoTotal:number; pagado:number; saldo:number; vencida:boolean; diasVencido:number };
 type Totales = { pendiente:number; vencido:number; count:number; countVencidas:number };
 type Pago = {id:number;montoCents:number;metodo:string;fechaPago:string;referencia:string|null;notas:string|null};
 
 type CuentaCatalogo = { id:number; codigo:string; nombre:string };
+
+const fechaCorta = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
+const CUBETA_LABEL: Record<string, string> = { porVencer: 'Por vencer', d1a30: '1–30 días', d31a60: '31–60 días', d61a90: '61–90 días', d90mas: '90+ días' };
+
+/** Imprimir / PDF / Excel de las cuentas filtradas. */
+const EXPORTAR: ExportTabla<Cuenta> = {
+  titulo: 'Cuentas por pagar',
+  archivo: 'cuentas-por-pagar',
+  columnas: [
+    { titulo: 'Proveedor', valor: c => c.proveedorNombre ?? 'Proveedor sin nombre', ancho: 2 },
+    { titulo: 'Compra', valor: c => c.referenciaEncf ?? `#${c.id}`, ancho: 1.2 },
+    { titulo: 'Vence', valor: c => (c.fechaVencimiento ? fechaCorta(c.fechaVencimiento) : null), ancho: 0.8 },
+    { titulo: 'Atraso', valor: c => (c.vencida ? `${c.diasVencido} d` : 'Al día'), ancho: 0.7 },
+    { titulo: 'A pagar', valor: c => c.montoTotal, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Pagado', valor: c => c.pagado, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Saldo', valor: c => c.saldo, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
 
 export function CuentasPorPagarClient({ cuentas, totales, puedeGestionar, cuentasSalida = [], cuentaSalidaPorMetodo = {} }: { cuentas:Cuenta[]; totales:Totales; puedeGestionar:boolean; cuentasSalida?:CuentaCatalogo[]; cuentaSalidaPorMetodo?:Record<string,number> }) {
   const router = useRouter(); const [pago, setPago] = useState<Cuenta|null>(null);
@@ -30,6 +51,20 @@ export function CuentasPorPagarClient({ cuentas, totales, puedeGestionar, cuenta
   const [cuentaSalida, setCuentaSalida] = useState('auto');
   const automatica = cuentasSalida.find(c => c.id === cuentaSalidaPorMetodo[metodo]) ?? null;
   const [fecha, setFecha] = useState(hoyRD()); const [error, setError] = useState<string|null>(null); const [guardando, setGuardando] = useState(false); const [historial,setHistorial]=useState<{cuenta:Cuenta;pagos:Pago[]}|null>(null); const [lista,setLista]=useState(cuentas); const [resumen,setResumen]=useState(totales); const [busqueda,setBusqueda]=useState(''); const [estado,setEstado]=useState(''); const [cubeta,setCubeta]=useState('');
+  // Rango por fecha de vencimiento (la lista no trae la de la compra).
+  const [desde, setDesde] = useState(''); const [hasta, setHasta] = useState('');
+  const visibles = useMemo(() => lista.filter(c => {
+    const v = c.fechaVencimiento?.slice(0, 10);
+    if (desde && (!v || v < desde)) return false;
+    if (hasta && (!v || v > hasta)) return false;
+    return true;
+  }), [lista, desde, hasta]);
+  const filtroTexto = [
+    desde && hasta ? `Vence del ${fechaCorta(desde)} al ${fechaCorta(hasta)}` : desde ? `Vence desde el ${fechaCorta(desde)}` : hasta ? `Vence hasta el ${fechaCorta(hasta)}` : 'Todas las fechas',
+    busqueda ? `Búsqueda: «${busqueda}»` : null,
+    estado ? (estado === 'vencidas' ? 'Solo vencidas' : 'Solo al día') : null,
+    cubeta ? `Antigüedad: ${CUBETA_LABEL[cubeta] ?? cubeta}` : null,
+  ].filter(Boolean).join(' · ');
   const stats: Array<[string, number]> = [['Pendiente',resumen.pendiente],['Vencido',resumen.vencido],['Cuentas',resumen.count],['Vencidas',resumen.countVencidas]];
   // Tras pagar se vuelve a pedir la lista: vive en estado local y router.refresh()
   // no la toca, así que la cuenta pagada seguía en pantalla.
@@ -43,12 +78,14 @@ export function CuentasPorPagarClient({ cuentas, totales, puedeGestionar, cuenta
   async function verHistorial(cuenta:Cuenta) { const r=await fetch(`/api/contabilidad/cuentas-por-pagar/${cuenta.id}`); const d=await r.json(); if(r.ok)setHistorial({cuenta,pagos:d.pagos??[]}); }
   async function filtrar(nuevaCubeta=cubeta) { const q=new URLSearchParams(); if(busqueda)q.set('search',busqueda); if(estado)q.set('estado',estado); if(nuevaCubeta)q.set('cubeta',nuevaCubeta); const r=await fetch(`/api/contabilidad/cuentas-por-pagar?${q}`); const d=await r.json();if(r.ok){setLista(d.cuentas);setResumen(d.totales);setCubeta(nuevaCubeta);} }
   return <Box component="section" sx={{ p:{xs:2,sm:3}, maxWidth:1100, mx:'auto', display:'flex', flexDirection:'column', gap:2 }}>
-    <Box><Typography component="h1" variant="h5" sx={{fontWeight:700}}>Cuentas por pagar</Typography><Typography sx={{color:'#6b7280',mt:.5}}>Compras a crédito, vencimientos y pagos a proveedores.</Typography></Box>
+    <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:1.5,flexWrap:'wrap'}}><Box><Typography component="h1" variant="h5" sx={{fontWeight:700}}>Cuentas por pagar</Typography><Typography sx={{color:'#6b7280',mt:.5}}>Compras a crédito, vencimientos y pagos a proveedores.</Typography></Box>
+      <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, visibles, filtroTexto)} deshabilitado={visibles.length === 0} testId="exportar-cxp" /></Box>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'repeat(2,1fr)',md:'repeat(4,1fr)'},gap:1.5}}>{stats.map(([label,valor]) => <Box key={label} sx={{p:2,border:'1px solid #e5e7eb',borderRadius:2,bgcolor:'#fff'}}><Typography sx={{fontSize:12,color:'#6b7280'}}>{label}</Typography><Typography sx={{fontWeight:700,color:label==='Vencido'&&valor>0?'#dc2626':'#111827'}}>{label==='Cuentas'||label==='Vencidas'?valor:fmtDOP(valor)}</Typography></Box>)}</Box>
     <Box sx={{display:'flex',gap:1,flexWrap:'wrap'}}><TextField size="small" label="Buscar proveedor" value={busqueda} onChange={e=>setBusqueda(e.target.value)}/><TextField select size="small" label="Estado" value={estado} onChange={e=>setEstado(e.target.value)} sx={{minWidth:145}}><MenuItem value="">Todos</MenuItem><MenuItem value="vencidas">Vencidas</MenuItem><MenuItem value="al-dia">Al día</MenuItem></TextField><Button variant="outlined" onClick={()=>filtrar()}>Filtrar</Button>{['porVencer','d1a30','d31a60','d61a90','d90mas'].map(c=><Button key={c} size="small" variant={cubeta===c?'contained':'text'} onClick={()=>filtrar(c)}>{c==='porVencer'?'Por vencer':c==='d90mas'?'90+ días':c.replace('d','').replace('a','–')+' días'}</Button>)}{cubeta&&<Button size="small" onClick={()=>filtrar('')}>Limpiar aging</Button>}</Box>
+    <RangoFechas label="Vence" desde={desde} hasta={hasta} onCambiar={(d,h)=>{setDesde(d);setHasta(h);}} />
     <Box sx={{border:'1px solid #e5e7eb',borderRadius:2,bgcolor:'#fff',overflowX:'auto'}}><Box component="table" sx={{width:'100%',minWidth:760,borderCollapse:'collapse'}}>
       <Box component="thead" sx={{bgcolor:'#f9fafb'}}><Box component="tr">{['Proveedor','Compra','Vence','A pagar','Pagado','Saldo',''].map(h=><Box component="th" key={h} sx={{p:1.25,textAlign:h?'left':'right',fontSize:12,color:'#6b7280'}}>{h}</Box>)}</Box></Box>
-      <Box component="tbody">{lista.map(c=><Box component="tr" key={c.id} sx={{borderTop:'1px solid #f3f4f6'}}><Box component="td" sx={{p:1.25,fontSize:14}}>{c.proveedorNombre??'Proveedor sin nombre'}</Box><Box component="td" sx={{p:1.25,fontFamily:'monospace',fontSize:12}}>{c.referenciaEncf??`#${c.id}`}</Box><Box component="td" sx={{p:1.25,fontSize:12,color:c.vencida?'#dc2626':'#374151'}}>{c.fechaVencimiento??'—'}{c.vencida?` · ${c.diasVencido}d`:''}</Box><Box component="td" sx={{p:1.25,textAlign:'right'}}>{fmtDOP(c.montoTotal)}</Box><Box component="td" sx={{p:1.25,textAlign:'right'}}>{fmtDOP(c.pagado)}</Box><Box component="td" sx={{p:1.25,textAlign:'right',fontWeight:700}}>{fmtDOP(c.saldo)}</Box><Box component="td" sx={{p:1.25,textAlign:'right'}}><Button size="small" title="Historial de pagos" onClick={()=>verHistorial(c)}><History size={14}/></Button>{puedeGestionar&&<Button size="small" startIcon={<Wallet size={14}/>} onClick={()=>{setPago(c);setMonto((c.saldo/100).toFixed(2));setCuentaSalida('auto');setError(null)}}>Pagar</Button>}</Box></Box>)}{!lista.length&&<Box component="tr"><Box component="td" colSpan={7} sx={{p:4,textAlign:'center',color:'#6b7280'}}>No hay compras a crédito pendientes.</Box></Box>}</Box>
+      <Box component="tbody">{visibles.map(c=><Box component="tr" key={c.id} sx={{borderTop:'1px solid #f3f4f6'}}><Box component="td" sx={{p:1.25,fontSize:14}}>{c.proveedorNombre??'Proveedor sin nombre'}</Box><Box component="td" sx={{p:1.25,fontFamily:'monospace',fontSize:12}}>{c.referenciaEncf??`#${c.id}`}</Box><Box component="td" sx={{p:1.25,fontSize:12,color:c.vencida?'#dc2626':'#374151'}}>{c.fechaVencimiento??'—'}{c.vencida?` · ${c.diasVencido}d`:''}</Box><Box component="td" sx={{p:1.25,textAlign:'right'}}>{fmtDOP(c.montoTotal)}</Box><Box component="td" sx={{p:1.25,textAlign:'right'}}>{fmtDOP(c.pagado)}</Box><Box component="td" sx={{p:1.25,textAlign:'right',fontWeight:700}}>{fmtDOP(c.saldo)}</Box><Box component="td" sx={{p:1.25,textAlign:'right'}}><Button size="small" title="Historial de pagos" onClick={()=>verHistorial(c)}><History size={14}/></Button>{puedeGestionar&&<Button size="small" startIcon={<Wallet size={14}/>} onClick={()=>{setPago(c);setMonto((c.saldo/100).toFixed(2));setCuentaSalida('auto');setError(null)}}>Pagar</Button>}</Box></Box>)}{!visibles.length&&<Box component="tr"><Box component="td" colSpan={7} sx={{p:4,textAlign:'center',color:'#6b7280'}}>No hay compras a crédito pendientes.</Box></Box>}</Box>
     </Box></Box>
     <Dialog open={!!pago} onClose={()=>!guardando&&setPago(null)}><DialogTitle>Registrar pago a proveedor</DialogTitle><DialogContent sx={{display:'flex',flexDirection:'column',gap:2,pt:2,minWidth:360}}><TextField label="Monto (RD$)" type="number" value={monto} onChange={e=>setMonto(e.target.value)}/><TextField select label="Método" value={metodo} onChange={e=>setMetodo(e.target.value)}>{METODOS_PAGO.map(m=><MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}</TextField>{cuentasSalida.length>0&&<TextField select label="Sale de" value={cuentaSalida} onChange={e=>setCuentaSalida(e.target.value)} helperText="La cuenta de caja o banco de la que salió el dinero.">
       <MenuItem value="auto">{automatica?`Automática · ${automatica.codigo} ${automatica.nombre}`:'Automática (la del método)'}</MenuItem>

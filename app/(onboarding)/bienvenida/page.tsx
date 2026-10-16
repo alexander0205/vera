@@ -18,6 +18,8 @@ import { ArrowLeft } from 'lucide-react';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
 import { planSugerido, preguntaDeTamano, type LineaKey } from '@/lib/onboarding/deducir';
 import { LogoZero } from '@/components/marca-zero';
+import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { EventoAlLlegar } from '@/components/analytics/evento-al-llegar';
 import { PasoEmpresa } from './_paso-empresa';
 import { PasoTamano } from './_paso-tamano';
 import { PasoPlan } from './_paso-plan';
@@ -151,6 +153,15 @@ export default async function BienvenidaPage({
           />
         )}
       </main>
+
+      {/* Medición del alta: es el final del embudo (de la web al plan) y la
+          URL no lleva nada privado —el `?paso=` ni siquiera sale, la lista
+          blanca lo quita—. Cada paso alcanzado y las dos marcas de llegada:
+          cuenta nueva por Google y correo recién verificado. */}
+      <GoogleAnalytics />
+      <EventoAlLlegar evento="sign_up" param="alta" />
+      <EventoAlLlegar evento="email_verified" param="verificado" params={{ method: 'correo' }} />
+      <EventoAlLlegar evento="onboarding_step" params={{ step: vista }} />
     </div>
   );
 }

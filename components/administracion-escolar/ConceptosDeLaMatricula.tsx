@@ -70,7 +70,7 @@ const cargosDe = (n: number) => cuantos(n, 'cargo', 'cargos');
 export function ConceptosDeLaMatricula({
   matriculaId, estudianteId, periodoId, alumno, inscritoDesde, estado,
   catalogo, automaticos, carga, cargos, cargosCargando, cargosIncompletos, editable,
-  onAutomaticos, recargarCargos, onCambio,
+  onAutomaticos, recargarCargos, onCambio, generacionId = null,
 }: {
   matriculaId: number;
   estudianteId: number;
@@ -93,6 +93,8 @@ export function ConceptosDeLaMatricula({
   editable: boolean;
   /** La lista ya se guardó en el servidor con estos conceptos. */
   onAutomaticos: (ids: number[]) => void;
+  /** La generación (concepto de mensualidad) de la matrícula, si tiene. */
+  generacionId?: number | null;
   /** Vuelve a pedir los cargos de la matrícula. */
   recargarCargos: () => Promise<void>;
   /** La cuenta cambió: la ficha del estudiante tiene que volver a pedirla. */
@@ -162,6 +164,7 @@ export function ConceptosDeLaMatricula({
       return;
     }
     if (f.montosLibres.length === 1 && f.montosLibres[0] === centavos) { setAbierto(null); return; }
+    if (generacionId != null && f.conceptoId === generacionId) { cambiarMensualidad(f, centavos); return; }
     void unaALaVez(async () => {
       let hechos = 0;
       let fallo: string | null = null;
@@ -187,6 +190,48 @@ export function ConceptosDeLaMatricula({
         toast.success(`«${f.nombre}»: ${cargosDe(hechos)} a ${fmtDOP(centavos)}`);
         setAbierto(null);
       }
+    });
+  }
+
+  /**
+   * La colegiatura no se cambia cargo a cargo: eso dejaba el precio guardado y
+   * la facturación automática con el monto viejo, y el cron volvía a emitirlo
+   * (revisión del PR #126). Se guarda como su monto propio —lo mismo que
+   * «Configuración mensual»— y se ponen al día los cargos sin factura y el
+   * plan recurrente.
+   */
+  function cambiarMensualidad(f: FilaDeConcepto, centavos: number) {
+    void unaALaVez(async () => {
+      try {
+        await pedir(`/api/administracion-escolar/matriculas/${matriculaId}`, {
+          method: 'PATCH', headers: JSON_HEADERS,
+          body: JSON.stringify({ becaTipo: 'monto', becaValor: centavos, becaMotivo: 'Precio cambiado al editar la matrícula' }),
+        }, 'No se pudo guardar el precio');
+        const r = await pedir(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, {
+          method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({}),
+        }, 'Se guardó el precio, pero no se pudieron poner al día los cargos') as {
+          monto?: number; sinRecurrente?: boolean; recurrente?: string;
+        };
+        if (r.monto != null && r.monto !== centavos) {
+          // El concepto no admite beca: el monto propio no lo toca.
+          toast.warning(`«${f.nombre}» no admite monto propio y sigue a ${fmtDOP(r.monto)}. Cambia su precio en Configuración → Tarifas.`);
+        } else if (r.sinRecurrente) {
+          // Sin recurrente no hay calendario al que alinear: el monto va a los cargos libres.
+          for (const id of f.libresIds) {
+            await pedir(`/api/administracion-escolar/cargos/${id}`, {
+              method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ montoCentavos: centavos }),
+            }, 'No se pudo cambiar el monto');
+          }
+          toast.success(`«${f.nombre}» queda a ${fmtDOP(centavos)} al mes.`);
+        } else {
+          toast.success(`«${f.nombre}» queda a ${fmtDOP(centavos)} al mes, también en la facturación automática. Los meses ya facturados no cambian.`);
+        }
+        setAbierto(null);
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : 'No se pudo cambiar el precio');
+      }
+      await recargarCargos();
+      onCambio();
     });
   }
 

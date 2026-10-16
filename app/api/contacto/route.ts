@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { headers } from 'next/headers';
 import { resend, assertSent } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
+import { COOKIE_ORIGEN, canalDeOrigen, detalleDeOrigen, leerOrigen } from '@/lib/analytics/origen';
 
 /**
  * Un solo buzón para las dos puertas de entrada: el formulario de integración
@@ -47,6 +48,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { nombre, empresa, email, telefono, mensaje, perfil, tamano, temas } = parsed.data;
+
+  // De dónde llegó a la web (primera visita, ver `lib/analytics/origen.ts`):
+  // para saber qué canal trae las solicitudes, no solo las visitas.
+  const origen = leerOrigen(req.cookies.get(COOKIE_ORIGEN)?.value);
+  const origenTexto = escapeHtml(
+    `${canalDeOrigen(origen)}${origen ? ` · ${detalleDeOrigen(origen)} · entró por ${origen.l} el ${origen.f}` : ''}`,
+  );
   const safe = {
     nombre:   escapeHtml(nombre),
     empresa:  escapeHtml(empresa),
@@ -83,6 +91,7 @@ export async function POST(req: NextRequest) {
             <tr><td style="padding:6px 0;color:#6b7280;">Teléfono:</td><td>${safe.telefono || '—'}</td></tr>
             ${safe.tamano ? `<tr><td style="padding:6px 0;color:#6b7280;">Tamaño:</td><td>${safe.tamano}</td></tr>` : ''}
             ${safe.temas ? `<tr><td style="padding:6px 0;color:#6b7280;">Le interesa:</td><td>${safe.temas}</td></tr>` : ''}
+            <tr><td style="padding:6px 0;color:#6b7280;">Llegó por:</td><td>${origenTexto}</td></tr>
           </table>
           ${safe.mensaje
             ? `<h3 style="color:#374151;margin-top:24px;">Mensaje:</h3>

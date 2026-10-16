@@ -18,8 +18,8 @@ import { NativeSelect } from '@/components/ui/native-select';
  * que en la lista aplanada vivía escondida en el título del grupo.
  *
  * Es para MATRICULAR: su valor es UNA sección, y servicio y grado solo son el
- * camino hasta ella. Para acotar un grupo —«toda Primaria», «toda la sala de
- * tareas»— está `FiltroCurso`. Este control tuvo un modo filtro añadido encima
+ * camino hasta ella. No sirve para acotar un grupo —«toda Primaria», «toda la
+ * sala de tareas»—. Este control tuvo un modo filtro añadido encima
  * que no podía funcionar: un servicio entero no cabe en un id de sección, así
  * que al elegirlo se devolvía solo a «Todos los cursos».
  */

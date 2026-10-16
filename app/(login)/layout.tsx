@@ -16,12 +16,19 @@
  */
 
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { CapturaOrigen } from '@/components/analytics/captura-origen';
+import { MicrosoftClarity } from '@/components/analytics/microsoft-clarity';
 
 export default function LoginLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {children}
+      {/* `data-clarity-mask`: Clarity graba dónde se hace clic en el acceso,
+          pero no el texto de la pantalla ni lo que se escribe. `contents`
+          para que el envoltorio no cambie el maquetado de ninguna pantalla. */}
+      <div data-clarity-mask="True" className="contents">{children}</div>
       <GoogleAnalytics />
+      <CapturaOrigen />
+      <MicrosoftClarity />
     </>
   );
 }

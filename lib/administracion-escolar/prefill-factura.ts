@@ -592,6 +592,7 @@ export async function prefillDeCargos(
         fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
         becaTipo: adminEscolarMatriculas.becaTipo,
         becaValor: adminEscolarMatriculas.becaValor,
+        conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
       })
       .from(adminEscolarMatriculas)
       .where(eq(adminEscolarMatriculas.id, matriculaId))
@@ -599,7 +600,7 @@ export async function prefillDeCargos(
 
     const ctxTarifa = mat
       ? await contextoDeSeccion(teamId, mat.periodoId, mat.cursoId,
-          { tipo: mat.becaTipo, valor: mat.becaValor }, mat.estudianteId)
+          { tipo: mat.becaTipo, valor: mat.becaValor }, mat.estudianteId, mat.conceptoMensualidadId)
       : null;
 
     if (!ctxTarifa || !mat) {

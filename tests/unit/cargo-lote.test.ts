@@ -866,7 +866,7 @@ describe('mensajeDeError: lo que se dice cuando el servidor dice que no', () => 
 const raiz = join(__dirname, '..', '..');
 const lee = (p: string) => readFileSync(join(raiz, p), 'utf8');
 
-const pantalla = lee('app/escolar/cargos/lote/_page-client.tsx');
+const pantalla = lee('app/escolar/cobrar-grupo/_page-client.tsx');
 const DIR = 'components/administracion-escolar/cargo-lote';
 const queSeCobra = lee(`${DIR}/QueSeCobra.tsx`);
 const lista = lee(`${DIR}/ListaAlumnosLote.tsx`);

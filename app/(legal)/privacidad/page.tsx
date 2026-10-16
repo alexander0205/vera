@@ -14,10 +14,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Cabecera, Seccion, Definiciones } from '../_piezas';
+import { urlDelSitio } from '@/lib/config/enlaces';
 
 export const metadata: Metadata = {
   title: 'Política de Privacidad · Zero',
   description: 'Qué datos guarda Zero, para qué, con quién se comparten y cómo ejercer tus derechos.',
+  // Absoluta: el marco legal no tiene `metadataBase`, y una relativa saldría
+  // contra el host que sirvió la página (app., facturacion-v2.…).
+  alternates: { canonical: urlDelSitio('/privacidad') },
 };
 
 const CORREO = 'soporte@zero.com.do';
@@ -246,6 +250,15 @@ export default function PrivacidadPage() {
           tu correo, y de la dirección de las páginas solo viajan los parámetros de campaña
           (los <span className="whitespace-nowrap">utm_*</span>), nunca los enlaces con
           clave como el de recuperar la contraseña o el de pago que recibe una familia.
+        </p>
+        <p>
+          En esas mismas páginas usamos también Microsoft Clarity, que nos muestra de forma
+          agregada dónde se hace clic, hasta dónde se lee cada página y, en grabaciones
+          anónimas, cómo se recorre. En las pantallas de acceso el texto queda oculto en la
+          grabación, y lo que escribes en un formulario no se guarda. Y guardamos una cookie
+          propia con la página por la que llegaste la primera vez y la campaña que te trajo,
+          para saber qué canales funcionan; si creas una cuenta, ese dato queda asociado a tu
+          empresa.
         </p>
         <p>
           <strong>No usamos cookies de publicidad ni le vendemos tus datos a nadie.</strong>{' '}

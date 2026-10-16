@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +20,9 @@ import {
 import { lunesDeLaSemana, rangoLegible } from '@/lib/nomina/periodos';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { CalendarClock, Loader2, Plus, ChevronRight, CalendarDays, Info } from 'lucide-react';
+import { RangoFechas } from '@/components/reportes/rango-fechas';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Corrida {
   id: number;
@@ -46,6 +49,24 @@ const BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 
   pagada:   { label: 'Pagada',   variant: 'secondary' },
 };
 
+/** Imprimir / PDF / Excel de las corridas del rango. */
+const EXPORTAR: ExportTabla<Corrida> = {
+  titulo: 'Corridas de nómina',
+  archivo: 'corridas-nomina',
+  columnas: [
+    { titulo: 'Corrida', valor: c => c.descripcion, sub: c => LABEL_TIPO_CORRIDA[c.tipo] ?? c.tipo, ancho: 1.8 },
+    { titulo: 'Período', valor: c => rangoLegible({ inicio: c.fechaInicio, fin: c.fechaFin }, { corto: true }), ancho: 1.3 },
+    { titulo: 'Pago', valor: c => (c.fechaPago ? fmtFechaCorta(c.fechaPago) : null), ancho: 0.8 },
+    { titulo: 'Estado', valor: c => (BADGE[c.estado] ?? BADGE.borrador).label, ancho: 0.8 },
+    { titulo: 'Bruto', valor: c => c.totalBrutoCents, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Deducciones', valor: c => c.totalDeduccionesCents, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Neto', valor: c => c.totalNetoCents, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Aportes patronales', valor: c => c.totalPatronalCents, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
+
+const fechaCorta = (iso: string) => iso.split('-').reverse().join('/');
+
 const formInicial = () => ({
   tipo: 'mensual' as TipoCorrida,
   periodo: hoyRD().slice(0, 7),
@@ -64,7 +85,16 @@ export default function CorridasClient() {
   const [creando, setCreando] = useState(false);
   const [form, setForm] = useState(formInicial);
 
-  const corridas = data?.corridas ?? [];
+  // Rango: una corrida entra si alguna de sus fechas cae dentro (una
+  // quincena del 25 al 10 es de los dos meses).
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const todas = data?.corridas;
+  const corridas = useMemo(() => (todas ?? []).filter(c =>
+    (!desde || c.fechaFin >= desde) && (!hasta || c.fechaInicio <= hasta),
+  ), [todas, desde, hasta]);
+  const filtroTexto = desde && hasta ? `Del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
+    : desde ? `Desde el ${fechaCorta(desde)}` : hasta ? `Hasta el ${fechaCorta(hasta)}` : 'Todas las fechas';
 
   // Lo que va a pagar la corrida, calculado igual que en el servidor.
   const periodoForm = periodoDeCorrida(form.tipo, { periodo: form.periodo, fechaInicio: form.fechaInicio });
@@ -108,12 +138,22 @@ export default function CorridasClient() {
             Cada corrida paga unas fechas a los empleados de su frecuencia, por los días que trabajaron en ellas.
           </p>
         </div>
-        {puedeCorrer && (
-          <Button onClick={() => setAbierto(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nueva corrida
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, corridas, filtroTexto)}
+            deshabilitado={isLoading || corridas.length === 0} testId="exportar-corridas" />
+          {puedeCorrer && (
+            <Button onClick={() => setAbierto(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Nueva corrida
+            </Button>
+          )}
+        </div>
       </div>
+
+      {(todas?.length ?? 0) > 0 && (
+        <div className="mb-4">
+          <RangoFechas desde={desde} hasta={hasta} onCambiar={(d, h) => { setDesde(d); setHasta(h); }} />
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -122,8 +162,8 @@ export default function CorridasClient() {
       ) : corridas.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
           <CalendarDays className="h-8 w-8" />
-          <p>Aún no has corrido ninguna nómina.</p>
-          {puedeCorrer && (
+          <p>{(todas?.length ?? 0) > 0 ? 'Ninguna corrida en estas fechas.' : 'Aún no has corrido ninguna nómina.'}</p>
+          {puedeCorrer && !todas?.length && (
             <Button variant="outline" onClick={() => setAbierto(true)} className="mt-2 gap-1.5">
               <Plus className="h-4 w-4" /> Correr la primera
             </Button>
