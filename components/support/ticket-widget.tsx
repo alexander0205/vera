@@ -279,7 +279,7 @@ export function TicketWidget() {
       )}
 
       {modoEfectivo === 'historial' && (
-        <HistorialAsistente a={asistente} alAbrir={() => setModo('asistente')} />
+        <HistorialAsistente a={asistente} alAbrir={() => setModo('asistente')} alAbrirSoporte={() => setModo('soporte')} />
       )}
 
       {modoEfectivo === 'soporte' && (call?.status === 'activa' || finalizadaReciente) && (

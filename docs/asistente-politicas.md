@@ -263,3 +263,7 @@ Sin subrayados ni barras azules en los mensajes (los enlaces se subrayan solo al
 ### Historial de conversaciones como pestaña (2026-10-16)
 
 «Asistente · Historial · Soporte»: el historial es una pantalla aparte con búsqueda, grupos por fecha (Hoy, Ayer, Esta semana…), vista previa de la última respuesta, número de mensajes y «Nueva». Elegir una conversación vuelve al chat con ella abierta. `GET /api/asistente?conversaciones=1` devuelve ahora hasta 50 conversaciones de la persona y la empresa con `previa` (primeros 400 caracteres de la última respuesta, que el panel limpia de bloques y marcas) y `mensajes`; el filtro por empresa y usuario no cambió.
+
+### Historial compartido con soporte (2026-10-16)
+
+La pestaña «Historial» junta las conversaciones con el asistente y los chats con soporte (filtros Todo / Asistente / Soporte, una sola línea de tiempo). El chat más reciente con soporte abre la pestaña «Soporte»; los anteriores se leen en el propio historial, de solo lectura. API: `GET /api/zero-tickets/tickets?historial=1` (solo los tickets de la persona en la empresa activa) y `?id=N` (comprueba empresa + persona antes de devolver mensajes: un id ajeno responde 404).
