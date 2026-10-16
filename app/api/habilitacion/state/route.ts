@@ -11,8 +11,10 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
-// Shape canónico del estado — todo opcional para permitir merges parciales
-export const HabilitacionStateSchema = z.object({
+// Shape canónico del estado — todo opcional para permitir merges parciales.
+// Sin `export`: un route.ts solo puede exportar sus métodos (la build fallaba);
+// nadie lo importaba de aquí — el cliente usa su propio tipo en lib/habilitacion.
+const HabilitacionStateSchema = z.object({
   fase:     z.number().int().min(0).max(15).optional(),
   subPaso:  z.number().int().min(0).max(10).optional(),
 

@@ -19,7 +19,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { SignJWT } from 'jose';
-import { getSemillaCache } from '../semilla/route';
+import { getSemillaCache } from '@/lib/dgii/semilla-cache';
 import { logInfo, logError } from '@/lib/logger';
 
 export const runtime = 'nodejs';

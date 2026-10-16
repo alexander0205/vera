@@ -2652,7 +2652,9 @@ function TarifaEstudianteDialog({
           <>
             <ModalHeader
               title="Meses con la mensualidad anterior"
-              subtitle="Se guardó. Estos meses ya estaban facturados o cobrados y no se cambiaron." />
+              subtitle={bloqueados.meses.length > 0
+                ? 'Se guardó. Estos meses ya estaban facturados o cobrados y no se cambiaron.'
+                : 'Se guardó.'} />
             <div className="space-y-2 px-6 pb-2">
               {bloqueados.meses.length === 0 ? (
                 <p className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-sm text-emerald-800">
@@ -2682,9 +2684,11 @@ function TarifaEstudianteDialog({
                   )}
                 </div>
               ))}
-              <p className="text-xs text-gray-500">
-                Si no anulas la factura, ese mes se cobra con la mensualidad de antes y no se le crea otro cargo.
-              </p>
+              {bloqueados.meses.length > 0 && (
+                <p className="text-xs text-gray-500">
+                  Si no anulas la factura, ese mes se cobra con la mensualidad de antes y no se le crea otro cargo.
+                </p>
+              )}
             </div>
             <DialogFooter>
               <Button className="bg-zero-600 hover:bg-zero-700" disabled={anulandoFactura != null}

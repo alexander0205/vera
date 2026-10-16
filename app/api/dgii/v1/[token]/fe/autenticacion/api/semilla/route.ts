@@ -18,16 +18,12 @@ import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { logInfo } from '@/lib/logger';
+import { getSemillaCache } from '@/lib/dgii/semilla-cache';
 
 export const runtime = 'nodejs';
 
-// Cache en memoria: token → { valor, expira }
-// En producción multiinstancia usar Redis/Upstash
-const semillaCache = new Map<string, { valor: string; expira: number }>();
-
-export function getSemillaCache() {
-  return semillaCache;
-}
+// La caché vive en lib/: una ruta solo puede exportar sus métodos.
+const semillaCache = getSemillaCache();
 
 export async function GET(
   _request: NextRequest,
