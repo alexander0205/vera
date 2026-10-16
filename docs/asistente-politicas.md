@@ -259,3 +259,7 @@ Sin cambio, por diseño: los montos y permisos los decide la API al enviar el fo
 ### Interfaz de formularios y de «listo» (2026-10-16)
 
 Sin subrayados ni barras azules en los mensajes (los enlaces se subrayan solo al pasar el cursor); formularios con encabezado con ícono, campos con foco suave, líneas en dos renglones (el panel es angosto), y una tarjeta de éxito con el enlace a lo creado y «Crear otro» para cliente, producto, cotización, factura y cobro. Solo estilos y presentación: ningún cambio en lo que se envía ni en las validaciones.
+
+### Historial de conversaciones como pestaña (2026-10-16)
+
+«Asistente · Historial · Soporte»: el historial es una pantalla aparte con búsqueda, grupos por fecha (Hoy, Ayer, Esta semana…), vista previa de la última respuesta, número de mensajes y «Nueva». Elegir una conversación vuelve al chat con ella abierta. `GET /api/asistente?conversaciones=1` devuelve ahora hasta 50 conversaciones de la persona y la empresa con `previa` (primeros 400 caracteres de la última respuesta, que el panel limpia de bloques y marcas) y `mensajes`; el filtro por empresa y usuario no cambió.

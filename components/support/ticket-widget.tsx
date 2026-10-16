@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Maximize2, Minimize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, LifeBuoy, Phone } from 'lucide-react';
+import { Maximize2, Minimize2, X, Paperclip, Camera, Send, Sparkles, MessageCircle, RotateCcw, Clock, LifeBuoy, Phone, History } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
@@ -18,6 +18,7 @@ import { PanelLlamada } from '@/components/support/panel-llamada';
 import { useSoporte } from './soporte-context';
 import { useAsistente } from './asistente/use-asistente';
 import { PanelAsistente } from './asistente/panel-asistente';
+import { HistorialAsistente } from './asistente/historial-asistente';
 import est from './asistente/asistente.module.css';
 import { ANCHO_AMPLIO, ANCHO_ANCLADO, useAnclado } from './asistente/use-anclado';
 import { LlamadaFinalizada } from '@/components/support/llamada-finalizada';
@@ -70,7 +71,7 @@ export function TicketWidget() {
   });
   const anchoColumna = amplio ? ANCHO_AMPLIO : ANCHO_ANCLADO;
   const anclado = useAnclado(open, anchoColumna);
-  const [modo, setModo] = useState<'asistente' | 'soporte'>('asistente');
+  const [modo, setModo] = useState<'asistente' | 'historial' | 'soporte'>('asistente');
   // La conexión WebRTC vive en un provider único montado en el layout raíz
   // (LlamadaGlobalProvider) — nunca este componente. Si este widget se
   // desmonta (p.ej. al navegar a una ruta excluida, ver TicketWidgetGate),
@@ -130,7 +131,7 @@ export function TicketWidget() {
   }, [call?.status]);
 
   // Mientras se averigua si hay asistente no se muestra el soporte para cambiarlo después.
-  const modoEfectivo: 'asistente' | 'soporte' | 'cargando' =
+  const modoEfectivo: 'asistente' | 'historial' | 'soporte' | 'cargando' =
     asistente.estado === 'cargando' ? 'cargando' : conAsistente ? modo : 'soporte';
 
   // Punto en «Soporte» cuando un agente respondió y no lo has visto.
@@ -195,11 +196,13 @@ export function TicketWidget() {
           {modoEfectivo === 'soporte' ? <MessageCircle size={17} /> : <Sparkles size={17} />}
         </span>
         <div className={est.titulos}>
-          <p className={est.titulo}>{modoEfectivo === 'asistente' ? 'Asistente de Zero' : modoEfectivo === 'cargando' ? 'Asistencia' : 'Soporte'}</p>
+          <p className={est.titulo}>{modoEfectivo === 'asistente' ? 'Asistente de Zero' : modoEfectivo === 'historial' ? 'Conversaciones' : modoEfectivo === 'cargando' ? 'Asistencia' : 'Soporte'}</p>
           <p className={est.subtitulo}>
             {modoEfectivo === 'asistente'
               ? (asistente.perfil.empresa ?? 'Tu negocio, a una pregunta')
-              : modoEfectivo === 'cargando'
+              : modoEfectivo === 'historial'
+                ? 'Retoma una consulta anterior'
+                : modoEfectivo === 'cargando'
                 ? 'Un momento…'
                 : 'Te atiende una persona del equipo'}
           </p>
@@ -254,6 +257,13 @@ export function TicketWidget() {
             <Sparkles size={14} aria-hidden /> Asistente
           </button>
           <button
+            type="button" role="tab" aria-selected={modoEfectivo === 'historial'}
+            className={`${est.segmento} ${modoEfectivo === 'historial' ? est.segmentoActivo : ''}`}
+            onClick={() => setModo('historial')}
+          >
+            <History size={14} aria-hidden /> Historial
+          </button>
+          <button
             type="button" role="tab" aria-selected={modoEfectivo === 'soporte'}
             className={`${est.segmento} ${modoEfectivo === 'soporte' ? est.segmentoActivo : ''}`}
             onClick={() => setModo('soporte')}
@@ -266,6 +276,10 @@ export function TicketWidget() {
 
       {modoEfectivo === 'asistente' && (
         <PanelAsistente a={asistente} onDerivada={() => setModo('soporte')} onIrASoporte={() => setModo('soporte')} />
+      )}
+
+      {modoEfectivo === 'historial' && (
+        <HistorialAsistente a={asistente} alAbrir={() => setModo('asistente')} />
       )}
 
       {modoEfectivo === 'soporte' && (call?.status === 'activa' || finalizadaReciente) && (

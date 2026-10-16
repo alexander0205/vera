@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, desc, eq, gte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/schema';
 import { rateLimitDb } from '@/lib/rate-limit';
@@ -53,10 +53,13 @@ export async function GET(req: NextRequest) {
   if (sp.get('conversaciones') === '1') {
     const lista = await db.select({
       id: asistenteConversaciones.id, titulo: asistenteConversaciones.titulo, actualizadaEn: asistenteConversaciones.actualizadaEn,
+      // Lo último que dijo el asistente (recortado), para reconocer la conversación de un vistazo.
+      previa: sql<string | null>`(select left(m.contenido, 400) from asistente_mensajes m where m.conversacion_id = asistente_conversaciones.id and m.rol = 'assistant' order by m.id desc limit 1)`,
+      mensajes: sql<number>`(select count(*)::int from asistente_mensajes m where m.conversacion_id = asistente_conversaciones.id)`,
     }).from(asistenteConversaciones)
       .where(and(eq(asistenteConversaciones.teamId, acceso.teamId), eq(asistenteConversaciones.userId, acceso.user.id)))
       .orderBy(desc(asistenteConversaciones.actualizadaEn))
-      .limit(15);
+      .limit(50);
     return NextResponse.json({ conversaciones: lista });
   }
   const idPedido = Number(sp.get('id'));

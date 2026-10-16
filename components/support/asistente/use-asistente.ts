@@ -3,6 +3,11 @@
 import type { PrimerosPasos } from '@/lib/asistente/primeros-pasos';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** Una conversación anterior, como la lista el historial. */
+export interface ConversacionResumen {
+  id: number; titulo: string | null; actualizadaEn: string; previa?: string | null; mensajes?: number;
+}
+
 export interface MensajeAsistente {
   /** Id de la base; los mensajes que aún no se guardan llevan un id negativo. */
   id: number;
@@ -194,8 +199,10 @@ export function useAsistente(activo: boolean) {
   }, [activo, estado]);
 
   // Historial: conversaciones anteriores de esta persona en esta empresa.
-  const [conversaciones, setConversaciones] = useState<{ id: number; titulo: string | null; actualizadaEn: string }[]>([]);
+  const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
+  const [cargandoConversaciones, setCargandoConversaciones] = useState(false);
   const cargarConversaciones = useCallback(async () => {
+    setCargandoConversaciones(true);
     try {
       const r = await fetch('/api/asistente?conversaciones=1', { cache: 'no-store' });
       if (!r.ok) return;
@@ -203,6 +210,8 @@ export function useAsistente(activo: boolean) {
       if (Array.isArray(d.conversaciones)) setConversaciones(d.conversaciones);
     } catch {
       // Sin historial por ahora.
+    } finally {
+      setCargandoConversaciones(false);
     }
   }, []);
   /** Abre una conversación anterior: lo que se escriba después continúa en ella. */
@@ -393,7 +402,7 @@ export function useAsistente(activo: boolean) {
   const disponible = estado === 'listo' ? true : estado === 'no-aplica' ? false : null;
   const reintentar_carga = cargar;
 
-  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia, alertas, primerosPasos, conversaciones, cargarConversaciones, abrirConversacion, conversacionId };
+  return { estado, reintentarCarga: reintentar_carga, disponible, perfil, mensajes, enviando, derivando, derivada, errorDerivar, enviar, reintentar, nueva, derivar, resolverPropuesta, valorar, motivar, probarConIa, ia, alertas, primerosPasos, conversaciones, cargandoConversaciones, cargarConversaciones, abrirConversacion, conversacionId };
 }
 
 export type AsistenteEstado = ReturnType<typeof useAsistente>;
