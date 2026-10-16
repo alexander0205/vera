@@ -248,6 +248,15 @@ export default function PrivacidadPage() {
           clave como el de recuperar la contraseña o el de pago que recibe una familia.
         </p>
         <p>
+          En esas mismas páginas usamos también Microsoft Clarity, que nos muestra de forma
+          agregada dónde se hace clic, hasta dónde se lee cada página y, en grabaciones
+          anónimas, cómo se recorre. En las pantallas de acceso el texto queda oculto en la
+          grabación, y lo que escribes en un formulario no se guarda. Y guardamos una cookie
+          propia con la página por la que llegaste la primera vez y la campaña que te trajo,
+          para saber qué canales funcionan; si creas una cuenta, ese dato queda asociado a tu
+          empresa.
+        </p>
+        <p>
           <strong>No usamos cookies de publicidad ni le vendemos tus datos a nadie.</strong>{' '}
           Si prefieres no aparecer en esa medición, puedes bloquearla desde tu navegador o
           con la extensión oficial de Google; el sistema funciona igual.
