@@ -81,8 +81,8 @@ const pesos = (n: number) => `RD$ ${n.toLocaleString('es-DO', { minimumFractionD
 export const nombreSeguro = (s: string, max = 80) => limpiarValor(s, max).replace(/[[\]()*_`<>|#~\\]/g, '').trim();
 
 const FIN = '(?=$|[\\s,.;:!¡¿?])';
-const RELLENO_SI = '(?:[\\s,]+(?:por favor|gracias|adelante|dale|claro|usalo|ese|esa|asi|tal cual|esta bien|de acuerdo|correcto|perfecto|armalo|guardalo))*';
-const RELLENO_NO = '(?:[\\s,]+(?:gracias|por ahora|hay|tengo|aplica|quiero|necesito|mas|todavia|ninguno|ninguna|nada|es todo|ya|nota|tiene))*';
+const RELLENO_SI = '(?:[\\s,]+(?:armar el formulario|arma el formulario|armalo|linea libre|usar ese nombre|uso ese nombre|usa ese nombre|por favor|gracias|adelante|dale|claro|usalo|ese|esa|asi|tal cual|esta bien|de acuerdo|correcto|perfecto|armalo|guardalo))*';
+const RELLENO_NO = '(?:[\\s,]+(?:queda por cobrar|por cobrar|gracias|por ahora|hay|tengo|aplica|quiero|necesito|mas|todavia|ninguno|ninguna|nada|es todo|ya|nota|tiene))*';
 const SI = new RegExp('^(?:si|s|ok|okay|dale|claro|correcto|exacto|de acuerdo|listo|yes|y|va|vale|afirmativo|perfecto|asi es|esta bien|todo bien|adelante|confirmo|confirmado)' + RELLENO_SI + '[\\s.,!¡]*$');
 const NO = new RegExp('^(?:no|n|nel|nop|nada|ninguno|ninguna|skip|saltar|salta|omitir|omite|sin nada|paso|pasar)' + RELLENO_NO + '[\\s.,!¡]*$');
 // Las órdenes solo valen si son TODO el mensaje: «Para Todos SRL», «Sal marina» o «Editar PDF» son nombres, no órdenes.
@@ -127,7 +127,11 @@ const NOMBRE_FORM: Record<IdGuiado, string> = {
 };
 
 const ok = (e: Estado, texto: string, chips: string[] = []): RespuestaGuiada => ({ texto, chips, estado: { ...e, q: texto.includes('```') ? undefined : texto.slice(0, 1500), c: chips.slice(0, 6) } });
-const repite = (e: Estado, motivo: string, pregunta: string, chips: string[] = []) => ok(e, `${motivo}\n\n${pregunta}`, chips);
+const repite = (e: Estado, motivo: string, pregunta: string, chips: string[] = []): RespuestaGuiada => {
+  const r = ok(e, `${motivo}\n\n${pregunta}`, chips);
+  // Al volver «atrás» se repite la pregunta, no el aviso de error que la acompañó.
+  return { ...r, estado: { ...r.estado!, q: pregunta.includes('```') ? undefined : pregunta.slice(0, 1500) } };
+};
 
 // ── Preguntas ───────────────────────────────────────────────────────────────
 
