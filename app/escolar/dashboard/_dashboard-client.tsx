@@ -540,8 +540,10 @@ export default function DashboardEscolarClient() {
                     {d.sinFacturar.cargosTotal} cargo(s) sin comprobante. Ninguno ha vencido todavía,
                     pero la familia no ha recibido nada que pagar.
                   </p>
+                  {/* Se factura desde la familia: su ficha separa «Por facturar» de
+                      «Por cobrar» y tiene el botón Facturar. */}
                   <Button asChild variant="outline" size="sm" className="mt-3">
-                    <Link href="/escolar/cargos">Ver en Cargos</Link>
+                    <Link href="/escolar/responsables?filtro=por-facturar">Ver familias por facturar</Link>
                   </Button>
                 </>
               ) : (
@@ -552,7 +554,7 @@ export default function DashboardEscolarClient() {
                     comprobante: la familia nunca recibió nada que pagar.
                   </p>
                   <Button asChild variant="outline" size="sm" className="mt-3">
-                    <Link href="/escolar/cargos">Ver en Cargos</Link>
+                    <Link href="/escolar/responsables?filtro=por-facturar">Ver familias por facturar</Link>
                   </Button>
                 </>
               )}

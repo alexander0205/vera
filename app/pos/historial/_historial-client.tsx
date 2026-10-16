@@ -22,6 +22,8 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import { ReceiptText, X, Printer, Undo2, Trash2, RefreshCw, Pencil } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 const fmt = (c: number) => (c / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -67,6 +69,26 @@ interface Ticket {
   cajero: string | null;
 }
 
+/**
+ * Imprimir / PDF / Excel de los recibos del turno, con el filtro de método y
+ * tipo de orden puesto. Sin filtro de fecha: la pantalla es el turno abierto.
+ */
+const EXPORTAR: ExportTabla<Venta> = {
+  titulo: 'Recibos del turno',
+  archivo: 'recibos-turno',
+  tachada: v => v.estado === 'ANULADO',
+  columnas: [
+    { titulo: 'Hora', valor: v => new Date(v.fechaEmision).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }), ancho: 0.6 },
+    { titulo: 'Recibo', valor: v => v.codigo ?? `#${v.id}`, sub: v => (/^E\d{12}$/.test(v.encf) ? v.encf : null), ancho: 1.3 },
+    { titulo: 'Cliente', valor: v => v.cliente, ancho: 1.6 },
+    { titulo: 'Orden', valor: v => [v.tipoOrden ? TIPO_ORDEN_LABEL[v.tipoOrden] ?? v.tipoOrden : null, v.mesa ? `Mesa ${v.mesa}` : null].filter(Boolean).join(' · ') || null, ancho: 1 },
+    { titulo: 'Método', valor: v => v.metodos.map(m => METODO_LABEL[m] ?? m).join(', ') || null, ancho: 1.1 },
+    { titulo: 'Cobro', valor: v => (v.estado === 'ANULADO' ? 'Anulado' : PAGO_BADGE[v.estadoPago]?.label ?? v.estadoPago), ancho: 0.8 },
+    { titulo: 'Cajero', valor: v => v.cajero, ancho: 1 },
+    { titulo: 'Total', valor: v => v.montoTotal, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
+
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 
 export default function PosHistorialClient({ modoMesas = false }: { modoMesas?: boolean } = {}) {
@@ -107,10 +129,21 @@ export default function PosHistorialClient({ modoMesas = false }: { modoMesas?: 
             <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Lo cobrado en el turno de caja abierto</Typography>
           </Box>
         </Box>
-        <Button onClick={cargar} startIcon={<RefreshCw style={{ width: 15, height: 15 }} />} size="small"
-          sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }} variant="outlined">
-          Actualizar
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <ExportarListado
+            deshabilitado={cargando || ventas.length === 0}
+            testId="exportar-recibos"
+            armar={() => armarEnvioTabla(EXPORTAR, ventas, [
+              'Turno de caja abierto',
+              metodo ? `Método: ${METODO_LABEL[metodo] ?? metodo}` : null,
+              tipoOrden ? `Orden: ${TIPO_ORDEN_LABEL[tipoOrden] ?? tipoOrden}` : null,
+            ].filter(Boolean).join(' · '))}
+          />
+          <Button onClick={cargar} startIcon={<RefreshCw style={{ width: 15, height: 15 }} />} size="small"
+            sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }} variant="outlined">
+            Actualizar
+          </Button>
+        </Box>
       </Box>
 
       {/* Listado de tarjetas */}

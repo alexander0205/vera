@@ -14,6 +14,7 @@ import Table from '@mui/material/Table';
 import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 import TableCell from '@mui/material/TableCell';
 
 export const dynamic = 'force-dynamic';
@@ -117,15 +118,9 @@ export default async function MayorGeneralPage({
           </Typography>
         </Box>
         {mayor && (
-          <Box component="a"
-            href={`/api/contabilidad/mayor/export?cuentaId=${cuentaId}${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
-              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
-              '&:hover': { bgcolor: '#e0e7fd' } }}
-          >
-            Exportar a Excel
-          </Box>
+          // Imprimir / PDF / Excel de todos los movimientos: la pantalla pagina.
+          <BotonesExportar ruta="/api/contabilidad/mayor/export" testId="exportar-mayor"
+            filtro={`cuentaId=${cuentaId}${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`} />
         )}
       </Box>
 

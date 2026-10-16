@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     conceptosIds,
   } = await req.json();
   const matriculaId = parseInt(id, 10);
-  const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado, conceptosIds: adminEscolarMatriculas.conceptosIds })
+  const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado, conceptosIds: adminEscolarMatriculas.conceptosIds, conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId })
     .from(adminEscolarMatriculas)
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
     .limit(1);
@@ -128,9 +128,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
    * La GENERACIÓN del alumno (concepto de mensualidad). Es su ubicación —lo que
    * la ficha muestra como «1ra/2da/3ra…»—, NO su precio: el importe sigue
    * saliendo de la tarifa/monto propio. Cambiarla reescribe `conceptosIds` para
-   * dejar SOLO esta mensualidad (más los conceptos que no son mensualidad, que
-   * se conservan), y fija `conceptoMensualidadId`. Así se elige la generación y
-   * el precio personal en un mismo sitio, sin arrastrar la tarifa de la generación.
+   * cambiar la generación ANTERIOR por esta, y fija `conceptoMensualidadId`.
+   * Así se elige la generación y el precio personal en un mismo sitio, sin
+   * arrastrar la tarifa de la generación.
+   *
+   * Solo se quita la generación anterior, no toda mensualidad: «Sala de tarea»
+   * también es de tipo mensualidad y va junto a la colegiatura (Mi Casita).
+   * Antes se quitaban todas, y cambiar de generación dejaba al alumno sin su
+   * sala de tarea sin que nadie lo notara: el devengo dejaba de cobrarla.
    */
   let generacionSet: { conceptoMensualidadId: number; conceptosIds: number[] } | null = null;
   if (conceptoMensualidadId !== undefined && conceptoMensualidadId !== null) {
@@ -143,17 +148,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!concepto || concepto.tipo !== 'mensualidad') {
       return NextResponse.json({ error: 'La generación debe ser un concepto de mensualidad del colegio.' }, { status: 400 });
     }
-    // Conserva los conceptos que NO son mensualidad; reemplaza la mensualidad
-    // vieja (cualquiera) por la elegida, sin duplicar.
+    // Reemplaza la generación anterior por la elegida, sin duplicar; el resto
+    // (sala de tarea, transporte, materiales…) se conserva.
     const idsActuales = (conceptosSet ?? actual.conceptosIds ?? []).map(Number);
-    const mensualidadIds = new Set(
-      (await db.select({ id: adminEscolarConceptosPago.id })
-        .from(adminEscolarConceptosPago)
-        .where(and(eq(adminEscolarConceptosPago.teamId, teamId), eq(adminEscolarConceptosPago.tipo, 'mensualidad'))))
-        .map((c) => c.id),
-    );
-    const noMensualidad = idsActuales.filter((cid) => !mensualidadIds.has(cid));
-    generacionSet = { conceptoMensualidadId: nuevoId, conceptosIds: [nuevoId, ...noMensualidad] };
+    const anterior = actual.conceptoMensualidadId;
+    const resto = idsActuales.filter((cid) => cid !== nuevoId && cid !== anterior);
+    generacionSet = { conceptoMensualidadId: nuevoId, conceptosIds: [nuevoId, ...resto] };
   }
 
   // Validar período/curso (si vienen) contra el team.

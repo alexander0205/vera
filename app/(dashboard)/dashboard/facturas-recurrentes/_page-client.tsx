@@ -15,7 +15,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import {
   RefreshCw, Plus, Trash2, AlertTriangle, Pencil, PauseCircle, PlayCircle, Zap, Eye, Loader2,
 } from 'lucide-react';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { toast } from 'sonner';
 
@@ -42,6 +42,28 @@ const FRECUENCIA_LABEL: Record<string, string> = {
   trimestral: 'Trimestral',
   semestral:  'Semestral',
   anual:      'Anual',
+};
+
+const ESTADOS = [
+  { value: 'activa',     label: 'Activa' },
+  { value: 'pausada',    label: 'Pausada' },
+  { value: 'finalizada', label: 'Finalizada' },
+];
+const ESTADO_LABEL: Record<string, string> = Object.fromEntries(ESTADOS.map(e => [e.value, e.label]));
+
+/** Imprimir / PDF / Excel: las plantillas tal como las filtra la tabla. */
+const EXPORTAR: ExportTabla<FacturaRecurrente> = {
+  titulo: 'Facturas recurrentes',
+  archivo: 'facturas-recurrentes',
+  columnas: [
+    { titulo: 'Nombre', valor: f => f.nombre, sub: f => f.descripcion, ancho: 2 },
+    { titulo: 'Contacto', valor: f => f.clienteRazonSocial ?? 'Sin contacto', ancho: 1.8 },
+    { titulo: 'Frecuencia', valor: f => FRECUENCIA_LABEL[f.frecuencia] ?? f.frecuencia, ancho: 0.9 },
+    { titulo: 'Próxima emisión', valor: f => fmtFechaCorta(f.proximaEmision), ancho: 1 },
+    { titulo: 'Estado', valor: f => ESTADO_LABEL[f.estado] ?? f.estado, ancho: 0.8 },
+    { titulo: 'Emitidas', valor: f => f.facturasEmitidas, tipo: 'numero', total: true, ancho: 0.7 },
+    { titulo: 'Total estimado', valor: f => f.totalEstimado, tipo: 'moneda', total: true, ancho: 1.1 },
+  ],
 };
 
 function EstadoChip({ estado }: { estado: string }) {
@@ -225,6 +247,24 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
     } finally { setGenerando(null); }
   }
 
+  // No tenía filtros: búsqueda, estado, frecuencia y rango de próxima emisión.
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const filtradas = useMemo(() => {
+    let rows = facturas;
+    const q = (filterValues.q ?? '').trim().toLowerCase();
+    if (q) rows = rows.filter(f =>
+      f.nombre.toLowerCase().includes(q) ||
+      (f.descripcion ?? '').toLowerCase().includes(q) ||
+      (f.clienteRazonSocial ?? '').toLowerCase().includes(q),
+    );
+    if (filterValues.estado)     rows = rows.filter(f => f.estado === filterValues.estado);
+    if (filterValues.frecuencia) rows = rows.filter(f => f.frecuencia === filterValues.frecuencia);
+    if (filterValues.proxima_desde) rows = rows.filter(f => f.proximaEmision.slice(0, 10) >= filterValues.proxima_desde);
+    if (filterValues.proxima_hasta) rows = rows.filter(f => f.proximaEmision.slice(0, 10) <= filterValues.proxima_hasta);
+    return rows;
+  }, [facturas, filterValues]);
+  const filtrando = Object.values(filterValues).some(Boolean);
+
   const columns: DataTableColumn<FacturaRecurrente>[] = useMemo(() => [
     {
       id: 'nombre',
@@ -318,10 +358,22 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
   return (
     <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3 }}>
       <DataTable<FacturaRecurrente>
-        data={facturas}
+        data={filtradas}
         loading={loading}
         columns={columns}
         title="Facturas recurrentes"
+        filters={[
+          { type: 'search', id: 'q', placeholder: 'Buscar por nombre o contacto…' },
+          { type: 'select', id: 'estado', label: 'Estado', placeholder: 'Todos los estados', options: ESTADOS },
+          {
+            type: 'select', id: 'frecuencia', label: 'Frecuencia', placeholder: 'Todas las frecuencias',
+            options: Object.entries(FRECUENCIA_LABEL).map(([value, label]) => ({ value, label })),
+          },
+          { type: 'daterange', id: 'proxima', label: 'Próxima emisión' },
+        ]}
+        filterValues={filterValues}
+        onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         description="Automatiza el ciclo de facturación de tus clientes"
         rowActions={rowActions}
         rowHref={f => `/dashboard/facturas-recurrentes/${f.id}`}
@@ -329,9 +381,9 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
         renderExpanded={f => <RecurrenteHijos recurrenteId={f.id} />}
         emptyState={{
           icon: RefreshCw,
-          title: 'Sin facturas recurrentes',
-          hint: 'Configura una factura recurrente para automatizar tu facturación',
-          cta: canOperate ? (
+          title: filtrando ? 'Sin resultados para estos filtros' : 'Sin facturas recurrentes',
+          hint: filtrando ? 'Intenta ajustar la búsqueda o los filtros' : 'Configura una factura recurrente para automatizar tu facturación',
+          cta: canOperate && !filtrando ? (
             <Link href="/dashboard/facturas-recurrentes/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />}
                 sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>

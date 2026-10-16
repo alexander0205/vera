@@ -18,7 +18,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import {
   PackagePlus, ArrowDownLeft, ArrowUpRight, Wrench, Package,
 } from 'lucide-react';
-import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { DataTable, type ExportTabla, type DataTableColumn } from '@/components/data-table';
+import { fmtFechaRD } from '@/lib/utils/format';
 import { Autocomplete } from '@/app/(dashboard)/dashboard/facturas/nueva/components/Autocomplete';
 import { renderProductoOption } from '@/components/productos/ProductoOption';
 
@@ -36,6 +37,22 @@ interface Movimiento {
   productoNombre: string | null;
   usuarioNombre:  string | null;
 }
+
+/** Imprimir / PDF / Excel de los movimientos, como los filtra la tabla. */
+const EXPORTAR: ExportTabla<Movimiento> = {
+  titulo: 'Movimientos de inventario',
+  archivo: 'movimientos-inventario',
+  columnas: [
+    { titulo: 'Fecha', valor: m => fmtFechaRD(m.createdAt), ancho: 0.8 },
+    { titulo: 'Tipo', valor: m => TIPO_LABELS[m.tipo] ?? m.tipo, ancho: 0.9 },
+    { titulo: 'Producto', valor: m => m.productoNombre ?? `#${m.productoId}`, ancho: 2 },
+    { titulo: 'Cantidad', valor: m => (m.esEntrada ? m.cantidad : -m.cantidad), tipo: 'numero', ancho: 0.7 },
+    { titulo: 'Stock antes', valor: m => m.stockAntes, tipo: 'numero', ancho: 0.7 },
+    { titulo: 'Stock después', valor: m => m.stockDespues, tipo: 'numero', ancho: 0.8 },
+    { titulo: 'Referencia', valor: m => m.referenciaEncf ?? m.motivo, ancho: 1.4 },
+    { titulo: 'Usuario', valor: m => m.usuarioNombre, ancho: 1 },
+  ],
+};
 
 interface ProductoBasico {
   id:     number;
@@ -155,12 +172,19 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
   const productoFilter = filterValues.productoId ?? '';
   const tipoFilter     = filterValues.tipo        ?? '';
 
-  const cargar = useCallback(async (productoId: string, tipo: string) => {
+  const desdeFilter    = filterValues.fecha_desde ?? '';
+  const hastaFilter    = filterValues.fecha_hasta ?? '';
+
+  const cargar = useCallback(async (productoId: string, tipo: string, desde: string, hasta: string) => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
       if (productoId) p.set('productoId', productoId);
       if (tipo)       p.set('tipo', tipo);
+      if (desde)      p.set('desde', desde);
+      if (hasta)      p.set('hasta', hasta);
+      // Sin rango, lo último (como antes); con rango, el rango entero.
+      p.set('limit', desde || hasta ? '2000' : '200');
       if (almacenId)  p.set('almacenId', String(almacenId));
       const res  = await fetch(`/api/inventario/movimientos?${p}`);
       const data = await res.json();
@@ -170,7 +194,7 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
     }
   }, [almacenId]);
 
-  useEffect(() => { cargar(productoFilter, tipoFilter); }, [productoFilter, tipoFilter, cargar]);
+  useEffect(() => { cargar(productoFilter, tipoFilter, desdeFilter, hastaFilter); }, [productoFilter, tipoFilter, desdeFilter, hastaFilter, cargar]);
 
   useEffect(() => {
     fetch('/api/productos?tipo=bien')
@@ -232,7 +256,7 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
       setAjuste(EMPTY_AJUSTE);
       setElegido(null);
       setVariantes([]);
-      cargar(productoFilter, tipoFilter);
+      cargar(productoFilter, tipoFilter, desdeFilter, hastaFilter);
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -357,9 +381,11 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
               { value: 'STOCK_INICIAL',  label: 'Stock inicial' },
             ],
           },
+          { type: 'daterange', id: 'fecha' },
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         emptyState={{
           icon:  Package,
           title: 'Sin movimientos de inventario',

@@ -95,6 +95,13 @@ const nextConfig: NextConfig = {
         destination: '/contabilidad/:seccion/:resto*',
         permanent: false,
       },
+      // «Cargos y deudas» (y su cobro por lote) se quitó del colegio: lo que
+      // debe cada familia está en Responsables con el filtro «Con deuda». Los
+      // marcadores y enlaces viejos llegan ahí en vez de a un 404. Temporal,
+      // por la misma razón que la de arriba.
+      // El cobro a un grupo volvió, en su propia ruta: el enlace viejo va ahí.
+      { source: '/escolar/cargos/lote', destination: '/escolar/cobrar-grupo', permanent: false },
+      { source: '/escolar/cargos/:resto*', destination: '/escolar/responsables?filtro=con-deuda', permanent: false },
     ];
   },
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser
