@@ -233,7 +233,7 @@ function MensajeAsistenteVista({
                 {m.herramientas.map((h) => h.nombre).filter((n, i, a) => a.indexOf(n) === i).join(' · ')}
               </span>
             )}
-            <div className={s.accionesMensaje} style={m.contenido.includes('```formulario') ? { display: 'none' } : undefined}>
+            <div className={s.accionesMensaje} style={/```(formulario|paso)/.test(m.contenido) ? { display: 'none' } : undefined}>
               {m.id > 0 && <MenuDescarga mensajeId={m.id} conExcel={tieneDatosTabulares(m.contenido)} destacado={m.grande === true} />}
               {m.id > 0 && (
                 <>
@@ -256,7 +256,7 @@ function MensajeAsistenteVista({
                 ))}
               </div>
             )}
-            {puedeIa && probarConIa && m.origen === 'local' && m.id > 0 && !m.contenido.includes('```formulario') && (
+            {puedeIa && probarConIa && m.origen === 'local' && m.id > 0 && !/```(formulario|paso)/.test(m.contenido) && (
               <div className={s.motivos}>
                 <button type="button" className={s.motivo} onClick={probarConIa}>
                   ¿No es lo que buscabas? Preguntar a la IA
@@ -327,6 +327,16 @@ export function PanelAsistente({
     setTexto('');
     void a.enviar(limpio);
   }
+
+  // Un formulario del chat puede pedir «mejor pregúntame»: se manda como un mensaje más.
+  useEffect(() => {
+    const alPedir = (ev: Event) => {
+      const t = (ev as CustomEvent<string>).detail;
+      if (typeof t === 'string' && t.length < 200) mandar(t);
+    };
+    window.addEventListener('asistente:enviar', alPedir);
+    return () => window.removeEventListener('asistente:enviar', alPedir);
+  });
 
   async function hablarConPersona() {
     // Sin conversación que entregar, o ya entregada: solo se cambia de vista.

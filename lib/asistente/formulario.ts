@@ -521,7 +521,7 @@ const soloDigitos = (s: string) => s.replace(/[,\s]/g, '');
  *    que el modelo puso fuera de los campos conocidos sobrevive.
  */
 export function filtrarFormulariosDeIa(texto: string, mensajesDeLaPersona: string[]): string {
-  texto = texto.replace(/\u0000/g, '');
+  texto = quitarBloquesGuiados(texto.replace(/\u0000/g, ''));
   const bloques = [...texto.matchAll(/```formulario[^\n]*\n([\s\S]*?)(?:```|$)/gi)];
   if (!bloques.length) return texto;
 
@@ -1130,4 +1130,62 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
   const nombre = nombreDe(llamado);
   const campo = id === 'cliente' ? 'razonSocial' : 'nombre';
   return { id, valores: nombre ? { [campo]: limpiarValor(nombre, MAX_TEXTO) } : {} };
+}
+
+// ── Formulario armado por la creación guiada ────────────────────────────────
+
+/** Formularios que el asistente puede llenar preguntando de a una. */
+export const IDS_GUIADOS = ['cliente', 'producto', 'cotizacion', 'factura', 'pago'] as const;
+
+/** Claves que el modo guiado puede dejar ya llenas (más las propias de cada formulario). */
+const CLAVES_GUIADAS = ['clienteId', 'clienteRnc', 'clienteEmail', 'documentoId', 'documentoNombre', 'documentoSaldo', 'documentoSaldoNum', 'documentoTotal'];
+
+/** El bloque ```formulario-guiado: solo lo escribe el servidor, desde la conversación guiada. */
+export function bloqueGuiado(id: IdFormulario, valores: Valores): string {
+  const limpio: Valores = {};
+  for (const [k, v] of Object.entries(valores)) if (typeof v === 'string' && v !== '') limpio[k] = v;
+  return '```formulario-guiado\n' + JSON.stringify({ tipo: id, valores: limpio }) + '\n```';
+}
+
+/** Lee un ```formulario-guiado: se reconstruye campo por campo; lo que no se reconoce se descarta. */
+export function parsearGuiado(cuerpo: string): { def: DefFormulario; valores: Valores } | null {
+  if (cuerpo.length > 20_000) return null;
+  let crudo: unknown;
+  try { crudo = JSON.parse(cuerpo); } catch { return null; }
+  if (!crudo || typeof crudo !== 'object') return null;
+  const o = crudo as { tipo?: unknown; valores?: unknown };
+  if (typeof o.tipo !== 'string' || !(IDS_GUIADOS as readonly string[]).includes(o.tipo)) return null;
+  const def = FORMULARIOS[o.tipo as IdFormulario];
+  const permitidas = new Map<string, Campo | null>();
+  for (const c of def.campos) {
+    if (c.tipo === 'cliente') permitidas.set('clienteNombre', c);
+    else if (c.tipo !== 'archivo' && c.tipo !== 'documento') permitidas.set(c.id, c);
+  }
+  for (const k of CLAVES_GUIADAS) permitidas.set(k, null);
+  const valores: Valores = {};
+  if (o.valores && typeof o.valores === 'object') {
+    for (const [k, x] of Object.entries(o.valores as Record<string, unknown>)) {
+      if (!permitidas.has(k) || typeof x !== 'string') continue;
+      const c = permitidas.get(k) ?? null;
+      if (def.id !== 'pago' && k.startsWith('documento')) continue;
+      if (k === 'lineas') { const ls = leerLineas(x); if (ls.length) valores.lineas = guardarLineas(ls); continue; }
+      if (k === 'clienteId' || k === 'documentoId') { if (/^[1-9]\d{0,9}$/.test(x)) valores[k] = x; continue; }
+      if (k === 'documentoSaldo' || k === 'documentoSaldoNum' || k === 'documentoTotal') { if (/^\d{1,9}(\.\d{1,2})?$/.test(x)) valores[k] = x; continue; }
+      if (def.id !== 'pago' && k.startsWith('documento')) continue;
+      if (def.id === 'pago' && k === 'documentoNombre') { valores[k] = limpiarValor(x, 200); continue; }
+      if (def.id !== 'pago' && (k === 'documentoId')) continue;
+      const v = limpiarValor(x, c?.max ?? MAX_TEXTO);
+      if (!v) continue;
+      if (c?.tipo === 'select') { if (c.opciones?.some((op) => op.valor === v)) valores[k] = v; continue; }
+      if (c?.tipo === 'numero') { const n = Number(v); if (Number.isFinite(n) && n >= 0 && n <= MAX_MONTO) valores[k] = String(n); continue; }
+      if (c?.tipo === 'fecha') { if (esFechaReal(v)) valores[k] = v; continue; }
+      valores[k] = v;
+    }
+  }
+  return { def, valores };
+}
+
+/** Quita lo que el modelo no puede escribir: el estado de la conversación guiada y los formularios ya llenos. */
+export function quitarBloquesGuiados(texto: string): string {
+  return texto.replace(/```(?:paso|formulario-guiado)[^\n]*\n[\s\S]*?(?:```|$)/gi, '').replace(/\n{3,}/g, '\n\n').trim();
 }

@@ -1,0 +1,59 @@
+import 'server-only';
+import type { ClienteApi } from './api';
+import {
+  armarMensajeGuiado, avanzarGuiado, bloquePaso, detectarGuiado, iniciarGuiado, leerEstado,
+  type BuscadoresGuiado, type Opcion, type RespuestaGuiada,
+} from './guiado';
+
+const TASAS = ['0.18', '0.16', '0', 'exento'] as const;
+const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
+
+/** Búsquedas de lectura sobre la empresa de la persona, por la misma API que usa la pantalla. */
+export function buscadoresGuiado(api: ClienteApi): BuscadoresGuiado {
+  const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santo_Domingo' }).format(new Date());
+  return {
+    hoy,
+    async clientes(q) {
+      const d = await api.get<{ clientes?: { id: number; razonSocial: string; rnc?: string | null; email?: string | null }[] }>('/api/clientes', { q, limit: 8 });
+      return (d.clientes ?? []).slice(0, 8).map((c): Opcion => ({ id: c.id, nombre: c.razonSocial, rnc: c.rnc ?? undefined, email: c.email ?? undefined }));
+    },
+    async productos(q) {
+      const d = await api.get<{ productos?: { id: number; nombre: string; precioDOP?: number; tasaItbis?: string; tipo?: string }[] }>('/api/productos', { contexto: 'facturacion', q, limit: 8 });
+      return (d.productos ?? []).slice(0, 8).map((p): Opcion => ({
+        id: p.id, nombre: p.nombre, precio: num(p.precioDOP), tasa: TASAS.find((t) => t === p.tasaItbis) ?? '0.18', bien: p.tipo === 'bien',
+      }));
+    },
+    async facturas(q) {
+      const d = await api.get<{ docs?: { id: number; codigo?: string | null; encf?: string | null; razonSocialComprador?: string | null; montoTotal: number; pagado?: number }[] }>('/api/facturas', { search: q, limit: 8 });
+      return (d.docs ?? []).slice(0, 8).map((f): Opcion => ({
+        id: f.id, nombre: `${f.encf || f.codigo || `Factura ${f.id}`} - ${f.razonSocialComprador ?? 'consumo final'}`,
+        saldo: Math.max(0, (num(f.montoTotal) - num(f.pagado)) / 100), total: num(f.montoTotal) / 100,
+      }));
+    },
+  };
+}
+
+export interface SalidaGuiada { contenido: string; chips: string[] }
+
+/**
+ * Si la conversación está en un flujo guiado (o el mensaje lo inicia), devuelve la
+ * respuesta; `null` = no aplica y el mensaje sigue el camino de siempre.
+ * `ultimoAsistente` es el mensaje del asistente INMEDIATAMENTE anterior al de la persona.
+ */
+export async function responderGuiado(texto: string, ultimoAsistente: string | null, api: ClienteApi): Promise<SalidaGuiada | null> {
+  const estado = leerEstado(ultimoAsistente);
+  let r: RespuestaGuiada | null = null;
+  if (estado) {
+    try {
+      r = await avanzarGuiado(estado, texto, buscadoresGuiado(api));
+    } catch {
+      return { contenido: `No pude consultar tus datos ahora. Intenta de nuevo en un momento.\n\n${bloquePaso(estado)}`, chips: ['Cancelar'] };
+    }
+    if (r.abandona) return null;
+  } else {
+    const det = detectarGuiado(texto);
+    if (!det) return null;
+    r = iniciarGuiado(det.id, det.valores);
+  }
+  return { contenido: armarMensajeGuiado(r), chips: r.chips.slice(0, 5) };
+}

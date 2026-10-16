@@ -27,6 +27,7 @@ import { seguimientosDe } from '@/lib/asistente/seguimientos';
 import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
+import { responderGuiado } from '@/lib/asistente/guiado-servidor';
 import { esRespuestaGrande, pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
@@ -142,15 +143,15 @@ export async function POST(req: NextRequest) {
   if (!acceso.ok) return sinAcceso(acceso);
   const { teamId, user } = acceso;
 
-  const rl = await rateLimitDb(`asistente:${teamId}:${user.id}`, 40, 60 * 60_000);
+  const rl = await rateLimitDb(`asistente:${teamId}:${user.id}`, 100, 60 * 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Muchas consultas seguidas. Espera unos minutos.' }, { status: 429 });
   }
 
-  // Ráfaga: más de 12 preguntas en 2 minutos no es una persona leyendo.
-  const rafaga = await rateLimitDb(`asistente_rafaga:${teamId}:${user.id}`, 12, 2 * 60_000);
+  // Ráfaga: más de 20 mensajes en 2 minutos no es una persona leyendo (la creación guiada son muchas respuestas cortas).
+  const rafaga = await rateLimitDb(`asistente_rafaga:${teamId}:${user.id}`, 20, 2 * 60_000);
   if (!rafaga.allowed) {
-    logAudit({ teamId, userId: user.id, actor: user.email, action: 'ASISTENTE_ABUSO', resource: 'rafaga', meta: { motivo: 'más de 12 preguntas en 2 minutos' } });
+    logAudit({ teamId, userId: user.id, actor: user.email, action: 'ASISTENTE_ABUSO', resource: 'rafaga', meta: { motivo: 'más de 20 mensajes en 2 minutos' } });
     return NextResponse.json({ error: 'Vas muy rápido. Espera un par de minutos y vuelve a preguntar.' }, { status: 429 });
   }
 
@@ -228,6 +229,24 @@ export async function POST(req: NextRequest) {
 
   // «Pásalo a Excel»: es la respuesta anterior, no una pregunta nueva.
   const esPolitica = clasificarSolicitud(texto) != null;
+
+  // Creación guiada: el asistente pregunta de a una y la persona contesta escribiendo.
+  // Es determinista (sin modelo); solo arma el formulario, que la persona envía.
+  const anterior = historial.length >= 2 && historial[historial.length - 2].role === 'assistant' ? historial[historial.length - 2].content : null;
+  // Una respuesta como «1» (sin letras) la tomaría la política de «vacío»: dentro de un flujo guiado es una opción válida.
+  const soloNumero = clasificarSolicitud(texto)?.categoria === 'vacio';
+  if (!forzarIa && (!esPolitica || soloNumero)) {
+    const guiada = await responderGuiado(texto, anterior, crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') }));
+    if (guiada) {
+      const [g] = await db.insert(asistenteMensajes).values({ conversacionId, rol: 'assistant', contenido: guiada.contenido, origen: 'local' })
+        .returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
+      await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() }).where(eq(asistenteConversaciones.id, conversacionId));
+      return NextResponse.json({
+        conversacionId, origen: 'local',
+        mensaje: { id: g.id, rol: 'assistant', contenido: guiada.contenido, herramientas: [], creadoEn: g.creadoEn, grande: false, origen: 'local', seguimientos: guiada.chips },
+      });
+    }
+  }
   const quiereExcel = !forzarIa && !esPolitica && pideExcel(texto);
   if (quiereExcel && texto.split(/\s+/).length <= 8) {
     const [prev] = await db.select({ id: asistenteMensajes.id, contenido: asistenteMensajes.contenido }).from(asistenteMensajes)

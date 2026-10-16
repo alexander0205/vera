@@ -32,7 +32,7 @@ ser manipulado; el código no se convence.
 | 8 | **Alcance de empresa:** el `teamId` sale de la sesión; nunca del cliente ni del modelo | `acceso.ts`, `contexto.ts` | `herramientas según módulo y permiso` |
 | 9 | **Totales completos o avisados:** pagina la API; si no cubre todo, lo dice | `herramientas-api.ts` | `precisión de la búsqueda de facturas` |
 | 10 | Si una API falla o niega acceso, se dice; no se inventa | `seguro()` en `herramientas-api.ts` | `búsqueda de facturas por la API` |
-| 11 | Límites: 40 preguntas/hora/usuario, 1 500 caracteres (se rechaza, no se corta), 30 PDF/hora, presupuesto de 45 s para la IA | `route.ts`, `agente.ts` | — |
+| 11 | Límites: 100 mensajes/hora/usuario (la creación guiada son muchas respuestas cortas), 1 500 caracteres (se rechaza, no se corta), 30 PDF/hora, presupuesto de 45 s para la IA | `route.ts`, `agente.ts` | — |
 | 12 | **Retención:** conversaciones sin actividad > 180 días se borran (configurable, mínimo 30) | `app/api/cron/asistente-retencion` | — |
 | 13 | **Trazabilidad:** cada respuesta guarda qué consultó; cada acción confirmada queda en `audit_logs` | `asistente_mensajes.herramientas`, `ASISTENTE_ACCION_CONFIRMADA` | — |
 | 14 | **Honestidad sobre la IA:** se identifica como IA si se le pregunta; «puede equivocarse» visible; handoff a una persona siempre disponible | `politicas.ts`, panel | `identidad` |
@@ -99,7 +99,7 @@ Capas, de afuera hacia adentro:
 
 1. **Entrada**: políticas con respuesta fija, sin modelo y sin consultar datos
    (`clasificarSolicitud`, comparando contra variantes del texto).
-2. **Límites**: 1500 caracteres, 12 preguntas por 2 minutos, 40 por hora; sin
+2. **Límites**: 1500 caracteres, 20 mensajes por 2 minutos, 100 por hora; sin
    caracteres de control; la empresa de la sesión manda (409 si la persona veía otra).
 3. **Modelo**: instrucciones con regla de secreto; herramientas de solo lectura sin
    parámetros de empresa ni usuario; datos de herramientas neutralizados.
@@ -206,3 +206,15 @@ cuenta, anular, convertir, emitir-ecf, fotos y clientes ya validaban la empresa 
   correcto en seguridad, engañoso en la respuesta.
 - Operativo: `CRON_SECRET` debe estar definido (16+ caracteres) en cada entorno; sin él las tareas
   programadas devuelven 401.
+
+## Creación guiada por conversación (2026-10-16)
+
+Además del formulario, la persona puede pedir «guíame paso a paso para crear una factura» (o cotización, cliente, producto, cobro) y el asistente va preguntando de a una.
+
+- **Sin modelo**: `lib/asistente/guiado.ts` es una máquina de estados determinista; cada pregunta es una plantilla y cada respuesta se interpreta con reglas. Nada de lo que escribe la persona llega a un modelo en este flujo.
+- **Estado en la conversación**: cada pregunta lleva un bloque ```` ```paso ```` con el estado en JSON; la respuesta siguiente lo lee del mensaje anterior del asistente. `leerEstado` reconstruye campo por campo (claves permitidas, ids solo dígitos, líneas por `leerLineas`). La UI no lo muestra.
+- **Quien crea es la persona**: al final se arma un ```` ```formulario-guiado ```` con todo lleno y se dibuja el mismo formulario de siempre; hasta que ella pulsa el botón (y confirma emitir/anular) no se guarda nada.
+- **El modelo no puede falsificarlo**: `quitarBloquesGuiados` (dentro de `filtrarFormulariosDeIa`) borra de la salida del modelo cualquier ```` ```paso ```` o ```` ```formulario-guiado ````; `parsearGuiado` solo acepta formularios guiados, claves conocidas y valores validados.
+- **Búsquedas**: clientes, productos y facturas se leen por la misma API de la pantalla con la sesión de la persona (`guiado-servidor.ts`); los nombres se muestran sin marcado (`nombreSeguro`).
+- **Salidas**: «cancelar» termina; «formulario» pasa al formulario con lo recogido; una pregunta suelta abandona el flujo y sigue el camino normal. Una respuesta numérica («1») no la frena la política de «vacío» dentro de un flujo.
+- Pruebas: `tests/unit/asistente-guiado.test.ts`.

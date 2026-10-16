@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
 import { anchoBarra, parsearGrafico, valorGrafico, type Grafico } from '@/lib/asistente/grafico';
-import { parsearFormulario } from '@/lib/asistente/formulario';
+import { parsearFormulario, parsearGuiado } from '@/lib/asistente/formulario';
 import { FormularioChat } from './formulario-chat';
 import { parsearTarjeta, type Tarjeta } from '@/lib/asistente/tarjeta';
 import s from './asistente.module.css';
@@ -169,9 +169,13 @@ export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
       const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
       const tj = lenguaje === 'tarjeta' ? parsearTarjeta(cuerpo.join('\n')) : null;
       const fm = lenguaje === 'formulario' && formularios === 0 ? parsearFormulario(cuerpo.join('\n')) : null;
-      if (fm) formularios += 1;
-      if (fm) {
-        bloques.push(<FormularioChat key={`b${n}`} def={fm.def} inicial={fm.valores} clave={clave ? `${clave}:${n++}` : undefined} />);
+      const fg = lenguaje === 'formulario-guiado' && formularios === 0 ? parsearGuiado(cuerpo.join('\n')) : null;
+      const fx = fm ?? fg;
+      if (fx) formularios += 1;
+      // El estado de la conversación guiada (```paso) es interno: no se muestra.
+      if (lenguaje === 'paso') continue;
+      if (fx) {
+        bloques.push(<FormularioChat key={`b${n}`} def={fx.def} inicial={fx.valores} clave={clave ? `${clave}:${n++}` : undefined} />);
       } else if (g) {
         bloques.push(<GraficoVista key={`b${n++}`} g={g} />);
       } else if (tj) {

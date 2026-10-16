@@ -343,6 +343,8 @@ function EditorLineas({ id, valor, cambiar, deshabilitado }: {
   );
 }
 
+const FRASE_GUIADA: Record<string, string> = { cliente: 'un cliente', producto: 'un producto', cotizacion: 'una cotización', factura: 'una factura', pago: 'un cobro' };
+
 export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; inicial: Valores; clave?: string }) {
   const base = useId();
   const soporte = useSoporte();
@@ -641,6 +643,11 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
       <header>
         <strong>{def.titulo}</strong>
         <p>{def.descripcion}</p>
+        {fase.t === 'editando' && ['cliente', 'producto', 'cotizacion', 'factura', 'pago'].includes(def.id) && !inicial.lineas && !inicial.clienteId && !inicial.documentoId && !inicial.razonSocial && (
+          <button type="button" className={s.enlaceBoton} onClick={() => window.dispatchEvent(new CustomEvent('asistente:enviar', { detail: `guíame paso a paso para crear ${FRASE_GUIADA[def.id] ?? 'esto'}` }))}>
+            Prefiero que me preguntes paso a paso
+          </button>
+        )}
       </header>
 
       <form
