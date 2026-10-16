@@ -1189,5 +1189,18 @@ export function parsearGuiado(cuerpo: string): { def: DefFormulario; valores: Va
 
 /** Quita lo que el modelo no puede escribir: el estado de la conversación guiada y los formularios ya llenos. */
 export function quitarBloquesGuiados(texto: string): string {
-  return texto.replace(/```(?:paso|formulario-guiado)[^\n]*\n[\s\S]*?(?:```|$)/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+  return texto
+    .replace(/```(?:paso|formulario-guiado)[^\n]*\n[\s\S]*?(?:```|$)/gi, '')
+    // ni siquiera la marca suelta (en una línea, sin cierre…): nada que un renderizador pudiera tomar por un bloque
+    .replace(/```\s*(?:paso|formulario-guiado)/gi, '')
+    .replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** El historial que ve el modelo: sin el estado interno de la creación guiada y con los formularios ya llenos resumidos. */
+export function sinBloquesGuiadosParaElModelo(texto: string): string {
+  return texto
+    .replace(/```paso[^\n]*\n[\s\S]*?(?:```|$)/gi, '')
+    .replace(/```formulario-guiado[^\n]*\n[\s\S]*?(?:```|$)/gi, '[formulario preparado para la persona]')
+    .replace(/```\s*(?:paso|formulario-guiado)/gi, '')
+    .trim();
 }

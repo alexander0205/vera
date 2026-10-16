@@ -226,3 +226,22 @@ Además del formulario, la persona puede pedir «guíame paso a paso para crear 
 Flujos: cliente, producto, cotización, factura, cobro, anulación, nota de crédito (elige líneas y cantidades de la factura), nota de débito (cargos libres), convertir cotización y editar borrador (elige qué cambiar: cliente, líneas, nota). Las facturas, cotizaciones y clientes existentes se buscan por la API de la pantalla; si hay varios se numeran para elegir, y si no hay ninguno se pide otra búsqueda. La factura que no admite nota (anulada, ya es nota) se rechaza en la propia conversación.
 
 El formulario final conserva lo dicho en la conversación sobre lo que trae la factura al elegirla (`fijosDeLaConversacion`).
+
+### Auditoría de la conversación guiada (2026-10-16)
+
+Hallazgos y cómo quedaron:
+
+| Riesgo | Antes | Ahora |
+|---|---|---|
+| Falsificar el estado (```paso) metiendo texto en un mensaje del asistente | solo se validaba la forma | el estado va **firmado con HMAC** (empresa + persona + conversación + hora), caduca a las 3 h y sin `AUTH_SECRET` el flujo no continúa |
+| Bloques guiados escritos por el modelo o el contestador | filtrados solo en el camino del modelo | se quitan en el punto de guardado de todo mensaje que no sea de la creación guiada, incluida la marca suelta |
+| Estado interno y formularios llenos en el historial que ve el modelo | se mandaban | se quitan (`sinBloquesGuiadosParaElModelo`) |
+| Nombres que parecen órdenes («Para Todos SRL», «Sal marina», «Editar PDF») cancelaban o abrían el formulario | prefijo | las órdenes valen solo si son el mensaje entero |
+| «Listo Transport» o «Va y Viene» entendidos como «sí» | prefijo | «sí»/«no» solo si son todo el mensaje (con relleno: «no, gracias») |
+| Productos que empiezan como una pregunta («Cómoda», «Cualquier…») abandonaban el flujo | prefijo | palabra interrogativa completa o «?» |
+| «0.500» leído como 500 | sí | 0.5 |
+| Producto de catálogo sin precio: bucle | sí | pide el precio |
+| Confirmar con datos que el formulario rechazaría | se descubría en el formulario | se valida antes de armarlo |
+| Nota de crédito sobre factura sin líneas | formulario vacío | se avisa |
+
+Sin cambio, por diseño: los montos y permisos los decide la API al enviar el formulario (`validarReferenciasDeEmpresa`, permisos); el flujo no escribe nada; las búsquedas son GET con la sesión de la persona. Condición de despliegue: `AUTH_SECRET` definido (16+ caracteres) en cada entorno; si falta, la creación guiada queda inactiva en lugar de aceptar estados sin firma. Pruebas: `tests/unit/asistente-guiado-seguridad.test.ts`.

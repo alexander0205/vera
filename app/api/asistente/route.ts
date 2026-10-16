@@ -28,6 +28,7 @@ import { evaluarAcceso, sinAcceso } from '@/lib/asistente/acceso';
 import { construirContexto } from '@/lib/asistente/contexto';
 import { crearClienteApi } from '@/lib/asistente/api';
 import { responderGuiado } from '@/lib/asistente/guiado-servidor';
+import { quitarBloquesGuiados, sinBloquesGuiadosParaElModelo } from '@/lib/asistente/formulario';
 import { esRespuestaGrande, pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
 
@@ -212,8 +213,11 @@ export async function POST(req: NextRequest) {
     .where(eq(asistenteMensajes.conversacionId, conversacionId))
     .orderBy(desc(asistenteMensajes.id))
     .limit(MAX_HISTORIAL);
-  const historial: MensajeChat[] = previos.reverse().map((m) => ({
-    role: m.rol === 'assistant' ? 'assistant' : 'user', content: m.contenido,
+  previos.reverse();
+  // Al modelo no le llega el estado interno de la creación guiada ni los formularios ya llenos: solo ruido y superficie de inyección.
+  const paraModelo = (m: { rol: string; contenido: string }) => (m.rol === 'assistant' ? sinBloquesGuiadosParaElModelo(m.contenido) : m.contenido);
+  const historial: MensajeChat[] = previos.map((m) => ({
+    role: m.rol === 'assistant' ? 'assistant' : 'user', content: paraModelo(m),
   }));
 
   if (forzarIa) {
@@ -232,11 +236,11 @@ export async function POST(req: NextRequest) {
 
   // Creación guiada: el asistente pregunta de a una y la persona contesta escribiendo.
   // Es determinista (sin modelo); solo arma el formulario, que la persona envía.
-  const anterior = historial.length >= 2 && historial[historial.length - 2].role === 'assistant' ? historial[historial.length - 2].content : null;
+  const anterior = previos.length >= 2 && previos[previos.length - 2].rol === 'assistant' ? previos[previos.length - 2].contenido : null;
   // Una respuesta como «1» (sin letras) la tomaría la política de «vacío»: dentro de un flujo guiado es una opción válida.
   const soloNumero = clasificarSolicitud(texto)?.categoria === 'vacio';
   if (!forzarIa && (!esPolitica || soloNumero)) {
-    const guiada = await responderGuiado(texto, anterior, crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') }));
+    const guiada = await responderGuiado(texto, anterior, crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') }), `${teamId}:${user.id}:${conversacionId}`);
     if (guiada) {
       const [g] = await db.insert(asistenteMensajes).values({ conversacionId, rol: 'assistant', contenido: guiada.contenido, origen: 'local' })
         .returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
@@ -295,6 +299,8 @@ export async function POST(req: NextRequest) {
       pantalla: interpretarPantalla(b?.pantalla),
       forzarIa,
     });
+    // Solo la creación guiada (código determinista y firmado) escribe bloques de paso o formularios llenos.
+    r.respuesta = quitarBloquesGuiados(r.respuesta);
     const [guardado] = await db.insert(asistenteMensajes).values({
       conversacionId, rol: 'assistant', contenido: r.respuesta,
       herramientas: r.consultas.length ? r.consultas : null,

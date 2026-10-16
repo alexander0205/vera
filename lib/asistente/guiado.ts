@@ -74,11 +74,15 @@ const pesos = (n: number) => `RD$ ${n.toLocaleString('es-DO', { minimumFractionD
 export const nombreSeguro = (s: string, max = 80) => limpiarValor(s, max).replace(/[[\]()*_`<>|#~\\]/g, '').trim();
 
 const FIN = '(?=$|[\\s,.;:!¡¿?])';
-const SI = new RegExp('^(si|s|ok|okay|dale|claro|correcto|exacto|de acuerdo|listo|yes|y|va|vale|afirmativo|perfecto|asi es|esta bien|todo bien)' + FIN);
-const NO = new RegExp('^(no|n|nel|nop|nada|ninguno|ninguna|skip|saltar|salta|omitir|omite)' + FIN);
-const CANCELAR = /^(cancela\w*|salir|sal|olvidalo|olvida\w*|ya no|dejalo|deja eso|detener|para|parar|basta|abortar)\b/;
-const FORMULARIO = /^(formulario|ver formulario|mejor el formulario|pasame el formulario|editar|quiero editar|corregir|corrijo)\b/;
-const OTRA_PREGUNTA = /^(cuanto|cuantos|cuantas|quien|quienes|donde|como|que |cual|cuales|cuando|por que|muestrame|dame|dime|mostrar|ver |resumen|ayuda)|\?\s*$/;
+const RELLENO_SI = '(?:[\\s,]+(?:por favor|gracias|adelante|dale|claro|usalo|ese|esa|asi|tal cual|esta bien|de acuerdo|correcto|perfecto|armalo|guardalo))*';
+const RELLENO_NO = '(?:[\\s,]+(?:gracias|por ahora|hay|tengo|aplica|quiero|necesito|mas|todavia|ninguno|ninguna|nada|es todo|ya|nota|tiene))*';
+const SI = new RegExp('^(?:si|s|ok|okay|dale|claro|correcto|exacto|de acuerdo|listo|yes|y|va|vale|afirmativo|perfecto|asi es|esta bien|todo bien|adelante|confirmo|confirmado)' + RELLENO_SI + '[\\s.,!¡]*$');
+const NO = new RegExp('^(?:no|n|nel|nop|nada|ninguno|ninguna|skip|saltar|salta|omitir|omite|sin nada|paso|pasar)' + RELLENO_NO + '[\\s.,!¡]*$');
+// Las órdenes solo valen si son TODO el mensaje: «Para Todos SRL», «Sal marina» o «Editar PDF» son nombres, no órdenes.
+const CANCELAR = /^(?:cancela(?:r|lo|la)?|salir|sal|olvidalo|olvidalo todo|ya no|ya no quiero|dejalo|deja eso|detener|detente|para|parar|basta|abortar|no quiero|mejor no)[\s.,!¡]*$/;
+const FORMULARIO = /^(?:(?:ver |mejor |pasame |dame |abre |quiero )?(?:el |un )?formulario|editar|quiero editar|corregir|corrijo)[\s.,!¡]*$/;
+// Una pregunta suelta (no un nombre): empieza por una palabra interrogativa COMPLETA o termina en «?».
+const OTRA_PREGUNTA = /^(?:cuanto|cuantos|cuantas|quien|quienes|donde|como|que|cual|cuales|cuando|por que|muestrame|dame|dime|mostrar|resumen|ayuda)(?:\s|$)|\?\s*$/;
 
 export const esSi = (t: string) => SI.test(norm(t));
 export const esNo = (t: string) => NO.test(norm(t));
@@ -87,7 +91,7 @@ export const esNo = (t: string) => NO.test(norm(t));
 export function leerMonto(texto: string): number | null {
   let t = norm(texto).replace(/rd\$?|\$|pesos?|dop|cada una|c\/u/g, '').replace(/\s/g, '');
   if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) t = t.replace(/,/g, '');
-  else if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^[1-9]\d{0,2}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
   else if (/^\d+,\d{1,2}$/.test(t)) t = t.replace(',', '.');
   if (!/^\d+(\.\d+)?$/.test(t) || t.length > 14) return null;
   const n = Number(t);
@@ -150,7 +154,9 @@ function preguntaDe(e: Estado): { texto: string; chips: string[] } {
       return { texto: `¿Cuántas unidades de «${nombreSeguro(e.l?.nombre ?? '')}»?`, chips: ['1', '2', '5'] };
     case 'factura:precio':
     case 'cotizacion:precio':
-      return { texto: `Cada una cuesta ${pesos(e.l?.precio ?? 0)}. ¿La dejo así? (sí, o escribe otro precio)`, chips: ['Sí'] };
+      return (e.l?.precio ?? 0) < 0.01
+        ? { texto: `«${nombreSeguro(e.l?.nombre ?? '')}» no tiene precio en tu catálogo. ¿A cuánto lo vendes? (cada unidad, antes de ITBIS)`, chips: [] }
+        : { texto: `Cada una cuesta ${pesos(e.l?.precio ?? 0)}. ¿La dejo así? (sí, o escribe otro precio)`, chips: ['Sí'] };
     case 'factura:precio-libre':
     case 'cotizacion:precio-libre':
       return { texto: `¿A qué precio vendes «${nombreSeguro(e.l?.nombre ?? '')}»? (cada unidad, antes de ITBIS)`, chips: [] };
@@ -267,7 +273,7 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
   if (FORMULARIO.test(t)) return formularioYa(e);
 
   // Una pregunta suelta en medio del flujo: se abandona y el mensaje sigue su camino normal.
-  const esperaTexto = ['cliente', 'linea', 'nombre', 'factura', 'notas', 'direccion'].includes(e.p);
+  const esperaTexto = ['cliente', 'linea', 'nombre', 'factura', 'notas', 'direccion', 'documento', 'razon', 'nota'].includes(e.p);
   if (esperaTexto && OTRA_PREGUNTA.test(t) && !detectarFormulario(texto)) return { texto: '', chips: [], estado: null, abandona: true };
 
   const esp = await avanzarEspecifico(e, texto, t, b);
@@ -334,15 +340,15 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
     }
     case 'factura:precio':
     case 'cotizacion:precio': {
-      if (esSi(texto)) return agregarLinea(e);
+      if (esSi(texto) && (e.l?.precio ?? 0) >= 0.01) return agregarLinea(e);
       const m = leerMonto(texto);
       if (m == null || m < 0.01 || m > MAX_MONTO) return repite(e, `Escribe un precio válido (entre RD$ 0.01 y ${pesos(MAX_MONTO)}) o «sí» para dejarlo.`, preguntaDe(e).texto, preguntaDe(e).chips);
       return agregarLinea({ ...e, l: { ...e.l, precio: m } });
     }
     case 'factura:mas':
     case 'cotizacion:mas':
-      if (esSi(texto) || /^(otra|otro|mas|agrega)/.test(t)) return siguiente({ ...e, p: 'linea', l: undefined });
-      if (esNo(texto) || /^(es todo|nada mas|eso es todo|ya)/.test(t)) {
+      if (esSi(texto) || /^(?:otra|otro|mas|agrega(?:r)?(?: otra| otro)?)$/.test(t)) return siguiente({ ...e, p: 'linea', l: undefined });
+      if (esNo(texto) || /^(?:es todo|nada mas|eso es todo|ya|listo)$/.test(t)) {
         if (e.f === 'borrador') return siguienteCambio(e);
         if (e.f === 'notadebito') return preguntaConfirmar(e);
         return e.f === 'factura' ? siguiente({ ...e, p: 'pago' }) : siguiente({ ...e, p: 'notas' });
@@ -420,7 +426,11 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
     // ── Confirmación ──────────────────────────────────────────────────────
     default:
       if (e.p === 'confirmar') {
-        if (esSi(texto) || /^(armalo|arma|armar|adelante|continua|continuar|siguiente)/.test(t)) return formularioYa(e);
+        if (esSi(texto) || /^(?:armalo|arma|armar|adelante|continua|continuar|siguiente)$/.test(t)) {
+          const mal = erroresFinales(e);
+          if (mal) return repite(e, `Todavía falta o está mal: ${mal}.`, 'Escribe «formulario» para corregirlo ahí, o «cancelar».', ['Formulario', 'Cancelar']);
+          return formularioYa(e);
+        }
         return repite(e, 'No te entendí.', 'Escribe «sí» para armar el formulario, «formulario» para editarlo, o «cancelar».', ['Sí, armar el formulario', 'Cancelar']);
       }
       return { texto: `Perdí el hilo de ${NOMBRE_FORM[e.f]}. Empecemos de nuevo cuando quieras.`, chips: [], estado: null };
@@ -519,6 +529,17 @@ function agregarLinea(e: Estado): RespuestaGuiada {
     return repite({ ...e, p: 'linea', l: undefined }, `Con esa línea el total pasaría de ${pesos(MAX_MONTO)}, que es el máximo por documento. No la agregué.`, 'Escribe otro producto, o di «no» para seguir con lo que llevas.');
   }
   return siguiente({ ...e, p: 'mas', l: undefined, v: { ...e.v, lineas: guardarLineas(ls) } });
+}
+
+/** Lo que el formulario rechazaría con lo recogido (misma validación): se avisa antes de armarlo. */
+function erroresFinales(e: Estado): string | null {
+  // Borrador y notas: lo demás (comprobante, total, cliente original) lo trae la factura al abrir el formulario, que valida con ello.
+  if (e.f === 'borrador' || e.f === 'notacredito' || e.f === 'notadebito' || e.f === 'convertir') return null;
+  const v: Valores = { ...e.v };
+  if (e.f === 'factura' && !v.tipoEcf) v.tipoEcf = 'sin-ncf';
+  const errs = validarFormulario(FORMULARIOS[e.f], v);
+  const primero = Object.values(errs).slice(0, 2).map((m) => nombreSeguro(m, 120));
+  return primero.length ? primero.join('; ') : null;
 }
 
 /** Arma el formulario con lo recogido y termina el flujo. */
@@ -818,7 +839,9 @@ async function avanzarEspecifico(e: Estado, texto: string, t: string, b: Buscado
       return e.f === 'notacredito' ? siguiente({ ...e, p: 'que', v }) : siguiente({ ...e, p: 'linea', v, l: undefined });
     }
     case 'notacredito:que': {
-      const r = leerSeleccion(texto, leerLineas(e.v.lineasBase));
+      const base = leerLineas(e.v.lineasBase);
+      if (!base.length) return { texto: 'Esa factura no tiene líneas que acreditar. Escribe «formulario» para hacerla a mano o «cancelar».', chips: ['Cancelar'], estado: e };
+      const r = leerSeleccion(texto, base);
       if (typeof r === 'string') return repite(e, r, preguntaDe(e).texto, preguntaDe(e).chips);
       return preguntaConfirmar({ ...e, v: { ...e.v, lineas: guardarLineas(r) } });
     }

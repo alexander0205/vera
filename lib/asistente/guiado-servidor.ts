@@ -1,8 +1,9 @@
 import 'server-only';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { ClienteApi } from './api';
 import {
   armarMensajeGuiado, avanzarGuiado, bloquePaso, detectarCreacionConversada, iniciarGuiado, leerEstado,
-  type BuscadoresGuiado, type Opcion, type RespuestaGuiada,
+  type BuscadoresGuiado, type Estado, type Opcion, type RespuestaGuiada,
 } from './guiado';
 import { leerLineas, prefillDeBorrador, prefillDeNota } from './formulario';
 
@@ -47,6 +48,46 @@ export function buscadoresGuiado(api: ClienteApi): BuscadoresGuiado {
   };
 }
 
+// ── Firma del estado ───────────────────────────────────────────────────────
+// El estado de la conversación viaja en el texto del mensaje. Se firma con HMAC (atado a empresa, persona y
+// conversación) para que un texto que alguien logre meter en un mensaje del asistente no pueda hacerse pasar
+// por un estado: sin la firma, el paso no se acepta. Además caduca.
+
+const VIGENCIA_MS = 3 * 60 * 60_000;
+const BLOQUE_PASO = /```paso\n([\s\S]*?)\n```/;
+
+function secreto(): string | null {
+  const s = process.env.AUTH_SECRET;
+  return s && s.length >= 16 ? s : null;
+}
+const firmaDe = (clave: string, ctx: string, ts: number, json: string) => createHmac('sha256', clave).update(`paso|${ctx}|${ts}|${json}`).digest('hex');
+
+/** Reemplaza el bloque ```paso del mensaje por uno firmado. Sin secreto configurado se quita (el flujo no continúa). */
+export function firmarPaso(contenido: string, ctx: string, ahora = Date.now()): string {
+  const m = contenido.match(BLOQUE_PASO);
+  if (!m) return contenido;
+  const clave = secreto();
+  if (!clave) return contenido.replace(BLOQUE_PASO, '').trim();
+  return contenido.replace(BLOQUE_PASO, () => '```paso\n' + `${ahora}.${firmaDe(clave, ctx, ahora, m[1])}\n${m[1]}` + '\n```');
+}
+
+/** El estado del mensaje, solo si la firma es válida para esta conversación y no caducó. */
+export function abrirPaso(contenido: string | null | undefined, ctx: string, ahora = Date.now()): Estado | null {
+  const clave = secreto();
+  const m = (contenido ?? '').match(BLOQUE_PASO);
+  if (!clave || !m) return null;
+  const corte = m[1].indexOf('\n');
+  if (corte < 0) return null;
+  const [tsTxt, firma] = m[1].slice(0, corte).split('.');
+  const json = m[1].slice(corte + 1);
+  const ts = Number(tsTxt);
+  if (!Number.isInteger(ts) || ahora - ts > VIGENCIA_MS || ts - ahora > 60_000 || !/^[0-9a-f]{64}$/.test(firma ?? '')) return null;
+  const esperada = Buffer.from(firmaDe(clave, ctx, ts, json), 'hex');
+  const recibida = Buffer.from(firma, 'hex');
+  if (esperada.length !== recibida.length || !timingSafeEqual(esperada, recibida)) return null;
+  return leerEstado('```paso\n' + json + '\n```');
+}
+
 export interface SalidaGuiada { contenido: string; chips: string[] }
 
 /**
@@ -54,15 +95,15 @@ export interface SalidaGuiada { contenido: string; chips: string[] }
  * respuesta; `null` = no aplica y el mensaje sigue el camino de siempre.
  * `ultimoAsistente` es el mensaje del asistente INMEDIATAMENTE anterior al de la persona.
  */
-export async function responderGuiado(texto: string, ultimoAsistente: string | null, api: ClienteApi): Promise<SalidaGuiada | null> {
-  const estado = leerEstado(ultimoAsistente);
+export async function responderGuiado(texto: string, ultimoAsistente: string | null, api: ClienteApi, ctx: string): Promise<SalidaGuiada | null> {
+  const estado = abrirPaso(ultimoAsistente, ctx);
   const b = buscadoresGuiado(api);
   let r: RespuestaGuiada | null = null;
   if (estado) {
     try {
       r = await avanzarGuiado(estado, texto, b);
     } catch {
-      return { contenido: `No pude consultar tus datos ahora. Intenta de nuevo en un momento.\n\n${bloquePaso(estado)}`, chips: ['Cancelar'] };
+      return { contenido: firmarPaso(`No pude consultar tus datos ahora. Intenta de nuevo en un momento.\n\n${bloquePaso(estado)}`, ctx), chips: ['Cancelar'] };
     }
     if (r.abandona) return null;
   } else {
@@ -77,5 +118,5 @@ export async function responderGuiado(texto: string, ultimoAsistente: string | n
       } catch { /* se pregunta normal */ }
     }
   }
-  return { contenido: armarMensajeGuiado(r), chips: r.chips.slice(0, 5) };
+  return { contenido: firmarPaso(armarMensajeGuiado(r), ctx), chips: r.chips.slice(0, 5) };
 }
