@@ -1135,7 +1135,7 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
 // ── Formulario armado por la creación guiada ────────────────────────────────
 
 /** Formularios que el asistente puede llenar preguntando de a una. */
-export const IDS_GUIADOS = ['cliente', 'producto', 'cotizacion', 'factura', 'pago'] as const;
+export const IDS_GUIADOS = ['cliente', 'producto', 'cotizacion', 'factura', 'pago', 'anulacion', 'notacredito', 'notadebito', 'convertir', 'borrador'] as const;
 
 /** Claves que el modo guiado puede dejar ya llenas (más las propias de cada formulario). */
 const CLAVES_GUIADAS = ['clienteId', 'clienteRnc', 'clienteEmail', 'documentoId', 'documentoNombre', 'documentoSaldo', 'documentoSaldoNum', 'documentoTotal'];
@@ -1162,18 +1162,20 @@ export function parsearGuiado(cuerpo: string): { def: DefFormulario; valores: Va
     else if (c.tipo !== 'archivo' && c.tipo !== 'documento') permitidas.set(c.id, c);
   }
   for (const k of CLAVES_GUIADAS) permitidas.set(k, null);
+  const conDocumento = def.campos.some((c) => c.tipo === 'documento');
+  const conCliente = def.campos.some((c) => c.tipo === 'cliente');
   const valores: Valores = {};
   if (o.valores && typeof o.valores === 'object') {
     for (const [k, x] of Object.entries(o.valores as Record<string, unknown>)) {
       if (!permitidas.has(k) || typeof x !== 'string') continue;
       const c = permitidas.get(k) ?? null;
-      if (def.id !== 'pago' && k.startsWith('documento')) continue;
+      if (k.startsWith('documento') && !conDocumento) continue;
+      if (/^cliente(Id|Rnc|Email)$/.test(k) && !conCliente) continue;
+      if ((k === 'documentoSaldo' || k === 'documentoSaldoNum') && def.id !== 'pago') continue;
       if (k === 'lineas') { const ls = leerLineas(x); if (ls.length) valores.lineas = guardarLineas(ls); continue; }
       if (k === 'clienteId' || k === 'documentoId') { if (/^[1-9]\d{0,9}$/.test(x)) valores[k] = x; continue; }
       if (k === 'documentoSaldo' || k === 'documentoSaldoNum' || k === 'documentoTotal') { if (/^\d{1,9}(\.\d{1,2})?$/.test(x)) valores[k] = x; continue; }
-      if (def.id !== 'pago' && k.startsWith('documento')) continue;
-      if (def.id === 'pago' && k === 'documentoNombre') { valores[k] = limpiarValor(x, 200); continue; }
-      if (def.id !== 'pago' && (k === 'documentoId')) continue;
+      if (k === 'documentoNombre') { valores[k] = limpiarValor(x, 200); continue; }
       const v = limpiarValor(x, c?.max ?? MAX_TEXTO);
       if (!v) continue;
       if (c?.tipo === 'select') { if (c.opciones?.some((op) => op.valor === v)) valores[k] = v; continue; }

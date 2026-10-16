@@ -218,3 +218,11 @@ Además del formulario, la persona puede pedir «guíame paso a paso para crear 
 - **Búsquedas**: clientes, productos y facturas se leen por la misma API de la pantalla con la sesión de la persona (`guiado-servidor.ts`); los nombres se muestran sin marcado (`nombreSeguro`).
 - **Salidas**: «cancelar» termina; «formulario» pasa al formulario con lo recogido; una pregunta suelta abandona el flujo y sigue el camino normal. Una respuesta numérica («1») no la frena la política de «vacío» dentro de un flujo.
 - Pruebas: `tests/unit/asistente-guiado.test.ts`.
+
+### La conversación es el camino por defecto (2026-10-16)
+
+«Crea un cliente», «anula una factura», «hazme una nota de crédito»… abren directamente las preguntas; ya no hace falta decir «paso a paso». El formulario solo sale si la persona lo pide («dame el formulario», o «formulario» a mitad del flujo) y, siempre, para lo que lleva archivos (gastos e importaciones).
+
+Flujos: cliente, producto, cotización, factura, cobro, anulación, nota de crédito (elige líneas y cantidades de la factura), nota de débito (cargos libres), convertir cotización y editar borrador (elige qué cambiar: cliente, líneas, nota). Las facturas, cotizaciones y clientes existentes se buscan por la API de la pantalla; si hay varios se numeran para elegir, y si no hay ninguno se pide otra búsqueda. La factura que no admite nota (anulada, ya es nota) se rechaza en la propia conversación.
+
+El formulario final conserva lo dicho en la conversación sobre lo que trae la factura al elegirla (`fijosDeLaConversacion`).

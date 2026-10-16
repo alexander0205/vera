@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  armarMensajeGuiado, avanzarGuiado, detectarGuiado, iniciarGuiado, leerEstado, leerMonto, type BuscadoresGuiado, type Estado, type Opcion, type RespuestaGuiada,
+  armarMensajeGuiado, avanzarGuiado, detectarCreacionConversada, detectarGuiado, iniciarGuiado, leerEstado, leerMonto, type BuscadoresGuiado, type Estado, type Opcion, type RespuestaGuiada,
 } from '@/lib/asistente/guiado';
 import { filtrarFormulariosDeIa, leerLineas, parsearGuiado, quitarBloquesGuiados } from '@/lib/asistente/formulario';
 
@@ -20,7 +20,11 @@ const b: BuscadoresGuiado = {
   hoy: '2026-10-16',
   clientes: async (q) => CLIENTES.filter((c) => c.nombre.toLowerCase().includes(q.toLowerCase())),
   productos: async (q) => PRODUCTOS.filter((p) => p.nombre.toLowerCase().includes(q.toLowerCase())),
-  facturas: async () => FACTURAS,
+  facturas: async (q, soloBorradores) => (soloBorradores ? [{ id: 60, nombre: 'BORRADOR-1 - Colegio X', total: 500 }] : FACTURAS.filter(() => !/zzz/.test(q))),
+  cotizaciones: async (q) => (/zzz/.test(q) ? [] : [{ id: 70, nombre: 'COT-0001 - Colegio X', total: 5000 }]),
+  detalleFactura: async (id) => (id === 51
+    ? { error: 'Esa factura está anulada y no admite notas.', lineas: [] }
+    : { error: null, lineas: [{ nombre: 'Uniforme', cantidad: 4, precio: 1000, tasa: '0.18' as const }, { nombre: 'Matrícula', cantidad: 1, precio: 5000, tasa: 'exento' as const }] }),
 };
 
 /** Recorre una conversación pasando el estado por el bloque de paso, como hace la ruta. */
@@ -149,7 +153,7 @@ describe('creación guiada', () => {
   });
 
   it('parsearGuiado descarta lo ajeno', () => {
-    expect(parsearGuiado(JSON.stringify({ tipo: 'anulacion', valores: {} }))).toBeNull();
+    expect(parsearGuiado(JSON.stringify({ tipo: 'gasto', valores: {} }))).toBeNull();
     const p = parsearGuiado(JSON.stringify({ tipo: 'factura', valores: { tipoEcf: 'hack', clienteId: '5', pagoMetodo: 'efectivo', extra: 'x', documentoId: '9' } }))!;
     expect(p.valores).toEqual({ clienteId: '5', pagoMetodo: 'efectivo' });
   });
@@ -159,5 +163,79 @@ describe('creación guiada', () => {
     expect(leerMonto('1.500,50')).toBe(1500.5);
     expect(leerMonto('250')).toBe(250);
     expect(leerMonto('mucho')).toBeNull();
+  });
+
+  it('por defecto «crea un cliente» abre las preguntas; «formulario» abre el formulario', () => {
+    expect(detectarCreacionConversada('crea un cliente')?.id).toBe('cliente');
+    expect(detectarCreacionConversada('quiero anular una factura')?.id).toBe('anulacion');
+    expect(detectarCreacionConversada('hazme una nota de crédito')?.id).toBe('notacredito');
+    expect(detectarCreacionConversada('dame el formulario para crear un cliente')).toBeNull();
+    expect(detectarCreacionConversada('sube una factura de gasto')).toBeNull();
+    expect(detectarCreacionConversada('importa mis productos desde un csv')).toBeNull();
+  });
+
+  it('cliente: pregunta el nombre y salta a la siguiente', async () => {
+    const ini = iniciarGuiado('cliente');
+    expect(ini.texto).toMatch(/qué nombre quieres ponerle/i);
+    const r = await avanzarGuiado(leerEstado(armarMensajeGuiado(ini))!, 'Pedro Pérez', b);
+    expect(r.estado?.p).toBe('rnc');
+  });
+
+  it('«no gracias» y «sí, adelante» se entienden', async () => {
+    const { r } = await correr(iniciarGuiado('cliente'), ['Mi Cliente', 'no gracias', 'no, gracias', 'nada', 'no']);
+    expect(r.estado?.p).toBe('confirmar');
+  });
+
+  it('anulación: elige factura de una lista, motivo y nota', async () => {
+    const { r } = await correr(iniciarGuiado('anulacion'), ['Colegio X', '2', 'se imprimió mal', 'sí']);
+    expect(r.final?.form).toBe('anulacion');
+    expect(r.final?.valores).toMatchObject({ documentoId: '50', tipoAnulacion: '03', motivo: 'se imprimió mal' });
+    expect(r.final?.valores.lineasBase).toBeUndefined();
+  });
+
+  it('nota de crédito: motivo, «otro» pide explicación y se acreditan líneas con cantidad', async () => {
+    const { r, textos } = await correr(iniciarGuiado('notacredito'), ['Colegio X', '6', 'se devolvieron', '2x9']);
+    expect(textos.at(-1)).toMatch(/no puedes acreditar/);
+    expect(r.estado?.p).toBe('que');
+    const ok = await correr(r, ['1x2', 'sí']);
+    expect(ok.r.final?.form).toBe('notacredito');
+    expect(ok.r.final?.valores).toMatchObject({ motivo: 'otro', razonModificacion: 'se devolvieron', documentoId: '50' });
+    expect(leerLineas(ok.r.final!.valores.lineas)).toEqual([expect.objectContaining({ nombre: 'Uniforme', cantidad: 2 })]);
+    const todo = await correr(iniciarGuiado('notacredito'), ['Colegio X', '1', 'todo', 'sí']);
+    expect(leerLineas(todo.r.final!.valores.lineas)).toHaveLength(2);
+  });
+
+  it('nota de débito: motivo y líneas libres', async () => {
+    const { r } = await correr(iniciarGuiado('notadebito'), ['Colegio X', '3', 'Recargo por mora', 'sí', '500', '1', '1', 'no', 'sí']);
+    expect(r.final?.form).toBe('notadebito');
+    expect(leerLineas(r.final!.valores.lineas)[0]).toMatchObject({ nombre: 'Recargo por mora', precio: 500, tasa: '0.18' });
+  });
+
+  it('convertir cotización', async () => {
+    const { r } = await correr(iniciarGuiado('convertir'), ['Colegio X', 'sí']);
+    expect(r.final?.valores).toMatchObject({ documentoId: '70' });
+    const nada = await correr(iniciarGuiado('convertir'), ['zzz']);
+    expect(nada.r.estado?.p).toBe('documento');
+  });
+
+  it('editar borrador: cambia cliente, líneas y nota', async () => {
+    const { r } = await correr(iniciarGuiado('borrador'), ['borrador', '1, 2 y 3', 'Ferretería', 'Servicio extra', 'sí', '100', '1', '1', 'no', 'Entregar el lunes', 'sí']);
+    expect(r.final?.form).toBe('borrador');
+    expect(r.final?.valores).toMatchObject({ documentoId: '60', clienteId: '9', notas: 'Entregar el lunes' });
+    expect(leerLineas(r.final!.valores.lineas)[0]).toMatchObject({ nombre: 'Servicio extra', precio: 100 });
+  });
+
+  it('una factura anulada no admite nota', async () => {
+    const e = leerEstado(armarMensajeGuiado(iniciarGuiado('notacredito')))!;
+    const r = await avanzarGuiado(e, 'x', { ...b, facturas: async () => [{ id: 51, nombre: 'E31 - X', total: 10 }] });
+    expect(r.texto).toMatch(/anulada/);
+    expect(r.estado?.p).toBe('documento');
+  });
+
+  it('parsearGuiado: documentos solo en formularios con documento', () => {
+    const p = parsearGuiado(JSON.stringify({ tipo: 'anulacion', valores: { documentoId: '4', documentoNombre: 'E31', tipoAnulacion: '03', motivo: 'x', clienteId: '1', lineasBase: '[]' } }))!;
+    expect(p.valores).toEqual({ documentoId: '4', documentoNombre: 'E31', tipoAnulacion: '03', motivo: 'x' });
+    const q = parsearGuiado(JSON.stringify({ tipo: 'cliente', valores: { documentoId: '4', razonSocial: 'A' } }))!;
+    expect(q.valores).toEqual({ razonSocial: 'A' });
   });
 });

@@ -343,6 +343,22 @@ function EditorLineas({ id, valor, cambiar, deshabilitado }: {
   );
 }
 
+/**
+ * Lo que la persona ya dijo en la conversación guiada (líneas, cliente, motivo, nota) manda sobre lo que
+ * trae la factura al elegirla: la factura solo completa lo que la conversación no tocó.
+ */
+function fijosDeLaConversacion(inicial: Valores): Valores {
+  const f: Valores = {};
+  for (const k of ['lineas', 'notas', 'motivo', 'razonModificacion']) if (inicial[k]) f[k] = inicial[k];
+  if (inicial.clienteNombre) {
+    f.clienteNombre = inicial.clienteNombre;
+    f.clienteId = inicial.clienteId ?? '';
+    f.clienteRnc = inicial.clienteRnc ?? '';
+    f.clienteEmail = inicial.clienteEmail ?? '';
+  }
+  return f;
+}
+
 const FRASE_GUIADA: Record<string, string> = { cliente: 'un cliente', producto: 'un producto', cotizacion: 'una cotización', factura: 'una factura', pago: 'un cobro' };
 
 export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; inicial: Valores; clave?: string }) {
@@ -375,7 +391,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
         const r = await fetch(`/api/facturas/${encodeURIComponent(documentoElegido)}`, { signal: ac.signal, cache: 'no-store' });
         const d = await r.json().catch(() => null);
         const p = r.ok ? prefillDeNota(d, def.id === 'notacredito') : { valores: { ncfModificado: '', fechaNcfModificado: '', documentoTotal: '', documentoError: 'No pude leer esa factura.' }, error: 'No pude leer esa factura.' };
-        setValores((x) => ({ ...x, ...p.valores }));
+        setValores((x) => ({ ...x, ...p.valores, ...fijosDeLaConversacion(inicial) }));
         setErrores((e) => (p.error ? { ...e, documento: p.error } : (({ documento: _d, ...resto }) => resto)(e)));
       } catch { /* cancelado */ }
     })();
@@ -391,7 +407,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
         const r = await fetch(`/api/facturas/${encodeURIComponent(documentoElegido)}`, { signal: ac.signal, cache: 'no-store' });
         const d = await r.json().catch(() => null);
         const p = r.ok ? prefillDeBorrador(d) : { valores: { tipoEcf: '', documentoError: 'No pude leer ese borrador.', conservado: '', documentoTotal: '' }, error: 'No pude leer ese borrador.' };
-        setValores((x) => ({ ...x, ...p.valores }));
+        setValores((x) => ({ ...x, ...p.valores, ...fijosDeLaConversacion(inicial) }));
         setErrores((e) => (p.error ? { ...e, documento: p.error } : (({ documento: _d, ...resto }) => resto)(e)));
       } catch { /* cancelado */ }
     })();
