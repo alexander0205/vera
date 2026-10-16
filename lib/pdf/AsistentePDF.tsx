@@ -5,8 +5,10 @@
  */
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
-import type { Style } from '@react-pdf/types';
 import type { Bloque, Tramo } from '@/lib/asistente/bloques';
+
+// El tipo de un estilo, sacado de la propia librería: `@react-pdf/types` es una dependencia indirecta y no se puede importar.
+type Style = Parameters<typeof StyleSheet.create>[0][string];
 
 export interface AsistentePDFData {
   empresa: string;
