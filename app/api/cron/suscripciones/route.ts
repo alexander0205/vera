@@ -29,10 +29,11 @@ import { evaluarSuscripcion } from '@/lib/suscripcion/estado';
 import { sincronizarConStripe } from '@/lib/payments/sincronizar';
 import { destinatarioDeSuscripcion } from '@/lib/suscripcion/destinatario';
 import { enviarSoloLectura } from '@/lib/email/suscripcion';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

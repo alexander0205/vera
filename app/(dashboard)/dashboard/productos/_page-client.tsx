@@ -284,18 +284,18 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin productos o servicios registrados',
           hint: search ? undefined : 'Crea tu catálogo para agilizar la emisión de facturas',
           cta: search ? undefined : (
-            <Button className="bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirNuevo}>
+            <Button className="bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirNuevo} data-tour="producto-nuevo">
               <Plus className="h-4 w-4 mr-1" />Nuevo ítem
             </Button>
           ),
         }}
         headerActions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowImport(true)}>
+            <Button variant="outline" onClick={() => setShowImport(true)} data-tour="producto-importar">
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
-            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNuevo}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNuevo} data-tour="producto-nuevo">
               <Plus className="h-4 w-4 mr-2" />
               Nuevo ítem
             </Button>

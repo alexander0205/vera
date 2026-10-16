@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createElement } from 'react';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams, clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       const [cl] = await db
         .select({ telefono: clients.telefono })
         .from(clients)
-        .where(eq(clients.id, body.clientId))
+        .where(and(eq(clients.id, body.clientId), eq(clients.teamId, teamId)))
         .limit(1);
       telefonoComprador = cl?.telefono ?? undefined;
     }

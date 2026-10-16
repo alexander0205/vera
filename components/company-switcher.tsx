@@ -123,6 +123,8 @@ export function CompanySwitcher({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teamId }),
       });
+      // Lo que guarda estado por empresa (el chat del asistente) se reinicia.
+      window.dispatchEvent(new Event('zero:empresa-cambiada'));
     } catch {
       setCambiandoA(null);   // no dejar el loader tapando la app si falla
       return;

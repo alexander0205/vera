@@ -35,6 +35,7 @@ import { ecfDocuments, teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 const schema = z.object({
   encf:                 z.string().max(40).optional(),
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest) {
     }
 
     const d = parsed.data;
+    const errRefs = await validarReferenciasDeEmpresa(teamId, { clientId: d.clientId });
+    if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
     const yaPagadoCts = Math.round((d.montoYaPagadoDOP ?? 0) * 100);
     const totalCts    = Math.round(d.montoTotalDOP * 100);
 

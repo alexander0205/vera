@@ -6,12 +6,13 @@ import { sql } from 'drizzle-orm';
 import { generarFacturaDeRecurrente } from '@/lib/cobranza/recurrente';
 import { equiposConProcesosVivos } from '@/lib/suscripcion/procesos';
 import { AL_CANCELAR } from '@/lib/config/suscripcion';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 // This endpoint is called by a cron job (e.g., Vercel Cron or external cron)
 // Protect it with a secret token in the Authorization header
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

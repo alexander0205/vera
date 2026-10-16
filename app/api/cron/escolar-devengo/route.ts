@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarPeriodos, teams } from '@/lib/db/schema';
 import { devengarPeriodo } from '@/lib/administracion-escolar/devengar';
 import { facturarCuotasEmitidas } from '@/lib/administracion-escolar/facturar-emision';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 /**
  * Devengo mensual de la deuda escolar, y su factura.
@@ -63,7 +64,7 @@ function restarDias(fecha: string, dias: number): string {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
