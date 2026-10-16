@@ -652,3 +652,11 @@ ul.lista { list-style: disc; }
 @media (max-width: 420px) { .linea { grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr) 34px; } .lineaTasa { display: block; } }
 .lineas { padding: 0; border: 0; background: none; }
 .lineasPie { border-top: 0; padding-top: 2px; }
+
+/* «Listo»: botones en la misma gama verde de la tarjeta, sin azul */
+.exitoEnlace { background: #15803d; color: #fff; box-shadow: 0 1px 2px rgba(21, 128, 61, 0.35); }
+.exitoEnlace:hover { background: #166534; filter: none; }
+.exitoOtro { background: transparent; color: #166534; border: 1px solid color-mix(in srgb, #16a34a 40%, var(--border)); }
+.exitoOtro:hover { background: color-mix(in srgb, #16a34a 10%, var(--card)); }
+.exitoEnlace:focus-visible, .exitoOtro:focus-visible { outline-color: #16a34a; }
+@media (prefers-color-scheme: dark) { .exitoOtro { color: #86efac; } }
