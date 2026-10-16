@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   title: 'Contacto',
   description:
     'Habla con Zero: WhatsApp 809 758 0266, teléfono 809 473 1859 o hola@zero.com.do. Demo de 30 minutos sin costo ni compromiso.',
+  // Propia: sin ella hereda la del marco de marketing (`/`) y Google trataba
+  // el contacto como un duplicado de la portada — no la indexaba.
+  alternates: { canonical: '/contacto' },
 };
 
 /**

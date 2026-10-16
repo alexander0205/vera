@@ -14,10 +14,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Cabecera, Seccion, Definiciones } from '../_piezas';
+import { urlDelSitio } from '@/lib/config/enlaces';
 
 export const metadata: Metadata = {
   title: 'Política de Privacidad · Zero',
   description: 'Qué datos guarda Zero, para qué, con quién se comparten y cómo ejercer tus derechos.',
+  // Absoluta: el marco legal no tiene `metadataBase`, y una relativa saldría
+  // contra el host que sirvió la página (app., facturacion-v2.…).
+  alternates: { canonical: urlDelSitio('/privacidad') },
 };
 
 const CORREO = 'soporte@zero.com.do';
