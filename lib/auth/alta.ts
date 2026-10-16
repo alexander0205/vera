@@ -19,6 +19,7 @@ import {
 } from '@/lib/db/schema';
 import { seedSystemRoles } from '@/lib/auth/permissions';
 import { logActivity } from '@/lib/db/actividad';
+import { registrarOrigenDelAlta } from '@/lib/analytics/origen-servidor';
 
 export type DatosDeAlta = {
   name: string;
@@ -122,6 +123,14 @@ export async function darDeAlta(datos: DatosDeAlta): Promise<ResultadoAlta> {
   const miembro: NewTeamMember = { userId: usuario.id, teamId: equipo.id, role: rol };
   await db.insert(teamMembers).values(miembro);
   await logActivity(equipo.id, usuario.id, ActivityType.SIGN_UP);
+
+  // De dónde vino quien funda empresa (la invitada no: la trajo su empresa).
+  // Lo lee la pantalla «Embudo» del admin. Ver `lib/analytics/origen.ts`.
+  if (rol === 'owner') {
+    await registrarOrigenDelAlta({
+      teamId: equipo.id, userId: usuario.id, actor: email, metodo: datos.googleId ? 'google' : 'correo',
+    });
+  }
 
   return { ok: true, usuario, equipo };
 }
