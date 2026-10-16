@@ -25,6 +25,8 @@ import TableCell from '@mui/material/TableCell';
 import {
   ListTree, Plus, Pencil, Trash2, AlertTriangle, X,
 } from 'lucide-react';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 type AplicaA = 'bien' | 'servicio' | 'ambos' | 'manual';
 type Entidad = 'producto' | 'factura';
@@ -69,6 +71,19 @@ const labelSx = { fontWeight: 500, color: '#374151' } as const;
 const fieldSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
 const chipOutlineSx = { height: 22, fontSize: '0.6875rem', borderColor: '#e5e7eb', color: '#6b7280', '& .MuiChip-label': { px: 1 } } as const;
 const chipSecondarySx = { height: 22, fontSize: '0.6875rem', fontWeight: 600, bgcolor: '#f1f5f9', color: '#475569', '& .MuiChip-label': { px: 1 } } as const;
+
+
+/** Imprimir / PDF / Excel de los maestros y sus valores. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Maestro> = {
+  titulo: 'Maestros',
+  archivo: 'maestros',
+  columnas: [
+    { titulo: 'Maestro', valor: m => m.nombre, sub: m => m.descripcion, ancho: 1.6 },
+    { titulo: 'Aplica a', valor: m => APLICA_LABEL[m.aplicaA] ?? m.aplicaA, ancho: 1.2 },
+    { titulo: 'Varios valores', valor: m => (m.multiple ? 'Sí' : 'No'), ancho: 0.7 },
+    { titulo: 'Valores', valor: m => m.valores.map(v => v.valor).join(', ') || null, ancho: 3 },
+  ],
+};
 
 export default function MaestrosPage() {
   const [maestros, setMaestros]         = useState<Maestro[]>([]);
@@ -223,10 +238,13 @@ export default function MaestrosPage() {
             Listas de atributos (marca, color…) que se aplican a tus productos y servicios
           </Typography>
         </Box>
-        <Button variant="contained" disableElevation startIcon={<Plus size={16} />} onClick={abrirNuevo}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, maestros, 'Todos los registros')} deshabilitado={maestros.length === 0} testId="exportar-maestros" />
+          <Button variant="contained" disableElevation startIcon={<Plus size={16} />} onClick={abrirNuevo}
           sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nuevo maestro
         </Button>
+        </Box>
       </Box>
 
       {/* Tabla */}

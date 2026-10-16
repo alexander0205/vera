@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   const asociadosLegados = new Set<number>();
   /*
    * Un cargo de este concepto puesto a mano sin mes (un cobro suelto, de los
-   * de «Cargo a varios alumnos») no lo reconoce el devengo: ni tiene cuota ni
+   * de «Agregar cargo» o del antiguo cobro por lote) no lo reconoce el devengo: ni tiene cuota ni
    * cae en el mes de ninguna. Asignar el concepto encima le crearía todas las
    * cuotas además de ese cargo. Esos alumnos no se pueden marcar.
    */

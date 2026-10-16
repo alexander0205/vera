@@ -30,6 +30,14 @@ export const GA_ID: string | null = FORMATO_GA4.test(CRUDO) ? CRUDO : null;
 export const GA_ID_INVALIDO = CRUDO !== '' && GA_ID === null;
 
 /**
+ * Proyecto de Microsoft Clarity (mapas de calor y grabaciones). Son letras y
+ * números en minúscula, unos 10. `null` = no se carga. Mismas reglas que GA:
+ * solo la web pública. Ver `components/analytics/microsoft-clarity.tsx`.
+ */
+const CLARITY_CRUDO = (process.env.NEXT_PUBLIC_CLARITY_ID ?? '').trim();
+export const CLARITY_ID: string | null = /^[a-z0-9]{6,20}$/.test(CLARITY_CRUDO) ? CLARITY_CRUDO : null;
+
+/**
  * Lo único que se deja pasar de la query.
  *
  * Lista blanca y no lista negra a propósito: una lista negra hay que acordarse

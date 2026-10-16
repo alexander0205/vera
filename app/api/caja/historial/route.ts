@@ -1,6 +1,6 @@
 /**
  * GET /api/caja/historial — turnos CERRADOS del team (caja:ver).
- * Soporta ?limit=&offset=&usuarioId=
+ * Soporta ?limit=&offset=&usuarioId=&desde=&hasta= (fecha de apertura, día RD)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,7 +24,11 @@ async function historialDeTurnos(req: NextRequest): Promise<Response> {
   const { teamId } = auth;
 
   const sp       = req.nextUrl.searchParams;
-  const limit    = Math.min(Number(sp.get('limit')  ?? 50), 100);
+  // Hasta 2000: el export de la pantalla pide el rango entero de una vez.
+  const limit    = Math.min(Number(sp.get('limit')  ?? 50) || 50, 2000);
+  const desde    = sp.get('desde');
+  const hasta    = sp.get('hasta');
+  const fechaApertura = sql`(${cajaTurnos.aperturaAt} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santo_Domingo')::date`;
   const offset   = Number(sp.get('offset') ?? 0);
   const uidParam = sp.get('usuarioId');
   const uidFilter = uidParam ? Number(uidParam) : null;
@@ -33,6 +37,8 @@ async function historialDeTurnos(req: NextRequest): Promise<Response> {
     eq(cajaTurnos.teamId, teamId),
     eq(cajaTurnos.estado, 'CERRADO'),
     ...(uidFilter ? [eq(cajaTurnos.usuarioId, uidFilter)] : []),
+    ...(desde && /^\d{4}-\d{2}-\d{2}$/.test(desde) ? [sql`${fechaApertura} >= ${desde}`] : []),
+    ...(hasta && /^\d{4}-\d{2}-\d{2}$/.test(hasta) ? [sql`${fechaApertura} <= ${hasta}`] : []),
   ];
 
   const [rows, [{ total }]] = await Promise.all([

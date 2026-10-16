@@ -10,8 +10,9 @@ import { NextRequest } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { balanceComprobacion } from '@/lib/contabilidad/reportes';
 import { fechaValidaISO } from '@/lib/utils/format';
+import { respuestaPdfContable } from '@/lib/contabilidad/export-pdf';
 import {
-  DOP, nuevaHoja, estilarEncabezado, respuestaXlsx,
+  DOP, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv,
 } from '@/lib/contabilidad/export-xlsx';
 
 export const maxDuration = 60;
@@ -58,5 +59,11 @@ export async function GET(req: NextRequest) {
   fin.font = { bold: true };
 
   estilarEncabezado(ws);
+  if (sp.get('formato') === 'csv') return respuestaCsv(wb, 'balance-comprobacion.csv');
+  if (sp.get('formato') === 'pdf') return respuestaPdfContable(wb, {
+    teamId: auth.teamId, titulo: 'Balance de comprobación', filename: 'balance-comprobacion.pdf',
+    desde: fechaValidaISO(sp.get('desde') ?? undefined), hasta: fechaValidaISO(sp.get('hasta') ?? undefined),
+    anchos: ['10%', '34%', '14%', '14%', '14%', '14%'], columnasMoneda: [2, 3, 4, 5],
+  });
   return respuestaXlsx(wb, 'balance-comprobacion.xlsx');
 }

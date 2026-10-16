@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     filtro: FILTROS_RESPONSABLES.includes(filtro as FiltroResponsables)
       ? (filtro as FiltroResponsables)
       : 'todos',
+    conceptoId: Number(sp.get('concepto')) || null,
     limit: Number(sp.get('limit')) || 25,
     offset: Number(sp.get('offset')) || 0,
   });

@@ -5,6 +5,8 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
 import { balanceComprobacion } from '@/lib/contabilidad/reportes';
 import { FiltrosPeriodo } from '../_filtros-periodo';
+import { PrintButton } from '@/components/reportes/print-button';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
@@ -49,16 +51,15 @@ export default async function BalancePage({
   const qs = new URLSearchParams();
   if (desde) qs.set('desde', desde);
   if (hasta) qs.set('hasta', hasta);
-  const exportHref = `/api/contabilidad/balance/export${qs.toString() ? `?${qs}` : ''}`;
 
   const celdaMonto = {
     whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: '#111827',
   } as const;
 
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box component="section" className="print-area" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Breadcrumb */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box className="no-print" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Balance de comprobación</Typography>
@@ -75,19 +76,13 @@ export default async function BalancePage({
             exactamente lo mismo.
           </Typography>
         </Box>
-        {balance.filas.length > 0 && (
-          <Box component="a" href={exportHref}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
-              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
-              '&:hover': { bgcolor: '#e0e7fd' } }}
-          >
-            Exportar a Excel
-          </Box>
-        )}
+        <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <PrintButton disabled={balance.filas.length === 0} />
+          <BotonesExportar ruta="/api/contabilidad/balance/export" filtro={qs.toString()} mostrarImprimir={false} deshabilitado={balance.filas.length === 0} />
+        </Box>
       </Box>
 
-      <FiltrosPeriodo ruta="/contabilidad/balance" periodo={{ desde, hasta }} />
+      <div className="no-print"><FiltrosPeriodo ruta="/contabilidad/balance" periodo={{ desde, hasta }} /></div>
 
       {/* El cuadre es el punto del reporte, así que se dice arriba y en grande,
           no como una nota al pie que nadie lee. */}

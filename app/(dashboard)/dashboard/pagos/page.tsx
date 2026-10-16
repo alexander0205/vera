@@ -21,9 +21,11 @@ import { DataTable, type DataTableColumn, type RowAction } from '@/components/da
 import { fmtDOP, fmtFechaCorta, fmtFechaHora } from '@/lib/utils/format';
 import { labelMetodo, esEfectivo, METODOS_PAGO } from '@/lib/pagos/metodos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-
-/** Origen de la venta que originó el cobro. */
-const ORIGEN_LABEL: Record<string, string> = { pos: 'Punto de venta', facturacion: 'Facturación' };
+import {
+  filtrarPagos, grupoDePago, leerFiltroPagos, filtroPagosAParams, ORIGEN_LABEL,
+} from '@/lib/pagos/filtro-listado';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
+import { protegerFormulaCsv } from '@/lib/export/csv';
 
 interface Pago {
   id:            number;
@@ -139,36 +141,13 @@ export default function PagosPage() {
     return opts;
   }, [pagos]);
 
-  // ── Filtrado client-side: búsqueda libre + método ──
-  const agrupar = filterValues.agrupar;
-  const pagosFiltrados = useMemo(() => {
-    let rows = pagos;
-    const q = (filterValues.q ?? '').trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(p =>
-        (p.cliente ?? 'consumidor final').toLowerCase().includes(q) ||
-        (p.rncComprador ?? '').toLowerCase().includes(q) ||
-        (p.referencia ?? '').toLowerCase().includes(q) ||
-        (p.docCodigo ?? '').toLowerCase().includes(q) ||
-        (p.docEncf ?? '').toLowerCase().includes(q),
-      );
-    }
-    if (filterValues.metodo) {
-      rows = rows.filter(p => (p.metodo ?? 'otro').toLowerCase() === filterValues.metodo);
-    }
-    if (filterValues.origen) {
-      rows = rows.filter(p => p.origen === filterValues.origen);
-    }
-    if (filterValues.tipoVenta) {
-      // Diferencia venta de Producto vs Servicio (no un artículo individual):
-      // basta con que el cobro incluya al menos una línea de esa categoría.
-      const esServicio = filterValues.tipoVenta === 'servicio';
-      rows = rows.filter(p => (p.productos ?? []).some(pr => pr.servicio === esServicio));
-    }
-    if (filterValues.dgii === 'enviado')    rows = rows.filter(p => p.enviadoDgii);
-    else if (filterValues.dgii === 'no')    rows = rows.filter(p => !p.enviadoDgii);
-    return rows;
-  }, [pagos, filterValues.q, filterValues.metodo, filterValues.origen, filterValues.tipoVenta, filterValues.dgii]);
+  // ── Filtrado client-side ──
+  // El filtro es el mismo que aplica el Excel/PDF en el servidor
+  // (`lib/pagos/filtro-listado`), así el archivo dice lo mismo que la tabla.
+  const filtro = useMemo(() => leerFiltroPagos({ ...filterValues, desde, hasta }), [filterValues, desde, hasta]);
+  const filtroQs = useMemo(() => filtroPagosAParams(filtro).toString(), [filtro]);
+  const agrupar = filtro.agrupar;
+  const pagosFiltrados = useMemo(() => filtrarPagos(pagos, filtro), [pagos, filtro]);
 
   // Totales reactivos al filtro (las tarjetas reflejan lo que se ve).
   const totales: Totales = useMemo(() => {
@@ -207,8 +186,10 @@ export default function PagosPage() {
 
   function exportarCSV() {
     const header = ['Fecha', 'Documento', 'NCF', 'Cliente', 'RNC', 'Método', 'Origen', 'DGII', 'Referencia', 'Registrado por', 'Monto'];
-    const escape = (v: string | number | null) => {
-      const s = String(v ?? '');
+    const escape = (v: string | number | null, indice: number) => {
+      // El monto calculado conserva su signo y sus dos decimales; solo los
+      // textos recibidos del negocio necesitan protección contra fórmulas.
+      const s = indice === 10 || typeof v === 'number' ? String(v ?? '') : protegerFormulaCsv(String(v ?? ''));
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = pagosFiltrados.map(p => [
@@ -443,6 +424,9 @@ export default function PagosPage() {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+          <BotonesExportar ruta="/api/pagos/export" filtro={filtroQs}
+            mostrarCsv={false}
+            deshabilitado={loading || pagosFiltrados.length === 0} testId="exportar-pagos" />
           <Button
             onClick={exportarCSV}
             disabled={pagosFiltrados.length === 0}
@@ -606,13 +590,7 @@ export default function PagosPage() {
         filterValues={filterValues}
         onFilterChange={setFilterValues}
         rowActions={rowActions}
-        groupBy={
-          agrupar === 'factura' ? (p => p.docCodigo ?? p.docEncf ?? (p.docId ? `#${p.docId}` : 'Sin documento')) :
-          agrupar === 'metodo'  ? (p => labelMetodo(p.metodo)) :
-          agrupar === 'cliente' ? (p => p.cliente ?? 'Consumidor Final') :
-          agrupar === 'fecha'   ? (p => fmtFechaCorta(p.fechaPago)) :
-          undefined
-        }
+        groupBy={agrupar ? (p => grupoDePago(p, agrupar, fmtFechaCorta)) : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot = rows.reduce((s, p) => s + p.monto, 0);
           return (

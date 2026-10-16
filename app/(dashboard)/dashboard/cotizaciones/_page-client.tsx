@@ -11,7 +11,7 @@ import {
   FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil, Mail, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { Input } from '@/components/ui/input';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
@@ -44,6 +44,29 @@ function estadoBadge(estado: string) {
       return <Badge variant="outline">{estado}</Badge>;
   }
 }
+
+const ESTADOS = [
+  { value: 'borrador',  label: 'Borrador' },
+  { value: 'enviada',   label: 'Enviada' },
+  { value: 'aceptada',  label: 'Aceptada' },
+  { value: 'rechazada', label: 'Rechazada' },
+  { value: 'vencida',   label: 'Vencida' },
+];
+const ESTADO_LABEL: Record<string, string> = Object.fromEntries(ESTADOS.map(e => [e.value, e.label]));
+
+/** Imprimir / PDF / Excel: las cotizaciones tal como las filtra la tabla. */
+const EXPORTAR: ExportTabla<Cotizacion> = {
+  titulo: 'Cotizaciones',
+  archivo: 'cotizaciones',
+  columnas: [
+    { titulo: 'Fecha', valor: c => fmtFechaCorta(c.fechaEmision), ancho: 0.8 },
+    { titulo: 'Número', valor: c => c.numero, ancho: 1.2 },
+    { titulo: 'Cliente', valor: c => c.razonSocialComprador ?? 'Sin cliente', ancho: 2.4 },
+    { titulo: 'Estado', valor: c => ESTADO_LABEL[c.estado] ?? c.estado, ancho: 0.9 },
+    { titulo: 'Vence', valor: c => (c.fechaVencimiento ? fmtFechaCorta(c.fechaVencimiento) : null), ancho: 0.8 },
+    { titulo: 'Monto', valor: c => c.montoTotal, tipo: 'moneda', total: true, ancho: 1.1 },
+  ],
+};
 
 export default function CotizacionesPage() {
   const [cotizaciones, setCotizaciones]   = useState<Cotizacion[]>([]);
@@ -125,6 +148,17 @@ export default function CotizacionesPage() {
     }
   }
 
+  // Estado y fechas se filtran aquí, sobre lo que ya trajo la búsqueda.
+  const filtradas = useMemo(() => {
+    let rows = cotizaciones;
+    const { estado, fecha_desde: desde, fecha_hasta: hasta } = filterValues;
+    if (estado) rows = rows.filter(c => c.estado === estado);
+    if (desde)  rows = rows.filter(c => c.fechaEmision.slice(0, 10) >= desde);
+    if (hasta)  rows = rows.filter(c => c.fechaEmision.slice(0, 10) <= hasta);
+    return rows;
+  }, [cotizaciones, filterValues]);
+  const filtrando = Boolean(search || filterValues.estado || filterValues.fecha_desde || filterValues.fecha_hasta);
+
   const columns: DataTableColumn<Cotizacion>[] = useMemo(() => [
     {
       id: 'numero',
@@ -182,23 +216,26 @@ export default function CotizacionesPage() {
   return (
     <section className="bg-[#eef0f7] min-h-full p-6 space-y-6">
       <DataTable<Cotizacion>
-        data={cotizaciones}
+        data={filtradas}
         loading={loading}
         columns={columns}
         title="Cotizaciones"
         description="Presupuestos y propuestas para tus clientes"
         filters={[
           { type: 'search', id: 'q', placeholder: 'Buscar por número o cliente…' },
+          { type: 'select', id: 'estado', label: 'Estado', placeholder: 'Todos los estados', options: ESTADOS },
+          { type: 'daterange', id: 'fecha' },
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        exportar={EXPORTAR}
         rowHref={c => `/dashboard/cotizaciones/${c.id}`}
         rowActions={rowActions}
         emptyState={{
           icon: FileText,
-          title: search ? 'Sin resultados para esa búsqueda' : 'Sin cotizaciones registradas',
-          hint: search ? undefined : 'Crea tu primera cotización para enviarla a un cliente',
-          cta: search ? undefined : (
+          title: filtrando ? 'Sin resultados para estos filtros' : 'Sin cotizaciones registradas',
+          hint: filtrando ? undefined : 'Crea tu primera cotización para enviarla a un cliente',
+          cta: filtrando ? undefined : (
             <Link href="/dashboard/cotizaciones/nueva">
               <Button className="bg-zero-600 hover:bg-zero-700" size="sm">
                 <Plus className="h-4 w-4 mr-1" /> Nueva cotización
