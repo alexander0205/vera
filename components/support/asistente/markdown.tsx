@@ -144,7 +144,31 @@ function TarjetaVista({ t }: { t: Tarjeta }) {
   );
 }
 
-export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
+/** Las filas «Etiqueta: valor» de la tarjeta de resumen; una línea con sangría continúa la fila anterior. */
+function ResumenVista({ cuerpo }: { cuerpo: string[] }) {
+  const filas: { k: string; v: string; extra: string[] }[] = [];
+  for (const l of cuerpo) {
+    if (/^\s{2}/.test(l)) { if (filas.length && l.trim()) filas[filas.length - 1].extra.push(l.trim().replace(/^\d+[.)]\s+/, '')); continue; }
+    const m = l.match(/^([^:]{1,40}):\s*(.*)$/);
+    if (m) filas.push({ k: m[1], v: m[2], extra: [] });
+  }
+  if (!filas.length) return null;
+  return (
+    <dl className={s.resumen}>
+      {filas.map((f, i) => (
+        <div key={i} className={/^Total/.test(f.k) ? s.resumenTotal : undefined}>
+          <dt>{f.k}</dt>
+          <dd>
+            {f.v}
+            {f.extra.length > 0 && <ul>{f.extra.map((x, j) => <li key={j}>{x}</li>)}</ul>}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+export function Markdown({ texto, clave, alElegir }: { texto: string; clave?: string; alElegir?: (numero: string) => void }) {
   const lineas = texto.replace(/\r/g, '').split('\n');
   const bloques: ReactNode[] = [];
   let i = 0;
@@ -174,6 +198,11 @@ export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
       if (fx) formularios += 1;
       // El estado de la conversación guiada (```paso) es interno: no se muestra.
       if (lenguaje === 'paso') continue;
+      if (lenguaje === 'resumen') {
+        const tarjeta = <ResumenVista cuerpo={cuerpo} />;
+        bloques.push(<Fragment key={`b${n++}`}>{tarjeta}</Fragment>);
+        continue;
+      }
       if (fx) {
         bloques.push(<FormularioChat key={`b${n}`} def={fx.def} inicial={fx.valores} clave={clave ? `${clave}:${n++}` : undefined} />);
       } else if (g) {
@@ -214,7 +243,24 @@ export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
       const ordenada = RE_NUMERADA.test(l);
       const re = ordenada ? RE_NUMERADA : RE_VINETA;
       const items: string[] = [];
-      while (i < lineas.length && re.test(lineas[i])) { items.push(lineas[i].replace(re, '')); i++; }
+      const numeros: string[] = [];
+      while (i < lineas.length && re.test(lineas[i])) { numeros.push(lineas[i].match(/\d+/)?.[0] ?? ''); items.push(lineas[i].replace(re, '')); i++; }
+      // En una pregunta guiada, las opciones numeradas se pueden pulsar: mandan su número como respuesta.
+      if (ordenada && alElegir) {
+        bloques.push(
+          <ul className={s.opciones} key={`b${n++}`}>
+            {items.map((it, j) => (
+              <li key={j}>
+                <button type="button" className={s.opcion} onClick={() => alElegir(numeros[j])}>
+                  <span className={s.opcionNum} aria-hidden>{numeros[j]}</span>
+                  <span className={s.opcionTexto}>{enLinea(it, `o${j}`)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>,
+        );
+        continue;
+      }
       const Tag = ordenada ? 'ol' : 'ul';
       bloques.push(
         <Tag className={s.lista} key={`b${n++}`}>

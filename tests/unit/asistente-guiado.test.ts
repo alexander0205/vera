@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  armarMensajeGuiado, avanzarGuiado, detectarCreacionConversada, detectarGuiado, iniciarGuiado, leerEstado, leerMonto, type BuscadoresGuiado, type Estado, type Opcion, type RespuestaGuiada,
+  armarMensajeGuiado, avanzarGuiado, detectarCreacionConversada, leerFecha, leerPasoVisible, progresoGuiado, detectarGuiado, iniciarGuiado, leerEstado, leerMonto, type BuscadoresGuiado, type Estado, type Opcion, type RespuestaGuiada,
 } from '@/lib/asistente/guiado';
 import { filtrarFormulariosDeIa, leerLineas, parsearGuiado, quitarBloquesGuiados } from '@/lib/asistente/formulario';
 
@@ -237,5 +237,85 @@ describe('creación guiada', () => {
     expect(p.valores).toEqual({ documentoId: '4', documentoNombre: 'E31', tipoAnulacion: '03', motivo: 'x' });
     const q = parsearGuiado(JSON.stringify({ tipo: 'cliente', valores: { documentoId: '4', razonSocial: 'A' } }))!;
     expect(q.valores).toEqual({ razonSocial: 'A' });
+  });
+
+  it('«atrás» vuelve a la pregunta anterior con sus opciones y conserva lo ya contestado', async () => {
+    const { r } = await correr(iniciarGuiado('factura'), ['1', 'Colegio', 'atrás']);
+    expect(r.estado?.p).toBe('cliente-elegir' === r.estado?.p ? 'cliente-elegir' : 'cliente');
+    const a = await correr(iniciarGuiado('cliente'), ['Ana', '131234567', 'atrás']);
+    expect(a.r.estado?.p).toBe('rnc');
+    expect(a.r.texto).toMatch(/Volvemos un paso/);
+    expect(a.r.estado?.v.razonSocial).toBe('Ana');
+    const b2 = await correr(a.r, ['atrás', 'atrás']);
+    expect(b2.r.estado?.p).toBe('nombre');
+    expect(b2.textos.at(-1)).toMatch(/primera pregunta/);
+    // los botones incluyen «Atrás» cuando hay a dónde volver
+    expect(a.r.chips).toContain('Atrás');
+  });
+
+  it('desde el resumen se puede cambiar un dato y se vuelve al resumen', async () => {
+    const { r } = await correr(iniciarGuiado('cliente'), ['Ana', '131234567', 'a@b.com', 'no', 'no', 'cambiar']);
+    expect(r.estado?.p).toBe('cambiar');
+    const c = await correr(r, ['correo', 'nuevo@x.com']);
+    expect(c.r.estado?.p).toBe('confirmar');
+    expect(c.r.estado?.v.email).toBe('nuevo@x.com');
+    expect(c.r.texto).toMatch(/nuevo@x\.com/);
+    const f = await correr(c.r, ['sí']);
+    expect(f.r.final?.valores).toMatchObject({ razonSocial: 'Ana', email: 'nuevo@x.com', rnc: '131234567' });
+  });
+
+  it('cambiar las líneas de una factura las rehace y vuelve al resumen', async () => {
+    const { r } = await correr(iniciarGuiado('factura'), ['1', 'consumo final', 'Matrícula', '1', '1', 'sí', 'no', 'no', 'no', 'cambiar', 'líneas', 'Uniforme escolar', '1', '3', 'sí', 'no']);
+    expect(r.estado?.p).toBe('confirmar');
+    const ls = leerLineas(r.estado!.v.lineas);
+    expect(ls).toHaveLength(1);
+    expect(ls[0]).toMatchObject({ nombre: 'Uniforme escolar', cantidad: 3 });
+  });
+
+  it('«3 uniformes» trae la cantidad y no la vuelve a preguntar; «quitar» borra la última línea', async () => {
+    const { r } = await correr(iniciarGuiado('factura'), ['1', 'consumo final', '3 Uniforme escolar', '1']);
+    expect(r.estado?.p).toBe('precio');
+    expect(r.estado?.l?.cantidad).toBe(3);
+    const m = await correr(r, ['sí']);
+    expect(m.r.estado?.p).toBe('mas');
+    const q = await correr(m.r, ['quitar']);
+    expect(q.r.estado?.p).toBe('linea');
+    expect(q.r.texto).toMatch(/Quité/);
+    const libre = await correr(iniciarGuiado('factura'), ['1', 'consumo final', '2 cosa zzz', 'sí', '50', '1']);
+    expect(leerLineas(libre.r.estado!.v.lineas)[0]).toMatchObject({ nombre: 'cosa zzz', cantidad: 2, precio: 50 });
+    const pal = await correr(iniciarGuiado('factura'), ['1', 'consumo final', 'Uniforme escolar', '1', 'una docena']);
+    expect(pal.r.estado?.l?.cantidad).toBe(12);
+  });
+
+  it('fechas naturales', () => {
+    const hoy = '2026-10-16';
+    expect(leerFecha('hoy', hoy)).toBe('2026-10-16');
+    expect(leerFecha('Ayer', hoy)).toBe('2026-10-15');
+    expect(leerFecha('mañana', hoy)).toBe('2026-10-17');
+    expect(leerFecha('en 30 días', hoy)).toBe('2026-11-15');
+    expect(leerFecha('2 semanas', hoy)).toBe('2026-10-30');
+    expect(leerFecha('15/10/2026', hoy)).toBe('2026-10-15');
+    expect(leerFecha('31 de diciembre', hoy)).toBe('2026-12-31');
+    expect(leerFecha('2026-02-30', hoy)).toBeNull();
+    expect(leerFecha('31/02/2026', hoy)).toBeNull();
+    expect(leerFecha('cuando pueda', hoy)).toBeNull();
+  });
+
+  it('avance «paso n de N» y lectura del estado para el panel', async () => {
+    const { r } = await correr(iniciarGuiado('factura'), ['1']);
+    const p = progresoGuiado(r.estado!);
+    expect(p).toMatchObject({ titulo: 'Nueva factura', n: 2, total: 6 });
+    expect(leerPasoVisible(armarMensajeGuiado(r))?.p).toBe('cliente');
+    expect(leerPasoVisible('sin bloque')).toBeNull();
+    const cobro = iniciarGuiado('pago');
+    expect(progresoGuiado(cobro.estado!)).toMatchObject({ n: 1 });
+  });
+
+  it('el historial se acota y el estado sigue siendo válido', async () => {
+    let r = iniciarGuiado('factura');
+    r = (await correr(r, ['1', 'consumo final'])).r;
+    for (let i = 0; i < 12; i++) r = (await correr(r, [`Cosa ${i} zzz`, 'sí', '10', '1', '1', 'sí'])).r;
+    expect(r.estado?.h?.length ?? 0).toBeLessThanOrEqual(6);
+    expect(leerEstado(armarMensajeGuiado(r))).not.toBeNull();
   });
 });

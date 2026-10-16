@@ -245,3 +245,13 @@ Hallazgos y cómo quedaron:
 | Nota de crédito sobre factura sin líneas | formulario vacío | se avisa |
 
 Sin cambio, por diseño: los montos y permisos los decide la API al enviar el formulario (`validarReferenciasDeEmpresa`, permisos); el flujo no escribe nada; las búsquedas son GET con la sesión de la persona. Condición de despliegue: `AUTH_SECRET` definido (16+ caracteres) en cada entorno; si falta, la creación guiada queda inactiva en lugar de aceptar estados sin firma. Pruebas: `tests/unit/asistente-guiado-seguridad.test.ts`.
+
+### Mejora de los flujos y de la UI de creación guiada (2026-10-16)
+
+- **Avance visible**: cada pregunta lleva «Nueva factura · Paso 3 de 6» con barra (el panel lo calcula del estado del mensaje; `progresoGuiado`).
+- **Opciones pulsables**: las listas numeradas de una pregunta guiada son botones (mandan su número); los botones de respuesta rápida se reconstruyen del estado al recargar la conversación.
+- **Resumen en tarjeta** (```` ```resumen ````, solo presentación) con filas Etiqueta/valor y totales destacados.
+- **«Atrás»** (palabra o botón): el estado guarda hasta 6 pasos anteriores con la pregunta que se mostró.
+- **«Cambiar algo»** desde el resumen: elige el dato (cliente, líneas, cobro, nota, motivo…), se rehace solo ese grupo de preguntas y se vuelve al resumen (`EDITABLES`, `conHistorial`).
+- **Más natural**: «3 uniformes» trae la cantidad; «una docena»; «quitar» borra la última línea; fechas «hoy», «ayer», «en 30 días», «15/10/2026», «31 de diciembre» (`leerFecha`).
+- **Seguridad del estado ampliado**: `h`, `q`, `c` y `r` se reconstruyen campo por campo (historial de un solo nivel, máx. 6; la pregunta guardada sin marcado; botones ≤ 40 caracteres) y siguen dentro de la firma HMAC.

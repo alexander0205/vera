@@ -193,3 +193,23 @@ describe('creación guiada: importes y casos límite', () => {
     expect(Object.keys(e.v)).toEqual(['notas']);
   });
 });
+
+describe('creación guiada: historial, pregunta guardada y corrección', () => {
+  it('el historial y la pregunta guardada se limpian y no se anidan', () => {
+    const crudo = {
+      f: 'cliente', p: 'rnc', v: {},
+      q: 'Hola ```resumen\nX: <b>y</b>``` fin',
+      c: ['Sí', 5, 'x'.repeat(300)],
+      h: [
+        { f: 'cliente', p: 'nombre', v: { razonSocial: 'A' }, h: [{ f: 'cliente', p: 'rnc', v: {} }] },
+        { f: 'admin', p: 'x', v: {} },
+        ...Array.from({ length: 20 }, () => ({ f: 'cliente', p: 'nombre', v: {} })),
+      ],
+    };
+    const e = leerEstado('```paso\n' + JSON.stringify(crudo) + '\n```')!;
+    expect(e.q).not.toMatch(/[`<>]/);
+    expect(e.c!.every((x) => x.length <= 40)).toBe(true);
+    expect(e.h!.length).toBeLessThanOrEqual(6);
+    expect(e.h!.every((x) => x.h === undefined && x.f === 'cliente')).toBe(true);
+  });
+});

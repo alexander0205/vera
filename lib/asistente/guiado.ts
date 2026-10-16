@@ -42,6 +42,13 @@ export interface Estado {
   o?: Opcion[];
   /** Línea que se está armando. */
   l?: Partial<Linea>;
+  /** Pasos anteriores (para «atrás»), del más viejo al más nuevo. */
+  h?: Estado[];
+  /** Grupo de preguntas que se está corrigiendo desde el resumen: al terminarlo se vuelve al resumen. */
+  r?: string;
+  /** La pregunta que se mostró (para repetirla al volver atrás) y sus botones. */
+  q?: string;
+  c?: string[];
 }
 
 export interface BuscadoresGuiado {
@@ -119,7 +126,7 @@ const NOMBRE_FORM: Record<IdGuiado, string> = {
   anulacion: 'la anulación', notacredito: 'la nota de crédito', notadebito: 'la nota de débito', convertir: 'la conversión', borrador: 'la edición del borrador',
 };
 
-const ok = (e: Estado, texto: string, chips: string[] = []): RespuestaGuiada => ({ texto, chips, estado: e });
+const ok = (e: Estado, texto: string, chips: string[] = []): RespuestaGuiada => ({ texto, chips, estado: { ...e, q: texto.includes('```') ? undefined : texto.slice(0, 1500), c: chips.slice(0, 6) } });
 const repite = (e: Estado, motivo: string, pregunta: string, chips: string[] = []) => ok(e, `${motivo}\n\n${pregunta}`, chips);
 
 // ── Preguntas ───────────────────────────────────────────────────────────────
@@ -138,14 +145,14 @@ function preguntaDe(e: Estado): { texto: string; chips: string[] } {
   if (esp) return esp;
   switch (`${famDe(e.f)}:${e.p}`) {
     case 'factura:tipo':
-      return { texto: '¿Qué tipo de comprobante?\n1) Factura sin comprobante fiscal\n2) Consumo (e-CF)\n3) Crédito fiscal (e-CF, pide cliente con RNC)', chips: ['Sin comprobante', 'Consumo', 'Crédito fiscal'] };
+      return { texto: '¿Qué tipo de comprobante?\n1) Factura sin comprobante fiscal\n2) Consumo (e-CF)\n3) Crédito fiscal (e-CF, pide cliente con RNC)', chips: [] };
     case 'factura:cliente':
     case 'cotizacion:cliente':
       return { texto: e.f === 'cotizacion'
         ? '¿Para quién es? Escribe su nombre o RNC (o «sin cliente» si todavía no lo sabes).'
         : '¿A quién le facturas? Escribe su nombre o RNC, o «consumo final».', chips: [e.f === 'cotizacion' ? 'Sin cliente' : 'Consumo final'] };
     case 'cotizacion:vence':
-      return { texto: '¿Hasta qué fecha es válida? (AAAA-MM-DD, o «no» si no vence)', chips: ['No vence'] };
+      return { texto: '¿Hasta cuándo es válida? Escribe la fecha (31/12/2026), «en 30 días», o «no» si no vence.', chips: ['En 15 días', 'En 30 días', 'No vence'] };
     case 'factura:linea':
     case 'cotizacion:linea':
       return { texto: ls.length ? '¿Qué otro producto o servicio agregas? (escribe el nombre)' : '¿Qué producto o servicio vendes? Escribe su nombre (o parte de él).', chips: [] };
@@ -162,11 +169,11 @@ function preguntaDe(e: Estado): { texto: string; chips: string[] } {
       return { texto: `¿A qué precio vendes «${nombreSeguro(e.l?.nombre ?? '')}»? (cada unidad, antes de ITBIS)`, chips: [] };
     case 'factura:itbis-libre':
     case 'cotizacion:itbis-libre':
-      return { texto: '¿Qué ITBIS lleva?\n1) 18 %\n2) 16 %\n3) 0 %\n4) Exento', chips: ['18 %', 'Exento'] };
+      return { texto: '¿Qué ITBIS lleva?\n1) 18 %\n2) 16 %\n3) 0 %\n4) Exento', chips: [] };
     case 'factura:mas':
     case 'cotizacion:mas': {
       const t = totalesDeLineas(ls);
-      return { texto: `Llevas ${ls.length} ${ls.length === 1 ? 'línea' : 'líneas'}, total ${pesos(t.total)}. ¿Agregas otra? (sí / no)`, chips: ['Sí', 'No'] };
+      return { texto: `Llevas:\n${resumenLineas(ls)}\n\nTotal ${pesos(t.total)}. ¿Agregas otra? (sí / no; o «quitar» para borrar la última)`, chips: ['Sí', 'No', 'Quitar la última'] };
     }
     case 'factura:pago':
       return { texto: '¿Ya te pagó? Dime cómo: efectivo, transferencia, tarjeta o cheque; o «no» si queda por cobrar.', chips: ['No, por cobrar', 'Efectivo', 'Transferencia', 'Tarjeta'] };
@@ -186,11 +193,11 @@ function preguntaDe(e: Estado): { texto: string; chips: string[] } {
     case 'producto:nombre':
       return { texto: '¿Qué nombre quieres ponerle al producto o servicio?', chips: [] };
     case 'producto:tipo':
-      return { texto: '¿Es un servicio o un producto (bien)?\n1) Servicio\n2) Producto', chips: ['Servicio', 'Producto'] };
+      return { texto: '¿Es un servicio o un producto (bien)?\n1) Servicio\n2) Producto', chips: [] };
     case 'producto:precio':
       return { texto: '¿Cuánto cuesta? (precio de una unidad, antes de ITBIS)', chips: [] };
     case 'producto:itbis':
-      return { texto: '¿Qué ITBIS lleva?\n1) 18 %\n2) 16 %\n3) 0 %\n4) Exento', chips: ['18 %', 'Exento'] };
+      return { texto: '¿Qué ITBIS lleva?\n1) 18 %\n2) 16 %\n3) 0 %\n4) Exento', chips: [] };
     case 'producto:referencia':
       return { texto: '¿Tiene un código o referencia? (o «no»)', chips: ['No'] };
     case 'pago:monto':
@@ -198,7 +205,7 @@ function preguntaDe(e: Estado): { texto: string; chips: string[] } {
     case 'pago:metodo':
       return { texto: '¿Con qué método pagó? efectivo, transferencia, tarjeta o cheque.', chips: ['Efectivo', 'Transferencia', 'Tarjeta', 'Cheque'] };
     case 'pago:fecha':
-      return { texto: `¿De qué fecha es el cobro? (AAAA-MM-DD, o «hoy»)`, chips: ['Hoy'] };
+      return { texto: '¿De qué fecha es el cobro? Escribe «hoy», «ayer» o la fecha (15/10/2026).', chips: ['Hoy', 'Ayer'] };
     case 'pago:referencia':
       return { texto: '¿Número de transferencia, cheque o aprobación? (o «no»)', chips: ['No'] };
     default:
@@ -229,17 +236,25 @@ function resumenFinal(e: Estado): string {
       if (e.f === 'factura') filas.push(`• Comprobante: ${ETIQUETA_TIPO[v.tipoEcf ?? 'sin-ncf']}`);
       filas.push(`• Cliente: ${v.clienteNombre ? nombreSeguro(v.clienteNombre) : e.f === 'factura' ? 'Consumo final' : 'Sin cliente'}`);
       if (e.f === 'cotizacion') filas.push(`• Válida hasta: ${v.fechaVencimiento || 'sin fecha'}`);
-      filas.push(`• Líneas:\n${resumenLineas(ls)}`, `• Subtotal ${pesos(t.subtotal)} · ITBIS ${pesos(t.itbis)} · **Total ${pesos(t.total)}**`);
+      filas.push(`• Líneas:\n${resumenLineas(ls)}`, `• Subtotal: ${pesos(t.subtotal)}`, `• ITBIS: ${pesos(t.itbis)}`, `• Total: ${pesos(t.total)}`);
       if (e.f === 'factura') filas.push(`• Cobro: ${v.pagoMetodo ? METODOS_COBRO.find((m) => m.valor === v.pagoMetodo)?.etiqueta ?? v.pagoMetodo : 'queda por cobrar'}`);
       if (v.notas) filas.push(`• Nota: ${nombreSeguro(v.notas, 300)}`);
   }
   return filas.join('\n');
 }
 
+/** Las viñetas del resumen pasan a filas «Etiqueta: valor» de una tarjeta (```resumen); lo que sigue a una fila con sangría la continúa. */
+function aTarjeta(texto: string): string {
+  const filas = texto.split('\n').map((l) => (l.startsWith('• ') ? l.slice(2).replace(/\*\*/g, '') : `  ${l.replace(/\*\*/g, '')}`));
+  return '```resumen\n' + filas.join('\n') + '\n```';
+}
+
 function preguntaConfirmar(e: Estado): RespuestaGuiada {
-  return ok({ ...e, p: 'confirmar', o: undefined, l: undefined },
-    `Esto es lo que tengo para ${NOMBRE_FORM[e.f]}:\n\n${resumenFinal(e)}\n\n¿Armo el formulario para que lo revises y lo guardes? (sí / formulario para editarlo / cancelar)`,
-    ['Sí, armar el formulario', 'Cancelar']);
+  const nuevo: Estado = { ...e, p: 'confirmar', o: undefined, l: undefined, r: undefined };
+  const puedeCambiar = (EDITABLES[e.f]?.length ?? 0) > 0;
+  return ok(nuevo,
+    `Esto es lo que tengo para ${NOMBRE_FORM[e.f]}:\n\n${aTarjeta(resumenFinal(e))}\n\n¿Armo el formulario para que lo revises y lo guardes?`,
+    ['Sí, armar el formulario', ...(puedeCambiar ? ['Cambiar algo'] : []), 'Cancelar']);
 }
 
 /** Primera pregunta de cada flujo. */
@@ -265,6 +280,16 @@ export function iniciarGuiado(f: IdGuiado, inicial: Valores = {}): RespuestaGuia
 
 /** Recibe lo que escribió la persona y devuelve la siguiente pregunta (o el formulario ya lleno). */
 export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGuiado): Promise<RespuestaGuiada> {
+  const t = norm(limpiarValor(entrada, 300));
+  let r: RespuestaGuiada;
+  if (ATRAS.test(t)) return volver(e);
+  if (e.p === 'confirmar' && CAMBIAR.test(t) && (EDITABLES[e.f]?.length ?? 0) > 0) r = preguntaQueCambiar(e);
+  else if (e.p === 'cambiar') r = await elegirCambio(e, limpiarValor(entrada, 300), t, b);
+  else r = await avanzarBase(e, entrada, b);
+  return conHistorial(e, r);
+}
+
+async function avanzarBase(e: Estado, entrada: string, b: BuscadoresGuiado): Promise<RespuestaGuiada> {
   const texto = limpiarValor(entrada, 300);
   const t = norm(texto);
   if (!t) return ok(e, `No te leí nada. ${preguntaDe(e).texto}`, preguntaDe(e).chips);
@@ -286,7 +311,7 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
       const tipo = el === '1' || /sin|interna|simple/.test(t) ? 'sin-ncf' : el === '2' || /consumo|consumidor/.test(t) ? '32' : el === '3' || /credito|fiscal|rnc/.test(t) ? '31' : null;
       if (!tipo) return repite(e, 'No te entendí.', preguntaDe(e).texto, preguntaDe(e).chips);
       // Si ya dijo para quién es («factura para Colegio X»), se busca de una vez.
-      if (e.v.clienteNombre && !e.v.clienteId) return pasoCliente({ ...e, p: 'cliente', v: { ...e.v, tipoEcf: tipo } }, e.v.clienteNombre, norm(e.v.clienteNombre), b);
+      if (e.v.clienteNombre && !e.v.clienteId && !e.r) return pasoCliente({ ...e, p: 'cliente', v: { ...e.v, tipoEcf: tipo } }, e.v.clienteNombre, norm(e.v.clienteNombre), b);
       return siguiente({ ...e, p: 'cliente', v: { ...e.v, tipoEcf: tipo } });
     }
     case 'factura:cliente':
@@ -301,8 +326,8 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
       return pasoCliente({ ...e, p: 'cliente' }, texto, t, b);
     case 'cotizacion:vence': {
       if (esNo(texto) || /^(no vence|sin fecha)/.test(t)) return siguiente({ ...e, p: 'linea', v: { ...e.v, fechaVencimiento: '' } });
-      const f = texto.match(/^\d{4}-\d{2}-\d{2}$/)?.[0];
-      if (!f || !esFechaReal(f)) return repite(e, 'Esa fecha no es válida.', preguntaDe(e).texto, preguntaDe(e).chips);
+      const f = leerFecha(texto, b.hoy);
+      if (!f || f < b.hoy) return repite(e, 'Esa fecha no es válida (tiene que ser de hoy en adelante).', preguntaDe(e).texto, preguntaDe(e).chips);
       return siguiente({ ...e, p: 'linea', v: { ...e.v, fechaVencimiento: f } });
     }
     case 'factura:linea':
@@ -327,11 +352,12 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
       const tasa = leerTasa(t);
       if (!tasa) return repite(e, 'No te entendí.', preguntaDe(e).texto, preguntaDe(e).chips);
       if (e.f === 'producto') return siguiente({ ...e, p: 'referencia', v: { ...e.v, tasaItbis: tasa } });
+      if (e.l?.cantidad) return agregarLinea({ ...e, l: { ...e.l, tasa } });
       return siguiente({ ...e, p: 'cantidad', l: { ...e.l, tasa } });
     }
     case 'factura:cantidad':
     case 'cotizacion:cantidad': {
-      const n = esSi(texto) ? 1 : leerMonto(texto);
+      const n = esSi(texto) ? 1 : CANTIDAD_EN_PALABRAS[t] ?? leerMonto(texto);
       if (n == null || n <= 0 || n > MAX_CANTIDAD) return repite(e, `La cantidad debe ser mayor que 0 y no pasar de ${MAX_CANTIDAD.toLocaleString('es-DO')}.`, preguntaDe(e).texto, preguntaDe(e).chips);
       const l = { ...e.l, cantidad: n };
       // De catálogo: se confirma el precio. Libre: ya se preguntó, la línea está completa.
@@ -346,7 +372,17 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
       return agregarLinea({ ...e, l: { ...e.l, precio: m } });
     }
     case 'factura:mas':
-    case 'cotizacion:mas':
+    case 'cotizacion:mas': {
+      const quitar = t.match(/^(?:quitar|quita|borrar|borra|eliminar|elimina)(?: la)?(?: ultima| (\d{1,2}))?$/);
+      if (quitar) {
+        const ls = leerLineas(e.v.lineas);
+        const i = quitar[1] ? Number(quitar[1]) - 1 : ls.length - 1;
+        if (!ls[i]) return repite(e, 'No hay esa línea.', preguntaDe(e).texto, preguntaDe(e).chips);
+        const quedan = ls.filter((_, j) => j !== i);
+        const aviso = `Quité «${nombreSeguro(ls[i].nombre)}».`;
+        if (!quedan.length) return repite({ ...e, p: 'linea', v: { ...e.v, lineas: '' } }, aviso, preguntaDe({ ...e, p: 'linea', v: { ...e.v, lineas: '' } }).texto);
+        return repite({ ...e, v: { ...e.v, lineas: guardarLineas(quedan) } }, aviso, preguntaDe({ ...e, v: { ...e.v, lineas: guardarLineas(quedan) } }).texto, ['Sí', 'No']);
+      }
       if (esSi(texto) || /^(?:otra|otro|mas|agrega(?:r)?(?: otra| otro)?)$/.test(t)) return siguiente({ ...e, p: 'linea', l: undefined });
       if (esNo(texto) || /^(?:es todo|nada mas|eso es todo|ya|listo)$/.test(t)) {
         if (e.f === 'borrador') return siguienteCambio(e);
@@ -354,6 +390,7 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
         return e.f === 'factura' ? siguiente({ ...e, p: 'pago' }) : siguiente({ ...e, p: 'notas' });
       }
       return repite(e, 'No te entendí.', preguntaDe(e).texto, preguntaDe(e).chips);
+    }
     case 'factura:pago': {
       if (esNo(texto) || /^(por cobrar|despues|credito|fiado)/.test(t)) return siguiente({ ...e, p: 'notas', v: { ...e.v, pagoMetodo: '' } });
       const m = METODOS_COBRO.find((x) => t.includes(x.valor) || t.includes(norm(x.etiqueta)));
@@ -415,9 +452,8 @@ export async function avanzarGuiado(e: Estado, entrada: string, b: BuscadoresGui
       return siguiente({ ...e, p: 'fecha', v: { ...e.v, metodo: m.valor } });
     }
     case 'pago:fecha': {
-      if (/^(hoy|ahora|de hoy)\b/.test(t)) return siguiente({ ...e, p: 'referencia', v: { ...e.v, fechaPago: b.hoy } });
-      const f = texto.match(/^\d{4}-\d{2}-\d{2}$/)?.[0];
-      if (!f || !esFechaReal(f) || f > b.hoy) return repite(e, 'Esa fecha no es válida (no puede ser futura).', preguntaDe(e).texto, preguntaDe(e).chips);
+      const f = leerFecha(texto, b.hoy);
+      if (!f || f > b.hoy) return repite(e, 'Esa fecha no es válida (no puede ser futura).', preguntaDe(e).texto, preguntaDe(e).chips);
       return siguiente({ ...e, p: 'referencia', v: { ...e.v, fechaPago: f } });
     }
     case 'pago:referencia':
@@ -497,23 +533,28 @@ function despuesDelCliente(e: Estado): RespuestaGuiada {
 
 async function pasoLinea(e: Estado, texto: string, b: BuscadoresGuiado): Promise<RespuestaGuiada> {
   if (leerLineas(e.v.lineas).length >= 30) return siguiente({ ...e, p: 'mas' });
-  const q = nombreSeguro(texto, 120);
+  // «3 uniformes», «2 x matrícula»: la cantidad ya viene dicha y no se vuelve a preguntar.
+  const pre = nombreSeguro(texto, 120).match(/^(\d+(?:[.,]\d+)?)\s*(?:x|×|unidades? de|uds?\.? de|de)?\s+(\D.{1,})$/i);
+  const cant = pre ? Number(pre[1].replace(',', '.')) : undefined;
+  const dicha = cant && cant > 0 && cant <= MAX_CANTIDAD ? cant : undefined;
+  const q = dicha ? nombreSeguro(pre![2], 120) : nombreSeguro(texto, 120);
   const hallados = (await b.productos(q)).slice(0, 6);
   if (!hallados.length) {
-    return ok({ ...e, p: 'linea-libre', l: { nombre: q, tasa: '0.18' } },
+    return ok({ ...e, p: 'linea-libre', l: { nombre: q, tasa: '0.18', ...(dicha ? { cantidad: dicha } : {}) } },
       `No encontré «${q}» en tu catálogo. ¿Lo agrego como línea libre con ese nombre? (sí) O escribe otro nombre para buscar de nuevo.`, ['Sí, línea libre']);
   }
-  return ok({ ...e, p: 'linea-elegir', o: hallados, l: { nombre: q } },
+  return ok({ ...e, p: 'linea-elegir', o: hallados, l: { nombre: q, ...(dicha ? { cantidad: dicha } : {}) } },
     `Encontré esto en tu catálogo. ¿Cuál es?\n${lista(hallados.map((o) => ({ ...o, detalle: `${pesos(o.precio ?? 0)} (${ETIQUETA_TASA[o.tasa ?? '0.18']})` })), `0) Ninguno: línea libre «${q}»`)}`,
     hallados.slice(0, 4).map((_, i) => String(i + 1)));
 }
 
 async function pasoLineaElegir(e: Estado, texto: string, t: string, b: BuscadoresGuiado): Promise<RespuestaGuiada> {
-  if (/^0\b/.test(t) && e.l?.nombre) return siguiente({ ...e, p: 'precio-libre', o: undefined, l: { nombre: e.l.nombre, tasa: '0.18' } });
+  if (/^0\b/.test(t) && e.l?.nombre) return siguiente({ ...e, p: 'precio-libre', o: undefined, l: { nombre: e.l.nombre, tasa: '0.18', ...(e.l.cantidad ? { cantidad: e.l.cantidad } : {}) } });
   const el = elegir(texto, e.o ?? []);
   if (!el) return pasoLinea({ ...e, p: 'linea' }, texto, b);
   const p = el.opcion;
-  return siguiente({ ...e, p: 'cantidad', o: undefined, l: { nombre: limpiarValor(p.nombre, 255), productoId: p.id ?? undefined, precio: p.precio ?? 0, tasa: p.tasa ?? '0.18', bien: p.bien } });
+  const l = { nombre: limpiarValor(p.nombre, 255), productoId: p.id ?? undefined, precio: p.precio ?? 0, tasa: p.tasa ?? '0.18', bien: p.bien, ...(e.l?.cantidad ? { cantidad: e.l.cantidad } : {}) };
+  return siguiente({ ...e, p: l.cantidad ? 'precio' : 'cantidad', o: undefined, l });
 }
 
 function agregarLinea(e: Estado): RespuestaGuiada {
@@ -571,7 +612,21 @@ const SOLO_DIGITOS = new Set(['clienteId', 'documentoId']);
 const MAX_ESTADO = 60_000;
 
 /** El bloque que se pega al final de cada pregunta: ```paso con el estado en JSON. */
-export const bloquePaso = (e: Estado) => '```paso\n' + JSON.stringify(e) + '\n```';
+export function bloquePaso(e: Estado): string {
+  let json = JSON.stringify(e);
+  // Si el historial hace pesar demasiado el estado, se recorta («atrás» llega hasta donde alcance).
+  for (let n = e.h?.length ?? 0; json.length > MAX_ESTADO * 0.7 && n > 0; n--) json = JSON.stringify({ ...e, h: e.h!.slice(-(n - 1)) });
+  if (json.length > MAX_ESTADO * 0.7) json = JSON.stringify({ ...e, h: undefined, q: undefined });
+  return '```paso\n' + json + '\n```';
+}
+
+/** Lo que el panel necesita del estado de un mensaje para dibujar el avance (sin verificar firma: solo se muestra). */
+export function leerPasoVisible(contenido: string | null | undefined): Estado | null {
+  const m = (contenido ?? '').match(/```paso\n([\s\S]*?)\n```/);
+  if (!m) return null;
+  const json = m[1].replace(/^\d+\.[0-9a-f]{64}\n/, '');
+  return leerEstado('```paso\n' + json + '\n```');
+}
 
 /**
  * Lee el estado del mensaje anterior del asistente. Se valida todo: aunque solo
@@ -583,7 +638,10 @@ export function leerEstado(contenido: string | null | undefined): Estado | null 
   let crudo: unknown;
   try { crudo = JSON.parse(m[1]); } catch { return null; }
   if (!crudo || typeof crudo !== 'object') return null;
-  const o = crudo as Record<string, unknown>;
+  return reconstruir(crudo as Record<string, unknown>, 0);
+}
+
+function reconstruir(o: Record<string, unknown>, nivel: number): Estado | null {
   if (typeof o.f !== 'string' || !IDS_GUIADO.includes(o.f as IdGuiado)) return null;
   if (typeof o.p !== 'string' || !PASOS_VALIDOS.test(o.p)) return null;
 
@@ -621,6 +679,13 @@ export function leerEstado(contenido: string | null | undefined): Estado | null 
       ...(Number.isInteger(r.productoId) && Number(r.productoId) > 0 ? { productoId: Number(r.productoId) } : {}),
       ...(typeof r.bien === 'boolean' ? { bien: r.bien } : {}),
     };
+  }
+  if (typeof o.r === 'string' && PASOS_VALIDOS.test(o.r)) e.r = o.r;
+  // Lo mostrado se guarda sin marcado: solo texto y saltos de línea.
+  if (typeof o.q === 'string') e.q = o.q.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f<>`]/g, ' ').slice(0, 1500);
+  if (Array.isArray(o.c)) e.c = o.c.slice(0, 6).filter((x): x is string => typeof x === 'string').map((x) => limpiarValor(x, 40));
+  if (nivel === 0 && Array.isArray(o.h)) {
+    e.h = o.h.slice(-6).flatMap((x) => (x && typeof x === 'object' ? [reconstruir(x as Record<string, unknown>, 1)] : [])).filter((x): x is Estado => x !== null);
   }
   return e;
 }
@@ -724,12 +789,12 @@ function resumenEspecifico(e: Estado): string | null {
       const ls = leerLineas(v.lineas);
       const t = totalesDeLineas(ls);
       return [doc, `• Motivo: ${etiquetaDe(motivosDe(e.f), v.motivo)}`, ...(v.razonModificacion ? [`• Explicación: ${nombreSeguro(v.razonModificacion, 200)}`] : []),
-        `• ${e.f === 'notacredito' ? 'Acreditas' : 'Cargas'}:\n${resumenLineas(ls)}`, `• **Total ${pesos(t.total)}**`].join('\n');
+        `• ${e.f === 'notacredito' ? 'Acreditas' : 'Cargas'}:\n${resumenLineas(ls)}`, `• Total: ${pesos(t.total)}`].join('\n');
     }
     case 'borrador': {
       const filas = [doc];
       if (v.clienteNombre) filas.push(`• Cliente nuevo: ${nombreSeguro(v.clienteNombre)}`);
-      if (v.lineas) { const ls = leerLineas(v.lineas); filas.push(`• Líneas nuevas:\n${resumenLineas(ls)}`, `• **Total ${pesos(totalesDeLineas(ls).total)}**`); }
+      if (v.lineas) { const ls = leerLineas(v.lineas); filas.push(`• Líneas nuevas:\n${resumenLineas(ls)}`, `• Total: ${pesos(totalesDeLineas(ls).total)}`); }
       if (v.notas) filas.push(`• Nota nueva: ${nombreSeguro(v.notas, 300)}`);
       return filas.join('\n');
     }
@@ -855,4 +920,180 @@ async function avanzarEspecifico(e: Estado, texto: string, t: string, b: Buscado
     default:
       return null;
   }
+}
+
+
+// ── Avance del flujo, «atrás» y «cambiar algo» ──────────────────────────────
+
+const ATRAS = /^(?:atras|volver|vuelve|regresar|regresa|anterior|deshacer|deshaz|paso anterior|volver atras)[\s.,!¡]*$/;
+const CAMBIAR = /^(?:cambiar(?: algo)?|cambia|corregir(?: algo)?|modificar(?: algo)?|quiero cambiar(?: algo)?|no|editar(?: algo)?)[\s.,!¡]*$/;
+const CANTIDAD_EN_PALABRAS: Record<string, number> = {
+  un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, docena: 12, 'una docena': 12, 'media docena': 6,
+};
+
+const TITULOS: Record<IdGuiado, string> = {
+  factura: 'Nueva factura', cotizacion: 'Nueva cotización', cliente: 'Nuevo cliente', producto: 'Nuevo producto o servicio', pago: 'Registrar un cobro',
+  anulacion: 'Anular una factura', notacredito: 'Nota de crédito', notadebito: 'Nota de débito', convertir: 'Convertir una cotización', borrador: 'Editar un borrador',
+};
+const ORDEN: Record<IdGuiado, string[]> = {
+  factura: ['tipo', 'cliente', 'linea', 'pago', 'notas', 'confirmar'],
+  cotizacion: ['cliente', 'vence', 'linea', 'notas', 'confirmar'],
+  cliente: ['nombre', 'rnc', 'email', 'telefono', 'direccion', 'confirmar'],
+  producto: ['nombre', 'tipo', 'precio', 'itbis', 'referencia', 'confirmar'],
+  pago: ['documento', 'monto', 'metodo', 'fecha', 'referencia', 'confirmar'],
+  anulacion: ['documento', 'tipoanul', 'nota', 'confirmar'],
+  notacredito: ['documento', 'motivo', 'que', 'confirmar'],
+  notadebito: ['documento', 'motivo', 'linea', 'confirmar'],
+  convertir: ['documento', 'confirmar'],
+  borrador: ['documento', 'cambios', 'cliente', 'linea', 'notas', 'confirmar'],
+};
+const CON_LINEAS: IdGuiado[] = ['factura', 'cotizacion', 'notadebito', 'borrador'];
+const PASOS_DE_LINEA = ['linea', 'linea-elegir', 'linea-libre', 'precio', 'precio-libre', 'itbis-libre', 'cantidad', 'mas'];
+
+/** Las preguntas que van juntas (buscar y elegir un cliente, armar una línea…) cuentan como un solo paso. */
+export function grupoDe(f: IdGuiado, p: string): string {
+  if (CON_LINEAS.includes(f) && PASOS_DE_LINEA.includes(p)) return 'linea';
+  if (p.startsWith('cliente')) return 'cliente';
+  if (p.startsWith('documento')) return 'documento';
+  if (p === 'razon') return 'motivo';
+  return p;
+}
+
+/** «Paso 3 de 6» para el panel; `null` si el paso no está en el recorrido. */
+export function progresoGuiado(e: Pick<Estado, 'f' | 'p'>): { titulo: string; n: number; total: number } | null {
+  const orden = ORDEN[e.f];
+  const i = orden?.indexOf(grupoDe(e.f, e.p)) ?? -1;
+  return i < 0 ? null : { titulo: TITULOS[e.f], n: i + 1, total: orden.length };
+}
+
+interface Editable { etiqueta: string; p: string; re: RegExp; limpiar?: string[] }
+const CLIENTE_V = ['clienteId', 'clienteNombre', 'clienteRnc', 'clienteEmail'];
+const EDITABLES: Partial<Record<IdGuiado, Editable[]>> = {
+  factura: [
+    { etiqueta: 'Tipo de comprobante', p: 'tipo', re: /tipo|comprobante/ },
+    { etiqueta: 'Cliente', p: 'cliente', re: /cliente/, limpiar: CLIENTE_V },
+    { etiqueta: 'Líneas (qué se factura)', p: 'linea', re: /linea|producto|item|factura/, limpiar: ['lineas'] },
+    { etiqueta: 'Cobro', p: 'pago', re: /cobro|pago/ },
+    { etiqueta: 'Nota', p: 'notas', re: /nota/ },
+  ],
+  cotizacion: [
+    { etiqueta: 'Cliente', p: 'cliente', re: /cliente/, limpiar: CLIENTE_V },
+    { etiqueta: 'Válida hasta', p: 'vence', re: /vence|valida|fecha/ },
+    { etiqueta: 'Líneas (qué cotizas)', p: 'linea', re: /linea|producto|item/, limpiar: ['lineas'] },
+    { etiqueta: 'Nota', p: 'notas', re: /nota/ },
+  ],
+  cliente: [
+    { etiqueta: 'Nombre', p: 'nombre', re: /nombre/ },
+    { etiqueta: 'RNC o cédula', p: 'rnc', re: /rnc|cedula|documento/ },
+    { etiqueta: 'Correo', p: 'email', re: /correo|email/ },
+    { etiqueta: 'Teléfono', p: 'telefono', re: /telefono|tel/ },
+    { etiqueta: 'Dirección', p: 'direccion', re: /direccion/ },
+  ],
+  producto: [
+    { etiqueta: 'Nombre', p: 'nombre', re: /nombre/ },
+    { etiqueta: 'Tipo (producto o servicio)', p: 'tipo', re: /tipo/ },
+    { etiqueta: 'Precio', p: 'precio', re: /precio|costo/ },
+    { etiqueta: 'ITBIS', p: 'itbis', re: /itbis|impuesto/ },
+    { etiqueta: 'Referencia', p: 'referencia', re: /referencia|codigo/ },
+  ],
+  pago: [
+    { etiqueta: 'Monto', p: 'monto', re: /monto|valor|cantidad/ },
+    { etiqueta: 'Método', p: 'metodo', re: /metodo|forma/ },
+    { etiqueta: 'Fecha', p: 'fecha', re: /fecha/ },
+    { etiqueta: 'Referencia', p: 'referencia', re: /referencia/ },
+  ],
+  anulacion: [
+    { etiqueta: 'Motivo', p: 'tipoanul', re: /motivo|razon/ },
+    { etiqueta: 'Nota', p: 'nota', re: /nota/ },
+  ],
+  notacredito: [
+    { etiqueta: 'Motivo', p: 'motivo', re: /motivo|razon/, limpiar: ['razonModificacion'] },
+    { etiqueta: 'Lo que acreditas', p: 'que', re: /acredit|linea/ },
+  ],
+  notadebito: [
+    { etiqueta: 'Motivo', p: 'motivo', re: /motivo|razon/, limpiar: ['razonModificacion'] },
+    { etiqueta: 'Lo que cargas', p: 'linea', re: /carg|linea/, limpiar: ['lineas'] },
+  ],
+};
+
+function preguntaQueCambiar(e: Estado): RespuestaGuiada {
+  const items = EDITABLES[e.f] ?? [];
+  return ok({ ...e, p: 'cambiar', o: undefined, l: undefined },
+    `¿Qué quieres cambiar?\n${items.map((x, i) => `${i + 1}) ${x.etiqueta}`).join('\n')}`,
+    []);
+}
+
+async function elegirCambio(e: Estado, texto: string, t: string, b: BuscadoresGuiado): Promise<RespuestaGuiada> {
+  if (CANCELAR.test(t)) return { texto: `Listo, cancelé ${NOMBRE_FORM[e.f]}. No se guardó nada.`, chips: [], estado: null };
+  if (/^(?:ninguno|nada|ya esta|esta bien|seguir|continuar|volver al resumen)[\s.,!]*$/.test(t)) return preguntaConfirmar(e);
+  const items = EDITABLES[e.f] ?? [];
+  const el = elegir(texto, items.map((x) => ({ nombre: x.etiqueta })));
+  const item = el ? items[el.indice] : items.find((x) => x.re.test(t));
+  if (!item) return repite(e, 'No te entendí.', preguntaDe(e).texto || (e.q ?? ''), e.c ?? []);
+  const v = { ...e.v };
+  for (const k of item.limpiar ?? []) v[k] = '';
+  const nuevo: Estado = { ...e, p: item.p, v, r: grupoDe(e.f, item.p), o: undefined, l: undefined };
+  void b;
+  const q = preguntaDe(nuevo);
+  return ok(nuevo, `Vamos a cambiar: ${item.etiqueta.toLowerCase()}.\n\n${q.texto}`, q.chips);
+}
+
+function volver(e: Estado): RespuestaGuiada {
+  const h = e.h ?? [];
+  if (!h.length) return ok(e, `Ya estás en la primera pregunta.\n\n${e.q ?? preguntaDe(e).texto}`, e.c ?? preguntaDe(e).chips);
+  const prev = h[h.length - 1];
+  const estado: Estado = { ...prev, h: h.slice(0, -1) };
+  if (prev.p === 'confirmar') {
+    const r = preguntaConfirmar(estado);
+    return { ...r, texto: `Volvemos un paso.\n\n${r.texto}`, estado: { ...r.estado!, h: estado.h } };
+  }
+  const q = prev.q ?? preguntaDe(prev).texto;
+  const chips = [...(prev.c ?? preguntaDe(prev).chips)];
+  if (estado.h?.length && !chips.includes('Atrás')) chips.push('Atrás');
+  return { texto: `Volvemos un paso.\n\n${q}`, chips: chips.slice(0, 6), estado: { ...estado, c: chips.slice(0, 6) } };
+}
+
+const instantanea = (e: Estado): Estado => ({ f: e.f, p: e.p, v: e.v, ...(e.o ? { o: e.o } : {}), ...(e.l ? { l: e.l } : {}), ...(e.r ? { r: e.r } : {}), ...(e.q ? { q: e.q } : {}), ...(e.c ? { c: e.c } : {}) });
+
+/** Guarda el paso anterior para «atrás» y, si se estaba corrigiendo desde el resumen, vuelve a él al terminar ese grupo de preguntas. */
+function conHistorial(e: Estado, r0: RespuestaGuiada): RespuestaGuiada {
+  if (!r0.estado || r0.final || r0.abandona) return r0;
+  let r = r0;
+  if (e.r && r.estado!.p !== 'confirmar' && r.estado!.p !== 'cambiar' && grupoDe(r.estado!.f, r.estado!.p) !== e.r) {
+    r = preguntaConfirmar({ ...r.estado!, r: undefined });
+  }
+  const est = r.estado!;
+  const avanzo = est.p !== e.p || JSON.stringify(est.v) !== JSON.stringify(e.v);
+  const h = avanzo ? [...(e.h ?? []).slice(-5), instantanea(e)] : e.h;
+  const chips = [...r.chips];
+  if (h?.length && !chips.includes('Atrás')) chips.push('Atrás');
+  return { ...r, chips: chips.slice(0, 6), estado: { ...est, h, c: chips.slice(0, 6) } };
+}
+
+// ── Fechas ──────────────────────────────────────────────────────────────────
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function sumarDias(iso: string, dias: number): string {
+  const [a, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
+}
+
+/** «hoy», «ayer», «mañana», «en 30 días», «15/10/2026», «15 de octubre» o AAAA-MM-DD → AAAA-MM-DD (o `null`). */
+export function leerFecha(texto: string, hoy: string): string | null {
+  const t = norm(texto).replace(/[.,!¡]+$/g, '');
+  const rel: Record<string, number> = { hoy: 0, 'hoy mismo': 0, ahora: 0, 'de hoy': 0, ayer: -1, anteayer: -2, 'antes de ayer': -2, manana: 1, 'pasado manana': 2 };
+  if (t in rel) return sumarDias(hoy, rel[t]);
+  const en = t.match(/^(?:en |dentro de )?(\d{1,3}) (dias?|semanas?|meses|mes)$/);
+  if (en) return sumarDias(hoy, Number(en[1]) * (en[2].startsWith('semana') ? 7 : en[2].startsWith('mes') ? 30 : 1));
+  if (/^(?:en un mes|proximo mes)$/.test(t)) return sumarDias(hoy, 30);
+  let a: number; let m: number; let d: number;
+  let x = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (x) { a = +x[1]; m = +x[2]; d = +x[3]; } else if ((x = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/))) { d = +x[1]; m = +x[2]; a = +x[3]; } else if ((x = t.match(/^(\d{1,2}) de ([a-z]+)(?: de (\d{4}))?$/))) {
+    const i = MESES.indexOf(x[2]);
+    if (i < 0) return null;
+    d = +x[1]; m = i + 1; a = x[3] ? +x[3] : Number(hoy.slice(0, 4));
+  } else return null;
+  const iso = `${String(a).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return esFechaReal(iso) ? iso : null;
 }

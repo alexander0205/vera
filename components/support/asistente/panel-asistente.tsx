@@ -11,6 +11,7 @@ import { descargarExcel, descargarPdf, type AsistenteEstado, type MensajeAsisten
 import { tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { preguntaDeLoQueVende } from '@/lib/asistente/primeros-pasos';
 import { Markdown } from './markdown';
+import { leerPasoVisible, progresoGuiado, type Estado as PasoGuiado } from '@/lib/asistente/guiado';
 import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
 import { describirError, mensajeDeEspera } from '@/lib/asistente/estados';
 import s from './asistente.module.css';
@@ -48,7 +49,21 @@ const MOTIVOS: [string, string][] = [
  * hacia abajo, en menos de un segundo. Con movimiento reducido, o si es corta,
  * aparece entera. Lo que no es nuevo (historial) nunca se anima.
  */
-function TextoRevelado({ texto, nuevo, alCrecer, clave }: { texto: string; nuevo: boolean; alCrecer: () => void; clave?: string }) {
+/** Dónde va la conversación guiada: nombre del trámite, «paso n de N» y una barra. */
+function CabeceraPaso({ e }: { e: PasoGuiado }) {
+  const p = progresoGuiado(e);
+  if (!p) return null;
+  return (
+    <div className={s.guiadoCab}>
+      <div className={s.guiadoTitulo}><strong>{p.titulo}</strong><span>Paso {p.n} de {p.total}</span></div>
+      <div className={s.guiadoRiel} role="progressbar" aria-label={`${p.titulo}: paso ${p.n} de ${p.total}`} aria-valuemin={1} aria-valuemax={p.total} aria-valuenow={p.n}>
+        <span style={{ width: `${Math.round((p.n / p.total) * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function TextoRevelado({ texto, nuevo, alCrecer, clave, alElegir }: { texto: string; nuevo: boolean; alCrecer: () => void; clave?: string; alElegir?: (numero: string) => void }) {
   const bloques = useMemo(() => bloquesDeRevelado(texto), [texto]);
   const [visibles, setVisibles] = useState(() => {
     const reducido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -60,7 +75,7 @@ function TextoRevelado({ texto, nuevo, alCrecer, clave }: { texto: string; nuevo
     return () => clearTimeout(t);
   }, [visibles, bloques.length]);
   useEffect(() => { alCrecer(); }, [visibles, alCrecer]);
-  return <Markdown texto={visibles >= bloques.length ? texto : bloques.slice(0, visibles).join('\n\n')} clave={clave} />;
+  return <Markdown texto={visibles >= bloques.length ? texto : bloques.slice(0, visibles).join('\n\n')} clave={clave} alElegir={alElegir} />;
 }
 
 /** Un error con explicación y la salida que corresponde (reintentar, esperar o hablar con alguien). */
@@ -193,6 +208,9 @@ function MensajeAsistenteVista({
   /** Se llama cuando la respuesta crece (se va revelando): el panel baja al final. */
   alCrecer: () => void;
 }) {
+  const paso = m.rol === 'assistant' && !m.error ? leerPasoVisible(m.contenido) : null;
+  // Al recargar la conversación los botones de una pregunta guiada se rehacen con lo que guardó su estado.
+  const botones = (m.seguimientos && m.seguimientos.length > 0 ? m.seguimientos : paso?.c ?? []).filter((q) => !paso || !/^\d{1,2}$/.test(q) || !/^\s*\d+[.)]\s/m.test(m.contenido));
   if (m.rol === 'user') {
     return (
       <div className={`${s.fila} ${s.filaUsuario}`}>
@@ -204,8 +222,9 @@ function MensajeAsistenteVista({
     <div className={`${s.fila} ${s.filaAsistente}`}>
       <span className={s.avatar} aria-hidden><Sparkles size={13} /></span>
       <div className={s.cuerpo}>
-        <div className={`${s.burbuja} ${s.burbujaAsistente} ${m.error ? s.burbujaError : ''}`}>
-          {m.error ? <ErrorVista texto={m.contenido} esElUltimo={ultimoError} onReintentar={onReintentar} onPersona={onPersona} /> : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} clave={m.id > 0 ? `msg-${m.id}` : undefined} />}
+        <div className={`${s.burbuja} ${s.burbujaAsistente} ${m.error ? s.burbujaError : ''} ${paso ? s.burbujaGuiada : ''}`}>
+          {paso && <CabeceraPaso e={paso} />}
+          {m.error ? <ErrorVista texto={m.contenido} esElUltimo={ultimoError} onReintentar={onReintentar} onPersona={onPersona} /> : <TextoRevelado texto={m.contenido} nuevo={m.nuevo === true} alCrecer={alCrecer} clave={m.id > 0 ? `msg-${m.id}` : undefined} alElegir={paso ? preguntar : undefined} />}
         </div>
         {m.propuestas?.map((p) => (
           <div key={p.token} className={`${s.propuesta} ${p.destructiva ? s.propuestaPeligro : ''}`} role="group" aria-label="Confirmar acción">
@@ -249,9 +268,9 @@ function MensajeAsistenteVista({
               )}
               <BotonCopiar texto={m.contenido} />
             </div>
-            {preguntar && m.seguimientos && m.seguimientos.length > 0 && m.id > 0 && (
-              <div className={s.seguimientos} role="group" aria-label="Qué preguntar después">
-                {m.seguimientos.map((q) => (
+            {preguntar && botones.length > 0 && m.id > 0 && (
+              <div className={s.seguimientos} role="group" aria-label={paso ? 'Respuestas rápidas' : 'Qué preguntar después'}>
+                {botones.map((q) => (
                   <button key={q} type="button" className={s.motivo} onClick={() => preguntar(q)}>{q}</button>
                 ))}
               </div>
@@ -345,6 +364,9 @@ export function PanelAsistente({
   }
 
   const vacio = a.mensajes.length === 0;
+  // En mitad de una creación guiada, el campo pide la respuesta (no una pregunta nueva).
+  const ultimoMsg = a.mensajes[a.mensajes.length - 1];
+  const enGuiado = ultimoMsg?.rol === 'assistant' && !ultimoMsg.error && leerPasoVisible(ultimoMsg.contenido) !== null;
   const ultimoEsError = a.mensajes[a.mensajes.length - 1]?.error === true;
   // «Preguntar a la IA» solo en la última respuesta: es la que la persona acaba de ver.
   const ultimaRespuestaId = [...a.mensajes].reverse().find((m) => m.rol === 'assistant' && !m.error)?.id;
@@ -522,7 +544,7 @@ export function PanelAsistente({
             rows={1}
             value={texto}
             maxLength={1500}
-            placeholder="Escribe tu pregunta…"
+            placeholder={enGuiado ? 'Escribe tu respuesta…  (atrás · cancelar)' : 'Escribe tu pregunta…'}
             aria-label="Pregunta para el asistente"
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => {
