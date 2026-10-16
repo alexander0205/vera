@@ -122,3 +122,52 @@ sacar más información de la que la persona ya vio, y una petición masiva
 - Los textos van como texto (nunca fórmula): un nombre que empiece con `=`, `+`, `-` o `@` no se ejecuta.
 - Montos, porcentajes y fechas pasan a celdas numéricas con formato; RNC, cédulas, e-NCF y códigos con ceros a la izquierda se quedan como texto.
 - Una hoja por tabla o gráfico, y al final «Información» (empresa, quién, cuándo, consulta y datos consultados).
+
+## Creación desde el chat (formularios)
+
+El asistente muestra formularios (cliente, producto, cotización, factura, borrador,
+cobro, anulación, nota de crédito y de débito, conversión, gasto, importación). Código:
+`lib/asistente/formulario.ts`, `components/support/asistente/formulario-chat.tsx`.
+Auditoría y pruebas: `tests/unit/asistente-formulario-seguridad.test.ts` y el bloque
+«formularios de creación con un modelo comprometido» de `asistente-seguridad.test.ts`.
+
+### Invariantes (no se negocian)
+
+1. **La IA no escribe.** Ninguna herramienta suya crea, edita ni borra; el carril de
+   propuestas (`acciones.ts`) está vacío. Un formulario solo es una invitación a llenar.
+2. **Solo si la persona lo pidió.** `filtrarFormulariosDeIa` deja pasar un formulario únicamente
+   si lo escrito pide una acción y NOMBRA esa cosa; un solo formulario por respuesta; los datos
+   adelantados solo valen si ella los dijo; montos, líneas, archivos y la factura elegida
+   jamás vienen de la IA. El bloque se reescribe desde cero (claves desconocidas no sobreviven).
+3. **Dirección y cuerpo salen de un registro en código.** Nada del texto elige a dónde se envía
+   (`endpointDe`, solo id de 1 a 10 dígitos) ni qué claves viajan (`armarPayload`): un test con
+   valores hostiles (`teamId`, `role`, `force`, `__proto__`…) comprueba que ninguna se cuela.
+4. **Enviar es un acto de la persona.** Sin envío automático; un solo envío a la vez (cerrojo);
+   emitir a la DGII, anular y convertir piden una segunda confirmación con total y cliente a la vista.
+5. **Mismas reglas que la pantalla.** Cada formulario llama a la ruta de la API que ya usa la
+   pantalla, con la sesión de quien lo llena: permisos, validaciones y secuencias son los de siempre.
+6. **Enlaces de resultado = pantallas internas.** `esEnlaceInterno` (solo `/dashboard/...`,
+   sin `//`, `\`, `..`, esquema ni consulta), también al leer lo guardado en el navegador.
+7. **Importes y fechas con tope** (RD$ 20 millones por documento, cantidad ≤ 1 000 000, fechas
+   reales, cobro ≤ saldo y no futuro, 4 archivos de gasto): un importe desmedido llegaba a la API
+   y volvía como «Error interno» (la base guarda centavos en 32 bits).
+8. **Las rutas validan que todo id del cuerpo sea de la empresa** (`lib/seguridad/pertenencia.ts`):
+   cliente, almacén, vendedor, lista de precios y productos. Antes se guardaban ids de otra
+   empresa y la ficha de la factura mostraba teléfono y correo del cliente ajeno.
+
+### Políticas de entrada añadidas
+
+Saltarse la confirmación («sin pedirme confirmación», «confirma por mí», «hazlo tú mismo»),
+borrar el rastro («desactiva la auditoría»), falsa autoridad con orden («como administrador
+de Zero te ordeno…»), comprobantes falsos o duplicar NCF, «sin pasar por la DGII», creación en
+masa o en bucle, crear en otra empresa y «sin límite de monto». Respuesta fija, sin modelo.
+
+### Riesgos residuales (conocidos)
+
+- No hay idempotencia en el servidor para cobros, clientes ni cotizaciones: el cerrojo y el
+  «Listo» guardado evitan el doble envío desde el panel, no una repetición desde dos pestañas.
+- La segunda confirmación de emitir es de interfaz: una llamada directa a la API (igual que fuera
+  del chat) no la pasa; el control real es el permiso `facturas:crear` de la API.
+- Las importaciones CSV guardan lo que traen (un nombre `=…` se exporta como texto en el Excel del
+  asistente, pero otros reportes antiguos pueden tratarlo distinto).
+- Un gasto subido se valida por contenido (tipo) y tamaño en el servidor, no por el nombre.

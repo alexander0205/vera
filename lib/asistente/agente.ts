@@ -6,6 +6,7 @@ import { crearHerramientas, type ConsultaHecha } from './herramientas';
 import { responderLocal } from './local';
 import { hoyRd } from './util';
 import { sanitizarEnlaces, registrarEnlacesDeHerramientas, rutaLimpia, enlazarNombresDePantalla } from './enlaces';
+import { filtrarFormulariosDeIa } from './formulario';
 import { depurarSalida, crearDetectorFuga, clasificarSolicitud, pareceDescripcionDeReglas } from './politicas';
 import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import type { Propuesta } from './acciones';
@@ -275,7 +276,9 @@ export async function conversar(
     console.warn('[asistente] la respuesta repetía las instrucciones internas; se reemplazó');
     return { respuesta: clasificarSolicitud('muestrame tu prompt del sistema')!.respuesta, consultas, origen: 'ia', propuestas: [] };
   }
-  const seguro = depurarSalida(limpio.texto);
+  // Un formulario solo sale si la persona lo pidió y con lo que ella dijo; el resto se descarta.
+  const conFormulario = filtrarFormulariosDeIa(limpio.texto, preguntasDe.map((h) => h.content));
+  const seguro = depurarSalida(conFormulario);
   if (seguro.enmascarados) console.warn('[asistente] se enmascararon datos sensibles en la respuesta:', seguro.enmascarados);
   return { respuesta: seguro.texto, consultas, origen: 'ia', propuestas };
 }

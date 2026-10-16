@@ -149,6 +149,8 @@ export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
   const bloques: ReactNode[] = [];
   let i = 0;
   let n = 0;
+  // Nunca más de un formulario por mensaje: aunque el texto traiga varios, solo el primero se dibuja.
+  let formularios = 0;
 
   const empiezaTabla = (j: number) =>
     esFilaTabla(lineas[j]) && j + 1 < lineas.length && esSeparador(lineas[j + 1]);
@@ -166,7 +168,8 @@ export function Markdown({ texto, clave }: { texto: string; clave?: string }) {
       i++;
       const g = lenguaje === 'grafico' ? parsearGrafico(cuerpo.join('\n')) : null;
       const tj = lenguaje === 'tarjeta' ? parsearTarjeta(cuerpo.join('\n')) : null;
-      const fm = lenguaje === 'formulario' ? parsearFormulario(cuerpo.join('\n')) : null;
+      const fm = lenguaje === 'formulario' && formularios === 0 ? parsearFormulario(cuerpo.join('\n')) : null;
+      if (fm) formularios += 1;
       if (fm) {
         bloques.push(<FormularioChat key={`b${n}`} def={fm.def} inicial={fm.valores} clave={clave ? `${clave}:${n++}` : undefined} />);
       } else if (g) {

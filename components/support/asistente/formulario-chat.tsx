@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import {
-  armarPayload, endpointDe, esNota, guardarLineas, leerLineas, lineaVacia, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
+  armarPayload, endpointDe, esEnlaceInterno, esNota, MAX_ARCHIVOS_GASTO, guardarLineas, leerLineas, lineaVacia, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeEmision,
   resumenDeAnulacion, resumenDeConversion, resumenDeNota, totalesDeLineas, validarFormulario,
   type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
@@ -42,7 +42,7 @@ function leerHecho(clave: string | undefined): Hecho | null {
     const crudo = window.localStorage.getItem(`asistente-form:${clave}`);
     if (!crudo) return null;
     const d = JSON.parse(crudo) as { mensaje?: unknown; enlace?: unknown; etiqueta?: unknown };
-    return typeof d.mensaje === 'string' && typeof d.enlace === 'string' && d.enlace.startsWith('/') && !d.enlace.startsWith('//')
+    return typeof d.mensaje === 'string' && esEnlaceInterno(d.enlace)
       ? { mensaje: d.mensaje.slice(0, 300), enlace: d.enlace, ...(typeof d.etiqueta === 'string' ? { etiqueta: d.etiqueta.slice(0, 60) } : {}) }
       : null;
   } catch { return null; }
@@ -193,7 +193,7 @@ function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores, co
         onChange={(ev) => {
           setTexto(ev.target.value);
           setAbierto(true);
-          poner({ documentoId: '', documentoNombre: ev.target.value, documentoSaldo: '' });
+          poner({ documentoId: '', documentoNombre: ev.target.value, documentoSaldo: '', documentoSaldoNum: '', documentoTotal: '' });
         }}
       />
       {elegido && !cotizaciones && valores.documentoSaldo && (
@@ -213,7 +213,7 @@ function SelectorFactura({ id, valores, poner, deshabilitado, soloBorradores, co
                   onClick={() => {
                     setTexto(nombre);
                     setAbierto(false);
-                    poner({ documentoId: String(f.id), documentoNombre: nombre, documentoSaldo: pesos(saldo), documentoTotal: String(f.montoTotal / 100), ...(saldo > 0 && !cotizaciones ? { monto: String(saldo) } : {}) });
+                    poner({ documentoId: String(f.id), documentoNombre: nombre, documentoSaldo: pesos(saldo), documentoTotal: String(f.montoTotal / 100), ...(cotizaciones ? {} : { documentoSaldoNum: String(saldo) }), ...(saldo > 0 && !cotizaciones ? { monto: String(saldo) } : {}) });
                   }}
                 >
                   <strong>{nombre}</strong>
@@ -401,8 +401,18 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
   const campoArchivo = def.campos.find((c) => c.tipo === 'archivo');
 
   function terminar(h: Hecho) {
-    guardarHecho(clave, h);
-    setFase({ t: 'listo', ...h });
+    // Un enlace que no sea una pantalla interna de /dashboard no se muestra nunca.
+    const seguro: Hecho = esEnlaceInterno(h.enlace) ? h : { ...h, enlace: def.pantalla };
+    guardarHecho(clave, seguro);
+    setFase({ t: 'listo', ...seguro });
+  }
+
+  // Un solo envío a la vez: un doble clic o un Enter repetido no puede registrar dos veces lo mismo (dos cobros, dos clientes).
+  const cerrojo = useRef(false);
+  async function conCerrojo(f: () => Promise<void>) {
+    if (cerrojo.current) return;
+    cerrojo.current = true;
+    try { await f(); } finally { cerrojo.current = false; }
   }
 
   function poner(p: Valores) {
@@ -416,7 +426,8 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     });
   }
 
-  async function enviarJson(opts: { modo?: ModoEmision; forzar?: boolean } = {}) {
+  function enviarJson(opts: { modo?: ModoEmision; forzar?: boolean } = {}) { return conCerrojo(() => enviarJsonInterno(opts)); }
+  async function enviarJsonInterno(opts: { modo?: ModoEmision; forzar?: boolean } = {}) {
     const modo = opts.modo ?? 'borrador';
     const e = validarFormulario(def, valores);
     setErrores(e);
@@ -495,7 +506,8 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     setFase({ t: 'confirmar', texto: resumenDeAnulacion(valores), accion: 'anular' });
   }
 
-  async function subirCsv(modo: 'preview' | 'commit') {
+  function subirCsv(modo: 'preview' | 'commit') { return conCerrojo(() => subirCsvInterno(modo)); }
+  async function subirCsvInterno(modo: 'preview' | 'commit') {
     const archivo = archivos[0];
     if (!archivo) { setErrorArchivo('Elige un archivo CSV'); return; }
     setFase({ t: 'enviando' });
@@ -522,7 +534,8 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     }
   }
 
-  async function subirCaptura() {
+  function subirCaptura() { return conCerrojo(subirCapturaInterna); }
+  async function subirCapturaInterna() {
     if (!archivos.length) { setErrorArchivo('Elige el PDF o la imagen del comprobante'); return; }
     setFase({ t: 'enviando' });
     try {
@@ -550,7 +563,8 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
     const mala = fs.find((f) => !ok(f));
     if (mala) { setArchivos([]); setErrorArchivo(def.modo === 'csv' ? 'Debe ser un archivo CSV (.csv)' : 'Debe ser un PDF o una imagen'); return; }
     if (fs.some((f) => f.size > MAX_ARCHIVO)) { setArchivos([]); setErrorArchivo('Cada archivo debe pesar menos de 8 MB'); return; }
-    setArchivos(fs.slice(0, campoArchivo?.multiple ? 5 : 1));
+    if (campoArchivo?.multiple && fs.length > MAX_ARCHIVOS_GASTO) { setArchivos([]); setErrorArchivo(`Máximo ${MAX_ARCHIVOS_GASTO} archivos por comprobante`); return; }
+    setArchivos(fs.slice(0, campoArchivo?.multiple ? MAX_ARCHIVOS_GASTO : 1));
   }
 
   if (fase.t === 'listo') {

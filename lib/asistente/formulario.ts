@@ -61,6 +61,26 @@ export interface DefFormulario {
 
 const MAX_TEXTO = 255;
 const MAX_LINEAS = 30;
+/**
+ * Topes de importes. La base guarda los montos en centavos como entero de 32
+ * bits (techo: RD$ 21,474,836.47); sin tope, un precio desmedido llegaba a la
+ * API y volvía como «Error interno». Se frena aquí con un mensaje claro.
+ */
+export const MAX_MONTO = 20_000_000;
+export const MAX_CANTIDAD = 1_000_000;
+export const MAX_ARCHIVOS_GASTO = 4;
+const MAX_CUERPO_BLOQUE = 2_000;
+
+const hoyRd = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
+
+/** ¿Es una fecha AAAA-MM-DD que existe de verdad (no 2026-13-45 ni 2026-02-30)? */
+export function esFechaReal(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (y < 2000 || y > 2100) return false;
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
 
 const TASAS = [
   { valor: '0.18', etiqueta: '18 %' }, { valor: '0.16', etiqueta: '16 %' },
@@ -411,9 +431,11 @@ const SOLO_PERSONA = new Set<TipoCampo>(['archivo', 'documento', 'lineas']);
  * solo un texto de búsqueda: nunca un id, que la persona elige de la lista.
  */
 export function parsearFormulario(cuerpo: string): { def: DefFormulario; valores: Valores } | null {
-  const lineas = cuerpo.replace(/\r/g, '').split('\n');
+  // Un bloque legítimo mide pocas líneas: lo demás es relleno o un intento de desbordar.
+  const lineas = cuerpo.slice(0, MAX_CUERPO_BLOQUE).replace(/\r/g, '').split('\n').slice(0, 40);
   let tipo: string | null = null;
-  const crudos: Valores = {};
+  // Sin prototipo: una clave como `__proto__` o `constructor` no puede tocar nada.
+  const crudos: Valores = Object.create(null);
   for (const l of lineas) {
     const m = l.match(/^\s*([A-Za-z][A-Za-z0-9_]*)\s*:\s*(.*)$/);
     if (!m) continue;
@@ -461,6 +483,74 @@ export function bloqueFormulario(id: IdFormulario, valores: Valores = {}): strin
   return '```formulario\n' + lineas.join('\n') + '\n```';
 }
 
+// ── Lo que la IA puede mostrar ──────────────────────────────────────────────
+
+const NOMBRE_DE: Record<IdFormulario, RegExp> = {
+  cliente: /\bcliente/,
+  producto: /\b(producto|servicio|articulo|item|catalogo|inventario)/,
+  cotizacion: /\b(cotizacion|presupuesto|proforma)/,
+  factura: /\bfactur/,
+  pago: /\b(cobr|pago|abono)/,
+  gasto: /\b(gasto|proveedor|compra|comprobante|recibo|ticket|factura)/,
+  anulacion: /\b(anul|cancel)/,
+  notacredito: /\bcredito/,
+  notadebito: /\bdebito/,
+  borrador: /\bborrador/,
+  convertir: /\b(cotizacion|presupuesto|proforma)/,
+  'importar-productos': /\b(import|cargar|subir|catalogo|producto|servicio|inventario)/,
+  'importar-clientes': /\b(import|cargar|subir|cliente)/,
+};
+const VERBO_DE_ACCION = /\b(crea\w*|crear|nuev[oa]s?|registr\w*|agreg\w*|anad\w*|emit\w*|factur\w*|cobr\w*|anul\w*|cancel\w*|import\w*|sub[eio]\w*|carg\w*|convert\w*|pas[ae]\w*|transform\w*|edit\w*|modific\w*|correg\w*|actualiz\w*|haz\w*|hacer|gener\w*|prepar\w*|arm\w*|alta|retom\w*|abr\w*|necesito|quiero|ayud\w*)\b/;
+
+const sinAcentos = (s: string) => s.normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const soloDigitos = (s: string) => s.replace(/[,\s]/g, '');
+
+/**
+ * Cuando la IA contesta con un formulario, esto decide si de verdad puede salir.
+ * Es la regla que impide que un dato envenenado (el nombre de un cliente, una
+ * nota) o un modelo extraviado ponga delante de la persona un formulario que
+ * ella no pidió:
+ *
+ *  - solo sale si lo que ella escribió pide crear, cobrar, anular… ALGO y nombra
+ *    ESA cosa (un formulario de cobro no sale a una pregunta por clientes);
+ *  - nunca más de uno por respuesta;
+ *  - los datos adelantados solo valen si la persona los dijo: un valor que no
+ *    aparece en lo que escribió se descarta, y los montos, líneas, archivos y
+ *    facturas elegidas nunca vienen de la IA;
+ *  - el bloque se reescribe desde cero con los valores ya filtrados: nada de lo
+ *    que el modelo puso fuera de los campos conocidos sobrevive.
+ */
+export function filtrarFormulariosDeIa(texto: string, mensajesDeLaPersona: string[]): string {
+  texto = texto.replace(/\u0000/g, '');
+  const bloques = [...texto.matchAll(/```formulario[^\n]*\n([\s\S]*?)(?:```|$)/gi)];
+  if (!bloques.length) return texto;
+
+  const dicho = sinAcentos(mensajesDeLaPersona.slice(-2).join(' \n ')).slice(0, 1_000);
+  const base = texto.replace(/```formulario[^\n]*\n[\s\S]*?(?:```|$)/gi, '\u0000');
+  let usado = false;
+  const reescrito = base.replace(/\u0000/g, () => {
+    if (usado) return '';
+    const m = bloques[0];
+    const p = parsearFormulario(m[1]);
+    if (!p || !VERBO_DE_ACCION.test(dicho) || !NOMBRE_DE[p.def.id].test(dicho)) return '';
+    const valores: Valores = {};
+    for (const [k, v] of Object.entries(p.valores)) {
+      const campo = p.def.campos.find((c) => (c.tipo === 'cliente' ? 'clienteNombre' : c.id) === k);
+      if (!campo) continue;
+      const visto = sinAcentos(v);
+      const aparece = campo.tipo === 'numero'
+        ? soloDigitos(dicho).includes(soloDigitos(visto))
+        : campo.tipo === 'select'
+          ? dicho.includes(sinAcentos(v)) || (campo.opciones ?? []).some((o) => o.valor === v && dicho.includes(sinAcentos(o.etiqueta).split(' ')[0]))
+          : dicho.includes(visto);
+      if (aparece) valores[k] = v;
+    }
+    usado = true;
+    return bloqueFormulario(p.def.id, valores);
+  });
+  return reescrito.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // ── Validación y envío ──────────────────────────────────────────────────────
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -475,8 +565,11 @@ export function validarFormulario(def: DefFormulario, valores: Valores): Record<
     if (c.tipo === 'lineas') {
       const ls = leerLineas(valores[c.id]).filter((l) => l.nombre || l.precio > 0);
       if (!ls.length) { e[c.id] = 'Agrega al menos una línea'; continue; }
-      const mala = ls.find((l) => !l.nombre || !(l.cantidad > 0) || !(l.precio > 0));
-      if (mala) e[c.id] = 'Cada línea necesita descripción, cantidad y un precio mayor a 0';
+      const mala = ls.find((l) => !l.nombre || !(l.cantidad > 0) || !(l.precio >= 0.01));
+      if (mala) { e[c.id] = 'Cada línea necesita descripción, cantidad y un precio de al menos RD$ 0.01'; continue; }
+      if (ls.some((l) => l.cantidad > MAX_CANTIDAD)) { e[c.id] = `La cantidad máxima por línea es ${MAX_CANTIDAD.toLocaleString('es-DO')}`; continue; }
+      if (ls.some((l) => l.precio > MAX_MONTO)) { e[c.id] = `El precio máximo por línea es RD$ ${MAX_MONTO.toLocaleString('es-DO')}`; continue; }
+      if (totalesDeLineas(ls).total > MAX_MONTO) e[c.id] = `El total no puede pasar de RD$ ${MAX_MONTO.toLocaleString('es-DO')}. Divídelo en varios documentos.`;
       continue;
     }
     if (c.tipo === 'documento') {
@@ -491,11 +584,20 @@ export function validarFormulario(def: DefFormulario, valores: Valores): Record<
     }
     if (c.max && v.length > c.max) e[c.id] = `Máximo ${c.max} caracteres`;
     if (c.tipo === 'email' && !EMAIL.test(v)) e[c.id] = 'Correo inválido';
-    if (c.tipo === 'fecha' && !FECHA.test(v)) e[c.id] = 'Fecha inválida';
+    if (c.tipo === 'fecha') {
+      if (!FECHA.test(v) || !esFechaReal(v)) e[c.id] = 'Fecha inválida';
+      // Un cobro no puede ser del futuro (a lo sumo mañana, por la zona horaria).
+      else if (def.id === 'pago' && v > new Date(Date.parse(`${hoyRd()}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) e[c.id] = 'La fecha del cobro no puede ser futura';
+    }
     if (c.tipo === 'numero') {
       const n = Number(v.replace(/,/g, ''));
       if (!Number.isFinite(n) || n < 0) e[c.id] = 'Escribe un número mayor o igual a 0';
       else if (def.id === 'pago' && n <= 0) e[c.id] = 'El monto debe ser mayor a 0';
+      else if (n > MAX_MONTO) e[c.id] = `El monto máximo es RD$ ${MAX_MONTO.toLocaleString('es-DO')}`;
+      else if (def.id === 'producto' && c.id === 'precio' && n === 0) { /* un producto a RD$ 0 es válido (cortesía) */ }
+      else if (def.id === 'pago' && valores.documentoSaldoNum !== undefined && valores.documentoSaldoNum !== '' && n > Number(valores.documentoSaldoNum) + 0.005) {
+        e[c.id] = `El cobro no puede ser mayor al saldo de la factura (RD$ ${Number(valores.documentoSaldoNum).toLocaleString('es-DO', { minimumFractionDigits: 2 })})`;
+      }
     }
     if (c.tipo === 'select' && !c.opciones?.some((o) => o.valor === v)) e[c.id] = 'Elige una opción';
     if (def.id === 'cliente' && c.id === 'rnc') {
@@ -672,8 +774,10 @@ export function armarPayload(def: DefFormulario, valores: Valores, modo: ModoEmi
 /** La dirección a la que se envía (completa `{documentoId}` con el id elegido). */
 export function endpointDe(def: DefFormulario, valores: Valores): string | null {
   if (!def.endpoint.includes('{documentoId}')) return def.endpoint;
-  const id = Number(valores.documentoId);
-  return Number.isInteger(id) && id > 0 ? def.endpoint.replace('{documentoId}', String(id)) : null;
+  // Solo dígitos (nada de «1e3», «0x10», rutas ni espacios) y de tamaño razonable.
+  const crudo = valores.documentoId ?? '';
+  if (!/^[1-9]\d{0,9}$/.test(crudo)) return null;
+  return def.endpoint.replace('{documentoId}', crudo);
 }
 
 /** Qué dice la confirmación antes de emitir (con el total y el cliente a la vista). */
@@ -839,6 +943,15 @@ export function resumenDeAnulacion(valores: Valores): string {
   return `Se anulará ${f}. Deja de contar en tus ventas y no se puede deshacer desde aquí.`;
 }
 
+/**
+ * Un enlace de resultado solo puede ser una pantalla interna de /dashboard:
+ * letras, números, guiones y barras. Nada de «//», «\\», «..», esquemas ni consulta.
+ * Se usa al mostrar y al leer lo guardado en el navegador.
+ */
+export function esEnlaceInterno(e: unknown): e is string {
+  return typeof e === 'string' && e.length <= 120 && /^\/dashboard(?:\/[A-Za-z0-9_-]+)*$/.test(e);
+}
+
 export interface ResultadoCreacion {
   mensaje: string;
   /** Pantalla de lo que se creó o modificó (la ficha, no la lista, cuando existe). */
@@ -847,9 +960,10 @@ export interface ResultadoCreacion {
   etiqueta: string;
 }
 
+/** Un id de la base: entero positivo de 32 bits (nada de 1e21, ni negativos, ni texto). */
 const idValido = (v: unknown): number | null => {
-  const n = Number(v);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  const n = typeof v === 'string' && /^[1-9]\d{0,9}$/.test(v) ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isInteger(n) && n > 0 && n <= 2_147_483_647 ? n : null;
 };
 
 /**

@@ -70,7 +70,8 @@ export async function GET(
     const [cl] = await db
       .select()
       .from(clients)
-      .where(eq(clients.id, doc.clientId))
+      // De esta empresa: un documento con un cliente ajeno (id mal puesto) no debe enseñar sus datos.
+      .where(and(eq(clients.id, doc.clientId), eq(clients.teamId, teamId)))
       .limit(1);
     cliente = cl ?? null;
   }

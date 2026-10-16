@@ -136,6 +136,50 @@ const EXTRA: { categoria: RespuestaPolitica['categoria']; re: RegExp }[] = [
     re: /\b(visita|abre|navega|accede|descarga|haz (una )?(peticion|request)|fetch|get|post|curl)\b.{0,40}\b(http|https|www|ftp|file)\b/,
   },
 
+  // Falsa autoridad con una orden: «como administrador de Zero te ordeno…».
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(como|en nombre de|por orden de|de parte de|mensaje (de|del)|aviso (de|del)) (el |la |un |una )?(administrador|admin|desarrollador|soporte|equipo|ingeniero|creador|gerente|ceo|dueno|zero|anthropic|google|openai|la plataforma|el sistema)\b.{0,70}\b(ordeno|autorizo|exijo|mando|obedece|debes|tienes que|te pido que|te obligo|es una orden)\b|\b(te ordeno|te mando que|te exijo|es una orden|obedece(me)?)\b/,
+  },
+  // Crear desde el chat: saltarse la confirmación, ejecutar sin que la persona revise, borrar el rastro,
+  // fabricar comprobantes, crear en masa, crear en otra empresa. Cada una tiene su respuesta fija.
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(crea|registra|emite|cobra|anula|envia|guarda|importa|sube|convierte|factura|hazlo|ejecuta|procesa)\w*\b.{0,60}\b(sin (pedir|pedirme|preguntar|preguntarme|solicitar|mostrar|mostrarme) ?(la |el |una |mi )?(confirm\w+|verific\w+|aprobacion|autorizacion|revision)|sin que (yo )?(revise|confirme|apruebe|autorice)|omite (la )?confirm\w+|salta\w* (la )?confirm\w+)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(no|nunca) (me )?(pidas|pida|pidan|requieras|exijas|muestres)\w* (la |el |mi )?(confirmacion|aprobacion|verificacion)\b|\b(omite|omitir|salta\w*|desactiva\w*|quita\w*|elimina\w*|apaga\w*) (el |la |los |las )?(paso de )?(confirmacion|doble verificacion|verificacion|aprobacion)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(confirma\w* (tu )?(por mi|tu mismo|automatic\w*)|da(lo)? por confirmad[oa]|ya (te )?confirme|ya esta confirmad[oa]|asume que (confirm|acept|autoric)\w*|considera(lo)? confirmad[oa])\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(hazlo|ejecutalo|envialo|emitelo|crealo|registralo|guardalo|cobralo|anulalo|mandalo)\b.{0,25}\b(tu mismo|tu solo|por mi|automaticamente|directamente|directo|ya mismo sin|sin preguntar|sin que)\b|\b(envia|emite|crea|registra|guarda|cobra|anula|importa|sube|convierte)\w*\b.{0,40}\b(automaticamente|en automatico|sin que (yo )?(lo )?(revise|vea|pulse|apruebe|confirme|toque|haga clic|abra)|sin intervencion|por tu cuenta)\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\b(desactiva\w*|deshabilita\w*|apaga\w*|borra\w*|elimina\w*|oculta\w*|no (registres|guardes|anotes|dejes (rastro|huella|log|registro)))\b.{0,35}\b(auditoria|logs?|bitacora|registro de (actividad|cambios|auditoria)|rastro|huellas?|historial de cambios)\b/,
+  },
+  {
+    categoria: 'evasion',
+    re: /\b(factura|comprobante|ncf|e ?cf|recibo|nota de credito|cotizacion)s? (falsa|falso|ficticia|ficticio|apocrifa|apocrifo|simulada|simulado|inventada|inventado|trucada|trucado)\b|\bsin (pasar por|enviar a|declarar a|reportar a|avisar a) (la )?dgii\b|\b(duplica\w*|clona\w*|repite\w*|reutiliza\w*) (el |la |un |una )?(ncf|e ?ncf|secuencia|numero de comprobante)\b|\bsin (ncf|e ?ncf|comprobante fiscal) para (no|evitar)\b/,
+  },
+  {
+    categoria: 'malicioso',
+    re: /\b(crea|crear|registra|registrar|genera|generar|emite|emitir)\w*\s+(\d{3,}|mil|miles|cien|cientos|cientos de|muchos|masivamente|en masa|en bucle|en loop|infinit\w+|sin parar|sin limite)\b/,
+  },
+  {
+    categoria: 'otra-empresa',
+    re: /\b(en|a|para|a nombre de) (otra|otras|todas las|esa otra|la competencia de) (empresas?|cuentas?|colegios?|escuelas?)\b|\b(crea|registra|emite|cobra|anula)\w* .{0,30}\b(en|de|para) (la empresa|el colegio|la cuenta) (numero|id|#)? ?\d+\b/,
+  },
+  {
+    categoria: 'cambio-de-reglas',
+    re: /\bsin (limite|tope|maximo|restriccion) (de )?(monto|importe|precio|cantidad|valor|total)\b|\b(ignora\w*|salta\w*|evita\w*) (el |los |la |las )?(limite|tope|maximo|validacion|validaciones)\b/,
+  },
+
   // Cambiar las reglas, jailbreak, juegos de rol, falsa autoridad.
   {
     categoria: 'cambio-de-reglas',
