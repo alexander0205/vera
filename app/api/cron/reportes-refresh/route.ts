@@ -10,12 +10,13 @@
 import { NextRequest } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(auth)) {
     return new Response('Unauthorized', { status: 401 });
   }
 

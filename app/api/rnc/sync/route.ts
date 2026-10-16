@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
   if (!user) return new Response('No autenticado', { status: 401 });
 
   // ── Cache check: skip if synced within the last 7 days (unless ?force=true) ──
-  const force = req.nextUrl.searchParams.get('force') === 'true';
+  // Forzar la descarga del padrón (780 mil filas) solo lo hace el administrador de la plataforma.
+  const force = req.nextUrl.searchParams.get('force') === 'true' && user.platformRole === 'admin';
   if (!force) {
     const existing = await db
       .select()

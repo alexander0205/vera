@@ -171,3 +171,38 @@ masa o en bucle, crear en otra empresa y «sin límite de monto». Respuesta fij
 - Las importaciones CSV guardan lo que traen (un nombre `=…` se exporta como texto en el Excel del
   asistente, pero otros reportes antiguos pueden tratarlo distinto).
 - Un gasto subido se valida por contenido (tipo) y tamaño en el servidor, no por el nombre.
+
+## Auditoría de las rutas con ids en el cuerpo (2026-10-16)
+
+Se revisaron las 295 rutas de la API que modifican datos (inventario por script +
+lectura de las 83 que reciben ids + batería de ataques en vivo con ids de otra empresa).
+Pruebas permanentes: `tests/unit/seguridad-rutas-api.test.ts` (incluye un inventario que
+falla si aparece una ruta nueva que modifica sin guarda).
+
+**Corregido**
+- Ids de OTRA empresa aceptados y guardados: cliente (emitir, cotización, cuentas por cobrar
+  históricas, recurrentes), almacén, vendedor y lista de precios (emitir), productos (lista de
+  precios), terminal y mesa (POS), mesero y turno (comandas), categoría (productos), responsable
+  de seguimiento y almacén (inventario, compras). Ahora `lib/seguridad/pertenencia.ts` los exige de
+  la empresa. Fuga real: la ficha de la factura y la vista previa en PDF mostraban teléfono y
+  correo de un cliente ajeno; ahora también filtran por empresa.
+- Permisos que faltaban: cobros (`/api/pagos`, `/api/facturas/[id]/pago`), generar factura de una
+  recurrente, subir o revocar el certificado, cambiar o cancelar el plan, conectar WhatsApp. Antes
+  bastaba con estar en la empresa (un rol de solo lectura podía hacerlo).
+- Tareas programadas: `Authorization: Bearer ${process.env.CRON_SECRET}` valía «Bearer undefined»
+  si el secreto no estaba definido. Ahora `llamadaDeCronValida` exige un secreto de 16+ caracteres
+  y compara en tiempo constante (15 rutas).
+- `/api/rnc/sync?force=true` (descarga de 780 mil filas) solo para el administrador de plataforma;
+  `/api/ecf/preview` pide sesión; importaciones CSV con tope de 5 MB; un importe desmedido frenado antes
+  de la API.
+
+**Verificado sin cambios**: las rutas de la capa escolar, POS (terminales), contabilidad, cobros por
+cuenta, anular, convertir, emitir-ecf, fotos y clientes ya validaban la empresa (404/422 con ids ajenos).
+
+**Pendiente / residual**
+- `/api/notes` acepta notas sobre un id de otra empresa (solo se leen dentro de la empresa que las
+  escribió; sin fuga).
+- `DELETE /api/facturas-recurrentes/[id]` responde `ok` aunque no borre nada (id de otra empresa):
+  correcto en seguridad, engañoso en la respuesta.
+- Operativo: `CRON_SECRET` debe estar definido (16+ caracteres) en cada entorno; sin él las tareas
+  programadas devuelven 401.

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones } from '@/lib/db/schema';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 /**
  * Retención de las conversaciones con el asistente.
@@ -18,7 +19,7 @@ import { asistenteConversaciones } from '@/lib/db/schema';
 const RETENCION_DIAS = Number(process.env.ASISTENTE_RETENCION_DIAS ?? 180);
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(req.headers.get('authorization'))) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
   const dias = Number.isFinite(RETENCION_DIAS) && RETENCION_DIAS >= 30 ? RETENCION_DIAS : 180;

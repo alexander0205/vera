@@ -3,6 +3,7 @@ import { getUser, getTeamIdForUser, registrarPago, getPagosDocumento } from '@/l
 import { getTurnoAbierto } from '@/lib/caja/core';
 import { faltaComprobanteExigido } from '@/lib/pagos/adjuntos';
 import { labelMetodo } from '@/lib/pagos/metodos';
+import { puedeCobrar } from '@/lib/seguridad/permisos';
 
 /**
  * Pagos de una factura — usa el ledger `pagos_recibidos` (source of truth).
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 400 });
+  // Cobrar exige poder cobrar (o facturar): estar en la empresa no basta (un rol de solo lectura no registra pagos).
+  if (!(await puedeCobrar(user, teamId))) return NextResponse.json({ error: 'Sin permiso para registrar pagos' }, { status: 403 });
 
   const { ecfDocumentId, monto, metodo, referencia, notas, fecha } = await req.json();
   if (!ecfDocumentId || !monto || !fecha) {

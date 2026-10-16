@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit, syncPagoMirror } from '@/lib/db/queries';
+import { puedeCobrar } from '@/lib/seguridad/permisos';
 import { requireTurnoAbierto } from '@/lib/caja/guard';
 import { METODOS_PAGO_SET, labelMetodo } from '@/lib/pagos/metodos';
 import { faltaComprobanteExigido } from '@/lib/pagos/adjuntos';
@@ -44,6 +45,8 @@ export async function POST(
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin empresa activa' }, { status: 403 });
+  // Cobrar exige poder cobrar (o facturar): estar en la empresa no basta.
+  if (!(await puedeCobrar(user, teamId))) return NextResponse.json({ error: 'Sin permiso para registrar pagos' }, { status: 403 });
 
   const { id } = await params;
   const docId = parseInt(id);
