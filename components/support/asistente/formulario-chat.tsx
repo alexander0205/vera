@@ -8,6 +8,7 @@ import {
   resumenDeAnulacion, resumenDeConversion, resumenDeNota, totalesDeLineas, validarFormulario,
   type Campo, type DefFormulario, type Linea, type ModoEmision, type Valores,
 } from '@/lib/asistente/formulario';
+import { useSoporte } from '@/components/support/soporte-context';
 import s from './asistente.module.css';
 
 /**
@@ -27,24 +28,26 @@ type Fase =
   | { t: 'confirmar'; texto: string; accion: 'emitir' | 'anular' | 'convertir' }
   | { t: 'duplicado'; nombre: string }
   | { t: 'previa'; resumen: ResumenImportacion }
-  | { t: 'listo'; mensaje: string; enlace: string }
+  | { t: 'listo'; mensaje: string; enlace: string; etiqueta?: string }
   | { t: 'error'; mensaje: string; enlace?: string; enlaceTexto?: string };
 
 const MAX_ARCHIVO = 8 * 1024 * 1024;
 
 /** Lo que ya se hizo con este formulario, para que recargar la página no lo muestre vacío otra vez. */
-function leerHecho(clave: string | undefined): { mensaje: string; enlace: string } | null {
+type Hecho = { mensaje: string; enlace: string; etiqueta?: string };
+
+function leerHecho(clave: string | undefined): Hecho | null {
   if (!clave) return null;
   try {
     const crudo = window.localStorage.getItem(`asistente-form:${clave}`);
     if (!crudo) return null;
-    const d = JSON.parse(crudo) as { mensaje?: unknown; enlace?: unknown };
+    const d = JSON.parse(crudo) as { mensaje?: unknown; enlace?: unknown; etiqueta?: unknown };
     return typeof d.mensaje === 'string' && typeof d.enlace === 'string' && d.enlace.startsWith('/') && !d.enlace.startsWith('//')
-      ? { mensaje: d.mensaje.slice(0, 300), enlace: d.enlace }
+      ? { mensaje: d.mensaje.slice(0, 300), enlace: d.enlace, ...(typeof d.etiqueta === 'string' ? { etiqueta: d.etiqueta.slice(0, 60) } : {}) }
       : null;
   } catch { return null; }
 }
-function guardarHecho(clave: string | undefined, h: { mensaje: string; enlace: string }) {
+function guardarHecho(clave: string | undefined, h: Hecho) {
   if (!clave) return;
   try { window.localStorage.setItem(`asistente-form:${clave}`, JSON.stringify(h)); } catch { /* sin almacenamiento: no pasa nada */ }
 }
@@ -342,6 +345,9 @@ function EditorLineas({ id, valor, cambiar, deshabilitado }: {
 
 export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; inicial: Valores; clave?: string }) {
   const base = useId();
+  const soporte = useSoporte();
+  // En pantallas angostas el panel tapa la pantalla a la que va el enlace: se cierra al abrirla.
+  const alAbrirEnlace = () => { if (typeof window !== 'undefined' && window.innerWidth < 1100) soporte?.cerrar(); };
   const [valores, setValores] = useState<Valores>(() => ({
     ...(def.id === 'pago' ? { fechaPago: hoy(), metodo: 'efectivo' } : {}),
     ...(def.id === 'factura' ? { tipoEcf: 'sin-ncf' } : {}),
@@ -394,7 +400,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
   const esArchivo = def.modo !== 'json';
   const campoArchivo = def.campos.find((c) => c.tipo === 'archivo');
 
-  function terminar(h: { mensaje: string; enlace: string }) {
+  function terminar(h: Hecho) {
     guardarHecho(clave, h);
     setFase({ t: 'listo', ...h });
   }
@@ -458,10 +464,10 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
           });
           return;
         }
-        terminar(resultadoDeCreacion(def, { documentoId: id, encf: d2?.encf, estado: d2?.estado }, 'emitir'));
+        terminar(resultadoDeCreacion(def, { documentoId: id, encf: d2?.encf, estado: d2?.estado }, 'emitir', valores));
         return;
       }
-      terminar(resultadoDeCreacion(def, d, modo));
+      terminar(resultadoDeCreacion(def, d, modo, valores));
     } catch {
       setFase({ t: 'error', mensaje: 'No hay conexión. No se guardó nada; revisa tu internet e intenta de nuevo.' });
     }
@@ -507,6 +513,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
       if (modo === 'preview') { setFase({ t: 'previa', resumen }); return; }
       terminar({
         enlace: def.pantalla,
+        etiqueta: def.id === 'importar-clientes' ? 'Ver los clientes' : 'Ver los productos',
         mensaje: `Listo: importé ${resumen.created} ${def.id === 'importar-clientes' ? 'clientes' : 'productos'}` +
           (resumen.skipped ? ` (omití ${resumen.skipped}).` : '.'),
       });
@@ -526,7 +533,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
       const r = await fetch(def.endpoint, { method: 'POST', body: fd });
       const d = await r.json().catch(() => null);
       if (!r.ok) { setFase({ t: 'error', mensaje: mensajeDeError(r.status, d) }); return; }
-      terminar(resultadoDeCreacion(def, d));
+      terminar(resultadoDeCreacion(def, d, 'borrador', valores));
     } catch {
       setFase({ t: 'error', mensaje: 'No hay conexión. No se subió nada; intenta de nuevo.' });
     }
@@ -552,7 +559,7 @@ export function FormularioChat({ def, inicial, clave }: { def: DefFormulario; in
         <CheckCircle2 size={18} aria-hidden />
         <div>
           <strong>{fase.mensaje}</strong>
-          <Link href={fase.enlace}>Ver en Zero</Link>
+          <Link href={fase.enlace} onClick={alAbrirEnlace}>{fase.etiqueta ?? 'Ver en Zero'} →</Link>
         </div>
       </section>
     );

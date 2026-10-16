@@ -839,75 +839,104 @@ export function resumenDeAnulacion(valores: Valores): string {
   return `Se anulará ${f}. Deja de contar en tus ventas y no se puede deshacer desde aquí.`;
 }
 
-/** Qué se le dice a la persona cuando la API responde bien. */
-export function resultadoDeCreacion(def: DefFormulario, respuesta: unknown, modo: ModoEmision = 'borrador'): { mensaje: string; enlace: string } {
+export interface ResultadoCreacion {
+  mensaje: string;
+  /** Pantalla de lo que se creó o modificó (la ficha, no la lista, cuando existe). */
+  enlace: string;
+  /** Texto del enlace: dice a dónde lleva. */
+  etiqueta: string;
+}
+
+const idValido = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+/**
+ * Qué se le dice a la persona cuando la API responde bien, y a dónde la lleva el
+ * enlace. Siempre a lo que se creó (su ficha); a la lista solo cuando esa cosa
+ * no tiene ficha propia (un comprobante en la bandeja, una importación).
+ * `valores` trae lo elegido en el formulario (la factura de un cobro o de una anulación).
+ */
+export function resultadoDeCreacion(
+  def: DefFormulario, respuesta: unknown, modo: ModoEmision = 'borrador', valores: Valores = {},
+): ResultadoCreacion {
   const r = (respuesta ?? {}) as {
     cliente?: { id?: number; razonSocial?: string };
     producto?: { id?: number; nombre?: string };
     cotizacion?: { id?: number; numero?: string };
     documentoId?: number; encf?: string | null; codigo?: string | null; estado?: string;
-    id?: number; repetida?: boolean;
+    id?: number; repetida?: boolean; facturaId?: number;
   };
+  const estadoTxt = r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.';
+  const ficha = (id: unknown, ruta: string, vacio: string) => (idValido(id) ? `${ruta}/${idValido(id)}` : vacio);
+
   switch (def.id) {
     case 'cliente': {
-      const c = r.cliente;
+      const id = idValido(r.cliente?.id);
       return {
-        mensaje: `Listo: creé el cliente ${c?.razonSocial ?? ''}`.trim() + '.',
-        enlace: c?.id ? `/dashboard/clientes/${c.id}/editar` : def.pantalla,
+        mensaje: `Listo: creé el cliente ${r.cliente?.razonSocial ?? ''}`.trim() + '.',
+        enlace: id ? `/dashboard/clientes/${id}/editar` : def.pantalla,
+        etiqueta: 'Ver el cliente',
       };
     }
-    case 'producto': {
-      const p = r.producto;
-      return { mensaje: `Listo: creé ${p?.nombre ?? 'el producto'}.`, enlace: p?.id ? `/dashboard/productos/${p.id}` : def.pantalla };
-    }
-    case 'cotizacion': {
-      const c = r.cotizacion;
+    case 'producto':
       return {
-        mensaje: `Listo: creé la cotización ${c?.numero ?? ''}`.trim() + ' como borrador.',
-        enlace: c?.id ? `/dashboard/cotizaciones/${c.id}` : def.pantalla,
+        mensaje: `Listo: creé ${r.producto?.nombre ?? 'el producto'}.`,
+        enlace: ficha(r.producto?.id, '/dashboard/productos', def.pantalla), etiqueta: 'Ver el producto',
       };
-    }
+    case 'cotizacion':
+      return {
+        mensaje: `Listo: creé la cotización ${r.cotizacion?.numero ?? ''}`.trim() + ' como borrador.',
+        enlace: ficha(r.cotizacion?.id, '/dashboard/cotizaciones', def.pantalla), etiqueta: 'Abrir la cotización',
+      };
     case 'factura': {
       const num = r.encf || r.codigo || '';
-      const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
+      const enlace = ficha(r.documentoId, '/dashboard/facturas', def.pantalla);
       return modo === 'emitir'
-        ? { mensaje: `Listo: emití la factura ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
-        : { mensaje: `Listo: guardé la factura ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace };
+        ? { mensaje: `Listo: emití la factura ${num}`.trim() + estadoTxt, enlace, etiqueta: 'Abrir la factura' }
+        : { mensaje: `Listo: guardé la factura ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace, etiqueta: 'Abrir el borrador' };
     }
     case 'pago':
-      return { mensaje: 'Listo: registré el cobro.', enlace: def.pantalla };
+      return {
+        mensaje: 'Listo: registré el cobro.',
+        enlace: ficha(valores.documentoId, '/dashboard/facturas', def.pantalla), etiqueta: 'Abrir la factura cobrada',
+      };
     case 'anulacion':
-      return { mensaje: 'Listo: la factura quedó anulada.', enlace: def.pantalla };
-    case 'convertir': {
-      const id = (respuesta as { facturaId?: number } | null)?.facturaId;
+      return {
+        mensaje: 'Listo: la factura quedó anulada.',
+        enlace: ficha(valores.documentoId, '/dashboard/facturas', def.pantalla), etiqueta: 'Abrir la factura anulada',
+      };
+    case 'convertir':
       return {
         mensaje: 'Listo: creé el borrador de factura a partir de la cotización. Revísalo y emítelo cuando quieras (puedes pedirme «editar un borrador»).',
-        enlace: id ? `/dashboard/facturas/${id}` : def.pantalla,
+        enlace: ficha(r.facturaId, '/dashboard/facturas', def.pantalla), etiqueta: 'Abrir el borrador',
       };
-    }
     case 'borrador': {
       const num = r.encf || r.codigo || '';
-      const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
+      const enlace = ficha(r.documentoId, '/dashboard/facturas', def.pantalla);
       return modo === 'emitir'
-        ? { mensaje: `Listo: emití la factura ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
-        : { mensaje: `Listo: guardé los cambios del borrador ${num}`.trim() + '.', enlace };
+        ? { mensaje: `Listo: emití la factura ${num}`.trim() + estadoTxt, enlace, etiqueta: 'Abrir la factura' }
+        : { mensaje: `Listo: guardé los cambios del borrador ${num}`.trim() + '.', enlace, etiqueta: 'Abrir el borrador' };
     }
     case 'notacredito':
     case 'notadebito': {
-      const nombre = def.id === 'notadebito' ? 'nota de débito' : 'nota de crédito';
+      const debito = def.id === 'notadebito';
+      const nombre = debito ? 'nota de débito' : 'nota de crédito';
       const num = r.encf || r.codigo || '';
-      const enlace = r.documentoId ? `/dashboard/facturas/${r.documentoId}` : def.pantalla;
+      const enlace = ficha(r.documentoId, debito ? '/dashboard/notas-debito' : '/dashboard/notas-credito', def.pantalla);
+      const etiqueta = `Abrir la ${nombre}`;
       return modo === 'emitir'
-        ? { mensaje: `Listo: emití la ${nombre} ${num}`.trim() + (r.estado ? ` (${r.estado.toLowerCase().replace('_', ' ')}).` : '.'), enlace }
-        : { mensaje: `Listo: guardé la ${nombre} ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace };
+        ? { mensaje: `Listo: emití la ${nombre} ${num}`.trim() + estadoTxt, enlace, etiqueta }
+        : { mensaje: `Listo: guardé la ${nombre} ${num}`.trim() + ' como borrador. Revísala y emítela cuando quieras.', enlace, etiqueta };
     }
     case 'gasto':
       return {
         mensaje: r.repetida ? 'Ese comprobante ya estaba subido.' : 'Listo: subí el comprobante. Quedó en «por revisar» para que lo confirmes.',
-        enlace: def.pantalla,
+        enlace: def.pantalla, etiqueta: 'Ir a los gastos por revisar',
       };
     default:
-      return { mensaje: 'Listo.', enlace: def.pantalla };
+      return { mensaje: 'Listo.', enlace: def.pantalla, etiqueta: 'Ver en Zero' };
   }
 }
 

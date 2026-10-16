@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   armarPayload, bloqueFormulario, defFormulario, detectarFormulario, endpointDe, FORMULARIOS, guardarLineas, leerLineas,
   limpiarValor, parsearFormulario, prefillDeBorrador, prefillDeNota, resultadoDeCreacion, resumenDeAnulacion, resumenDeConversion, resumenDeEmision, resumenDeNota, totalesDeLineas, validarFormulario,
@@ -139,7 +141,7 @@ describe('validación y envío', () => {
   });
 
   it('el resultado enlaza a la pantalla real', () => {
-    expect(resultadoDeCreacion(cliente, { cliente: { id: 7, razonSocial: 'Ana' } })).toEqual({
+    expect(resultadoDeCreacion(cliente, { cliente: { id: 7, razonSocial: 'Ana' } })).toMatchObject({
       mensaje: 'Listo: creé el cliente Ana.', enlace: '/dashboard/clientes/7/editar',
     });
     expect(resultadoDeCreacion(producto, { producto: { id: 3, nombre: 'Lápiz' } }).enlace).toBe('/dashboard/productos/3');
@@ -557,5 +559,50 @@ describe('convertir una cotización en factura', () => {
     expect(resumenDeConversion({ documentoNombre: 'COT-0001 · Ana', documentoTotal: '3540' })).toContain('RD$ 3,540.00');
     expect(resumenDeConversion({ documentoNombre: 'COT-0001 · Ana' })).toContain('No se emite nada');
     expect(resultadoDeCreacion(def, { ok: true, facturaId: 4002, redirect: '/x' }).enlace).toBe('/dashboard/facturas/4002');
+  });
+});
+
+describe('enlaces de lo que se creó', () => {
+  // El enlace debe caer en una pantalla que existe: los números del medio se leen como [id].
+  const existePantalla = (enlace: string) => {
+    const ruta = enlace.split('?')[0].replace(/\/\d+(?=\/|$)/g, '/[id]');
+    return existsSync(join(process.cwd(), 'app', '(dashboard)', ...ruta.split('/').filter(Boolean), 'page.tsx'));
+  };
+
+  const casos: [string, () => { enlace: string; etiqueta: string }, string][] = [
+    ['cliente', () => resultadoDeCreacion(FORMULARIOS.cliente, { cliente: { id: 7, razonSocial: 'Ana' } }), '/dashboard/clientes/7/editar'],
+    ['producto', () => resultadoDeCreacion(FORMULARIOS.producto, { producto: { id: 3, nombre: 'Lápiz' } }), '/dashboard/productos/3'],
+    ['cotización', () => resultadoDeCreacion(FORMULARIOS.cotizacion, { cotizacion: { id: 8, numero: 'COT-0008' } }), '/dashboard/cotizaciones/8'],
+    ['factura', () => resultadoDeCreacion(FORMULARIOS.factura, { documentoId: 31 }), '/dashboard/facturas/31'],
+    ['borrador', () => resultadoDeCreacion(FORMULARIOS.borrador, { documentoId: 31 }), '/dashboard/facturas/31'],
+    ['convertir', () => resultadoDeCreacion(FORMULARIOS.convertir, { facturaId: 44 }), '/dashboard/facturas/44'],
+    ['nota de crédito', () => resultadoDeCreacion(FORMULARIOS.notacredito, { documentoId: 51 }), '/dashboard/notas-credito/51'],
+    ['nota de débito', () => resultadoDeCreacion(FORMULARIOS.notadebito, { documentoId: 52 }), '/dashboard/notas-debito/52'],
+    ['cobro (va a la factura cobrada)', () => resultadoDeCreacion(FORMULARIOS.pago, { ok: true }, 'borrador', { documentoId: '61' }), '/dashboard/facturas/61'],
+    ['anulación (va a la factura anulada)', () => resultadoDeCreacion(FORMULARIOS.anulacion, { ok: true }, 'borrador', { documentoId: '62' }), '/dashboard/facturas/62'],
+  ];
+
+  it.each(casos)('%s lleva a su ficha', (_n, f, esperado) => {
+    const r = f();
+    expect(r.enlace).toBe(esperado);
+    expect(existePantalla(r.enlace), r.enlace).toBe(true);
+    expect(r.etiqueta).not.toBe('Ver en Zero');
+  });
+
+  it('lo que no tiene ficha propia cae en su lista, con la etiqueta que lo dice', () => {
+    const g = resultadoDeCreacion(FORMULARIOS.gasto, { ok: true, id: 5 });
+    expect(g.enlace).toBe('/dashboard/gastos');
+    expect(g.etiqueta).toMatch(/por revisar/);
+    expect(existePantalla(g.enlace)).toBe(true);
+    for (const id of ['cliente', 'producto', 'cotizacion', 'factura', 'pago', 'anulacion', 'notacredito', 'notadebito', 'gasto', 'importar-productos', 'importar-clientes'] as const) {
+      expect(existePantalla(FORMULARIOS[id].pantalla), `${id}: ${FORMULARIOS[id].pantalla}`).toBe(true);
+    }
+  });
+
+  it('si la API no devuelve el id, el enlace cae en la lista y no se rompe', () => {
+    expect(resultadoDeCreacion(FORMULARIOS.cliente, {}).enlace).toBe('/dashboard/clientes');
+    expect(resultadoDeCreacion(FORMULARIOS.pago, {}).enlace).toBe('/dashboard/cuentas-por-cobrar');
+    expect(resultadoDeCreacion(FORMULARIOS.pago, {}, 'borrador', { documentoId: '../x' }).enlace).toBe('/dashboard/cuentas-por-cobrar');
+    expect(resultadoDeCreacion(FORMULARIOS.factura, { documentoId: -4 }).enlace).toBe('/dashboard/facturas');
   });
 });
