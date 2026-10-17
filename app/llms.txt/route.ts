@@ -3,6 +3,7 @@ import { CONTACTO } from '@/app/(marketing)/_piezas';
 import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
+import { ALTA, CONECTOR, RUTA_AGENTES_MD, RUTA_FUNCIONES_MD, textoDeLaPrueba } from '@/lib/agentes/contenido';
 
 /**
  * `/llms.txt` — el sitio resumido para quien lo lee con un modelo.
@@ -69,6 +70,13 @@ export function GET() {
 > Plataforma dominicana de gestión para empresas e instituciones: facturación electrónica (e-CF) certificada ante la DGII, cuentas por cobrar, inventario, compras, contabilidad, punto de venta, nómina, gestión de colegios y un CRM con agentes de inteligencia artificial.
 
 Zero es un producto de Yisrael Technology. Opera en República Dominicana, en español, sobre la web y sin instalación. La facturación cumple con el formato de comprobante fiscal electrónico de la DGII.
+
+## Para agentes de IA
+
+- [Zero para agentes](${SITIO_PUBLICO}${RUTA_AGENTES_MD}): qué puede hacer hoy un agente con Zero, cómo se conecta y con qué reglas.
+- [Todas las funciones](${SITIO_PUBLICO}${RUTA_FUNCIONES_MD}): el sistema entero, módulo por módulo, con lo que no hace.
+- Conector MCP, de solo lectura: \`${CONECTOR.url}\`. Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
+- Crear una empresa: la crea una persona en ${ALTA.url}. Prueba gratis: ${textoDeLaPrueba()}.
 
 ## Productos
 
