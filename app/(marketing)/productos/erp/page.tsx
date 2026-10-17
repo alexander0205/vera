@@ -32,7 +32,7 @@ import { PRUEBA } from '@/lib/config/suscripcion';
 export const metadata: Metadata = {
   title: 'Zero ERP — facturación electrónica, inventario y contabilidad para República Dominicana',
   description:
-    'Facturación e-CF ante la DGII, cuentas por cobrar con links de pago, inventario con costo real, compras con retenciones y contabilidad con asientos automáticos y reportes 606, 607 y 608.',
+    'Facturación e-CF ante la DGII, cuentas por cobrar con abonos y días vencidos, inventario con costo real, compras con retenciones y contabilidad con asientos automáticos y reportes 606, 607 y 608.',
   keywords: [
     'ERP República Dominicana', 'facturación electrónica e-CF', 'comprobante fiscal electrónico DGII',
     'software de contabilidad', 'control de inventario', 'reportes 606 607 608', 'cuentas por cobrar',
@@ -58,16 +58,16 @@ const HASTA = PRECIOS_ECF.length > 0 ? Math.max(...PRECIOS_ECF) : null;
 
 const FACTURACION: PuntoDeProducto[] = [
   { titulo: 'Los diez tipos de e-CF', detalle: 'Factura de crédito fiscal, consumo, notas de crédito y débito, gubernamental y las demás, emitidas y acusadas ante la DGII.', icono: Iconos.factura },
-  { titulo: 'Sale al cliente sola', detalle: 'El PDF va por correo a nombre de tu empresa, con su XML, y también puede ir por WhatsApp.', icono: Iconos.correo },
+  { titulo: 'Al cliente en un clic', detalle: 'El PDF le llega por correo a nombre de tu empresa, y el XML queda listo para descargar.', icono: Iconos.correo },
   { titulo: 'Cotizaciones', detalle: 'Se envían, se aprueban y se convierten en factura sin volver a escribir nada.', icono: Iconos.papel },
-  { titulo: 'Facturas que se repiten', detalle: 'Las igualas y mensualidades se emiten solas el día que toca.', icono: Iconos.reloj },
+  { titulo: 'Facturas que se repiten', detalle: 'Las igualas y mensualidades se preparan solas el día que toca, como borrador para revisar y emitir.', icono: Iconos.reloj },
   { titulo: 'Tus secuencias, controladas', detalle: 'Cada tipo de comprobante con su rango autorizado, y la anulación de los que no se usaron.', icono: Iconos.base },
-  { titulo: 'Impresoras fiscales', detalle: 'Para el que ya tiene la suya puesta en el mostrador.', icono: Iconos.pos },
+  { titulo: 'Impresión térmica o en carta', detalle: 'Desde el navegador, en la térmica de 80 o 58 mm o en papel carta y A4.', icono: Iconos.pos },
 ];
 
 const COBROS: PuntoDeProducto[] = [
   { titulo: 'Quién te debe y desde cuándo', detalle: 'La cartera completa, con los días vencidos de cada factura y los abonos aplicados.', icono: Iconos.dinero },
-  { titulo: 'Links de pago', detalle: 'El cliente paga con tarjeta por CardNet y ves en qué va cada enlace que mandaste.', icono: Iconos.tarjeta },
+  { titulo: 'Recordatorios de cobro', detalle: 'Le mandas por correo su saldo a quien se atrasó, y queda anotado quién avisó y cuándo.', icono: Iconos.correo },
   { titulo: 'El cobro con su comprobante', detalle: 'Se registra con su método, su banco y la foto del depósito adjunta.', icono: Iconos.escudo },
   { titulo: 'Caja con turnos', detalle: 'Apertura, cierre y cuadre por cajero, con su corte imprimible.', icono: Iconos.reloj },
 ];
@@ -107,7 +107,7 @@ const PREGUNTAS = [
   },
   {
     pregunta: '¿Hay que instalar algo?',
-    respuesta: 'No. Funciona en el navegador, desde cualquier computadora o tableta. Lo único que puede necesitar instalación es una impresora fiscal si ya tienes una.',
+    respuesta: 'No. Funciona en el navegador, desde cualquier computadora o tableta, y desde ahí mismo imprimes en una térmica de 80 o 58 mm o en papel carta. No usa impresora fiscal.',
   },
   {
     pregunta: '¿Migran mis datos actuales?',
@@ -226,14 +226,14 @@ export default function ErpPage() {
 
       <DatosDeProducto
         nombre="Zero ERP"
-        descripcion="Sistema de gestión con facturación electrónica e-CF certificada ante la DGII, cuentas por cobrar, inventario con costo promedio real, compras con retenciones y contabilidad con asientos automáticos."
+        descripcion="Sistema de gestión con facturación electrónica e-CF emitida directo a la DGII, cuentas por cobrar, inventario con costo promedio real, compras con retenciones y contabilidad con asientos automáticos."
         ruta="/productos/erp"
         precioDesde={DESDE}
         precioHasta={HASTA}
         funciones={[
           'Los diez tipos de comprobante fiscal electrónico ante la DGII',
           'Cotizaciones y facturas recurrentes',
-          'Cuentas por cobrar con links de pago CardNet',
+          'Cuentas por cobrar con antigüedad del saldo y abonos parciales',
           'Inventario por almacén con costo promedio',
           'Compras, gastos y retenciones de ITBIS e ISR',
           'Contabilidad con asientos automáticos y estados financieros',

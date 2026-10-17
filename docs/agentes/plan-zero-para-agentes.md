@@ -220,7 +220,9 @@ El catálogo se levantó desde el código el 14 de octubre de 2026. Dos listas q
 
 Y una en sentido contrario: `llms.txt` y la página de nómina dicen que **no** genera archivo de pago para el banco, pero el sistema sí tiene «Descargar dispersión».
 
-El catálogo nuevo no repite ninguna de estas afirmaciones. Falta decidir, una por una, si se corrige el texto del sitio o se termina la función.
+El catálogo nuevo no repite ninguna de estas afirmaciones.
+
+**17 de octubre de 2026: corregido el texto.** Se volvió a revisar cada afirmación contra el código y se reescribió el sitio para decir lo que hace hoy: impresión en térmica y carta, factura que se manda con un clic, mensualidades que se generan como borrador, saldo que baja al aprobar el comprobante, nada de enlaces con tarjeta, nómina con su archivo para el banco y sin préstamos ni bonos, y «directo a la DGII» en vez de «certificada». La revisión encontró dos más: el punto de venta **no** envía el e-CF a la DGII al cobrar (guarda la venta y se emite desde Facturación) y la venta con comprobante no baja del inventario hasta que se emite. Si se termina alguna de esas funciones, el texto puede volver a decirlo. La página del CRM no se tocó: el CRM es otro producto y su código no está aquí.
 
 ### Funciones que existen y están apagadas en producción
 

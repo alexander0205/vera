@@ -128,7 +128,7 @@ export const HERRAMIENTAS: readonly Herramienta[] = [
   { nombre: 'get_invoice', paraQue: 'Devuelve una factura.', parametros: [ID] },
   {
     nombre: 'list_recurring_invoices',
-    paraQue: 'Lista los planes de facturación recurrente (lo que se factura solo cada mes).',
+    paraQue: 'Lista los planes de facturación recurrente (lo que se genera solo cada período, como borrador).',
     parametros: [
       { nombre: 'q', tipo: 'texto', detalle: 'Opcional. Texto a buscar.' },
       { nombre: 'estado', tipo: 'texto', detalle: 'Opcional. Estado del plan.' },

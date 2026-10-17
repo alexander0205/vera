@@ -132,7 +132,7 @@ export const MODULOS: readonly Modulo[] = [
   {
     id: 'recurrentes',
     nombre: 'Facturación recurrente',
-    resumen: 'Lo que se cobra cada cierto tiempo se factura solo.',
+    resumen: 'Lo que se cobra cada cierto tiempo se prepara solo, como borrador para emitir.',
     hace: [
       'Planes semanales, quincenales, mensuales, trimestrales o anuales, con su día de cobro.',
       'Genera las facturas cada día, según les toque.',
@@ -443,7 +443,7 @@ export function preguntasDeFunciones(): readonly { pregunta: string; respuesta: 
     },
     {
       pregunta: '¿Zero sirve para un colegio?',
-      respuesta: 'Sí. Tiene un producto para colegios con matrícula, mensualidades que se crean solas, cobro a las familias con enlace de pago, avisos por correo, WhatsApp y SMS, y conexión con SIGERD. Incluye además facturación, contabilidad, nómina y punto de venta.',
+      respuesta: 'Sí. Tiene un producto para colegios con matrícula, mensualidades que se crean solas, un enlace donde cada familia ve lo que debe y sube su comprobante de transferencia, avisos por correo, WhatsApp y SMS, y conexión con SIGERD. Incluye además facturación, contabilidad, nómina y punto de venta.',
     },
     {
       pregunta: '¿Cuánto cuesta Zero?',

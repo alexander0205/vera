@@ -67,9 +67,9 @@ function textoPrueba(): string {
 export function GET() {
   const cuerpo = `# Zero
 
-> Plataforma dominicana de gestión para empresas e instituciones: facturación electrónica (e-CF) certificada ante la DGII, cuentas por cobrar, inventario, compras, contabilidad, punto de venta, nómina, gestión de colegios y un CRM con agentes de inteligencia artificial.
+> Plataforma dominicana de gestión para empresas e instituciones: facturación electrónica (e-CF) emitida directo a la DGII, cuentas por cobrar, inventario, compras, contabilidad, punto de venta, nómina, gestión de colegios y un CRM con agentes de inteligencia artificial.
 
-Zero es un producto de Yisrael Technology. Opera en República Dominicana, en español, sobre la web y sin instalación. La facturación cumple con el formato de comprobante fiscal electrónico de la DGII.
+Zero es un producto de Yisrael Technology. Opera en República Dominicana, en español, sobre la web y sin instalación. La facturación cumple con el formato de comprobante fiscal electrónico de la DGII; cada empresa completa su propia habilitación ante la DGII, guiada paso a paso dentro de Zero.
 
 ## Para agentes de IA
 
@@ -111,7 +111,7 @@ ${guias()}
 - **¿Emite comprobantes fiscales electrónicos?** Sí: los diez tipos de e-CF, firmados, enviados y acusados ante la DGII, con sus reportes 606, 607 y 608.
 - **¿Incluye contabilidad?** Sí, en todos los planes, sin costo aparte.
 - **¿Tiene inteligencia artificial?** Sí. Zero CRM usa agentes que entienden lenguaje natural, leen notas de voz y fotos con OCR, responden desde los documentos que se les cargan citando la fuente, verifican identidad, agendan citas, cobran y contestan llamadas por voz.
-- **¿Se integra con otros sistemas?** Sí: API REST y webhooks en las dos direcciones, WhatsApp Business API, Google Calendar, CardNet y Azul.
+- **¿Se integra con otros sistemas?** En parte: una API de solo lectura y un conector MCP, con una llave por empresa; webhooks de salida, todavía sin pantalla para configurarlos; avisos de cobro a los padres por WhatsApp, SMS y correo; y conexión con SIGERD para los colegios. No hay API para crear o cambiar datos desde fuera.
 - **¿Hay prueba?** ${textoPrueba()} Sin contrato mínimo.
 - **Contacto:** ${CONTACTO.ventas} · ${CONTACTO.telefono} · WhatsApp ${CONTACTO.whatsapp}
 
@@ -120,7 +120,9 @@ ${guias()}
 - No gestiona sucursales como entidades separadas.
 - El punto de venta no funciona sin conexión.
 - No maneja lotes con fecha de vencimiento ni conteo físico de inventario.
-- La nómina no genera archivo de pago masivo para el banco ni calcula liquidaciones de prestaciones.
+- La nómina no calcula liquidaciones de prestaciones ni maneja préstamos, bonos por regla o descuentos fijos configurables. Sí genera el archivo de pago para el banco.
+- Zero ERP no cobra con tarjeta por enlace de pago: en los colegios, el padre paga por transferencia y sube su comprobante.
+- No usa impresoras fiscales: imprime desde el navegador en térmica de 80 o 58 mm o en papel carta.
 `;
 
   return new Response(cuerpo, {
