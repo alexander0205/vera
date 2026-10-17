@@ -32,8 +32,6 @@ export type AuditAction =
   | 'ECF_RESET'
   | 'ECF_VOID'
   | 'FACTURA_TRAZA'
-  // Correo automático a quien se quedó a medias en el alta (ver lib/seguimiento/altas.ts)
-  | 'SEGUIMIENTO_ALTA'
   // Medición: de dónde vino una empresa nueva (ver lib/analytics/origen-servidor.ts)
   | 'REGISTRO_ORIGEN'
   | 'DGII_AUTH'
