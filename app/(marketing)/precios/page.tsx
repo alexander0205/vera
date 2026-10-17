@@ -101,18 +101,17 @@ function gruposDeLinea(planes: PlanDef[], conPos: boolean, esColegio: boolean): 
         { nombre: 'Anulación de rangos (ANECF)', celdas: filaFija(planes, check) },
         { nombre: 'Cotizaciones', celdas: planes.map(p => celdaFeature(p, 'cotizaciones')) },
         { nombre: 'Facturas recurrentes', celdas: planes.map(p => celdaFeature(p, 'facturas-recurrentes')) },
-        { nombre: 'Impresoras fiscales', celdas: planes.map(p => celdaFeature(p, 'impresoras')) },
+        { nombre: 'Impresión en térmica (80 y 58 mm) y en carta', celdas: planes.map(p => celdaFeature(p, 'impresoras')) },
       ],
     },
     {
       titulo: 'Cobros y caja',
-      resumen: 'Cuentas por cobrar, links de pago y cuadre de caja',
+      resumen: 'Cuentas por cobrar, pagos recibidos y cuadre de caja',
       icono: 'tarjeta',
       celdas: planes.map(p => celdaFeature(p, 'caja')),
       filas: [
         { nombre: 'Cuentas por cobrar', celdas: filaFija(planes, check) },
         { nombre: 'Pagos recibidos y conciliación', celdas: filaFija(planes, check) },
-        { nombre: 'Links de pago (CardNet, Azul)', celdas: filaFija(planes, check) },
         { nombre: 'Turnos de caja', celdas: planes.map(p => celdaFeature(p, 'caja')) },
         { nombre: 'Cuadre y cierre de caja', celdas: planes.map(p => celdaFeature(p, 'caja')) },
       ],
@@ -193,7 +192,7 @@ function gruposDeLinea(planes: PlanDef[], conPos: boolean, esColegio: boolean): 
       filas: [
         { nombre: 'Estudiantes del tramo', celdas: planes.map(p => celdaOpcional(p.limits.estudiantes)) },
         { nombre: 'Matrículas, cursos y cargos por estudiante', celdas: planes.map(p => celdaModulo(p, 'escolar')) },
-        { nombre: 'Portal de padres con links de pago', celdas: planes.map(p => celdaModulo(p, 'escolar')) },
+        { nombre: 'Portal de padres para ver el saldo y subir el comprobante', celdas: planes.map(p => celdaModulo(p, 'escolar')) },
         { nombre: 'Recargo por mora automático', celdas: planes.map(p => celdaModulo(p, 'escolar')) },
         { nombre: 'Avisos por WhatsApp al mes', celdas: planes.map(p => celdaOpcional(p.limits.whatsappMensajes)) },
         { nombre: 'Avisos por SMS al mes', celdas: planes.map(p => celdaOpcional(p.limits.smsMensajes)) },
@@ -333,7 +332,7 @@ const FAQS: Pregunta[] = [
   },
   {
     pregunta: '¿Hay período de prueba?',
-    respuesta: `Sí: ${diasDePrueba('ecf')} días en los planes de facturación y ${diasDePrueba('colegio')} en los de colegio. Un colegio necesita ver un ciclo de cobro entero —la mensualidad que se emite sola, la mora que entra el día que toca y los avisos colgados de esas fechas— y en dos semanas no cabe. Si al terminar no se activa la suscripción, la empresa entra en solo lectura durante unos días —puedes entrar, consultar y exportar todo— antes de cerrarse. Nunca se corta en seco.`,
+    respuesta: `Sí: ${diasDePrueba('ecf')} días en los planes de facturación y ${diasDePrueba('colegio')} en los de colegio. Un colegio necesita ver un ciclo de cobro entero —la mensualidad que aparece sola en la cuenta de cada estudiante, la mora que entra el día que toca y los avisos colgados de esas fechas— y en dos semanas no cabe. Si al terminar no se activa la suscripción, la empresa entra en solo lectura durante unos días —puedes entrar, consultar y exportar todo— antes de cerrarse. Nunca se corta en seco.`,
   },
   {
     pregunta: '¿Mis datos son míos?',
@@ -343,7 +342,7 @@ const FAQS: Pregunta[] = [
 ];
 
 const MOMENTOS = [
-  { paso: '1', titulo: 'Al emitir', detalle: 'El padre recibe la factura del mes con su link de pago.' },
+  { paso: '1', titulo: 'Al emitir', detalle: 'El padre recibe el aviso del mes, con el enlace para ver lo que debe y subir su comprobante.' },
   { paso: '2', titulo: 'Al vencer', detalle: 'Aviso el día del vencimiento con el saldo pendiente.' },
   { paso: '3', titulo: 'Antes del recargo', detalle: 'Se avisa unos días antes de que entre la mora, con tiempo para pagar.' },
 ];

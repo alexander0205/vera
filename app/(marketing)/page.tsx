@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     images: [{ url: '/home/capturas/demo-facturacion.png', width: 1440, height: 900, alt: 'Panel de Zero de una distribuidora' }],
     title: 'Zero — El control financiero de tu negocio, de punta a punta',
     description:
-      'ERP con facturación electrónica certificada ante la DGII, punto de venta, nómina, contabilidad y un CRM con agentes de IA. Hecho en República Dominicana.',
+      'ERP con facturación electrónica directo a la DGII, punto de venta, nómina, contabilidad y un CRM con agentes de IA. Hecho en República Dominicana.',
   },
 };
 
@@ -75,7 +75,7 @@ const PRECIO_CRM = CRM && !CRM.bajoCotizacion && CRM.precio !== null
 
 /** Lo que respalda la promesa, en cuatro líneas. Va donde antes iban los logos. */
 const GARANTIAS = [
-  { titulo: 'Certificados ante la DGII', detalle: 'Cada e-CF sale firmado, enviado y con su acuse.', icono: Iconos.escudo },
+  { titulo: 'Directo con la DGII', detalle: 'Cada e-CF sale firmado, enviado y con su acuse.', icono: Iconos.escudo },
   { titulo: 'Los diez tipos de e-CF', detalle: 'Crédito fiscal, consumo, notas y los regímenes especiales.', icono: Iconos.factura },
   { titulo: '606, 607 y 608', detalle: 'Salen de lo que ya registraste, sin armarlos a mano.', icono: Iconos.hoja },
   { titulo: 'Soporte dominicano', detalle: `En español. ${CONTACTO.horarioSoporte}.`, icono: Iconos.soporte },
@@ -123,7 +123,7 @@ export default function PortadaPage() {
               <BotonPrueba />
               <BotonWhatsApp />
             </div>
-            <GarantiasPrueba centrado extra={['Certificados ante la DGII']} className="mx-auto mt-4 max-w-[640px]" />
+            <GarantiasPrueba centrado extra={['e-CF directo a la DGII']} className="mx-auto mt-4 max-w-[640px]" />
           </div>
 
           <PantallaDelHero />

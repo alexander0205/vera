@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     type: 'website',
     images: [{ url: '/home/capturas/demo-colegio.png', width: 1440, height: 900, alt: 'Zero para colegios' }],
     title: 'Zero para colegios: mensualidades, mora y portal de padres',
-    description: 'La mora se aplica sola, el aviso sale antes de vencer y cada mensualidad se factura con su comprobante fiscal.',
+    description: 'La mora se aplica sola, el aviso sale antes de vencer y cada mensualidad aparece sola en la cuenta del estudiante.',
   },
   description:
     'Mensualidades, cobranza, portal de padres, contabilidad y nómina docente en un solo sistema. La gobernanza completa de tu colegio, con implementación incluida.',
@@ -92,14 +92,14 @@ const CLIENTES = [
 
 const PASOS = [
   { titulo: '1. Matricula', detalle: 'Estudiantes, cuotas, becas y descuentos en un expediente.', icono: Iconos.colegio },
-  { titulo: '2. Cobra', detalle: 'Avisos, links de pago y mora que corren solos.', icono: Iconos.tarjeta },
+  { titulo: '2. Cobra', detalle: 'Avisos con su enlace y mora que corren solos.', icono: Iconos.tarjeta },
   { titulo: '3. Administra', detalle: 'Contabilidad, nómina y compras sobre los mismos datos.', icono: Iconos.contabilidad },
   { titulo: '4. Decide', detalle: 'La dirección ve cartera, matrícula y resultados al día.', icono: Iconos.crecer },
 ] as const;
 
 const MODULOS = [
   { titulo: 'Mensualidades y cobranza', detalle: 'Cuotas, mora automática y cartera por curso.', icono: Iconos.dinero },
-  { titulo: 'Portal de padres', detalle: 'Estado de cuenta y pago digital sin filas en caja.', icono: Iconos.usuarios },
+  { titulo: 'Portal de padres', detalle: 'Estado de cuenta y comprobante de pago sin filas en caja.', icono: Iconos.usuarios },
   { titulo: 'Contabilidad', detalle: 'Asientos automáticos y cierres al día.', icono: Iconos.contabilidad },
   { titulo: 'Nómina docente', detalle: 'TSS, regalía y vacaciones sin hojas de cálculo.', icono: Iconos.hoja },
   { titulo: 'Avisos a las familias', detalle: 'WhatsApp y correo automáticos antes de la fecha de pago.', icono: Iconos.sms },
@@ -109,15 +109,15 @@ const MODULOS = [
 const FAMILIAS = [
   { titulo: 'Estado de cuenta en vivo', detalle: 'Cuotas, becas y descuentos, siempre al día.' },
   { titulo: 'Aviso antes de la fecha', detalle: 'WhatsApp y correo automáticos, sin que nadie los envíe.' },
-  { titulo: 'Pago con link', detalle: 'Tarjeta o transferencia, desde el teléfono.' },
-  { titulo: 'Recibo inmediato', detalle: 'El comprobante llega solo y el saldo se actualiza al instante.' },
+  { titulo: 'Comprobante desde el teléfono', detalle: 'Transfiere y sube el comprobante por su enlace, sin ir a caja.' },
+  { titulo: 'Saldo al día', detalle: 'Cuando el colegio aprueba el comprobante, el pago se registra y el saldo baja.' },
 ] as const;
 
 const INDUSTRIAS = [
   { titulo: 'Comercio y retail', detalle: 'Tiendas, colmados y distribuidoras.', foto: '/home/fotos/31-colmado.png' },
   { titulo: 'Restaurantes y cafés', detalle: 'Controla ventas, mesas e inventario.', foto: '/home/fotos/30-restaurante.png' },
   { titulo: 'Servicios profesionales', detalle: 'Agencias, consultorías y estudios.', foto: '/home/fotos/33-agencia.png' },
-  { titulo: 'Contadores y firmas', detalle: 'Varias empresas bajo un mismo cierre.', foto: '/home/fotos/35-contadora-abierto.png' },
+  { titulo: 'Contadores y firmas', detalle: 'Varias empresas con un usuario, cada una con sus libros.', foto: '/home/fotos/35-contadora-abierto.png' },
 ] as const;
 
 const EQUIPO = [
@@ -136,7 +136,7 @@ const PREGUNTAS = [
   },
   {
     pregunta: '¿Los padres pueden pagar en línea?',
-    respuesta: 'Sí. Cada familia recibe su enlace de pago por WhatsApp o correo y paga con tarjeta desde el teléfono, o sube el comprobante de su transferencia para que el colegio lo apruebe.',
+    respuesta: 'Sí, por transferencia. Cada familia recibe su enlace por WhatsApp o correo, ve lo que debe y sube el comprobante de su transferencia. Cuando el colegio lo aprueba, el pago se registra y el saldo baja.',
   },
   {
     pregunta: '¿Cuánto cuesta el sistema para un colegio?',
@@ -338,7 +338,7 @@ export default function ColegiosPage() {
               <Antetitulo>Las familias, adentro</Antetitulo>
               <Titulo className="mt-3.5">Los padres ven su cuenta y pagan desde el teléfono.</Titulo>
               <p className="mt-3.5 max-w-[480px] text-pretty text-[15px] leading-[1.65] text-[#5c6373]">
-                La cobranza deja de depender de llamadas: el aviso sale solo, el pago entra digital y el saldo se actualiza al instante.
+                La cobranza deja de depender de llamadas: el aviso sale solo, el padre sube su comprobante y el saldo baja cuando el colegio lo aprueba.
               </p>
               <ul className="m-0 mt-6 grid max-w-[480px] list-none gap-3.5 p-0">
                 {FAMILIAS.map(f => (
@@ -436,17 +436,17 @@ export default function ColegiosPage() {
 
       <DatosDeProducto
         nombre="Zero ERP Colegio"
-        descripcion="Sistema de gestión escolar dominicano: matrícula, cargos y mensualidades con facturación e-CF ante la DGII, mora automática, avisos por WhatsApp, SMS y correo, portal de pago para los padres, contabilidad, nómina del personal y punto de venta para la cafetería."
+        descripcion="Sistema de gestión escolar dominicano: matrícula, cargos y mensualidades que se generan solas cada mes, facturación electrónica directo a la DGII, mora automática, avisos por WhatsApp, SMS y correo, portal donde el padre ve su saldo y sube su comprobante, contabilidad, nómina del personal y punto de venta para la cafetería."
         ruta="/colegios"
         captura="/home/capturas/demo-colegio.png"
         precioDesde={TRAMOS_DESDE}
         precioHasta={TRAMOS_HASTA}
         funciones={[
           'Matrícula y estructura académica por período',
-          'Mensualidades facturadas con comprobante fiscal electrónico',
+          'Mensualidades que se generan solas, listas para emitir con su e-CF',
           'Mora que se aplica sola al vencer',
           'Avisos a las familias por WhatsApp, SMS y correo',
-          'Portal de pago para el padre, con tarjeta o comprobante',
+          'Portal del padre para ver su saldo y subir su comprobante',
           'Contabilidad y nómina del personal incluidas',
           'Punto de venta para la cafetería',
         ]}
