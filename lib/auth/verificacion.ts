@@ -12,7 +12,6 @@ import { eq, and, isNull, gt, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { emailVerificationTokens } from '@/lib/db/schema';
 import { sendEmailVerificationEmail } from '@/lib/email';
-import { baseDeEnlaces } from '@/lib/config/enlaces';
 
 /** Un día. Suficiente para quien lo abre al otro día, corto para un enlace filtrado. */
 const VIDA_MS = 24 * 60 * 60 * 1000;
@@ -65,24 +64,4 @@ export async function tieneEnlaceVivo(userId: number): Promise<boolean> {
     .limit(1);
 
   return !!vivo;
-}
-
-/**
- * Un enlace de verificación nuevo, sin mandar el correo del sistema.
- *
- * Para el seguimiento de quien no confirmó su correo
- * (`app/api/cron/seguimiento-altas`): ese correo lo escribe una persona y
- * lleva el enlace dentro, así que mandar además el «Verifica tu email» de
- * noreply serían dos correos a la vez. Dura más que el del alta porque llega
- * un día después, cuando el primero ya caducó, y quien lo lee puede abrirlo
- * al otro día.
- */
-export async function crearEnlaceDeVerificacion(userId: number, horas = 72): Promise<string> {
-  const token = randomBytes(32).toString('hex');
-  await db.insert(emailVerificationTokens).values({
-    userId,
-    token,
-    expiresAt: new Date(Date.now() + horas * 60 * 60 * 1000),
-  });
-  return `${baseDeEnlaces()}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
 }

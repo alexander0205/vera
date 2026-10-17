@@ -45,10 +45,6 @@
       "schedule": "0 11 * * *"
     },
     {
-      "path": "/api/cron/seguimiento-altas",
-      "schedule": "0 13-22 * * *"
-    },
-    {
       "path": "/api/cron/escolar-documentos",
       "schedule": "0 13 * * 2"
     },
