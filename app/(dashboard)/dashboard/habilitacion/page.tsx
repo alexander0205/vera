@@ -648,9 +648,14 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
     if (!validate()) return false;
     setSavingPerfil(true);
     try {
+      // Solo lo que esta pantalla edita. Antes se reenviaba el perfil entero
+      // leído del GET, y en una empresa nueva trae `null` en nombre comercial,
+      // teléfono, sitio web, logo, firma y representante: el esquema del POST
+      // no acepta `null` y devolvía 422, así que aquí no se podía guardar nada.
+      // El POST actualiza solo los campos que recibe.
       const res = await fetch('/api/equipo/perfil', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...perfil, razonSocial, emailFacturacion: emailFact, direccion, provincia, municipio }),
+        body: JSON.stringify({ razonSocial, emailFacturacion: emailFact, direccion, provincia, municipio }),
       });
       if (res.ok) { setPerfilSaved(true); return true; }
       return false;
@@ -665,7 +670,19 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
 
   async function handleUploadCert() {
     if (!file || !password) return;
-    setUploadingCert(true); setCertError(null);
+    setCertError(null);
+    // El servidor registra a la empresa en ecf-api antes de aceptar el
+    // certificado y para eso exige la dirección GUARDADA. Aquí la dirección
+    // solo se guardaba con «Guardar y continuar», que está desactivado hasta
+    // que haya certificado: la empresa nueva quedaba atrapada («Completa los
+    // siguientes campos antes de subir el certificado: Dirección» con la
+    // dirección escrita al lado). Se guardan primero los datos fiscales.
+    const guardado = await handleSavePerfil();
+    if (!guardado) {
+      setCertError('Completa y guarda los datos fiscales de la izquierda (dirección, provincia y municipio) antes de subir el certificado.');
+      return;
+    }
+    setUploadingCert(true);
     try {
       const buf    = await file.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
