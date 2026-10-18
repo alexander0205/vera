@@ -71,7 +71,8 @@ export default function PaginaAgentes() {
                 Actualizada el {fecha} ·{' '}
                 <a href={RUTA_AGENTES_MD} className="text-zero-600 underline underline-offset-2">Esta página en texto</a> ·{' '}
                 <a href={RUTA_FUNCIONES_MD} className="text-zero-600 underline underline-offset-2">Todas las funciones en texto</a> ·{' '}
-                <a href="/llms.txt" className="text-zero-600 underline underline-offset-2">llms.txt</a>
+                <a href="/llms.txt" className="text-zero-600 underline underline-offset-2">llms.txt</a> ·{' '}
+                <a href={CONECTOR.documentacion} className="font-semibold text-zero-600 underline underline-offset-2">Documentación del conector</a>
               </p>
             </div>
           </Contenedor>
@@ -101,6 +102,12 @@ export default function PaginaAgentes() {
 
             <Apartado titulo="¿Cómo se conecta un asistente a una empresa?">
               <Pasos pasos={PASOS_DE_CONEXION} />
+              <Dato>
+                La documentación completa del conector —cada herramienta por módulo, la seguridad y los pasos para
+                Claude, Cursor y VS Code— está en{' '}
+                <a href={CONECTOR.documentacion} className="font-semibold underline underline-offset-2">mcp.zero.com.do</a>.
+                El conector también responde en <Mono>{CONECTOR.urlEnSubdominio}</Mono>.
+              </Dato>
               <TablaDeTexto
                 columnas={['Dato', 'Valor']}
                 filas={[

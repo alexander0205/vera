@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
 import {
-  moduleForHost, esHostApp, esRutaDeCuenta, MODULE_HOME,
+  moduleForHost, esHostApp, esHostMcp, destinoEnHostMcp, esRutaDeCuenta, MODULE_HOME,
 } from '@/lib/config/modules';
 
 const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar', '/nomina', '/contabilidad'];
@@ -34,6 +34,26 @@ export async function proxy(request: NextRequest) {
   const sessionCookie = request.cookies.get('session');
 
   const hostActual = request.headers.get('host');
+
+  /**
+   * mcp.zero.com.do — la documentación del conector y el conector mismo.
+   *
+   * Va ANTES de todo lo demás a propósito: es un sitio público de punta a
+   * punta, sin sesión, y no debe pasar por el guard de rutas protegidas ni por
+   * el refresco de cookie. `/mcp` se reescribe a `/api/mcp` (donde vive el
+   * conector y su guard de llaves); el resto, a `/conector/…`. Ver
+   * `destinoEnHostMcp` para el reparto exacto.
+   */
+  if (esHostMcp(hostActual)) {
+    const destino = destinoEnHostMcp(pathname);
+    if (destino.accion === 'seguir') return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = destino.ruta;
+    return destino.accion === 'reescribir'
+      ? NextResponse.rewrite(url)
+      : NextResponse.redirect(url, 308);
+  }
+
   const mod = moduleForHost(hostActual);
 
   /**

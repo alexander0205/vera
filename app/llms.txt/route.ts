@@ -75,7 +75,8 @@ Zero es un producto de Yisrael Technology. Opera en República Dominicana, en es
 
 - [Zero para agentes](${SITIO_PUBLICO}${RUTA_AGENTES_MD}): qué puede hacer hoy un agente con Zero, cómo se conecta y con qué reglas.
 - [Todas las funciones](${SITIO_PUBLICO}${RUTA_FUNCIONES_MD}): el sistema entero, módulo por módulo, con lo que no hace.
-- Conector MCP, de solo lectura: \`${CONECTOR.url}\`. Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
+- Conector MCP, de solo lectura: \`${CONECTOR.url}\` (también \`${CONECTOR.urlEnSubdominio}\`). Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
+- [Documentación del conector MCP](${CONECTOR.documentacion}): cada herramienta por módulo, seguridad y cómo conectarlo en Claude, Cursor y VS Code. Tiene su propio [llms.txt](${CONECTOR.documentacion}/llms.txt).
 - Crear una empresa: la crea una persona en ${ALTA.url}. Prueba gratis: ${textoDeLaPrueba()}.
 
 ## Productos

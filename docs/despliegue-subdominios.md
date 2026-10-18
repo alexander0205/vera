@@ -13,8 +13,16 @@ mover nada.
 | `facturacion.zero.com.do` | Facturación electrónica | El de la app |
 | `pos.zero.com.do` | Punto de venta | El de la app |
 | `colegio.zero.com.do` | Colegios | El de la app |
+| `mcp.zero.com.do` | Documentación del conector MCP (`/`) y el conector (`/mcp`) | El de la app |
 
-Un solo proyecto de Vercel para los cuatro últimos. Comparten sesión, base de
+`mcp.` no es un módulo: lo reconoce `esHostMcp` (prefijo `mcp.`, o `MCP_HOST` si
+se quiere fijar) y `proxy.ts` lo atiende **antes** de cualquier guard de
+sesión. `/mcp` se reescribe a `/api/mcp` (el conector, con su guard de llaves) y
+todo lo demás a `/conector/…` (`app/(conector)`); el reparto exacto está en
+`destinoEnHostMcp`. Solo necesita el dominio añadido al proyecto y su registro
+DNS; no lleva variables de entorno. Ver `docs/agentes/plan-alta-por-ia.md`, fase A.
+
+Un solo proyecto de Vercel para todos los que dicen «El de la app». Comparten sesión, base de
 datos, componentes y permisos: partirlos en cuatro despliegues duplicaría todo
 eso sin ganar nada.
 

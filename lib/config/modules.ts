@@ -173,6 +173,55 @@ export function esHostApp(hostHeader: string | null | undefined): boolean {
 }
 
 /**
+ * ¿Este host es el del conector? (`mcp.zero.com.do`)
+ *
+ * Ahí viven la documentación del conector MCP (en la raíz) y el propio
+ * conector (en `/mcp`). Se reconoce por el prefijo `mcp.` —así también sirve
+ * `mcp.localhost:3000` en desarrollo— o por `MCP_HOST` si se quiere fijar.
+ */
+export function esHostMcp(hostHeader: string | null | undefined): boolean {
+  if (!hostHeader) return false;
+  const host = hostHeader.toLowerCase();
+  if (process.env.MCP_HOST && host === process.env.MCP_HOST) return true;
+  return host.split(':')[0].startsWith('mcp.');
+}
+
+/** Qué hace el proxy con una ruta pedida en el host del conector. */
+export type DestinoEnHostMcp =
+  | { accion: 'reescribir' | 'redirigir'; ruta: string }
+  | { accion: 'seguir' };
+
+/**
+ * Archivos y rutas que NO son documentación y deben llegar tal cual: el
+ * logotipo y las capturas (`public/`), los íconos que genera Next y el
+ * manifiesto. Reescribirlos a `/conector/…` los dejaba en 404 y la página salía
+ * sin logo ni ícono de pestaña.
+ */
+const RUTAS_DIRECTAS_EN_HOST_MCP = [
+  '/marca/', '/home/', '/icons/', '/icon', '/apple-icon', '/manifest.webmanifest', '/_next/', '/api/',
+] as const;
+
+/**
+ * El reparto de rutas del host del conector:
+ *
+ *  - `/mcp` es el conector → se reescribe a `/api/mcp`, que lo sirve (POST y GET);
+ *  - `/` y todo lo demás es documentación → se reescribe a `/conector/…`;
+ *  - `/conector/…` pedido directo se redirige a la ruta limpia (sin el
+ *    prefijo, que es un detalle interno);
+ *  - los archivos estáticos pasan sin tocar.
+ *
+ * Pura y sin `process.env` para poder probarla sin levantar nada.
+ */
+export function destinoEnHostMcp(pathname: string): DestinoEnHostMcp {
+  if (pathname === '/mcp' || pathname === '/mcp/') return { accion: 'reescribir', ruta: '/api/mcp' };
+  if (RUTAS_DIRECTAS_EN_HOST_MCP.some(r => pathname === r || pathname.startsWith(r))) return { accion: 'seguir' };
+  if (pathname === '/conector' || pathname.startsWith('/conector/')) {
+    return { accion: 'redirigir', ruta: pathname.slice('/conector'.length) || '/' };
+  }
+  return { accion: 'reescribir', ruta: pathname === '/' ? '/conector' : `/conector${pathname}` };
+}
+
+/**
  * A qué host pertenece cada módulo, para armar enlaces entre subdominios.
  *
  * Devuelve null si ese módulo no tiene host propio configurado, y entonces
