@@ -204,10 +204,10 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
           <div className="inline-flex h-[30px] items-center gap-2.5 rounded-full border border-[#e0e4f0] bg-white px-3.5 text-xs font-medium text-zero-600">
             <span className="size-1.5 rounded-full bg-zero-600" />
             {linea.esColegio
-              ? 'Del aula a la caja, con cobro automático'
+              ? 'Del aula a la caja, con avisos de cobro automáticos'
               : linea.conPos
                 ? 'Caja, inventario y facturación en un mismo flujo'
-                : 'Facturación electrónica certificada ante la DGII'}
+                : 'Facturación electrónica directo con la DGII'}
           </div>
           <h1 className="mt-5 text-pretty font-[family-name:var(--font-display)] text-[clamp(2rem,6vw,2.75rem)] font-semibold leading-[1.1] tracking-[-.04em]">
             {linea.nombre}
@@ -424,7 +424,7 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
           {[
             `${linea.diasPrueba} días de prueba`,
             'Sin contrato mínimo',
-            'Facturas certificadas ante la DGII',
+            'e-CF directo a la DGII',
             'Soporte en español',
           ].map(g => (
             <span key={g} className="flex items-center gap-2 text-[12.5px] text-gray-500">

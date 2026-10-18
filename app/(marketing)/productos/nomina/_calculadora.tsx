@@ -114,7 +114,7 @@ export function CalculadoraNomina() {
 
       <p className="m-0 border-t border-[#eef1f8] px-5 py-3 text-[11px] leading-[1.5] text-[#666d80]">
         Calculado con el mismo motor que corre la nómina dentro del sistema: tasas {t.anio} y la
-        escala del ISR vigente. Falta sumarle lo que el mes traiga —horas extra, bonos, préstamos— y
+        escala del ISR vigente. Falta sumarle lo que el mes traiga —horas extra u otras deducciones— y
         las provisiones de regalía y vacaciones, que el sistema acumula aparte.
       </p>
     </div>

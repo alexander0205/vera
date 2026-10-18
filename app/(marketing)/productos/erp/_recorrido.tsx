@@ -38,7 +38,7 @@ const PASOS: Paso[] = [
     detalle: 'Firmado y enviado en el acto, con su e-NCF tomado de tu secuencia autorizada.',
     solo: [
       'e-CF firmado, enviado y acusado por la DGII',
-      'El PDF sale al cliente por correo, con su XML',
+      'El PDF y el XML, listos para mandar al cliente',
       'El inventario baja por cada línea vendida',
     ],
   },
@@ -53,11 +53,11 @@ const PASOS: Paso[] = [
     clave: 'cobro',
     rotulo: 'Cobras',
     titulo: 'El cliente paga',
-    detalle: 'Por transferencia, en caja o con el link de pago que le mandaste. El comprobante del depósito se adjunta ahí mismo.',
+    detalle: 'Por transferencia, depósito o en caja. El comprobante del depósito se adjunta ahí mismo.',
     solo: [
       'El cobro entra con su método y su banco',
       'La cartera baja por el monto cobrado',
-      'Si fue link de pago, se concilia solo',
+      'Si fue un abono, el resto sigue en la cartera',
     ],
   },
   {
