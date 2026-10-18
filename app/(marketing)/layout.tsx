@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     template: '%s · Zero',
   },
   description:
-    'Plataforma dominicana: ERP con facturación electrónica certificada ante la DGII, CRM con agentes de inteligencia artificial que atienden por WhatsApp y teléfono, punto de venta, nómina y gestión de colegios.',
+    'Plataforma dominicana: ERP con facturación electrónica directo a la DGII, CRM con agentes de inteligencia artificial que atienden por WhatsApp y teléfono, punto de venta, nómina y gestión de colegios.',
   applicationName: 'Zero',
   // Las palabras no son un ranking —Google las ignora hace años— pero sí las
   // leen los asistentes de IA cuando resumen de qué va un sitio, y es lo que
