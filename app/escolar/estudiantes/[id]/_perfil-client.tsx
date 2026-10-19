@@ -3,11 +3,13 @@
 import { useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import useSWR from 'swr';
+import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, Receipt, Smartphone, Users } from 'lucide-react';
+import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, Receipt, Smartphone, UserMinus, UserPlus, Users } from 'lucide-react';
+import { BajaReingresoDialog } from '@/components/administracion-escolar/BajaReingresoDialog';
+import { MovimientosEstudiante, claveMovimientosEstudiante } from '@/components/administracion-escolar/MovimientosEstudiante';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
@@ -216,6 +218,8 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   const [responsableModo, setResponsableModo] = useState<'buscar' | 'crear' | 'editar'>('buscar');
   /** El contacto que ya tenía esa cédula, para ofrecerlo en vez de duplicarlo. */
   const [responsableExistente, setResponsableExistente] = useState<Contacto | null>(null);
+  /** Dar de baja / reactivar: el diálogo que enseña qué se va a tocar. */
+  const [cambioEstado, setCambioEstado] = useState<'baja' | 'reingreso' | null>(null);
 
   const guardarResponsable = useCallback(async (clientId: number) => {
     const res = await fetch(`/api/administracion-escolar/estudiantes/${id}/facturar-a`, {
@@ -289,6 +293,33 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
     <section className="p-6 space-y-5">
       <VolverLink />
 
+      {/* Marcado como no activo desde «Editar», que solo cambiaba la etiqueta:
+          la matrícula o la mensualidad siguen vivas y le siguen cobrando. */}
+      {puedeGestionar && estudiante.estado !== 'activo'
+        && matriculas.some((m) => m.estado === 'activa' || m.recurrenteEstado === 'activa') && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
+          <p>
+            Está <b>{estudiante.estado}</b>, pero su matrícula o su mensualidad automática siguen activas:
+            se le siguen generando cuotas y facturas.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setCambioEstado('baja')}>
+            Terminar la baja
+          </Button>
+        </div>
+      )}
+
+      {cambioEstado && (
+        <BajaReingresoDialog
+          estudianteId={estudiante.id}
+          nombre={`${estudiante.nombres} ${estudiante.apellidos}`.trim()}
+          accion={cambioEstado}
+          abierto
+          onCerrar={() => setCambioEstado(null)}
+          onHecho={() => { void cargar(); void mutateGlobal(claveMovimientosEstudiante(estudiante.id)); }}
+          onMatricular={() => router.push(rutaNuevaMatricula({ estudianteId: estudiante.id, volver: volverAqui }))}
+        />
+      )}
+
       {/* Tarjeta horizontal del estudiante (sin encabezado duplicado) */}
       <div className="border border-gray-200 rounded-xl bg-white p-4">
               <div className="flex flex-col md:flex-row md:items-center gap-4">
@@ -328,6 +359,22 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                             <Pencil className="h-4 w-4 mr-1.5" />Editar estudiante
                           </Link>
                         </Button>
+                      )}
+                      {/* Se va y a veces vuelve. No es editar un campo: arrastra
+                          su matrícula, su mensualidad y sus cuotas, así que va
+                          por un diálogo que enseña qué se toca antes de hacerlo. */}
+                      {puedeGestionar && (
+                        estudiante.estado === 'activo' ? (
+                          <Button variant="ghost" size="sm" className="shrink-0 text-gray-500"
+                            onClick={() => setCambioEstado('baja')}>
+                            <UserMinus className="h-4 w-4 mr-1.5" />Dar de baja
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="sm" className="shrink-0"
+                            onClick={() => setCambioEstado('reingreso')}>
+                            <UserPlus className="h-4 w-4 mr-1.5" />Reactivar
+                          </Button>
+                        )
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -634,6 +681,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
               <h2 className="text-base font-semibold text-gray-900 mb-2">Historial de actividad</h2>
               <Historial matriculas={matriculas} pagos={pagos} />
             </div>
+            <div className="mt-5"><MovimientosEstudiante estudianteId={estudiante.id} /></div>
           </TabsContent>
         </Tabs>
       </div>

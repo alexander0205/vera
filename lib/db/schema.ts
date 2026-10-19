@@ -2592,6 +2592,38 @@ export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados
   index('admin_escolar_avisos_team_fecha').on(t.teamId, t.enviadoAt),
 ]);
 
+/**
+ * Cada baja y cada reingreso de un alumno (migración 0197).
+ *
+ * Es la constancia de lo que el sistema tocó al irse o volver —matrícula,
+ * mensualidad, cuotas, fechas— y de quién lo hizo. No se edita ni se borra. El
+ * reingreso lee de aquí qué cuotas anuló la última baja para devolverlas.
+ */
+export const adminEscolarEstudianteMovimientos = pgTable('admin_escolar_estudiante_movimientos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  estudianteId:  integer('estudiante_id').notNull().references(() => adminEscolarEstudiantes.id, { onDelete: 'cascade' }),
+  matriculaId:   integer('matricula_id').references(() => adminEscolarMatriculas.id, { onDelete: 'set null' }),
+  /** baja | reingreso */
+  tipo:          varchar('tipo', { length: 12 }).notNull(),
+  estadoAnterior: varchar('estado_anterior', { length: 20 }),
+  estadoNuevo:   varchar('estado_nuevo', { length: 20 }).notNull(),
+  /** El día en que se fue o volvió; el día en que se registró es `creadoEn`. */
+  fecha:         date('fecha').notNull(),
+  motivo:        varchar('motivo', { length: 200 }),
+  cuotasAnuladas:    jsonb('cuotas_anuladas').$type<number[]>().notNull().default([]),
+  cuotasRestauradas: jsonb('cuotas_restauradas').$type<number[]>().notNull().default([]),
+  fechaInscripcionAnterior: date('fecha_inscripcion_anterior'),
+  recurrenteId:  integer('recurrente_id').references(() => facturasRecurrentes.id, { onDelete: 'set null' }),
+  recurrenteInicioAnterior: date('recurrente_inicio_anterior'),
+  recurrenteInicioNuevo:    date('recurrente_inicio_nuevo'),
+  userId:        integer('user_id').references(() => users.id),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_est_mov_estudiante_idx').on(t.teamId, t.estudianteId, t.creadoEn),
+  index('admin_escolar_est_mov_tipo_fecha_idx').on(t.teamId, t.tipo, t.fecha),
+]);
+
 export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   id:               serial('id').primaryKey(),
   teamId:           integer('team_id').notNull().references(() => teams.id),

@@ -25,8 +25,9 @@ import { busquedaDesdeFicha, type BusquedaDeFicha } from '@/lib/administracion-e
  * en SIGERD», así que la dirección y el acta solo entraban tecleadas a mano.
  *
  * Lo único que cambia respecto al alta, y a propósito:
- *   · el estado del alumno (activo/retirado/graduado), que solo tiene sentido
- *     sobre alguien que ya existe;
+ *   · el estado del alumno NO: darlo de baja o reactivarlo arrastra su
+ *     matrícula, su mensualidad y sus cuotas, y se hace desde la ficha con
+ *     «Dar de baja» / «Reactivar», que enseñan qué se va a tocar;
  *   · tutores y responsable se guardan al momento —el alumno ya está creado, no
  *     hay nada que esperar—, mientras que en el alta viajan con el formulario.
  *
@@ -62,7 +63,6 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
   const [loading, setLoading] = useState(true);
   const [noExiste, setNoExiste] = useState(false);
   const [form, setForm] = useState({ nombres: '', apellidos: '', sexo: '', fechaNacimiento: '' });
-  const [estado, setEstado] = useState('activo');
   const [extra, setExtra] = useState<Record<string, string>>(camposExtraVacios);
   const [sigerdId, setSigerdId] = useState<number | null>(null);
   const [buscarSigerd, setBuscarSigerd] = useState(false);
@@ -117,7 +117,6 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
         sexo: est.sexo ?? '',
         fechaNacimiento: est.fechaNacimiento ?? '',
       });
-      setEstado(est.estado);
       setSigerdId(est.sigerdId ?? null);
       setExtra(camposExtraDe(data.estudiante));
       // La pantalla vuelve a lo guardado: lo traído de SIGERD sin guardar ya
@@ -243,7 +242,6 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
         body: JSON.stringify({
           nombres: form.nombres, apellidos: form.apellidos,
           sexo: form.sexo || null, fechaNacimiento: form.fechaNacimiento || null,
-          estado,
           // El id del padrón del MINERD, si la ficha se cruzó con SIGERD desde
           // aquí. Es lo que permite reconocer al alumno en una sincronización
           // futura en vez de crear una segunda ficha del mismo niño.
@@ -401,8 +399,6 @@ export default function EditarEstudianteClient({ id }: { id: number }) {
             if (campoError) { setCampoError(null); setError(null); }
             setForm((f) => ({ ...f, ...parche }));
           }}
-          estado={estado}
-          onEstadoChange={setEstado}
         />
 
         {/* ── Tutores ── El mismo panel del alta, pero atado al alumno: aquí
