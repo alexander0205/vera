@@ -17,6 +17,7 @@
 import { useEffect, useState } from 'react';
 import { planesDeFamilia } from '@/lib/config/plans';
 import { CONTACTO, Cheque, IconoWhatsApp, Iconos } from '../_piezas';
+import { enviarEvento } from '@/lib/analytics/eventos';
 
 type Perfil = 'pyme' | 'colegio';
 
@@ -46,7 +47,7 @@ const TAMANOS: Record<Perfil, string[]> = {
 
 const TEMAS: Record<Perfil, string[]> = {
   pyme: ['Facturación electrónica', 'Punto de venta', 'Inventario', 'Contabilidad', 'Migrar desde Excel'],
-  colegio: ['Cuotas y matrículas', 'Cobro automático a padres', 'Recordatorios por WhatsApp', 'Portal de padres', 'Contabilidad', 'Migrar desde Excel'],
+  colegio: ['Cuotas y matrículas', 'Avisos de cobro a padres', 'Recordatorios por WhatsApp', 'Portal de padres', 'Contabilidad', 'Migrar desde Excel'],
 };
 
 type Errores = Partial<Record<'nombre' | 'empresa' | 'email' | 'telefono', string>>;
@@ -134,6 +135,9 @@ export function FormularioContacto() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? 'No se pudo enviar la solicitud.');
       }
+      // Evento recomendado de GA para un contacto comercial: se puede marcar
+      // como evento clave sin configurar nada más.
+      enviarEvento('generate_lead', { perfil, tamano: tamano ?? undefined });
       setEnviado(true);
     } catch (err) {
       setFallo(err instanceof Error ? err.message : 'No hay conexión con el servidor.');

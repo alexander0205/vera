@@ -24,6 +24,8 @@ import {
   TableCell,
 } from '@mui/material';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Ref { id: number; nombre: string; }
 interface Terminal {
@@ -43,6 +45,22 @@ const EMPTY = { nombre: '', almacenId: 0, impresoraId: 0, listaPreciosId: 0, tip
 
 const TEAL = '#3658e1';
 const TEAL_HOVER = '#2a45c4';
+
+
+/** Imprimir / PDF / Excel de las terminales. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Terminal> = {
+  titulo: 'Terminales del punto de venta',
+  archivo: 'terminales-pos',
+  tachada: t => !t.activo,
+  columnas: [
+    { titulo: 'Terminal', valor: t => t.nombre, ancho: 1.5 },
+    { titulo: 'Almacén', valor: t => t.almacenNombre, ancho: 1.3 },
+    { titulo: 'Lista de precios', valor: t => t.listaNombre, ancho: 1.3 },
+    { titulo: 'Comprobante', valor: t => (t.tipoEcf === 'sin-ncf' ? 'Sin NCF' : `e${t.tipoEcf}`), ancho: 0.8 },
+    { titulo: 'Mesas', valor: t => (t.mesas ? 'Sí' : null), ancho: 0.5 },
+    { titulo: 'Estado', valor: t => (t.activo ? 'Activa' : 'Inactiva'), ancho: 0.7 },
+  ],
+};
 
 export default function TerminalesClient({
   terminalesIniciales, almacenes, impresoras, listas,
@@ -145,7 +163,9 @@ export default function TerminalesClient({
           >
             Abrir POS
           </Button>
-          <Button
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+            <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, terminales, 'Todos los registros')} deshabilitado={terminales.length === 0} testId="exportar-terminales" />
+            <Button
             variant="contained"
             disableElevation
             onClick={nueva}
@@ -153,6 +173,7 @@ export default function TerminalesClient({
           >
             Nueva terminal
           </Button>
+          </Box>
         </Box>
       </Box>
 

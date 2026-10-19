@@ -3,9 +3,10 @@
  * período y detalle con líneas, pagos y asientos.
  */
 
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { categoriaCompra } from './categorias';
+import { categoriaCompra, CATEGORIAS_COMPRA } from './categorias';
+import { clavesDeCategoria, SIN_CATEGORIA, type FiltroGastos } from './filtro-gastos';
 
 export interface FilaCompra {
   id: number;
@@ -35,11 +36,83 @@ export interface FilaCompra {
 
 const n = (v: unknown) => Number(v ?? 0);
 
+// ─── Filtro de la pantalla de Gastos, en SQL ─────────────────────────────────
+//
+// La lista se pagina en la base y las tarjetas salen de un agregado, así que el
+// filtro no se puede aplicar en memoria: tiene que entrar en las tres
+// consultas (las dos listas y el resumen) o las tarjetas dirían un total y la
+// tabla otro. Una función por tabla, porque cada una guarda el gasto distinto.
+
+/** `%texto%` para ILIKE, con los comodines del usuario escapados. */
+const patron = (q: string) => `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+
+const lista = (valores: string[]) => sql.join(valores.map((v) => sql`${v}`), sql`, `);
+
+/** La categoría de un comprobante de proveedor: la de su línea de mayor monto. */
+const categoriaDeCompra = sql`(SELECT i.categoria FROM compras_locales_items i
+  WHERE i.compra_id = c.id AND i.categoria IS NOT NULL
+  ORDER BY i.cantidad * i.costo_unitario DESC, i.id LIMIT 1)`;
+
+/** Lo que falta pagarle al proveedor; mismo cálculo que `listarCompras`. */
+const saldoDeCompra = sql`(CASE WHEN c.forma_pago = 'contado' THEN 0 ELSE greatest(0,
+  c.monto_total - c.itbis_retenido_cents - c.isr_retenido_cents
+  - coalesce((SELECT sum(p.monto_cents) FROM pagos_proveedores p WHERE p.compra_id = c.id), 0)) END)`;
+
+/** Lo que falta pagar de un e43/e47; mismo cálculo que `listarGastosEcf`. */
+const saldoDeEcf = sql`greatest(0, ecf_documents.monto_total - coalesce(ecf_documents.total_retenciones, 0) - GREATEST(
+  coalesce((SELECT sum(p.monto_centavos) FROM pagos_recibidos p WHERE p.ecf_document_id = ecf_documents.id), 0),
+  CASE WHEN ecf_documents.pago_recibido = 'true' THEN coalesce(ecf_documents.pago_valor_cts, 0) ELSE 0 END))`;
+
+/** Condiciones del filtro (sin fechas) sobre `compras_locales c`. */
+function condFiltroCompras(f: FiltroGastos | undefined): SQL {
+  if (!f) return sql``;
+  // Un e43/e47 nunca es un comprobante de proveedor.
+  if (f.tipo === 'e43' || f.tipo === 'e47') return sql`AND false`;
+  const partes: SQL[] = [];
+  if (f.q) {
+    const p = patron(f.q);
+    partes.push(sql`AND (c.proveedor_nombre ILIKE ${p} OR c.proveedor_rnc ILIKE ${p} OR c.referencia_encf ILIKE ${p})`);
+  }
+  if (f.categoria === SIN_CATEGORIA) {
+    // «Sin categoría» es también una clave que el catálogo ya no conoce: la
+    // pantalla la enseña igual, sin etiqueta.
+    partes.push(sql`AND (${categoriaDeCompra} IS NULL OR ${categoriaDeCompra} NOT IN (${lista(CATEGORIAS_COMPRA.map((x) => x.clave))}))`);
+  } else if (f.categoria) {
+    const claves = clavesDeCategoria(f.categoria);
+    partes.push(claves.length ? sql`AND ${categoriaDeCompra} IN (${lista(claves)})` : sql`AND false`);
+  }
+  if (f.estado === 'anulado') partes.push(sql`AND c.estado = 'anulada'`);
+  else if (f.estado === 'pagado') partes.push(sql`AND c.estado <> 'anulada' AND ${saldoDeCompra} = 0`);
+  else if (f.estado === 'por_pagar') partes.push(sql`AND c.estado <> 'anulada' AND ${saldoDeCompra} > 0`);
+  return sql.join(partes, sql` `);
+}
+
+/** Condiciones del filtro (sin fechas) sobre `ecf_documents` (e43/e47). */
+function condFiltroEcf(f: FiltroGastos | undefined): SQL {
+  if (!f) return sql``;
+  if (f.tipo === 'proveedor') return sql`AND false`;
+  const partes: SQL[] = [];
+  if (f.tipo === 'e43') partes.push(sql`AND ecf_documents.tipo_ecf = '43'`);
+  if (f.tipo === 'e47') partes.push(sql`AND ecf_documents.tipo_ecf = '47'`);
+  if (f.q) {
+    const p = patron(f.q);
+    partes.push(sql`AND (ecf_documents.razon_social_comprador ILIKE ${p} OR ecf_documents.rnc_comprador ILIKE ${p}
+      OR ecf_documents.ncf_proveedor ILIKE ${p} OR ecf_documents.encf ILIKE ${p})`);
+  }
+  if (f.categoria === SIN_CATEGORIA) partes.push(sql`AND coalesce(ecf_documents.categoria_gasto, '') = ''`);
+  else if (f.categoria) partes.push(sql`AND ecf_documents.categoria_gasto = ${f.categoria}`);
+  if (f.estado === 'anulado') partes.push(sql`AND ecf_documents.estado IN ('ANULADO', 'RECHAZADO')`);
+  else if (f.estado === 'pagado') partes.push(sql`AND ecf_documents.estado NOT IN ('ANULADO', 'RECHAZADO') AND ${saldoDeEcf} = 0`);
+  else if (f.estado === 'por_pagar') partes.push(sql`AND ecf_documents.estado NOT IN ('ANULADO', 'RECHAZADO') AND ${saldoDeEcf} > 0`);
+  return sql.join(partes, sql` `);
+}
+
 export async function listarCompras(
   teamId: number,
-  opts: { clase?: 'compra' | 'gasto'; desde?: string; hasta?: string; limit?: number } = {},
+  opts: { clase?: 'compra' | 'gasto'; desde?: string; hasta?: string; limit?: number; filtro?: FiltroGastos } = {},
 ): Promise<FilaCompra[]> {
-  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  // El tope alto es para el Excel/PDF de Gastos, que bajan todo lo filtrado.
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 5000);
   const filas = await db.execute(sql`
     SELECT c.id, c.clase, c.estado, to_char(c.fecha, 'YYYY-MM-DD') AS fecha,
            c.proveedor_nombre AS "proveedorNombre", c.proveedor_rnc AS "proveedorRnc",
@@ -59,6 +132,7 @@ export async function listarCompras(
       ${opts.clase ? sql`AND c.clase = ${opts.clase}` : sql``}
       ${opts.desde ? sql`AND c.fecha >= ${opts.desde}` : sql``}
       ${opts.hasta ? sql`AND c.fecha <= ${opts.hasta}` : sql``}
+      ${condFiltroCompras(opts.filtro)}
     ORDER BY c.fecha DESC, c.id DESC
     LIMIT ${limit}
   `);
@@ -159,7 +233,7 @@ export interface ResumenGastos {
  */
 export async function resumenGastos(
   teamId: number,
-  opts: { desde?: string; hasta?: string } = {},
+  opts: FiltroGastos = {},
 ): Promise<ResumenGastos> {
   const { desde, hasta } = opts;
   const [compras, emitidos] = await Promise.all([
@@ -183,6 +257,7 @@ export async function resumenGastos(
         WHERE c.team_id = ${teamId} AND c.clase = 'gasto'
           ${desde ? sql`AND c.fecha >= ${desde}` : sql``}
           ${hasta ? sql`AND c.fecha <= ${hasta}` : sql``}
+          ${condFiltroCompras(opts)}
       )
       SELECT categoria,
              count(*)::int AS cantidad,
@@ -209,6 +284,7 @@ export async function resumenGastos(
         WHERE team_id = ${teamId} AND tipo_ecf IN ('43', '47')
           ${desde ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) >= ${desde}` : sql``}
           ${hasta ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) <= ${hasta}` : sql``}
+          ${condFiltroEcf(opts)}
       )
       SELECT categoria,
              count(*)::int AS cantidad,
@@ -382,9 +458,9 @@ export interface GastoEcf {
  * pantalla solo necesita la página que enseña.
  */
 export async function listarGastosEcf(
-  teamId: number, desde?: string, hasta?: string, limit = 500,
+  teamId: number, desde?: string, hasta?: string, limit = 500, filtro?: FiltroGastos,
 ): Promise<GastoEcf[]> {
-  const tope = Math.min(Math.max(limit, 1), 1000);
+  const tope = Math.min(Math.max(limit, 1), 5000);
   const filas = await db.execute(sql`
     SELECT id, encf, tipo_ecf AS "tipoEcf", estado, estado_pago AS "estadoPago",
            razon_social_comprador AS proveedor, rnc_comprador AS "rncProveedor",
@@ -401,6 +477,7 @@ export async function listarGastosEcf(
     WHERE team_id = ${teamId} AND tipo_ecf IN ('43', '47')
       ${desde ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) >= ${desde}` : sql``}
       ${hasta ? sql`AND coalesce(fecha_gasto, (coalesce(fecha_emision, created_at) AT TIME ZONE 'America/Santo_Domingo')::date) <= ${hasta}` : sql``}
+      ${condFiltroEcf(filtro)}
     ORDER BY fecha DESC, id DESC
     LIMIT ${tope}
   `);
@@ -422,4 +499,30 @@ export async function listarGastosEcf(
     saldoCents: Math.max(0, n(f.montoTotal) - n(f.totalRetenciones) - n(f.pagadoCents)),
     fecha: String(f.fecha),
   }));
+}
+
+/**
+ * Las categorías que esta empresa ha usado en gastos, por su etiqueta: las
+ * opciones del filtro de la pantalla. Solo las usadas, para no ofrecer veinte
+ * que no devuelven nada.
+ */
+export async function categoriasDeGastos(teamId: number): Promise<string[]> {
+  const [compras, emitidos] = await Promise.all([
+    db.execute<{ categoria: string }>(sql`
+      SELECT DISTINCT i.categoria FROM compras_locales_items i
+      JOIN compras_locales c ON c.id = i.compra_id
+      WHERE c.team_id = ${teamId} AND c.clase = 'gasto' AND i.categoria IS NOT NULL
+    `),
+    db.execute<{ categoria: string }>(sql`
+      SELECT DISTINCT categoria_gasto AS categoria FROM ecf_documents
+      WHERE team_id = ${teamId} AND tipo_ecf IN ('43', '47') AND coalesce(categoria_gasto, '') <> ''
+    `),
+  ]);
+  const labels = new Set<string>();
+  for (const f of compras as unknown as { categoria: string }[]) {
+    const label = categoriaCompra(f.categoria)?.label;
+    if (label) labels.add(label);
+  }
+  for (const f of emitidos as unknown as { categoria: string }[]) labels.add(f.categoria);
+  return [...labels].sort((a, b) => a.localeCompare(b, 'es'));
 }

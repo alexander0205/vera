@@ -5,6 +5,8 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
 import { estadoResultados, type SeccionResultado } from '@/lib/contabilidad/estado-resultados';
 import { FiltrosPeriodo } from '../_filtros-periodo';
+import { PrintButton } from '@/components/reportes/print-button';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Table from '@mui/material/Table';
@@ -49,7 +51,6 @@ export default async function EstadoResultadosPage({
   const qs = new URLSearchParams();
   if (desde) qs.set('desde', desde);
   if (hasta) qs.set('hasta', hasta);
-  const exportHref = `/api/contabilidad/estado-resultados/export${qs.toString() ? `?${qs}` : ''}`;
 
   /** Bloque de una sección (Ingresos, Costos, Gastos) con su total. */
   const Seccion = ({ titulo, seccion, signo }: {
@@ -82,9 +83,9 @@ export default async function EstadoResultadosPage({
   const utilidad = er.utilidadNetaCents >= 0;
 
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1000, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <Box component="section" className="print-area" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1000, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Breadcrumb */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box className="no-print" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Estado de resultados</Typography>
@@ -100,19 +101,13 @@ export default async function EstadoResultadosPage({
             que costó y lo que se gastó.
           </Typography>
         </Box>
-        {er.hayDatos && (
-          <Box component="a" href={exportHref}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
-              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
-              '&:hover': { bgcolor: '#e0e7fd' } }}
-          >
-            Exportar a Excel
-          </Box>
-        )}
+        <Box className="no-print" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <PrintButton disabled={!er.hayDatos} />
+          <BotonesExportar ruta="/api/contabilidad/estado-resultados/export" filtro={qs.toString()} mostrarImprimir={false} deshabilitado={!er.hayDatos} />
+        </Box>
       </Box>
 
-      <FiltrosPeriodo ruta="/contabilidad/estado-resultados" periodo={{ desde, hasta }} />
+      <div className="no-print"><FiltrosPeriodo ruta="/contabilidad/estado-resultados" periodo={{ desde, hasta }} /></div>
 
       <Box sx={{ ...CARD, overflow: 'hidden' }}>
         <Box sx={{ overflowX: 'auto' }}>

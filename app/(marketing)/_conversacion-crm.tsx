@@ -7,8 +7,9 @@
  * hace el agente, y se escribe con datos de la empresa de demostración: la
  * factura del Colmado La Esquina es la misma que sale en su cartera.
  *
- * Lo que se afirma es lo que ya afirma la página del CRM (su demo «Un
- * balance»): verificar identidad, decir el saldo y mandar el enlace de pago.
+ * Lo que se afirma: verificar identidad, decir el saldo y mandarle la factura
+ * en PDF por correo. Antes ofrecía un enlace para pagar con tarjeta, y el cobro
+ * con tarjeta por enlace está apagado en producción: no se anuncia.
  */
 
 type Linea =
@@ -20,11 +21,11 @@ const CONVERSACION: Linea[] = [
   { de: 'sistema', texto: 'Verificó la identidad contra la ficha del cliente' },
   {
     de: 'agente',
-    texto: 'Hola, don Rafael. Tiene RD$17,716.60 de la factura del 19 de septiembre, que vence el 19 de octubre. ¿Le mando el enlace para pagarla con tarjeta?',
+    texto: 'Hola, don Rafael. Tiene RD$17,716.60 de la factura del 19 de septiembre, que vence el 19 de octubre. ¿Le mando la factura a su correo?',
     hora: '9:14 a. m.',
   },
-  { de: 'cliente', texto: 'Sí, mándamelo.', hora: '9:15 a. m.' },
-  { de: 'sistema', texto: 'Enlace de pago enviado · al pagar, el cobro se registra solo' },
+  { de: 'cliente', texto: 'Sí, mándamela.', hora: '9:15 a. m.' },
+  { de: 'sistema', texto: 'Factura enviada por correo, en PDF y a nombre de la empresa' },
 ];
 
 export function ConversacionCrm() {

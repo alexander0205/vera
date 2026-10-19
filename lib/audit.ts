@@ -32,6 +32,8 @@ export type AuditAction =
   | 'ECF_RESET'
   | 'ECF_VOID'
   | 'FACTURA_TRAZA'
+  // Medición: de dónde vino una empresa nueva (ver lib/analytics/origen-servidor.ts)
+  | 'REGISTRO_ORIGEN'
   | 'DGII_AUTH'
   | 'DGII_AUTH_FAIL'
   | 'HABILITACION_SIGN'

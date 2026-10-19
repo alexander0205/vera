@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CalendarRange, Loader2, Lock, Trash2, Wand2 } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Loader2, Lock, Plus, Trash2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  cuantasCuotas, generarCalendario, repartirMilesimasEntre, vencimientoDe, type Frecuencia,
+  agregarCuota, cuantasCuotas, generarCalendario, repartirMilesimasEntre, vencimientoDe, type Frecuencia,
 } from '@/lib/administracion-escolar/calendario';
+import { hoyRD } from '@/lib/utils/format';
 
 /**
  * El calendario de cobro de un concepto: cuándo sale cada factura y por cuánto.
@@ -182,6 +183,21 @@ export function CalendarioCuotas({
       .map((f, i) => ({ ...f, numero: i + 1 }));
   }
 
+  /**
+   * Una fecha más, a mano. Para cobros de fechas sueltas (evaluaciones P1, P2,
+   * P3…) que no salen de una frecuencia: la fila nace un mes después de la
+   * última y se corrige en la tabla. El reparto vive en `agregarCuota`.
+   */
+  function agregar() {
+    const r = agregarCuota(filas, {
+      frecuencia, diaEmision,
+      fechaInicio: periodo?.fechaInicio, fechaFin: periodo?.fechaFin, hoy: hoyRD(),
+    });
+    if ('error' in r) { setError(r.error); return; }
+    setError(null);
+    setFilas(r.filas);
+  }
+
   function editar(i: number, campo: keyof FilaCuota, valor: string | number) {
     setFilas((xs) => xs.map((f, k) => (k === i ? { ...f, [campo]: valor } : f)));
   }
@@ -292,6 +308,10 @@ export function CalendarioCuotas({
             : ` · ${fmtFecha(periodo.fechaInicio!)} a ${fmtFecha(periodo.fechaFin!)}`}
         </span>
         <div className="flex-1" />
+        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={agregar}>
+          <Plus className="h-3.5 w-3.5" />
+          Agregar cuota
+        </Button>
         <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={regenerar} disabled={sinFechas}>
           <Wand2 className="h-3.5 w-3.5" />
           {filas.length === 0 ? 'Generar calendario' : 'Rehacer'}
@@ -311,6 +331,7 @@ export function CalendarioCuotas({
       {filas.length === 0 ? (
         <p className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-sm text-gray-500">
           Sin calendario. Se le cobrará todo de una vez el día que se matricule el alumno.
+          Genéralo desde la frecuencia o usa «Agregar cuota» para poner cada fecha a mano.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">

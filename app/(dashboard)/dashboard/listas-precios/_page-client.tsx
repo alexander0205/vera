@@ -25,6 +25,8 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import { Tag, Plus, Pencil, Trash2, Eye } from 'lucide-react';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface ListaPrecio {
   id: number;
@@ -67,6 +69,19 @@ const EMPTY_FORM = {
 };
 
 const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
+
+
+/** Imprimir / PDF / Excel de las listas de precios. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<ListaPrecio> = {
+  titulo: 'Listas de precios',
+  archivo: 'listas-precios',
+  columnas: [
+    { titulo: 'Nombre', valor: l => l.nombre, sub: l => l.descripcion, ancho: 2 },
+    { titulo: 'Tipo', valor: l => (l.tipo === 'porcentaje' ? 'Porcentaje' : 'Valor fijo'), ancho: 0.9 },
+    { titulo: 'Ajuste', valor: l => (l.tipo === 'porcentaje' ? `${l.esDescuento === 'true' ? '−' : '+'}${l.porcentaje} %` : null), ancho: 0.7 },
+    { titulo: 'Principal', valor: l => (l.esDefault === 'true' ? 'Sí' : null), ancho: 0.6 },
+  ],
+};
 
 export default function ListasPreciosPage() {
   const [listas, setListas]             = useState<ListaPrecio[]>([]);
@@ -179,10 +194,13 @@ export default function ListasPreciosPage() {
             Configura precios especiales o descuentos para diferentes clientes o grupos
           </Typography>
         </Box>
-        <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, listas, 'Todos los registros')} deshabilitado={listas.length === 0} testId="exportar-listas" />
+          <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
           sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nueva lista
         </Button>
+        </Box>
       </Box>
 
       <Box sx={cardSx}>

@@ -14,10 +14,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Cabecera, Seccion, Definiciones } from '../_piezas';
 import { PRUEBA, diasDePrueba, MORA, SOLO_LECTURA } from '@/lib/config/suscripcion';
+import { urlDelSitio } from '@/lib/config/enlaces';
 
 export const metadata: Metadata = {
   title: 'Términos y Condiciones · Zero',
   description: 'Las reglas del servicio: cuenta, planes, cobro, cancelación y responsabilidades.',
+  // Absoluta: el marco legal no tiene `metadataBase`, y una relativa saldría
+  // contra el host que sirvió la página (app., facturacion-v2.…).
+  alternates: { canonical: urlDelSitio('/terminos') },
 };
 
 const CORREO = 'soporte@zero.com.do';

@@ -7,6 +7,8 @@ import {
   Hash, Calendar, CheckCircle2, XCircle, AlertCircle, Star, Infinity,
 } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -107,6 +109,30 @@ function EstadoBadge({ estado }: { estado: Secuencia['estado'] }) {
     />
   );
 }
+
+
+const ESTADO_SEC: Record<Secuencia['estado'], string> = { activa: 'Activa', vencida: 'Vencida', agotada: 'Agotada' };
+const fechaCortaSec = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
+
+/**
+ * Imprimir / PDF / Excel de las numeraciones. Sin filtro de fecha: es la
+ * configuración de rangos; la fecha que importa (vencimiento) va en una columna.
+ */
+const EXPORTAR: ExportTabla<Secuencia> = {
+  titulo: 'Numeraciones de comprobantes',
+  archivo: 'numeraciones',
+  tachada: q => q.estado !== 'activa',
+  columnas: [
+    { titulo: 'Tipo', valor: q => `e${q.tipoEcf}`, ancho: 0.5 },
+    { titulo: 'Nombre', valor: q => q.nombre, sub: q => q.sucursal, ancho: 1.6 },
+    { titulo: 'Desde', valor: q => q.secuenciaDesde, ancho: 0.9 },
+    { titulo: 'Actual', valor: q => q.secuenciaActual, ancho: 0.9 },
+    { titulo: 'Hasta', valor: q => q.secuenciaHasta, ancho: 0.9 },
+    { titulo: 'Disponibles', valor: q => q.disponibles, tipo: 'numero', ancho: 0.8 },
+    { titulo: 'Vence', valor: q => (q.fechaVencimiento ? fechaCortaSec(q.fechaVencimiento) : null), ancho: 0.8 },
+    { titulo: 'Estado', valor: q => `${ESTADO_SEC[q.estado]}${q.preferida ? ' · preferida' : ''}`, ancho: 0.9 },
+  ],
+};
 
 export default function SecuenciasPage() {
   const [secuencias, setSecuencias] = useState<Secuencia[]>([]);
@@ -228,7 +254,9 @@ export default function SecuenciasPage() {
               </Box>
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap' }}>
+            <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, secuencias, 'Todas las numeraciones')}
+              deshabilitado={loading || secuencias.length === 0} testId="exportar-secuencias" />
             <IconButton size="small" onClick={cargar} disabled={loading}
               sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', color: 'text.secondary' }}>
               <RefreshCw style={{ width: 16, height: 16, animation: loading ? 'spin 1s linear infinite' : 'none' }} />

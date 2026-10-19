@@ -9,7 +9,8 @@ import { NextRequest } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { estadoResultados, type SeccionResultado } from '@/lib/contabilidad/estado-resultados';
 import { fechaValidaISO } from '@/lib/utils/format';
-import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx } from '@/lib/contabilidad/export-xlsx';
+import { DOP, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv } from '@/lib/contabilidad/export-xlsx';
+import { respuestaPdfContable } from '@/lib/contabilidad/export-pdf';
 
 export const maxDuration = 60;
 
@@ -51,5 +52,11 @@ export async function GET(req: NextRequest) {
   total(er.utilidadNetaCents >= 0 ? 'UTILIDAD NETA' : 'PÉRDIDA NETA', er.utilidadNetaCents);
 
   estilarEncabezado(ws);
+  if (sp.get('formato') === 'csv') return respuestaCsv(wb, 'estado-resultados.csv');
+  if (sp.get('formato') === 'pdf') return respuestaPdfContable(wb, {
+    teamId: auth.teamId, titulo: 'Estado de resultados', filename: 'estado-resultados.pdf',
+    desde: fechaValidaISO(sp.get('desde') ?? undefined), hasta: fechaValidaISO(sp.get('hasta') ?? undefined),
+    anchos: ['72%', '28%'], columnasMoneda: [1],
+  });
   return respuestaXlsx(wb, 'estado-resultados.xlsx');
 }

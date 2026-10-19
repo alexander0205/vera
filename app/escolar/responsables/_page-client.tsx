@@ -12,10 +12,15 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Paginador } from '@/components/ui/paginador';
+import { NativeSelect } from '@/components/ui/native-select';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { notaDeCorte } from '@/lib/export/paginas';
 
 /**
  * Las familias que pagan.
@@ -59,17 +64,46 @@ const traer = (u: string) => fetch(u).then((r) => {
 
 const POR_PAGINA = 25;
 
+
+/** Imprimir / PDF / Excel de las familias filtradas (todas las páginas). Sin filtro de fecha: es un padrón. */
+const EXPORTAR: ExportTabla<FilaResponsable> = {
+  titulo: 'Responsables de pago',
+  archivo: 'responsables-pago',
+  columnas: [
+    { titulo: 'Responsable', valor: f => f.razonSocial, sub: f => f.rnc, ancho: 2 },
+    // Los canales salen de la misma regla que el motor de avisos (destinoDeContacto).
+    { titulo: 'WhatsApp', valor: f => destinoDeContacto(f, 'whatsapp'), sub: f => destinoDeContacto(f, 'correo'), ancho: 1.3 },
+    { titulo: 'SMS / teléfono', valor: f => destinoDeContacto(f, 'sms') ?? f.telefono, ancho: 1 },
+    { titulo: 'Hijos', valor: f => f.alumnos, tipo: 'numero', total: true, ancho: 0.5 },
+    { titulo: 'Deuda escolar', valor: f => f.deudaEscolarCentavos, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Otras facturas', valor: f => f.deudaFacturasCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Vence más viejo', valor: f => (f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : null), ancho: 0.9 },
+  ],
+};
+
 export default function ResponsablesClient() {
   const { params, setParams } = useUrlParams();
   const filtro = params.get('filtro') ?? 'todos';
   const pagina = Number(params.get('p')) || 1;
+  /**
+   * Por concepto: las familias con cargos de UN cobro (el paseo que se le
+   * cargó a un grupo, los «Pago de más» a revisión). Lo daba «Cargos y deudas»
+   * antes de quitarla.
+   */
+  const concepto = params.get('concepto') ?? '';
+  const { can } = usePermissions();
+  const { data: catalogo } = useSWR<{ conceptos?: { id: number; nombre: string; activo: boolean }[] }>(
+    '/api/administracion-escolar/conceptos', traer, { revalidateOnFocus: false, dedupingInterval: 60_000 });
+  const conceptos = catalogo?.conceptos ?? [];
+  const nombreConcepto = conceptos.find((c) => String(c.id) === concepto)?.nombre ?? null;
+  const qsConcepto = concepto ? `&concepto=${encodeURIComponent(concepto)}` : '';
 
   // Lo que se teclea va aparte de lo que viaja: una consulta por tecla sobre
   // seiscientos contactos no adelanta nada.
   const [texto, setTexto] = useState(params.get('q') ?? '');
   const q = params.get('q') ?? '';
 
-  const url = `/api/administracion-escolar/responsables?filtro=${filtro}`
+  const url = `/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}`
     + `&limit=${POR_PAGINA}&offset=${(pagina - 1) * POR_PAGINA}`
     + (q ? `&q=${encodeURIComponent(q)}` : '');
   /**
@@ -77,6 +111,21 @@ export default function ResponsablesClient() {
    * `dedupingInterval` para que volver de la ficha de una familia no repita la
    * consulta pesada del listado: son cuatro LATERAL por contacto.
    */
+  async function armarExport() {
+    const filas: FilaResponsable[] = [];
+    let totalFamilias = 0;
+    for (let offset = 0; offset < 10000; offset += 200) {
+      const r = await fetch(`/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}&limit=200&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+      const d = await r.json().catch(() => null) as (Resp & { error?: string }) | null;
+      if (!r.ok || !d) throw new Error(d?.error ?? 'No se pudo leer el listado para exportarlo');
+      filas.push(...(d.filas ?? []));
+      totalFamilias = d.total ?? filas.length;
+      if ((d.filas ?? []).length < 200 || filas.length >= (d.total ?? 0)) break;
+    }
+    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, nombreConcepto ? `Concepto: ${nombreConcepto}` : null, q ? `Búsqueda: «${q}»` : null,
+      totalFamilias > filas.length ? notaDeCorte(filas.length, totalFamilias) : null].filter(Boolean).join(' · '));
+  }
+
   const { data, isLoading, error } = useSWR<Resp>(url, traer, {
     keepPreviousData: true,
     revalidateOnFocus: false,
@@ -120,6 +169,15 @@ export default function ResponsablesClient() {
           <p className="mt-1 text-sm text-gray-500">
             Las familias que pagan, con sus hijos y su deuda junta.
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Cobrarle lo mismo a un grupo (paseo, fotos): vivía en «Cargos y deudas». */}
+          {can('administracion-escolar:gestionar') && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/escolar/cobrar-grupo">Cobrar a un grupo</Link>
+            </Button>
+          )}
+          <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-responsables" />
         </div>
       </div>
 
@@ -170,18 +228,37 @@ export default function ResponsablesClient() {
             </Badge>
           </div>
 
+          {/* Buscador y concepto arriba; las pastillas en su propia línea: las
+              tres cosas juntas dejaban el buscador sin ancho. */}
+          <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
+            <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input className="pl-8" placeholder="Buscar por nombre, cédula o RNC…"
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setParams({ q: texto || null, p: null }); }} />
             </div>
+            <NativeSelect aria-label="Concepto" className="sm:!w-60 sm:shrink-0" value={concepto}
+              onChange={(e) => setParams({ concepto: e.target.value || null, p: null })}>
+              <option value="">Todos los conceptos</option>
+              {/* Mientras llega el catálogo, el concepto del enlace tiene su
+                  opción: sin ella el selector quedaba sin valor y el filtro se
+                  perdía al abrir un enlace con ?concepto=. */}
+              {concepto && !conceptos.some((c) => String(c.id) === concepto) && (
+                <option value={concepto}>Concepto seleccionado</option>
+              )}
+              {/* Los inactivos también: uno retirado del catálogo puede seguir con cargos vivos. */}
+              {conceptos.map((c) => (
+                <option key={c.id} value={String(c.id)}>{c.nombre}{c.activo === false ? ' (inactivo)' : ''}</option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {/* «Sin hijos activos» solo aparece si hay alguna: son las familias
                 que ya no tienen a nadie en el colegio ni deben nada. Salían
                 mezcladas con las que pagan este año y engordaban el contador. */}
-            {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['sin-contacto', 'Sin contacto'],
+            {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['por-facturar', 'Por facturar'], ['sin-contacto', 'Sin contacto'],
                ['sin-ficha', `Falta traerlas${data?.sinFicha ? ` (${data.sinFicha})` : ''}`],
                ...((data?.retiradas ?? 0) > 0 || filtro === 'retiradas'
                  ? [['retiradas', `Sin hijos activos${data?.retiradas ? ` (${data.retiradas})` : ''}`] as const]
@@ -189,7 +266,7 @@ export default function ResponsablesClient() {
               .map(([v, etiqueta]) => (
                 <button key={v} type="button"
                   onClick={() => setParams({ filtro: v === 'todos' ? null : v, p: null })}
-                  className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                  className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                     filtro === v
                       ? 'border-zero-600 bg-zero-600 font-medium text-white'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
@@ -197,6 +274,7 @@ export default function ResponsablesClient() {
                   {etiqueta}
                 </button>
               ))}
+          </div>
           </div>
 
           {error ? (
@@ -263,6 +341,15 @@ export default function ResponsablesClient() {
                           {f.deudaEscolarCentavos > 0
                             ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
+                          {f.delConcepto && nombreConcepto && (
+                            <span className="block text-xs text-zero-700">
+                              {nombreConcepto}: {f.delConcepto.cargos} cargo{f.delConcepto.cargos === 1 ? '' : 's'}
+                              {f.delConcepto.saldoCentavos > 0 ? `, debe ${fmtDOP(f.delConcepto.saldoCentavos)}` : ', pagado'}
+                            </span>
+                          )}
+                          {f.porFacturarCentavos > 0 && (
+                            <span className="block text-xs text-gray-500">{fmtDOP(f.porFacturarCentavos)} sin factura</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           {f.deudaFacturasCentavos > 0

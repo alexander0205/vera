@@ -19,6 +19,8 @@ import TableCell from '@mui/material/TableCell';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import { UserCheck, Plus, Pencil, Trash2, Search, AlertTriangle, X } from 'lucide-react';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Vendedor {
   id: number;
@@ -32,6 +34,20 @@ interface Vendedor {
 
 const EMPTY_FORM = { nombre: '', identificacion: '', observacion: '' };
 const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
+
+
+/** Imprimir / PDF / Excel de los vendedores. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Vendedor> = {
+  titulo: 'Vendedores',
+  archivo: 'vendedores',
+  tachada: v => v.activo === 'false',
+  columnas: [
+    { titulo: 'Nombre', valor: v => v.nombre, ancho: 1.8 },
+    { titulo: 'Identificación', valor: v => v.identificacion, ancho: 1 },
+    { titulo: 'Observación', valor: v => v.observacion, ancho: 2 },
+    { titulo: 'Estado', valor: v => (v.activo === 'false' ? 'Inactivo' : 'Activo'), ancho: 0.7 },
+  ],
+};
 
 export default function VendedoresPage() {
   const [vendedores, setVendedores]     = useState<Vendedor[]>([]);
@@ -117,10 +133,13 @@ export default function VendedoresPage() {
           </Box>
           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>Administra los vendedores y asígnalos a facturas</Typography>
         </Box>
-        <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, vendedores, 'Todos los registros')} deshabilitado={vendedores.length === 0} testId="exportar-vendedores" />
+          <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
           sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nuevo Vendedor
         </Button>
+        </Box>
       </Box>
 
       {/* Search bar */}

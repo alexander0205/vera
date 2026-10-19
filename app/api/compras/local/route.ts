@@ -121,10 +121,14 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const desde = sp.get('desde');
   const hasta = sp.get('hasta');
+  // Sin `limit` la consulta corta en 200 y «Todos los meses» perdía compras en
+  // silencio; la pantalla pide hasta 2000 (la consulta topa en 5000).
+  const limit = Number(sp.get('limit')) || undefined;
   const compras = await listarCompras(auth.teamId, {
     clase,
     desde: esFechaYMD(desde) ? desde : undefined,
     hasta: esFechaYMD(hasta) ? hasta : undefined,
+    limit,
   });
   return NextResponse.json({ compras });
 }

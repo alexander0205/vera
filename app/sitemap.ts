@@ -25,6 +25,8 @@ const RUTAS = [
   { ruta: '/colegios', prioridad: 0.8 },
   { ruta: '/precios', prioridad: 0.9 },
   { ruta: '/guias', prioridad: 0.7 },
+  { ruta: '/funciones', prioridad: 0.9 },
+  { ruta: '/agentes', prioridad: 0.7 },
   { ruta: '/contacto', prioridad: 0.6 },
   { ruta: '/terminos', prioridad: 0.2 },
   { ruta: '/privacidad', prioridad: 0.2 },

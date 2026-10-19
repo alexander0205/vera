@@ -45,7 +45,7 @@ const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',
@@ -95,6 +95,13 @@ const nextConfig: NextConfig = {
         destination: '/contabilidad/:seccion/:resto*',
         permanent: false,
       },
+      // «Cargos y deudas» (y su cobro por lote) se quitó del colegio: lo que
+      // debe cada familia está en Responsables con el filtro «Con deuda». Los
+      // marcadores y enlaces viejos llegan ahí en vez de a un 404. Temporal,
+      // por la misma razón que la de arriba.
+      // El cobro a un grupo volvió, en su propia ruta: el enlace viejo va ahí.
+      { source: '/escolar/cargos/lote', destination: '/escolar/cobrar-grupo', permanent: false },
+      { source: '/escolar/cargos/:resto*', destination: '/escolar/responsables?filtro=con-deuda', permanent: false },
     ];
   },
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser

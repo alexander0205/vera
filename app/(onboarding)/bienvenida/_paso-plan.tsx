@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import { Loader2, ArrowRight, Check } from 'lucide-react';
 import { terminar } from './actions';
+import { enviarEvento } from '@/lib/analytics/eventos';
 import type { ActionState } from '@/lib/auth/middleware';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import {
@@ -134,7 +135,14 @@ export function PasoPlan({ plan, linea, tamano, razonSocial }: {
         </p>
       </div>
 
-      <form action={formAction} className="mt-8 space-y-5">
+      <form
+        action={formAction}
+        // Analytics: pulsó «Empezar». Si el teléfono no pasa la validación
+        // vuelve a contar al reintentar; lo que de verdad terminó el alta lo
+        // dice la base (`onboarding_completado_en`), ver /admin/embudo.
+        onSubmit={() => enviarEvento('onboarding_submit', { plan: plan.key, linea })}
+        className="mt-8 space-y-5"
+      >
         <div>
           <label htmlFor="telefono" className="mb-2 block text-sm font-medium text-gray-700">
             Tu WhatsApp

@@ -65,6 +65,32 @@ export interface ContextoTarifa {
    * y entonces no hay excepción individual que aplicar.
    */
   estudianteId?: number | null;
+  /**
+   * La generación del alumno (`conceptoMensualidadId` de su matrícula).
+   *
+   * Un monto propio (beca `monto`) es LA mensualidad pactada, no un precio
+   * para todo lo que admite beca: con «Sala de tarea» también admitiendo beca
+   * (Mi Casita), la sala salía al mismo monto que la colegiatura. Con la
+   * generación conocida, el monto fijo solo va a ella. Sin ella (matrícula sin
+   * generación, pantallas previas) se sigue como antes.
+   */
+  conceptoMensualidadId?: number | null;
+}
+
+/**
+ * ¿La beca de la matrícula toca este concepto?
+ *
+ * El porcentaje descuenta en todo lo que admite beca. El monto fijo es el
+ * precio pactado de la mensualidad: si se sabe cuál es, solo esa.
+ */
+export function becaAplica(
+  ctx: Pick<ContextoTarifa, 'becaTipo' | 'conceptoMensualidadId'>,
+  conceptoId: number,
+  admiteBeca: boolean | null | undefined,
+): boolean {
+  if (!admiteBeca) return false;
+  if (ctx.becaTipo === 'monto' && ctx.conceptoMensualidadId) return conceptoId === ctx.conceptoMensualidadId;
+  return true;
 }
 
 /** Sube por la sección hasta encontrar el grado y el servicio de una sección. */
@@ -74,6 +100,7 @@ export async function contextoDeSeccion(
   seccionId: number,
   beca?: { tipo: string | null; valor: number | null },
   estudianteId?: number | null,
+  conceptoMensualidadId?: number | null,
 ): Promise<ContextoTarifa | null> {
   const [fila] = await db
     .select({ gradoId: adminEscolarCursos.gradoId, servicioId: adminEscolarGrados.servicioId })
@@ -90,6 +117,7 @@ export async function contextoDeSeccion(
     becaTipo: beca?.tipo ?? null,
     becaValor: beca?.valor ?? null,
     estudianteId: estudianteId ?? null,
+    conceptoMensualidadId: conceptoMensualidadId ?? null,
   };
 }
 
@@ -165,7 +193,7 @@ export async function resolverTarifas(
     // materiales y uniformes se cobran completos aunque el estudiante la tenga.
     // Cambia el monto pero conserva el servicio de facturación de la estructura,
     // para que el becado siga sumando en su grado y no en una bolsa aparte.
-    if (ctx.becaTipo && ctx.becaValor != null && admiteBeca.get(conceptoId)) {
+    if (ctx.becaTipo && ctx.becaValor != null && becaAplica(ctx, conceptoId, admiteBeca.get(conceptoId))) {
       // El porcentaje necesita saber sobre cuánto descuenta, así que sin tarifa
       // debajo no hay beca que aplicar. El monto pactado sí se sostiene solo.
       const conBeca = ctx.becaTipo === 'porcentaje'
@@ -203,6 +231,7 @@ export async function resolverTarifa(
       becaTipo:     adminEscolarMatriculas.becaTipo,
       becaValor:    adminEscolarMatriculas.becaValor,
       estudianteId: adminEscolarMatriculas.estudianteId,
+      conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
       gradoId:      adminEscolarCursos.gradoId,
       servicioId:   adminEscolarGrados.servicioId,
     })
@@ -272,7 +301,7 @@ export async function resolverTarifa(
     // `admiteBeca` y no la frecuencia: son cosas distintas. Un concepto puede
     // cobrarse en cuotas sin que la beca lo toque —el transporte se paga todos
     // los meses y no lo cubre la beca del colegio.
-    if (concepto?.admiteBeca) {
+    if (becaAplica(ctx, conceptoId, concepto?.admiteBeca)) {
       // El porcentaje necesita saber sobre cuánto descuenta, así que sin tarifa
       // debajo no hay beca que aplicar. El monto pactado sí se sostiene solo.
       const conBeca = ctx.becaTipo === 'porcentaje'

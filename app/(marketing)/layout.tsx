@@ -14,6 +14,8 @@
 import type { Metadata } from 'next';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { CapturaOrigen } from '@/components/analytics/captura-origen';
+import { MicrosoftClarity } from '@/components/analytics/microsoft-clarity';
 import { CabeceraMarketing } from './_cabecera';
 import { PieMarketing } from './_pie';
 import { BarraPrueba } from './_barra-prueba';
@@ -32,7 +34,7 @@ export const metadata: Metadata = {
     template: '%s · Zero',
   },
   description:
-    'Plataforma dominicana: ERP con facturación electrónica certificada ante la DGII, CRM con agentes de inteligencia artificial que atienden por WhatsApp y teléfono, punto de venta, nómina y gestión de colegios.',
+    'Plataforma dominicana: ERP con facturación electrónica directo a la DGII, CRM con agentes de inteligencia artificial que atienden por WhatsApp y teléfono, punto de venta, nómina y gestión de colegios.',
   applicationName: 'Zero',
   // Las palabras no son un ranking —Google las ignora hace años— pero sí las
   // leen los asistentes de IA cuando resumen de qué va un sitio, y es lo que
@@ -103,6 +105,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <PieMarketing />
       <BarraPrueba />
       <GoogleAnalytics />
+      <CapturaOrigen />
+      <MicrosoftClarity />
     </div>
   );
 }

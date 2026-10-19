@@ -11,7 +11,7 @@ import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { DataTable, type DataTableColumn, type ExportTabla } from '@/components/data-table';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtFechaCorta, fmtDOP, hoyRD } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -39,12 +39,34 @@ function tipoFromEncf(item: RecepcionEcfDto): string {
   return code ? (TIPO_LABELS[code] ?? `e${code}`) : '—';
 }
 
-function fmtMonto(item: RecepcionEcfDto): string {
+/** Monto del XML en centavos, o null si no viene. */
+function montoCents(item: RecepcionEcfDto): number | null {
   const xml = item.xmlFirmado ?? item.xmlOriginal;
   const m = xml?.match(/<MontoTotal>\s*([\d.]+)\s*<\/MontoTotal>/i);
-  if (!m) return '—';
-  return `RD$${Number(m[1]).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return m ? Math.round(Number(m[1]) * 100) : null;
 }
+
+function fmtMonto(item: RecepcionEcfDto): string {
+  const c = montoCents(item);
+  return c == null ? '—' : fmtDOP(c);
+}
+
+const fechaRecibida = (item: RecepcionEcfDto) => (item.fechaRecepcion ?? item.createdAt ?? '').slice(0, 10);
+
+/** Imprimir / PDF / Excel de los e-CF recibidos, como los filtra la tabla. */
+const EXPORTAR_RECIBIDAS: ExportTabla<RecepcionEcfDto> = {
+  titulo: 'e-CF recibidos',
+  archivo: 'ecf-recibidos',
+  tachada: i => i.estado === 'RECHAZADO',
+  columnas: [
+    { titulo: 'Fecha', valor: i => fmtFechaCorta(fechaRecibida(i)), ancho: 0.8 },
+    { titulo: 'Emisor (RNC)', valor: i => i.rncEmisor ?? i.rnc ?? null, ancho: 1.1 },
+    { titulo: 'e-NCF', valor: i => i.eNcf ?? null, ancho: 1.3 },
+    { titulo: 'Tipo', valor: i => tipoFromEncf(i), ancho: 0.9 },
+    { titulo: 'Estado', valor: i => ESTADO_CHIP[i.estado ?? 'PENDIENTE']?.label ?? i.estado ?? null, ancho: 0.9 },
+    { titulo: 'Monto', valor: i => montoCents(i), tipo: 'moneda', total: true, ancho: 1.1 },
+  ],
+};
 
 interface ComprasResponse { items?: RecepcionEcfDto[]; sinContribuyente?: boolean; error?: string }
 
@@ -145,6 +167,30 @@ const columnasRegistradas: DataTableColumn<FilaCompra>[] = [
   },
 ];
 
+const ESTADO_PAGO_OPC = [
+  { value: 'pagada',    label: 'Pagada' },
+  { value: 'por_pagar', label: 'Por pagar' },
+  { value: 'anulada',   label: 'Anulada' },
+];
+const estadoPagoCompra = (c: FilaCompra) => (c.estado === 'anulada' ? 'Anulada' : c.saldoCents > 0 ? 'Por pagar' : 'Pagada');
+
+/** Imprimir / PDF / Excel de las compras registradas, como las filtra la tabla. */
+const EXPORTAR_REGISTRADAS: ExportTabla<FilaCompra> = {
+  titulo: 'Compras registradas',
+  archivo: 'compras',
+  tachada: c => c.estado === 'anulada',
+  columnas: [
+    { titulo: 'Fecha', valor: c => fmtFechaCorta(c.fecha), ancho: 0.8 },
+    { titulo: 'Proveedor', valor: c => c.proveedorNombre ?? '—', sub: c => c.proveedorRnc, ancho: 2 },
+    { titulo: 'Comprobante', valor: c => c.ncf, sub: c => { const i = analizarNcf(c.ncf); return i.valido ? i.nombre : null; }, ancho: 1.3 },
+    { titulo: 'Pago', valor: estadoPagoCompra, ancho: 0.8 },
+    { titulo: 'ITBIS', valor: c => c.itbisCents, tipo: 'moneda', total: true, ancho: 0.9 },
+    { titulo: 'Retenciones', valor: c => c.retencionesCents || null, tipo: 'moneda', total: true, ancho: 0.9 },
+    { titulo: 'Por pagar', valor: c => (c.estado === 'anulada' ? null : c.saldoCents || null), tipo: 'moneda', total: true, ancho: 0.9 },
+    { titulo: 'Total', valor: c => c.montoTotal, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
+
 function Tarjeta({ titulo, valor, sub, destacado }: { titulo: string; valor: string; sub?: string; destacado?: boolean }) {
   return (
     <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', p: 1.75, bgcolor: destacado ? '#eef2fe' : '#fff', minWidth: 0 }}>
@@ -162,17 +208,47 @@ export default function ComprasPage() {
   const canVerRegistradas = canRegistrar || can('productos:ver');
 
   const hoy = hoyRD();
-  const [mes, setMes] = useState(hoy.slice(0, 7));
   const [tab, setTab] = useState<'registradas' | 'recibidas'>('registradas');
-  const rango = mes ? rangoDelMes(mes) : null;
+  // El rango de fechas vive en el filtro de la tabla; el selector de mes es un
+  // atajo que lo rellena. Arranca en el mes actual, como antes.
+  const mesActual = rangoDelMes(hoy.slice(0, 7));
+  const [filtros, setFiltros] = useState<Record<string, string>>({ fecha_desde: mesActual.inicio, fecha_hasta: mesActual.fin });
+  const [filtrosRec, setFiltrosRec] = useState<Record<string, string>>({});
+  const mes = ultimosMeses(hoy).find(m => { const r = rangoDelMes(m); return r.inicio === filtros.fecha_desde && r.fin === filtros.fecha_hasta; }) ?? '';
+  const sinFechas = !filtros.fecha_desde && !filtros.fecha_hasta;
 
   const { data: recibidas, isLoading: cargandoRecibidas } = useSWR<ComprasResponse>(
     !permLoading && canVerRecibidas && tab === 'recibidas' ? '/api/compras' : null, fetcher, { revalidateOnFocus: false },
   );
   const { data: registradas, isLoading: cargandoRegistradas } = useSWR<{ compras?: FilaCompra[]; error?: string }>(
-    !permLoading && canVerRegistradas ? `/api/compras/local?clase=compra${rango ? `&desde=${rango.inicio}&hasta=${rango.fin}` : ''}` : null, fetcher,
+    !permLoading && canVerRegistradas
+      ? `/api/compras/local?clase=compra&limit=2000${filtros.fecha_desde ? `&desde=${filtros.fecha_desde}` : ''}${filtros.fecha_hasta ? `&hasta=${filtros.fecha_hasta}` : ''}`
+      : null, fetcher,
   );
-  const compras = registradas?.compras ?? [];
+  // Búsqueda y estado de pago, sobre lo que trajo el rango.
+  const compras = useMemo(() => {
+    let rows = registradas?.compras ?? [];
+    const q = (filtros.q ?? '').trim().toLowerCase();
+    if (q) rows = rows.filter(c =>
+      (c.proveedorNombre ?? '').toLowerCase().includes(q) ||
+      (c.proveedorRnc ?? '').toLowerCase().includes(q) ||
+      (c.ncf ?? '').toLowerCase().includes(q),
+    );
+    if (filtros.estado === 'anulada')   rows = rows.filter(c => c.estado === 'anulada');
+    if (filtros.estado === 'pagada')    rows = rows.filter(c => c.estado !== 'anulada' && c.saldoCents === 0);
+    if (filtros.estado === 'por_pagar') rows = rows.filter(c => c.estado !== 'anulada' && c.saldoCents > 0);
+    return rows;
+  }, [registradas, filtros.q, filtros.estado]);
+
+  const recibidasFiltradas = useMemo(() => {
+    let rows = recibidas?.items ?? [];
+    const q = (filtrosRec.q ?? '').trim().toLowerCase();
+    if (q) rows = rows.filter(i => `${i.rncEmisor ?? i.rnc ?? ''} ${i.eNcf ?? ''}`.toLowerCase().includes(q));
+    if (filtrosRec.estado) rows = rows.filter(i => (i.estado ?? 'PENDIENTE') === filtrosRec.estado);
+    if (filtrosRec.fecha_desde) rows = rows.filter(i => fechaRecibida(i) >= filtrosRec.fecha_desde);
+    if (filtrosRec.fecha_hasta) rows = rows.filter(i => fechaRecibida(i) <= filtrosRec.fecha_hasta);
+    return rows;
+  }, [recibidas, filtrosRec]);
 
   const resumen = useMemo(() => {
     const vivas = compras.filter(c => c.estado === 'registrada');
@@ -224,9 +300,17 @@ export default function ComprasPage() {
       {tab === 'registradas' && canVerRegistradas && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <NativeSelect aria-label="Mes" value={mes} onChange={e => setMes(e.target.value)} style={{ width: 'auto', height: 34 }}>
+            <NativeSelect aria-label="Mes" value={mes || (sinFechas ? 'todos' : 'rango')} style={{ width: 'auto', height: 34 }}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === 'rango') return;
+                if (v === 'todos') { setFiltros(f => ({ ...f, fecha_desde: '', fecha_hasta: '' })); return; }
+                const r = rangoDelMes(v);
+                setFiltros(f => ({ ...f, fecha_desde: r.inicio, fecha_hasta: r.fin }));
+              }}>
               {ultimosMeses(hoy).map(m => <option key={m} value={m}>{nombreMes(m)}</option>)}
-              <option value="">Todos los meses</option>
+              {!mes && !sinFechas && <option value="rango">Rango personalizado</option>}
+              <option value="todos">Todos los meses</option>
             </NativeSelect>
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }} data-testid="resumen-compras">
@@ -241,9 +325,17 @@ export default function ComprasPage() {
             columns={columnasRegistradas}
             rowHref={c => `/dashboard/compras/local/${c.id}`}
             title="Compras registradas"
+            filters={[
+              { type: 'search', id: 'q', placeholder: 'Buscar proveedor, RNC o comprobante…' },
+              { type: 'select', id: 'estado', label: 'Pago', placeholder: 'Todos los estados', options: ESTADO_PAGO_OPC },
+              { type: 'daterange', id: 'fecha' },
+            ]}
+            filterValues={filtros}
+            onFilterChange={setFiltros}
+            exportar={EXPORTAR_REGISTRADAS}
             emptyState={{
               icon: PackagePlus,
-              title: mes ? `No hay compras registradas en ${nombreMes(mes).toLowerCase()}` : 'No has registrado compras',
+              title: filtros.q || filtros.estado ? 'Ninguna compra coincide con los filtros' : mes ? `No hay compras registradas en ${nombreMes(mes).toLowerCase()}` : 'No hay compras en este rango',
               hint: 'Registra el comprobante de tu proveedor: suma inventario, arma el 606 y va a contabilidad.',
             }}
           />
@@ -254,10 +346,21 @@ export default function ComprasPage() {
         <>
           {recibidas?.error && <Alert severity="error" sx={{ borderRadius: '10px' }}>{recibidas.error}</Alert>}
           <DataTable<RecepcionEcfDto>
-            data={recibidas?.items ?? []}
+            data={recibidasFiltradas}
             loading={permLoading || cargandoRecibidas}
             columns={columnasRecibidas(canRegistrar)}
             title="e-CF recibidos"
+            filters={[
+              { type: 'search', id: 'q', placeholder: 'Buscar RNC o e-NCF…' },
+              {
+                type: 'select', id: 'estado', label: 'Estado', placeholder: 'Todos los estados',
+                options: Object.entries(ESTADO_CHIP).map(([value, c]) => ({ value, label: c.label })),
+              },
+              { type: 'daterange', id: 'fecha' },
+            ]}
+            filterValues={filtrosRec}
+            onFilterChange={setFiltrosRec}
+            exportar={EXPORTAR_RECIBIDAS}
             emptyState={{
               icon: recibidas?.sinContribuyente ? ShoppingCart : FileText,
               title: recibidas?.sinContribuyente ? 'Tu empresa aún no está registrada para recibir e-CF' : 'No has recibido e-CF todavía',
