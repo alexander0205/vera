@@ -3719,6 +3719,12 @@ export const whatsappPlantillas = pgTable('whatsapp_plantillas', {
   /** NULL = disponible para todos los negocios. */
   teamId: integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
 
+  /**
+   * El aviso al que se asignará cuando Meta la apruebe. NULL = ninguno.
+   * Ver lib/whatsapp/plantillas-servicio.ts.
+   */
+  avisoDestino: varchar('aviso_destino', { length: 32 }),
+
   /** Mientras es borrador no existe en Meta y se puede editar. */
   borrador:   boolean('borrador').notNull().default(true),
   metaId:     varchar('meta_id', { length: 128 }),
@@ -3770,6 +3776,40 @@ export const whatsappMensajes = pgTable('whatsapp_mensajes', {
 }, (t) => ({
   teamIdx: index('whatsapp_mensajes_team_idx').on(t.teamId, t.recibidoEn),
 }));
+
+// ── Asistente de Zero (solo lectura) — ver migración 0193_asistente_zero.sql ──
+export const asistenteConversaciones = pgTable('asistente_conversaciones', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  userId:        integer('user_id').notNull().references(() => users.id),
+  titulo:        varchar('titulo', { length: 120 }),
+  creadaEn:      timestamp('creada_en').notNull().defaultNow(),
+  actualizadaEn: timestamp('actualizada_en').notNull().defaultNow(),
+  derivadaTicketId: integer('derivada_ticket_id'),
+}, (t) => ({
+  userIdx: index('asistente_conv_user_idx').on(t.teamId, t.userId, t.actualizadaEn),
+}));
+
+export const asistenteMensajes = pgTable('asistente_mensajes', {
+  id:             serial('id').primaryKey(),
+  conversacionId: integer('conversacion_id').notNull()
+    .references(() => asistenteConversaciones.id, { onDelete: 'cascade' }),
+  rol:            varchar('rol', { length: 12 }).notNull(),
+  contenido:      text('contenido').notNull(),
+  herramientas:   jsonb('herramientas').$type<{ nombre: string; resumen: string }[]>(),
+  /** 1 = útil, -1 = no útil, null = sin valorar (migración 0194). */
+  valoracion:     smallint('valoracion'),
+  valoracionMotivo: varchar('valoracion_motivo', { length: 40 }),
+  valoradoEn:     timestamp('valorado_en'),
+  /** 'local' (contestador automático) o 'ia' (modelo); null en mensajes anteriores a 0196. */
+  origen:         varchar('origen', { length: 8 }),
+  creadoEn:       timestamp('creado_en').notNull().defaultNow(),
+}, (t) => ({
+  convIdx: index('asistente_msg_conv_idx').on(t.conversacionId, t.id),
+}));
+
+export type AsistenteConversacion = typeof asistenteConversaciones.$inferSelect;
+export type AsistenteMensaje = typeof asistenteMensajes.$inferSelect;
 
 export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
 export type WhatsappMensaje = typeof whatsappMensajes.$inferSelect;

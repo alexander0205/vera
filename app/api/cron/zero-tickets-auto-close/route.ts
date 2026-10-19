@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, lt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { tickets, ticketMessages } from '@/lib/db/schema';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 // Umbral de inactividad (minutos) tras el cual un ticket "abierto" se cierra
 // automáticamente. Fácil de ajustar.
@@ -20,7 +21,7 @@ const INACTIVIDAD_MINUTOS = 30;
 // no dependen de eso (ver `esConversacionViva` en lib/sondeo/intervalos.ts).
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

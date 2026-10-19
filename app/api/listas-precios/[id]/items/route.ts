@@ -9,6 +9,7 @@ import { listasPrecios, listasPrecios_items, products } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 async function verifyOwnership(listId: number, teamId: number) {
   const [row] = await db.select({ id: listasPrecios.id }).from(listasPrecios)
@@ -36,7 +37,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       precioBase: products.precio,
     })
     .from(listasPrecios_items)
-    .innerJoin(products, eq(listasPrecios_items.productoId, products.id))
+    // Solo productos de esta empresa: una referencia ajena no debe enseñar nombre ni precio.
+    .innerJoin(products, and(eq(listasPrecios_items.productoId, products.id), eq(products.teamId, teamId)))
     .where(eq(listasPrecios_items.listaPreciosId, listId));
 
   return NextResponse.json({ items: rows });
@@ -60,6 +62,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
+
+    // El producto tiene que ser de esta empresa.
+    const errRefs = await validarReferenciasDeEmpresa(teamId, { productoIds: [parsed.data.productoId] });
+    if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
     // Upsert: actualizar si existe, crear si no
     const existing = await db.select().from(listasPrecios_items)

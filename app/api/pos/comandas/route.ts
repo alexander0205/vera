@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { getComandaAbierta, abrirComanda } from '@/lib/pos/restaurante';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 export async function GET(req: NextRequest) {
   const auth = await requirePermission('pos:vender');
@@ -35,6 +36,11 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
   }
+  const errRefs = await validarReferenciasDeEmpresa(auth.teamId, {
+    terminalId: parsed.data.terminalId, mesaId: parsed.data.mesaId,
+    miembroUserId: parsed.data.meseroId ?? null, turnoId: parsed.data.turnoId ?? null,
+  });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
   try {
     const comanda = await abrirComanda({
       teamId:     auth.teamId,

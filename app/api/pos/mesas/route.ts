@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { listarMesas, crearMesa } from '@/lib/pos/restaurante';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 export async function GET(req: NextRequest) {
   const auth = await requirePermission('pos:vender');
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
   }
+
+  const errRefs = await validarReferenciasDeEmpresa(teamId, { terminalId: parsed.data.terminalId });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
   try {
     const mesa = await crearMesa(teamId, parsed.data.terminalId, parsed.data.nombre, parsed.data.zona ?? null);

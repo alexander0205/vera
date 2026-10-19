@@ -29,6 +29,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/asistente-retencion",
+      "schedule": "0 8 * * 0"
+    },
+    {
       "path": "/api/cron/zero-tickets-auto-close",
       "schedule": "*/10 11-23 * * *"
     },

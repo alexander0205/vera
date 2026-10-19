@@ -165,7 +165,7 @@ export default function ClientesPage() {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin clientes registrados',
           hint: search ? undefined : 'Crea tu primer cliente o aparecerán automáticamente al emitir facturas',
           cta: search ? undefined : (
-            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo} data-tour="cliente-nuevo"
               startIcon={<Plus style={{ width: 14, height: 14 }} />}
               sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
               Nuevo cliente
@@ -179,7 +179,7 @@ export default function ClientesPage() {
               sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
               Importar CSV
             </MuiButton>
-            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo} data-tour="cliente-nuevo"
               startIcon={<Plus style={{ width: 14, height: 14 }} />}
               sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
               Nuevo cliente

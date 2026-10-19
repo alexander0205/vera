@@ -6,6 +6,7 @@ import { corridasDelDia } from '@/lib/nomina/programacion';
 import { normalizarTipoCorrida } from '@/lib/nomina/corrida';
 import { generarCorrida } from '@/lib/nomina/generar-corrida';
 import { hoyRD } from '@/lib/utils/format';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 /**
  * Cron diario de nómina automática. Por cada empresa con la programación
@@ -19,7 +20,7 @@ import { hoyRD } from '@/lib/utils/format';
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

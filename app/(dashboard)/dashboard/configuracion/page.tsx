@@ -365,7 +365,7 @@ export default function ConfiguracionPage() {
     <div className="p-4 sm:p-6 min-h-full flex flex-col">
       <div className="flex flex-col flex-1 gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-tour="empresa-datos">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Configuración del negocio</h1>
           <p className="text-sm text-gray-500 mt-1">

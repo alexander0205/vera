@@ -11,13 +11,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { syncAllCatalogos } from '@/lib/dgii/sync-catalogos';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 export const maxDuration = 60;
 export const dynamic    = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

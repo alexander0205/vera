@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/payments/stripe';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { puedeEnEmpresa } from '@/lib/seguridad/permisos';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -34,6 +35,10 @@ export async function POST(req: NextRequest) {
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'No hay empresa activa' }, { status: 400 });
+  // Cambiar el plan toca la facturación de la empresa: solo quien administra la configuración.
+  if (!(await puedeEnEmpresa(user, teamId, 'configuracion:gestionar'))) {
+    return NextResponse.json({ error: 'Solo quien administra la empresa puede cambiar el plan' }, { status: 403 });
+  }
 
   const { newPriceId, confirmado } = await req.json() as {
     newPriceId?: string;
@@ -214,6 +219,9 @@ export async function DELETE() {
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'No hay empresa activa' }, { status: 400 });
+  if (!(await puedeEnEmpresa(user, teamId, 'configuracion:gestionar'))) {
+    return NextResponse.json({ error: 'Solo quien administra la empresa puede cambiar el plan' }, { status: 403 });
+  }
 
   const team = await getTeam(teamId);
   if (!team?.stripeSubscriptionId || !team.stripeCustomerId) {

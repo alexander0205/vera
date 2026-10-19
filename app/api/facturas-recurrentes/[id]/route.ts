@@ -12,6 +12,7 @@ import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and, ne, desc, sql } from 'drizzle-orm';
 import { esTipoEcfRecurrenteValido, esTipoVentaFiscal } from '@/lib/ecf/categorias';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -191,6 +192,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   if (isNaN(numId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const body = await req.json();
+
+  // El cliente y los productos del plan tienen que ser de esta empresa.
+  const errRefs = await validarReferenciasDeEmpresa(teamId, {
+    clientId: typeof body.clientId === 'number' ? body.clientId : null,
+    productoIds: Array.isArray(body.items) ? body.items.map((i: { productoId?: unknown }) => (typeof i?.productoId === 'number' ? i.productoId : null)) : [],
+  });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
   // Validar estado contra whitelist (evita strings arbitrarios que confundan al cron/UI)
   const ESTADOS_VALIDOS = ['activa', 'pausada', 'finalizada'] as const;

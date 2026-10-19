@@ -9,10 +9,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getUser } from '@/lib/db/queries';
 import { calcularTotales } from '@/lib/ecf/types';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 
 export async function POST(request: NextRequest) {
+  // Es una herramienta de depuración que calcula con lo que recibe: solo con sesión iniciada.
+  if (!(await getUser())) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
   const body = await request.json();
 
   const {
