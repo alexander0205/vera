@@ -403,7 +403,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           alignSelf: { xs: 'flex-start', md: 'center' },
         }}>
           <Button asChild variant="outline" size="sm">
-            <Link href={`/dashboard/clientes/${clientId}/editar`}>
+            <Link href={`/dashboard/clientes/${clientId}/editar?volver=${encodeURIComponent(`/escolar/responsables/${clientId}`)}`}>
               <Pencil className="mr-1.5 h-4 w-4" />Editar contacto
             </Link>
           </Button>
