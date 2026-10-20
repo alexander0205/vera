@@ -22,17 +22,19 @@ export interface PantallaDef {
   label: string;
   /** Ruta que abre la pantalla; todo lo que cuelga de ella cuenta como suya. */
   href: string;
+  /** Una línea para quien decide: qué se hace en esa pantalla. */
+  descripcion: string;
 }
 
 export const PANTALLAS_ESCOLAR: PantallaDef[] = [
-  { id: 'escolar-panorama',      href: '/escolar/dashboard',     label: 'Panorama' },
-  { id: 'escolar-matriculas',    href: '/escolar/matriculas',    label: 'Matriculación' },
-  { id: 'escolar-estudiantes',   href: '/escolar/estudiantes',   label: 'Estudiantes y padres' },
-  { id: 'escolar-documentos',    href: '/escolar/documentos',    label: 'Documentos' },
-  { id: 'escolar-responsables',  href: '/escolar/responsables',  label: 'Responsables' },
-  { id: 'escolar-pagos',         href: '/escolar/pagos',         label: 'Pagos' },
-  { id: 'escolar-avisos',        href: '/escolar/avisos',        label: 'Avisos' },
-  { id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración' },
+  { id: 'escolar-panorama',      href: '/escolar/dashboard',     label: 'Panorama', descripcion: 'Resumen del colegio: cobros, deuda y matrícula' },
+  { id: 'escolar-matriculas',    href: '/escolar/matriculas',    label: 'Matriculación', descripcion: 'Inscribir alumnos en un curso' },
+  { id: 'escolar-estudiantes',   href: '/escolar/estudiantes',   label: 'Estudiantes y padres', descripcion: 'Fichas de los alumnos y de sus padres' },
+  { id: 'escolar-documentos',    href: '/escolar/documentos',    label: 'Documentos', descripcion: 'Documentos requeridos y formularios' },
+  { id: 'escolar-responsables',  href: '/escolar/responsables',  label: 'Responsables', descripcion: 'Las familias que pagan y lo que deben' },
+  { id: 'escolar-pagos',         href: '/escolar/pagos',         label: 'Pagos', descripcion: 'Pagos aplicados y comprobantes por aprobar' },
+  { id: 'escolar-avisos',        href: '/escolar/avisos',        label: 'Avisos', descripcion: 'Recordatorios de cobro que se enviaron' },
+  { id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', descripcion: 'Períodos, cursos, tarifas y conceptos' },
 ];
 
 const IDS = new Set(PANTALLAS_ESCOLAR.map(p => p.id));

@@ -27,7 +27,10 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import ButtonBase from '@mui/material/ButtonBase';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { MatrizPantallas } from '@/components/administracion-escolar/PantallasPorRol';
+import {
+  MatrizPantallas, PantallasDelRol, ResumenPantallas, usePantallasPorRol,
+  type RolPantallas,
+} from '@/components/administracion-escolar/PantallasPorRol';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface PermDef { key: string; label: string }
@@ -62,6 +65,8 @@ export default function PermisosClient() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const { modules } = usePermissions();
+  const conColegio = modules.includes('escolar');
+  const { data: pantallas } = usePantallasPorRol(conColegio);
 
   const selected = data?.roles.find(r => r.id === selectedId) ?? null;
 
@@ -85,6 +90,7 @@ export default function PermisosClient() {
       <RoleEditor
         role={selected}
         catalog={data.catalog}
+        conColegio={conColegio}
         onBack={() => setSelectedId(null)}
         onSaved={() => mutate()}
         onDeleted={() => { setSelectedId(null); mutate(); }}
@@ -101,10 +107,11 @@ export default function PermisosClient() {
         roles={data.roles}
         onSelect={setSelectedId}
         onCreate={() => setShowCreate(true)}
+        pantallas={conColegio ? pantallas : undefined}
       />
-      {modules.includes('escolar') && (
+      {conColegio && (
         <Box sx={{ px: { xs: 2, sm: 3 }, pb: 3 }}>
-          <MatrizPantallas />
+          <MatrizPantallas onAbrirRol={setSelectedId} />
         </Box>
       )}
       {showCreate && (
@@ -119,10 +126,12 @@ export default function PermisosClient() {
 }
 
 // ─── Lista de roles ───────────────────────────────────────────────────────────
-function RolesList({ roles, onSelect, onCreate }: {
+function RolesList({ roles, onSelect, onCreate, pantallas }: {
   roles: Role[];
   onSelect: (id: number) => void;
   onCreate: () => void;
+  /** Pantallas del colegio por rol; solo si la empresa tiene el módulo. */
+  pantallas?: { pantallas: unknown[]; roles: RolPantallas[] };
 }) {
   return (
     // La página se renderiza directo dentro del área de contenido (que no trae
@@ -212,6 +221,10 @@ function RolesList({ roles, onSelect, onCreate }: {
                     >
                       {r.isSystem ? 'sistema' : 'personalizado'}
                     </Box>
+                    {(() => {
+                      const rp = pantallas?.roles.find(x => x.id === r.id);
+                      return rp ? <ResumenPantallas rol={rp} total={pantallas!.pantallas.length} /> : null;
+                    })()}
                   </Box>
                   <Box
                     sx={{
@@ -331,9 +344,11 @@ function MiPinCard() {
 }
 
 // ─── Editor de un rol ─────────────────────────────────────────────────────────
-function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
+function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
   role: Role;
   catalog: PermGroup[];
+  /** La empresa tiene Administración Escolar: se muestran sus pantallas. */
+  conColegio: boolean;
   onBack: () => void;
   onSaved: () => void;
   onDeleted: () => void;
@@ -523,6 +538,10 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
         >
           <AlertTriangle style={{ width: 16, height: 16 }} /> {error}
         </Box>
+      )}
+
+      {conColegio && (
+        <PantallasDelRol roleId={role.id} moduloActivo={isOwner || perms.has('modulo:escolar')} />
       )}
 
       <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>

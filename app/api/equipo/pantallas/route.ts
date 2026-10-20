@@ -1,7 +1,8 @@
 /**
  * GET /api/equipo/pantallas — qué pantallas tiene apagadas cada rol.
  * PUT /api/equipo/pantallas — enciende o apaga una pantalla para un rol.
- *       body: { roleId: number, pantalla: string, visible: boolean }
+ *       body: { roleId: number, pantalla: string | string[], visible: boolean }
+ *       (varias a la vez para «Todas» / «Ninguna»)
  *
  * El Propietario no se puede tocar: siempre ve todo.
  * Catálogo de pantallas: lib/config/pantallas.ts.
@@ -12,7 +13,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { listTeamRoles } from '@/lib/auth/permissions';
-import { ocultasPorRol, fijarPantalla } from '@/lib/auth/pantallas';
+import { ocultasPorRol, fijarPantallas } from '@/lib/auth/pantallas';
 import { PANTALLAS_ESCOLAR, esPantalla } from '@/lib/config/pantallas';
 
 export async function GET() {
@@ -28,6 +29,8 @@ export async function GET() {
       key: r.key,
       label: r.label,
       ocultas: ocultas.get(r.id) ?? [],
+      // Sin 'modulo:escolar' el rol ni entra al colegio: sus pantallas no aplican.
+      tieneModulo: r.permissions.includes('modulo:escolar'),
     })),
   });
 }
@@ -39,7 +42,8 @@ export async function PUT(req: Request) {
 
   const body = await req.json().catch(() => null);
   const roleId = Number(body?.roleId);
-  if (!Number.isInteger(roleId) || !esPantalla(body?.pantalla) || typeof body?.visible !== 'boolean') {
+  const pantallas: unknown[] = Array.isArray(body?.pantalla) ? body.pantalla : [body?.pantalla];
+  if (!Number.isInteger(roleId) || !pantallas.every(esPantalla) || typeof body?.visible !== 'boolean') {
     return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
   }
 
@@ -49,6 +53,6 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'El Propietario siempre ve todas las pantallas' }, { status: 403 });
   }
 
-  await fijarPantalla(roleId, body.pantalla, body.visible);
+  await fijarPantallas(roleId, pantallas as string[], body.visible);
   return NextResponse.json({ ok: true });
 }

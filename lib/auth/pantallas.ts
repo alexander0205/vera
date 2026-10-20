@@ -43,16 +43,17 @@ export async function pantallasOcultasDe(
   return (await ocultasPorRol(teamId)).get(rol.id) ?? [];
 }
 
-/** Enciende o apaga una pantalla para un rol. Idempotente. */
-export async function fijarPantalla(teamRoleId: number, pantalla: string, visible: boolean) {
+/** Enciende o apaga varias pantallas para un rol. Idempotente. */
+export async function fijarPantallas(teamRoleId: number, pantallas: string[], visible: boolean) {
+  if (pantallas.length === 0) return;
   if (visible) {
     await db.delete(teamRolePantallasOcultas).where(and(
       eq(teamRolePantallasOcultas.teamRoleId, teamRoleId),
-      eq(teamRolePantallasOcultas.pantalla, pantalla),
+      inArray(teamRolePantallasOcultas.pantalla, pantallas),
     ));
   } else {
     await db.insert(teamRolePantallasOcultas)
-      .values({ teamRoleId, pantalla })
+      .values(pantallas.map(pantalla => ({ teamRoleId, pantalla })))
       .onConflictDoNothing();
   }
 }
