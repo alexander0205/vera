@@ -1,7 +1,9 @@
-import { requirePermission } from '@/lib/auth/page-guard';
-import PermisosClient from './_permisos-client';
+import { redirect } from 'next/navigation';
 
-export default async function PermisosPage() {
-  await requirePermission('equipo:gestionar');
-  return <PermisosClient />;
+/**
+ * Roles y permisos viven en Administración (/cuenta/roles), junto a Usuarios y
+ * Mi empresa. Esta dirección se queda para los enlaces y marcadores viejos.
+ */
+export default function PermisosPage() {
+  redirect('/cuenta/roles');
 }

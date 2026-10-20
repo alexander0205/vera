@@ -61,7 +61,7 @@ function Icon({ name, style }: { name: string | null; style?: React.CSSPropertie
 
 const fetcher = (url: string) => fetch(url).then(r => (r.ok ? r.json() : Promise.reject(r)));
 
-export default function PermisosClient() {
+export default function RolesClient() {
   const { data, isLoading, mutate } = useSWR<Data>('/api/equipo/permisos', fetcher);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -77,7 +77,7 @@ export default function PermisosClient() {
 
   if (isLoading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 10, color: '#9ca3af' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 10, color: '#6b7280' }}>
         <CircularProgress size={20} color="inherit" />
       </Box>
     );
@@ -105,9 +105,6 @@ export default function PermisosClient() {
 
   return (
     <>
-      <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
-        <MiPinCard />
-      </Box>
       <RolesList
         roles={data.roles}
         onSelect={setSelectedId}
@@ -119,6 +116,9 @@ export default function PermisosClient() {
           <MatrizPantallas modulosEmpresa={modulosEmpresa} onAbrirRol={setSelectedId} />
         </Box>
       )}
+      <Box sx={{ px: { xs: 2, sm: 3 }, pb: 3 }}>
+        <MiPinCard />
+      </Box>
       {showCreate && (
         <CreateRoleDialog
           roles={data.roles}
@@ -247,13 +247,13 @@ function RolesList({ roles, onSelect, onCreate, gobernanza }: {
               <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.5 }}>
                 <Box
                   component="span"
-                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#9ca3af' }}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#6b7280' }}
                 >
                   <User style={{ width: 14, height: 14 }} />{r.memberCount}
                 </Box>
                 {isOwner
-                  ? <Lock style={{ width: 16, height: 16, color: '#9ca3af' }} />
-                  : <Pencil style={{ width: 16, height: 16, color: '#9ca3af' }} />}
+                  ? <Lock style={{ width: 16, height: 16, color: '#6b7280' }} />
+                  : <Pencil style={{ width: 16, height: 16, color: '#6b7280' }} />}
               </Box>
             </ButtonBase>
           );
@@ -302,7 +302,7 @@ function MiPinCard() {
           <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: editando ? 1.5 : 0 }}>
             Con tu PIN autorizas que un cajero quite un ítem de un recibo ya cobrado.
             {data && (
-              <Box component="span" sx={{ ml: 0.75, fontWeight: 600, color: data.tienePin ? '#059669' : '#9ca3af' }}>
+              <Box component="span" sx={{ ml: 0.75, fontWeight: 600, color: data.tienePin ? '#059669' : '#6b7280' }}>
                 {data.tienePin ? '· Configurado' : '· Sin configurar'}
               </Box>
             )}
@@ -490,12 +490,12 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
                   <IconButton
                     onClick={() => setEditingLabel(true)}
                     size="small"
-                    sx={{ color: '#9ca3af', p: 0.25, '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
+                    sx={{ color: '#6b7280', p: 0.25, '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
                   >
                     <Pencil style={{ width: 14, height: 14 }} />
                   </IconButton>
                 )}
-                {isOwner && <Lock style={{ width: 16, height: 16, color: '#9ca3af' }} />}
+                {isOwner && <Lock style={{ width: 16, height: 16, color: '#6b7280' }} />}
               </Box>
             )}
             <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
@@ -514,7 +514,7 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
                 textTransform: 'none',
                 color: '#dc2626',
                 borderColor: '#d1d5db',
-                '&:hover': { color: '#b91c1c', borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+                '&:hover': { color: '#b91c1c', borderColor: '#6b7280', bgcolor: '#f9fafb' },
               }}
             >
               Borrar
@@ -586,6 +586,8 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
       {modulosEmpresa.length > 0 && (
         <ButtonBase
           onClick={() => setAvanzado(a => !a)}
+          aria-expanded={avanzado}
+          aria-controls="otros-permisos"
           sx={{
             display: 'flex', justifyContent: 'space-between', width: '100%', textAlign: 'left',
             border: '1px solid #e5e7eb', borderRadius: '12px', bgcolor: '#fff', px: 2, py: 1.25,
@@ -607,7 +609,7 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
       )}
 
       {avanzado && (
-      <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+      <Paper id="otros-permisos" elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
         {catalogVisible.map((group, gi) => (
           <Box key={group.module} sx={{ px: 2, py: 1.5, borderTop: gi === 0 ? 'none' : '1px solid #f3f4f6' }}>
             <Box
@@ -620,7 +622,7 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
                 fontWeight: 500,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
-                color: '#9ca3af',
+                color: '#6b7280',
               }}
             >
               <Icon name={group.icon} style={{ width: 14, height: 14 }} /> {group.module}
@@ -634,7 +636,7 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
                     sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}
                   >
                     <Box component="span" sx={{ fontSize: '0.875rem', color: '#374151' }}>{p.label}</Box>
-                    <Toggle on={on} disabled={isOwner} onClick={() => toggle(p.key)} />
+                    <Toggle on={on} disabled={isOwner} onClick={() => toggle(p.key)} etiqueta={p.label} />
                   </Box>
                 );
               })}
@@ -662,7 +664,7 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
                 textTransform: 'none',
                 color: '#374151',
                 borderColor: '#d1d5db',
-                '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+                '&:hover': { borderColor: '#6b7280', bgcolor: '#f9fafb' },
               }}
             >
               Cancelar
@@ -692,12 +694,13 @@ function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted 
   );
 }
 
-function Toggle({ on, disabled, onClick }: { on: boolean; disabled?: boolean; onClick: () => void }) {
+function Toggle({ on, disabled, onClick, etiqueta }: { on: boolean; disabled?: boolean; onClick: () => void; etiqueta?: string }) {
   return (
     <Switch
       checked={on}
       disabled={disabled}
       onChange={onClick}
+      slotProps={{ input: { 'aria-label': etiqueta } }}
       disableRipple
       sx={{
         width: 38,
@@ -807,7 +810,7 @@ function CreateRoleDialog({ roles, onClose, onCreated }: {
             textTransform: 'none',
             color: '#374151',
             borderColor: '#d1d5db',
-            '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+            '&:hover': { borderColor: '#6b7280', bgcolor: '#f9fafb' },
           }}
         >
           Cancelar

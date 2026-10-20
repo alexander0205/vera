@@ -24,7 +24,7 @@
  * momento.
  */
 
-import { useCallback, useEffect, useState, type ElementType } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ElementType } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
@@ -98,6 +98,24 @@ const ICONOS_ACCION: Record<string, ElementType> = {
 const ICONO_MODULO: Record<ModuloId, ElementType> = { escolar: GraduationCap, facturacion: Receipt };
 const ENTRA: Record<ModuloId, string> = { escolar: 'Entra al colegio', facturacion: 'Entra a Facturación' };
 
+type EstadoGuardar = 'reposo' | 'guardando' | 'guardado';
+
+/**
+ * «Guardando… / Guardado» junto al título. `role="status"` lo anuncia a los
+ * lectores de pantalla sin quitarle el foco a quien está tocando interruptores.
+ */
+function EstadoGuardado({ estado }: { estado: EstadoGuardar }) {
+  return (
+    <Typography
+      role="status"
+      aria-live="polite"
+      sx={{ fontSize: '0.75rem', fontWeight: 500, color: estado === 'guardado' ? '#047857' : '#6b7280', minWidth: 72, textAlign: 'right' }}
+    >
+      {estado === 'guardando' ? 'Guardando…' : estado === 'guardado' ? '✓ Guardado' : ''}
+    </Typography>
+  );
+}
+
 /** Cuántas pantallas del módulo ve el rol. */
 export function pantallasVisibles(rol: RolGobernanza, modulo: ModuloDef) {
   return modulo.pantallas.filter(p => veLaPantalla(rol, p)).length;
@@ -117,6 +135,10 @@ export function useGobernanza(
   const router = useRouter();
   const { data, isLoading, mutate } = useSWR<DatosGobernanza>(activo ? URL_API : null, fetcher);
   const [guardando, setGuardando] = useState<string | null>(null);
+  // «Guardando… / Guardado»: como todo se guarda al instante, hay que decirlo,
+  // y decirlo también a quien no ve la pantalla (ver `EstadoGuardado`).
+  const [estado, setEstado] = useState<EstadoGuardar>('reposo');
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Optimista: el interruptor responde ya; si el servidor dice que no, se revierte. */
   const aplicar = useCallback(async (
@@ -127,6 +149,8 @@ export function useGobernanza(
     permisosCambiados?: { permisos: string[]; activo: boolean },
   ) => {
     setGuardando(`${rol.id}:${clave}`);
+    setEstado('guardando');
+    if (temporizador.current) clearTimeout(temporizador.current);
     mutate(d => d && { ...d, roles: d.roles.map(r => (r.id === rol.id ? cambio(r) : r)) }, false);
     try {
       const res = await fetch(URL_API, {
@@ -137,7 +161,10 @@ export function useGobernanza(
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo guardar');
       if (permisosCambiados) onPermisos?.(permisosCambiados.permisos, permisosCambiados.activo);
       router.refresh();
+      setEstado('guardado');
+      temporizador.current = setTimeout(() => setEstado('reposo'), 2500);
     } catch (e) {
+      setEstado('reposo');
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
       setGuardando(null);
@@ -191,7 +218,7 @@ export function useGobernanza(
     for (const permiso of permisos) await fijarPermiso(rol, permiso, visible);
   }, [fijarVarias, fijarPermiso]);
 
-  return { data, isLoading, guardando, fijarPantalla, fijarTodas, fijarPermiso, fijarAcceso };
+  return { data, isLoading, guardando, estado, fijarPantalla, fijarTodas, fijarPermiso, fijarAcceso };
 }
 
 // ─── Bloqueo ──────────────────────────────────────────────────────────────────
@@ -254,8 +281,8 @@ export function AtajoPantallaRoles() {
   }, []);
 
   return (
-    <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs">
-      <DialogTitle sx={{ pb: 0.5 }}>
+    <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs" aria-labelledby="atajo-pantalla-titulo">
+      <DialogTitle id="atajo-pantalla-titulo" sx={{ pb: 0.5 }}>
         <Typography component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>
           ¿Quién ve esta pantalla?
         </Typography>
@@ -274,7 +301,7 @@ export function AtajoPantallaRoles() {
             Esta pantalla no se puede apagar por rol. Las que sí, están en Equipo → Permisos.
           </Typography>
         ) : isLoading || !data ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#9ca3af' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#6b7280' }}>
             <CircularProgress size={18} color="inherit" />
           </Box>
         ) : (
@@ -293,9 +320,9 @@ export function AtajoPantallaRoles() {
           </Box>
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 1.5, borderTop: '1px solid #f3f4f6' }}>
-          <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Alt + Shift + R</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Alt + Shift + R</Typography>
           <Link
-            href="/dashboard/equipo/permisos"
+            href="/cuenta/roles"
             onClick={() => setAbierto(false)}
             style={{ fontSize: '0.8125rem', color: '#3658e1', fontWeight: 500 }}
           >
@@ -320,9 +347,9 @@ function FilaRol({ rol, modulo, visible, ocupado, onCambiar, onDarAcceso }: {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f9fafb' }}>
       <Box>
-        <Typography sx={{ fontSize: '0.875rem', color: sinModulo ? '#9ca3af' : '#111827' }}>{rol.label}</Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: sinModulo ? '#6b7280' : '#111827' }}>{rol.label}</Typography>
         {(esOwner || sinModulo) && (
-          <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
             {esOwner ? 'Siempre ve todo' : `No entra a ${modulo.corto}`}
           </Typography>
         )}
@@ -330,10 +357,10 @@ function FilaRol({ rol, modulo, visible, ocupado, onCambiar, onDarAcceso }: {
       {sinModulo ? (
         <Button variant="outline" size="sm" disabled={ocupado} onClick={onDarAcceso}>Dar acceso</Button>
       ) : esOwner ? (
-        <Lock size={15} style={{ color: '#9ca3af' }} />
+        <Lock size={15} style={{ color: '#6b7280' }} />
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography sx={{ fontSize: '0.75rem', color: visible ? '#059669' : '#9ca3af', fontWeight: 500, width: 44, textAlign: 'right' }}>
+          <Typography sx={{ fontSize: '0.75rem', color: visible ? '#047857' : '#6b7280', fontWeight: 500, width: 44, textAlign: 'right' }}>
             {visible ? 'La ve' : 'Oculta'}
           </Typography>
           <Switch
@@ -364,18 +391,26 @@ function FilaOpcion({ icono: Icono, titulo, descripcion, nota, on, disabled, est
   onChange: (on: boolean) => void;
 }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, borderTop: '1px solid #f9fafb' }}>
+    <Box
+      component="label"
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, borderTop: '1px solid #f9fafb',
+        cursor: disabled ? 'default' : 'pointer',
+        '&:hover': disabled ? undefined : { bgcolor: '#f9fafb' },
+        '&:focus-within': { bgcolor: '#f3f4f6' },
+      }}
+    >
       <Box sx={{ display: 'flex', height: 30, width: 30, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: on ? '#f3f4f6' : '#fafafa', color: on ? '#4b5563' : '#d1d5db', flexShrink: 0 }}>
         <Icono size={16} />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: on ? '#111827' : '#9ca3af' }}>{titulo}</Typography>
-        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: on ? '#111827' : '#6b7280' }}>{titulo}</Typography>
+        <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
           {descripcion}{nota ? ` · ${nota}` : ''}
         </Typography>
       </Box>
       {estado && (
-        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: on ? '#059669' : '#9ca3af', width: 44, textAlign: 'right' }}>
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: on ? '#047857' : '#6b7280', width: 44, textAlign: 'right' }}>
           {on ? 'La ve' : 'Oculta'}
         </Typography>
       )}
@@ -393,7 +428,7 @@ function FilaOpcion({ icono: Icono, titulo, descripcion, nota, on, disabled, est
 function Subtitulo({ children, derecha }: { children: React.ReactNode; derecha?: React.ReactNode }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, px: 2, py: 0.75, bgcolor: '#fafafa', borderTop: '1px solid #f3f4f6' }}>
-      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#9ca3af' }}>
+      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280' }}>
         {children}
       </Typography>
       {derecha}
@@ -411,8 +446,9 @@ export function ModuloDelRol({ roleId, moduloId, onPermisos }: {
   moduloId: ModuloId;
   onPermisos: (permisos: string[], activo: boolean) => void;
 }) {
-  const { data, isLoading, guardando, fijarPantalla, fijarTodas, fijarPermiso, fijarAcceso } =
+  const { data, isLoading, guardando, estado, fijarPantalla, fijarTodas, fijarPermiso, fijarAcceso } =
     useGobernanza(true, onPermisos);
+  const idTitulo = useId();
   const rol = data?.roles.find(r => r.id === roleId);
   const modulo = data?.modulos.find(m => m.id === moduloId);
   if (isLoading || !data || !rol || !modulo) return null;
@@ -424,19 +460,20 @@ export function ModuloDelRol({ roleId, moduloId, onPermisos }: {
   const IconoModulo = ICONO_MODULO[modulo.id];
 
   return (
-    <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+    <Paper component="section" aria-labelledby={idTitulo} elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
       <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.25 }}>
         <Box sx={{ display: 'flex', height: 32, width: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: '#eef2fe', color: '#2a45c4', flexShrink: 0 }}>
-          <IconoModulo size={17} />
+          <IconoModulo size={17} aria-hidden />
         </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography component="h2" id={idTitulo} sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
             {modulo.titulo}
           </Typography>
           <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
             Qué ve y qué puede hacer este rol aquí. Los cambios se guardan al instante.
           </Typography>
         </Box>
+        <EstadoGuardado estado={estado} />
       </Box>
 
       <FilaOpcion
@@ -500,7 +537,7 @@ export function ModuloDelRol({ roleId, moduloId, onPermisos }: {
             />
           ))}
           {esOwner && (
-            <Box sx={{ px: 2, py: 1, borderTop: '1px solid #f3f4f6', fontSize: '0.75rem', color: '#9ca3af' }}>
+            <Box sx={{ px: 2, py: 1, borderTop: '1px solid #f3f4f6', fontSize: '0.75rem', color: '#6b7280' }}>
               El Propietario siempre ve y puede todo.
             </Box>
           )}
@@ -552,16 +589,17 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
   modulosEmpresa: ModuloId[];
   onAbrirRol?: (roleId: number) => void;
 }) {
-  const { data, isLoading, fijarPantalla, fijarAcceso, guardando } = useGobernanza();
+  const { data, isLoading, fijarPantalla, fijarAcceso, guardando, estado } = useGobernanza();
+  const idTitulo = useId();
   const [elegido, setElegido] = useState<ModuloId | null>(null);
   const disponibles = (data?.modulos ?? []).filter(m => modulosEmpresa.includes(m.id));
   const modulo = disponibles.find(m => m.id === elegido) ?? disponibles[0];
 
   return (
-    <Paper id="pantallas" variant="outlined" sx={{ borderRadius: '12px', borderColor: '#e5e7eb', overflow: 'hidden', scrollMarginTop: 24 }}>
+    <Paper component="section" aria-labelledby={idTitulo} id="pantallas" variant="outlined" sx={{ borderRadius: '12px', borderColor: '#e5e7eb', overflow: 'hidden', scrollMarginTop: 24 }}>
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
         <Box sx={{ flex: 1, minWidth: 260 }}>
-          <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
+          <Typography component="h2" id={idTitulo} sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
             Quién ve qué · vista general
           </Typography>
           <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
@@ -569,11 +607,13 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
             Alt + Shift + R en cualquier pantalla.
           </Typography>
         </Box>
+        <EstadoGuardado estado={estado} />
         {disponibles.length > 1 && (
-          <Box sx={{ display: 'flex', gap: 0.5, p: 0.5, bgcolor: '#f3f4f6', borderRadius: '10px' }}>
+          <Box role="group" aria-label="Módulo" sx={{ display: 'flex', gap: 0.5, p: 0.5, bgcolor: '#f3f4f6', borderRadius: '10px' }}>
             {disponibles.map(m => (
               <ButtonBase
                 key={m.id}
+                aria-pressed={m.id === modulo?.id}
                 onClick={() => setElegido(m.id)}
                 sx={{
                   px: 1.5, py: 0.5, borderRadius: '8px', fontSize: '0.8125rem', fontWeight: 500,
@@ -589,30 +629,34 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
         )}
       </Box>
       {isLoading || !data || !modulo ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4, color: '#9ca3af' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4, color: '#6b7280' }}>
           <CircularProgress size={18} color="inherit" />
         </Box>
       ) : (
         <Box sx={{ overflowX: 'auto' }}>
           <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+            <caption className="sr-only">
+              Pantallas de {modulo.titulo} y qué roles las ven. Cada casilla enciende o apaga la pantalla para ese rol.
+            </caption>
             <thead>
               <tr>
-                <Box component="th" sx={{ textAlign: 'left', px: 2, py: 1, color: '#6b7280', fontWeight: 500, whiteSpace: 'nowrap', position: 'sticky', left: 0, bgcolor: '#fff' }}>
+                <Box component="th" scope="col" sx={{ textAlign: 'left', px: 2, py: 1, color: '#6b7280', fontWeight: 500, whiteSpace: 'nowrap', position: 'sticky', left: 0, bgcolor: '#fff' }}>
                   Pantalla
                 </Box>
                 {data.roles.map(r => {
                   const esOwner = r.key === 'owner';
                   const sinModulo = !entraAlModulo(r, modulo);
                   return (
-                    <Box component="th" key={r.id} sx={{ px: 1, py: 0.75, textAlign: 'center', fontWeight: 500, verticalAlign: 'top' }}>
+                    <Box component="th" scope="col" key={r.id} sx={{ px: 1, py: 0.75, textAlign: 'center', fontWeight: 500, verticalAlign: 'top' }}>
                       <ButtonBase
+                        aria-label={esOwner ? `${r.label}: siempre ve todo` : `Configurar el rol ${r.label}`}
                         disabled={!onAbrirRol || esOwner}
                         onClick={() => onAbrirRol?.(r.id)}
-                        sx={{ flexDirection: 'column', borderRadius: '6px', px: 1, py: 0.5, color: sinModulo ? '#9ca3af' : '#374151', '&:hover': { bgcolor: '#f3f4f6' } }}
+                        sx={{ flexDirection: 'column', borderRadius: '6px', px: 1, py: 0.5, color: sinModulo ? '#6b7280' : '#374151', '&:hover': { bgcolor: '#f3f4f6' } }}
                       >
                         <span style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem', fontWeight: 500 }}>{r.label}</span>
                         {!sinModulo && (
-                          <span style={{ fontSize: '0.6875rem', color: '#9ca3af', fontWeight: 400 }}>
+                          <span style={{ fontSize: '0.6875rem', color: '#6b7280', fontWeight: 400 }}>
                             {esOwner ? 'siempre todo' : `${pantallasVisibles(r, modulo)}/${modulo.pantallas.length}`}
                           </span>
                         )}
@@ -634,9 +678,9 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
                 const Icono = ICONOS[p.id] ?? FileText;
                 return (
                   <Box component="tr" key={p.id} sx={{ borderTop: '1px solid #f3f4f6', '&:hover': { bgcolor: '#fafafa' } }}>
-                    <Box component="td" sx={{ px: 2, py: 0.75, whiteSpace: 'nowrap', position: 'sticky', left: 0, bgcolor: 'inherit' }}>
+                    <Box component="th" scope="row" sx={{ px: 2, py: 0.75, whiteSpace: 'nowrap', position: 'sticky', left: 0, bgcolor: 'inherit', textAlign: 'left', fontWeight: 400 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#111827' }}>
-                        <Icono size={15} style={{ color: '#9ca3af' }} />
+                        <Icono size={15} style={{ color: '#6b7280' }} />
                         {p.label}
                       </Box>
                     </Box>
@@ -646,9 +690,11 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
                       return (
                         <Box component="td" key={r.id} sx={{ textAlign: 'center', py: 0.5 }}>
                           {sinModulo ? (
-                            <span style={{ color: '#d1d5db' }}>—</span>
+                            <span role="img" aria-label="Sin acceso al módulo" style={{ color: '#9ca3af' }}>—</span>
                           ) : esOwner ? (
-                            <Lock size={14} style={{ color: '#c7cbd1', margin: '0 auto' }} />
+                            <span role="img" aria-label="Siempre la ve" style={{ display: 'inline-flex' }}>
+                              <Lock size={14} style={{ color: '#6b7280' }} aria-hidden />
+                            </span>
                           ) : (
                             <Switch
                               size="small"
