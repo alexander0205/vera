@@ -22,6 +22,8 @@ import { BannerSuscripcion } from '@/components/banner-suscripcion';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import type { UserInfo } from '@/components/profile-dropdown';
 import type { ModuleKey } from '@/lib/config/modules';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { AtajoPantallaRoles } from '@/components/gobernanza/Gobernanza';
 
 interface Props {
   /** Rail de escritorio (se oculta solo por debajo de lg). */
@@ -45,6 +47,7 @@ export function ModuleShell(props: Props) {
 function ShellInterno({ rail, railMovil, current, titulo, user, children }: Props) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const { fijo, alternar } = useNavFijo();
+  const { can } = usePermissions();
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f9fafb', color: '#111827' }}>
@@ -78,6 +81,8 @@ function ShellInterno({ rail, railMovil, current, titulo, user, children }: Prop
           {children}
         </Box>
       </Box>
+      {/* Alt+Shift+R: mostrar/ocultar pantallas por rol, desde cualquier módulo. */}
+      {can('equipo:gestionar') && <AtajoPantallaRoles />}
     </Box>
   );
 }

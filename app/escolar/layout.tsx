@@ -1,7 +1,7 @@
 import { EscolarNavRail } from '@/components/escolar-nav-rail';
 import { ModuleShell } from '@/components/module-shell';
-import { GuardPantalla, AtajoPantallaRoles } from '@/components/gobernanza/Gobernanza';
-import { hasPermission, requireModule, requirePermission } from '@/lib/auth/page-guard';
+import { GuardPantalla } from '@/components/gobernanza/Gobernanza';
+import { requireModule, requirePermission } from '@/lib/auth/page-guard';
 import { pantallasOcultasDe } from '@/lib/auth/pantallas';
 import { getTeamIdForUser, getTeamRoleForUser, getUser } from '@/lib/db/queries';
 import { exigirOnboarding } from '@/lib/onboarding/muro';
@@ -28,8 +28,8 @@ export default async function EscolarLayout({ children }: { children: React.Reac
   await exigirOnboarding();
   await requireModule('escolar', '/dashboard');
   await requirePermission('administracion-escolar:ver');
-  const [user, teamId, teamRole, gestionaEquipo] = await Promise.all([
-    getUser(), getTeamIdForUser(), getTeamRoleForUser(), hasPermission('equipo:gestionar'),
+  const [user, teamId, teamRole] = await Promise.all([
+    getUser(), getTeamIdForUser(), getTeamRoleForUser(),
   ]);
   const ocultas = teamId ? await pantallasOcultasDe(teamId, user?.platformRole, teamRole) : [];
 
@@ -41,7 +41,6 @@ export default async function EscolarLayout({ children }: { children: React.Reac
       railMovil={<EscolarNavRail variant="drawer" ocultas={ocultas} />}
     >
       <GuardPantalla ocultas={ocultas}>{children}</GuardPantalla>
-      {gestionaEquipo && <AtajoPantallaRoles />}
     </ModuleShell>
   );
 }

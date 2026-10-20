@@ -183,18 +183,28 @@ export function PantallasDelRol({ roleId }: { roleId: number }) {
   );
 }
 
-// ─── Atajo Alt+Shift+R ────────────────────────────────────────────────────────
+// ─── Comando global ───────────────────────────────────────────────────────────
+
+/** Evento que abre el panel desde cualquier sitio (lo usa el buscador ⌘K). */
+export const EVENTO_PANTALLAS_ROLES = 'zero:pantallas-roles';
 
 /** `e.code` y no `e.key`: con Alt, en Mac la R escribe «®» y en otros teclados cambia. */
 function esAtajo(e: KeyboardEvent) {
   return e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyR';
 }
 
+/**
+ * El comando: **Alt+Shift+R** (o «Mostrar/ocultar pantallas por rol» en ⌘K) en
+ * CUALQUIER pantalla de cualquier módulo. Enseña Panorama y Dashboard con un
+ * interruptor por rol; la del sitio donde estás va primero. Solo lo monta quien
+ * gestiona el equipo (ModuleShell y el layout de Facturación).
+ */
 export function AtajoPantallaRoles() {
   const pathname = usePathname();
+  const { modules } = usePermissions();
   const [abierto, setAbierto] = useState(false);
   const { data, isLoading, fijar, guardando } = usePantallasPorRol(abierto);
-  const pantalla = pantallaDeRuta(pathname);
+  const aqui = pantallaDeRuta(pathname);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -202,57 +212,77 @@ export function AtajoPantallaRoles() {
       e.preventDefault();
       setAbierto(a => !a);
     };
+    const onEvento = () => setAbierto(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener(EVENTO_PANTALLAS_ROLES, onEvento);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener(EVENTO_PANTALLAS_ROLES, onEvento);
+    };
   }, []);
+
+  // Solo las de los módulos de la empresa; mientras cargan, todas.
+  const pantallas = (data?.pantallas ?? [])
+    .filter(p => modules.length === 0 || (modules as string[]).includes(p.modulo))
+    .sort((a, b) => Number(b.id === aqui?.id) - Number(a.id === aqui?.id));
 
   return (
     <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs" aria-labelledby="atajo-pantalla-titulo">
       <DialogTitle id="atajo-pantalla-titulo" sx={{ pb: 0.5 }}>
-        <Typography component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>
-          ¿Quién ve esta pantalla?
-        </Typography>
         <Typography component="span" sx={{ display: 'block', fontSize: '1.125rem', fontWeight: 600, color: '#111827' }}>
-          {pantalla ? `${pantalla.label} · ${pantalla.moduloLabel}` : 'Esta pantalla'}
+          Mostrar u ocultar pantallas por rol
+        </Typography>
+        <Typography component="span" sx={{ display: 'block', fontSize: '0.8125rem', color: '#6b7280', fontWeight: 400 }}>
+          Apaga la portada para los roles que no deben verla. Se guarda al instante.
         </Typography>
       </DialogTitle>
       <DialogContent>
-        {!pantalla ? (
-          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', py: 1 }}>
-            Solo se pueden ocultar Panorama (Gobernanza) y el Dashboard (Facturación). Abre una de las dos
-            y vuelve a pulsar Alt + Shift + R.
-          </Typography>
-        ) : isLoading || !data ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#9ca3af' }}>
+        {isLoading || !data ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#6b7280' }}>
             <CircularProgress size={18} color="inherit" />
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', mt: 1 }}>
-            {data.roles.map(rol => {
-              const esOwner = rol.key === 'owner';
-              return (
-                <Box key={rol.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f9fafb' }}>
-                  <Box>
-                    <Typography sx={{ fontSize: '0.875rem', color: '#111827' }}>{rol.label}</Typography>
-                    {esOwner && <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Siempre ve todo</Typography>}
-                  </Box>
-                  {esOwner ? (
-                    <Lock size={15} style={{ color: '#6b7280' }} aria-label="Siempre la ve" />
-                  ) : (
-                    <Interruptor
-                      visible={veLaPantalla(rol, pantalla.id)}
-                      disabled={guardando === `${rol.id}:${pantalla.id}`}
-                      etiqueta={`${rol.label} ve ${pantalla.label}`}
-                      onChange={v => fijar(rol, pantalla.id, v)}
-                    />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            {pantallas.map(pantalla => (
+              <Box key={pantalla.id} component="section" aria-label={`${pantalla.label} (${pantalla.moduloLabel})`}>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, pb: 0.5, borderBottom: '1px solid #e5e7eb' }}>
+                  <Typography component="h3" sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
+                    {pantalla.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{pantalla.moduloLabel}</Typography>
+                  {aqui?.id === pantalla.id && (
+                    <Box component="span" sx={{ ml: 'auto', fontSize: '0.6875rem', fontWeight: 700, px: 0.75, py: 0.125, borderRadius: '9999px', bgcolor: '#eef2fe', color: '#2a45c4' }}>
+                      Estás aquí
+                    </Box>
                   )}
                 </Box>
-              );
-            })}
+                {data.roles.map(rol => {
+                  const esOwner = rol.key === 'owner';
+                  return (
+                    <Box key={rol.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid #f9fafb' }}>
+                      <Box>
+                        <Typography sx={{ fontSize: '0.875rem', color: '#111827' }}>{rol.label}</Typography>
+                        {esOwner && <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Siempre ve todo</Typography>}
+                      </Box>
+                      {esOwner ? (
+                        <Lock size={15} style={{ color: '#6b7280' }} aria-label="Siempre la ve" />
+                      ) : (
+                        <Interruptor
+                          visible={veLaPantalla(rol, pantalla.id)}
+                          disabled={guardando === `${rol.id}:${pantalla.id}`}
+                          etiqueta={`${rol.label} ve ${pantalla.label} (${pantalla.moduloLabel})`}
+                          onChange={v => fijar(rol, pantalla.id, v)}
+                        />
+                      )}
+                    </Box>
+                  );
+                })}
+              </Box>
+            ))}
           </Box>
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 1.5, borderTop: '1px solid #f3f4f6' }}>
-          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Alt + Shift + R</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Alt + Shift + R, desde cualquier pantalla</Typography>
           <Link
             href="/cuenta/roles"
             onClick={() => setAbierto(false)}
@@ -265,4 +295,3 @@ export function AtajoPantallaRoles() {
     </Dialog>
   );
 }
-
