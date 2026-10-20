@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ChipEstado } from './ChipEstado';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -3054,7 +3055,7 @@ function clsSaldo(saldo: number, tieneFactura: boolean): string {
 
 function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?: boolean }) {
   if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
-  if (estado === 'pagado')  return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
+  if (estado === 'pagado')  return <ChipEstado tono="verde">Pagado</ChipEstado>;
   // El cargo nace al matricular, no al facturar: la inscripción y el uniforme se
   // deben desde el primer día, mucho antes de que salga ningún comprobante.
   // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
@@ -3063,16 +3064,16 @@ function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?:
   // saldo abierto. Sigue contando como deuda; lo único que cambia es que lo dice
   // en vez de pintarlo en rojo.
   if (sinFactura) return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
-  if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
-  if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
-  return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Pendiente</Badge>;
+  if (estado === 'vencido') return <ChipEstado tono="rojo">Vencido</ChipEstado>;
+  if (estado === 'parcial') return <ChipEstado tono="ambar">Parcial</ChipEstado>;
+  return <ChipEstado tono="gris">Pendiente</ChipEstado>;
 }
 
 function EstadoMesBadge({ estado }: { estado: EstadoMes }) {
-  if (estado === 'pagado') return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
-  if (estado === 'adelantado') return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Adelantado</Badge>;
-  if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
-  if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
+  if (estado === 'pagado') return <ChipEstado tono="verde">Pagado</ChipEstado>;
+  if (estado === 'adelantado') return <ChipEstado tono="azul">Adelantado</ChipEstado>;
+  if (estado === 'vencido') return <ChipEstado tono="rojo">Vencido</ChipEstado>;
+  if (estado === 'parcial') return <ChipEstado tono="ambar">Parcial</ChipEstado>;
   // Previsto no es un estado del cargo: es la ausencia de cargo con una promesa
   // de calendario detrás. Borde discontinuo para que no se confunda de un
   // vistazo con "pendiente", que sí hay que cobrar.
@@ -3081,7 +3082,7 @@ function EstadoMesBadge({ estado }: { estado: EstadoMes }) {
   // debe— y distinto de "por vencer", que da por hecho que ya hay factura.
   if (estado === 'sin-facturar') return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
   if (estado === 'sin-cargo') return <Badge variant="outline" className="text-gray-500">Sin cargo</Badge>;
-  return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Por vencer</Badge>;
+  return <ChipEstado tono="gris">Por vencer</ChipEstado>;
 }
 
 function facturaLink(cargo: Cargo) {
@@ -3265,12 +3266,12 @@ function EstadoFacturaBadge({ anulada, saldo, pagado }: {
 }) {
   if (anulada) return <Badge variant="outline" className="text-gray-500">Anulada</Badge>;
   if (saldo === 0) {
-    return <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">Pagada</Badge>;
+    return <ChipEstado tono="verde">Pagada</ChipEstado>;
   }
   if (pagado > 0) {
-    return <Badge className="border-amber-200 bg-amber-50 text-amber-700">Parcial</Badge>;
+    return <ChipEstado tono="ambar">Parcial</ChipEstado>;
   }
-  return <Badge className="border-red-200 bg-red-50 text-red-700">Pendiente</Badge>;
+  return <ChipEstado tono="rojo">Pendiente</ChipEstado>;
 }
 
 /**

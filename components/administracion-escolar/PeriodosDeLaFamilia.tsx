@@ -46,6 +46,7 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { cargoDeFila, mesesConFactura, mesYaFacturado, montoCorregible } from '@/lib/administracion-escolar/acciones-cargo';
 import type { HijoConPeriodos, PeriodoDeHijo, FilaMes } from '@/lib/administracion-escolar/periodos-familia';
 import { CargoActionsMenu } from './CargoActionsMenu';
+import { ChipEstado as Chip } from './ChipEstado';
 import { CrearCargoEstudianteDialog } from './CrearCargoEstudianteDialog';
 import { HuecoDelLapiz, MontoEditable } from './MontoEditable';
 import type { AccionesDeCargo } from './useAccionesDeCargo';
@@ -91,27 +92,6 @@ const tituloFila = (f: FilaMes) =>
   f.mes ? `${f.concepto} — ${MESES[f.mes]} ${f.anio}` : f.concepto;
 
 // ─── Piezas visuales ─────────────────────────────────────────────────────────
-
-const CHIP = {
-  verde:  { bg: '#E8F6EF', fg: '#0F7A4A' },
-  rojo:   { bg: '#FDECEC', fg: '#B4231F' },
-  ambar:  { bg: '#FEF6E7', fg: '#B45309' },
-  violeta:{ bg: '#F3EFFE', fg: '#6D28D9' },
-  gris:   { bg: '#F2F4FA', fg: '#4A5164' },
-} as const;
-
-function Chip({ tono, children }: { tono: keyof typeof CHIP; children: React.ReactNode }) {
-  const c = CHIP[tono];
-  return (
-    <Box component="span" sx={{
-      display: 'inline-grid', placeItems: 'center', height: 22, px: 1.125,
-      borderRadius: '6px', bgcolor: c.bg, color: c.fg,
-      fontSize: '0.6875rem', fontWeight: 600, whiteSpace: 'nowrap',
-    }}>
-      {children}
-    </Box>
-  );
-}
 
 function EstadoChip({ fila, hoy }: { fila: FilaMes; hoy: string }) {
   if (fila.saldoCentavos <= 0) return <Chip tono="verde">Pagado</Chip>;
