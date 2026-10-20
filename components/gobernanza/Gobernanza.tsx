@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * Mostrar u ocultar por rol las portadas de Gobernanza (Panorama) y de
- * Facturación (Dashboard). Catálogo en lib/config/pantallas.ts.
+ * Mostrar u ocultar por rol las pantallas de Gobernanza (colegio) y de
+ * Facturación. Catálogo en lib/config/pantallas.ts.
  *
- *  - `PantallasDelRol`     → dos interruptores dentro del editor de un rol
- *    (Equipo → Permisos → el rol).
- *  - `AtajoPantallaRoles`  → el «comando»: Alt+Shift+R en Panorama o en el
- *    Dashboard abre la lista de roles con un interruptor cada uno. Solo lo
- *    monta el layout para quien gestiona el equipo.
+ *  - `PantallasDelRol`     → un bloque dentro del editor de un rol (Equipo →
+ *    Permisos → el rol): por módulo y sección, con «Todas» / «Ninguna».
+ *  - `AtajoPantallaRoles`  → el comando global: Alt+Shift+R (o ⌘K) en cualquier
+ *    módulo abre «elige una pantalla → qué roles la ven». Solo lo monta quien
+ *    gestiona el equipo.
  *  - `GuardPantalla`       → si la pantalla en la que se está quedó oculta para
  *    el rol, enseña «no está disponible para ti». Cubre también la llegada por URL.
  *
@@ -17,7 +17,7 @@
  * momento.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
@@ -30,10 +30,14 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import CircularProgress from '@mui/material/CircularProgress';
-import { Lock } from 'lucide-react';
+import ButtonBase from '@mui/material/ButtonBase';
+import { Lock, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { pantallaDeRuta, veLaPantalla, type PantallaDef } from '@/lib/config/pantallas';
+import {
+  MODULOS_PANTALLAS, PANTALLAS, agruparPantallas, pantallaDeRuta, veLaPantalla,
+  type ModuloId, type PantallaDef,
+} from '@/lib/config/pantallas';
 
 interface RolPantallas { id: number; key: string; label: string; ocultas: string[] }
 interface Datos { pantallas: PantallaDef[]; roles: RolPantallas[] }
@@ -47,16 +51,19 @@ function usePantallasPorRol(activo = true) {
   const { data, isLoading, mutate } = useSWR<Datos>(activo ? URL_API : null, fetcher);
   const [guardando, setGuardando] = useState<string | null>(null);
 
-  const fijar = useCallback(async (rol: RolPantallas, pantalla: string, visible: boolean) => {
-    setGuardando(`${rol.id}:${pantalla}`);
+  const fijar = useCallback(async (rol: RolPantallas, ids: string[], visible: boolean) => {
+    if (!ids.length) return;
+    setGuardando(`${rol.id}:${ids.join(',')}`);
     // Optimista: el interruptor responde ya; si el servidor dice que no, se revierte.
-    const ocultas = visible ? rol.ocultas.filter(p => p !== pantalla) : [...rol.ocultas, pantalla];
+    const ocultas = visible
+      ? rol.ocultas.filter(p => !ids.includes(p))
+      : [...new Set([...rol.ocultas, ...ids])];
     mutate(d => d && { ...d, roles: d.roles.map(r => (r.id === rol.id ? { ...r, ocultas } : r)) }, false);
     try {
       const res = await fetch(URL_API, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roleId: rol.id, pantalla, visible }),
+        body: JSON.stringify({ roleId: rol.id, pantalla: ids, visible }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo guardar');
       router.refresh();
@@ -78,6 +85,8 @@ export function GuardPantalla({ ocultas, children }: { ocultas: string[]; childr
   const pantalla = ocultas.length ? pantallaDeRuta(pathname) : null;
   if (!pantalla || !ocultas.includes(pantalla.id)) return <>{children}</>;
 
+  // Adónde puede ir: la primera pantalla del mismo módulo que sí ve.
+  const alternativa = PANTALLAS.find(p => p.modulo === pantalla.modulo && !ocultas.includes(p.id));
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 2, sm: 6 } }}>
       <Box sx={{ maxWidth: 420, textAlign: 'center' }}>
@@ -90,11 +99,13 @@ export function GuardPantalla({ ocultas, children }: { ocultas: string[]; childr
         <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: '#6b7280' }}>
           El administrador la desactivó para tu rol. Si la necesitas, pídele que te la habilite.
         </Typography>
-        <Box sx={{ mt: 3 }}>
-          <Button asChild variant="outline" size="sm">
-            <Link href={pantalla.alternativa.href}>{pantalla.alternativa.label}</Link>
-          </Button>
-        </Box>
+        {alternativa && (
+          <Box sx={{ mt: 3 }}>
+            <Button asChild variant="outline" size="sm">
+              <Link href={alternativa.href}>Ir a {alternativa.label}</Link>
+            </Button>
+          </Box>
+        )}
       </Box>
     </Box>
   );
@@ -127,52 +138,40 @@ function Interruptor({ visible, disabled, etiqueta, onChange }: {
 // ─── Dentro del editor de un rol ──────────────────────────────────────────────
 
 /**
- * Las portadas que este rol ve, con un interruptor cada una. Solo las de los
- * módulos que tiene la empresa. Cambia al instante (no pasa por «Guardar
- * cambios», que es de los permisos), y lo dice.
+ * Las pantallas que este rol ve, por módulo y sección, con un interruptor cada
+ * una. Solo las de los módulos que tiene la empresa. Cambia al instante (no
+ * pasa por «Guardar cambios», que es de los permisos), y lo dice.
  */
 export function PantallasDelRol({ roleId }: { roleId: number }) {
   const { modules } = usePermissions();
   const { data, isLoading, fijar, guardando } = usePantallasPorRol();
   const rol = data?.roles.find(r => r.id === roleId);
-  const pantallas = (data?.pantallas ?? []).filter(p => (modules as string[]).includes(p.modulo));
-  if (isLoading || !rol || pantallas.length === 0) return null;
+  const modulos = MODULOS_PANTALLAS.filter(m => (modules as string[]).includes(m.id));
+  if (isLoading || !rol || modulos.length === 0) return null;
 
   const esOwner = rol.key === 'owner';
   return (
     <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f3f4f6' }}>
         <Typography component="h2" sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
-          Pantallas de inicio
+          Pantallas
         </Typography>
         <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-          Muestra u oculta la portada de cada módulo para este rol. Se guarda al instante.
+          Muestra u oculta pantallas de Gobernanza y de Facturación para este rol. Se guarda al instante.
         </Typography>
       </Box>
-      {pantallas.map((p, i) => (
-        <Box
-          key={p.id}
-          component="label"
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1,
-            borderTop: i === 0 ? 'none' : '1px solid #f9fafb',
-            cursor: esOwner ? 'default' : 'pointer',
-            '&:hover': esOwner ? undefined : { bgcolor: '#f9fafb' },
-          }}
-        >
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>
-              {p.label} <Box component="span" sx={{ color: '#6b7280', fontWeight: 400 }}>· {p.moduloLabel}</Box>
-            </Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.descripcion}</Typography>
-          </Box>
-          <Interruptor
-            visible={veLaPantalla(rol, p.id)}
-            disabled={esOwner || guardando === `${rol.id}:${p.id}`}
-            etiqueta={`${p.label} (${p.moduloLabel})`}
-            onChange={v => fijar(rol, p.id, v)}
-          />
-        </Box>
+      {modulos.map((m, i) => (
+        <SeccionModulo
+          key={m.id}
+          moduloId={m.id}
+          etiqueta={m.label}
+          pantallas={(data?.pantallas ?? []).filter(p => p.modulo === m.id)}
+          rol={rol}
+          esOwner={esOwner}
+          guardando={guardando}
+          primero={i === 0}
+          onFijar={(ids, v) => fijar(rol, ids, v)}
+        />
       ))}
       {esOwner && (
         <Box sx={{ px: 2, py: 1, borderTop: '1px solid #f3f4f6', fontSize: '0.75rem', color: '#6b7280' }}>
@@ -180,6 +179,102 @@ export function PantallasDelRol({ roleId }: { roleId: number }) {
         </Box>
       )}
     </Paper>
+  );
+}
+
+function SeccionModulo({ moduloId, etiqueta, pantallas, rol, esOwner, guardando, primero, onFijar }: {
+  moduloId: ModuloId;
+  etiqueta: string;
+  pantallas: PantallaDef[];
+  rol: RolPantallas;
+  esOwner: boolean;
+  guardando: string | null;
+  primero: boolean;
+  onFijar: (ids: string[], visible: boolean) => void;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  const idPanel = useId();
+  const ids = pantallas.map(p => p.id);
+  const visibles = pantallas.filter(p => veLaPantalla(rol, p.id)).length;
+  const ocupado = guardando !== null;
+
+  return (
+    <Box sx={{ borderTop: primero ? 'none' : '1px solid #f3f4f6' }}>
+      <ButtonBase
+        onClick={() => setAbierta(a => !a)}
+        aria-expanded={abierta}
+        aria-controls={idPanel}
+        sx={{ display: 'flex', width: '100%', alignItems: 'center', gap: 1, px: 2, py: 1.25, textAlign: 'left', '&:hover': { bgcolor: '#f9fafb' } }}
+      >
+        {abierta ? <ChevronDown size={16} aria-hidden /> : <ChevronRight size={16} aria-hidden />}
+        <Typography component="span" sx={{ flex: 1, fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+          {etiqueta}
+        </Typography>
+        <Typography component="span" sx={{ fontSize: '0.8125rem', color: visibles === pantallas.length ? '#6b7280' : '#92400e', fontWeight: 500 }}>
+          {esOwner ? 'Todas' : `Ve ${visibles} de ${pantallas.length}`}
+        </Typography>
+      </ButtonBase>
+
+      {abierta && (
+        <Box id={idPanel} sx={{ pb: 1 }}>
+          {!esOwner && (
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, px: 2, pb: 0.5 }}>
+              <Button variant="outline" size="sm" disabled={ocupado || visibles === pantallas.length} onClick={() => onFijar(ids, true)}>
+                Mostrar todas
+              </Button>
+              <Button variant="outline" size="sm" disabled={ocupado || visibles === 0} onClick={() => onFijar(ids, false)}>
+                Ocultar todas
+              </Button>
+            </Box>
+          )}
+          {agruparPantallas(pantallas).map(g => (
+            <Box key={g.nombre ?? moduloId}>
+              {g.nombre && (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, pt: 1, pb: 0.25 }}>
+                  <Typography component="h3" sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6b7280' }}>
+                    {g.nombre}
+                  </Typography>
+                  {!esOwner && (
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <ButtonBase disabled={ocupado} onClick={() => onFijar(g.items.map(p => p.id), true)} aria-label={`Mostrar todas las pantallas de ${g.nombre}`}
+                        sx={{ px: 0.75, borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }}>
+                        Todas
+                      </ButtonBase>
+                      <ButtonBase disabled={ocupado} onClick={() => onFijar(g.items.map(p => p.id), false)} aria-label={`Ocultar todas las pantallas de ${g.nombre}`}
+                        sx={{ px: 0.75, borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#475569', '&:hover': { bgcolor: '#f1f5f9' } }}>
+                        Ninguna
+                      </ButtonBase>
+                    </Box>
+                  )}
+                </Box>
+              )}
+              {g.items.map(p => (
+                <Box
+                  key={p.id}
+                  component="label"
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 0.75,
+                    cursor: esOwner ? 'default' : 'pointer',
+                    '&:hover': esOwner ? undefined : { bgcolor: '#f9fafb' },
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{p.label}</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.descripcion}</Typography>
+                  </Box>
+                  <Interruptor
+                    visible={veLaPantalla(rol, p.id)}
+                    disabled={esOwner || guardando === `${rol.id}:${p.id}`}
+                    etiqueta={`${p.label} (${etiqueta})`}
+                    onChange={v => onFijar([p.id], v)}
+                  />
+                </Box>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -195,16 +290,18 @@ function esAtajo(e: KeyboardEvent) {
 
 /**
  * El comando: **Alt+Shift+R** (o «Mostrar/ocultar pantallas por rol» en ⌘K) en
- * CUALQUIER pantalla de cualquier módulo. Enseña Panorama y Dashboard con un
- * interruptor por rol; la del sitio donde estás va primero. Solo lo monta quien
+ * CUALQUIER pantalla de cualquier módulo. Se elige una pantalla (la del sitio
+ * donde estás sale ya elegida) y se ve qué roles la ven. Solo lo monta quien
  * gestiona el equipo (ModuleShell y el layout de Facturación).
  */
 export function AtajoPantallaRoles() {
   const pathname = usePathname();
   const { modules } = usePermissions();
   const [abierto, setAbierto] = useState(false);
+  const [elegida, setElegida] = useState<string | null>(null);
   const { data, isLoading, fijar, guardando } = usePantallasPorRol(abierto);
   const aqui = pantallaDeRuta(pathname);
+  const idSelect = useId();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -221,10 +318,14 @@ export function AtajoPantallaRoles() {
     };
   }, []);
 
+  // Al abrir, la pantalla de este sitio sale elegida.
+  useEffect(() => {
+    if (abierto && aqui) setElegida(aqui.id);
+  }, [abierto, aqui]);
+
   // Solo las de los módulos de la empresa; mientras cargan, todas.
-  const pantallas = (data?.pantallas ?? [])
-    .filter(p => modules.length === 0 || (modules as string[]).includes(p.modulo))
-    .sort((a, b) => Number(b.id === aqui?.id) - Number(a.id === aqui?.id));
+  const pantallas = (data?.pantallas ?? []).filter(p => modules.length === 0 || (modules as string[]).includes(p.modulo));
+  const actual = pantallas.find(p => p.id === elegida) ?? pantallas.find(p => p.id === aqui?.id) ?? pantallas[0];
 
   return (
     <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs" aria-labelledby="atajo-pantalla-titulo">
@@ -233,53 +334,62 @@ export function AtajoPantallaRoles() {
           Mostrar u ocultar pantallas por rol
         </Typography>
         <Typography component="span" sx={{ display: 'block', fontSize: '0.8125rem', color: '#6b7280', fontWeight: 400 }}>
-          Apaga la portada para los roles que no deben verla. Se guarda al instante.
+          Elige una pantalla y apágala para los roles que no deben verla. Se guarda al instante.
         </Typography>
       </DialogTitle>
       <DialogContent>
-        {isLoading || !data ? (
+        {isLoading || !data || !actual ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#6b7280' }}>
             <CircularProgress size={18} color="inherit" />
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            {pantallas.map(pantalla => (
-              <Box key={pantalla.id} component="section" aria-label={`${pantalla.label} (${pantalla.moduloLabel})`}>
-                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, pb: 0.5, borderBottom: '1px solid #e5e7eb' }}>
-                  <Typography component="h3" sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
-                    {pantalla.label}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{pantalla.moduloLabel}</Typography>
-                  {aqui?.id === pantalla.id && (
-                    <Box component="span" sx={{ ml: 'auto', fontSize: '0.6875rem', fontWeight: 700, px: 0.75, py: 0.125, borderRadius: '9999px', bgcolor: '#eef2fe', color: '#2a45c4' }}>
-                      Estás aquí
+          <>
+            <Box component="label" htmlFor={idSelect} sx={{ display: 'block', mt: 1, mb: 0.5, fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>
+              Pantalla
+            </Box>
+            <Box
+              component="select"
+              id={idSelect}
+              value={actual.id}
+              onChange={e => setElegida(e.target.value)}
+              sx={{ width: '100%', height: 38, px: 1, borderRadius: '8px', border: '1px solid #d1d5db', bgcolor: '#fff', fontSize: '0.875rem', color: '#111827', '&:focus': { outline: '2px solid #3658e1', outlineOffset: 1 } }}
+            >
+              {MODULOS_PANTALLAS.filter(m => pantallas.some(p => p.modulo === m.id)).map(m => (
+                <optgroup key={m.id} label={m.label}>
+                  {pantallas.filter(p => p.modulo === m.id).map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.grupo ? `${p.grupo} · ` : ''}{p.label}{p.id === aqui?.id ? '  (estás aquí)' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Box>
+            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#6b7280' }}>{actual.descripcion}</Typography>
+
+            <Box sx={{ mt: 1.5 }}>
+              {data.roles.map(rol => {
+                const esOwner = rol.key === 'owner';
+                return (
+                  <Box key={rol.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid #f9fafb' }}>
+                    <Box>
+                      <Typography sx={{ fontSize: '0.875rem', color: '#111827' }}>{rol.label}</Typography>
+                      {esOwner && <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Siempre ve todo</Typography>}
                     </Box>
-                  )}
-                </Box>
-                {data.roles.map(rol => {
-                  const esOwner = rol.key === 'owner';
-                  return (
-                    <Box key={rol.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid #f9fafb' }}>
-                      <Box>
-                        <Typography sx={{ fontSize: '0.875rem', color: '#111827' }}>{rol.label}</Typography>
-                        {esOwner && <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Siempre ve todo</Typography>}
-                      </Box>
-                      {esOwner ? (
-                        <Lock size={15} style={{ color: '#6b7280' }} aria-label="Siempre la ve" />
-                      ) : (
-                        <Interruptor
-                          visible={veLaPantalla(rol, pantalla.id)}
-                          disabled={guardando === `${rol.id}:${pantalla.id}`}
-                          etiqueta={`${rol.label} ve ${pantalla.label} (${pantalla.moduloLabel})`}
-                          onChange={v => fijar(rol, pantalla.id, v)}
-                        />
-                      )}
-                    </Box>
-                  );
-                })}
-              </Box>
-            ))}
-          </Box>
+                    {esOwner ? (
+                      <Lock size={15} style={{ color: '#6b7280' }} aria-label="Siempre la ve" />
+                    ) : (
+                      <Interruptor
+                        visible={veLaPantalla(rol, actual.id)}
+                        disabled={guardando === `${rol.id}:${actual.id}`}
+                        etiqueta={`${rol.label} ve ${actual.label} (${actual.moduloLabel})`}
+                        onChange={v => fijar(rol, [actual.id], v)}
+                      />
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          </>
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 1.5, borderTop: '1px solid #f3f4f6' }}>
           <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Alt + Shift + R, desde cualquier pantalla</Typography>
