@@ -85,7 +85,7 @@ export function GuardPantalla({ ocultas, children }: { ocultas: string[]; childr
           <Lock size={22} />
         </Box>
         <Typography sx={{ fontWeight: 600, fontSize: '1.125rem', color: '#111827' }}>
-          {pantalla.label} no está disponible para tu rol
+          {pantalla.label} no está disponible para ti
         </Typography>
         <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: '#6b7280' }}>
           El administrador del colegio la desactivó. Si la necesitas, pídele que te la habilite.
