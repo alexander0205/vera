@@ -103,7 +103,27 @@ export function usePantallasPorRol(activo = true) {
     [fijarVarias],
   );
 
-  return { data, isLoading, fijar, fijarVarias, guardando };
+  /** Le abre el colegio a un rol que no entraba (módulo + ver). */
+  const darAcceso = useCallback(async (rol: RolPantallas) => {
+    setGuardando(`${rol.id}:acceso`);
+    try {
+      const res = await fetch(URL_API, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roleId: rol.id, darAcceso: true }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo dar acceso');
+      toast.success(`${rol.label} ya entra al colegio`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo dar acceso');
+    } finally {
+      setGuardando(null);
+      mutate();
+    }
+  }, [mutate, router]);
+
+  return { data, isLoading, fijar, fijarVarias, darAcceso, guardando };
 }
 
 // ─── Bloqueo ──────────────────────────────────────────────────────────────────
@@ -150,7 +170,7 @@ function esAtajo(e: KeyboardEvent) {
 export function AtajoPantallaRoles() {
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(false);
-  const { data, isLoading, fijar, guardando } = usePantallasPorRol(abierto);
+  const { data, isLoading, fijar, darAcceso, guardando } = usePantallasPorRol(abierto);
   const pantalla = pantallaDeRuta(pathname);
 
   useEffect(() => {
@@ -194,8 +214,9 @@ export function AtajoPantallaRoles() {
                 key={rol.id}
                 rol={rol}
                 pantalla={pantalla.id}
-                guardando={guardando === `${rol.id}:${pantalla.id}`}
+                guardando={guardando === `${rol.id}:${pantalla.id}` || guardando === `${rol.id}:acceso`}
                 onCambiar={visible => fijar(rol, pantalla.id, visible)}
+                onDarAcceso={() => darAcceso(rol)}
               />
             ))}
           </Box>
@@ -215,37 +236,44 @@ export function AtajoPantallaRoles() {
   );
 }
 
-function FilaRol({ rol, pantalla, guardando, onCambiar }: {
+function FilaRol({ rol, pantalla, guardando, onCambiar, onDarAcceso }: {
   rol: RolPantallas;
   pantalla: string;
   guardando: boolean;
   onCambiar: (visible: boolean) => void;
+  onDarAcceso: () => void;
 }) {
   const esOwner = rol.key === 'owner';
   const sinModulo = !rol.tieneModulo && !esOwner;
   const visible = esOwner || !rol.ocultas.includes(pantalla);
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f9fafb', opacity: sinModulo ? 0.55 : 1 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f9fafb' }}>
       <Box>
-        <Typography sx={{ fontSize: '0.875rem', color: '#111827' }}>{rol.label}</Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: sinModulo ? '#9ca3af' : '#111827' }}>{rol.label}</Typography>
         {(esOwner || sinModulo) && (
           <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-            {esOwner ? 'Siempre ve todo' : 'No entra al módulo del colegio'}
+            {esOwner ? 'Siempre ve todo' : 'No entra al colegio'}
           </Typography>
         )}
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <Typography sx={{ fontSize: '0.75rem', color: visible ? '#059669' : '#9ca3af', fontWeight: 500, width: 44, textAlign: 'right' }}>
-          {visible ? 'La ve' : 'Oculta'}
-        </Typography>
-        <Switch
-          size="small"
-          checked={visible}
-          disabled={esOwner || guardando}
-          onChange={(_, v) => onCambiar(v)}
-          slotProps={{ input: { 'aria-label': `${rol.label} ve esta pantalla` } }}
-        />
-      </Box>
+      {sinModulo ? (
+        <Button variant="outline" size="sm" disabled={guardando} onClick={onDarAcceso}>Dar acceso</Button>
+      ) : esOwner ? (
+        <Lock size={15} style={{ color: '#9ca3af' }} />
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: visible ? '#059669' : '#9ca3af', fontWeight: 500, width: 44, textAlign: 'right' }}>
+            {visible ? 'La ve' : 'Oculta'}
+          </Typography>
+          <Switch
+            size="small"
+            checked={visible}
+            disabled={guardando}
+            onChange={(_, v) => onCambiar(v)}
+            slotProps={{ input: { 'aria-label': `${rol.label} ve esta pantalla` } }}
+          />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -381,7 +409,7 @@ export function ResumenPantallas({ rol, total }: { rol: RolPantallas; total: num
  * está su editor; aquí el encabezado de cada rol lleva a él.
  */
 export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) => void }) {
-  const { data, isLoading, fijar, guardando } = usePantallasPorRol();
+  const { data, isLoading, fijar, darAcceso, guardando } = usePantallasPorRol();
 
   return (
     <Paper id="pantallas" variant="outlined" sx={{ borderRadius: '12px', borderColor: '#e5e7eb', overflow: 'hidden', scrollMarginTop: 24 }}>
@@ -394,8 +422,8 @@ export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) 
             Pantallas del colegio · vista general
           </Typography>
           <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-            Encendido = el rol la ve. Apagada, sale de su menú y no puede abrirla. Toca el nombre de un
-            rol para configurarlo a fondo, o usa Alt + Shift + R dentro de cualquier pantalla del colegio.
+            Enciende o apaga cada pantalla por rol: apagada, sale de su menú y no puede abrirla. Los roles
+            sin acceso al colegio traen un botón para dárselo. Atajo: Alt + Shift + R en cualquier pantalla.
           </Typography>
         </Box>
       </Box>
@@ -412,19 +440,29 @@ export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) 
                   Pantalla
                 </Box>
                 {data.roles.map(r => {
-                  const sinModulo = !r.tieneModulo && r.key !== 'owner';
+                  const esOwner = r.key === 'owner';
+                  const sinModulo = !r.tieneModulo && !esOwner;
                   return (
-                    <Box component="th" key={r.id} sx={{ px: 1, py: 0.75, textAlign: 'center', fontWeight: 500, opacity: sinModulo ? 0.55 : 1 }}>
+                    <Box component="th" key={r.id} sx={{ px: 1, py: 0.75, textAlign: 'center', fontWeight: 500, verticalAlign: 'top' }}>
                       <ButtonBase
-                        disabled={!onAbrirRol || r.key === 'owner'}
+                        disabled={!onAbrirRol || esOwner}
                         onClick={() => onAbrirRol?.(r.id)}
-                        sx={{ flexDirection: 'column', borderRadius: '6px', px: 1, py: 0.5, color: '#374151', '&:hover': { bgcolor: '#f3f4f6' } }}
+                        sx={{ flexDirection: 'column', borderRadius: '6px', px: 1, py: 0.5, color: sinModulo ? '#9ca3af' : '#374151', '&:hover': { bgcolor: '#f3f4f6' } }}
                       >
                         <span style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem', fontWeight: 500 }}>{r.label}</span>
-                        <span style={{ fontSize: '0.6875rem', color: '#9ca3af', fontWeight: 400 }}>
-                          {sinModulo ? 'sin acceso al colegio' : `${pantallasVisibles(r, data.pantallas.length)}/${data.pantallas.length}`}
-                        </span>
+                        {!sinModulo && (
+                          <span style={{ fontSize: '0.6875rem', color: '#9ca3af', fontWeight: 400 }}>
+                            {esOwner ? 'siempre todo' : `${pantallasVisibles(r, data.pantallas.length)}/${data.pantallas.length}`}
+                          </span>
+                        )}
                       </ButtonBase>
+                      {sinModulo && (
+                        <Box sx={{ mt: 0.25 }}>
+                          <Button variant="outline" size="sm" disabled={guardando === `${r.id}:acceso`} onClick={() => darAcceso(r)}>
+                            Dar acceso
+                          </Button>
+                        </Box>
+                      )}
                     </Box>
                   );
                 })}
@@ -445,14 +483,20 @@ export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) 
                       const esOwner = r.key === 'owner';
                       const sinModulo = !r.tieneModulo && !esOwner;
                       return (
-                        <Box component="td" key={r.id} sx={{ textAlign: 'center', py: 0.5, opacity: sinModulo ? 0.4 : 1 }}>
-                          <Switch
-                            size="small"
-                            checked={esOwner || !r.ocultas.includes(p.id)}
-                            disabled={esOwner || guardando === `${r.id}:${p.id}`}
-                            onChange={(_, v) => fijar(r, p.id, v)}
-                            slotProps={{ input: { 'aria-label': `${r.label} ve ${p.label}` } }}
-                          />
+                        <Box component="td" key={r.id} sx={{ textAlign: 'center', py: 0.5 }}>
+                          {sinModulo ? (
+                            <span style={{ color: '#d1d5db' }}>—</span>
+                          ) : esOwner ? (
+                            <Lock size={14} style={{ color: '#c7cbd1', margin: '0 auto' }} />
+                          ) : (
+                            <Switch
+                              size="small"
+                              checked={!r.ocultas.includes(p.id)}
+                              disabled={guardando === `${r.id}:${p.id}`}
+                              onChange={(_, v) => fijar(r, p.id, v)}
+                              slotProps={{ input: { 'aria-label': `${r.label} ve ${p.label}` } }}
+                            />
+                          )}
                         </Box>
                       );
                     })}
