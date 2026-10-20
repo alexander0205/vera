@@ -13,7 +13,10 @@
  */
 
 import { db } from '@/lib/db/drizzle';
-import { teams, ecfDocuments, pagosRecibidos, products } from '@/lib/db/schema';
+import {
+  teams, ecfDocuments, pagosRecibidos, products,
+  adminEscolarCargos, adminEscolarConceptosPago,
+} from '@/lib/db/schema';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
@@ -22,6 +25,46 @@ import {
   calcularMora, fechaPeriodo,
   type ConfigMora, type ModoMora,
 } from '@/lib/cobranza/mora-calculo';
+import { graciaParaMora } from '@/lib/cobranza/elegibilidad-mora-escolar';
+
+/**
+ * Días de gracia que aplican a UNA factura.
+ *
+ * Para facturas de cargos escolares manda la gracia del CONCEPTO
+ * (`admin_escolar_conceptos_pago.mora_dias_gracia`), no la del team: el colegio
+ * configura una gracia por cada tipo de cobro (p. ej. Colegiatura 5 días) y el
+ * motor debe respetarla. `teams.recargo_mora_dias_gracia` solo se usa como
+ * respaldo para ventas normales (sin cargo escolar) o facturas cuyos conceptos
+ * no cobran mora.
+ *
+ * Si la factura junta varios conceptos que cobran mora con gracias distintas, se
+ * usa la MÁS LARGA (favorece a la familia; la ND es por factura, una sola gracia).
+ * Un concepto con gracia 0 es un 0 real (Inscripción/Evaluación no dan gracia),
+ * no "sin configurar": por eso solo se cae al team cuando NO hay ningún concepto
+ * escolar que cobre mora detrás de la factura.
+ */
+async function graciaDeFactura(
+  ecfDocumentId: number,
+  teamId: number,
+  graciaTeam: number,
+): Promise<number> {
+  const conceptos = await db
+    .select({
+      cobraMora:      adminEscolarConceptosPago.cobraMora,
+      moraDiasGracia: adminEscolarConceptosPago.moraDiasGracia,
+    })
+    .from(adminEscolarCargos)
+    .innerJoin(
+      adminEscolarConceptosPago,
+      eq(adminEscolarConceptosPago.id, adminEscolarCargos.conceptoId),
+    )
+    .where(and(
+      eq(adminEscolarCargos.ecfDocumentId, ecfDocumentId),
+      eq(adminEscolarCargos.teamId, teamId),
+    ));
+  // Sin cargos escolares (venta normal) la lista queda vacía → gracia del team.
+  return graciaParaMora(conceptos, graciaTeam);
+}
 
 /**
  * Preview de la próxima mora automática de una factura, para mostrarla en el
@@ -88,6 +131,9 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
     topeBps:          team.topeBps ?? 0,
     maxPeriodos:      team.maxPeriodos ?? 0,
   };
+  // Gracia por concepto escolar (ver graciaDeFactura). Para colegio manda el
+  // concepto; para ventas normales queda la del team.
+  config.diasGracia = await graciaDeFactura(padre.id, padre.teamId, config.diasGracia);
 
   // Saldo real = total − pagos − NC aplicadas.
   const [{ pagado }] = await db
@@ -230,6 +276,10 @@ export async function generarNotaDebitoMora(
     topeBps:          team?.topeBps ?? 0,
     maxPeriodos:      team?.maxPeriodos ?? 0,
   };
+  // Gracia por concepto escolar (ver graciaDeFactura): aplica igual al cron
+  // (que llama aquí) y a la generación manual. Para ventas normales queda la
+  // del team.
+  config.diasGracia = await graciaDeFactura(padre.id, padre.teamId, config.diasGracia);
 
   // ── Saldo del padre = montoTotal − SUM(pagos) − NC aplicadas ───────────────
   const [{ pagado }] = await db
