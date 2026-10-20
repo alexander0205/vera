@@ -24,17 +24,33 @@ export interface PantallaDef {
   href: string;
   /** Una línea para quien decide: qué se hace en esa pantalla. */
   descripcion: string;
+  /**
+   * Si la pantalla ya la manda un permiso, cuál. Apagarla es quitarle ese
+   * permiso al rol, no una fila aparte: así hay UN solo control y no dos que
+   * puedan contradecirse. Las rutas ya exigen el permiso en el servidor.
+   */
+  permiso?: string;
 }
+
+/** Los dos permisos que abren la puerta del colegio (módulo + poder mirar). */
+export const ACCESO_COLEGIO = ['modulo:escolar', 'administracion-escolar:ver'] as const;
+
+/** Permisos del colegio que se encienden y apagan sueltos desde la tarjeta. */
+export const PERMISO_CONFIGURAR = 'administracion-escolar:configurar';
+export const PERMISOS_ACCION = ['administracion-escolar:gestionar', 'administracion-escolar:pagos'] as const;
+export const PERMISOS_COLEGIO: readonly string[] = [
+  ...ACCESO_COLEGIO, PERMISO_CONFIGURAR, ...PERMISOS_ACCION,
+];
 
 export const PANTALLAS_ESCOLAR: PantallaDef[] = [
   { id: 'escolar-panorama',      href: '/escolar/dashboard',     label: 'Panorama', descripcion: 'Resumen del colegio: cobros, deuda y matrícula' },
   { id: 'escolar-matriculas',    href: '/escolar/matriculas',    label: 'Matriculación', descripcion: 'Inscribir alumnos en un curso' },
   { id: 'escolar-estudiantes',   href: '/escolar/estudiantes',   label: 'Estudiantes y padres', descripcion: 'Fichas de los alumnos y de sus padres' },
-  { id: 'escolar-documentos',    href: '/escolar/documentos',    label: 'Documentos', descripcion: 'Documentos requeridos y formularios' },
+  { id: 'escolar-documentos',    href: '/escolar/documentos',    label: 'Documentos', descripcion: 'Documentos requeridos y formularios', permiso: PERMISO_CONFIGURAR },
   { id: 'escolar-responsables',  href: '/escolar/responsables',  label: 'Responsables', descripcion: 'Las familias que pagan y lo que deben' },
   { id: 'escolar-pagos',         href: '/escolar/pagos',         label: 'Pagos', descripcion: 'Pagos aplicados y comprobantes por aprobar' },
   { id: 'escolar-avisos',        href: '/escolar/avisos',        label: 'Avisos', descripcion: 'Recordatorios de cobro que se enviaron' },
-  { id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', descripcion: 'Períodos, cursos, tarifas y conceptos' },
+  { id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', descripcion: 'Períodos, cursos, tarifas y conceptos', permiso: PERMISO_CONFIGURAR },
 ];
 
 const IDS = new Set(PANTALLAS_ESCOLAR.map(p => p.id));
@@ -53,4 +69,16 @@ export function pantallaDeRuta(pathname: string): PantallaDef | null {
   return PANTALLAS_ESCOLAR.find(
     p => pathname === p.href || pathname.startsWith(`${p.href}/`),
   ) ?? null;
+}
+
+/**
+ * ¿El rol ve esta pantalla? Si la manda un permiso, es tenerlo; si no, no
+ * estar en su lista de apagadas. El Propietario siempre la ve.
+ */
+export function veLaPantalla(
+  rol: { key: string; ocultas: string[]; permisos: string[] },
+  p: Pick<PantallaDef, 'id' | 'permiso'>,
+): boolean {
+  if (rol.key === 'owner') return true;
+  return p.permiso ? rol.permisos.includes(p.permiso) : !rol.ocultas.includes(p.id);
 }

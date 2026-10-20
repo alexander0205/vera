@@ -1,9 +1,11 @@
 /**
- * GET /api/equipo/pantallas — qué pantallas tiene apagadas cada rol.
- * PUT /api/equipo/pantallas — enciende o apaga una pantalla para un rol.
- *       body: { roleId: number, pantalla: string | string[], visible: boolean }
- *       (varias a la vez para «Todas» / «Ninguna»)
- *       o { roleId, darAcceso: true }: le abre el colegio al rol (módulo + ver).
+ * GET /api/equipo/pantallas — qué ve cada rol del colegio.
+ * PUT /api/equipo/pantallas — cambia algo del colegio para un rol. Una de:
+ *   { roleId, pantalla: string | string[], visible }  enciende/apaga pantallas
+ *   { roleId, acceso: boolean }     abre o cierra el colegio (módulo + ver)
+ *   { roleId, permiso, activo }     un permiso suelto del colegio (acciones,
+ *                                   o «configurar», que manda Configuración y
+ *                                   Documentos)
  *
  * El Propietario no se puede tocar: siempre ve todo.
  * Catálogo de pantallas: lib/config/pantallas.ts.
@@ -12,15 +14,10 @@
  */
 
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db/drizzle';
-import { teamRolePermissions } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { listTeamRoles } from '@/lib/auth/permissions';
-import { ocultasPorRol, fijarPantallas } from '@/lib/auth/pantallas';
-import { PANTALLAS_ESCOLAR, esPantalla } from '@/lib/config/pantallas';
-
-/** Permisos que hacen falta para entrar al colegio (layout de /escolar). */
-const ACCESO_COLEGIO = ['modulo:escolar', 'administracion-escolar:ver'];
+import { ocultasPorRol, fijarPantallas, fijarPermisos } from '@/lib/auth/pantallas';
+import { PANTALLAS_ESCOLAR, ACCESO_COLEGIO, PERMISOS_COLEGIO, esPantalla } from '@/lib/config/pantallas';
 
 export async function GET() {
   const auth = await requirePermission('equipo:gestionar');
@@ -35,8 +32,10 @@ export async function GET() {
       key: r.key,
       label: r.label,
       ocultas: ocultas.get(r.id) ?? [],
-      // Sin 'modulo:escolar' el rol ni entra al colegio: sus pantallas no aplican.
-      tieneModulo: r.permissions.includes('modulo:escolar'),
+      // Los permisos del colegio que tiene (acciones y «configurar»).
+      permisos: r.permissions.filter(p => PERMISOS_COLEGIO.includes(p)),
+      // Entra al colegio solo con módulo + ver; sin ellos sus pantallas no aplican.
+      tieneModulo: ACCESO_COLEGIO.every(p => r.permissions.includes(p)),
     })),
   });
 }
@@ -48,16 +47,24 @@ export async function PUT(req: Request) {
 
   const body = await req.json().catch(() => null);
   const roleId = Number(body?.roleId);
-  // «Dar acceso al colegio»: lo mínimo para entrar y mirar. El resto (crear,
-  // cobrar…) se afina en el editor del rol.
-  if (body?.darAcceso === true) {
-    if (!Number.isInteger(roleId)) return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
+  // Abrir/cerrar el colegio, o un permiso suelto: no son pantallas sino
+  // permisos del rol, y se aplican al instante.
+  const esAcceso = typeof body?.acceso === 'boolean';
+  const esPermiso = typeof body?.permiso === 'string' && typeof body?.activo === 'boolean';
+  if (esAcceso || esPermiso) {
+    if (!Number.isInteger(roleId) || (esPermiso && !PERMISOS_COLEGIO.includes(body.permiso))) {
+      return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
+    }
     const rolDestino = (await listTeamRoles(teamId)).find(r => r.id === roleId);
     if (!rolDestino) return NextResponse.json({ error: 'Rol no encontrado' }, { status: 404 });
-    if (rolDestino.key === 'owner') return NextResponse.json({ ok: true });
-    await db.insert(teamRolePermissions)
-      .values(ACCESO_COLEGIO.map(permission => ({ teamRoleId: roleId, permission })))
-      .onConflictDoNothing();
+    if (rolDestino.key === 'owner') {
+      return NextResponse.json({ error: 'El Propietario siempre tiene acceso a todo' }, { status: 403 });
+    }
+    await fijarPermisos(
+      roleId,
+      esAcceso ? [...ACCESO_COLEGIO] : [body.permiso],
+      esAcceso ? body.acceso : body.activo,
+    );
     return NextResponse.json({ ok: true });
   }
 

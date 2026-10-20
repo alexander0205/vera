@@ -27,9 +27,10 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import ButtonBase from '@mui/material/ButtonBase';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { PERMISOS_COLEGIO } from '@/lib/config/pantallas';
 import {
-  MatrizPantallas, PantallasDelRol, ResumenPantallas, usePantallasPorRol,
-  type RolPantallas,
+  MatrizPantallas, ColegioDelRol, ResumenPantallas, usePantallasPorRol,
+  type DatosPantallas,
 } from '@/components/administracion-escolar/PantallasPorRol';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -130,8 +131,8 @@ function RolesList({ roles, onSelect, onCreate, pantallas }: {
   roles: Role[];
   onSelect: (id: number) => void;
   onCreate: () => void;
-  /** Pantallas del colegio por rol; solo si la empresa tiene el módulo. */
-  pantallas?: { pantallas: unknown[]; roles: RolPantallas[] };
+  /** El colegio por rol; solo si la empresa tiene el módulo. */
+  pantallas?: DatosPantallas;
 }) {
   return (
     // La página se renderiza directo dentro del área de contenido (que no trae
@@ -223,7 +224,7 @@ function RolesList({ roles, onSelect, onCreate, pantallas }: {
                     </Box>
                     {(() => {
                       const rp = pantallas?.roles.find(x => x.id === r.id);
-                      return rp ? <ResumenPantallas rol={rp} total={pantallas!.pantallas.length} /> : null;
+                      return rp ? <ResumenPantallas rol={rp} pantallas={pantallas!.pantallas} /> : null;
                     })()}
                   </Box>
                   <Box
@@ -361,6 +362,16 @@ function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Con el colegio, sus permisos viven en la tarjeta de arriba: aquí no se
+  // repiten. Siguen en `perms`, así que al guardar no se pierden.
+  const catalogVisible = useMemo(() => {
+    if (!conColegio) return catalog;
+    const sueltos = new Set<string>(PERMISOS_COLEGIO);
+    return catalog
+      .map(g => ({ ...g, permissions: g.permissions.filter(p => !sueltos.has(p.key)) }))
+      .filter(g => g.permissions.length > 0);
+  }, [catalog, conColegio]);
 
   const dirty = useMemo(() => {
     if (label !== role.label) return true;
@@ -541,11 +552,23 @@ function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
       )}
 
       {conColegio && (
-        <PantallasDelRol roleId={role.id} moduloActivo={isOwner || perms.has('modulo:escolar')} />
+        <ColegioDelRol
+          roleId={role.id}
+          onPermisos={(claves, activo) => {
+            // Lo que la tarjeta ya aplicó en el servidor: sin esto, «Guardar
+            // cambios» mandaría la copia vieja y lo deshacería.
+            setPerms(prev => {
+              const next = new Set(prev);
+              for (const k of claves) { if (activo) next.add(k); else next.delete(k); }
+              return next;
+            });
+            onSaved();
+          }}
+        />
       )}
 
       <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
-        {catalog.map((group, gi) => (
+        {catalogVisible.map((group, gi) => (
           <Box key={group.module} sx={{ px: 2, py: 1.5, borderTop: gi === 0 ? 'none' : '1px solid #f3f4f6' }}>
             <Box
               sx={{

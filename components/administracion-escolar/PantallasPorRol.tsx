@@ -1,18 +1,23 @@
 'use client';
 
 /**
- * Gobernanza del colegio: qué pantallas ve cada rol.
+ * Gobernanza del colegio: qué ve y qué puede hacer cada rol en Administración
+ * Escolar, en UN solo sitio.
  *
- *  - `GuardPantalla`       → envuelve el contenido del módulo; si la pantalla
- *    en la que se está quedó apagada para el rol, enseña «no está disponible
- *    para ti» en vez de la pantalla. Cubre también la llegada por URL.
+ *  - `ColegioDelRol`       → la tarjeta dentro del editor de un rol (Equipo →
+ *    Permisos → el rol): entra o no al colegio, qué pantallas ve y qué puede
+ *    hacer (crear/editar, cobrar). Todo se guarda al instante.
+ *  - `MatrizPantallas`     → vista general pantallas × roles para comparar.
  *  - `AtajoPantallaRoles`  → Alt+Shift+R abre, sobre la pantalla en la que se
  *    está, la lista de roles con un interruptor cada uno. Solo lo monta el
  *    layout para quien gestiona el equipo.
- *  - `PantallasDelRol`     → la tarjeta que vive DENTRO del editor de un rol
- *    (Equipo → Permisos → el rol): con icono y descripción por pantalla, y
- *    «Todas» / «Ninguna». Es donde se espera encontrarlas.
- *  - `MatrizPantallas`     → vista general pantallas × roles para comparar.
+ *  - `GuardPantalla`       → si la pantalla en la que se está quedó apagada
+ *    para el rol, enseña «no está disponible para ti». Cubre la llegada por URL.
+ *
+ * Detrás hay dos mecanismos que el usuario no tiene que distinguir: una lista
+ * de pantallas apagadas por rol y los permisos de siempre (entrar, configurar,
+ * crear/editar, cobrar). Configuración y Documentos las manda el permiso
+ * «configurar»: ver `permiso` en lib/config/pantallas.ts.
  *
  * El menú se filtra en el servidor (ver app/escolar/layout.tsx). Tras cada
  * cambio se refresca la ruta para que menú y bloqueo lo tomen al momento.
@@ -34,17 +39,22 @@ import CircularProgress from '@mui/material/CircularProgress';
 import ButtonBase from '@mui/material/ButtonBase';
 import {
   Lock, LayoutDashboard, ClipboardList, Users, FileText, Contact, Wallet, BellRing,
-  Settings, GraduationCap, Info, Eye, EyeOff,
+  Settings, GraduationCap, Eye, EyeOff, DoorOpen, Pencil, Banknote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PANTALLAS_ESCOLAR, pantallaDeRuta, type PantallaDef } from '@/lib/config/pantallas';
+import {
+  ACCESO_COLEGIO, PANTALLAS_ESCOLAR, PERMISO_CONFIGURAR, pantallaDeRuta, veLaPantalla,
+  type PantallaDef,
+} from '@/lib/config/pantallas';
 
 export interface RolPantallas {
   id: number;
   key: string;
   label: string;
   ocultas: string[];
-  /** ¿El rol entra al módulo del colegio? Sin eso las pantallas no aplican. */
+  /** Permisos del colegio que tiene el rol (acciones y «configurar»). */
+  permisos: string[];
+  /** ¿Entra al colegio? Sin eso nada de lo demás aplica. */
   tieneModulo: boolean;
 }
 export interface DatosPantallas { pantallas: PantallaDef[]; roles: RolPantallas[] }
@@ -63,32 +73,50 @@ const ICONOS: Record<string, ElementType> = {
   'escolar-configuracion': Settings,
 };
 
-/** Cuántas pantallas ve el rol (el Propietario siempre todas). */
-export function pantallasVisibles(rol: RolPantallas, total: number) {
-  return rol.key === 'owner' ? total : total - rol.ocultas.length;
+/** Las dos cosas que un rol puede HACER en el colegio (el resto es ver). */
+const ACCIONES: { permiso: string; label: string; descripcion: string; icono: ElementType }[] = [
+  { permiso: 'administracion-escolar:gestionar', label: 'Crear y editar', descripcion: 'Estudiantes, tutores, cursos y matrículas', icono: Pencil },
+  { permiso: 'administracion-escolar:pagos', label: 'Cobrar', descripcion: 'Registrar pagos escolares', icono: Banknote },
+];
+
+/** Cuántas pantallas ve el rol. */
+export function pantallasVisibles(rol: RolPantallas, pantallas: PantallaDef[]) {
+  return pantallas.filter(p => veLaPantalla(rol, p)).length;
 }
 
-/** Lee las pantallas por rol y devuelve con qué cambiarlas. */
-export function usePantallasPorRol(activo = true) {
+/**
+ * Lee el colegio por rol y devuelve con qué cambiarlo.
+ *
+ * `onPermisos` avisa de los permisos que cambiaron: el editor del rol guarda
+ * su propia copia de los permisos hasta «Guardar cambios», y sin el aviso
+ * ese guardado deshacería lo que aquí ya se aplicó.
+ */
+export function usePantallasPorRol(
+  activo = true,
+  onPermisos?: (permisos: string[], activo: boolean) => void,
+) {
   const router = useRouter();
   const { data, isLoading, mutate } = useSWR<DatosPantallas>(activo ? URL_API : null, fetcher);
   const [guardando, setGuardando] = useState<string | null>(null);
 
-  const fijarVarias = useCallback(async (rol: RolPantallas, ids: string[], visible: boolean) => {
-    if (!ids.length) return;
-    setGuardando(`${rol.id}:${ids.join(',')}`);
-    // Optimista: el interruptor responde ya; si el servidor dice que no, se revierte.
-    const ocultas = visible
-      ? rol.ocultas.filter(p => !ids.includes(p))
-      : [...new Set([...rol.ocultas, ...ids])];
-    mutate(d => d && { ...d, roles: d.roles.map(r => (r.id === rol.id ? { ...r, ocultas } : r)) }, false);
+  /** Optimista: el interruptor responde ya; si el servidor dice que no, se revierte. */
+  const aplicar = useCallback(async (
+    rol: RolPantallas,
+    clave: string,
+    cambio: (r: RolPantallas) => RolPantallas,
+    body: Record<string, unknown>,
+    permisosCambiados?: { permisos: string[]; activo: boolean },
+  ) => {
+    setGuardando(`${rol.id}:${clave}`);
+    mutate(d => d && { ...d, roles: d.roles.map(r => (r.id === rol.id ? cambio(r) : r)) }, false);
     try {
       const res = await fetch(URL_API, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roleId: rol.id, pantalla: ids, visible }),
+        body: JSON.stringify({ roleId: rol.id, ...body }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo guardar');
+      if (permisosCambiados) onPermisos?.(permisosCambiados.permisos, permisosCambiados.activo);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
@@ -96,34 +124,49 @@ export function usePantallasPorRol(activo = true) {
       setGuardando(null);
       mutate();
     }
-  }, [mutate, router]);
+  }, [mutate, router, onPermisos]);
 
-  const fijar = useCallback(
-    (rol: RolPantallas, pantalla: string, visible: boolean) => fijarVarias(rol, [pantalla], visible),
-    [fijarVarias],
-  );
+  /** Pantallas de la lista de apagadas (las que no las manda un permiso). */
+  const fijarVarias = useCallback((rol: RolPantallas, ids: string[], visible: boolean) => {
+    if (!ids.length) return Promise.resolve();
+    return aplicar(
+      rol, ids.join(','),
+      r => ({
+        ...r,
+        ocultas: visible ? r.ocultas.filter(p => !ids.includes(p)) : [...new Set([...r.ocultas, ...ids])],
+      }),
+      { pantalla: ids, visible },
+    );
+  }, [aplicar]);
 
-  /** Le abre el colegio a un rol que no entraba (módulo + ver). */
-  const darAcceso = useCallback(async (rol: RolPantallas) => {
-    setGuardando(`${rol.id}:acceso`);
-    try {
-      const res = await fetch(URL_API, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roleId: rol.id, darAcceso: true }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo dar acceso');
-      toast.success(`${rol.label} ya entra al colegio`);
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo dar acceso');
-    } finally {
-      setGuardando(null);
-      mutate();
-    }
-  }, [mutate, router]);
+  /** Un permiso suelto del colegio. */
+  const fijarPermiso = useCallback((rol: RolPantallas, permiso: string, on: boolean) => aplicar(
+    rol, permiso,
+    r => ({ ...r, permisos: on ? [...new Set([...r.permisos, permiso])] : r.permisos.filter(p => p !== permiso) }),
+    { permiso, activo: on },
+    { permisos: [permiso], activo: on },
+  ), [aplicar]);
 
-  return { data, isLoading, fijar, fijarVarias, darAcceso, guardando };
+  /** Abre o cierra el colegio para un rol (módulo + ver). */
+  const fijarAcceso = useCallback((rol: RolPantallas, on: boolean) => aplicar(
+    rol, 'acceso',
+    r => ({ ...r, tieneModulo: on }),
+    { acceso: on },
+    { permisos: [...ACCESO_COLEGIO], activo: on },
+  ), [aplicar]);
+
+  /** Una pantalla: por su permiso si lo tiene, por la lista de apagadas si no. */
+  const fijarPantalla = useCallback((rol: RolPantallas, p: PantallaDef, visible: boolean) => (
+    p.permiso ? fijarPermiso(rol, p.permiso, visible) : fijarVarias(rol, [p.id], visible)
+  ), [fijarPermiso, fijarVarias]);
+
+  /** «Todas» / «Ninguna». */
+  const fijarTodas = useCallback(async (rol: RolPantallas, pantallas: PantallaDef[], visible: boolean) => {
+    await fijarVarias(rol, pantallas.filter(p => !p.permiso).map(p => p.id), visible);
+    if (pantallas.some(p => p.permiso === PERMISO_CONFIGURAR)) await fijarPermiso(rol, PERMISO_CONFIGURAR, visible);
+  }, [fijarVarias, fijarPermiso]);
+
+  return { data, isLoading, guardando, fijarPantalla, fijarTodas, fijarPermiso, fijarAcceso };
 }
 
 // ─── Bloqueo ──────────────────────────────────────────────────────────────────
@@ -170,7 +213,7 @@ function esAtajo(e: KeyboardEvent) {
 export function AtajoPantallaRoles() {
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(false);
-  const { data, isLoading, fijar, darAcceso, guardando } = usePantallasPorRol(abierto);
+  const { data, isLoading, fijarPantalla, fijarAcceso, guardando } = usePantallasPorRol(abierto);
   const pantalla = pantallaDeRuta(pathname);
 
   useEffect(() => {
@@ -213,10 +256,10 @@ export function AtajoPantallaRoles() {
               <FilaRol
                 key={rol.id}
                 rol={rol}
-                pantalla={pantalla.id}
-                guardando={guardando === `${rol.id}:${pantalla.id}` || guardando === `${rol.id}:acceso`}
-                onCambiar={visible => fijar(rol, pantalla.id, visible)}
-                onDarAcceso={() => darAcceso(rol)}
+                visible={veLaPantalla(rol, pantalla)}
+                ocupado={guardando?.startsWith(`${rol.id}:`) ?? false}
+                onCambiar={visible => fijarPantalla(rol, pantalla, visible)}
+                onDarAcceso={() => fijarAcceso(rol, true)}
               />
             ))}
           </Box>
@@ -236,16 +279,15 @@ export function AtajoPantallaRoles() {
   );
 }
 
-function FilaRol({ rol, pantalla, guardando, onCambiar, onDarAcceso }: {
+function FilaRol({ rol, visible, ocupado, onCambiar, onDarAcceso }: {
   rol: RolPantallas;
-  pantalla: string;
-  guardando: boolean;
+  visible: boolean;
+  ocupado: boolean;
   onCambiar: (visible: boolean) => void;
   onDarAcceso: () => void;
 }) {
   const esOwner = rol.key === 'owner';
   const sinModulo = !rol.tieneModulo && !esOwner;
-  const visible = esOwner || !rol.ocultas.includes(pantalla);
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f9fafb' }}>
       <Box>
@@ -257,7 +299,7 @@ function FilaRol({ rol, pantalla, guardando, onCambiar, onDarAcceso }: {
         )}
       </Box>
       {sinModulo ? (
-        <Button variant="outline" size="sm" disabled={guardando} onClick={onDarAcceso}>Dar acceso</Button>
+        <Button variant="outline" size="sm" disabled={ocupado} onClick={onDarAcceso}>Dar acceso</Button>
       ) : esOwner ? (
         <Lock size={15} style={{ color: '#9ca3af' }} />
       ) : (
@@ -268,7 +310,7 @@ function FilaRol({ rol, pantalla, guardando, onCambiar, onDarAcceso }: {
           <Switch
             size="small"
             checked={visible}
-            disabled={guardando}
+            disabled={ocupado}
             onChange={(_, v) => onCambiar(v)}
             slotProps={{ input: { 'aria-label': `${rol.label} ve esta pantalla` } }}
           />
@@ -280,101 +322,157 @@ function FilaRol({ rol, pantalla, guardando, onCambiar, onDarAcceso }: {
 
 // ─── Tarjeta dentro del editor de un rol ──────────────────────────────────────
 
+/** Fila con icono, título, descripción y un interruptor. */
+function FilaOpcion({ icono: Icono, titulo, descripcion, nota, on, disabled, estado = true, onChange }: {
+  icono: ElementType;
+  titulo: string;
+  descripcion: string;
+  nota?: string;
+  on: boolean;
+  disabled?: boolean;
+  /** Muestra «La ve / Oculta» junto al interruptor. */
+  estado?: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, borderTop: '1px solid #f9fafb' }}>
+      <Box sx={{ display: 'flex', height: 30, width: 30, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: on ? '#f3f4f6' : '#fafafa', color: on ? '#4b5563' : '#d1d5db', flexShrink: 0 }}>
+        <Icono size={16} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: on ? '#111827' : '#9ca3af' }}>{titulo}</Typography>
+        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+          {descripcion}{nota ? ` · ${nota}` : ''}
+        </Typography>
+      </Box>
+      {estado && (
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: on ? '#059669' : '#9ca3af', width: 44, textAlign: 'right' }}>
+          {on ? 'La ve' : 'Oculta'}
+        </Typography>
+      )}
+      <Switch
+        size="small"
+        checked={on}
+        disabled={disabled}
+        onChange={(_, v) => onChange(v)}
+        slotProps={{ input: { 'aria-label': titulo } }}
+      />
+    </Box>
+  );
+}
+
+function Subtitulo({ children, derecha }: { children: React.ReactNode; derecha?: React.ReactNode }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, px: 2, py: 0.75, bgcolor: '#fafafa', borderTop: '1px solid #f3f4f6' }}>
+      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#9ca3af' }}>
+        {children}
+      </Typography>
+      {derecha}
+    </Box>
+  );
+}
+
 /**
- * Las pantallas de UN rol, con lo que hace cada una. Cambia al instante (no
- * pasa por «Guardar cambios», que es de los permisos), y lo dice.
- *
- * `moduloActivo` es lo que el editor tiene encendido AHORA: si apaga «Acceso
- * al módulo Administración Escolar» sin guardar, el aviso sale al momento.
+ * Todo lo del colegio para UN rol: si entra, qué ve y qué puede hacer. Cambia
+ * al instante (no pasa por «Guardar cambios») y lo dice. `onPermisos` mantiene
+ * al día la copia de permisos del editor (ver `usePantallasPorRol`).
  */
-export function PantallasDelRol({ roleId, moduloActivo }: { roleId: number; moduloActivo: boolean }) {
-  const { data, isLoading, fijarVarias, guardando } = usePantallasPorRol();
+export function ColegioDelRol({ roleId, onPermisos }: {
+  roleId: number;
+  onPermisos: (permisos: string[], activo: boolean) => void;
+}) {
+  const { data, isLoading, guardando, fijarPantalla, fijarTodas, fijarPermiso, fijarAcceso } =
+    usePantallasPorRol(true, onPermisos);
   const rol = data?.roles.find(r => r.id === roleId);
   if (isLoading || !data || !rol) return null;
 
   const esOwner = rol.key === 'owner';
-  const ids = data.pantallas.map(p => p.id);
-  const visibles = pantallasVisibles(rol, ids.length);
+  const entra = esOwner || rol.tieneModulo;
+  const visibles = pantallasVisibles(rol, data.pantallas);
   const ocupado = guardando !== null;
 
   return (
     <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
-      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', borderBottom: '1px solid #f3f4f6' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', height: 32, width: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: '#eef2fe', color: '#2a45c4', flexShrink: 0 }}>
-            <GraduationCap size={17} />
-          </Box>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
-              Pantallas del colegio
-            </Typography>
-            <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-              Qué ve este rol dentro de Administración Escolar. Los cambios se guardan al instante.
-            </Typography>
-          </Box>
+      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.25 }}>
+        <Box sx={{ display: 'flex', height: 32, width: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: '#eef2fe', color: '#2a45c4', flexShrink: 0 }}>
+          <GraduationCap size={17} />
         </Box>
-        {!esOwner && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280', mr: 0.5 }}>
-              Ve <b style={{ color: '#111827' }}>{visibles}</b> de {ids.length}
-            </Typography>
-            <Button variant="outline" size="sm" disabled={ocupado || visibles === ids.length} onClick={() => fijarVarias(rol, ids, true)}>
-              <Eye size={14} className="mr-1" />Todas
-            </Button>
-            <Button variant="outline" size="sm" disabled={ocupado || visibles === 0} onClick={() => fijarVarias(rol, ids, false)}>
-              <EyeOff size={14} className="mr-1" />Ninguna
-            </Button>
-          </Box>
-        )}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
+            Administración Escolar
+          </Typography>
+          <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+            Qué ve y qué puede hacer este rol en el colegio. Los cambios se guardan al instante.
+          </Typography>
+        </Box>
       </Box>
 
-      {!moduloActivo && !esOwner && (
-        <Box sx={{ display: 'flex', gap: 1, px: 2, py: 1.25, bgcolor: '#fffbeb', borderBottom: '1px solid #fde68a', color: '#92400e', fontSize: '0.8125rem' }}>
-          <Info size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>
-            Este rol no tiene «Acceso al módulo Administración Escolar» (más abajo, en Acceso a módulos):
-            no entra al colegio y estas pantallas no le aplican. Actívalo primero y guarda.
-          </span>
-        </Box>
-      )}
+      <FilaOpcion
+        icono={DoorOpen}
+        titulo="Entra al colegio"
+        descripcion={entra ? 'Ve el módulo y puede mirar sus datos' : 'Apagado: no ve nada del colegio. Enciéndelo para elegir pantallas y acciones.'}
+        on={entra}
+        estado={false}
+        disabled={esOwner || ocupado}
+        onChange={on => fijarAcceso(rol, on)}
+      />
 
-      <Box sx={{ opacity: !moduloActivo && !esOwner ? 0.5 : 1 }}>
-        {data.pantallas.map((p, i) => {
-          const Icono = ICONOS[p.id] ?? FileText;
-          const visible = esOwner || !rol.ocultas.includes(p.id);
-          return (
-            <Box
-              key={p.id}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1,
-                borderTop: i === 0 ? 'none' : '1px solid #f9fafb',
-              }}
-            >
-              <Box sx={{ display: 'flex', height: 30, width: 30, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: visible ? '#f3f4f6' : '#fafafa', color: visible ? '#4b5563' : '#d1d5db', flexShrink: 0 }}>
-                <Icono size={16} />
+      {entra && (
+        <>
+          <Subtitulo
+            derecha={!esOwner && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  Ve <b style={{ color: '#111827' }}>{visibles}</b> de {data.pantallas.length}
+                </Typography>
+                <Button variant="outline" size="sm" disabled={ocupado || visibles === data.pantallas.length} onClick={() => fijarTodas(rol, data.pantallas, true)}>
+                  <Eye size={14} className="mr-1" />Todas
+                </Button>
+                <Button variant="outline" size="sm" disabled={ocupado || visibles === 0} onClick={() => fijarTodas(rol, data.pantallas, false)}>
+                  <EyeOff size={14} className="mr-1" />Ninguna
+                </Button>
               </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: visible ? '#111827' : '#9ca3af' }}>{p.label}</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{p.descripcion}</Typography>
-              </Box>
-              <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: visible ? '#059669' : '#9ca3af', width: 44, textAlign: 'right' }}>
-                {visible ? 'La ve' : 'Oculta'}
-              </Typography>
-              <Switch
-                size="small"
-                checked={visible}
-                disabled={esOwner || guardando === `${rol.id}:${p.id}`}
-                onChange={(_, v) => fijarVarias(rol, [p.id], v)}
-                slotProps={{ input: { 'aria-label': `${rol.label} ve ${p.label}` } }}
+            )}
+          >
+            Pantallas que ve
+          </Subtitulo>
+          {data.pantallas.map(p => {
+            const otras = p.permiso
+              ? data.pantallas.filter(x => x.permiso === p.permiso && x.id !== p.id).map(x => x.label)
+              : [];
+            return (
+              <FilaOpcion
+                key={p.id}
+                icono={ICONOS[p.id] ?? FileText}
+                titulo={p.label}
+                descripcion={p.descripcion}
+                nota={otras.length ? `va junto con ${otras.join(', ')}` : undefined}
+                on={veLaPantalla(rol, p)}
+                disabled={esOwner || ocupado}
+                onChange={on => fijarPantalla(rol, p, on)}
               />
+            );
+          })}
+
+          <Subtitulo>Qué puede hacer</Subtitulo>
+          {ACCIONES.map(a => (
+            <FilaOpcion
+              key={a.permiso}
+              icono={a.icono}
+              titulo={a.label}
+              descripcion={a.descripcion}
+              on={esOwner || rol.permisos.includes(a.permiso)}
+              estado={false}
+              disabled={esOwner || ocupado}
+              onChange={on => fijarPermiso(rol, a.permiso, on)}
+            />
+          ))}
+          {esOwner && (
+            <Box sx={{ px: 2, py: 1, borderTop: '1px solid #f3f4f6', fontSize: '0.75rem', color: '#9ca3af' }}>
+              El Propietario siempre ve y puede todo.
             </Box>
-          );
-        })}
-      </Box>
-      {esOwner && (
-        <Box sx={{ px: 2, py: 1, borderTop: '1px solid #f3f4f6', fontSize: '0.75rem', color: '#9ca3af' }}>
-          El Propietario siempre ve todas las pantallas.
-        </Box>
+          )}
+        </>
       )}
     </Paper>
   );
@@ -383,9 +481,10 @@ export function PantallasDelRol({ roleId, moduloActivo }: { roleId: number; modu
 // ─── Resumen para la lista de roles ───────────────────────────────────────────
 
 /** «6 de 8 pantallas»; `null` si el rol ni entra al colegio. */
-export function ResumenPantallas({ rol, total }: { rol: RolPantallas; total: number }) {
+export function ResumenPantallas({ rol, pantallas }: { rol: RolPantallas; pantallas: PantallaDef[] }) {
   if (!rol.tieneModulo && rol.key !== 'owner') return null;
-  const n = pantallasVisibles(rol, total);
+  const total = pantallas.length;
+  const n = pantallasVisibles(rol, pantallas);
   const completo = n === total;
   return (
     <Box
@@ -409,7 +508,7 @@ export function ResumenPantallas({ rol, total }: { rol: RolPantallas; total: num
  * está su editor; aquí el encabezado de cada rol lleva a él.
  */
 export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) => void }) {
-  const { data, isLoading, fijar, darAcceso, guardando } = usePantallasPorRol();
+  const { data, isLoading, fijarPantalla, fijarAcceso, guardando } = usePantallasPorRol();
 
   return (
     <Paper id="pantallas" variant="outlined" sx={{ borderRadius: '12px', borderColor: '#e5e7eb', overflow: 'hidden', scrollMarginTop: 24 }}>
@@ -452,13 +551,13 @@ export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) 
                         <span style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem', fontWeight: 500 }}>{r.label}</span>
                         {!sinModulo && (
                           <span style={{ fontSize: '0.6875rem', color: '#9ca3af', fontWeight: 400 }}>
-                            {esOwner ? 'siempre todo' : `${pantallasVisibles(r, data.pantallas.length)}/${data.pantallas.length}`}
+                            {esOwner ? 'siempre todo' : `${pantallasVisibles(r, data.pantallas)}/${data.pantallas.length}`}
                           </span>
                         )}
                       </ButtonBase>
                       {sinModulo && (
                         <Box sx={{ mt: 0.25 }}>
-                          <Button variant="outline" size="sm" disabled={guardando === `${r.id}:acceso`} onClick={() => darAcceso(r)}>
+                          <Button variant="outline" size="sm" disabled={guardando === `${r.id}:acceso`} onClick={() => fijarAcceso(r, true)}>
                             Dar acceso
                           </Button>
                         </Box>
@@ -491,9 +590,9 @@ export function MatrizPantallas({ onAbrirRol }: { onAbrirRol?: (roleId: number) 
                           ) : (
                             <Switch
                               size="small"
-                              checked={!r.ocultas.includes(p.id)}
-                              disabled={guardando === `${r.id}:${p.id}`}
-                              onChange={(_, v) => fijar(r, p.id, v)}
+                              checked={veLaPantalla(r, p)}
+                              disabled={guardando?.startsWith(`${r.id}:`) ?? false}
+                              onChange={(_, v) => fijarPantalla(r, p, v)}
                               slotProps={{ input: { 'aria-label': `${r.label} ve ${p.label}` } }}
                             />
                           )}

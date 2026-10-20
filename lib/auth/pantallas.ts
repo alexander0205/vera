@@ -9,10 +9,10 @@ import 'server-only';
 import { cache } from 'react';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { teamRolePantallasOcultas } from '@/lib/db/schema';
-import { listTeamRoles } from '@/lib/auth/permissions';
+import { teamRolePantallasOcultas, teamRolePermissions } from '@/lib/db/schema';
+import { listTeamRoles, getEffectivePermissions } from '@/lib/auth/permissions';
 import { normalizeRoleKey } from '@/lib/config/roles';
-import { esPantalla } from '@/lib/config/pantallas';
+import { esPantalla, PANTALLAS_ESCOLAR } from '@/lib/config/pantallas';
 
 /** Por id de rol, las pantallas que tiene apagadas. */
 export const ocultasPorRol = cache(async (teamId: number): Promise<Map<number, string[]>> => {
@@ -40,7 +40,30 @@ export async function pantallasOcultasDe(
   if (platformRole === 'admin' || !key || key === 'owner') return [];
   const rol = (await listTeamRoles(teamId)).find(r => r.key === key);
   if (!rol) return [];
-  return (await ocultasPorRol(teamId)).get(rol.id) ?? [];
+  const ocultas = (await ocultasPorRol(teamId)).get(rol.id) ?? [];
+  // Las pantallas que manda un permiso (Configuración, Documentos) también
+  // salen del menú cuando falta: la ruta ya redirige, pero el menú las seguía
+  // ofreciendo.
+  const permisos = await getEffectivePermissions(teamId, key);
+  const sinPermiso = PANTALLAS_ESCOLAR
+    .filter(p => p.permiso && !permisos.includes(p.permiso as never))
+    .map(p => p.id);
+  return [...new Set([...ocultas, ...sinPermiso])];
+}
+
+/** Da o quita permisos sueltos a un rol (los del colegio). Idempotente. */
+export async function fijarPermisos(teamRoleId: number, permisos: string[], activo: boolean) {
+  if (permisos.length === 0) return;
+  if (activo) {
+    await db.insert(teamRolePermissions)
+      .values(permisos.map(permission => ({ teamRoleId, permission })))
+      .onConflictDoNothing();
+  } else {
+    await db.delete(teamRolePermissions).where(and(
+      eq(teamRolePermissions.teamRoleId, teamRoleId),
+      inArray(teamRolePermissions.permission, permisos),
+    ));
+  }
 }
 
 /** Enciende o apaga varias pantallas para un rol. Idempotente. */
