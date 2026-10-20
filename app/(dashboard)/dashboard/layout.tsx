@@ -624,7 +624,7 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
         {/* Page content */}
         <Box
           component="main"
-          sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
+          sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0, position: 'relative' }}
         >
           <GuardPantalla ocultas={pantallasOcultas}>{children}</GuardPantalla>
         </Box>
