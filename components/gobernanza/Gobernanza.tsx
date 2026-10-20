@@ -59,6 +59,10 @@ export interface RolGobernanza {
 }
 export interface DatosGobernanza { modulos: ModuloDef[]; roles: RolGobernanza[] }
 
+const AZUL = '#3658e1';
+const AZUL_OSCURO = '#2a45c4';
+const AZUL_SUAVE = '#eef2fe';
+
 const URL_API = '/api/equipo/pantallas';
 const fetcher = (url: string) => fetch(url).then(r => (r.ok ? r.json() : Promise.reject(r)));
 
@@ -119,6 +123,13 @@ function EstadoGuardado({ estado }: { estado: EstadoGuardar }) {
 /** Cuántas pantallas del módulo ve el rol. */
 export function pantallasVisibles(rol: RolGobernanza, modulo: ModuloDef) {
   return modulo.pantallas.filter(p => veLaPantalla(rol, p)).length;
+}
+
+/** Cuántas acciones del módulo puede hacer el rol. */
+export function accionesActivas(rol: RolGobernanza, modulo: ModuloDef) {
+  return rol.key === 'owner'
+    ? modulo.acciones.length
+    : modulo.acciones.filter(a => rol.permisos.includes(a.permiso)).length;
 }
 
 /**
@@ -233,8 +244,8 @@ export function GuardPantalla({ ocultas, children }: { ocultas: string[]; childr
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 2, sm: 6 } }}>
       <Box sx={{ maxWidth: 420, textAlign: 'center' }}>
-        <Box sx={{ width: 48, height: 48, borderRadius: '14px', bgcolor: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
-          <Lock size={22} />
+        <Box sx={{ width: 64, height: 64, borderRadius: '20px', bgcolor: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2.5, boxShadow: '0 0 0 8px #fffbeb' }}>
+          <Lock size={28} aria-hidden />
         </Box>
         <Typography sx={{ fontWeight: 600, fontSize: '1.125rem', color: '#111827' }}>
           {pantalla.label} no está disponible para ti
@@ -281,7 +292,7 @@ export function AtajoPantallaRoles() {
   }, []);
 
   return (
-    <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs" aria-labelledby="atajo-pantalla-titulo">
+    <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs" aria-labelledby="atajo-pantalla-titulo" slotProps={{ paper: { sx: { borderRadius: '18px' } } }}>
       <DialogTitle id="atajo-pantalla-titulo" sx={{ pb: 0.5 }}>
         <Typography component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>
           ¿Quién ve esta pantalla?
@@ -346,13 +357,26 @@ function FilaRol({ rol, modulo, visible, ocupado, onCambiar, onDarAcceso }: {
   const sinModulo = !entraAlModulo(rol, modulo);
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f9fafb' }}>
-      <Box>
-        <Typography sx={{ fontSize: '0.875rem', color: sinModulo ? '#6b7280' : '#111827' }}>{rol.label}</Typography>
-        {(esOwner || sinModulo) && (
-          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
-            {esOwner ? 'Siempre ve todo' : `No entra a ${modulo.corto}`}
-          </Typography>
-        )}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+        <Box
+          component="span"
+          aria-hidden
+          sx={{
+            display: 'flex', height: 32, width: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '50%',
+            bgcolor: sinModulo ? '#f1f5f9' : AZUL_SUAVE, color: sinModulo ? '#64748b' : AZUL_OSCURO,
+            fontSize: '0.8125rem', fontWeight: 700, flexShrink: 0,
+          }}
+        >
+          {rol.label.charAt(0).toUpperCase()}
+        </Box>
+        <Box>
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: sinModulo ? '#64748b' : '#111827' }}>{rol.label}</Typography>
+          {(esOwner || sinModulo) && (
+            <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>
+              {esOwner ? 'Siempre ve todo' : `No entra a ${modulo.corto}`}
+            </Typography>
+          )}
+        </Box>
       </Box>
       {sinModulo ? (
         <Button variant="outline" size="sm" disabled={ocupado} onClick={onDarAcceso}>Dar acceso</Button>
@@ -376,62 +400,94 @@ function FilaRol({ rol, modulo, visible, ocupado, onCambiar, onDarAcceso }: {
   );
 }
 
-// ─── Tarjeta de un módulo dentro del editor de un rol ─────────────────────────
+// ─── Panel de un módulo dentro del editor de un rol ───────────────────────────
 
-/** Fila con icono, título, descripción y un interruptor. */
-function FilaOpcion({ icono: Icono, titulo, descripcion, nota, on, disabled, estado = true, onChange }: {
+/**
+ * Una opción como baldosa: icono, nombre, qué es y un interruptor. Toda la
+ * baldosa es el objetivo del interruptor (label). Encendida se ve «con color»,
+ * apagada se ve atenuada y con borde punteado: el estado se lee de un vistazo
+ * sin depender solo del interruptor.
+ */
+function Baldosa({ icono: Icono, titulo, descripcion, nota, on, disabled, textoOn, textoOff, onChange }: {
   icono: ElementType;
   titulo: string;
   descripcion: string;
   nota?: string;
   on: boolean;
   disabled?: boolean;
-  /** Muestra «La ve / Oculta» junto al interruptor. */
-  estado?: boolean;
+  textoOn: string;
+  textoOff: string;
   onChange: (on: boolean) => void;
 }) {
   return (
     <Box
       component="label"
       sx={{
-        display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, borderTop: '1px solid #f9fafb',
+        display: 'flex', flexDirection: 'column', gap: 1.25, p: 1.75, borderRadius: '14px',
+        border: on ? '1px solid #c7d2fe' : '1px dashed #cbd5e1',
+        bgcolor: on ? '#fff' : '#f8fafc',
+        boxShadow: on ? '0 1px 3px rgba(54,88,225,0.10)' : 'none',
         cursor: disabled ? 'default' : 'pointer',
-        '&:hover': disabled ? undefined : { bgcolor: '#f9fafb' },
-        '&:focus-within': { bgcolor: '#f3f4f6' },
+        transition: 'border-color .15s, box-shadow .15s, background-color .15s',
+        '&:hover': disabled ? undefined : { borderColor: on ? AZUL : '#94a3b8' },
+        '&:focus-within': { outline: `2px solid ${AZUL}`, outlineOffset: 2 },
       }}
     >
-      <Box sx={{ display: 'flex', height: 30, width: 30, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: on ? '#f3f4f6' : '#fafafa', color: on ? '#4b5563' : '#d1d5db', flexShrink: 0 }}>
-        <Icono size={16} />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{
+          display: 'flex', height: 38, width: 38, alignItems: 'center', justifyContent: 'center',
+          borderRadius: '10px', bgcolor: on ? AZUL_SUAVE : '#f1f5f9', color: on ? AZUL_OSCURO : '#94a3b8',
+        }}>
+          <Icono size={19} aria-hidden />
+        </Box>
+        <Switch
+          checked={on}
+          disabled={disabled}
+          onChange={(_, v) => onChange(v)}
+          slotProps={{ input: { 'aria-label': titulo } }}
+        />
       </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: on ? '#111827' : '#6b7280' }}>{titulo}</Typography>
-        <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
-          {descripcion}{nota ? ` · ${nota}` : ''}
+      <Box sx={{ flex: 1 }}>
+        <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.25, color: on ? '#0f172a' : '#64748b' }}>
+          {titulo}
+        </Typography>
+        <Typography sx={{ mt: 0.25, fontSize: '0.8125rem', lineHeight: 1.35, color: '#64748b' }}>
+          {descripcion}
+        </Typography>
+        {nota && (
+          <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic' }}>{nota}</Typography>
+        )}
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Box component="span" aria-hidden sx={{ height: 8, width: 8, borderRadius: '50%', bgcolor: on ? '#10b981' : '#cbd5e1' }} />
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: on ? '#047857' : '#64748b' }}>
+          {on ? textoOn : textoOff}
         </Typography>
       </Box>
-      {estado && (
-        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: on ? '#047857' : '#6b7280', width: 44, textAlign: 'right' }}>
-          {on ? 'La ve' : 'Oculta'}
-        </Typography>
-      )}
-      <Switch
-        size="small"
-        checked={on}
-        disabled={disabled}
-        onChange={(_, v) => onChange(v)}
-        slotProps={{ input: { 'aria-label': titulo } }}
-      />
     </Box>
   );
 }
 
-function Subtitulo({ children, derecha }: { children: React.ReactNode; derecha?: React.ReactNode }) {
+function SeccionPanel({ titulo, detalle, derecha, children }: {
+  titulo: string;
+  detalle?: string;
+  derecha?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, px: 2, py: 0.75, bgcolor: '#fafafa', borderTop: '1px solid #f3f4f6' }}>
-      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280' }}>
+    <Box component="section" sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+        <Box>
+          <Typography component="h3" sx={{ fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#475569' }}>
+            {titulo}
+          </Typography>
+          {detalle && <Typography sx={{ fontSize: '0.8125rem', color: '#64748b' }}>{detalle}</Typography>}
+        </Box>
+        {derecha}
+      </Box>
+      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}>
         {children}
-      </Typography>
-      {derecha}
+      </Box>
     </Box>
   );
 }
@@ -460,40 +516,62 @@ export function ModuloDelRol({ roleId, moduloId, onPermisos }: {
   const IconoModulo = ICONO_MODULO[modulo.id];
 
   return (
-    <Paper component="section" aria-labelledby={idTitulo} elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
-      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.25 }}>
-        <Box sx={{ display: 'flex', height: 32, width: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: '#eef2fe', color: '#2a45c4', flexShrink: 0 }}>
-          <IconoModulo size={17} aria-hidden />
-        </Box>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography component="h2" id={idTitulo} sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
-            {modulo.titulo}
-          </Typography>
-          <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-            Qué ve y qué puede hacer este rol aquí. Los cambios se guardan al instante.
-          </Typography>
-        </Box>
+    <Box component="section" aria-labelledby={idTitulo} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+        <Typography component="h2" id={idTitulo} sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a' }}>
+          {modulo.titulo}
+        </Typography>
         <EstadoGuardado estado={estado} />
       </Box>
 
-      <FilaOpcion
-        icono={DoorOpen}
-        titulo={ENTRA[modulo.id]}
-        descripcion={entra ? 'Ve el módulo y puede mirar sus datos' : 'Apagado: no ve nada de este módulo. Enciéndelo para elegir pantallas y acciones.'}
-        on={entra}
-        estado={false}
-        disabled={esOwner || ocupado}
-        onChange={on => fijarAcceso(rol, modulo, on)}
-      />
+      {/* La puerta: si está cerrada, lo demás no aplica. */}
+      <Box
+        component="label"
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 2, p: 2, borderRadius: '16px',
+          border: '1px solid', borderColor: entra ? '#c7d2fe' : '#e2e8f0',
+          background: entra ? 'linear-gradient(135deg, #f5f7ff 0%, #ffffff 70%)' : '#fff',
+          cursor: esOwner ? 'default' : 'pointer',
+          '&:focus-within': { outline: `2px solid ${AZUL}`, outlineOffset: 2 },
+        }}
+      >
+        <Box sx={{
+          display: 'flex', height: 46, width: 46, alignItems: 'center', justifyContent: 'center', borderRadius: '12px',
+          bgcolor: entra ? AZUL : '#e2e8f0', color: entra ? '#fff' : '#64748b', flexShrink: 0,
+        }}>
+          <IconoModulo size={22} aria-hidden />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{ENTRA[modulo.id]}</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', color: '#64748b' }}>
+            {esOwner
+              ? 'El Propietario siempre entra y puede todo.'
+              : entra
+                ? 'Este rol ve el módulo y puede mirar sus datos. Elige abajo qué pantallas ve y qué puede hacer.'
+                : 'Apagado: este rol no ve nada de este módulo. Enciéndelo para elegir pantallas y acciones.'}
+          </Typography>
+        </Box>
+        <Typography sx={{
+          fontSize: '0.75rem', fontWeight: 700, borderRadius: '9999px', px: 1.25, py: 0.4,
+          bgcolor: entra ? '#d1fae5' : '#f1f5f9', color: entra ? '#047857' : '#64748b',
+        }}>
+          {entra ? 'Activo' : 'Sin acceso'}
+        </Typography>
+        <Switch
+          checked={entra}
+          disabled={esOwner || ocupado}
+          onChange={(_, v) => fijarAcceso(rol, modulo, v)}
+          slotProps={{ input: { 'aria-label': ENTRA[modulo.id] } }}
+        />
+      </Box>
 
       {entra && (
         <>
-          <Subtitulo
+          <SeccionPanel
+            titulo="Pantallas que ve"
+            detalle={esOwner ? 'Todas, siempre.' : `Ve ${visibles} de ${modulo.pantallas.length}. Las apagadas salen de su menú y no puede abrirlas.`}
             derecha={!esOwner && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                  Ve <b style={{ color: '#111827' }}>{visibles}</b> de {modulo.pantallas.length}
-                </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button variant="outline" size="sm" disabled={ocupado || visibles === modulo.pantallas.length} onClick={() => fijarTodas(rol, modulo, true)}>
                   <Eye size={14} className="mr-1" />Todas
                 </Button>
@@ -503,47 +581,48 @@ export function ModuloDelRol({ roleId, moduloId, onPermisos }: {
               </Box>
             )}
           >
-            Pantallas que ve
-          </Subtitulo>
-          {modulo.pantallas.map(p => {
-            const otras = p.permiso
-              ? modulo.pantallas.filter(x => x.permiso === p.permiso && x.id !== p.id).map(x => x.label)
-              : [];
-            return (
-              <FilaOpcion
-                key={p.id}
-                icono={ICONOS[p.id] ?? FileText}
-                titulo={p.label}
-                descripcion={p.descripcion}
-                nota={otras.length ? `va junto con ${otras.join(', ')}` : undefined}
-                on={veLaPantalla(rol, p)}
-                disabled={esOwner || ocupado}
-                onChange={on => fijarPantalla(rol, p, on)}
-              />
-            );
-          })}
+            {modulo.pantallas.map(p => {
+              const otras = p.permiso
+                ? modulo.pantallas.filter(x => x.permiso === p.permiso && x.id !== p.id).map(x => x.label)
+                : [];
+              return (
+                <Baldosa
+                  key={p.id}
+                  icono={ICONOS[p.id] ?? FileText}
+                  titulo={p.label}
+                  descripcion={p.descripcion}
+                  nota={otras.length ? `Va junto con ${otras.join(', ')}` : undefined}
+                  on={veLaPantalla(rol, p)}
+                  disabled={esOwner || ocupado}
+                  textoOn="La ve"
+                  textoOff="Oculta"
+                  onChange={on => fijarPantalla(rol, p, on)}
+                />
+              );
+            })}
+          </SeccionPanel>
 
-          <Subtitulo>Qué puede hacer</Subtitulo>
-          {modulo.acciones.map(a => (
-            <FilaOpcion
-              key={a.permiso}
-              icono={ICONOS_ACCION[a.permiso] ?? CircleCheck}
-              titulo={a.label}
-              descripcion={a.descripcion}
-              on={esOwner || rol.permisos.includes(a.permiso)}
-              estado={false}
-              disabled={esOwner || ocupado}
-              onChange={on => fijarPermiso(rol, a.permiso, on)}
-            />
-          ))}
-          {esOwner && (
-            <Box sx={{ px: 2, py: 1, borderTop: '1px solid #f3f4f6', fontSize: '0.75rem', color: '#6b7280' }}>
-              El Propietario siempre ve y puede todo.
-            </Box>
-          )}
+          <SeccionPanel
+            titulo="Qué puede hacer"
+            detalle="Acciones que cambian datos. Ver una pantalla no implica poder editarla."
+          >
+            {modulo.acciones.map(a => (
+              <Baldosa
+                key={a.permiso}
+                icono={ICONOS_ACCION[a.permiso] ?? CircleCheck}
+                titulo={a.label}
+                descripcion={a.descripcion}
+                on={esOwner || rol.permisos.includes(a.permiso)}
+                disabled={esOwner || ocupado}
+                textoOn="Permitido"
+                textoOff="No permitido"
+                onChange={on => fijarPermiso(rol, a.permiso, on)}
+              />
+            ))}
+          </SeccionPanel>
         </>
       )}
-    </Paper>
+    </Box>
   );
 }
 
@@ -596,7 +675,7 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
   const modulo = disponibles.find(m => m.id === elegido) ?? disponibles[0];
 
   return (
-    <Paper component="section" aria-labelledby={idTitulo} id="pantallas" variant="outlined" sx={{ borderRadius: '12px', borderColor: '#e5e7eb', overflow: 'hidden', scrollMarginTop: 24 }}>
+    <Paper component="section" aria-labelledby={idTitulo} id="pantallas" variant="outlined" sx={{ borderRadius: '16px', borderColor: '#e5e7eb', overflow: 'hidden', scrollMarginTop: 24 }}>
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
         <Box sx={{ flex: 1, minWidth: 260 }}>
           <Typography component="h2" id={idTitulo} sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>
@@ -677,7 +756,7 @@ export function MatrizPantallas({ modulosEmpresa, onAbrirRol }: {
               {modulo.pantallas.map(p => {
                 const Icono = ICONOS[p.id] ?? FileText;
                 return (
-                  <Box component="tr" key={p.id} sx={{ borderTop: '1px solid #f3f4f6', '&:hover': { bgcolor: '#fafafa' } }}>
+                  <Box component="tr" key={p.id} sx={{ borderTop: '1px solid #eef0f4', '&:nth-of-type(even)': { bgcolor: '#f8fafc' }, '&:hover': { bgcolor: '#f1f5ff' } }}>
                     <Box component="th" scope="row" sx={{ px: 2, py: 0.75, whiteSpace: 'nowrap', position: 'sticky', left: 0, bgcolor: 'inherit', textAlign: 'left', fontWeight: 400 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#111827' }}>
                         <Icono size={15} style={{ color: '#6b7280' }} />
