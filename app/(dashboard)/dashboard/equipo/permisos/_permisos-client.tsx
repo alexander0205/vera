@@ -27,11 +27,11 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import ButtonBase from '@mui/material/ButtonBase';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { PERMISOS_COLEGIO } from '@/lib/config/pantallas';
+import { MODULOS, PERMISOS_GOBERNANZA, type ModuloId } from '@/lib/config/pantallas';
 import {
-  MatrizPantallas, ColegioDelRol, ResumenPantallas, usePantallasPorRol,
-  type DatosPantallas,
-} from '@/components/administracion-escolar/PantallasPorRol';
+  MatrizPantallas, ModuloDelRol, ResumenGobernanza, useGobernanza,
+  type DatosGobernanza,
+} from '@/components/gobernanza/Gobernanza';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface PermDef { key: string; label: string }
@@ -66,8 +66,12 @@ export default function PermisosClient() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const { modules } = usePermissions();
-  const conColegio = modules.includes('escolar');
-  const { data: pantallas } = usePantallasPorRol(conColegio);
+  // Los módulos de gobernanza que tiene esta empresa (y a los que ella entra).
+  const modulosEmpresa = useMemo(
+    () => MODULOS.map(m => m.id).filter(id => (modules as string[]).includes(id)),
+    [modules],
+  );
+  const { data: gobernanza } = useGobernanza(modulosEmpresa.length > 0);
 
   const selected = data?.roles.find(r => r.id === selectedId) ?? null;
 
@@ -91,7 +95,7 @@ export default function PermisosClient() {
       <RoleEditor
         role={selected}
         catalog={data.catalog}
-        conColegio={conColegio}
+        modulosEmpresa={modulosEmpresa}
         onBack={() => setSelectedId(null)}
         onSaved={() => mutate()}
         onDeleted={() => { setSelectedId(null); mutate(); }}
@@ -108,11 +112,11 @@ export default function PermisosClient() {
         roles={data.roles}
         onSelect={setSelectedId}
         onCreate={() => setShowCreate(true)}
-        pantallas={conColegio ? pantallas : undefined}
+        gobernanza={modulosEmpresa.length > 0 ? gobernanza : undefined}
       />
-      {conColegio && (
+      {modulosEmpresa.length > 0 && (
         <Box sx={{ px: { xs: 2, sm: 3 }, pb: 3 }}>
-          <MatrizPantallas onAbrirRol={setSelectedId} />
+          <MatrizPantallas modulosEmpresa={modulosEmpresa} onAbrirRol={setSelectedId} />
         </Box>
       )}
       {showCreate && (
@@ -127,12 +131,12 @@ export default function PermisosClient() {
 }
 
 // ─── Lista de roles ───────────────────────────────────────────────────────────
-function RolesList({ roles, onSelect, onCreate, pantallas }: {
+function RolesList({ roles, onSelect, onCreate, gobernanza }: {
   roles: Role[];
   onSelect: (id: number) => void;
   onCreate: () => void;
-  /** El colegio por rol; solo si la empresa tiene el módulo. */
-  pantallas?: DatosPantallas;
+  /** Lo que cada rol ve y puede hacer por módulo; solo si la empresa tiene alguno. */
+  gobernanza?: DatosGobernanza;
 }) {
   return (
     // La página se renderiza directo dentro del área de contenido (que no trae
@@ -223,8 +227,8 @@ function RolesList({ roles, onSelect, onCreate, pantallas }: {
                       {r.isSystem ? 'sistema' : 'personalizado'}
                     </Box>
                     {(() => {
-                      const rp = pantallas?.roles.find(x => x.id === r.id);
-                      return rp ? <ResumenPantallas rol={rp} pantallas={pantallas!.pantallas} /> : null;
+                      const rg = gobernanza?.roles.find(x => x.id === r.id);
+                      return rg ? <ResumenGobernanza rol={rg} modulos={gobernanza!.modulos} /> : null;
                     })()}
                   </Box>
                   <Box
@@ -345,11 +349,11 @@ function MiPinCard() {
 }
 
 // ─── Editor de un rol ─────────────────────────────────────────────────────────
-function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
+function RoleEditor({ role, catalog, modulosEmpresa, onBack, onSaved, onDeleted }: {
   role: Role;
   catalog: PermGroup[];
-  /** La empresa tiene Administración Escolar: se muestran sus pantallas. */
-  conColegio: boolean;
+  /** Los módulos de gobernanza de la empresa: cada uno trae su tarjeta. */
+  modulosEmpresa: ModuloId[];
   onBack: () => void;
   onSaved: () => void;
   onDeleted: () => void;
@@ -366,12 +370,22 @@ function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
   // Con el colegio, sus permisos viven en la tarjeta de arriba: aquí no se
   // repiten. Siguen en `perms`, así que al guardar no se pierden.
   const catalogVisible = useMemo(() => {
-    if (!conColegio) return catalog;
-    const sueltos = new Set<string>(PERMISOS_COLEGIO);
+    if (modulosEmpresa.length === 0) return catalog;
+    const sueltos = new Set<string>(
+      MODULOS.filter(m => modulosEmpresa.includes(m.id)).flatMap(m => [
+        ...m.acceso,
+        ...m.acciones.map(a => a.permiso),
+        ...m.pantallas.flatMap(p => (p.permiso ? [p.permiso] : [])),
+      ]),
+    );
     return catalog
       .map(g => ({ ...g, permissions: g.permissions.filter(p => !sueltos.has(p.key)) }))
       .filter(g => g.permissions.length > 0);
-  }, [catalog, conColegio]);
+  }, [catalog, modulosEmpresa]);
+  const [avanzado, setAvanzado] = useState(modulosEmpresa.length === 0);
+  const activosAvanzados = catalogVisible.reduce(
+    (n, g) => n + g.permissions.filter(p => perms.has(p.key)).length, 0,
+  );
 
   const dirty = useMemo(() => {
     if (label !== role.label) return true;
@@ -551,12 +565,14 @@ function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
         </Box>
       )}
 
-      {conColegio && (
-        <ColegioDelRol
+      {MODULOS.filter(m => modulosEmpresa.includes(m.id)).map(m => (
+        <ModuloDelRol
+          key={m.id}
           roleId={role.id}
+          moduloId={m.id}
           onPermisos={(claves, activo) => {
             // Lo que la tarjeta ya aplicó en el servidor: sin esto, «Guardar
-            // cambios» mandaría la copia vieja y lo deshacería.
+            // cambios» mandaría la copia vieja y lo desharía.
             setPerms(prev => {
               const next = new Set(prev);
               for (const k of claves) { if (activo) next.add(k); else next.delete(k); }
@@ -565,8 +581,32 @@ function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
             onSaved();
           }}
         />
+      ))}
+
+      {modulosEmpresa.length > 0 && (
+        <ButtonBase
+          onClick={() => setAvanzado(a => !a)}
+          sx={{
+            display: 'flex', justifyContent: 'space-between', width: '100%', textAlign: 'left',
+            border: '1px solid #e5e7eb', borderRadius: '12px', bgcolor: '#fff', px: 2, py: 1.25,
+            '&:hover': { bgcolor: '#f9fafb' },
+          }}
+        >
+          <Box>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+              Otros permisos
+            </Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+              POS, reportes, contabilidad, nómina, equipo y configuración · {activosAvanzados} activos
+            </Typography>
+          </Box>
+          <Box component="span" sx={{ fontSize: '0.8125rem', color: '#3658e1', fontWeight: 500 }}>
+            {avanzado ? 'Ocultar' : 'Mostrar'}
+          </Box>
+        </ButtonBase>
       )}
 
+      {avanzado && (
       <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
         {catalogVisible.map((group, gi) => (
           <Box key={group.module} sx={{ px: 2, py: 1.5, borderTop: gi === 0 ? 'none' : '1px solid #f3f4f6' }}>
@@ -602,6 +642,7 @@ function RoleEditor({ role, catalog, conColegio, onBack, onSaved, onDeleted }: {
           </Box>
         ))}
       </Paper>
+      )}
 
       {confirmDelete && (
         <Dialog open onClose={() => setConfirmDelete(false)} fullWidth maxWidth="xs">

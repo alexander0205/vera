@@ -12,7 +12,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamRolePantallasOcultas, teamRolePermissions } from '@/lib/db/schema';
 import { listTeamRoles, getEffectivePermissions } from '@/lib/auth/permissions';
 import { normalizeRoleKey } from '@/lib/config/roles';
-import { esPantalla, PANTALLAS_ESCOLAR } from '@/lib/config/pantallas';
+import { esPantalla, PANTALLAS } from '@/lib/config/pantallas';
 
 /** Por id de rol, las pantallas que tiene apagadas. */
 export const ocultasPorRol = cache(async (teamId: number): Promise<Map<number, string[]>> => {
@@ -41,11 +41,11 @@ export async function pantallasOcultasDe(
   const rol = (await listTeamRoles(teamId)).find(r => r.key === key);
   if (!rol) return [];
   const ocultas = (await ocultasPorRol(teamId)).get(rol.id) ?? [];
-  // Las pantallas que manda un permiso (Configuración, Documentos) también
-  // salen del menú cuando falta: la ruta ya redirige, pero el menú las seguía
-  // ofreciendo.
+  // Las pantallas que manda un permiso (Configuración y Documentos del
+  // colegio) también salen del menú cuando falta: la ruta ya redirige, pero el
+  // menú las seguía ofreciendo.
   const permisos = await getEffectivePermissions(teamId, key);
-  const sinPermiso = PANTALLAS_ESCOLAR
+  const sinPermiso = PANTALLAS
     .filter(p => p.permiso && !permisos.includes(p.permiso as never))
     .map(p => p.id);
   return [...new Set([...ocultas, ...sinPermiso])];

@@ -1,6 +1,6 @@
 import { EscolarNavRail } from '@/components/escolar-nav-rail';
 import { ModuleShell } from '@/components/module-shell';
-import { GuardPantalla, AtajoPantallaRoles } from '@/components/administracion-escolar/PantallasPorRol';
+import { GuardPantalla, AtajoPantallaRoles } from '@/components/gobernanza/Gobernanza';
 import { hasPermission, requireModule, requirePermission } from '@/lib/auth/page-guard';
 import { pantallasOcultasDe } from '@/lib/auth/pantallas';
 import { getTeamIdForUser, getTeamRoleForUser, getUser } from '@/lib/db/queries';

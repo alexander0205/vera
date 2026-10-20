@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pantallaDeRuta, esPantalla, veLaPantalla, PANTALLAS_ESCOLAR, PERMISO_CONFIGURAR,
+  pantallaDeRuta, esPantalla, veLaPantalla, entraAlModulo, moduloDe,
+  MODULOS, PANTALLAS, PANTALLAS_ESCOLAR, PERMISO_CONFIGURAR, PERMISOS_GOBERNANZA,
 } from '@/lib/config/pantallas';
 
 describe('pantallaDeRuta', () => {
@@ -15,7 +16,60 @@ describe('pantallaDeRuta', () => {
 
   it('deja fuera lo que no está en el catálogo', () => {
     expect(pantallaDeRuta('/escolar/cobrar-grupo')).toBeNull();
-    expect(pantallaDeRuta('/dashboard/clientes')).toBeNull();
+    expect(pantallaDeRuta('/dashboard/equipo/permisos')).toBeNull();
+    expect(pantallaDeRuta('/dashboard/suscripcion')).toBeNull();
+  });
+});
+
+describe('pantallaDeRuta · Facturación', () => {
+  it('el Dashboard es solo /dashboard: no se traga el resto de /dashboard/*', () => {
+    expect(pantallaDeRuta('/dashboard')?.id).toBe('fact-dashboard');
+    expect(pantallaDeRuta('/')?.id).toBe('fact-dashboard');
+    expect(pantallaDeRuta('/dashboard/clientes')?.id).toBe('fact-contactos');
+  });
+
+  it('una sección con varias rutas las reconoce todas, y sus hijas', () => {
+    expect(pantallaDeRuta('/dashboard/facturas/nueva')?.id).toBe('fact-ingresos');
+    expect(pantallaDeRuta('/dashboard/notas-credito/12')?.id).toBe('fact-ingresos');
+    expect(pantallaDeRuta('/dashboard/gastos/nueva')?.id).toBe('fact-compras');
+    expect(pantallaDeRuta('/dashboard/maestros')?.id).toBe('fact-configuracion');
+  });
+
+  it('si dos rutas encajan gana la más específica', () => {
+    expect(pantallaDeRuta('/dashboard/pagos')?.id).toBe('fact-reportes');
+    expect(pantallaDeRuta('/dashboard/pagos/links')?.id).toBe('fact-ingresos');
+    expect(pantallaDeRuta('/dashboard/secuencias')?.id).toBe('fact-configuracion');
+    expect(pantallaDeRuta('/dashboard/contabilidad/secuencias')?.id).toBe('fact-comprobantes');
+  });
+});
+
+describe('catálogo de módulos', () => {
+  it('cada pantalla pertenece al módulo donde está y los ids no se repiten', () => {
+    for (const m of MODULOS) for (const p of m.pantallas) expect(p.modulo).toBe(m.id);
+    const ids = PANTALLAS.map(p => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('Panorama (colegio) y Dashboard (facturación) son pantallas gobernables', () => {
+    expect(esPantalla('escolar-panorama')).toBe(true);
+    expect(esPantalla('fact-dashboard')).toBe(true);
+  });
+
+  it('PERMISOS_GOBERNANZA reúne puertas, acciones y permisos de pantalla', () => {
+    for (const p of ['modulo:facturacion', 'modulo:escolar', 'facturas:crear', PERMISO_CONFIGURAR]) {
+      expect(PERMISOS_GOBERNANZA).toContain(p);
+    }
+  });
+});
+
+describe('entraAlModulo', () => {
+  const colegio = moduloDe('escolar');
+  it('pide todos los permisos de la puerta', () => {
+    expect(entraAlModulo({ key: 'x', permisos: ['modulo:escolar'] }, colegio)).toBe(false);
+    expect(entraAlModulo({ key: 'x', permisos: ['modulo:escolar', 'administracion-escolar:ver'] }, colegio)).toBe(true);
+  });
+  it('el Propietario siempre entra', () => {
+    expect(entraAlModulo({ key: 'owner', permisos: [] }, colegio)).toBe(true);
   });
 });
 

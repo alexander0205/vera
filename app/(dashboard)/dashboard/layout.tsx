@@ -21,6 +21,8 @@ import type { RailGrupo, RailItem, RailSeccion } from '@/components/rail/tipos';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { pantallaDeRuta } from '@/lib/config/pantallas';
+import { GuardPantalla, AtajoPantallaRoles } from '@/components/gobernanza/Gobernanza';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { PAGOS_ONLINE_ENABLED } from '@/lib/config/pagos-online';
 import { type UserInfo } from '@/components/profile-dropdown';
@@ -254,14 +256,21 @@ function SidebarContent({
 
   // Permisos efectivos (con overrides por empresa). null mientras carga →
   // canAccessHref usa el fallback estático del rol.
-  const { permissions, modules, isLoading: permsLoading } = usePermissions();
+  const { permissions, modules, pantallasOcultas, isLoading: permsLoading } = usePermissions();
   const permSet = useMemo(
     () => (permsLoading ? null : new Set<string>(permissions)),
     [permsLoading, permissions],
   );
+  // Además del permiso, el dueño pudo apagar la pantalla para este rol
+  // (lib/config/pantallas.ts): sale del menú, y si era la única de su grupo, el
+  // grupo entero.
   const can = useCallback(
-    (href: string) => canAccessHref(href, permSet, role),
-    [permSet, role],
+    (href: string) => {
+      if (!canAccessHref(href, permSet, role)) return false;
+      const pantalla = pantallaDeRuta(href);
+      return !(pantalla && pantallasOcultas.includes(pantalla.id));
+    },
+    [permSet, role, pantallasOcultas],
   );
 
   // Grupo Caja — solo visible si cajaHabilitada y el rol tiene caja:ver
@@ -533,6 +542,7 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
   // menú acá lo encuentra fijo allá. Antes esto era un localStorage propio de
   // Facturación ('emitedo:sidebarCollapsed') que ningún otro módulo leía.
   const { fijo: navFijo, alternar: alternarNavFijo } = useNavFijo();
+  const { pantallasOcultas, can: puede } = usePermissions();
 
   const { data: user }          = useSWR<UserInfo | null>('/api/user', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
   const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>('/api/empresa/list', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
@@ -616,9 +626,12 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
           component="main"
           sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
         >
-          {children}
+          <GuardPantalla ocultas={pantallasOcultas}>{children}</GuardPantalla>
         </Box>
       </Box>
+      {/* Alt+Shift+R: quién ve la pantalla en la que estás (solo quien gestiona
+          el equipo). */}
+      {puede('equipo:gestionar') && <AtajoPantallaRoles />}
     </Box>
   );
 }

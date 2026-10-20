@@ -1,14 +1,14 @@
 /**
- * GET /api/equipo/pantallas — qué ve cada rol del colegio.
- * PUT /api/equipo/pantallas — cambia algo del colegio para un rol. Una de:
+ * GET /api/equipo/pantallas — qué ve y qué puede hacer cada rol, por módulo.
+ * PUT /api/equipo/pantallas — cambia algo de un rol. Una de:
  *   { roleId, pantalla: string | string[], visible }  enciende/apaga pantallas
- *   { roleId, acceso: boolean }     abre o cierra el colegio (módulo + ver)
- *   { roleId, permiso, activo }     un permiso suelto del colegio (acciones,
- *                                   o «configurar», que manda Configuración y
- *                                   Documentos)
+ *   { roleId, modulo, acceso: boolean }  abre o cierra un módulo (sus permisos
+ *                                        de entrada)
+ *   { roleId, permiso, activo }          un permiso suelto de la gobernanza
+ *                                        (acciones, o el que manda pantallas)
  *
- * El Propietario no se puede tocar: siempre ve todo.
- * Catálogo de pantallas: lib/config/pantallas.ts.
+ * El Propietario no se puede tocar: siempre ve y puede todo.
+ * Catálogo de módulos y pantallas: lib/config/pantallas.ts.
  *
  * Guard: equipo:gestionar.
  */
@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { listTeamRoles } from '@/lib/auth/permissions';
 import { ocultasPorRol, fijarPantallas, fijarPermisos } from '@/lib/auth/pantallas';
-import { PANTALLAS_ESCOLAR, ACCESO_COLEGIO, PERMISOS_COLEGIO, esPantalla } from '@/lib/config/pantallas';
+import { MODULOS, PERMISOS_GOBERNANZA, esPantalla } from '@/lib/config/pantallas';
 
 export async function GET() {
   const auth = await requirePermission('equipo:gestionar');
@@ -26,16 +26,15 @@ export async function GET() {
 
   const [roles, ocultas] = await Promise.all([listTeamRoles(teamId), ocultasPorRol(teamId)]);
   return NextResponse.json({
-    pantallas: PANTALLAS_ESCOLAR,
+    modulos: MODULOS,
     roles: roles.map(r => ({
       id: r.id,
       key: r.key,
       label: r.label,
       ocultas: ocultas.get(r.id) ?? [],
-      // Los permisos del colegio que tiene (acciones y «configurar»).
-      permisos: r.permissions.filter(p => PERMISOS_COLEGIO.includes(p)),
-      // Entra al colegio solo con módulo + ver; sin ellos sus pantallas no aplican.
-      tieneModulo: ACCESO_COLEGIO.every(p => r.permissions.includes(p)),
+      // Los permisos de la gobernanza que tiene el rol: con ellos el cliente
+      // decide si entra a cada módulo, qué ve y qué puede hacer.
+      permisos: r.permissions.filter(p => PERMISOS_GOBERNANZA.includes(p)),
     })),
   });
 }
@@ -47,38 +46,33 @@ export async function PUT(req: Request) {
 
   const body = await req.json().catch(() => null);
   const roleId = Number(body?.roleId);
-  // Abrir/cerrar el colegio, o un permiso suelto: no son pantallas sino
-  // permisos del rol, y se aplican al instante.
-  const esAcceso = typeof body?.acceso === 'boolean';
-  const esPermiso = typeof body?.permiso === 'string' && typeof body?.activo === 'boolean';
-  if (esAcceso || esPermiso) {
-    if (!Number.isInteger(roleId) || (esPermiso && !PERMISOS_COLEGIO.includes(body.permiso))) {
-      return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
-    }
-    const rolDestino = (await listTeamRoles(teamId)).find(r => r.id === roleId);
-    if (!rolDestino) return NextResponse.json({ error: 'Rol no encontrado' }, { status: 404 });
-    if (rolDestino.key === 'owner') {
-      return NextResponse.json({ error: 'El Propietario siempre tiene acceso a todo' }, { status: 403 });
-    }
-    await fijarPermisos(
-      roleId,
-      esAcceso ? [...ACCESO_COLEGIO] : [body.permiso],
-      esAcceso ? body.acceso : body.activo,
-    );
-    return NextResponse.json({ ok: true });
-  }
-
-  const pantallas: unknown[] = Array.isArray(body?.pantalla) ? body.pantalla : [body?.pantalla];
-  if (!Number.isInteger(roleId) || !pantallas.every(esPantalla) || typeof body?.visible !== 'boolean') {
-    return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
-  }
+  if (!Number.isInteger(roleId)) return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
 
   const rol = (await listTeamRoles(teamId)).find(r => r.id === roleId);
   if (!rol) return NextResponse.json({ error: 'Rol no encontrado' }, { status: 404 });
   if (rol.key === 'owner') {
-    return NextResponse.json({ error: 'El Propietario siempre ve todas las pantallas' }, { status: 403 });
+    return NextResponse.json({ error: 'El Propietario siempre ve y puede todo' }, { status: 403 });
   }
 
+  // Abrir/cerrar un módulo, o un permiso suelto: no son pantallas sino permisos
+  // del rol, y se aplican al instante.
+  const modulo = MODULOS.find(m => m.id === body?.modulo);
+  if (modulo && typeof body?.acceso === 'boolean') {
+    await fijarPermisos(roleId, [...modulo.acceso], body.acceso);
+    return NextResponse.json({ ok: true });
+  }
+  if (typeof body?.permiso === 'string' && typeof body?.activo === 'boolean') {
+    if (!PERMISOS_GOBERNANZA.includes(body.permiso)) {
+      return NextResponse.json({ error: 'Permiso inválido' }, { status: 400 });
+    }
+    await fijarPermisos(roleId, [body.permiso], body.activo);
+    return NextResponse.json({ ok: true });
+  }
+
+  const pantallas: unknown[] = Array.isArray(body?.pantalla) ? body.pantalla : [body?.pantalla];
+  if (!pantallas.every(esPantalla) || typeof body?.visible !== 'boolean') {
+    return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
+  }
   await fijarPantallas(roleId, pantallas as string[], body.visible);
   return NextResponse.json({ ok: true });
 }
