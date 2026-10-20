@@ -26,6 +26,8 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import ButtonBase from '@mui/material/ButtonBase';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { MatrizPantallas } from '@/components/administracion-escolar/PantallasPorRol';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface PermDef { key: string; label: string }
@@ -59,6 +61,7 @@ export default function PermisosClient() {
   const { data, isLoading, mutate } = useSWR<Data>('/api/equipo/permisos', fetcher);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const { modules } = usePermissions();
 
   const selected = data?.roles.find(r => r.id === selectedId) ?? null;
 
@@ -99,6 +102,11 @@ export default function PermisosClient() {
         onSelect={setSelectedId}
         onCreate={() => setShowCreate(true)}
       />
+      {modules.includes('escolar') && (
+        <Box sx={{ px: { xs: 2, sm: 3 }, pb: 3 }}>
+          <MatrizPantallas />
+        </Box>
+      )}
       {showCreate && (
         <CreateRoleDialog
           roles={data.roles}

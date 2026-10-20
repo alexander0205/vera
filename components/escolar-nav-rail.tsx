@@ -76,11 +76,18 @@ const VISIBLES: RailSeccion[] = SECCIONES.filter(s => !s.oculto);
  *  - 'rail'   → columna de iconos que se expande al pasar el mouse (escritorio).
  *  - 'drawer' → siempre abierto, sin animación: es el contenido del cajón móvil,
  *    donde no hay hover y ocultar el menú dejaría la pantalla sin navegación.
+ *
+ * `ocultas`: las pantallas que el dueño le apagó al rol de quien mira
+ * (lib/config/pantallas.ts). Las calcula el layout en el servidor.
  */
-export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
+export function EscolarNavRail({ variant = 'rail', ocultas = [] }: {
+  variant?: 'rail' | 'drawer';
+  ocultas?: string[];
+} = {}) {
+  const secciones = ocultas.length ? VISIBLES.filter(s => !ocultas.includes(s.id)) : VISIBLES;
   return (
     <RailArmazon modulo="escolar" variant={variant}>
-      <RailSecciones secciones={VISIBLES} modulo="escolar" />
+      <RailSecciones secciones={secciones} modulo="escolar" />
     </RailArmazon>
   );
 }

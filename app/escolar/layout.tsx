@@ -1,7 +1,9 @@
 import { EscolarNavRail } from '@/components/escolar-nav-rail';
 import { ModuleShell } from '@/components/module-shell';
-import { requireModule, requirePermission } from '@/lib/auth/page-guard';
-import { getUser } from '@/lib/db/queries';
+import { GuardPantalla, AtajoPantallaRoles } from '@/components/administracion-escolar/PantallasPorRol';
+import { hasPermission, requireModule, requirePermission } from '@/lib/auth/page-guard';
+import { pantallasOcultasDe } from '@/lib/auth/pantallas';
+import { getTeamIdForUser, getTeamRoleForUser, getUser } from '@/lib/db/queries';
 import { exigirOnboarding } from '@/lib/onboarding/muro';
 
 export const metadata = { title: 'Zero Administración Escolar' };
@@ -16,21 +18,30 @@ export const metadata = { title: 'Zero Administración Escolar' };
  *
  * Sub-rutas más estrictas (p. ej. configuracion) agregan su propio
  * requirePermission encima de este.
+ *
+ * Encima, las pantallas que el dueño le apagó al rol (lib/config/pantallas.ts):
+ * salen del menú y `GuardPantalla` las cambia por «Sin acceso». El layout no
+ * se vuelve a pintar al cambiar de pantalla, por eso el bloqueo mira la ruta
+ * en el cliente; la lista sí sale de aquí, y se refresca al cambiarla.
  */
 export default async function EscolarLayout({ children }: { children: React.ReactNode }) {
   await exigirOnboarding();
   await requireModule('escolar', '/dashboard');
   await requirePermission('administracion-escolar:ver');
-  const user = await getUser();
+  const [user, teamId, teamRole, gestionaEquipo] = await Promise.all([
+    getUser(), getTeamIdForUser(), getTeamRoleForUser(), hasPermission('equipo:gestionar'),
+  ]);
+  const ocultas = teamId ? await pantallasOcultasDe(teamId, user?.platformRole, teamRole) : [];
 
   return (
     <ModuleShell
       current="escolar"
       user={user ?? null}
-      rail={<EscolarNavRail />}
-      railMovil={<EscolarNavRail variant="drawer" />}
+      rail={<EscolarNavRail ocultas={ocultas} />}
+      railMovil={<EscolarNavRail variant="drawer" ocultas={ocultas} />}
     >
-      {children}
+      <GuardPantalla ocultas={ocultas}>{children}</GuardPantalla>
+      {gestionaEquipo && <AtajoPantallaRoles />}
     </ModuleShell>
   );
 }
