@@ -23,7 +23,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { ModuleKey } from '@/lib/config/modules';
-import { EVENTO_PANTALLAS_ROLES } from '@/components/gobernanza/Gobernanza';
 import { Command } from 'cmdk';
 import {
   Search, FileText, Users, Package, Hash, Plus, LayoutDashboard,
@@ -53,8 +52,6 @@ type ItemEstatico = {
   label: string;
   href: string;
   icon: typeof Users;
-  /** Si trae `evento`, en vez de navegar se lanza ese evento del navegador. */
-  evento?: string;
 };
 
 const STATIC_ITEMS: ItemEstatico[] = [
@@ -102,12 +99,6 @@ const STATIC_ITEMS: ItemEstatico[] = [
   { grupo: 'Páginas', modulo: 'administracion', label: 'Usuarios', href: '/cuenta/usuarios', icon: UserCog },
   { grupo: 'Páginas', modulo: 'administracion', label: 'Roles y permisos', href: '/cuenta/roles', icon: Shield },
 ];
-
-/** El comando global de gobernanza: sale en cualquier módulo, solo a quien gestiona el equipo. */
-const ITEM_PANTALLAS_ROLES: ItemEstatico = {
-  grupo: 'Acciones', modulo: 'administracion', label: 'Mostrar/ocultar pantallas por rol',
-  href: '#pantallas-por-rol', icon: Shield, evento: EVENTO_PANTALLAS_ROLES,
-};
 
 /** Icono con el que se pinta cada tipo de resultado. */
 const ICONO_TIPO: Record<TipoResultado, typeof Users> = {
@@ -245,7 +236,7 @@ export function GlobalSearch({
 } = {}) {
   const router = useRouter();
   const pathname = usePathname();
-  const { modules, can } = usePermissions();
+  const { modules } = usePermissions();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [grupos, setGrupos] = useState<GrupoResultados[]>([]);
@@ -289,10 +280,10 @@ export function GlobalSearch({
   const estaticosVisibles = useMemo(() => {
     const permitidos = modules.length > 0 ? modules : [modulo];
     // Lo del módulo donde estás, primero: es lo que se va a pulsar.
-    return [...STATIC_ITEMS, ...(can('equipo:gestionar') ? [ITEM_PANTALLAS_ROLES] : [])]
-      .filter((i) => i.evento ? true : permitidos.includes(i.modulo))
+    return STATIC_ITEMS
+      .filter((i) => permitidos.includes(i.modulo))
       .sort((a, b) => Number(b.modulo === modulo) - Number(a.modulo === modulo));
-  }, [modules, modulo, can]);
+  }, [modules, modulo]);
 
   // ⌘K / Ctrl+K abre y cierra.
   useEffect(() => {
@@ -400,15 +391,6 @@ export function GlobalSearch({
     setOpen(false);
     setQuery('');
     router.push(href);
-  }
-
-  /** Un comando del buscador: navega o, si trae `evento`, lo lanza (p. ej. abrir un panel). */
-  function ejecutar(item: ItemEstatico) {
-    if (!item.evento) { navigate(item.href); return; }
-    setOpen(false);
-    setQuery('');
-    // Tras cerrar el buscador, para que el panel reciba el foco.
-    setTimeout(() => window.dispatchEvent(new Event(item.evento!)), 0);
   }
 
   const hayResultados = grupos.some(g => g.items.length > 0);
@@ -632,7 +614,7 @@ export function GlobalSearch({
                           <Command.Item
                             key={item.href + item.label}
                             value={item.label}
-                            onSelect={() => ejecutar(item)}
+                            onSelect={() => navigate(item.href)}
                             style={{ padding: '8px 12px' }}
                           >
                             <item.icon style={{ width: 16, height: 16, color: '#9ca3af' }} />
@@ -645,7 +627,7 @@ export function GlobalSearch({
                           <Command.Item
                             key={item.href + item.label}
                             value={item.label}
-                            onSelect={() => ejecutar(item)}
+                            onSelect={() => navigate(item.href)}
                             style={{ padding: '8px 12px' }}
                           >
                             <item.icon style={{ width: 16, height: 16, color: '#5b73ec' }} />
