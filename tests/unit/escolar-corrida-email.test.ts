@@ -12,6 +12,17 @@ vi.mock('@/lib/email', () => ({
   },
 }));
 
+/**
+ * El WhatsApp de soporte sale del entorno y no tiene valor por defecto. Aquí se
+ * controla a mano para probar el correo con número y sin él.
+ */
+let whatsappDeSoporte: string | null = null;
+vi.mock('@/lib/config/soporte', () => ({
+  SOPORTE: { correo: 'soporte@zero.com.do', get whatsapp() { return whatsappDeSoporte; } },
+  enlaceWhatsapp: (mensaje: string) =>
+    whatsappDeSoporte ? `https://wa.me/${whatsappDeSoporte}?text=${encodeURIComponent(mensaje)}` : null,
+}));
+
 import {
   armarCorreoCorrida,
   enviarAvisoCorrida,
@@ -23,6 +34,7 @@ const BASE = 'https://app.zero.com.do';
 let guardadas: Record<string, string | undefined>;
 
 beforeEach(() => {
+  whatsappDeSoporte = null;
   enviar.mockReset();
   enviar.mockResolvedValue({ data: { id: 'x' }, error: null });
   guardadas = {
@@ -84,8 +96,37 @@ describe('armarCorreoCorrida', () => {
 
   it('escapa el nombre del colegio', () => {
     const { html } = armarCorreoCorrida(datos());
-    expect(html).toContain('Colegio &lt;Ejemplo&gt; &amp; Hijos');
+    expect(html).toContain('Hola, equipo de Colegio &lt;Ejemplo&gt; &amp; Hijos');
     expect(html).not.toContain('<Ejemplo>');
+  });
+
+  it('saluda, agradece, ofrece ayuda y se despide como una persona', () => {
+    const { texto, html } = armarCorreoCorrida(datos());
+    expect(texto).toContain('Hola, equipo de Colegio <Ejemplo> & Hijos,');
+    expect(texto).toContain('Gracias por confiar en Zero.');
+    expect(texto).toContain('Para que todo salga bien, revisa esto antes del 30 de octubre');
+    expect(texto).toContain('Si algo no se ve bien, responde este correo y te ayudamos.');
+    expect(texto.trimEnd().endsWith('Un abrazo,\nEl equipo de Zero')).toBe(true);
+    expect(html).toContain('Un abrazo,<br>El equipo de Zero');
+  });
+
+  it('las respuestas van a soporte', () => {
+    expect(armarCorreoCorrida(datos()).responderA).toBe('soporte@zero.com.do');
+  });
+
+  it('sin número de WhatsApp configurado no se ofrece WhatsApp ni se inventa uno', () => {
+    const { html, texto } = armarCorreoCorrida(datos());
+    expect(html).not.toMatch(/wa\.me|WhatsApp/);
+    expect(texto).not.toMatch(/wa\.me|WhatsApp/);
+  });
+
+  it('con número, ofrece WhatsApp con el mensaje ya escrito', () => {
+    whatsappDeSoporte = '18095551234';
+    const { html, texto } = armarCorreoCorrida(datos());
+    expect(texto).toContain('responde este correo o escríbenos por WhatsApp y te ayudamos.');
+    expect(texto).toContain('WhatsApp: https://wa.me/18095551234?text=');
+    expect(html).toContain('https://wa.me/18095551234?text=');
+    expect(html).toContain('Escríbenos por WhatsApp');
   });
 
   it('trae la versión en texto plano con los montos en RD$', () => {
@@ -103,6 +144,7 @@ describe('enviarAvisoCorrida', () => {
     const arg = enviar.mock.calls[0][0];
     expect(arg.from).toBe('Zero <noreply@zero.com.do>');
     expect(arg.to).toBe('admin@colegio.do');
+    expect(arg.replyTo).toBe('soporte@zero.com.do');
     expect(arg.subject).toBe('Así va a salir la facturación del 30 de octubre');
     expect(arg.html).toContain('Revisar familias por facturar');
     expect(arg.text).toContain('Revisar familias por facturar');

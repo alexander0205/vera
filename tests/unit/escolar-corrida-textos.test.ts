@@ -55,7 +55,7 @@ describe('aviso de 5 días', () => {
 
   it('automático: dice que Zero genera las facturas a las 3:00 a. m.', () => {
     const r = redactarAviso(datos());
-    expect(r.intro).toContain('Zero va a generar solo las facturas');
+    expect(r.intro).toContain('Zero va a generar las facturas por ti');
     expect(r.intro).toContain('3:00 a. m.');
     expect(r.cifras[0]).toEqual({ etiqueta: 'Facturas a generar', valor: '57' });
     expect(r.cifras[1]).toEqual({ etiqueta: 'Total', valor: 'RD$412,500.00' });
@@ -63,9 +63,9 @@ describe('aviso de 5 días', () => {
 
   it('manual: es un recordatorio de que le toca facturar a él', () => {
     const r = redactarAviso(datos({ modo: 'manual' }));
-    expect(r.intro).toContain('Zero no factura solo');
-    expect(r.intro).toContain('te toca facturar');
-    expect(r.intro).not.toContain('va a generar solo');
+    expect(r.intro).toContain('las facturas las hace tu equipo');
+    expect(r.intro).toContain('toca facturar a las familias');
+    expect(r.intro).not.toContain('Zero va a generar');
     expect(r.cifras[0]).toEqual({ etiqueta: 'Familias por facturar', valor: '57' });
     expect(r.boton).toEqual({ texto: 'Ir a familias por facturar', destino: 'por-facturar' });
   });
@@ -79,9 +79,15 @@ describe('aviso de 5 días', () => {
 
   it('sin nada que revisar lo dice, en vez de dejar la sección vacía', () => {
     const r = redactarAviso(datos());
-    expect(r.tituloRevision).toBe('Lo que hay que revisar antes');
-    expect(r.revision).toEqual(['Nada por ahora: con los datos de hoy todo está listo para salir.']);
+    expect(r.tituloRevision).toBe('Todo en orden');
+    expect(r.revision).toEqual(['Con los datos de hoy no encontramos nada que revisar: todo está listo para salir.']);
     expect(r.enlace).toBeNull();
+  });
+
+  it('lo que hay que revisar se presenta como una ayuda, con la fecha', () => {
+    const r = redactarAviso(datos({ resumen: resumen({ revisar: [{ codigo: 'sin-responsable', cantidad: 3 }] }) }));
+    expect(r.tituloRevision).toBe('Para que todo salga bien, revisa esto antes del 30 de octubre');
+    expect(r.revision).toHaveLength(1);
   });
 
   it('ofrece el enlace a Tarifas solo cuando lo que hay que revisar se arregla ahí', () => {
@@ -103,12 +109,12 @@ describe('aviso de 2 días', () => {
 
   it('automático y manual dicen cosas distintas', () => {
     const auto = redactarAviso(datos({ tipo: 'aviso-2' }));
-    expect(auto.intro).toContain('Zero genera solo 57 facturas');
+    expect(auto.intro).toContain('Zero genera por ti 57 facturas');
     expect(auto.intro).toContain('RD$412,500.00');
 
     const manual = redactarAviso(datos({ tipo: 'aviso-2', modo: 'manual' }));
-    expect(manual.intro).toContain('te toca facturar a 57 familias');
-    expect(manual.intro).not.toContain('Zero genera solo');
+    expect(manual.intro).toContain('toca facturar a 57 familias');
+    expect(manual.intro).not.toContain('Zero genera por ti');
   });
 
   it('con una sola familia usa el singular', () => {
@@ -118,14 +124,15 @@ describe('aviso de 2 días', () => {
 
   it('si no hay nada que revisar lo dice en una frase y no abre la sección', () => {
     const r = redactarAviso(datos({ tipo: 'aviso-2' }));
-    expect(r.intro).toContain('Todo está en orden.');
+    expect(r.intro).toContain('todo está en orden.');
     expect(r.tituloRevision).toBeNull();
   });
 
   it('si hay algo que revisar lo lista', () => {
     const r = redactarAviso(datos({ tipo: 'aviso-2', resumen: resumen({ revisar: [{ codigo: 'sin-responsable', cantidad: 2 }] }) }));
-    expect(r.intro).not.toContain('Todo está en orden.');
+    expect(r.intro).not.toContain('todo está en orden.');
     expect(r.revision).toHaveLength(1);
+    expect(r.tituloRevision).toBe('Para que todo salga bien, revisa esto antes del 30 de octubre');
   });
 });
 
@@ -141,9 +148,9 @@ describe('resultado del día', () => {
       tipo: 'resultado',
       resumen: resumen({ familias: 0, totalCentavos: 0, facturadasHoy: hechas }),
     }));
-    expect(r.intro).toContain('Hoy Zero generó 54 facturas');
+    expect(r.intro).toContain('Zero generó 54 facturas');
     expect(r.intro).toContain('RD$398,200.00');
-    expect(r.intro).toContain('No quedó ninguna familia por facturar');
+    expect(r.intro).toContain('no quedó ninguna familia pendiente');
     expect(r.boton).toEqual({ texto: 'Ver cuentas por cobrar', destino: 'cuentas-por-cobrar' });
     expect(r.enlace?.destino).toBe('por-facturar');
   });
@@ -156,7 +163,8 @@ describe('resultado del día', () => {
         revisar: [{ codigo: 'sin-responsable', cantidad: 3 }],
       }),
     }));
-    expect(r.intro).toContain('Quedaron 3 familias sin factura');
+    expect(r.intro).toContain('3 familias quedaron sin factura');
+    expect(r.intro).toContain('Abajo te contamos qué encontramos');
     expect(r.boton).toEqual({ texto: 'Ver familias por facturar', destino: 'por-facturar' });
     expect(r.enlace).toEqual({ texto: 'Ver cuentas por cobrar', destino: 'cuentas-por-cobrar' });
     expect(r.cifras.map((c) => c.etiqueta)).toEqual([
@@ -166,8 +174,8 @@ describe('resultado del día', () => {
 
   it('automático sin ninguna factura: lo dice claro', () => {
     const r = redactarAviso(datos({ tipo: 'resultado', resumen: resumen() }));
-    expect(r.intro).toContain('Hoy no se generó ninguna factura');
-    expect(r.intro).toContain('Quedan 57 familias por facturar');
+    expect(r.intro).toContain('Hoy todavía no se generó ninguna factura');
+    expect(r.intro).toContain('57 familias quedan por facturar');
   });
 
   it('si ni siquiera existen los cargos de hoy, es lo primero que dice (en los dos modos)', () => {
@@ -178,7 +186,9 @@ describe('resultado del día', () => {
     });
     for (const modo of ['automatico', 'manual'] as const) {
       const r = redactarAviso(datos({ tipo: 'resultado', modo, resumen: resumenSinCargos }));
-      expect(r.intro).toContain('todavía no existen los cargos de 40 familias');
+      expect(r.intro).toContain('Los cargos de 40 familias');
+      expect(r.intro).toContain('todavía no se han generado');
+      expect(r.intro).toContain('No te preocupes');
       expect(r.intro).toContain('RD$275,000.00');
       expect(r.boton).toEqual({
         texto: modo === 'automatico' ? 'Ver familias por facturar' : 'Facturar a las familias',
@@ -192,7 +202,7 @@ describe('resultado del día', () => {
   it('manual: los cargos salieron y las facturas esperan', () => {
     const r = redactarAviso(datos({ tipo: 'resultado', modo: 'manual' }));
     expect(r.intro).toContain('Hoy salió el cobro de Colegio Ejemplo');
-    expect(r.intro).toContain('se hacen a mano');
+    expect(r.intro).toContain('las facturas las hace tu equipo');
     expect(r.intro).not.toContain('Zero generó');
     expect(r.boton).toEqual({ texto: 'Facturar a las familias', destino: 'por-facturar' });
   });
@@ -202,7 +212,7 @@ describe('resultado del día', () => {
       tipo: 'resultado', modo: 'manual',
       resumen: resumen({ familias: 0, totalCentavos: 0, facturadasHoy: hechas }),
     }));
-    expect(r.intro).toContain('ya está facturado');
+    expect(r.intro).toContain('ya está todo facturado');
     expect(r.boton.destino).toBe('cuentas-por-cobrar');
   });
 });
@@ -227,6 +237,52 @@ describe('textoDeRevision', () => {
   it('cubre todos los códigos sin devolver vacío', () => {
     for (const codigo of ['sin-responsable', 'sin-tarifa', 'sin-producto', 'planes', 'monto-distinto', 'sin-saldo', 'sin-cargo', 'sin-factura'] as const) {
       expect(textoDeRevision({ codigo, cantidad: 2, concepto: 'X' }).length).toBeGreaterThan(10);
+    }
+  });
+});
+
+describe('el tono es el de atención al cliente, no el de un sistema', () => {
+  const todos = () => {
+    const out: ReturnType<typeof redactarAviso>[] = [];
+    for (const tipo of ['aviso-5', 'aviso-2', 'resultado'] as const) {
+      for (const modo of ['automatico', 'manual'] as const) {
+        out.push(redactarAviso(datos({ tipo, modo })));
+      }
+    }
+    return out;
+  };
+
+  it('saluda al equipo del colegio por su nombre', () => {
+    for (const r of todos()) expect(r.saludo).toBe('Hola, equipo de Colegio Ejemplo');
+  });
+
+  it('agradece al empezar', () => {
+    for (const r of todos()) expect(r.intro).toContain('Gracias por confiar en Zero');
+  });
+
+  it('cierra ofreciendo ayuda', () => {
+    for (const r of todos()) {
+      expect(r.ayuda).toBe('Si algo no se ve bien, responde este correo y te ayudamos.');
+    }
+  });
+
+  it('ofrece WhatsApp solo si hay un número de soporte configurado', () => {
+    const r = redactarAviso(datos(), { whatsapp: true });
+    expect(r.ayuda).toBe('Si algo no se ve bien, responde este correo o escríbenos por WhatsApp y te ayudamos.');
+  });
+
+  it('explica en frases cortas: ningún párrafo del cuerpo pasa de dos oraciones largas', () => {
+    for (const r of todos()) {
+      for (const p of r.intro.split('\n\n')) {
+        expect(p.length).toBeLessThan(260);
+      }
+    }
+  });
+
+  it('no usa tono de alarma', () => {
+    for (const r of todos()) {
+      const todo = [r.intro, r.pie, r.ayuda, ...r.revision].join(' ');
+      expect(todo).not.toMatch(/ERROR|FALL[OÓ]|URGENTE|ATENCI[OÓ]N|CR[IÍ]TIC|¡/);
     }
   });
 });

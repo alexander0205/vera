@@ -7,8 +7,15 @@
  * (Zero solo, o el colegio a mano). Allá solo se pinta.
  *
  * Reglas del texto, las mismas de `lib/email/suscripcion.ts`: una idea y un
- * botón. Y una propia de este módulo: NUNCA un nombre de alumno. El correo va a
- * quien administra, pero se reenvía y se imprime; son cuentas, no personas.
+ * botón. Y dos propias de este módulo:
+ *
+ *   · NUNCA un nombre de alumno. El correo va a quien administra, pero se
+ *     reenvía y se imprime; son cuentas, no personas.
+ *   · El tono es el de una persona de atención al cliente, no el de un sistema:
+ *     saluda al colegio, agradece, explica en frases cortas qué pasa y por qué
+ *     se le avisa, presenta lo que hay que revisar como una ayuda y termina
+ *     ofreciendo ayuda. Nada de alarmas: aun cuando algo no salió, se cuenta lo
+ *     que se encontró y cuándo se reintenta.
  */
 
 import { fmtDOP } from '@/lib/utils/format';
@@ -33,9 +40,17 @@ export interface DatosAvisoCorrida {
 
 export type DestinoEnlace = 'por-facturar' | 'cuentas-por-cobrar' | 'tarifas';
 
+export interface OpcionesDeRedaccion {
+  /** Hay un número de WhatsApp de soporte configurado: se ofrece como vía de ayuda. */
+  whatsapp?: boolean;
+}
+
 export interface RedaccionCorrida {
   asunto: string;
   titulo: string;
+  /** «Hola, equipo de {colegio}». */
+  saludo: string;
+  /** Párrafos cortos separados por una línea en blanco. */
   intro: string;
   cifras: { etiqueta: string; valor: string }[];
   conceptos: string[];
@@ -44,6 +59,8 @@ export interface RedaccionCorrida {
   boton: { texto: string; destino: DestinoEnlace };
   enlace: { texto: string; destino: DestinoEnlace } | null;
   pie: string;
+  /** El ofrecimiento de ayuda con que cierra el correo. */
+  ayuda: string;
 }
 
 // ─── Fechas y cantidades ─────────────────────────────────────────────────────
@@ -105,32 +122,49 @@ const SE_ARREGLAN_EN_TARIFAS = new Set(['sin-tarifa', 'sin-producto', 'monto-dis
  * generará las facturas a las 3:00 a. m.; en manual el mismo dato es un
  * recordatorio de que el colegio tiene que facturar él.
  */
-export function redactarAviso(d: DatosAvisoCorrida): RedaccionCorrida {
+export function redactarAviso(d: DatosAvisoCorrida, o: OpcionesDeRedaccion = {}): RedaccionCorrida {
+  const base = {
+    saludo: `Hola, equipo de ${d.colegio}`,
+    ayuda: o.whatsapp
+      ? 'Si algo no se ve bien, responde este correo o escríbenos por WhatsApp y te ayudamos.'
+      : 'Si algo no se ve bien, responde este correo y te ayudamos.',
+  };
   switch (d.tipo) {
-    case 'aviso-5': return avisoDeCincoDias(d);
-    case 'aviso-2': return avisoDeDosDias(d);
-    case 'resultado': return resultado(d);
+    case 'aviso-5': return { ...base, ...avisoDeCincoDias(d) };
+    case 'aviso-2': return { ...base, ...avisoDeDosDias(d) };
+    case 'resultado': return { ...base, ...resultado(d) };
   }
 }
 
-function revisionDelAviso(r: ResumenCorrida) {
-  const revision = r.revisar.map(textoDeRevision);
-  const tarifas = r.revisar.some((p) => SE_ARREGLAN_EN_TARIFAS.has(p.codigo));
-  return { revision, tarifas };
+type Cuerpo = Omit<RedaccionCorrida, 'saludo' | 'ayuda'>;
+
+/** Los puntos a revisar, presentados como una ayuda para que la corrida salga bien. */
+function revisionDelAviso(r: ResumenCorrida, fecha: string) {
+  return {
+    revision: r.revisar.map(textoDeRevision),
+    tarifas: r.revisar.some((p) => SE_ARREGLAN_EN_TARIFAS.has(p.codigo)),
+    titulo: `Para que todo salga bien, revisa esto antes del ${fechaCorta(fecha)}`,
+  };
 }
 
-function avisoDeCincoDias(d: DatosAvisoCorrida): RedaccionCorrida {
+function avisoDeCincoDias(d: DatosAvisoCorrida): Cuerpo {
   const r = d.resumen;
   const auto = d.modo === 'automatico';
   const asunto = `Así va a salir la facturación del ${fechaCorta(d.fecha)}`;
-  const { revision, tarifas } = revisionDelAviso(r);
+  const { revision, tarifas, titulo } = revisionDelAviso(r, d.fecha);
 
   return {
     asunto,
     titulo: asunto,
     intro: auto
-      ? `El ${fechaLarga(d.fecha)} a las ${HORA_DE_LA_CORRIDA} Zero va a generar solo las facturas de ${d.colegio}, una por familia. Esto es lo que saldría con los datos de hoy.`
-      : `El ${fechaLarga(d.fecha)} sale el cobro de ${d.colegio}. En este colegio Zero no factura solo: ese día te toca facturar a las familias. Esto es lo que habría que facturar con los datos de hoy.`,
+      ? [
+          `Gracias por confiar en Zero. Te escribimos con tiempo para que el cobro del ${fechaLarga(d.fecha)} salga sin sorpresas.`,
+          `Ese día, a las ${HORA_DE_LA_CORRIDA}, Zero va a generar las facturas por ti, una por familia. Así saldrían con los datos de hoy:`,
+        ].join('\n\n')
+      : [
+          `Gracias por confiar en Zero. Te escribimos para recordarte que el ${fechaLarga(d.fecha)} sale el cobro de ${d.colegio}.`,
+          'En este colegio las facturas las hace tu equipo, así que ese día toca facturar a las familias. Esto es lo que habría que facturar con los datos de hoy:',
+        ].join('\n\n'),
     cifras: auto
       ? [
           { etiqueta: 'Facturas a generar', valor: String(r.familias) },
@@ -142,10 +176,10 @@ function avisoDeCincoDias(d: DatosAvisoCorrida): RedaccionCorrida {
         ],
     conceptos: r.porConcepto.map((c) =>
       `${c.concepto}: ${cant(c.lineas, 'cargo', 'cargos')}, ${fmtDOP(c.totalCentavos)}`),
-    tituloRevision: 'Lo que hay que revisar antes',
+    tituloRevision: revision.length > 0 ? titulo : 'Todo en orden',
     revision: revision.length > 0
       ? revision
-      : ['Nada por ahora: con los datos de hoy todo está listo para salir.'],
+      : ['Con los datos de hoy no encontramos nada que revisar: todo está listo para salir.'],
     boton: { texto: auto ? 'Revisar familias por facturar' : 'Ir a familias por facturar', destino: 'por-facturar' },
     enlace: tarifas ? { texto: 'Revisar las tarifas', destino: 'tarifas' } : null,
     pie: auto
@@ -154,57 +188,85 @@ function avisoDeCincoDias(d: DatosAvisoCorrida): RedaccionCorrida {
   };
 }
 
-function avisoDeDosDias(d: DatosAvisoCorrida): RedaccionCorrida {
+function avisoDeDosDias(d: DatosAvisoCorrida): Cuerpo {
   const r = d.resumen;
   const auto = d.modo === 'automatico';
-  const { revision, tarifas } = revisionDelAviso(r);
-  const enOrden = revision.length === 0 ? ' Todo está en orden.' : '';
+  const { revision, tarifas, titulo } = revisionDelAviso(r, d.fecha);
+  const enOrden = revision.length === 0 ? ' Con los datos de hoy todo está en orden.' : '';
+  const recordatorio = 'Gracias por confiar en Zero. Un recordatorio rápido, para que nada te tome por sorpresa.';
 
   return {
     asunto: 'Pasado mañana se factura',
     titulo: 'Pasado mañana se factura',
     intro: auto
-      ? `El ${fechaLarga(d.fecha)} a las ${HORA_DE_LA_CORRIDA} Zero genera solo ${cant(r.familias, 'factura', 'facturas')} de ${d.colegio}, por ${fmtDOP(r.totalCentavos)}.${enOrden}`
-      : `El ${fechaLarga(d.fecha)} sale el cobro de ${d.colegio} y te toca facturar a ${cant(r.familias, 'familia', 'familias')} (${fmtDOP(r.totalCentavos)}).${enOrden}`,
+      ? [
+          recordatorio,
+          `Pasado mañana, ${fechaLarga(d.fecha)}, a las ${HORA_DE_LA_CORRIDA}, Zero genera por ti ${cant(r.familias, 'factura', 'facturas')} de ${d.colegio}, por ${fmtDOP(r.totalCentavos)}.${enOrden}`,
+        ].join('\n\n')
+      : [
+          recordatorio,
+          `Pasado mañana, ${fechaLarga(d.fecha)}, sale el cobro de ${d.colegio} y toca facturar a ${cant(r.familias, 'familia', 'familias')} (${fmtDOP(r.totalCentavos)}).${enOrden}`,
+        ].join('\n\n'),
     cifras: [],
     conceptos: [],
-    tituloRevision: revision.length > 0 ? 'Revísalo antes' : null,
+    tituloRevision: revision.length > 0 ? titulo : null,
     revision,
     boton: { texto: auto ? 'Revisar familias por facturar' : 'Ir a familias por facturar', destino: 'por-facturar' },
     enlace: tarifas ? { texto: 'Revisar las tarifas', destino: 'tarifas' } : null,
-    pie: auto ? 'Se crean como borrador: nada se envía a la DGII solo.' : '',
+    pie: auto ? 'Las facturas se crean como borrador: nada se envía a la DGII solo.' : '',
   };
 }
 
-function resultado(d: DatosAvisoCorrida): RedaccionCorrida {
+function resultado(d: DatosAvisoCorrida): Cuerpo {
   const r = d.resumen;
   const auto = d.modo === 'automatico';
   const hechas = r.facturadasHoy;
   const pendientes = r.familias;
-  const { revision } = revisionDelAviso(r);
+  const revision = r.revisar.map(textoDeRevision);
 
   // El día que tocaba facturar y ni siquiera hay cargos: el devengo no corrió o
-  // no pudo. Es la peor noticia posible del resultado y se dice primero, igual
-  // en los dos modos.
+  // no pudo. Es la noticia más delicada del resultado y se dice primero, igual
+  // en los dos modos, pero con calma: se reintenta solo.
   const sinCargo = r.sinCargo;
   const nadaGenerado = hechas.facturas === 0 && pendientes === 0 && sinCargo.lineas > 0;
 
+  const gracias = 'Gracias por confiar en Zero. Te contamos cómo salió la facturación de hoy.';
   let intro: string;
   if (nadaGenerado) {
-    intro = `Hoy tocaba facturar ${d.colegio} y todavía no existen los cargos de ${cant(sinCargo.familias, 'familia', 'familias')} (${fmtDOP(sinCargo.totalCentavos)}). El proceso se repite cada día y debería recogerlos mañana.`;
+    intro = [
+      'Gracias por confiar en Zero. Hoy tocaba facturar y queremos contarte lo que encontramos.',
+      `Los cargos de ${cant(sinCargo.familias, 'familia', 'familias')} de ${d.colegio} (${fmtDOP(sinCargo.totalCentavos)}) todavía no se han generado. No te preocupes: el proceso se repite cada día y debería recogerlos mañana.`,
+    ].join('\n\n');
   } else if (auto) {
     if (hechas.facturas > 0 && pendientes === 0) {
-      intro = `Hoy Zero generó ${cant(hechas.facturas, 'factura', 'facturas')} de ${d.colegio} por ${fmtDOP(hechas.totalCentavos)}. No quedó ninguna familia por facturar.`;
+      intro = [
+        gracias,
+        `Zero generó ${cant(hechas.facturas, 'factura', 'facturas')} de ${d.colegio} por ${fmtDOP(hechas.totalCentavos)}, y no quedó ninguna familia pendiente.`,
+      ].join('\n\n');
     } else if (hechas.facturas > 0) {
-      intro = `Hoy Zero generó ${cant(hechas.facturas, 'factura', 'facturas')} de ${d.colegio} por ${fmtDOP(hechas.totalCentavos)}. Quedaron ${cant(pendientes, 'familia', 'familias')} sin factura (${fmtDOP(r.totalCentavos)}).`;
+      intro = [
+        gracias,
+        `Zero generó ${cant(hechas.facturas, 'factura', 'facturas')} de ${d.colegio} por ${fmtDOP(hechas.totalCentavos)}.`,
+        `${cant(pendientes, 'familia quedó', 'familias quedaron')} sin factura (${fmtDOP(r.totalCentavos)}). Abajo te contamos qué encontramos.`,
+      ].join('\n\n');
     } else {
-      intro = `Hoy no se generó ninguna factura de ${d.colegio}. Quedan ${cant(pendientes, 'familia', 'familias')} por facturar (${fmtDOP(r.totalCentavos)}).`;
+      intro = [
+        gracias,
+        `Hoy todavía no se generó ninguna factura de ${d.colegio}, y ${cant(pendientes, 'familia queda', 'familias quedan')} por facturar (${fmtDOP(r.totalCentavos)}). Abajo te contamos qué encontramos.`,
+      ].join('\n\n');
     }
   } else if (pendientes === 0) {
-    intro = `Hoy salió el cobro de ${d.colegio} y ya está facturado: ${cant(hechas.facturas, 'factura', 'facturas')} por ${fmtDOP(hechas.totalCentavos)}.`;
+    intro = [
+      gracias,
+      `Hoy salió el cobro de ${d.colegio} y ya está todo facturado: ${cant(hechas.facturas, 'factura', 'facturas')} por ${fmtDOP(hechas.totalCentavos)}.`,
+    ].join('\n\n');
   } else {
-    const ya = hechas.facturas > 0 ? ` ${cant(hechas.facturas, 'ya tiene', 'ya tienen')} factura de hoy.` : '';
-    intro = `Hoy salió el cobro de ${d.colegio}: ${cant(pendientes, 'familia tiene', 'familias tienen')} cargos nuevos por ${fmtDOP(r.totalCentavos)}. En este colegio las facturas se hacen a mano, así que están esperando que las factures.${ya}`;
+    const ya = hechas.facturas > 0 ? ` ${cant(hechas.facturas, 'ya tiene', 'ya tienen')} su factura de hoy.` : '';
+    intro = [
+      gracias,
+      `Hoy salió el cobro de ${d.colegio}: ${cant(pendientes, 'familia tiene', 'familias tienen')} cargos nuevos por ${fmtDOP(r.totalCentavos)}.${ya}`,
+      'Como en este colegio las facturas las hace tu equipo, ya puedes facturarlas cuando quieras.',
+    ].join('\n\n');
   }
 
   const cifras: RedaccionCorrida['cifras'] = [];
@@ -216,7 +278,6 @@ function resultado(d: DatosAvisoCorrida): RedaccionCorrida {
     cifras.push({ etiqueta: auto ? 'Familias sin factura' : 'Familias por facturar', valor: String(pendientes) });
     cifras.push({ etiqueta: 'Pendiente de facturar', valor: fmtDOP(r.totalCentavos) });
   }
-
   if (sinCargo.lineas > 0) {
     cifras.push({ etiqueta: 'Cargos sin generar', valor: String(sinCargo.lineas) });
   }
@@ -229,7 +290,7 @@ function resultado(d: DatosAvisoCorrida): RedaccionCorrida {
     intro,
     cifras,
     conceptos: [],
-    tituloRevision: revision.length > 0 ? 'Lo que conviene revisar' : null,
+    tituloRevision: revision.length > 0 ? 'Para dejarlo todo al día, revisa esto' : null,
     revision,
     boton: hayPendientes
       ? { texto: auto ? 'Ver familias por facturar' : 'Facturar a las familias', destino: 'por-facturar' }
