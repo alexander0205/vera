@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { CuentasPorCobrarPanel } from '@/components/administracion-escolar/CuentasPorCobrarPanel';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -242,7 +243,7 @@ export interface FacturaSuelta {
 
 // Lanza en 404/500 para que SWR lo trate como error y no cachee un cuerpo vacío
 // como si fuera la ficha.
-const VISTAS = ['mensualidades', 'otros', 'facturas', 'pagos'] as const;
+const VISTAS = ['mensualidades', 'cuentas', 'otros', 'facturas', 'pagos'] as const;
 
 // ─── Página ────────────────────────────────────────────────────────────────
 
@@ -686,6 +687,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
         <div className="flex gap-6 border-b border-gray-200 overflow-x-auto">
           {[
             ['mensualidades', 'Mensualidades'],
+            ['cuentas', 'Cuentas por cobrar'],
             ['otros', 'Otros cargos'],
             ['facturas', 'Facturas'],
             ['pagos', 'Pagos'],
@@ -751,6 +753,25 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
               />
           </>
         )}
+
+            {/* Cuentas por cobrar — la cartera de Facturación del responsable,
+                al lado de «Mensualidades» (lo pidió Alex). Es la deuda
+                documentada (facturas e-CF con saldo) y la mora en su sección
+                aparte; va a nombre del RESPONSABLE, no filtrada por período:
+                una factura al padre no es deuda individual de cada hijo. */}
+            {vista === 'cuentas' && (
+              tutorClientId != null
+                ? (
+                  <div className="pt-1">
+                    <CuentasPorCobrarPanel
+                      clientId={tutorClientId}
+                      puedePagos={puedePagos}
+                      onCambio={onCargoCreado}
+                    />
+                  </div>
+                )
+                : <EmptyBox text="Falta asignar el responsable de pago: sin él no hay a quién facturarle ni cuentas que cobrar." />
+            )}
 
             {/* Agregar un cargo suelto desde la misma pestaña donde se ven:
                 antes aquí solo se podía mirar. */}
