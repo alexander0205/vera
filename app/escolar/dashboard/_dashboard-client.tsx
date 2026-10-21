@@ -4,14 +4,17 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarRange, CheckCircle2, FileWarning,
-  Loader2, RefreshCw, TrendingUp, Users, Wallet, X,
+  Loader2, Receipt, RefreshCw, TrendingUp, Users, Wallet, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP } from '@/lib/utils/format';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
 import { TRAMOS, tramoDeAtraso, type TramoKey } from '@/lib/administracion-escolar/cartera';
 import { mesCorto, nombreDeMes } from '@/lib/administracion-escolar/serie-mensual';
+import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 // Solo el tipo: `dashboard.ts` es `server-only` y la importación de tipo se
 // borra al compilar, así que nada de la base llega al bundle del navegador.
 import type { DashboardEscolar, PuntoMensual } from '@/lib/administracion-escolar/dashboard';
@@ -89,8 +92,21 @@ function pctCobrado(cobrado: number, total: number): number {
 
 const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
-export default function DashboardEscolarClient() {
+export default function DashboardEscolarClient({ perfilEmpresa }: {
+  /** Datos del emisor, resueltos en el servidor. Los usa el cajón de facturar. */
+  perfilEmpresa: EmpresaPerfil | null;
+}) {
   const { params, setParams } = useUrlParams();
+
+  // Facturar toca dos módulos: mueve dinero en el escolar y emite un documento
+  // en Facturación. Sin las dos, el botón no se pinta.
+  const { permissions } = usePermissions();
+  const puedeFacturar = permissions.includes('administracion-escolar:pagos')
+    && permissions.includes('facturas:crear');
+  // El cajón de «Nueva factura» vive en la URL (?factura=nueva), igual que en la
+  // ficha de la familia: recargar no lo cierra y el enlace se puede compartir.
+  // Solo lee ese valor; el SWR del panorama ignora el parámetro.
+  const facturaAbierta = params.get('factura') != null;
 
   // Lo que se pide es lo que dice la URL, tal cual: quién es un mes, un
   // concepto o un grado válido lo decide el servidor y lo devuelve en
@@ -199,8 +215,26 @@ export default function DashboardEscolarClient() {
               ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Calculando…</>
               : <><RefreshCw className="mr-1.5 h-4 w-4" />Actualizar</>}
           </Button>
+          {/* «Nueva factura» desde el Panorama: abre el mismo cajón lateral que
+              la ficha de la familia, en blanco. El responsable se elige dentro,
+              en el buscador de cliente del formulario. */}
+          {puedeFacturar && (
+            <Button variant="default" size="sm" onClick={() => setParams({ factura: 'nueva' })}>
+              <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Cajón de nueva factura. Abre vacío: sin cargos ni cliente previo —el
+          Panorama es del colegio entero, no de una familia—, así que el
+          responsable se busca dentro del formulario. */}
+      <FacturaDrawer
+        abierto={facturaAbierta}
+        onCerrar={() => { setParams({ factura: null }); void mutate(); }}
+        perfilEmpresa={perfilEmpresa}
+        clienteInicial={null}
+      />
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
