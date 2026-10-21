@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  PANTALLAS, MODULOS_PANTALLAS, esPantalla, pantallaDeRuta, veLaPantalla, agruparPantallas,
+  PANTALLAS, MODULOS_PANTALLAS, esPantalla, pantallaDeRuta, veLaPantalla, agruparPantallas, rutaOculta,
 } from '@/lib/config/pantallas';
 
 describe('catálogo', () => {
@@ -92,5 +92,46 @@ describe('agruparPantallas', () => {
     const grupos = agruparPantallas(PANTALLAS.filter(p => p.modulo === 'facturacion'));
     expect(grupos[0].nombre).toBeNull();
     expect(grupos.map(g => g.nombre)).toEqual([null, 'Ingresos', 'Inventario', 'Compras', 'Caja', 'Comprobantes', 'Configuración']);
+  });
+});
+
+describe('pantallaDeRuta · POS, Contabilidad, Nómina y Administración', () => {
+  it('«Abrir caja» ya no se confunde con Panorama: cada pantalla del POS es la suya', () => {
+    expect(pantallaDeRuta('/pos')?.id).toBe('pos-vender');
+    expect(pantallaDeRuta('/pos/turnos')?.id).toBe('pos-turnos');
+    expect(pantallaDeRuta('/pos/caja')?.id).toBe('pos-caja');
+    expect(pantallaDeRuta('/pos/historial/15')?.id).toBe('pos-historial');
+  });
+
+  it('Contabilidad, incluidos sus reportes', () => {
+    expect(pantallaDeRuta('/contabilidad')?.id).toBe('contabilidad-panorama');
+    expect(pantallaDeRuta('/contabilidad/libro-diario')?.id).toBe('contabilidad-libro');
+    expect(pantallaDeRuta('/contabilidad/balance-general')?.id).toBe('contabilidad-balance-general');
+    expect(pantallaDeRuta('/contabilidad/balance')?.id).toBe('contabilidad-balance');
+  });
+
+  it('Nómina y Administración (Usuarios y Roles siguen fuera)', () => {
+    expect(pantallaDeRuta('/nomina')?.id).toBe('nomina-panorama');
+    expect(pantallaDeRuta('/nomina/empleados/3')?.id).toBe('nomina-empleados');
+    expect(pantallaDeRuta('/cuenta/empresa')?.id).toBe('cuenta-empresa');
+    expect(pantallaDeRuta('/cuenta/plan')?.id).toBe('cuenta-plan');
+    expect(pantallaDeRuta('/cuenta/usuarios')).toBeNull();
+    expect(pantallaDeRuta('/cuenta/roles')).toBeNull();
+  });
+
+  it('en el subdominio de un módulo la barra dice «/» y se resuelve con su portada', () => {
+    expect(pantallaDeRuta('/', '/pos')?.id).toBe('pos-vender');
+    expect(pantallaDeRuta('/', '/nomina')?.id).toBe('nomina-panorama');
+    expect(pantallaDeRuta('/')?.id).toBe('fact-dashboard');
+  });
+});
+
+describe('rutaOculta', () => {
+  it('es cierto solo si la ruta es de una pantalla oculta', () => {
+    expect(rutaOculta('/pos/caja', ['pos-caja'])).toBe(true);
+    expect(rutaOculta('/pos/turnos', ['pos-caja'])).toBe(false);
+    expect(rutaOculta('/cuenta/usuarios', ['cuenta-empresa'])).toBe(false);
+    expect(rutaOculta('/', ['pos-vender'], '/pos')).toBe(true);
+    expect(rutaOculta('/pos', [])).toBe(false);
   });
 });

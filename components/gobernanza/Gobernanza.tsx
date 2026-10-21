@@ -75,9 +75,9 @@ function usePantallasPorRol(activo = true) {
 
 // ─── Bloqueo ──────────────────────────────────────────────────────────────────
 
-export function GuardPantalla({ ocultas, children }: { ocultas: string[]; children: React.ReactNode }) {
+export function GuardPantalla({ ocultas, inicio, children }: { ocultas: string[]; inicio?: string; children: React.ReactNode }) {
   const pathname = usePathname();
-  const pantalla = ocultas.length ? pantallaDeRuta(pathname) : null;
+  const pantalla = ocultas.length ? pantallaDeRuta(pathname, inicio) : null;
   if (!pantalla || !ocultas.includes(pantalla.id)) return <>{children}</>;
 
   // Adónde puede ir: la primera pantalla del mismo módulo que sí ve.
@@ -142,13 +142,13 @@ function esAtajo(e: KeyboardEvent) {
  * donde estás sale ya elegida) y se ve qué roles la ven. Solo lo monta quien
  * gestiona el equipo (ModuleShell y el layout de Facturación).
  */
-export function AtajoPantallaRoles() {
+export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
   const pathname = usePathname();
   const { modules } = usePermissions();
   const [abierto, setAbierto] = useState(false);
   const [elegida, setElegida] = useState<string | null>(null);
   const { data, isLoading, fijar, guardando } = usePantallasPorRol(abierto);
-  const aqui = pantallaDeRuta(pathname);
+  const aqui = pantallaDeRuta(pathname, inicio);
   const idSelect = useId();
 
   useEffect(() => {
@@ -161,14 +161,15 @@ export function AtajoPantallaRoles() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Al abrir, la pantalla de este sitio sale elegida.
+  // Al abrir, la pantalla de este sitio sale elegida; si este sitio no se puede
+  // ocultar (Usuarios, Roles…), no sale ninguna: elegir una al azar engaña.
   useEffect(() => {
-    if (abierto && aqui) setElegida(aqui.id);
+    if (abierto) setElegida(aqui?.id ?? null);
   }, [abierto, aqui]);
 
   // Solo las de los módulos de la empresa; mientras cargan, todas.
   const pantallas = (data?.pantallas ?? []).filter(p => modules.length === 0 || (modules as string[]).includes(p.modulo));
-  const actual = pantallas.find(p => p.id === elegida) ?? pantallas.find(p => p.id === aqui?.id) ?? pantallas[0];
+  const actual = pantallas.find(p => p.id === elegida);
 
   return (
     <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="xs" aria-labelledby="atajo-pantalla-titulo">
@@ -181,7 +182,7 @@ export function AtajoPantallaRoles() {
         </Typography>
       </DialogTitle>
       <DialogContent>
-        {isLoading || !data || !actual ? (
+        {isLoading || !data ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#6b7280' }}>
             <CircularProgress size={18} color="inherit" />
           </Box>
@@ -193,10 +194,11 @@ export function AtajoPantallaRoles() {
             <Box
               component="select"
               id={idSelect}
-              value={actual.id}
-              onChange={e => setElegida(e.target.value)}
+              value={actual?.id ?? ''}
+              onChange={e => setElegida(e.target.value || null)}
               sx={{ width: '100%', height: 38, px: 1, borderRadius: '8px', border: '1px solid #d1d5db', bgcolor: '#fff', fontSize: '0.875rem', color: '#111827', '&:focus': { outline: '2px solid #3658e1', outlineOffset: 1 } }}
             >
+              <option value="" disabled>Elige una pantalla…</option>
               {MODULOS_PANTALLAS.filter(m => pantallas.some(p => p.modulo === m.id)).map(m => (
                 <optgroup key={m.id} label={m.label}>
                   {pantallas.filter(p => p.modulo === m.id).map(p => (
@@ -207,9 +209,15 @@ export function AtajoPantallaRoles() {
                 </optgroup>
               ))}
             </Box>
-            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#6b7280' }}>{actual.descripcion}</Typography>
+            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#6b7280' }}>
+              {actual
+                ? actual.descripcion
+                : aqui
+                  ? ''
+                  : 'Esta pantalla no se puede ocultar (Usuarios y Roles siempre se ven). Elige otra de la lista.'}
+            </Typography>
 
-            <Box sx={{ mt: 1.5 }}>
+            {actual && <Box sx={{ mt: 1.5 }}>
               {data.roles.map(rol => {
                 const esOwner = rol.key === 'owner';
                 return (
@@ -231,7 +239,7 @@ export function AtajoPantallaRoles() {
                   </Box>
                 );
               })}
-            </Box>
+            </Box>}
           </>
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, pt: 1.5, borderTop: '1px solid #f3f4f6' }}>

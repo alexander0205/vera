@@ -4,6 +4,8 @@
  * Una fila por pantalla real de cada módulo, con su ruta:
  *   - Gobernanza   → Administración Escolar (`/escolar/*`)
  *   - Facturación  → `/dashboard/*`, agrupadas como en el menú
+ *   - Punto de Venta, Contabilidad, Nómina y Administración (`/pos`,
+ *     `/contabilidad`, `/nomina`, `/cuenta`)
  *
  * Los permisos (lib/config/roles.ts) siguen mandando lo que cada rol puede
  * HACER; esto solo decide si el rol VE la pantalla. Es una lista negra por rol
@@ -15,7 +17,7 @@
  * TypeScript puro: lo usan el servidor (layout, API) y el cliente (menú, panel).
  */
 
-export type ModuloId = 'escolar' | 'facturacion';
+export type ModuloId = 'escolar' | 'facturacion' | 'pos' | 'contabilidad' | 'nomina' | 'administracion';
 
 export interface PantallaDef {
   /** Igual al `id` de la sección del menú en el colegio; `fact-…` en Facturación. */
@@ -38,12 +40,22 @@ export interface PantallaDef {
 export const MODULOS_PANTALLAS: { id: ModuloId; label: string }[] = [
   { id: 'escolar', label: 'Gobernanza' },
   { id: 'facturacion', label: 'Facturación' },
+  { id: 'pos', label: 'Punto de Venta' },
+  { id: 'contabilidad', label: 'Contabilidad' },
+  { id: 'nomina', label: 'Nómina' },
+  { id: 'administracion', label: 'Administración' },
 ];
 
 const G = 'Gobernanza';
 const F = 'Facturación';
 const esc = (p: Omit<PantallaDef, 'modulo' | 'moduloLabel'>): PantallaDef => ({ modulo: 'escolar', moduloLabel: G, ...p });
 const fac = (p: Omit<PantallaDef, 'modulo' | 'moduloLabel'>): PantallaDef => ({ modulo: 'facturacion', moduloLabel: F, ...p });
+const otro = (modulo: ModuloId, moduloLabel: string) =>
+  (p: Omit<PantallaDef, 'modulo' | 'moduloLabel'>): PantallaDef => ({ modulo, moduloLabel, ...p });
+const pos = otro('pos', 'Punto de Venta');
+const con = otro('contabilidad', 'Contabilidad');
+const nom = otro('nomina', 'Nómina');
+const adm = otro('administracion', 'Administración');
 
 export const PANTALLAS: PantallaDef[] = [
   // ── Gobernanza ──
@@ -92,6 +104,45 @@ export const PANTALLAS: PantallaDef[] = [
   fac({ grupo: 'Configuración', id: 'fact-habilitacion', label: 'Habilitación e-CF', href: '/dashboard/habilitacion', descripcion: 'Activar la facturación electrónica' }),
   fac({ grupo: 'Configuración', id: 'fact-impresoras',   label: 'Impresoras', href: '/dashboard/impresoras', descripcion: 'Tickets y facturas impresas' }),
   fac({ grupo: 'Configuración', id: 'fact-api-keys',     label: 'API Keys', href: '/dashboard/api-keys', descripcion: 'Integraciones' }),
+
+  // ── Punto de Venta ──
+  pos({ id: 'pos-vender',        label: 'Vender', href: '/pos', exacta: true, descripcion: 'La terminal: vender y cobrar' }),
+  pos({ id: 'pos-historial',     label: 'Historial', href: '/pos/historial', descripcion: 'Ventas del turno' }),
+  pos({ id: 'pos-turnos',        label: 'Turnos', href: '/pos/turnos', descripcion: 'Abrir y cerrar caja' }),
+  pos({ id: 'pos-caja',          label: 'Gestión de efectivo', href: '/pos/caja', descripcion: 'Entradas y salidas de efectivo' }),
+  pos({ id: 'pos-devoluciones',  label: 'Devoluciones', href: '/pos/devoluciones', descripcion: 'Devolver una venta' }),
+  pos({ id: 'pos-contactos',     label: 'Contactos', href: '/pos/contactos', descripcion: 'Clientes del POS' }),
+  pos({ id: 'pos-productos',     label: 'Productos', href: '/pos/productos', descripcion: 'Catálogo del POS' }),
+  pos({ id: 'pos-inventario',    label: 'Inventario', href: '/pos/inventario', descripcion: 'Existencias' }),
+  pos({ id: 'pos-configuracion', label: 'Configuración', href: '/pos/configuracion', descripcion: 'Terminales y ajustes del POS' }),
+
+  // ── Contabilidad ──
+  con({ id: 'contabilidad-panorama', label: 'Panorama', href: '/contabilidad', exacta: true, descripcion: 'Resumen contable' }),
+  con({ id: 'contabilidad-libro',    label: 'Libro diario', href: '/contabilidad/libro-diario', descripcion: 'Asientos en orden' }),
+  con({ id: 'contabilidad-asiento',  label: 'Nuevo asiento', href: '/contabilidad/nuevo-asiento', descripcion: 'Registrar un asiento manual' }),
+  con({ id: 'contabilidad-cuentas',  label: 'Catálogo de cuentas', href: '/contabilidad/cuentas', descripcion: 'Plan de cuentas' }),
+  con({ grupo: 'Reportes', id: 'contabilidad-mayor',            label: 'Mayor general', href: '/contabilidad/mayor', descripcion: 'Movimientos por cuenta' }),
+  con({ grupo: 'Reportes', id: 'contabilidad-balance',          label: 'Balance de comprobación', href: '/contabilidad/balance', descripcion: 'Saldos por cuenta' }),
+  con({ grupo: 'Reportes', id: 'contabilidad-resultados',       label: 'Estado de resultados', href: '/contabilidad/estado-resultados', descripcion: 'Ingresos, costos y gastos' }),
+  con({ grupo: 'Reportes', id: 'contabilidad-balance-general',  label: 'Balance general', href: '/contabilidad/balance-general', descripcion: 'Activos, pasivos y capital' }),
+  con({ id: 'contabilidad-cxp',      label: 'Cuentas por pagar', href: '/contabilidad/cuentas-por-pagar', descripcion: 'Lo que se debe a proveedores' }),
+  con({ id: 'contabilidad-activos',  label: 'Activos fijos', href: '/contabilidad/activos-fijos', descripcion: 'Bienes y depreciación' }),
+  con({ id: 'contabilidad-cierre',   label: 'Cierre de ejercicio', href: '/contabilidad/cierre-ejercicio', descripcion: 'Cerrar el año contable' }),
+  con({ id: 'contabilidad-config',   label: 'Configuración', href: '/contabilidad/configuracion', descripcion: 'Cuentas automáticas y ajustes' }),
+
+  // ── Nómina ──
+  nom({ id: 'nomina-panorama',  label: 'Panorama', href: '/nomina', exacta: true, descripcion: 'Resumen de la nómina' }),
+  nom({ id: 'nomina-empleados', label: 'Empleados', href: '/nomina/empleados', descripcion: 'Ficha de cada empleado' }),
+  nom({ id: 'nomina-corridas',  label: 'Corridas', href: '/nomina/corridas', descripcion: 'Calcular y aprobar la nómina' }),
+  nom({ id: 'nomina-horas',     label: 'Horas', href: '/nomina/horas', descripcion: 'Horas trabajadas' }),
+  nom({ id: 'nomina-contratos', label: 'Contratos', href: '/nomina/contratos', descripcion: 'Contratos de los empleados' }),
+  nom({ id: 'nomina-pagos',     label: 'Pagos', href: '/nomina/pagos', descripcion: 'Dispersión y pagos' }),
+  nom({ id: 'nomina-config',    label: 'Configuración', href: '/nomina/configuracion', descripcion: 'Tasas y cuenta de dispersión' }),
+
+  // ── Administración (Usuarios y Roles quedan fuera a propósito) ──
+  adm({ id: 'cuenta-empresa',  label: 'Mi empresa', href: '/cuenta/empresa', descripcion: 'Datos de la empresa' }),
+  adm({ id: 'cuenta-plan',     label: 'Plan y facturación', href: '/cuenta/plan', descripcion: 'Suscripción y pagos' }),
+  adm({ id: 'cuenta-empresas', label: 'Mis empresas', href: '/cuenta/empresas', descripcion: 'Cambiar de empresa' }),
 ];
 
 const IDS = new Set(PANTALLAS.map(p => p.id));
@@ -106,10 +157,11 @@ export function esPantalla(id: unknown): id is string {
  * es «Estudiantes y padres»: ocultar una pantalla oculta también sus fichas y
  * formularios. Si dos rutas encajan, gana la más específica.
  */
-export function pantallaDeRuta(pathname: string): PantallaDef | null {
-  // En facturacion.zero.com.do el proxy sirve el panel por rewrite y la barra
-  // dice «/» aunque se esté viendo /dashboard.
-  const ruta = pathname === '/' ? '/dashboard' : pathname;
+export function pantallaDeRuta(pathname: string, inicio = '/dashboard'): PantallaDef | null {
+  // En los subdominios de módulo el proxy sirve la portada por rewrite y la
+  // barra dice «/» aunque se esté viendo /dashboard, /pos, etc.: `inicio` es la
+  // portada del módulo en el que se está.
+  const ruta = pathname === '/' ? inicio : pathname;
   let mejor: PantallaDef | null = null;
   let largo = -1;
   for (const p of PANTALLAS) {
@@ -121,6 +173,13 @@ export function pantallaDeRuta(pathname: string): PantallaDef | null {
     }
   }
   return mejor;
+}
+
+/** ¿Esta ruta es de una pantalla que el rol tiene oculta? */
+export function rutaOculta(href: string, ocultas: string[], inicio?: string): boolean {
+  if (ocultas.length === 0) return false;
+  const p = pantallaDeRuta(href, inicio);
+  return !!p && ocultas.includes(p.id);
 }
 
 /** ¿El rol ve esta pantalla? El Propietario siempre. */
