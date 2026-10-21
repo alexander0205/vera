@@ -105,6 +105,16 @@ describe('procesarAvisosCorrida', () => {
     expect(modo('aviso-5')).toBe('automatico'); // 30 ya cae dentro
   });
 
+  it('con los avisos manuales apagados, el colegio manual no recibe nada y el automático sí', async () => {
+    candidatos = [candidato({ facturarDesde: '2026-10-28' })];
+    const r = await procesarAvisosCorrida(deps, { hoy: HOY, soloSimular: false, incluirManual: false });
+    // 25 y 27 caen antes de la línea de corte (manual): se omiten; el 30 es automático y sale.
+    expect(r.avisos.map((x) => x.tipo)).toEqual(['aviso-5']);
+    expect(r.omitidos.filter((o) => o.motivo === 'manual-apagado').map((o) => o.tipo).sort()).toEqual(['aviso-2', 'resultado']);
+    // Un solo aviso (el de 5 días) a sus dos destinatarios.
+    expect(enviar).toHaveBeenCalledTimes(2);
+  });
+
   it('nunca repite un aviso que ya salió', async () => {
     yaEnviados = new Set([
       llaveDeEnvio(1, claveAviso('aviso-5', EN_5), 7),

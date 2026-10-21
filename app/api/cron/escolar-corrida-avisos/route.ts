@@ -69,7 +69,10 @@ export async function GET(req: NextRequest) {
   const pedida = req.nextUrl.searchParams.get('hoy');
   const hoy = soloSimular && pedida && /^\d{4}-\d{2}-\d{2}$/.test(pedida) ? pedida : hoyRD();
 
-  const r = await procesarAvisosCorrida(deps, { hoy, soloSimular });
+  // Los colegios que facturan a mano solo reciben avisos si se enciende a
+  // propósito: hoy solo los pidió el colegio con facturación automática.
+  const incluirManual = process.env.ESCOLAR_AVISOS_CORRIDA_MANUAL === '1';
+  const r = await procesarAvisosCorrida(deps, { hoy, soloSimular, incluirManual });
 
   return NextResponse.json({
     hoy,

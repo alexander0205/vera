@@ -42,6 +42,8 @@ export type MotivoOmision =
   | 'ya-enviado'
   | 'sin-destinatarios'
   | 'sin-matriculas-activas'
+  /** Colegio que factura a mano, con los avisos de modo manual apagados. */
+  | 'manual-apagado'
   | 'sin-monto';
 
 export interface AvisoDeLaCorrida {
@@ -73,7 +75,17 @@ export interface ResultadoProceso {
  */
 export async function procesarAvisosCorrida(
   deps: DepsCorrida,
-  opts: { hoy: string; soloSimular: boolean },
+  opts: {
+    hoy: string;
+    soloSimular: boolean;
+    /**
+     * Si también se avisa a los colegios que facturan a mano. Por defecto sí;
+     * el cron lo enciende solo con `ESCOLAR_AVISOS_CORRIDA_MANUAL=1`, porque
+     * hoy los colegios manuales no lo pidieron y algunos ni facturan por
+     * Gobernanza todavía.
+     */
+    incluirManual?: boolean;
+  },
 ): Promise<ResultadoProceso> {
   const objetivos = objetivosDeAviso(opts.hoy);
   const r: ResultadoProceso = { colegios: 0, avisos: [], enviados: 0, omitidos: [], fallos: [] };
@@ -125,6 +137,10 @@ export async function procesarAvisosCorrida(
 
       for (const { o, para } of porEnviar) {
         const modo = modoDeCorrida(cand.facturarDesde, o.fecha);
+        if (modo === 'manual' && opts.incluirManual === false) {
+          r.omitidos.push({ teamId: cand.teamId, tipo: o.tipo, fecha: o.fecha, motivo: 'manual-apagado' });
+          continue;
+        }
         const { lineas, sinTarifa } = lineasDeLaCorrida(ctx, o.fecha);
 
         // Solo el resultado necesita saber cuáles facturas nacieron HOY.
