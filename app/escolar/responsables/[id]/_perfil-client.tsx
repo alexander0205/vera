@@ -4,7 +4,7 @@ import { useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import useSWR, { mutate as revalidar } from 'swr';
 import {
-  AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, Download,
+  AlertTriangle, ArrowLeft, CalendarDays, Check, Download,
   HandCoins, Loader2, Mail, MessageCircle, Pencil, Receipt, Smartphone,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -44,16 +44,16 @@ const traer = (u: string) => fetch(u).then((r) => {
   return r.json();
 });
 
-const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
 const AVISO_TEXTO: Record<string, string> = {
   'al-emitir': 'Factura nueva',
   'al-vencer': 'Venció hoy',
   'antes-mora': 'Antes del recargo',
 };
 
-const VISTAS = ['cuenta', 'cxc', 'pagos', 'facturas', 'avisos'] as const;
+// «Estado de cuenta» se quitó: repetía el pendiente y el vencido que ya están
+// en el resumen de arriba (Alex lo pidió). La ficha abre en «Cuentas por
+// cobrar», que es la deuda que se viene a mirar.
+const VISTAS = ['cxc', 'pagos', 'facturas', 'avisos'] as const;
 
 /** Descarga en el navegador, sin pasar por el servidor. */
 function descargarCsv(nombre: string, filas: (string | number)[][]) {
@@ -76,7 +76,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   perfilEmpresa: EmpresaPerfil | null;
 }) {
   const volver = useVolver('/escolar/responsables');
-  const [vista, setVista] = useTabUrl('v', VISTAS, 'cuenta');
+  const [vista, setVista] = useTabUrl('v', VISTAS, 'cxc');
 
   const { permissions } = usePermissions();
   // Facturar toca dos módulos: mueve dinero en el escolar y emite un documento
@@ -266,9 +266,6 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const sinFacturar = data.cargos.filter((g) =>
     g.ecfDocumentId == null && g.saldoCentavos > 0 && COBRABLES.includes(g.estado));
   const cargosSaldados = data.cargos.filter((g) => g.saldoCentavos <= 0).length;
-  // El más reciente por fecha, no el primero de la lista: el orden que llega
-  // de la consulta no es contrato de esta pantalla.
-  const ultimoPago = [...data.pagos].sort((a, b) => b.fechaPago.localeCompare(a.fechaPago))[0] ?? null;
   // Se redondea hacia abajo: un 99.6% cobrado no puede decir «100%» mientras
   // quede un peso vivo. Y al revés, si de verdad está todo, tiene que decir 100.
   const pctCobrado = facturado > 0
@@ -597,8 +594,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           display: 'flex', alignItems: 'center', gap: 0.5, px: 2.75,
           borderBottom: '1px solid #EDEFF5', overflowX: 'auto',
         }}>
-          {([['cuenta', 'Estado de cuenta'],
-             ['cxc', 'Cuentas por cobrar'],
+          {([['cxc', 'Cuentas por cobrar'],
              ['pagos', `Pagos (${data.pagos.length})`],
              ['facturas', `Facturas sueltas (${data.facturas.length})`],
              ['avisos', `Recordatorios (${data.avisosProgramados.length + data.avisos.length})`]] as const)
@@ -637,41 +633,6 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         </Box>
 
         <Box sx={{ px: 2.75, pt: 0.75, pb: 1.75 }}>
-          {vista === 'cuenta' && (
-            <>
-              <FilaResumen
-                icono={<HandCoins size={17} />}
-                tono={pendiente > 0 ? 'rojo' : 'verde'}
-                titulo="Saldo al día de hoy"
-                detalle={pendiente > 0
-                  ? `${porHijo.filter((h) => h.pendiente > 0).length} de ${porHijo.length} estudiantes con saldo`
-                  : 'No hay saldo pendiente en ningún estudiante'}
-                monto={fmtDOP(pendiente)}
-              />
-              <FilaResumen
-                icono={<AlertTriangle size={17} />}
-                tono={vencido > 0 ? 'rojo' : 'gris'}
-                titulo="Vencido"
-                detalle={vencido > 0
-                  ? 'Ya pasó su fecha de pago · genera mora si está configurada'
-                  : 'Sin atrasos registrados'}
-                monto={fmtDOP(vencido)}
-              />
-              <FilaResumen
-                icono={<Receipt size={17} />}
-                tono="azul"
-                titulo="Último pago recibido"
-                detalle={ultimoPago
-                  ? [ultimoPago.encf || ultimoPago.codigo, fmtFechaCorta(ultimoPago.fechaPago), ultimoPago.metodo]
-                      .filter(Boolean).join(' · ')
-                  : 'Todavía no ha pagado nada'}
-                monto={ultimoPago ? fmtDOP(ultimoPago.montoCentavos) : '—'}
-                href={ultimoPago ? `/dashboard/facturas/${ultimoPago.ecfDocumentId}` : undefined}
-                ultima
-              />
-            </>
-          )}
-
           {vista === 'cxc' && (
             /* Las cuentas por cobrar de Facturación del responsable: sus
                facturas con saldo (totales de la familia) y la mora en su
@@ -836,16 +797,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
 /** Saca a CSV lo que se está mirando, no la ficha entera. */
 function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
   const nombre = (d.contacto?.razonSocial ?? 'familia').replace(/[^\w]+/g, '-').toLowerCase();
-  if (vista === 'cuenta') {
-    descargarCsv(`estado-de-cuenta-${nombre}.csv`, [
-      ['Alumno', 'Concepto', 'Mes', 'Año', 'Vence', 'Factura', 'Monto', 'Pendiente', 'Estado'],
-      ...d.cargos.map((g) => [
-        g.alumno, g.concepto ?? '', g.mes ? MESES[g.mes] : '', g.anio,
-        g.fechaVencimiento ?? '', g.encf || g.codigo || '',
-        (g.montoCentavos / 100).toFixed(2), (g.saldoCentavos / 100).toFixed(2), g.estado,
-      ]),
-    ]);
-  } else if (vista === 'pagos') {
+  if (vista === 'pagos') {
     descargarCsv(`pagos-${nombre}.csv`, [
       ['Fecha', 'Alumno', 'Factura', 'Método', 'Referencia', 'Monto'],
       ...d.pagos.map((p) => [
@@ -971,65 +923,6 @@ function Cifra({ icon: Icon, label, valor, detalle, tono = 'gris', primera = fal
       </Typography>
     </Box>
   );
-}
-
-const TONO_FILA = {
-  verde: { bg: '#E8F6EF', fg: '#0F7A4A' },
-  rojo:  { bg: '#FDECEC', fg: '#B4231F' },
-  azul:  { bg: '#EDF1FE', fg: '#2A48C4' },
-  gris:  { bg: '#F2F4FA', fg: '#8A90A0' },
-} as const;
-
-/**
- * Un renglón del resumen: icono, qué es, el detalle y la cifra.
- *
- * Sustituye al acordeón que repetía los cargos hijo por hijo. Ese detalle ya
- * está arriba en la tarjeta de cada uno, y tenerlo dos veces hacía que las dos
- * copias se contradijeran en cuanto una de las dos consultas se refrescaba
- * antes que la otra.
- */
-function FilaResumen({ icono, tono, titulo, detalle, monto, href, ultima = false }: {
-  icono: React.ReactNode;
-  tono: keyof typeof TONO_FILA;
-  titulo: string;
-  detalle: string;
-  monto: string;
-  /** Si lleva, la fila entera es un enlace. */
-  href?: string;
-  ultima?: boolean;
-}) {
-  const c = TONO_FILA[tono];
-  const cuerpo = (
-    <Box sx={{
-      display: 'flex', alignItems: 'center', gap: 1.75, py: 1.75,
-      borderBottom: ultima ? 'none' : '1px solid #F1F3F9',
-      cursor: href ? 'pointer' : 'default',
-      transition: 'background .12s',
-      '&:hover': href ? { bgcolor: '#FBFCFE' } : undefined,
-    }}>
-      <Box sx={{
-        width: 36, height: 36, flex: '0 0 36px', borderRadius: '10px',
-        bgcolor: c.bg, color: c.fg, display: 'grid', placeItems: 'center',
-      }}>
-        {icono}
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: '0.84375rem', fontWeight: 600, color: '#0F1118' }}>{titulo}</Typography>
-        <Typography noWrap sx={{ mt: 0.25, fontSize: '0.75rem', color: '#8A90A0' }}>{detalle}</Typography>
-      </Box>
-      <Typography sx={{
-        flex: '0 0 auto', fontSize: '0.9375rem', fontWeight: 600,
-        color: tono === 'rojo' ? '#B4231F' : tono === 'verde' ? '#0F7A4A' : '#0F1118',
-        letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums',
-      }}>
-        {monto}
-      </Typography>
-      {href && <ChevronRight size={15} style={{ flexShrink: 0, color: '#C3C8D4' }} />}
-    </Box>
-  );
-  return href
-    ? <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>{cuerpo}</Link>
-    : cuerpo;
 }
 
 /** Cifra alineada a la derecha, con dígitos de ancho fijo. */

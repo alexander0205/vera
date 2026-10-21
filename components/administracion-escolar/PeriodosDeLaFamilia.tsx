@@ -290,7 +290,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
         dos años distintos creyendo que era el mismo.
 
         Las pastillas de estudiante solo con más de un hijo: con uno serían
-        «Todos» y su nombre, las dos enseñando lo mismo. El año se dice
+        «General» y su nombre, las dos enseñando lo mismo. El año se dice
         siempre, aunque no haya otro que elegir —entonces como rótulo y no como
         desplegable, que ofrecer una lista de una opción es prometer algo que
         no se puede hacer—.
@@ -306,8 +306,11 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
         >
           {hijos.length > 1 && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0, overflowX: 'auto' }}>
+              {/* «General»: la vista de toda la familia, por defecto. Antes
+                  decía «Todos los estudiantes»; Alex la renombró —abre aquí y,
+                  al elegir un hijo, se filtra a él—. */}
               <Pastilla activa={soloHijo == null} insignia={String(hijos.length)} onClick={() => setSoloHijo(null)}>
-                Todos los estudiantes
+                General
               </Pastilla>
               {hijos.map((h) => (
                 <Pastilla
