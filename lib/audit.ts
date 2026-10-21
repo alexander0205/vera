@@ -74,7 +74,11 @@ export type AuditAction =
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
-  | 'CONTABILIDAD_CATALOGO_IMPORTADO';
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
+  // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
+  // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
+  | 'SUSCRIPCION_AVISO';
 
 export interface AuditParams {
   teamId:    number;
