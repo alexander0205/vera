@@ -190,6 +190,21 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
     });
   }
 
+  /**
+   * Tarjetas plegadas, por estudianteId. Alex pidió poder minimizar la tarjeta
+   * de cada hijo (tipo acordeón): con varios hijos, en «General» hay que bajar
+   * por todas, y plegar las que no interesan deja a la vista solo la que se
+   * está mirando. Por defecto abiertas.
+   */
+  const [colapsadas, setColapsadas] = useState<Set<number>>(new Set());
+  function alternarColapso(estudianteId: number) {
+    setColapsadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(estudianteId)) next.delete(estudianteId); else next.add(estudianteId);
+      return next;
+    });
+  }
+
   const hoy = new Date().toISOString().slice(0, 10);
   const hijos = data?.hijos ?? [];
 
@@ -421,6 +436,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
         const totalCargos = cargos.reduce((s, f) => s + f.montoCentavos, 0);
         const cobrados = cargos.filter((f) => f.saldoCentavos <= 0).length;
         const ultimoPrevisto = previstos.at(-1);
+        const colapsado = colapsadas.has(h.estudianteId);
 
         return (
           <Paper
@@ -431,8 +447,16 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
               boxShadow: '0 1px 2px rgba(15,17,24,.03)',
             }}
           >
-            <CabeceraHijo hijo={h} periodo={p} />
+            <CabeceraHijo
+              hijo={h}
+              periodo={p}
+              colapsado={colapsado}
+              onToggle={() => alternarColapso(h.estudianteId)}
+            />
 
+            {/* El cuerpo de la tarjeta se oculta cuando está plegada: queda solo
+                la cabecera con el resumen (curso, deuda, por salir). */}
+            {!colapsado && (<>
             {/* Por qué estos meses van a ir saliendo solos — o por qué no van a
                 salir, que es lo que nadie descubre a tiempo. */}
             <Box sx={{ px: 2.75, pt: 1.75 }}>
@@ -745,6 +769,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
               </Box>
               )}
             </Box>
+            </>)}
           </Paper>
         );
       })}
@@ -951,9 +976,13 @@ function TiraAutomatizacion({ periodo }: { periodo: PeriodoDeHijo }) {
   );
 }
 
-function CabeceraHijo({ hijo, periodo }: {
+function CabeceraHijo({ hijo, periodo, colapsado, onToggle }: {
   hijo: HijoConPeriodos;
   periodo?: PeriodoDeHijo;
+  /** Si la tarjeta está plegada (solo se ve esta cabecera). */
+  colapsado?: boolean;
+  /** Pliega/despliega la tarjeta. Sin él, no se pinta el botón de acordeón. */
+  onToggle?: () => void;
 }) {
   const alDia = (periodo?.pendienteCentavos ?? 0) <= 0;
   const porCobrar = periodo?.porCobrarCentavos ?? 0;
@@ -962,7 +991,8 @@ function CabeceraHijo({ hijo, periodo }: {
     <Box sx={{
       px: 2.75, pt: 2, pb: 1.875,
       display: 'flex', alignItems: 'center', gap: 1.75, flexWrap: 'wrap',
-      borderBottom: '1px solid #EDEFF5',
+      // Sin línea inferior cuando está plegada: la cabecera es toda la tarjeta.
+      borderBottom: colapsado ? 'none' : '1px solid #EDEFF5',
     }}>
       <Box sx={{
         width: 40, height: 40, flex: '0 0 40px', borderRadius: '50%',
@@ -1012,6 +1042,30 @@ function CabeceraHijo({ hijo, periodo }: {
           escribirlo otra vez en cada tarjeta lo pone tres veces en pantalla
           para una familia de tres hijos. Lo que sí es de este hijo —su
           curso— ya está en el chip de al lado del nombre. */}
+
+      {/* Acordeón: pliega/despliega la tarjeta de este hijo. Es un botón aparte
+          del nombre (que es un enlace a su ficha), para no pelearse con él. */}
+      {onToggle && (
+        <Box
+          component="button"
+          type="button"
+          onClick={onToggle}
+          aria-label={colapsado ? 'Desplegar tarjeta' : 'Plegar tarjeta'}
+          aria-expanded={!colapsado}
+          sx={{
+            flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 30, height: 30, borderRadius: '8px',
+            border: '1px solid #E6E8F0', bgcolor: '#fff', color: '#6B7280', cursor: 'pointer',
+            transition: 'background .12s, color .12s',
+            '&:hover': { bgcolor: '#F2F4FA', color: '#2A48C4' },
+          }}
+        >
+          <ChevronDown
+            size={16}
+            style={{ transform: colapsado ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}
+          />
+        </Box>
+      )}
     </Box>
   );
 }
