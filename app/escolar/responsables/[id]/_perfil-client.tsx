@@ -53,7 +53,7 @@ const AVISO_TEXTO: Record<string, string> = {
 // «Estado de cuenta» se quitó: repetía el pendiente y el vencido que ya están
 // en el resumen de arriba (Alex lo pidió). La ficha abre en «Cuentas por
 // cobrar», que es la deuda que se viene a mirar.
-const VISTAS = ['cxc', 'pagos', 'facturas', 'avisos'] as const;
+const VISTAS = ['cxc', 'notas', 'pagos', 'facturas', 'avisos'] as const;
 
 /** Descarga en el navegador, sin pasar por el servidor. */
 function descargarCsv(nombre: string, filas: (string | number)[][]) {
@@ -595,6 +595,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           borderBottom: '1px solid #EDEFF5', overflowX: 'auto',
         }}>
           {([['cxc', 'Cuentas por cobrar'],
+             ['notas', 'Notas de débito'],
              ['pagos', `Pagos (${data.pagos.length})`],
              ['facturas', `Facturas sueltas (${data.facturas.length})`],
              ['avisos', `Recordatorios (${data.avisosProgramados.length + data.avisos.length})`]] as const)
@@ -620,10 +621,10 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             </Box>
           ))}
           <Box sx={{ flex: 1 }} />
-          {/* «Cuentas por cobrar» trae su propio export dentro de la tabla
-              (con sus filtros y su rango de fechas); el de la ficha exportaría
-              otra cosa, así que ahí se oculta. */}
-          {vista !== 'cxc' && (
+          {/* «Cuentas por cobrar» y «Notas de débito» traen su propio export (o
+              no aplican); el de la ficha exportaría otra cosa, así que ahí se
+              oculta. */}
+          {vista !== 'cxc' && vista !== 'notas' && (
             <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
               <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
                 <Download className="mr-1.5 h-4 w-4" />Exportar
@@ -635,11 +636,20 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         <Box sx={{ px: 2.75, pt: 0.75, pb: 1.75 }}>
           {vista === 'cxc' && (
             /* Las cuentas por cobrar de Facturación del responsable: sus
-               facturas con saldo (totales de la familia) y la mora en su
-               sección aparte. Reusa la cartera general acotada a este cliente;
-               el cobro refresca las cifras de arriba. */
+               facturas con saldo (totales de la familia). La mora va en su
+               propia pestaña, «Notas de débito». Reusa la cartera general
+               acotada a este cliente; el cobro refresca las cifras de arriba. */
             <Box sx={{ pt: 0.75 }}>
-              <CuentasPorCobrarPanel clientId={clientId} puedePagos={puedePagos} onCambio={refrescar} />
+              <CuentasPorCobrarPanel clientId={clientId} puedePagos={puedePagos} onCambio={refrescar} seccion="cuentas" />
+            </Box>
+          )}
+
+          {vista === 'notas' && (
+            /* Notas de débito (mora) del responsable, en su sección propia al
+               lado de «Cuentas por cobrar». Se cobran junto con la factura de
+               la que cuelgan. */
+            <Box sx={{ pt: 0.75 }}>
+              <CuentasPorCobrarPanel clientId={clientId} puedePagos={puedePagos} onCambio={refrescar} seccion="notas" />
             </Box>
           )}
 

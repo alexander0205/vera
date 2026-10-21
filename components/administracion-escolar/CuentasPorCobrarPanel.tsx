@@ -75,6 +75,7 @@ export function CuentasPorCobrarPanel({
   clientId,
   puedePagos,
   onCambio,
+  seccion = 'cuentas',
 }: {
   /** El responsable de pago: sus facturas son las cuentas por cobrar. */
   clientId: number;
@@ -82,6 +83,13 @@ export function CuentasPorCobrarPanel({
   puedePagos: boolean;
   /** Avisa a la ficha para que refresque sus cifras tras un cobro. */
   onCambio?: () => void;
+  /**
+   * Qué sección pinta este panel. Son pestañas hermanas (Alex las quiere una al
+   * lado de la otra), no apiladas: cada ficha monta dos instancias, una por
+   * sección. Comparten el mismo `?clientId=` de SWR, así que es una sola
+   * consulta de red aunque haya dos paneles.
+   */
+  seccion?: 'cuentas' | 'notas';
 }) {
   const { data, error, isLoading, mutate } = useSWR(
     `/api/cuentas-por-cobrar?clientId=${clientId}`,
@@ -199,6 +207,7 @@ export function CuentasPorCobrarPanel({
   return (
     <div className="space-y-6">
       {/* ── Cuentas por cobrar (facturas) ──────────────────────────────── */}
+      {seccion === 'cuentas' && (
       <section className="space-y-2">
         <div>
           <h3 className="text-sm font-semibold text-gray-900">Cuentas por cobrar</h3>
@@ -234,8 +243,10 @@ export function CuentasPorCobrarPanel({
           }}
         />
       </section>
+      )}
 
       {/* ── Notas de débito (mora), en su sección aparte ───────────────── */}
+      {seccion === 'notas' && (
       <section className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
@@ -283,6 +294,7 @@ export function CuentasPorCobrarPanel({
           </div>
         )}
       </section>
+      )}
 
       {/* Cobro — el mismo modal de la cartera general. Cobra la factura y, si
           hay mora, el resto se aplica a la mora. */}

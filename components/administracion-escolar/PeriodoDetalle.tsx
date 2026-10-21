@@ -243,7 +243,7 @@ export interface FacturaSuelta {
 
 // Lanza en 404/500 para que SWR lo trate como error y no cachee un cuerpo vacío
 // como si fuera la ficha.
-const VISTAS = ['mensualidades', 'cuentas', 'otros', 'facturas', 'pagos'] as const;
+const VISTAS = ['mensualidades', 'cuentas', 'notas', 'otros', 'facturas', 'pagos'] as const;
 
 // ─── Página ────────────────────────────────────────────────────────────────
 
@@ -688,6 +688,7 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           {[
             ['mensualidades', 'Mensualidades'],
             ['cuentas', 'Cuentas por cobrar'],
+            ['notas', 'Notas de débito'],
             ['otros', 'Otros cargos'],
             ['facturas', 'Facturas'],
             ['pagos', 'Pagos'],
@@ -767,10 +768,28 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                       clientId={tutorClientId}
                       puedePagos={puedePagos}
                       onCambio={onCargoCreado}
+                      seccion="cuentas"
                     />
                   </div>
                 )
                 : <EmptyBox text="Falta asignar el responsable de pago: sin él no hay a quién facturarle ni cuentas que cobrar." />
+            )}
+
+            {/* Notas de débito — la mora del responsable, en su sección propia
+                al lado de «Cuentas por cobrar» (Alex la quiere separada). */}
+            {vista === 'notas' && (
+              tutorClientId != null
+                ? (
+                  <div className="pt-1">
+                    <CuentasPorCobrarPanel
+                      clientId={tutorClientId}
+                      puedePagos={puedePagos}
+                      onCambio={onCargoCreado}
+                      seccion="notas"
+                    />
+                  </div>
+                )
+                : <EmptyBox text="Falta asignar el responsable de pago: sin él no hay notas de débito que cobrar." />
             )}
 
             {/* Agregar un cargo suelto desde la misma pestaña donde se ven:
