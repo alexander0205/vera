@@ -110,6 +110,7 @@ export function RailSecciones({
   modulo,
   onNavegar,
   puedeVer,
+  ordenFijo = false,
 }: {
   /**
    * El módulo de este rail, para saber qué es «la raíz».
@@ -130,6 +131,13 @@ export function RailSecciones({
   onNavegar?: () => void;
   /** Gate del atajo "+" de un hijo. Sin él, todos los atajos se muestran. */
   puedeVer?: (href: string) => boolean;
+  /**
+   * Fija el orden del menú al que trae el código: ni se reordena por uso ni se
+   * cuentan las visitas. Gobernanza lo pidió así —el menú que se mueve solo
+   * confunde a quien busca siempre la sección en el mismo sitio—. Los demás
+   * módulos lo dejan en `false` y conservan el orden por uso.
+   */
+  ordenFijo?: boolean;
 }) {
   const rutaNavegador = usePathname();
   // En la portada de un subdominio de módulo, la ruta efectiva es la del
@@ -139,10 +147,15 @@ export function RailSecciones({
     exact ? pathname === href : pathname.startsWith(href);
 
   // El orden que se pinta sale del uso de los últimos días, no del orden en que
-  // están escritas las secciones en cada rail.
-  const lista = useOrdenNav(secciones.map(s => s.id))
-    .map(id => secciones.find(s => s.id === id))
-    .filter((s): s is RailSeccion => s !== undefined);
+  // están escritas las secciones en cada rail. `useOrdenNav` es un hook y se
+  // llama siempre; con `ordenFijo` se ignora su resultado y manda el orden del
+  // código, para que el menú no se mueva nunca.
+  const ordenPorUso = useOrdenNav(secciones.map(s => s.id));
+  const lista = ordenFijo
+    ? secciones
+    : ordenPorUso
+        .map(id => secciones.find(s => s.id === id))
+        .filter((s): s is RailSeccion => s !== undefined);
 
   // Sección donde estás ahora mismo. Sirve para dos cosas: abrir su grupo sin
   // que haya que pedirlo, y sumarle la visita que alimenta el orden por uso.
@@ -153,10 +166,12 @@ export function RailSecciones({
   ) ?? null;
   const grupoActivo = seccionActual?.tipo === 'grupo' ? seccionActual.id : null;
 
+  // Con el orden fijo no se cuentan visitas: no alimentan ningún reordenamiento
+  // de este rail, y el contador es compartido entre módulos.
   const idSeccionActual = seccionActual?.id ?? null;
   useEffect(() => {
-    if (idSeccionActual) registrarVisitaNav(idSeccionActual);
-  }, [idSeccionActual]);
+    if (!ordenFijo && idSeccionActual) registrarVisitaNav(idSeccionActual);
+  }, [ordenFijo, idSeccionActual]);
 
   const { grupoAbierto, duracion, alternar, handlersPuntero } = useDesplegables(grupoActivo);
 

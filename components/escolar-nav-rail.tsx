@@ -20,9 +20,10 @@ import {
 
 type SeccionEscolar = RailSeccion & { oculto?: boolean };
 
-// El orden lo manda cuánto se usa cada pantalla, y después a quién mira. Este
-// es el orden POR DEFECTO: el que ve quien entra por primera vez y el que rompe
-// los empates; a partir de ahí manda el uso (ver useOrdenNav).
+// El orden es FIJO en Gobernanza: este es el que se ve siempre (el rail va con
+// `ordenFijo`, ver EscolarNavRail). No se reordena por uso como los otros
+// módulos —Alex lo pidió así, porque la sección más usada se adelantaba sola y
+// dejaba de estar donde se la busca—.
 // Matriculación y Estudiantes van pegadas porque se salta de una a otra todo el
 // día: la matrícula ES el alumno inscrito en un curso, con sus padres detrás.
 //
@@ -37,7 +38,7 @@ type SeccionEscolar = RailSeccion & { oculto?: boolean };
 const SECCIONES: SeccionEscolar[] = [
   // El panorama va primero aunque no sea la más usada: la abre el dueño, no la
   // secretaria, y quien entra a mirar cómo va el dinero no tiene por qué saber
-  // que eso se deduce de los cargos. Las demás siguen ordenadas por uso diario.
+  // que eso se deduce de los cargos. Las demás van en el orden del día a día.
   { tipo: 'item', id: 'escolar-panorama',    href: '/escolar/dashboard',     label: 'Panorama',       icon: LayoutDashboard },
   // Matriculación va después: es la pantalla que más se abre. Inscribir a un
   // alumno es el trabajo diario del colegio; consultarlo, lo de después.
@@ -80,7 +81,10 @@ const VISIBLES: RailSeccion[] = SECCIONES.filter(s => !s.oculto);
 export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   return (
     <RailArmazon modulo="escolar" variant={variant}>
-      <RailSecciones secciones={VISIBLES} modulo="escolar" />
+      {/* `ordenFijo`: en Gobernanza el menú NO se reordena por uso. Alex lo
+          pidió estático —la sección que se usa mucho se adelantaba sola y
+          dejaba de estar donde el usuario la busca—. */}
+      <RailSecciones secciones={VISIBLES} modulo="escolar" ordenFijo />
     </RailArmazon>
   );
 }
