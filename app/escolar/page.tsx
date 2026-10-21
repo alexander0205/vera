@@ -74,8 +74,12 @@ export default async function EscolarPage() {
 
   const estado = await estadoConfiguracion(equipo.id);
 
-  // Ya hay algo cargado: a trabajar, que es a lo que se entra.
-  if (!estado.enBlanco) redirect('/escolar/estudiantes');
+  // Ya hay algo cargado: se entra al Panorama, no al listado de estudiantes.
+  // Alex lo pidió así: quien abre el módulo ve primero cómo va el cobro del
+  // colegio. Todo el que llega hasta aquí tiene `administracion-escolar:ver`
+  // (lo exige el layout), que es lo único que gatea el Panorama, así que no
+  // hace falta pantalla de respaldo por permiso.
+  if (!estado.enBlanco) redirect('/escolar/dashboard');
 
   // Las horas de implementación salen del plan que tiene contratado, no de un
   // número escrito aquí: cada tramo de colegio trae las suyas (8, 10.5, 14 y
