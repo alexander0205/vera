@@ -58,13 +58,14 @@ describe('Cuenta activada', () => {
     });
     const t = texto(html);
 
-    expect(subject).toBe('Tu cuenta de Zero está lista');
-    expect(t).toContain('Tu cuenta de Zero está lista');
+    expect(subject).toBe('¡Bienvenido a Zero! Tu cuenta ya está lista');
+    expect(t).toContain('¡Bienvenido a Zero!');
+    expect(t).toContain('gracias por elegir Zero');
     expect(t).toContain('Colegio Los Pinos');
     expect(t).toContain('Plan Básico');
     expect(t).toContain('Precio US$135 al mes');
     expect(t).toContain('Tu prueba termina 5 de noviembre');
-    expect(t).toContain('Ese día se cobra US$135 a tu tarjeta terminada en 4242; no tienes que hacer nada.');
+    expect(t).toContain('ese día se cobrará US$135 a tu tarjeta terminada en 4242 y todo seguirá funcionando igual. No tienes que hacer nada.');
     expect(t).not.toContain('Agrega tu método de pago');
     expect(t).toContain('Ver mi suscripción');
     expect(enlace(html)).toBe('https://app.zero.com.do/dashboard/suscripcion');
@@ -76,8 +77,8 @@ describe('Cuenta activada', () => {
     });
     const t = texto(html);
 
-    expect(t).toContain('Agrega tu método de pago antes del 5 de noviembre para no perder el acceso.');
-    expect(t).not.toContain('no tienes que hacer nada');
+    expect(t).toContain('agrega tu método de pago antes del 5 de noviembre. Te toma un minuto.');
+    expect(t).not.toContain('No tienes que hacer nada');
     expect(t).not.toContain('terminada en');
     expect(t).toContain('Agregar método de pago');
     expect(t).toContain(`solo lectura durante ${SOLO_LECTURA.diasTrasPrueba} días`);
@@ -101,7 +102,7 @@ describe('Cuenta activada', () => {
     const t = texto(html);
 
     expect(t).not.toContain('US$');
-    expect(t).toContain('Ese día se cobra tu plan Básico a tu tarjeta terminada en 4242');
+    expect(t).toContain('ese día se cobrará tu plan Básico a tu tarjeta terminada en 4242');
   });
 
   it('un método sin dígitos (wallet) no imprime «terminada en null»', () => {
@@ -129,7 +130,8 @@ describe('Cuenta activada', () => {
     const arg = enviar.mock.calls[0][0];
     expect(arg.to).toBe('dueno@colegio.test');
     expect(arg.from).toBe('Zero <noreply@zero.com.do>');
-    expect(arg.subject).toBe('Tu cuenta de Zero está lista');
+    expect(arg.subject).toBe('¡Bienvenido a Zero! Tu cuenta ya está lista');
+    expect(arg.replyTo).toBe('alexander@zero.com.do');
   });
 
   it('si Resend responde con error, el envío lanza (el control de duplicados NO debe anotarlo)', async () => {
@@ -151,7 +153,7 @@ describe('Prueba por vencer', () => {
 
     expect(subject).toBe('Tu prueba de Zero termina en 3 días');
     expect(t).toContain('termina el 25 de octubre');
-    expect(t).toContain('El 25 de octubre se cobra US$135 del plan Básico a tu tarjeta •••• 4242. Si quieres cambiar de plan, hazlo antes.');
+    expect(t).toContain('Ese día se cobrará US$135 del plan Básico a tu tarjeta •••• 4242 y seguirás trabajando sin ninguna interrupción.');
     expect(t).toContain('Ver mi plan');
     expect(t).not.toContain('Agrega tu método de pago');
     expect(t).not.toContain('solo lectura');
@@ -164,7 +166,7 @@ describe('Prueba por vencer', () => {
     });
     const t = texto(html);
 
-    expect(t).toContain('Agrega tu método de pago para seguir emitiendo sin interrupciones con el plan Básico.');
+    expect(t).toContain('Para seguir trabajando sin interrupciones con el plan Básico, solo falta agregar tu método de pago.');
     expect(t).toContain(`solo lectura durante ${SOLO_LECTURA.diasTrasPrueba} días`);
     expect(t).toContain('Agregar método de pago');
     expect(t).not.toContain('se cobra');
@@ -172,7 +174,7 @@ describe('Prueba por vencer', () => {
 
   it('llamado como antes (sin método ni precio) sigue siendo la versión «sin tarjeta»', () => {
     const { html } = armarPruebaPorVencer({ ...base, diasRestantes: 3, venceEl });
-    expect(texto(html)).toContain('Agrega tu método de pago');
+    expect(texto(html)).toContain('agregar tu método de pago');
   });
 
   it('el asunto cuenta los días: hoy, mañana, en N días', () => {
@@ -194,7 +196,7 @@ describe('Prueba por vencer', () => {
   it('sin precio conocido, no inventa la cifra', () => {
     const { html } = armarPruebaPorVencer({ ...base, diasRestantes: 3, venceEl, metodo: visa, precio: null });
     const t = texto(html);
-    expect(t).toContain('se cobra tu plan Básico a tu tarjeta •••• 4242');
+    expect(t).toContain('se cobrará tu plan Básico a tu tarjeta •••• 4242');
     expect(t).not.toContain('US$');
   });
 
@@ -217,9 +219,9 @@ describe('Pago recibido', () => {
     });
     const t = texto(html);
 
-    expect(subject).toBe('Recibimos tu pago de US$135');
-    expect(t).toContain('Recibimos tu pago');
-    expect(t).toContain('recibimos tu pago de US$135 por la suscripción de Colegio Los Pinos');
+    expect(subject).toBe('¡Gracias! Recibimos tu pago de US$135');
+    expect(t).toContain('¡Gracias por tu pago!');
+    expect(t).toContain('Colegio Los Pinos: recibimos tu pago de US$135. Gracias por confiar en Zero.');
     expect(t).toContain('Plan Básico');
     expect(t).toContain('Monto pagado US$135');
     expect(t).toContain('Período cubierto 5 de noviembre al 5 de diciembre de 2026');
@@ -245,7 +247,7 @@ describe('Pago recibido', () => {
     const t = texto(html);
 
     expect(t).toContain('recibimos tu pago de RD$20');
-    expect(t).toContain('Tu suscripción sigue activo.');
+    expect(t).toContain('Tu suscripción sigue activa.');
     expect(t).not.toContain('Plan ');
     expect(t).not.toContain('Período cubierto');
     expect(t).not.toContain('null');
@@ -258,7 +260,7 @@ describe('Pago recibido', () => {
     });
     const arg = enviar.mock.calls[0][0];
     expect(arg.to).toBe('dueno@colegio.test');
-    expect(arg.subject).toBe('Recibimos tu pago de US$135');
+    expect(arg.subject).toBe('¡Gracias! Recibimos tu pago de US$135');
   });
 });
 

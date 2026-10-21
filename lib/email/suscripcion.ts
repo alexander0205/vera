@@ -27,6 +27,12 @@ import {
 } from '@/lib/suscripcion/datos-aviso';
 
 const DE = 'Zero <noreply@zero.com.do>';
+/**
+ * A dónde llega la respuesta. Todos estos correos terminan en «responde este
+ * correo y te ayudamos», así que la respuesta tiene que llegarle a una persona
+ * y no perderse en `noreply@`.
+ */
+const SOPORTE = 'alexander@zero.com.do';
 
 function escapeHtml(s: string | null | undefined): string {
   if (s == null) return '';
@@ -87,7 +93,9 @@ function plantilla(opts: {
           ${escapeHtml(opts.boton)}
         </a>
       </p>
-      ${opts.pie ? `<p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0;">${opts.pie}</p>` : ''}
+      ${opts.pie ? `<p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0 0 20px;">${opts.pie}</p>` : ''}
+      <p style="margin: 0 0 4px; line-height: 1.6;">¿Tienes alguna pregunta? Responde este correo y con gusto te ayudamos.</p>
+      <p style="margin: 0; line-height: 1.6;">Un saludo,<br><strong>El equipo de Zero</strong></p>
     </div>
   `;
 }
@@ -152,26 +160,26 @@ export function armarCuentaActivada(
   if (d.metodo) {
     cuerpo = fecha
       ? enPrueba
-        ? `Ese día se cobra ${escapeHtml(cuanto)} ${metodoTerminada(d.metodo)}; no tienes que hacer nada.`
+        ? `Disfruta tu prueba con tranquilidad: ese día se cobrará ${escapeHtml(cuanto)} ${metodoTerminada(d.metodo)} y todo seguirá funcionando igual. No tienes que hacer nada.`
         : `Tu próximo cobro es el <strong>${escapeHtml(fecha)}</strong>: ${escapeHtml(cuanto)} ${metodoTerminada(d.metodo)}. No tienes que hacer nada.`
-      : `El cobro se hace ${metodoTerminada(d.metodo)}; no tienes que hacer nada.`;
+      : `El cobro se hará ${metodoTerminada(d.metodo)}. No tienes que hacer nada.`;
     boton = 'Ver mi suscripción';
-    pie = 'Si quieres cambiar de plan o cancelar, puedes hacerlo desde tu suscripción antes de esa fecha.';
+    pie = 'Si en algún momento quieres cambiar de plan o cancelar, puedes hacerlo desde tu suscripción antes de esa fecha.';
   } else {
     const limite = fecha ? `antes del <strong>${escapeHtml(fecha)}</strong>` : 'a tiempo';
     cuerpo = enPrueba
-      ? `Agrega tu método de pago ${limite} para no perder el acceso.`
-      : `Agrega un método de pago ${limite} para que tu plan se renueve sin interrupciones.`;
+      ? `Para que no pierdas el acceso al terminar la prueba, agrega tu método de pago ${limite}. Te toma un minuto.`
+      : `Para que tu plan se renueve sin interrupciones, agrega un método de pago ${limite}. Te toma un minuto.`;
     boton = 'Agregar método de pago';
-    pie = `Si no lo haces, tu cuenta pasa a solo lectura durante ${SOLO_LECTURA.diasTrasPrueba} días: podrás consultar y descargar toda tu información, pero no emitir comprobantes nuevos.`;
+    pie = `Si la prueba termina sin método de pago, tu cuenta pasa a solo lectura durante ${SOLO_LECTURA.diasTrasPrueba} días: tu información queda guardada y puedes consultarla y descargarla, pero no emitir comprobantes nuevos.`;
   }
 
   return {
-    subject: 'Tu cuenta de Zero está lista',
+    subject: '¡Bienvenido a Zero! Tu cuenta ya está lista',
     html: plantilla({
-      titulo: 'Tu cuenta de Zero está lista',
+      titulo: '¡Bienvenido a Zero!',
       color: VERDE,
-      saludo: `Hola, <strong>${escapeHtml(d.empresa)}</strong> ya está activa en Zero. Esto es lo que contrataste:`,
+      saludo: `Hola, equipo de <strong>${escapeHtml(d.empresa)}</strong>: gracias por elegir Zero. Tu cuenta ya está activa y lista para trabajar. Este es el resumen de lo que contrataste:`,
       resumen,
       cuerpo,
       boton,
@@ -188,7 +196,7 @@ export async function enviarCuentaActivada(
   d: Destinatario & DatosCuentaActivada,
 ): Promise<void> {
   const { subject, html } = armarCuentaActivada(d);
-  const res = await resend.emails.send({ from: DE, to: d.email, subject, html });
+  const res = await resend.emails.send({ from: DE, replyTo: SOPORTE, to: d.email, subject, html });
   assertSent(res, 'enviarCuentaActivada');
 }
 
@@ -222,7 +230,7 @@ export function armarPruebaPorVencer(
   const fecha = fechaLarga(d.venceEl);
   const subject = `Tu prueba de Zero termina ${dias}`;
   const titulo = `Tu prueba termina ${dias}`;
-  const saludo = `Hola, tu período de prueba de <strong>${escapeHtml(d.empresa)}</strong> termina el ${escapeHtml(fecha)}.`;
+  const saludo = `Hola, equipo de <strong>${escapeHtml(d.empresa)}</strong>: esperamos que Zero les esté siendo útil. Te escribimos para recordarte que tu período de prueba termina el <strong>${escapeHtml(fecha)}</strong>.`;
 
   if (d.metodo && variantePrueba(d.metodo) === 'con-tarjeta') {
     const monto = montoDelPrecio(d.precio);
@@ -235,9 +243,9 @@ export function armarPruebaPorVencer(
         titulo,
         color: AZUL,
         saludo,
-        cuerpo: `El <strong>${escapeHtml(fecha)}</strong> ${cobro} ${metodoPuntos(d.metodo)}. Si quieres cambiar de plan, hazlo antes.`,
+        cuerpo: `Ese día ${cobro.replace(/^se cobra/, 'se cobrará')} ${metodoPuntos(d.metodo)} y seguirás trabajando sin ninguna interrupción. Si prefieres otro plan, puedes cambiarlo antes de esa fecha.`,
         boton: 'Ver mi plan',
-        pie: 'Si el plan es el que quieres, no tienes que hacer nada.',
+        pie: 'Si todo está bien así, no tienes que hacer nada. ¡Gracias por seguir con nosotros!',
       }),
     };
   }
@@ -248,9 +256,9 @@ export function armarPruebaPorVencer(
       titulo,
       color: AZUL,
       saludo,
-      cuerpo: `Agrega tu método de pago para seguir emitiendo sin interrupciones con el plan ${escapeHtml(d.plan)}.`,
+      cuerpo: `Para seguir trabajando sin interrupciones con el plan ${escapeHtml(d.plan)}, solo falta agregar tu método de pago. Te toma un minuto.`,
       boton: 'Agregar método de pago',
-      pie: `Si no lo haces, tu cuenta pasa a solo lectura durante ${SOLO_LECTURA.diasTrasPrueba} días: podrás consultar y descargar toda tu información, pero no emitir comprobantes nuevos.`,
+      pie: `Si la prueba termina sin método de pago, tu cuenta pasa a solo lectura durante ${SOLO_LECTURA.diasTrasPrueba} días: tu información queda guardada y puedes consultarla y descargarla, pero no emitir comprobantes nuevos.`,
     }),
   };
 }
@@ -265,7 +273,7 @@ export async function enviarPruebaPorVencer(
   d: Destinatario & DatosPruebaPorVencer,
 ): Promise<void> {
   const { subject, html } = armarPruebaPorVencer(d);
-  const res = await resend.emails.send({ from: DE, to: d.email, subject, html });
+  const res = await resend.emails.send({ from: DE, replyTo: SOPORTE, to: d.email, subject, html });
   assertSent(res, 'enviarPruebaPorVencer');
 }
 
@@ -303,19 +311,19 @@ export function armarPagoRecibido(
   }
 
   return {
-    subject: `Recibimos tu pago de ${monto}`,
+    subject: `¡Gracias! Recibimos tu pago de ${monto}`,
     html: plantilla({
-      titulo: 'Recibimos tu pago',
+      titulo: '¡Gracias por tu pago!',
       color: VERDE,
-      saludo: `Hola, recibimos tu pago de <strong>${escapeHtml(monto)}</strong> por la suscripción de <strong>${escapeHtml(d.empresa)}</strong>. Gracias.`,
+      saludo: `Hola, equipo de <strong>${escapeHtml(d.empresa)}</strong>: recibimos tu pago de <strong>${escapeHtml(monto)}</strong>. Gracias por confiar en Zero.`,
       resumen,
       cuerpo: hasta
         ? `${sujeto} queda pagado hasta el <strong>${escapeHtml(hasta)}</strong>.`
-        : `${sujeto} sigue activo.`,
+        : plan ? `${sujeto} sigue activo.` : 'Tu suscripción sigue activa.',
       boton: d.urlRecibo ? 'Ver mi recibo' : 'Ver mi suscripción',
       url: d.urlRecibo ?? undefined,
       pie: d.urlRecibo
-        ? 'Es el recibo de Stripe por este cobro; guárdalo para tus registros.'
+        ? 'Aquí tienes el recibo de este cobro; guárdalo para tus registros.'
         : 'El historial de tus cobros está en tu suscripción.',
     }),
   };
@@ -325,7 +333,7 @@ export async function enviarPagoRecibido(
   d: Omit<Destinatario, 'plan'> & DatosPagoRecibido,
 ): Promise<void> {
   const { subject, html } = armarPagoRecibido(d);
-  const res = await resend.emails.send({ from: DE, to: d.email, subject, html });
+  const res = await resend.emails.send({ from: DE, replyTo: SOPORTE, to: d.email, subject, html });
   assertSent(res, 'enviarPagoRecibido');
 }
 
@@ -341,15 +349,16 @@ export async function enviarCobroFallido(
 ): Promise<void> {
   const res = await resend.emails.send({
     from: DE,
+    replyTo: SOPORTE,
     to: d.email,
     subject: 'No pudimos cobrar tu suscripción de Zero',
     html: plantilla({
       titulo: 'No pudimos cobrar tu suscripción',
       color: AMBAR,
-      saludo: `Hola, el cobro del plan ${escapeHtml(d.plan)} de <strong>${escapeHtml(d.empresa)}</strong> no pasó.`,
-      cuerpo: `Lo más común es una tarjeta vencida o sin fondos. Actualízala y lo reintentamos de inmediato.`,
+      saludo: `Hola, equipo de <strong>${escapeHtml(d.empresa)}</strong>: no pudimos procesar el cobro del plan ${escapeHtml(d.plan)}. No te preocupes, tiene arreglo fácil.`,
+      cuerpo: `Lo más común es una tarjeta vencida o sin fondos. Actualízala y lo intentamos de nuevo enseguida.`,
       boton: 'Actualizar tarjeta',
-      pie: `Tienes ${d.diasDeGracia} días para resolverlo. Mientras tanto sigues trabajando con normalidad.`,
+      pie: `Tienes ${d.diasDeGracia} días para resolverlo, y mientras tanto sigues trabajando con normalidad.`,
     }),
   });
   assertSent(res, 'enviarCobroFallido');
@@ -371,12 +380,13 @@ export async function enviarSoloLectura(
 
   const res = await resend.emails.send({
     from: DE,
+    replyTo: SOPORTE,
     to: d.email,
     subject: `${d.empresa} está en solo lectura`,
     html: plantilla({
       titulo: 'Tu cuenta está en solo lectura',
       color: ROJO,
-      saludo: `Hola, como ${razon}, <strong>${escapeHtml(d.empresa)}</strong> pasó a solo lectura.`,
+      saludo: `Hola, equipo de <strong>${escapeHtml(d.empresa)}</strong>: como ${razon}, la cuenta pasó a solo lectura.`,
       cuerpo: `<strong>No se borró nada.</strong> Puedes entrar, consultar tus facturas, sacar tus reportes y descargar toda tu información. Lo único que no puedes hacer es emitir comprobantes nuevos.`,
       boton: 'Reactivar mi plan',
       pie: `Te quedan ${d.diasRestantes} días de acceso de consulta. Tus datos y comprobantes se conservan.`,
@@ -400,12 +410,13 @@ export async function enviarCancelacionProgramada(
 
   const res = await resend.emails.send({
     from: DE,
+    replyTo: SOPORTE,
     to: d.email,
     subject: 'Confirmamos la cancelación de tu suscripción',
     html: plantilla({
       titulo: 'Tu suscripción quedó cancelada',
       color: AZUL,
-      saludo: `Hola, cancelamos la suscripción de <strong>${escapeHtml(d.empresa)}</strong>.`,
+      saludo: `Hola, equipo de <strong>${escapeHtml(d.empresa)}</strong>: confirmamos la cancelación de tu suscripción. Gracias por el tiempo que trabajaste con Zero.`,
       cuerpo: `Tu plan ${escapeHtml(d.plan)} sigue activo hasta el <strong>${escapeHtml(fecha)}</strong>, que es hasta donde está pagado. No se te cobrará de nuevo.`,
       boton: 'Reactivar antes de esa fecha',
       pie: 'Si cambias de idea, puedes reactivarla en cualquier momento antes de esa fecha y no se interrumpe nada. Después también, pero volviendo a contratar.',
