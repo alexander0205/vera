@@ -70,6 +70,9 @@ export type AuditAction =
   // El mensaje de prueba de los canales de aviso. También sale hacia afuera y
   // cuesta dinero (el SMS), así que se traza igual que un envío de verdad.
   | 'ESCOLAR_AVISO_PRUEBA'
+  // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
+  // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
+  | 'ESCOLAR_AVISO_CORRIDA'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
