@@ -118,15 +118,20 @@ export async function aplicarRecargosMoraVencidos(
         // anidado, y como admin_escolar_cargos también tiene `id` la correlación
         // casaría con la tabla interna. El subquery de `pagado` de arriba usa el
         // mismo literal por la misma razón.
+        // El `aec.team_id = ecf_documents.team_id` no cambia el resultado (la
+        // factura y sus cargos son del mismo team), pero deja que Postgres use
+        // el índice admin_escolar_cargos_team_factura_idx (team_id, ecf_document_id).
         sql`NOT (
           EXISTS (
             SELECT 1 FROM admin_escolar_cargos aec
             WHERE aec.ecf_document_id = ecf_documents.id
+              AND aec.team_id = ecf_documents.team_id
           )
           AND NOT EXISTS (
             SELECT 1 FROM admin_escolar_cargos aec
             JOIN admin_escolar_conceptos_pago cp ON cp.id = aec.concepto_id
             WHERE aec.ecf_document_id = ecf_documents.id
+              AND aec.team_id = ecf_documents.team_id
               AND cp.cobra_mora = true
           )
         )`,

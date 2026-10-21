@@ -162,7 +162,41 @@ export async function resolverTarifas(
       )),
   ]);
 
-  const admiteBeca = new Map(conceptos.map((c) => [c.id, c.admiteBeca]));
+  return resolverTarifasEnMemoria(
+    precios,
+    new Map(conceptos.map((c) => [c.id, c.admiteBeca])),
+    ctx,
+    conceptoIds,
+  );
+}
+
+/** Una fila de `admin_escolar_concepto_precios`, la parte que la cadena necesita. */
+export interface PrecioConfigurado {
+  conceptoId: number;
+  objetivoTipo: string;
+  objetivoId: number;
+  montoCentavos: number;
+  productId: number | null;
+}
+
+/**
+ * La cadena de tarifas (alumno → sección → grado → servicio, y la beca por
+ * encima), sobre precios que YA están cargados.
+ *
+ * Es el cuerpo de `resolverTarifas` sin las dos consultas. Se separó para que
+ * quien necesita resolver la tarifa de cientos de matrículas de una vez —el
+ * simulacro de la corrida de facturación— cargue los precios del colegio UNA
+ * vez y repita la regla en memoria, en vez de pagar dos consultas por cada
+ * matrícula. La regla sigue viviendo en un solo sitio: `resolverTarifas` la
+ * llama, así que lo que se avisa y lo que se cobra no pueden divergir.
+ */
+export function resolverTarifasEnMemoria(
+  precios: PrecioConfigurado[],
+  admiteBeca: Map<number, boolean | null | undefined>,
+  ctx: ContextoTarifa,
+  conceptoIds: number[],
+): Map<number, TarifaResuelta> {
+  const resuelto = new Map<number, TarifaResuelta>();
 
   // Lo más específico gana: el precio propio del alumno tapa el de su sección,
   // que tapa el del grado, que tapa el del servicio.
