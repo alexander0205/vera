@@ -22,6 +22,7 @@ import { DocumentosEstudiante } from '@/components/administracion-escolar/Docume
 import { CapturaFoto } from '@/components/fotos/CapturaFoto';
 import { type CobroDelColegio } from '@/components/administracion-escolar/DetalleCuotaDialog';
 import { PeriodoDetalle, FacturasSueltas, CanalChip, MESES, AVISO_TEXTO, construirGruposPeriodo, EmptyBox, SimpleTable, type Matricula, type Cargo, type Pago, type PagoSuelto, type FacturaSuelta, type AvisoEnviado, type AvisoProgramado, type PlanesPorMatricula } from '@/components/administracion-escolar/PeriodoDetalle';
+import { CuentasPorCobrarPanel } from '@/components/administracion-escolar/CuentasPorCobrarPanel';
 import { useAccionesDeCargo } from '@/components/administracion-escolar/useAccionesDeCargo';
 import {
   claveFichaEstudiante, rutaDeVueltaALaFicha, rutaEditarMatricula, rutaNuevaMatricula,
@@ -101,7 +102,7 @@ const fetcher = async (url: string) => {
   return r.json();
 };
 
-const TABS = ['periodo', 'tutores', 'documentos', 'avisos', 'historial'] as const;
+const TABS = ['periodo', 'cxc', 'tutores', 'documentos', 'avisos', 'historial'] as const;
 export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   id: number;
   /** Datos del emisor, resueltos en el servidor. Los usa el cajón de facturar. */
@@ -467,6 +468,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line" className="w-full justify-start border-b border-gray-200 rounded-none px-0">
             <TabsTrigger value="periodo">Por período</TabsTrigger>
+            <TabsTrigger value="cxc">Cuentas por cobrar</TabsTrigger>
             <TabsTrigger value="tutores">Tutores</TabsTrigger>
             <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="avisos">Avisos</TabsTrigger>
@@ -527,6 +529,23 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                 Con período viven dentro de «Otros cargos», que es donde el
                 colegio busca lo que se le cobró al alumno. */}
             {grupos.length === 0 && <FacturasSueltas facturas={facturasSueltas} />}
+          </TabsContent>
+
+          {/* Cuentas por cobrar — la cartera de Facturación del responsable,
+              acotada a él: sus facturas con saldo y la mora en su sección
+              aparte. Es la deuda documentada (e-CF), distinta de los cargos
+              escolares de «Por período». Una factura al padre NO es deuda
+              individual de cada hijo: por eso sale a nombre del responsable. */}
+          <TabsContent value="cxc" className="pt-4">
+            {responsable ? (
+              <CuentasPorCobrarPanel
+                clientId={responsable.clientId}
+                puedePagos={puedePagos}
+                onCambio={cargar}
+              />
+            ) : (
+              <EmptyBox text="Falta asignar el responsable de pago: sin él no hay a quién facturarle ni cuentas que cobrar." />
+            )}
           </TabsContent>
 
           {/* Tutores — gestión + contacto vinculado, separado de lo financiero. */}

@@ -18,6 +18,7 @@ import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { EnlacePagoFamilia } from '@/components/administracion-escolar/EnlacePagoFamilia';
 import { PeriodosDeLaFamilia } from '@/components/administracion-escolar/PeriodosDeLaFamilia';
+import { CuentasPorCobrarPanel } from '@/components/administracion-escolar/CuentasPorCobrarPanel';
 import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
 import { useAccionesDeCargo } from '@/components/administracion-escolar/useAccionesDeCargo';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -52,7 +53,7 @@ const AVISO_TEXTO: Record<string, string> = {
   'antes-mora': 'Antes del recargo',
 };
 
-const VISTAS = ['cuenta', 'pagos', 'facturas', 'avisos'] as const;
+const VISTAS = ['cuenta', 'cxc', 'pagos', 'facturas', 'avisos'] as const;
 
 /** Descarga en el navegador, sin pasar por el servidor. */
 function descargarCsv(nombre: string, filas: (string | number)[][]) {
@@ -597,6 +598,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           borderBottom: '1px solid #EDEFF5', overflowX: 'auto',
         }}>
           {([['cuenta', 'Estado de cuenta'],
+             ['cxc', 'Cuentas por cobrar'],
              ['pagos', `Pagos (${data.pagos.length})`],
              ['facturas', `Facturas sueltas (${data.facturas.length})`],
              ['avisos', `Recordatorios (${data.avisosProgramados.length + data.avisos.length})`]] as const)
@@ -622,11 +624,16 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             </Box>
           ))}
           <Box sx={{ flex: 1 }} />
-          <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
-            <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
-              <Download className="mr-1.5 h-4 w-4" />Exportar
-            </Button>
-          </Box>
+          {/* «Cuentas por cobrar» trae su propio export dentro de la tabla
+              (con sus filtros y su rango de fechas); el de la ficha exportaría
+              otra cosa, así que ahí se oculta. */}
+          {vista !== 'cxc' && (
+            <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
+              <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
+                <Download className="mr-1.5 h-4 w-4" />Exportar
+              </Button>
+            </Box>
+          )}
         </Box>
 
         <Box sx={{ px: 2.75, pt: 0.75, pb: 1.75 }}>
@@ -663,6 +670,16 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
                 ultima
               />
             </>
+          )}
+
+          {vista === 'cxc' && (
+            /* Las cuentas por cobrar de Facturación del responsable: sus
+               facturas con saldo (totales de la familia) y la mora en su
+               sección aparte. Reusa la cartera general acotada a este cliente;
+               el cobro refresca las cifras de arriba. */
+            <Box sx={{ pt: 0.75 }}>
+              <CuentasPorCobrarPanel clientId={clientId} puedePagos={puedePagos} onCambio={refrescar} />
+            </Box>
           )}
 
           {vista === 'pagos' && (
