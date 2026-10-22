@@ -13,14 +13,16 @@
  *    el rol, enseña «no está disponible para ti». Cubre también la llegada por URL.
  *
  * El menú se filtra por lo mismo (server en /escolar, /api/user en
- * Facturación). Tras cada cambio se refresca la ruta para que lo tome al
- * momento.
+ * Facturación). Tras cada cambio se refresca la ruta y se vuelve a pedir
+ * /api/user para que lo tome al momento.
+ *
+ * Ocultar no quita permisos (ver lib/config/pantallas.ts): el panel lo dice.
  */
 
 import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import useSWR from 'swr';
+import useSWR, { mutate as mutarGlobal } from 'swr';
 import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -35,7 +37,7 @@ import { Lock, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
-  MODULOS_PANTALLAS, PANTALLAS, agruparPantallas, pantallaDeRuta, veLaPantalla,
+  MODULOS_PANTALLAS, agruparPantallas, pantallaDeRuta, primeraVisible, veLaPantalla,
   type ModuloId, type PantallaDef,
 } from '@/lib/config/pantallas';
 
@@ -48,7 +50,7 @@ const fetcher = (url: string) => fetch(url).then(r => (r.ok ? r.json() : Promise
 /** Lee las pantallas por rol y devuelve con qué cambiarlas. */
 function usePantallasPorRol(activo = true) {
   const router = useRouter();
-  const { data, isLoading, mutate } = useSWR<Datos>(activo ? URL_API : null, fetcher);
+  const { data, error, isLoading, mutate } = useSWR<Datos>(activo ? URL_API : null, fetcher);
   const [guardando, setGuardando] = useState<string | null>(null);
 
   const fijar = useCallback(async (rol: RolPantallas, ids: string[], visible: boolean) => {
@@ -67,6 +69,9 @@ function usePantallasPorRol(activo = true) {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'No se pudo guardar');
       router.refresh();
+      // El menú de Facturación y de los demás módulos sale de /api/user (con y
+      // sin clave propia): sin esto seguía igual hasta recargar la página.
+      void mutarGlobal(k => k === '/api/user' || (Array.isArray(k) && k[0] === '/api/user'));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
@@ -75,18 +80,35 @@ function usePantallasPorRol(activo = true) {
     }
   }, [mutate, router]);
 
-  return { data, isLoading, fijar, guardando };
+  return { data, error, isLoading, fijar, guardando, reintentar: () => mutate() };
 }
 
 // ─── Bloqueo ──────────────────────────────────────────────────────────────────
 
-export function GuardPantalla({ ocultas, inicio, children }: { ocultas: string[]; inicio?: string; children: React.ReactNode }) {
+export function GuardPantalla({ ocultas, inicio, puede, children }: {
+  ocultas: string[];
+  inicio?: string;
+  /** Si se sabe, qué rutas deja abrir el permiso: el «Ir a…» no manda a otra pared. */
+  puede?: (href: string) => boolean;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const pantalla = ocultas.length ? pantallaDeRuta(pathname, inicio) : null;
-  if (!pantalla || !ocultas.includes(pantalla.id)) return <>{children}</>;
-
+  const oculta = !!pantalla && ocultas.includes(pantalla.id);
   // Adónde puede ir: la primera pantalla del mismo módulo que sí ve.
-  const alternativa = PANTALLAS.find(p => p.modulo === pantalla.modulo && !ocultas.includes(p.id));
+  const alternativa = oculta ? primeraVisible(pantalla.modulo, ocultas, puede) : null;
+  // La portada (a donde se entra, o se rebota por permisos) no se queda en el
+  // aviso: quien entra a Facturación sin Dashboard va directo a lo que ve.
+  const seguir = oculta && pantalla.portada && alternativa ? alternativa.href : null;
+
+  useEffect(() => {
+    if (seguir) router.replace(seguir);
+  }, [seguir, router]);
+
+  if (!oculta) return <>{children}</>;
+  if (seguir) return null;
+
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 2, sm: 6 } }}>
       <Box sx={{ maxWidth: 420, textAlign: 'center' }}>
@@ -97,7 +119,7 @@ export function GuardPantalla({ ocultas, inicio, children }: { ocultas: string[]
           {pantalla.label} no está disponible para ti
         </Typography>
         <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: '#6b7280' }}>
-          El administrador la desactivó para tu rol. Si la necesitas, pídele que te la habilite.
+          El administrador la ocultó para tu rol. Si la necesitas, pídele que te la muestre.
         </Typography>
         {alternativa && (
           <Box sx={{ mt: 3 }}>
@@ -157,7 +179,8 @@ export function PantallasDelRol({ roleId }: { roleId: number }) {
           Pantallas
         </Typography>
         <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-          Muestra u oculta pantallas de Gobernanza y de Facturación para este rol. Se guarda al instante.
+          Muestra u oculta pantallas para este rol. Se guarda al instante. Ocultar no quita permisos:
+          para que no pueda hacer algo, quítale el permiso arriba.
         </Typography>
       </Box>
       {modulos.map((m, i) => (
@@ -261,6 +284,9 @@ function SeccionModulo({ moduloId, etiqueta, pantallas, rol, esOwner, guardando,
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{p.label}</Typography>
                     <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.descripcion}</Typography>
+                    {p.aviso && !veLaPantalla(rol, p.id) && (
+                      <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: '#92400e' }}>{p.aviso}</Typography>
+                    )}
                   </Box>
                   <Interruptor
                     visible={veLaPantalla(rol, p.id)}
@@ -295,7 +321,7 @@ export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
   const { modules } = usePermissions();
   const [abierto, setAbierto] = useState(false);
   const [elegida, setElegida] = useState<string | null>(null);
-  const { data, isLoading, fijar, guardando } = usePantallasPorRol(abierto);
+  const { data, error, isLoading, fijar, guardando, reintentar } = usePantallasPorRol(abierto);
   const aqui = pantallaDeRuta(pathname, inicio);
   const idSelect = useId();
 
@@ -303,6 +329,8 @@ export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
     const onKey = (e: KeyboardEvent) => {
       if (!esAtajo(e)) return;
       e.preventDefault();
+      // Con la tecla sostenida el navegador repite el evento: abría y cerraba.
+      if (e.repeat) return;
       setAbierto(a => !a);
     };
     window.addEventListener('keydown', onKey);
@@ -327,10 +355,18 @@ export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
         </Typography>
         <Typography component="span" sx={{ display: 'block', fontSize: '0.8125rem', color: '#6b7280', fontWeight: 400 }}>
           Elige una pantalla y apágala para los roles que no deben verla. Se guarda al instante.
+          Solo la oculta: lo que el rol puede hacer se cambia en Roles y permisos.
         </Typography>
       </DialogTitle>
       <DialogContent>
-        {isLoading || !data ? (
+        {error && !data ? (
+          <Box sx={{ py: 2.5, textAlign: 'center' }}>
+            <Typography sx={{ fontSize: '0.875rem', color: '#b91c1c' }}>No se pudieron cargar las pantallas.</Typography>
+            <Box sx={{ mt: 1.5 }}>
+              <Button variant="outline" size="sm" onClick={() => reintentar()}>Reintentar</Button>
+            </Box>
+          </Box>
+        ) : isLoading || !data ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, color: '#6b7280' }}>
             <CircularProgress size={18} color="inherit" />
           </Box>
@@ -364,6 +400,9 @@ export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
                   ? ''
                   : 'Esta pantalla no se puede ocultar (Usuarios y Roles siempre se ven). Elige otra de la lista.'}
             </Typography>
+            {actual?.aviso && (
+              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#92400e' }}>{actual.aviso}</Typography>
+            )}
 
             {actual && <Box sx={{ mt: 1.5 }}>
               {data.roles.map(rol => {

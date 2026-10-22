@@ -40,7 +40,8 @@ export default async function EscolarLayout({ children }: { children: React.Reac
       rail={<EscolarNavRail ocultas={ocultas} />}
       railMovil={<EscolarNavRail variant="drawer" ocultas={ocultas} />}
     >
-      <GuardPantalla ocultas={ocultas}>{children}</GuardPantalla>
+      {/* `inicio`: en colegio.zero.com.do la barra dice «/» estando en /escolar. */}
+      <GuardPantalla ocultas={ocultas} inicio="/escolar">{children}</GuardPantalla>
     </ModuleShell>
   );
 }

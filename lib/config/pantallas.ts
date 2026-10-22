@@ -14,8 +14,14 @@
  * se puede apagar: siempre ve todo. Equipo, Roles y Usuarios no están en la
  * lista a propósito: apagarlas dejaría a un rol sin poder arreglar lo que apagó.
  *
+ * Ocultar NO es un permiso: la pantalla sale del menú y por URL se ve un aviso,
+ * pero el rol conserva lo que sus permisos le dejan hacer (las APIs no cambian).
+ * Para que un rol no pueda hacer algo, se quita el permiso en Roles y permisos.
+ *
  * TypeScript puro: lo usan el servidor (layout, API) y el cliente (menú, panel).
  */
+
+import { PAGOS_ONLINE_ENABLED } from './pagos-online';
 
 export type ModuloId = 'escolar' | 'facturacion' | 'pos' | 'contabilidad' | 'nomina' | 'administracion';
 
@@ -34,7 +40,15 @@ export interface PantallaDef {
   rutas?: string[];
   /** Solo la ruta exacta (`/dashboard` es raíz de todo lo demás de Facturación). */
   exacta?: boolean;
+  /**
+   * La portada del módulo: a donde se llega al entrar, o al rebotar de una
+   * pantalla sin permiso. Oculta, no se queda en el aviso: se sigue a la
+   * primera pantalla del módulo que el rol sí ve.
+   */
+  portada?: boolean;
   descripcion: string;
+  /** Lo que se rompe en otro sitio si se oculta: el panel lo enseña antes de apagarla. */
+  aviso?: string;
 }
 
 export const MODULOS_PANTALLAS: { id: ModuloId; label: string }[] = [
@@ -61,20 +75,30 @@ export const PANTALLAS: PantallaDef[] = [
   // ── Gobernanza ──
   esc({ id: 'escolar-panorama',      label: 'Panorama', href: '/escolar/dashboard', descripcion: 'Resumen del colegio: cobros, deuda y matrícula' }),
   esc({ id: 'escolar-matriculas',    label: 'Matriculación', href: '/escolar/matriculas', descripcion: 'Inscribir alumnos en un curso' }),
-  esc({ id: 'escolar-estudiantes',   label: 'Estudiantes y padres', href: '/escolar/estudiantes', descripcion: 'Fichas de los alumnos y de sus padres' }),
+  esc({ id: 'escolar-estudiantes',   label: 'Estudiantes y padres', href: '/escolar/estudiantes', rutas: ['/escolar/condicion-academica'], descripcion: 'Fichas de los alumnos y de sus padres' }),
   esc({ id: 'escolar-documentos',    label: 'Documentos', href: '/escolar/documentos', descripcion: 'Documentos requeridos y formularios' }),
-  esc({ id: 'escolar-responsables',  label: 'Responsables', href: '/escolar/responsables', descripcion: 'Las familias que pagan y lo que deben' }),
+  esc({ id: 'escolar-responsables',  label: 'Responsables', href: '/escolar/responsables', rutas: ['/escolar/cobrar-grupo'], descripcion: 'Las familias que pagan y lo que deben' }),
   esc({ id: 'escolar-pagos',         label: 'Pagos', href: '/escolar/pagos', descripcion: 'Pagos aplicados y comprobantes por aprobar' }),
   esc({ id: 'escolar-avisos',        label: 'Avisos', href: '/escolar/avisos', descripcion: 'Recordatorios de cobro que se enviaron' }),
-  esc({ id: 'escolar-configuracion', label: 'Configuración', href: '/escolar/configuracion', descripcion: 'Períodos, cursos, tarifas y conceptos' }),
+  esc({ id: 'escolar-configuracion', label: 'Configuración', href: '/escolar/configuracion', rutas: ['/escolar/sigerd', '/escolar/personal'], descripcion: 'Períodos, cursos, tarifas y conceptos' }),
 
   // ── Facturación ──
-  fac({ id: 'fact-dashboard', label: 'Dashboard', href: '/dashboard', exacta: true, descripcion: 'Resumen de ventas, cobros y pendientes' }),
-  fac({ id: 'fact-contactos', label: 'Contactos', href: '/dashboard/clientes', descripcion: 'Clientes y sus dependientes' }),
+  fac({ id: 'fact-dashboard', label: 'Dashboard', href: '/dashboard', exacta: true, portada: true, descripcion: 'Resumen de ventas, cobros y pendientes' }),
+  fac({ id: 'fact-contactos', label: 'Contactos', href: '/dashboard/clientes', descripcion: 'Clientes y sus dependientes',
+    aviso: '«Editar contacto» de Responsables (Gobernanza) abre esta pantalla: oculta, a este rol no le abrirá.' }),
+  // «Pagos recibidos» (/dashboard/pagos) es un reporte; Links de pago y Pasarelas,
+  // que cuelgan de esa ruta, son pantallas propias de Ingresos (abajo) y ganan
+  // por ser más específicas.
   fac({ id: 'fact-reportes',  label: 'Reportes', href: '/dashboard/reportes', rutas: ['/dashboard/pagos'], descripcion: 'Reportes y pagos recibidos' }),
 
-  fac({ grupo: 'Ingresos', id: 'fact-facturas',      label: 'Facturas de venta', href: '/dashboard/facturas', descripcion: 'Emitir, consultar y exportar facturas' }),
+  fac({ grupo: 'Ingresos', id: 'fact-facturas',      label: 'Facturas de venta', href: '/dashboard/facturas', descripcion: 'Emitir, consultar y exportar facturas',
+    aviso: 'Gobernanza abre aquí las facturas de los alumnos: oculta, a este rol no le abrirán desde el colegio.' }),
   fac({ grupo: 'Ingresos', id: 'fact-cxc',           label: 'Cuentas por cobrar', href: '/dashboard/cuentas-por-cobrar', descripcion: 'Lo que los clientes deben' }),
+  // Solo cuando el cobro por internet está encendido: es cuando salen en el menú.
+  ...(PAGOS_ONLINE_ENABLED ? [
+    fac({ grupo: 'Ingresos', id: 'fact-links-pago', label: 'Links de pago', href: '/dashboard/pagos/links', descripcion: 'Cobrar con un enlace por internet' }),
+    fac({ grupo: 'Ingresos', id: 'fact-pasarelas',  label: 'Pasarelas de pago', href: '/dashboard/pagos/pasarelas', descripcion: 'Conectar la pasarela de cobro' }),
+  ] : []),
   fac({ grupo: 'Ingresos', id: 'fact-notas-credito', label: 'Notas de crédito', href: '/dashboard/notas-credito', descripcion: 'Corregir o devolver una factura' }),
   fac({ grupo: 'Ingresos', id: 'fact-notas-debito',  label: 'Notas de débito', href: '/dashboard/notas-debito', descripcion: 'Cargos adicionales a una factura' }),
   fac({ grupo: 'Ingresos', id: 'fact-cotizaciones',  label: 'Cotizaciones', href: '/dashboard/cotizaciones', descripcion: 'Propuestas antes de facturar' }),
@@ -106,7 +130,7 @@ export const PANTALLAS: PantallaDef[] = [
   fac({ grupo: 'Configuración', id: 'fact-api-keys',     label: 'API Keys', href: '/dashboard/api-keys', descripcion: 'Integraciones' }),
 
   // ── Punto de Venta ──
-  pos({ id: 'pos-vender',        label: 'Vender', href: '/pos', exacta: true, descripcion: 'La terminal: vender y cobrar' }),
+  pos({ id: 'pos-vender',        label: 'Vender', href: '/pos', exacta: true, portada: true, descripcion: 'La terminal: vender y cobrar' }),
   pos({ id: 'pos-historial',     label: 'Historial', href: '/pos/historial', descripcion: 'Ventas del turno' }),
   pos({ id: 'pos-turnos',        label: 'Turnos', href: '/pos/turnos', descripcion: 'Abrir y cerrar caja' }),
   pos({ id: 'pos-caja',          label: 'Gestión de efectivo', href: '/pos/caja', descripcion: 'Entradas y salidas de efectivo' }),
@@ -114,10 +138,10 @@ export const PANTALLAS: PantallaDef[] = [
   pos({ id: 'pos-contactos',     label: 'Contactos', href: '/pos/contactos', descripcion: 'Clientes del POS' }),
   pos({ id: 'pos-productos',     label: 'Productos', href: '/pos/productos', descripcion: 'Catálogo del POS' }),
   pos({ id: 'pos-inventario',    label: 'Inventario', href: '/pos/inventario', descripcion: 'Existencias' }),
-  pos({ id: 'pos-configuracion', label: 'Configuración', href: '/pos/configuracion', descripcion: 'Terminales y ajustes del POS' }),
+  pos({ id: 'pos-configuracion', label: 'Configuración', href: '/pos/configuracion', rutas: ['/pos/terminales', '/dashboard/pos-terminales'], descripcion: 'Terminales y ajustes del POS' }),
 
   // ── Contabilidad ──
-  con({ id: 'contabilidad-panorama', label: 'Panorama', href: '/contabilidad', exacta: true, descripcion: 'Resumen contable' }),
+  con({ id: 'contabilidad-panorama', label: 'Panorama', href: '/contabilidad', exacta: true, portada: true, descripcion: 'Resumen contable' }),
   con({ id: 'contabilidad-libro',    label: 'Libro diario', href: '/contabilidad/libro-diario', descripcion: 'Asientos en orden' }),
   con({ id: 'contabilidad-asiento',  label: 'Nuevo asiento', href: '/contabilidad/nuevo-asiento', descripcion: 'Registrar un asiento manual' }),
   con({ id: 'contabilidad-cuentas',  label: 'Catálogo de cuentas', href: '/contabilidad/cuentas', descripcion: 'Plan de cuentas' }),
@@ -131,7 +155,7 @@ export const PANTALLAS: PantallaDef[] = [
   con({ id: 'contabilidad-config',   label: 'Configuración', href: '/contabilidad/configuracion', descripcion: 'Cuentas automáticas y ajustes' }),
 
   // ── Nómina ──
-  nom({ id: 'nomina-panorama',  label: 'Panorama', href: '/nomina', exacta: true, descripcion: 'Resumen de la nómina' }),
+  nom({ id: 'nomina-panorama',  label: 'Panorama', href: '/nomina', exacta: true, portada: true, descripcion: 'Resumen de la nómina' }),
   nom({ id: 'nomina-empleados', label: 'Empleados', href: '/nomina/empleados', descripcion: 'Ficha de cada empleado' }),
   nom({ id: 'nomina-corridas',  label: 'Corridas', href: '/nomina/corridas', descripcion: 'Calcular y aprobar la nómina' }),
   nom({ id: 'nomina-horas',     label: 'Horas', href: '/nomina/horas', descripcion: 'Horas trabajadas' }),
@@ -161,7 +185,7 @@ export function pantallaDeRuta(pathname: string, inicio = '/dashboard'): Pantall
   // En los subdominios de módulo el proxy sirve la portada por rewrite y la
   // barra dice «/» aunque se esté viendo /dashboard, /pos, etc.: `inicio` es la
   // portada del módulo en el que se está.
-  const ruta = pathname === '/' ? inicio : pathname;
+  const ruta = normalizar(pathname === '/' ? inicio : pathname);
   let mejor: PantallaDef | null = null;
   let largo = -1;
   for (const p of PANTALLAS) {
@@ -173,6 +197,32 @@ export function pantallaDeRuta(pathname: string, inicio = '/dashboard'): Pantall
     }
   }
   return mejor;
+}
+
+/**
+ * La ruta como la ve el router: `/dashboard/%66acturas` es `/dashboard/facturas`
+ * y una barra final no cambia de pantalla. Sin esto, escribir la dirección
+ * codificada se saltaba el aviso.
+ */
+function normalizar(ruta: string): string {
+  let r = ruta.split(/[?#]/)[0];
+  try { r = decodeURIComponent(r); } catch { /* secuencia inválida: se compara tal cual */ }
+  return r.length > 1 ? r.replace(/\/+$/, '') : r;
+}
+
+/**
+ * Adónde mandar a quien no ve una pantalla: la primera del módulo que sí ve
+ * (y que sus permisos dejan abrir, si se sabe). `preferida`, si la ve, primero.
+ */
+export function primeraVisible(
+  modulo: ModuloId,
+  ocultas: string[],
+  puede?: (href: string) => boolean,
+  preferida?: string,
+): PantallaDef | null {
+  const candidatas = PANTALLAS.filter(p =>
+    p.modulo === modulo && !ocultas.includes(p.id) && (!puede || puede(p.href)));
+  return candidatas.find(p => p.id === preferida) ?? candidatas[0] ?? null;
 }
 
 /** ¿Esta ruta es de una pantalla que el rol tiene oculta? */

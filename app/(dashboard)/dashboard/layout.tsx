@@ -542,7 +542,13 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
   // menú acá lo encuentra fijo allá. Antes esto era un localStorage propio de
   // Facturación ('emitedo:sidebarCollapsed') que ningún otro módulo leía.
   const { fijo: navFijo, alternar: alternarNavFijo } = useNavFijo();
-  const { pantallasOcultas, can: puede } = usePermissions();
+  const { pantallasOcultas, can: puede, permissions, teamRole, isLoading: permisosCargando } = usePermissions();
+  // Para el «Ir a…» del aviso de pantalla oculta: que no mande a otra pantalla
+  // que su permiso tampoco deja abrir. La misma regla que el menú.
+  const puedeAbrir = useCallback(
+    (href: string) => canAccessHref(href, permisosCargando ? null : new Set<string>(permissions), teamRole),
+    [permisosCargando, permissions, teamRole],
+  );
 
   const { data: user }          = useSWR<UserInfo | null>('/api/user', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
   const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>('/api/empresa/list', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
@@ -626,7 +632,7 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
           component="main"
           sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0, position: 'relative' }}
         >
-          <GuardPantalla ocultas={pantallasOcultas}>{children}</GuardPantalla>
+          <GuardPantalla ocultas={pantallasOcultas} puede={puedeAbrir}>{children}</GuardPantalla>
         </Box>
       </Box>
       {/* Alt+Shift+R: quién ve la pantalla en la que estás (solo quien gestiona

@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { GraduationCap, MessageCircle, Mail, ArrowRight, Check } from 'lucide-react';
-import { getUser, getTeamForUser } from '@/lib/db/queries';
+import { getUser, getTeamForUser, getTeamRoleForUser } from '@/lib/db/queries';
+import { pantallasOcultasDe } from '@/lib/auth/pantallas';
+import { primeraVisible } from '@/lib/config/pantallas';
 import { getPlan } from '@/lib/config/plans';
 import { estadoConfiguracion } from '@/lib/administracion-escolar/configurado';
 import { SOPORTE, enlaceWhatsapp, enlaceCorreo } from '@/lib/config/soporte';
@@ -75,7 +77,13 @@ export default async function EscolarPage() {
   const estado = await estadoConfiguracion(equipo.id);
 
   // Ya hay algo cargado: a trabajar, que es a lo que se entra.
-  if (!estado.enBlanco) redirect('/escolar/estudiantes');
+  // A Estudiantes, salvo que el dueño se la haya ocultado a este rol: entonces
+  // a la primera pantalla del colegio que sí ve, no a un aviso de «no disponible».
+  if (!estado.enBlanco) {
+    const [usuario, rol] = await Promise.all([getUser(), getTeamRoleForUser()]);
+    const ocultas = await pantallasOcultasDe(equipo.id, usuario?.platformRole, rol);
+    redirect(primeraVisible('escolar', ocultas, undefined, 'escolar-estudiantes')?.href ?? '/escolar/estudiantes');
+  }
 
   // Las horas de implementación salen del plan que tiene contratado, no de un
   // número escrito aquí: cada tramo de colegio trae las suyas (8, 10.5, 14 y

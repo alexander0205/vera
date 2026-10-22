@@ -3,18 +3,28 @@
  *
  * El Propietario y el admin de plataforma nunca tienen pantallas apagadas:
  * son quienes encienden y apagan, y quitárselas los dejaría sin salida.
+ *
+ * Se lee en cada carga (`/api/user` y el layout del colegio), así que va en
+ * caché por empresa y se invalida al cambiarla: casi siempre no cuesta ninguna
+ * consulta, y cuando cuesta es una sola.
+ *
+ * Si la lectura falla —típicamente, código desplegado antes de correr la
+ * migración 0197— no se oculta nada. Esto solo esconde pantallas: fallar
+ * abierto deja todo como estaba antes del PR, y fallar cerrado tumbaba
+ * `/api/user`, que es de donde todo el sistema saca los permisos.
  */
 
 import 'server-only';
 import { cache } from 'react';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { teamRolePantallasOcultas } from '@/lib/db/schema';
+import { teamRolePantallasOcultas, teamRoles } from '@/lib/db/schema';
 import { listTeamRoles } from '@/lib/auth/permissions';
 import { normalizeRoleKey } from '@/lib/config/roles';
 import { esPantalla } from '@/lib/config/pantallas';
+import { cachearPorTag, invalidarPantallas, tagPantallas } from '@/lib/cache/escolar';
 
-/** Por id de rol, las pantallas que tiene apagadas. */
+/** Por id de rol, las pantallas que tiene apagadas. Para el panel (GET). */
 export const ocultasPorRol = cache(async (teamId: number): Promise<Map<number, string[]>> => {
   const roles = await listTeamRoles(teamId);
   const ids = roles.map(r => r.id);
@@ -30,21 +40,38 @@ export const ocultasPorRol = cache(async (teamId: number): Promise<Map<number, s
   return mapa;
 });
 
-/** Las pantallas que este usuario no puede ver en la empresa. */
-export async function pantallasOcultasDe(
+/** Las pantallas apagadas de un rol, en una consulta: el rol por su clave, dentro de la empresa. */
+async function leerOcultas(teamId: number, key: string): Promise<string[]> {
+  const filas = await db
+    .select({ pantalla: teamRolePantallasOcultas.pantalla })
+    .from(teamRolePantallasOcultas)
+    .innerJoin(teamRoles, eq(teamRoles.id, teamRolePantallasOcultas.teamRoleId))
+    .where(and(eq(teamRoles.teamId, teamId), eq(teamRoles.key, key)));
+  return filas.map(f => f.pantalla).filter(esPantalla);
+}
+
+/** Las pantallas que este usuario no puede ver en la empresa. Nunca lanza. */
+export const pantallasOcultasDe = cache(async (
   teamId: number,
   platformRole: string | null | undefined,
   teamRole: string | null | undefined,
-): Promise<string[]> {
+): Promise<string[]> => {
   const key = normalizeRoleKey(teamRole);
   if (platformRole === 'admin' || !key || key === 'owner') return [];
-  const rol = (await listTeamRoles(teamId)).find(r => r.key === key);
-  if (!rol) return [];
-  return (await ocultasPorRol(teamId)).get(rol.id) ?? [];
-}
+  try {
+    return await cachearPorTag(
+      () => leerOcultas(teamId, key),
+      ['pantallas-ocultas', String(teamId), key],
+      [tagPantallas(teamId)],
+    )();
+  } catch (err) {
+    console.error('[pantallas] no se pudieron leer; no se oculta nada', teamId, err instanceof Error ? err.message : err);
+    return [];
+  }
+});
 
 /** Muestra u oculta varias pantallas para un rol. Idempotente. */
-export async function fijarPantallas(teamRoleId: number, pantallas: string[], visible: boolean) {
+export async function fijarPantallas(teamId: number, teamRoleId: number, pantallas: string[], visible: boolean) {
   if (pantallas.length === 0) return;
   if (visible) {
     await db.delete(teamRolePantallasOcultas).where(and(
@@ -56,4 +83,5 @@ export async function fijarPantallas(teamRoleId: number, pantallas: string[], vi
       .values(pantallas.map(pantalla => ({ teamRoleId, pantalla })))
       .onConflictDoNothing();
   }
+  invalidarPantallas(teamId);
 }

@@ -18,24 +18,21 @@ export async function GET() {
   const teamId = await getTeamIdForUser();
   const teamRole = teamId ? await getTeamRoleForUser() : null;
 
-  // platformRole='admin' → acceso total (espejo de userCanForTeam). Para el
-  // resto, permisos efectivos del rol en el team (con overrides por empresa).
-  const permissions: Permission[] =
+  // Las tres lecturas dependen solo del team y del rol: van a la vez. Esta ruta
+  // se pide en cada carga de cada módulo, y en fila sumaban sus esperas.
+  const [permissions, modules, pantallasOcultas] = await Promise.all([
+    // platformRole='admin' → acceso total (espejo de userCanForTeam). Para el
+    // resto, permisos efectivos del rol en el team (con overrides por empresa).
     user.platformRole === 'admin'
-      ? [...ALL_PERMISSIONS]
-      : (teamId ? await getEffectivePermissions(teamId, teamRole) : []);
-
-  // Módulos accesibles para este usuario en el team activo (módulos de la
-  // empresa ∩ permisos modulo:* del rol). El module-switcher usa esto.
-  const modules: ModuleKey[] = teamId
-    ? await getUserModules(teamId, user.platformRole, teamRole)
-    : [];
-
-  // Pantallas que el dueño le apagó a este rol (o que le faltan por permiso):
-  // el menú de Facturación y su bloqueo las leen de aquí.
-  const pantallasOcultas = teamId
-    ? await pantallasOcultasDe(teamId, user.platformRole, teamRole)
-    : [];
+      ? Promise.resolve<Permission[]>([...ALL_PERMISSIONS])
+      : (teamId ? getEffectivePermissions(teamId, teamRole) : Promise.resolve<Permission[]>([])),
+    // Módulos accesibles para este usuario en el team activo (módulos de la
+    // empresa ∩ permisos modulo:* del rol). El module-switcher usa esto.
+    teamId ? getUserModules(teamId, user.platformRole, teamRole) : Promise.resolve<ModuleKey[]>([]),
+    // Pantallas que el dueño le apagó a este rol: el menú de cada módulo y su
+    // bloqueo las leen de aquí. En caché, y no lanza.
+    teamId ? pantallasOcultasDe(teamId, user.platformRole, teamRole) : Promise.resolve<string[]>([]),
+  ]);
 
   return Response.json({ ...safe, teamRole, permissions, modules, pantallasOcultas });
 }
