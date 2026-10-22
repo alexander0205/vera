@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { MatriculaLoteDialog } from '@/components/administracion-escolar/MatriculaLoteDialog';
+import { MatricularSigerdAviso } from '@/components/administracion-escolar/MatricularSigerdAviso';
 import { MatriculaFicha, EstadoMatriculaBadge } from '@/components/administracion-escolar/MatriculaFicha';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { CalendarDays, ClipboardList, GraduationCap, Loader2, Plus, Search, Users } from 'lucide-react';
@@ -342,6 +343,9 @@ export default function MatriculasClient() {
         )}
         </div>
       </div>
+
+      {/* «Tienes X alumnos de SIGERD sin matricular». Solo sale si hay alguno. */}
+      {puedeGestionar && <MatricularSigerdAviso onSaved={() => { void cargarMatriculas(); }} />}
 
       {/* Contadores del team, no de la página: los cuenta el servidor sobre
           todo lo filtrado. */}
