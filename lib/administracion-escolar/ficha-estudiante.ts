@@ -189,6 +189,41 @@ export function cargosDeEstudiante(teamId: number, estudianteId: number) {
       // Estado ANTE LA DGII, que no es el de cobro: con él la ficha sabe si a
       // esta factura todavía le falta emitirse y puede ofrecerlo en el menú.
       facturaEstado: ecfDocuments.estado,
+      // Mora de la factura de este cargo: las notas de débito (tipo 33) atadas
+      // a ella por `mora_origen_id`. El colegio las pedía en la ficha —hasta
+      // ahora solo se veían en Facturación o en la pestaña de Notas de débito—.
+      // `moraCentavos` es lo recargado; `moraSaldoCentavos`, lo que de eso
+      // sigue sin cobrarse; `moraNotaId`/`moraNotaCount` dan el enlace al
+      // documento (a la nota si es una sola, a la factura padre si hay varias).
+      // `ecf_document_id` va sin calificar a propósito: dentro de un `sql`
+      // crudo Drizzle lo emite pelado y solo `admin_escolar_cargos` tiene esa
+      // columna en el alcance, así que la correlación resuelve bien (ver la
+      // nota de `facturasSueltasDeEstudiante` sobre este mismo detalle).
+      moraCentavos: sql<number>`COALESCE((
+        SELECT SUM(nd.monto_total) FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+      ), 0)::int`,
+      moraSaldoCentavos: sql<number>`COALESCE((
+        SELECT SUM(nd.monto_total - COALESCE((
+          SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
+           WHERE pr.ecf_document_id = nd.id AND pr.team_id = ${teamId}
+        ), 0))
+        FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+      ), 0)::int`,
+      moraNotaId: sql<number | null>`(
+        SELECT nd.id FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+         ORDER BY nd.id DESC LIMIT 1
+      )`,
+      moraNotaCount: sql<number>`(
+        SELECT COUNT(*)::int FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+      )`,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarConceptosPago, and(

@@ -127,15 +127,29 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
     { keepPreviousData: true },
   );
 
+  // El acceso del menú puede abrir este cajón aunque todavía no exista año
+  // escolar o el panorama no haya cargado.
+  const facturaDrawer = puedeFacturar && (
+    <FacturaDrawer
+      abierto={facturaAbierta}
+      onCerrar={() => { setParams({ factura: null }); void mutate(); }}
+      perfilEmpresa={perfilEmpresa}
+      clienteInicial={null}
+    />
+  );
+
   if (!data && isLoading) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>;
+    return <>{facturaDrawer}<div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div></>;
   }
   if (!data) {
     return (
-      <section className="p-6">
-        <p className="text-sm text-red-600">No se pudo leer el panorama del colegio.</p>
-        <Button variant="outline" size="sm" className="mt-3" onClick={() => mutate()}>Reintentar</Button>
-      </section>
+      <>
+        {facturaDrawer}
+        <section className="p-6">
+          <p className="text-sm text-red-600">No se pudo leer el panorama del colegio.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => mutate()}>Reintentar</Button>
+        </section>
+      </>
     );
   }
 
@@ -145,22 +159,25 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
   // colegio no ha cobrado nada. Se manda a configurarlo, que es lo que falta.
   if (!d) {
     return (
-      <section className="space-y-4 p-6">
-        <h1 className="text-2xl font-bold text-gray-900">Panorama financiero</h1>
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          <div>
-            <p className="text-sm font-semibold text-amber-900">Todavía no hay un año escolar</p>
-            <p className="mt-0.5 text-sm text-amber-800">
-              El panorama se calcula sobre un año escolar. Crea el tuyo en Configuración y
-              vuelve: aquí verás el cobro del año en cuanto haya matrículas.
-            </p>
-            <Button asChild variant="outline" size="sm" className="mt-3">
-              <Link href="/escolar/configuracion">Ir a Configuración</Link>
-            </Button>
+      <>
+        {facturaDrawer}
+        <section className="space-y-4 p-6">
+          <h1 className="text-2xl font-bold text-gray-900">Panorama financiero</h1>
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Todavía no hay un año escolar</p>
+              <p className="mt-0.5 text-sm text-amber-800">
+                El panorama se calcula sobre un año escolar. Crea el tuyo en Configuración y
+                vuelve: aquí verás el cobro del año en cuanto haya matrículas.
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link href="/escolar/configuracion">Ir a Configuración</Link>
+              </Button>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </>
     );
   }
 
@@ -226,15 +243,8 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
         </div>
       </div>
 
-      {/* Cajón de nueva factura. Abre vacío: sin cargos ni cliente previo —el
-          Panorama es del colegio entero, no de una familia—, así que el
-          responsable se busca dentro del formulario. */}
-      <FacturaDrawer
-        abierto={facturaAbierta}
-        onCerrar={() => { setParams({ factura: null }); void mutate(); }}
-        perfilEmpresa={perfilEmpresa}
-        clienteInicial={null}
-      />
+      {/* Abre vacío; el responsable se busca dentro del formulario. */}
+      {facturaDrawer}
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

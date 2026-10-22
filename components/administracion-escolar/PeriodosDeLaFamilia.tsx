@@ -42,7 +42,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { cargoDeFila, mesesConFactura, mesYaFacturado, montoCorregible } from '@/lib/administracion-escolar/acciones-cargo';
 import type { HijoConPeriodos, PeriodoDeHijo, FilaMes } from '@/lib/administracion-escolar/periodos-familia';
 import { CargoActionsMenu } from './CargoActionsMenu';
@@ -102,6 +102,35 @@ function EstadoChip({ fila, hoy }: { fila: FilaMes; hoy: string }) {
   if (fila.fechaVencimiento && fila.fechaVencimiento < hoy) return <Chip tono="rojo">Vencido</Chip>;
   if (fila.saldoCentavos < fila.montoCentavos) return <Chip tono="ambar">Parcial</Chip>;
   return <Chip tono="gris">Pendiente</Chip>;
+}
+
+/**
+ * La mora de un cargo: las notas de débito (tipo 33) de su factura.
+ *
+ * Enseña lo que sigue impago —si ya se pagó, lo recargado en gris— y enlaza a
+ * la nota cuando es una sola, o a la factura padre si hay varias. Sin mora, un
+ * guion. De una línea para caber en su columna estrecha.
+ */
+function MoraFamilia({ fila }: { fila: FilaMes }) {
+  if (!fila.moraCentavos || fila.moraCentavos <= 0) {
+    return <Box component="span" sx={{ color: '#C3C8D4' }}>—</Box>;
+  }
+  const saldada = fila.moraSaldoCentavos <= 0;
+  const href = fila.moraNotaCount === 1 && fila.moraNotaId != null
+    ? `/dashboard/facturas/${fila.moraNotaId}`
+    : fila.ecfDocumentId != null ? `/dashboard/facturas/${fila.ecfDocumentId}` : null;
+  const inner = (
+    <Box component="span" sx={{
+      fontWeight: saldada ? 400 : 600,
+      color: saldada ? '#6B7280' : '#D4183D',
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      {fmtDOP(saldada ? fila.moraCentavos : fila.moraSaldoCentavos)}
+    </Box>
+  );
+  return href
+    ? <Link href={href} title="Ver la nota de débito por mora" style={{ textDecoration: 'none' }}>{inner}</Link>
+    : inner;
 }
 
 const ENCABEZADO = {
@@ -205,7 +234,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
     });
   }
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
   const hijos = data?.hijos ?? [];
 
   /**
@@ -500,7 +529,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                     gridTemplateColumns: [
                       puedeFacturar ? '30px' : null,
                       puedeFacturar ? 'minmax(140px, 1fr)' : 'minmax(150px, 1fr)',
-                      '92px 92px 132px',
+                      '92px 92px 132px 96px',
                       // La columna de acción está SIEMPRE: quien solo puede
                       // mirar también abre la factura desde los tres puntos.
                       // Mide lo que lleva dentro. Con cobro, los 88 px que ya
@@ -523,6 +552,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Vence</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'center' }}>Estado</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Monto</Box>
+                    <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Mora</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Acción</Box>
 
                     {cargosVisibles.map((f) => {
@@ -586,6 +616,12 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                                 editable={montoCorregible(c, puedeGestionar)}
                                 concepto={tituloFila(f)} onGuardado={alCambiar} />
                             ) : <>{fmtDOP(f.montoCentavos)}<HuecoDelLapiz /></>}
+                          </Box>
+                          {/* La mora de la factura de este cargo, enlazada a su
+                              nota de débito. El colegio la pedía a la vista aquí
+                              y no solo en Facturación. */}
+                          <Box sx={{ ...CELDA, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            <MoraFamilia fila={f} />
                           </Box>
                           {/*
                             Cobrar el mes sin salir de la familia.
@@ -694,8 +730,9 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                       }}>
                         {fmtDOP(totalCargos)}<HuecoDelLapiz />
                       </Box>
-                      {/* La columna de acción no suma nada: va vacía para que
-                          el total siga cayendo bajo «Monto» y no se corra. */}
+                      {/* Mora y acción no suman nada: van vacías para que el
+                          total siga cayendo bajo «Monto» y no se corra. */}
+                      <Box />
                       <Box />
                     </Box>
                   </Box>

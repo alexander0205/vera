@@ -13,7 +13,7 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { EnlacePagoFamilia } from '@/components/administracion-escolar/EnlacePagoFamilia';
@@ -152,7 +152,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
   );
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   /**
    * El estado de cuenta agrupado por hijo.
@@ -483,15 +483,16 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             detalle={`${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`}
             tono={cobrado > 0 ? 'verde' : 'gris'} />
           <Cifra icon={AlertTriangle} label="Pendiente" valor={fmtDOP(pendiente)}
-            // Rojo solo por lo emitido sin cobrar. Si además queda por facturar,
-            // se dice aparte para no mezclarlo con lo que ya es exigible.
+            // Rojo siempre que quede algo pendiente (lo pidió Alex): aunque sea
+            // «aún por facturar», la familia debe verlo destacado. El desglose
+            // de abajo sigue separando lo exigible de lo que falta emitir.
             detalle={pendientePorCobrar > 0 && pendientePorFacturar > 0
               ? `Por cobrar ${fmtDOP(pendientePorCobrar)} · por facturar ${fmtDOP(pendientePorFacturar)}`
               : pendientePorCobrar > 0
               ? (deudaFacturas > 0 ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas` : 'Del plan de cobro')
               : pendientePorFacturar > 0 ? 'Aún por facturar'
               : 'Nada por cobrar'}
-            tono={pendientePorCobrar > 0 ? 'rojo' : 'gris'} />
+            tono={pendiente > 0 ? 'rojo' : 'gris'} />
           <Cifra icon={CalendarDays} label="Vencido" valor={fmtDOP(vencido)}
             // Solo del plan de cobro: una factura suelta no lleva fecha de
             // vencimiento en el módulo, y contarla aquí sería inventarle una.

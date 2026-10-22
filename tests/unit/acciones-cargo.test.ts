@@ -344,6 +344,10 @@ describe('cargoDeFila — la fila de la familia, dicha como la lee el menú', ()
     encf: 'E310000000001',
     codigo: 'F-2027-000123',
     facturaEstado: 'BORRADOR',
+    moraCentavos: 0,
+    moraSaldoCentavos: 0,
+    moraNotaId: null,
+    moraNotaCount: 0,
   };
 
   it('cambia los tres nombres que no coinciden y deja lo demás como viene', () => {

@@ -665,11 +665,13 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
 export type OrdenCartera = 'reciente' | 'antiguo' | 'monto' | 'vencimiento';
 
 const ORDEN_CARTERA_SQL: Record<OrdenCartera, string> = {
-  reciente:    'fecha_emision_ts DESC',
-  antiguo:     'fecha_emision_ts ASC',
-  monto:       'saldo DESC',
+  // El id rompe empates para que LIMIT/OFFSET no repita ni omita filas cuando
+  // varias facturas comparten fecha, saldo o vencimiento.
+  reciente:    'fecha_emision_ts DESC, id DESC',
+  antiguo:     'fecha_emision_ts ASC, id ASC',
+  monto:       'saldo DESC, id DESC',
   // Vencidas primero y las más atrasadas arriba; las que no vencen, al final.
-  vencimiento: 'vencida DESC, fecha_limite_date ASC NULLS LAST',
+  vencimiento: 'vencida DESC, fecha_limite_date ASC NULLS LAST, id DESC',
 };
 
 /**

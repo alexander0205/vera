@@ -4,20 +4,69 @@
     {
       "name": "emitedo-dev",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--turbopack"],
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "--turbopack"
+      ],
       "autoPort": true
     },
     {
       "name": "emitedo-e2e",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--turbopack", "--port", "3000"],
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "--turbopack",
+        "--port",
+        "3000"
+      ],
       "port": 3000
     },
     {
       "name": "emitedo-prod",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
       "autoPort": true
+    },
+    {
+      "name": "ensayo-eval",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "C:/Projects/vera-ensayo-eval",
+        "--port",
+        "3200"
+      ],
+      "port": 3200
+    },
+    {
+      "name": "features-deuda-baja",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "C:/Projects/vera-features",
+        "--port",
+        "3300"
+      ],
+      "port": 3300
+    },
+    {
+      "name": "plan-a",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "C:/Projects/vera-plan-a",
+        "--port",
+        "3001"
+      ],
+      "port": 3001
     }
   ]
 }

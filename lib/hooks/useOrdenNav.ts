@@ -170,15 +170,17 @@ export function registrarVisitaNav(id: string) {
  * Devuelve `ids` reordenado por uso. En el servidor y en la primera pasada del
  * cliente devuelve la lista tal cual llega — ver la nota de hidratación arriba.
  */
-export function useOrdenNav(ids: string[]): string[] {
+export function useOrdenNav(ids: string[], activo = true): string[] {
   const orden = useSyncExternalStore(
     suscribir,
-    () => ordenEfectivo(ids),
+    // Gobernanza conserva el orden del código y no debe escribir su lista en
+    // el orden compartido de Facturación, POS y Contabilidad.
+    () => activo ? ordenEfectivo(ids) : null,
     () => null,
   );
 
   useEffect(() => {
-    if (!pendienteDeGuardar) return;
+    if (!activo || !pendienteDeGuardar) return;
     escribir(pendienteDeGuardar);
     pendienteDeGuardar = null;
   });

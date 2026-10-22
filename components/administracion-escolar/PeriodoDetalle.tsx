@@ -30,6 +30,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
+import { estadoMes } from '@/lib/administracion-escolar/estado-mes-ficha';
 import { nombreMes } from '@/lib/administracion-escolar/sincronizar-mensualidad';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
@@ -113,6 +114,12 @@ export interface Cargo {
   facturaEstadoPago: string | null;
   /** Estado ante la DGII (BORRADOR, EN_PROCESO, ACEPTADO…), no el de cobro. */
   facturaEstado: string | null;
+  /** Mora (notas de débito) de la factura de este cargo. 0 sin factura o sin mora. */
+  moraCentavos: number;
+  moraSaldoCentavos: number;
+  /** Enlace a la mora: a la nota si es una sola, a la factura padre si hay varias. */
+  moraNotaId: number | null;
+  moraNotaCount: number;
 }
 export interface Pago {
   id: number;
@@ -1344,6 +1351,8 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
       .filter((c) => c.ecfDocumentId == null && ['pendiente', 'parcial', 'vencido'].includes(c.estado))
       .reduce((s, c) => s + c.saldoCentavos, 0);
     const totalPrevisto = previstosMes.reduce((s, p) => s + p.montoCentavos, 0);
+    const moraCentavos = cargosMes.reduce((s, c) => s + (c.moraCentavos ?? 0), 0);
+    const moraSaldoCentavos = cargosMes.reduce((s, c) => s + (c.moraSaldoCentavos ?? 0), 0);
     const factura = cargosMes.find((c) => c.ecfDocumentId != null) ?? null;
     // Historial de pagos del mes: los abonos hechos a las facturas de sus cargos.
     // Una factura, varios pagos (abonos parciales) → subfilas al desplegar.
@@ -1354,7 +1363,7 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
     const estado: EstadoMes = cargosMes.length === 0 && previstosMes.length > 0
       ? 'previsto'
       : estadoMes(cargosMes);
-    return { mes, anio, cargosMes, previstosMes, total, saldo, pagado, totalPrevisto, sinFacturar, factura, pagosMes, estado };
+    return { mes, anio, cargosMes, previstosMes, total, saldo, pagado, totalPrevisto, sinFacturar, moraCentavos, moraSaldoCentavos, factura, pagosMes, estado };
   });
 
   if (mesesAcademicos.length === 0) {
@@ -1430,6 +1439,7 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
                 <th className="px-3 py-2.5 font-medium text-right">Monto</th>
                 <th className="px-3 py-2.5 font-medium text-right">Pagado</th>
                 <th className="px-3 py-2.5 font-medium text-right">Pendiente</th>
+                <th className="px-3 py-2.5 font-medium text-right">Mora</th>
                 {/* Pegada a la derecha: la tabla es más ancha que la pantalla
                     en un portátil y los tres puntos quedaban fuera de la vista. */}
                 <th className="sticky right-0 bg-gray-50 px-3 py-2.5 font-medium text-right">Acción</th>
@@ -1606,6 +1616,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
             <th className="px-3 py-2 font-medium text-right">Monto</th>
             <th className="px-3 py-2 font-medium text-right">Pagado</th>
             <th className="px-3 py-2 font-medium text-right">Pendiente</th>
+            <th className="px-3 py-2 font-medium text-right">Mora</th>
             <th className="px-3 py-2 font-medium text-right">Acción</th>
           </tr>
         </thead>
@@ -1650,6 +1661,9 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                     {fmtDOP(saldo)}
                   </span>
                 </td>
+                {/* Una factura suelta no es un cargo escolar: su mora, si la
+                    tiene, se ve en Facturación, no en esta columna. */}
+                <td className="px-3 py-2.5 text-right text-gray-300">—</td>
                 {/* Las mismas acciones que cualquier otra fila. Antes solo
                     tenía el sobre: desde aquí no se podía ni ver la factura ni
                     su PDF, y esta es la única tabla donde aparecen las facturas
@@ -1702,6 +1716,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2 text-right text-gray-600">{fmtDOP(l.importeCentavos)}</td>
+                  <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
@@ -1760,6 +1775,15 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right">
+                  {anulado ? <span className="text-gray-300">—</span> : (
+                    <MoraCelda
+                      moraCentavos={c.moraCentavos} moraSaldoCentavos={c.moraSaldoCentavos}
+                      moraNotaId={c.moraNotaId} moraNotaCount={c.moraNotaCount}
+                      facturaId={c.ecfDocumentId}
+                    />
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-right">
                   <span className="inline-flex items-center justify-end gap-2">
                     {/* Enlace de pago de la factura, visible: se copia y se manda
                         al padre sin tener que abrir el detalle de la factura. */}
@@ -1808,6 +1832,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
               </td>
               <td className="px-3 py-2.5"><EstadoMesBadge estado="previsto" /></td>
               <td className="px-3 py-2.5 text-right text-gray-500">{fmtDOP(p.montoCentavos)}</td>
+              <td className="px-3 py-2.5 text-right text-gray-300">—</td>
               <td className="px-3 py-2.5 text-right text-gray-300">—</td>
               <td className="px-3 py-2.5 text-right text-gray-300">—</td>
               <td className="px-3 py-2.5 text-right">
@@ -1871,6 +1896,7 @@ const MINIMOS_CUENTAS = [
   140, // Monto: la cifra y, a su lado, el lápiz para corregirla
   116, // Pagado
   116, // Pendiente
+  104, // Mora: la nota de débito de la factura, enlazada
   76,  // Acción
 ];
 const ANCHO_MINIMO_CUENTAS = MINIMOS_CUENTAS.reduce((s, w) => s + w, 0);
@@ -1915,6 +1941,8 @@ type MesRow = {
   total: number; saldo: number; pagado: number; totalPrevisto: number;
   /** Lo que se debe del mes y todavía no tiene factura (p. ej. una evaluación). */
   sinFacturar: number;
+  /** Mora de las facturas del mes: lo recargado y lo que de eso sigue impago. */
+  moraCentavos: number; moraSaldoCentavos: number;
   factura: Cargo | null; pagosMes: Pago[];
   estado: EstadoMes;
 };
@@ -2031,6 +2059,12 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
 
   const montoMes = r.total + r.totalPrevisto;
 
+  // Para enlazar la mora del mes: si un solo cargo la trae, se abre su nota (o
+  // su factura si tiene varias); si son varios los que la traen, se manda a la
+  // factura del mes, que es donde se ven todas juntas.
+  const cargosConMora = r.cargosMes.filter((c) => (c.moraCentavos ?? 0) > 0);
+  const moraUnica = cargosConMora.length === 1 ? cargosConMora[0] : null;
+
   return (
     <>
       <tr
@@ -2128,6 +2162,16 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
             <span className="block text-xs text-amber-700">+ {fmtDOP(r.sinFacturar)} sin facturar</span>
           )}
         </td>
+        <td className="px-3 py-3 align-top text-right">
+          {soloPrevistos ? <span className="text-gray-300">—</span> : (
+            <MoraCelda
+              moraCentavos={r.moraCentavos} moraSaldoCentavos={r.moraSaldoCentavos}
+              moraNotaId={moraUnica?.moraNotaId ?? null}
+              moraNotaCount={moraUnica ? moraUnica.moraNotaCount : cargosConMora.length}
+              facturaId={(moraUnica ?? r.factura)?.ecfDocumentId ?? null}
+            />
+          )}
+        </td>
         <td className="sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,17,24,0.18)] px-3 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
           {soloPrevistos && tutorClientId ? (
             // Una cuota prevista no tiene documento todavía. El mismo enlace de
@@ -2222,6 +2266,15 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
                 </span>
               )}
             </td>
+            <td className="px-3 py-3 text-right">
+              {anulado ? <span className="text-gray-300">—</span> : (
+                <MoraCelda
+                  moraCentavos={c.moraCentavos} moraSaldoCentavos={c.moraSaldoCentavos}
+                  moraNotaId={c.moraNotaId} moraNotaCount={c.moraNotaCount}
+                  facturaId={c.ecfDocumentId}
+                />
+              )}
+            </td>
             <td className="sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,17,24,0.18)] px-3 py-3 text-right">
               <span className="inline-flex items-center justify-end gap-2">
                 {/* Enlace de pago de la factura, visible: se copia y se manda al
@@ -2273,6 +2326,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           <td className="px-3 py-3 text-right text-gray-800">{fmtDOP(p.montoCentavos)}</td>
           <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right text-gray-300">—</td>
+          <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right">
             <span className="inline-flex items-center justify-end">
               {puedeGestionar && p.cuotaId > 0 && onPrevisto ? (
@@ -2295,7 +2349,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           <td className="px-3 py-2.5" />
           <td className="px-3 py-2.5 whitespace-nowrap text-gray-700">{fmtFechaCorta(p.fechaPago)}</td>
           <td className="px-3 py-2.5 truncate text-gray-500" colSpan={2}>{p.referencia ?? '—'}</td>
-          <td className="px-3 py-2.5 text-right font-medium text-gray-900" colSpan={2}>{fmtDOP(p.montoCentavos)}</td>
+          <td className="px-3 py-2.5 text-right font-medium text-gray-900" colSpan={3}>{fmtDOP(p.montoCentavos)}</td>
           <td className="px-3 py-2.5" />
         </tr>
       ))}
@@ -3024,63 +3078,6 @@ function MesAcademico({ mes, cargos, pagos }: { mes: number; cargos: Cargo[]; pa
 }
 
 /**
- * Las cuotas del plan que todavía no son cargo.
- *
- * El descarte va por `cuotaId`, que es la misma llave con la que el devengo
- * evita cobrar dos veces (índice único `matricula_id, cuota_id`). Por eso entran
- * también los cargos ANULADOS: su cuota está gastada y el devengo no la va a
- * volver a crear, así que anunciarla como prevista sería prometer una factura
- * que no va a salir.
- *
- * Los conceptos sin calendario devengan con `cuota_id` nulo, y ahí la llave es
- * el concepto: si ya tiene un cargo en esta matrícula, no se anuncia otro.
- */
-/**
- * Las cuotas del plan que todavía no son cargo.
- *
- * El descarte va por `cuotaId`, que es la misma llave con la que el devengo
- * evita cobrar dos veces (índice único `matricula_id, cuota_id`). Por eso entran
- * también los cargos ANULADOS: su cuota está gastada y el devengo no la va a
- * volver a crear, así que anunciarla como prevista sería prometer una factura
- * que no va a salir.
- *
- * Los conceptos sin calendario devengan con `cuota_id` nulo, y ahí la llave es
- * el concepto: si ya tiene un cargo en esta matrícula, no se anuncia otro.
- */
-function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pendiente' | 'parcial' | 'sin-facturar' | 'sin-cargo' {
-  if (cargos.length === 0) return 'sin-cargo';
-  const hoyIso = new Date().toISOString().slice(0, 10);
-  const vivos = cargos.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado));
-  if (vivos.length === 0) {
-    const futura = cargos.some((c) => c.fechaVencimiento && c.fechaVencimiento >= hoyIso);
-    return futura ? 'adelantado' : 'pagado';
-  }
-  if (vivos.some((c) => c.estado === 'vencido' || (c.fechaVencimiento && c.fechaVencimiento < hoyIso))) return 'vencido';
-  if (vivos.some((c) => c.estado === 'parcial')) return 'parcial';
-  // Se debe, pero todavía no se ha emitido nada: al padre no le ha llegado
-  // ningún documento por esto. Es lo que hay que hacer con él, y decirlo
-  // "pendiente" lo confundía con lo que ya está facturado y sin cobrar.
-  if (vivos.every((c) => c.ecfDocumentId == null)) return 'sin-facturar';
-  return 'pendiente';
-}
-
-/**
- * El estado de UN cargo, no el del mes entero.
- *
- * Va aparte de `EstadoMesBadge` porque los valores no son los mismos: un mes
- * puede estar "adelantado" o "sin cargo", que son conclusiones sacadas de mirar
- * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
- * de mes no significa nada.
- */
-/**
- * El estado de UN cargo, no el del mes entero.
- *
- * Va aparte de `EstadoMesBadge` porque los valores no son los mismos: un mes
- * puede estar "adelantado" o "sin cargo", que son conclusiones sacadas de mirar
- * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
- * de mes no significa nada.
- */
-/**
  * Color del saldo pendiente de un cargo o mes.
  *
  * Rojo = deuda por cobrar: hay una factura emitida y su saldo sigue abierto. Un
@@ -3091,6 +3088,43 @@ function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pend
 function clsSaldo(saldo: number, tieneFactura: boolean): string {
   if (saldo <= 0) return 'font-medium text-zero-700';
   return tieneFactura ? 'font-medium text-red-600' : 'font-medium text-gray-700';
+}
+
+/**
+ * La mora de un cargo: las notas de débito (tipo 33) atadas a su factura.
+ *
+ * El colegio la pedía a la vista en la ficha —hasta ahora solo salía en
+ * Facturación o en la pestaña de Notas de débito—. Se enseña lo que sigue
+ * IMPAGO (`moraSaldo`), que es lo que de verdad hay que cobrar; si ya se pagó,
+ * queda en gris con lo recargado para dejar constancia. Enlaza a la nota cuando
+ * es una sola y a la factura padre si hay varias, para abrir el documento sin
+ * salir a buscarlo. Sin mora, un guion, igual que las demás columnas de importe.
+ */
+function MoraCelda({ moraCentavos, moraSaldoCentavos, moraNotaId, moraNotaCount, facturaId }: {
+  moraCentavos: number;
+  moraSaldoCentavos: number;
+  moraNotaId: number | null;
+  moraNotaCount: number;
+  facturaId: number | null;
+}) {
+  if (!moraCentavos || moraCentavos <= 0) return <span className="text-gray-300">—</span>;
+  const saldada = moraSaldoCentavos <= 0;
+  const href = moraNotaCount === 1 && moraNotaId != null
+    ? `/dashboard/facturas/${moraNotaId}`
+    : facturaId != null ? `/dashboard/facturas/${facturaId}` : null;
+  const contenido = (
+    <span className={saldada ? 'text-gray-500' : 'font-medium text-red-600'}>
+      {fmtDOP(saldada ? moraCentavos : moraSaldoCentavos)}
+      {saldada
+        ? <span className="block text-[11px] font-normal text-gray-400">pagada</span>
+        : moraSaldoCentavos !== moraCentavos
+          ? <span className="block text-[11px] font-normal text-gray-400">de {fmtDOP(moraCentavos)}</span>
+          : null}
+    </span>
+  );
+  return href
+    ? <Link href={href} className="hover:underline" title="Ver la nota de débito por mora">{contenido}</Link>
+    : contenido;
 }
 
 function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?: boolean }) {

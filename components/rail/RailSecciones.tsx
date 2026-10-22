@@ -150,7 +150,7 @@ export function RailSecciones({
   // están escritas las secciones en cada rail. `useOrdenNav` es un hook y se
   // llama siempre; con `ordenFijo` se ignora su resultado y manda el orden del
   // código, para que el menú no se mueva nunca.
-  const ordenPorUso = useOrdenNav(secciones.map(s => s.id));
+  const ordenPorUso = useOrdenNav(secciones.map(s => s.id), !ordenFijo);
   const lista = ordenFijo
     ? secciones
     : ordenPorUso

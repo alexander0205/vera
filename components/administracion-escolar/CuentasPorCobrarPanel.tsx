@@ -29,9 +29,11 @@ import { DataTable, type DataTableColumn, type RowAction } from '@/components/da
 import { PagoModal, nombreDeCuenta, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
 import { NotasMoraTable, type NotaMoraFila } from '@/components/notas-mora-table';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { Button } from '@/components/ui/button';
 import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
-import type { ExportTabla } from '@/lib/export/tabla';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 /**
  * La cuenta tal como la devuelve `/api/cuentas-por-cobrar`. Es el shape
@@ -39,13 +41,29 @@ import type { ExportTabla } from '@/lib/export/tabla';
  * la general lo trae así y la sección de notas de débito lo necesita.
  */
 type CuentaCxC = Omit<Cuenta, 'moraNotas'> & {
-  moraNotas?: { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' }[];
+  moraNotas?: { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL'; fechaEmision: string | null; periodo: string | null }[];
 };
 
-const fetcher = (url: string) => fetch(url).then((r) => {
-  if (!r.ok) throw new Error('No se pudieron leer las cuentas por cobrar');
-  return r.json() as Promise<{ cuentas: CuentaCxC[] }>;
-});
+const TAMANO_PAGINA = 2000; // Máximo aceptado por la API.
+
+async function fetcher(url: string): Promise<{ cuentas: CuentaCxC[] }> {
+  const cuentas: CuentaCxC[] = [];
+  let total = Infinity;
+  while (cuentas.length < total) {
+    const pagina = new URL(url, window.location.origin);
+    pagina.searchParams.set('limit', String(TAMANO_PAGINA));
+    pagina.searchParams.set('offset', String(cuentas.length));
+    const r = await fetch(pagina);
+    if (!r.ok) throw new Error('No se pudieron leer las cuentas por cobrar');
+    const datos = await r.json() as { cuentas: CuentaCxC[]; totales: { count: number } };
+    total = datos.totales.count;
+    cuentas.push(...datos.cuentas);
+    if (datos.cuentas.length === 0 && cuentas.length < total) {
+      throw new Error('La consulta de cuentas por cobrar quedó incompleta');
+    }
+  }
+  return { cuentas };
+}
 
 const isHistorica = (c: CuentaCxC) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -71,6 +89,21 @@ const EXPORTAR: ExportTabla<CuentaCxC> = {
   },
 };
 
+type NotaExport = NotaMoraFila & { factura: string };
+const EXPORTAR_NOTAS: ExportTabla<NotaExport> = {
+  titulo: 'Notas de débito por mora',
+  archivo: 'notas-debito-mora',
+  columnas: [
+    { titulo: 'Factura', valor: (n) => n.factura, ancho: 1.2 },
+    { titulo: 'Nota', valor: (n) => n.codigo ?? `ND #${n.id}`, ancho: 1.2 },
+    { titulo: 'Emisión', valor: (n) => fmtFechaCorta(n.fechaEmision), ancho: 0.9 },
+    { titulo: 'Período', valor: (n) => fmtFechaCorta(n.periodo), ancho: 0.9 },
+    { titulo: 'Recargo', valor: (n) => n.montoTotal, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Pagado', valor: (n) => n.montoTotal - n.saldo, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Saldo', valor: (n) => n.saldo, tipo: 'moneda', total: true, ancho: 1 },
+  ],
+};
+
 export function CuentasPorCobrarPanel({
   clientId,
   puedePagos,
@@ -91,8 +124,13 @@ export function CuentasPorCobrarPanel({
    */
   seccion?: 'cuentas' | 'notas';
 }) {
+  const { can, modules, isLoading: permisosCargando } = usePermissions();
+  const puedeVer = can('facturas:ver');
+  const puedeCobrar = puedePagos && (can('pagos:registrar') || can('facturas:crear'));
+  const puedeAbrirFactura = modules.includes('facturacion');
+  const puedeGestionarCobro = can('facturas:crear');
   const { data, error, isLoading, mutate } = useSWR(
-    `/api/cuentas-por-cobrar?clientId=${clientId}`,
+    puedeVer ? `/api/cuentas-por-cobrar?clientId=${clientId}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
   );
@@ -100,7 +138,7 @@ export function CuentasPorCobrarPanel({
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
     busca: '', estado: '', fecha_desde: '', fecha_hasta: '',
   });
-  const [pagoModal, setPagoModal] = useState<CuentaCxC | null>(null);
+  const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [detalle, setDetalle] = useState<CuentaCxC | null>(null);
 
   const cuentas = useMemo(() => data?.cuentas ?? [], [data]);
@@ -125,6 +163,9 @@ export function CuentasPorCobrarPanel({
   // «Notas de débito» = las facturas que arrastran mora pendiente.
   const conMora = useMemo(() => cuentas.filter((c) => c.moraSaldo > 0), [cuentas]);
   const totalMora = conMora.reduce((s, c) => s + c.moraSaldo, 0);
+  const notasExportar = conMora.flatMap((c): NotaExport[] => (c.moraNotas ?? []).map((n) => ({
+    ...n, factura: c.codigo ?? `Factura #${c.id}`,
+  })));
 
   const columnas: DataTableColumn<CuentaCxC>[] = useMemo(() => {
     const base: DataTableColumn<CuentaCxC>[] = [
@@ -133,13 +174,15 @@ export function CuentasPorCobrarPanel({
         header: 'Documento',
         render: (c) => (
           <div className="flex items-center gap-1.5">
-            <Link
-              href={`/dashboard/facturas/${c.id}`}
-              title={c.codigo ?? `Factura #${c.id}`}
-              className="whitespace-nowrap font-mono text-xs font-medium text-zero-600 hover:underline"
-            >
-              {c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}
-            </Link>
+            {puedeAbrirFactura ? (
+              <Link
+                href={`/dashboard/facturas/${c.id}`}
+                title={c.codigo ?? `Factura #${c.id}`}
+                className="whitespace-nowrap font-mono text-xs font-medium text-zero-600 hover:underline"
+              >
+                {c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}
+              </Link>
+            ) : <span className="whitespace-nowrap font-mono text-xs font-medium text-gray-700">{c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}</span>}
             {isHistorica(c) && (
               <span className="rounded-full border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">histórica</span>
             )}
@@ -194,15 +237,18 @@ export function CuentasPorCobrarPanel({
       atraso: cuentas.some((c) => c.diasVencido > 0),
     };
     return base.filter((col) => conDatos[col.id] ?? true);
-  }, [cuentas]);
+  }, [cuentas, puedeAbrirFactura]);
 
   const rowActions = (c: CuentaCxC): RowAction[] => [
-    ...(puedePagos ? [{ icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true } as RowAction] : []),
-    { icon: Eye, title: 'Ver factura', href: `/dashboard/facturas/${c.id}`, primary: true },
+    ...(puedeCobrar ? [{ icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true } as RowAction] : []),
+    ...(puedeAbrirFactura ? [{ icon: Eye, title: 'Ver factura', href: `/dashboard/facturas/${c.id}`, primary: true } as RowAction] : []),
     { icon: PanelRightOpen, title: 'Ver movimientos', onClick: () => setDetalle(c), primary: true },
   ];
 
   const refrescar = () => { void mutate(); onCambio?.(); };
+
+  if (permisosCargando) return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>;
+  if (!puedeVer) return <p className="text-sm text-gray-500">Sin permiso para consultar facturas.</p>;
 
   return (
     <div className="space-y-6">
@@ -253,13 +299,21 @@ export function CuentasPorCobrarPanel({
             <h3 className="text-sm font-semibold text-gray-900">Notas de débito</h3>
             <p className="text-xs text-gray-500">Recargos por mora pendientes. Se cobran junto con la factura de la que cuelgan.</p>
           </div>
-          {totalMora > 0 && (
-            <span className="text-sm font-semibold tabular-nums text-red-600">{fmtDOP(totalMora)} en mora</span>
-          )}
+          <div className="flex items-center gap-3">
+            {totalMora > 0 && (
+              <span className="text-sm font-semibold tabular-nums text-red-600">{fmtDOP(totalMora)} en mora</span>
+            )}
+            <ExportarListado
+              armar={() => armarEnvioTabla(EXPORTAR_NOTAS, notasExportar, 'Notas pendientes del responsable')}
+              deshabilitado={isLoading || !!error || notasExportar.length === 0}
+            />
+          </div>
         </div>
 
         {isLoading && !data ? (
           <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
+        ) : error ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-4 text-sm text-red-700">No se pudieron leer las notas de débito.</p>
         ) : conMora.length === 0 ? (
           <p className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-sm text-gray-500">
             Sin notas de débito por mora.
@@ -269,17 +323,20 @@ export function CuentasPorCobrarPanel({
             {conMora.map((c) => {
               const notas: NotaMoraFila[] = (c.moraNotas ?? []).map((n) => ({
                 id: n.id, codigo: n.codigo, montoTotal: n.montoTotal, saldo: n.saldo, estado: n.estado,
+                fechaEmision: n.fechaEmision, periodo: n.periodo,
               }));
               return (
                 <div key={c.id} className="rounded-lg border border-gray-200 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0 text-sm">
-                      <Link href={`/dashboard/facturas/${c.id}`} className="font-mono text-xs text-zero-600 hover:underline">
-                        {c.codigo ? fmtCodigoCorto(c.codigo) : `Factura #${c.id}`}
-                      </Link>
+                      {puedeAbrirFactura ? (
+                        <Link href={`/dashboard/facturas/${c.id}`} className="font-mono text-xs text-zero-600 hover:underline">
+                          {c.codigo ? fmtCodigoCorto(c.codigo) : `Factura #${c.id}`}
+                        </Link>
+                      ) : <span className="font-mono text-xs text-gray-700">{c.codigo ? fmtCodigoCorto(c.codigo) : `Factura #${c.id}`}</span>}
                       <span className="ml-1.5 text-gray-400">· {nombreDeCuenta(c) ?? 'Consumidor final'}</span>
                     </div>
-                    {puedePagos && (
+                    {puedeCobrar && (
                       <Button variant="outline" size="sm" onClick={() => setPagoModal(c)}>
                         <Wallet2 className="mr-1.5 h-4 w-4" />Registrar pago
                       </Button>
@@ -287,7 +344,7 @@ export function CuentasPorCobrarPanel({
                   </div>
                   {/* La subtabla de recargos: sin estado, porque aquí solo cuelgan
                       los que tienen saldo. */}
-                  {notas.length > 0 && <NotasMoraTable notas={notas} conEstado={false} />}
+                  {notas.length > 0 && <NotasMoraTable notas={notas} conEstado={false} enlazarDocumentos={puedeAbrirFactura} />}
                 </div>
               );
             })}
@@ -311,7 +368,10 @@ export function CuentasPorCobrarPanel({
         <DetallePanel
           cuenta={detalle}
           onClose={() => setDetalle(null)}
-          onCobrar={() => { setPagoModal(detalle); setDetalle(null); }}
+          onCobrar={(cuentaActual) => { setPagoModal(cuentaActual); setDetalle(null); }}
+          puedeCobrar={puedeCobrar}
+          puedeAbrirFactura={puedeAbrirFactura}
+          puedeGestionarCobro={puedeGestionarCobro}
         />
       )}
     </div>

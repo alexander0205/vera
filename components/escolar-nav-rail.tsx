@@ -12,10 +12,14 @@
 
 import { RailArmazon } from '@/components/rail/RailArmazon';
 import { RailSecciones } from '@/components/rail/RailSecciones';
+import { FUENTE_SECCION } from '@/components/rail/estilos';
 import type { RailSeccion } from '@/components/rail/tipos';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import Box from '@mui/material/Box';
+import Link from 'next/link';
 import {
   Users, ClipboardList, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
-  LayoutDashboard,
+  LayoutDashboard, Plus,
 } from 'lucide-react';
 
 type SeccionEscolar = RailSeccion & { oculto?: boolean };
@@ -79,8 +83,28 @@ const VISIBLES: RailSeccion[] = SECCIONES.filter(s => !s.oculto);
  *    donde no hay hover y ocultar el menú dejaría la pantalla sin navegación.
  */
 export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
+  const { can } = usePermissions();
+  const puedeFacturar = can('administracion-escolar:pagos') && can('facturas:crear');
+
   return (
     <RailArmazon modulo="escolar" variant={variant}>
+      {puedeFacturar && (
+        <Box
+          component={Link}
+          href="/escolar/dashboard?factura=nueva"
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 1,
+            px: 1.5, py: 1, mb: 0.5, borderRadius: '10px',
+            bgcolor: 'rgba(255,255,255,0.16)', color: '#ffffff',
+            ...FUENTE_SECCION, fontWeight: 700, textDecoration: 'none',
+            transition: 'background-color 0.15s',
+            '&:hover': { bgcolor: 'rgba(255,255,255,0.26)' },
+          }}
+        >
+          <Plus style={{ width: 17, height: 17, flexShrink: 0 }} />
+          <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>Nueva Factura</Box>
+        </Box>
+      )}
       {/* `ordenFijo`: en Gobernanza el menú NO se reordena por uso. Alex lo
           pidió estático —la sección que se usa mucho se adelantaba sola y
           dejaba de estar donde el usuario la busca—. */}
