@@ -607,9 +607,9 @@ export function GlobalSearch({
                     );
                   })}
 
-                  {!buscando && (
-                    <>
-                      <Command.Group heading={<Encabezado>Páginas</Encabezado>}>
+                  {!buscando && (() => {
+                    const grupoPaginas = (
+                      <Command.Group key="paginas" heading={<Encabezado>Páginas</Encabezado>}>
                         {estaticosVisibles.filter(i => i.grupo === 'Páginas').map(item => (
                           <Command.Item
                             key={item.href + item.label}
@@ -622,7 +622,9 @@ export function GlobalSearch({
                           </Command.Item>
                         ))}
                       </Command.Group>
-                      <Command.Group heading={<Encabezado>Acciones rápidas</Encabezado>}>
+                    );
+                    const grupoAcciones = (
+                      <Command.Group key="acciones" heading={<Encabezado>Acciones rápidas</Encabezado>}>
                         {estaticosVisibles.filter(i => i.grupo === 'Acciones').map(item => (
                           <Command.Item
                             key={item.href + item.label}
@@ -635,8 +637,14 @@ export function GlobalSearch({
                           </Command.Item>
                         ))}
                       </Command.Group>
-                    </>
-                  )}
+                    );
+                    // En Gobernanza los accesos rápidos van ARRIBA: Alex los
+                    // quiere primero, no al pie de la lista de páginas. El resto
+                    // de módulos conserva Páginas → Acciones.
+                    return modulo === 'escolar'
+                      ? <>{grupoAcciones}{grupoPaginas}</>
+                      : <>{grupoPaginas}{grupoAcciones}</>;
+                  })()}
                 </Command.List>
 
                 <Box

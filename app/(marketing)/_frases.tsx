@@ -43,13 +43,13 @@ const FRASES: Frase[] = [
   {
     frase: 'Mando las facturas por correo, una por una.',
     modulo: 'Facturación e-CF',
-    resuelve: 'Al emitir, el PDF le sale solo al cliente, a nombre de tu empresa.',
+    resuelve: 'Con un clic desde la factura, el PDF le llega al cliente por correo, a nombre de tu empresa.',
     href: '/productos/erp#facturacion',
   },
   {
     frase: 'No sé quién me debe sin ponerme a sumar.',
     modulo: 'Cuentas por cobrar',
-    resuelve: 'Quién debe, cuánto y desde cuándo, con link de pago para cobrarle.',
+    resuelve: 'Quién debe, cuánto y desde cuándo, con su recordatorio por correo.',
     href: '/productos/erp#cobros',
   },
   {

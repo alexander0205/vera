@@ -118,7 +118,7 @@ export default function ContactoPage() {
     {
       pregunta: '¿Atienden fuera de República Dominicana?',
       respuesta:
-        'Nuestra facturación electrónica está certificada ante la DGII, así que hoy trabajamos con operaciones dominicanas. Si tienes sedes en otros países, escríbenos y lo evaluamos.',
+        'Zero emite la factura electrónica directo a la DGII dominicana, así que hoy trabajamos con operaciones dominicanas. Si tienes sedes en otros países, escríbenos y lo evaluamos.',
     },
   ];
 

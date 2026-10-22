@@ -15,9 +15,15 @@
  *    decenas de empresas es un puñado de requests; si algún día son miles,
  *    esto es lo que hay que trocear.
  *
+ * 3. AVISA a quien le quedan exactamente siete días de prueba. Es el aviso
+ *    «largo»: el de tres días lo manda Stripe solo (`trial_will_end`), pero
+ *    Stripe no tiene evento para el de siete — hay que contar días, y contarlos
+ *    es trabajo del calendario, o sea de este cron.
+ *
  * Es idempotente: `aviso_solo_lectura_en` marca que ya se mandó, así que
- * correrlo dos veces el mismo día no manda dos correos; y la reconciliación
- * escribe lo mismo que ya hay cuando no hay drift.
+ * correrlo dos veces el mismo día no manda dos correos; el aviso de siete días
+ * lleva su propia llave en `audit_logs` (lib/suscripcion/avisos.ts); y la
+ * reconciliación escribe lo mismo que ya hay cuando no hay drift.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,6 +36,7 @@ import { sincronizarConStripe } from '@/lib/payments/sincronizar';
 import { destinatarioDeSuscripcion } from '@/lib/suscripcion/destinatario';
 import { enviarSoloLectura } from '@/lib/email/suscripcion';
 import { llamadaDeCronValida } from '@/lib/seguridad/cron';
+import { avisarPruebasA7Dias } from '@/lib/suscripcion/avisos';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -133,6 +140,21 @@ export async function GET(req: NextRequest) {
     console.warn('[cron.suscripciones] avisos que no salieron', fallos);
   }
 
+  // ── Prueba por vencer: siete días antes ─────────────────────────────────
+  // Después de reconciliar, por la misma razón que arriba: la fecha de fin de
+  // prueba tiene que ser la que Stripe tiene hoy. Va en su propio try porque
+  // un fallo aquí no debe esconder lo ya hecho arriba (los correos de solo
+  // lectura ya salieron y quedaron marcados).
+  let pruebaA7: Awaited<ReturnType<typeof avisarPruebasA7Dias>> | null = null;
+  try {
+    pruebaA7 = await avisarPruebasA7Dias(ahora);
+    if (pruebaA7.fallos.length > 0) {
+      console.warn('[cron.suscripciones] avisos de prueba a 7 días que no salieron', pruebaA7.fallos);
+    }
+  } catch (err) {
+    console.error('[cron.suscripciones] el barrido de pruebas a 7 días falló', err);
+  }
+
   return NextResponse.json({
     ok: true,
     reconciliadas,
@@ -141,5 +163,14 @@ export async function GET(req: NextRequest) {
     avisados: avisados.length,
     teams: avisados,
     fallos: fallos.length,
+    pruebaA7Dias: pruebaA7
+      ? {
+          revisadas: pruebaA7.revisadas,
+          avisados: pruebaA7.enviados.length,
+          teams: pruebaA7.enviados,
+          omitidas: pruebaA7.omitidas,
+          fallos: pruebaA7.fallos.length,
+        }
+      : { error: true },
   });
 }

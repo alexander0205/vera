@@ -70,6 +70,9 @@ export type AuditAction =
   // El mensaje de prueba de los canales de aviso. También sale hacia afuera y
   // cuesta dinero (el SMS), así que se traza igual que un envío de verdad.
   | 'ESCOLAR_AVISO_PRUEBA'
+  // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
+  // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
+  | 'ESCOLAR_AVISO_CORRIDA'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Asistente de IA: acción que la persona confirmó en el panel (crear, modificar, eliminar).
@@ -78,7 +81,11 @@ export type AuditAction =
   | 'ASISTENTE_ABUSO'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
-  | 'CONTABILIDAD_CATALOGO_IMPORTADO';
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
+  // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
+  // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
+  | 'SUSCRIPCION_AVISO';
 
 export interface AuditParams {
   teamId:    number;

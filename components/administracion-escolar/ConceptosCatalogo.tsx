@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { ChevronDown, ChevronUp, Loader2, Plus, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,17 @@ const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then((r) => r.jso
 
 /** Mismo aspecto que las flechas del árbol de Estructura: se ordena igual. */
 const FLECHA = 'shrink-0 rounded text-gray-300 enabled:hover:bg-gray-200 enabled:hover:text-gray-700 disabled:opacity-30';
+
+// La Navigation API permite cancelar Atrás/Adelante antes de que Next cambie
+// de pantalla. Los tipos DOM de la versión actual de TypeScript aún no la incluyen.
+interface NavegacionNativa extends EventTarget {
+  traverseTo(key: string): { finished: Promise<void> };
+}
+
+interface EventoNavegacion extends Event {
+  navigationType: string;
+  destination: { url: string; key: string };
+}
 
 /** Impacto de borrar un concepto (lo calcula el servidor con `?preview=1`). */
 interface ImpactoConcepto {
@@ -68,6 +80,15 @@ export function ConceptosCatalogo() {
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
   const [arrastre, setArrastre] = useState<number | null>(null);
   const [sobre, setSobre] = useState<{ id: number; lado: 'arriba' | 'abajo' } | null>(null);
+  const router = useRouter();
+  /** Salida pendiente de confirmar por haber cambios sin guardar. */
+  const [salida, setSalida] = useState<
+    | { tipo: 'concepto'; id: number }
+    | { tipo: 'nav'; href: string; externa: boolean }
+    | { tipo: 'historial'; key: string }
+    | null
+  >(null);
+  const salidaConfirmada = useRef(false);
 
   // Al abrir, el primero de la lista: una pantalla de detalle vacía no dice
   // nada sobre lo que hay dentro.
@@ -81,6 +102,76 @@ export function ConceptosCatalogo() {
     setBorrador(seleccionado ? { ...seleccionado } : null);
     setError(null);
   }, [seleccionado]);
+
+  /**
+   * Cambios sin guardar (lo pidió Alex tras salir de una mensualidad y perder lo
+   * que había metido): el borrador difiere del concepto guardado, o el
+   * calendario tiene cuotas tocadas sin persistir. El estado del calendario se
+   * lee por su ref, en vivo, no es estado de aquí.
+   */
+  const conceptoSucio = !!borrador && !!seleccionado
+    && JSON.stringify(borrador) !== JSON.stringify(seleccionado);
+
+  // Cerrar la pestaña, recargar o salir del sitio: el aviso nativo del
+  // navegador. El calendario se consulta en el momento por su ref.
+  useEffect(() => {
+    const avisar = (e: BeforeUnloadEvent) => {
+      if (!salidaConfirmada.current && (conceptoSucio || calendario.current?.sucio)) {
+        e.preventDefault(); e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', avisar);
+    return () => window.removeEventListener('beforeunload', avisar);
+  }, [conceptoSucio]);
+
+  // Navegación interna (las pestañas de Configuración, la barra lateral): el
+  // beforeunload NO salta en los cambios de ruta de Next, así que se intercepta
+  // el clic sobre un enlace que saque de esta pantalla y se pide confirmar.
+  useEffect(() => {
+    const alHacerClic = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (!conceptoSucio && !calendario.current?.sucio) return;
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a) return;
+      if (a.target === '_blank' || a.hasAttribute('download')) return;
+      const href = a.getAttribute('href') ?? '';
+      if (!href || href.startsWith('#')) return;
+      const destino = new URL(a.href);
+      if (!['http:', 'https:'].includes(destino.protocol)) return;
+      if (destino.origin === window.location.origin
+        && destino.pathname === window.location.pathname) return;
+      e.preventDefault();
+      setSalida({ tipo: 'nav', href: destino.href, externa: destino.origin !== window.location.origin || !href.startsWith('/') });
+    };
+    document.addEventListener('click', alHacerClic, true);
+    return () => document.removeEventListener('click', alHacerClic, true);
+  }, [conceptoSucio]);
+
+  // Atrás/Adelante en Chrome hacen una navegación SPA sin click ni beforeunload.
+  // El evento "navigate" sí es cancelable antes de tocar la URL o el historial.
+  useEffect(() => {
+    const navegacion = (window as Window & { navigation?: NavegacionNativa }).navigation;
+    if (!navegacion) return;
+    const alNavegar = (event: Event) => {
+      const e = event as EventoNavegacion;
+      if (salidaConfirmada.current || e.navigationType !== 'traverse' || !e.cancelable) return;
+      if (!conceptoSucio && !calendario.current?.sucio) return;
+      const destino = new URL(e.destination.url);
+      if (destino.origin === window.location.origin
+        && destino.pathname === window.location.pathname) return;
+      e.preventDefault();
+      setSalida({ tipo: 'historial', key: e.destination.key });
+    };
+    navegacion.addEventListener('navigate', alNavegar);
+    return () => navegacion.removeEventListener('navigate', alNavegar);
+  }, [conceptoSucio]);
+
+  /** Cambiar de concepto en la lista: con algo sin guardar, se confirma antes. */
+  function intentarSeleccionar(id: number) {
+    if (id === selId) return;
+    if (conceptoSucio || calendario.current?.sucio) { setSalida({ tipo: 'concepto', id }); return; }
+    setSelId(id);
+  }
 
   async function guardar() {
     if (!borrador) return;
@@ -286,9 +377,13 @@ export function ConceptosCatalogo() {
             <span className="pl-1.5 opacity-0 transition-opacity group-hover:opacity-100">
               <Agarradera />
             </span>
-            <button type="button" onClick={() => setSelId(c.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm">
-              <span className={`min-w-0 flex-1 truncate ${c.activo ? '' : 'text-gray-400 line-through'}`}>
+            <button type="button" onClick={() => intentarSeleccionar(c.id)}
+              className="flex min-w-0 flex-1 items-start gap-2 px-2 py-2 text-left text-sm">
+              {/* El nombre se envuelve en lugar de cortarse: en una columna de
+                  220px «Avance de Anualidad» salía como «Avance de Anu…» y no se
+                  podía distinguir de otro parecido. Lo pidió Alex. */}
+              <span title={c.nombre}
+                className={`min-w-0 flex-1 break-words leading-snug ${c.activo ? '' : 'text-gray-400 line-through'}`}>
                 {c.nombre}
               </span>
               {c.frecuencia !== 'unico' && (
@@ -387,6 +482,40 @@ export function ConceptosCatalogo() {
             }} />
         );
       })()}
+
+      {/* Cambios sin guardar: avisa antes de cambiar de concepto o de salir de
+          la pantalla por un enlace (lo pidió Alex). */}
+      {salida && (
+        <ConfirmDialog
+          open
+          onOpenChange={(o: boolean) => { if (!o) setSalida(null); }}
+          title="Tienes cambios sin guardar"
+          description={
+            <>
+              Hiciste cambios en este concepto o en su calendario y todavía no los has
+              guardado. Si sales ahora, se pierden.
+            </>
+          }
+          confirmLabel="Salir sin guardar"
+          cancelLabel="Seguir editando"
+          destructive
+          onConfirm={() => {
+            const s = salida;
+            setSalida(null);
+            if (s.tipo === 'concepto') { setSelId(s.id); return; }
+            if (s.tipo === 'nav' && !s.externa) {
+              const destino = new URL(s.href);
+              router.push(destino.pathname + destino.search + destino.hash);
+              return;
+            }
+            salidaConfirmada.current = true;
+            if (s.tipo === 'nav') window.location.assign(s.href);
+            else {
+              const navegacion = (window as Window & { navigation?: NavegacionNativa }).navigation;
+              void navegacion?.traverseTo(s.key).finished.catch(() => { salidaConfirmada.current = false; });
+            }
+          }} />
+      )}
     </div>
   );
 }

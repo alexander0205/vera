@@ -47,7 +47,7 @@ const TAMANOS: Record<Perfil, string[]> = {
 
 const TEMAS: Record<Perfil, string[]> = {
   pyme: ['Facturación electrónica', 'Punto de venta', 'Inventario', 'Contabilidad', 'Migrar desde Excel'],
-  colegio: ['Cuotas y matrículas', 'Cobro automático a padres', 'Recordatorios por WhatsApp', 'Portal de padres', 'Contabilidad', 'Migrar desde Excel'],
+  colegio: ['Cuotas y matrículas', 'Avisos de cobro a padres', 'Recordatorios por WhatsApp', 'Portal de padres', 'Contabilidad', 'Migrar desde Excel'],
 };
 
 type Errores = Partial<Record<'nombre' | 'empresa' | 'email' | 'telefono', string>>;

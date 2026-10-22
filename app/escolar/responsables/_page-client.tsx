@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  AlertTriangle, FileText, Loader2, Mail, MessageCircle, Receipt, Search,
+  AlertTriangle, CalendarClock, FileText, Loader2, Mail, MessageCircle, Receipt, Search,
   Smartphone, Users, Wallet, X,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,7 +14,9 @@ import { Button } from '@/components/ui/button';
 import { Paginador } from '@/components/ui/paginador';
 import { NativeSelect } from '@/components/ui/native-select';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { partidasDeFamilia, resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
@@ -44,7 +46,8 @@ interface Resp {
   retiradas: number;
   stats: {
     familias: number; conDeuda: number;
-    deudaTotalCentavos: number; incontactables: number;
+    deudaTotalCentavos: number; deudaExigibleCentavos: number;
+    porFacturarCentavos: number; incontactables: number;
   };
 }
 
@@ -52,7 +55,10 @@ interface Detalle {
   hijos: { estudianteId: number | null; nombre: string; curso: string | null;
     estado: string | null; deudaCentavos: number; cargos: number }[];
   facturas: { id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number }[];
+    montoTotal: number; pagadoCentavos: number; esMora: boolean; saldoCentavos: number; vence: string }[];
+  /** Los cargos de sus hijos: con ellos y las facturas sale el resumen de cobro. */
+  cargos: { saldoCentavos: number; montoCentavos: number; fechaVencimiento: string | null;
+    ecfDocumentId: number | null; estado: string }[];
   avisos: { id: number; enviadoAt: string; tipo: string; canal: string;
     destino: string | null; alumno: string; concepto: string | null }[];
 }
@@ -75,8 +81,10 @@ const EXPORTAR: ExportTabla<FilaResponsable> = {
     { titulo: 'WhatsApp', valor: f => destinoDeContacto(f, 'whatsapp'), sub: f => destinoDeContacto(f, 'correo'), ancho: 1.3 },
     { titulo: 'SMS / teléfono', valor: f => destinoDeContacto(f, 'sms') ?? f.telefono, ancho: 1 },
     { titulo: 'Hijos', valor: f => f.alumnos, tipo: 'numero', total: true, ancho: 0.5 },
-    { titulo: 'Deuda escolar', valor: f => f.deudaEscolarCentavos, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Deuda escolar', valor: f => Math.max(0, f.deudaEscolarCentavos - f.porFacturarCentavos), tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Por facturar', valor: f => f.porFacturarCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
     { titulo: 'Otras facturas', valor: f => f.deudaFacturasCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Mora', valor: f => f.deudaMoraCentavos || null, tipo: 'moneda', total: true, ancho: 0.9 },
     { titulo: 'Vence más viejo', valor: f => (f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : null), ancho: 0.9 },
   ],
 };
@@ -185,9 +193,12 @@ export default function ResponsablesClient() {
           la página ni del filtro. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={Users} label="Familias" value={data ? String(data.stats.familias) : '—'} />
-        <StatCard icon={Wallet} label="Deuda total"
-          value={data ? fmtDOP(data.stats.deudaTotalCentavos) : '—'}
-          accent={(data?.stats.deudaTotalCentavos ?? 0) > 0} />
+        {/* «Por cobrar» = lo exigible hoy (escolar ya facturada + otras
+            facturas). Lo que aún no tiene factura es anualidad futura y no se
+            mezcla aquí: se ve como «por facturar» en cada familia. */}
+        <StatCard icon={Wallet} label="Por cobrar"
+          value={data ? fmtDOP(data.stats.deudaExigibleCentavos) : '—'}
+          accent={(data?.stats.deudaExigibleCentavos ?? 0) > 0} />
         <StatCard icon={AlertTriangle} label="Con deuda"
           value={data ? String(data.stats.conDeuda) : '—'}
           accent={(data?.stats.conDeuda ?? 0) > 0} />
@@ -293,7 +304,7 @@ export default function ResponsablesClient() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-lg border border-gray-100">
-                <table className="w-full min-w-[52rem] text-sm">
+                <table className="w-full min-w-[58rem] text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                       <th className="px-3 py-2 font-medium">Familia</th>
@@ -301,6 +312,7 @@ export default function ResponsablesClient() {
                       <th className="px-3 py-2 font-medium">Avisos</th>
                       <th className="px-3 py-2 text-right font-medium">Deuda escolar</th>
                       <th className="px-3 py-2 text-right font-medium">Otras facturas</th>
+                      <th className="px-3 py-2 text-right font-medium">Mora</th>
                       <th className="px-3 py-2 font-medium">Más viejo sin pagar</th>
                     </tr>
                   </thead>
@@ -338,8 +350,11 @@ export default function ResponsablesClient() {
                         </td>
                         <td className="px-3 py-2.5"><Canales fila={f} /></td>
                         <td className="px-3 py-2.5 text-right">
-                          {f.deudaEscolarCentavos > 0
-                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos)}</span>
+                          {/* La cifra grande es lo EXIGIBLE (escolar ya facturada);
+                              lo que aún no tiene factura va debajo como «sin
+                              factura», que es la anualidad futura. */}
+                          {f.deudaEscolarCentavos - f.porFacturarCentavos > 0
+                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos - f.porFacturarCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
                           {f.delConcepto && nombreConcepto && (
                             <span className="block text-xs text-zero-700">
@@ -354,6 +369,14 @@ export default function ResponsablesClient() {
                         <td className="px-3 py-2.5 text-right">
                           {f.deudaFacturasCentavos > 0
                             ? <span className="font-medium text-amber-700">{fmtDOP(f.deudaFacturasCentavos)}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        {/* Las notas de débito por mora, aparte de «otras
+                            facturas»: cuelgan de una factura escolar y antes se
+                            colaban ahí como si fueran deuda ajena al plan. */}
+                        <td className="px-3 py-2.5 text-right">
+                          {f.deudaMoraCentavos > 0
+                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaMoraCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
@@ -403,10 +426,13 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
   detalle: Detalle | undefined;
   onCerrar: () => void;
 }) {
-  const deuda = fila.deudaEscolarCentavos + fila.deudaFacturasCentavos;
   const hijos = detalle?.hijos ?? [];
+  // Las notas de mora no son facturas: van en «Vencido» con lo demás.
   const facturasPendientes = (detalle?.facturas ?? [])
-    .filter((f) => f.montoTotal - f.pagadoCentavos > 0).length;
+    .filter((f) => !f.esMora && f.saldoCentavos > 0).length;
+  // Vencido / próximo pago / falta del año / pagado: la misma cuenta que la
+  // ficha completa de la familia (resumen-cobro.ts).
+  const resumen = detalle ? resumirCobro(partidasDeFamilia(detalle), hoyRD()) : null;
 
   return (
     // Misma tarjeta que la ficha del estudiante: encabezado con iniciales,
@@ -450,13 +476,10 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
           falta={!destinoDeContacto(fila, 'sms')} />
       </div>
 
-      <div className="space-y-2 border-t border-gray-100 pt-3">
-        <TotalRow icon={Receipt} tone="gray" label="Deuda escolar"
-          value={fmtDOP(fila.deudaEscolarCentavos)} muted={fila.deudaEscolarCentavos === 0} />
-        <TotalRow icon={FileText} tone="amber" label="Otras facturas"
-          value={fmtDOP(fila.deudaFacturasCentavos)} muted={fila.deudaFacturasCentavos === 0} />
-        <TotalRow icon={AlertTriangle} tone="red" label="Debe en total"
-          value={fmtDOP(deuda)} muted={deuda === 0} />
+      <div className="border-t border-gray-100 pt-3">
+        {resumen
+          ? <ResumenCobroFilas resumen={resumen} />
+          : <div className="flex justify-center py-3"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>}
       </div>
 
       {/* Los hijos, con lo que debe cada uno: es lo que se mira antes de
@@ -506,7 +529,9 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
           <Link href={`/escolar/responsables/${fila.clientId}`}>Abrir ficha completa</Link>
         </Button>
         <Button asChild variant="outline" className="w-full">
-          <Link href={`/dashboard/clientes/${fila.clientId}/editar`}>Editar contacto</Link>
+          <Link href={`/dashboard/clientes/${fila.clientId}/editar?volver=${encodeURIComponent(`/escolar/responsables?familia=${fila.clientId}`)}`}>
+            Editar contacto
+          </Link>
         </Button>
       </div>
     </div>

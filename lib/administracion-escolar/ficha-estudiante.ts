@@ -40,6 +40,7 @@ import {
 import { CANALES_DEL_AVISO } from '@/lib/administracion-escolar/ciclo-cobro';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { cargarPlan, type PlanCargado } from '@/lib/administracion-escolar/plan-matricula';
+import { esVentaSql, moraFacturaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
 
 /** Ficha del alumno + deuda + el contacto de Contactos al que está enlazado. */
 export async function estudianteConDependiente(teamId: number, estudianteId: number) {
@@ -159,6 +160,20 @@ export function matriculasDeEstudiante(teamId: number, estudianteId: number) {
 }
 
 /**
+ * El cargo que lleva la mora de su factura: el de menor id, no anulado, entre
+ * todos los del team que apuntan a esa factura —de este alumno o de un
+ * hermano—. Así la mora sale una sola vez aunque la factura cubra varios
+ * cargos. Sin factura, ningún cargo es representante.
+ */
+function esRepresentanteDeFactura(teamId: number) {
+  return sql`${adminEscolarCargos.id} = (
+    SELECT MIN(g2.id) FROM admin_escolar_cargos g2
+     WHERE g2.ecf_document_id = ${adminEscolarCargos.ecfDocumentId}
+       AND g2.team_id = ${teamId} AND g2.estado <> 'anulado'
+  )`;
+}
+
+/**
  * Cargos del estudiante (más reciente primero).
  *
  * No sincroniza saldos: eso lo hace quien llama, una sola vez por carga.
@@ -189,6 +204,47 @@ export function cargosDeEstudiante(teamId: number, estudianteId: number) {
       // Estado ANTE LA DGII, que no es el de cobro: con él la ficha sabe si a
       // esta factura todavía le falta emitirse y puede ofrecerlo en el menú.
       facturaEstado: ecfDocuments.estado,
+      // Mora de la factura de este cargo: las notas de débito (tipo 33) atadas
+      // a ella por `mora_origen_id`. El colegio las pedía en la ficha —hasta
+      // ahora solo se veían en Facturación o en la pestaña de Notas de débito—.
+      // `moraCentavos` es lo recargado; `moraSaldoCentavos`, lo que de eso
+      // sigue sin cobrarse; `moraNotaId`/`moraNotaCount` dan el enlace al
+      // documento (a la nota si es una sola, a la factura padre si hay varias).
+      //
+      // La mora es de la FACTURA, no del cargo: una factura puede cubrir varios
+      // cargos (varios meses, o hijos de la misma familia). Si cada cargo
+      // trajera la mora entera, la ficha la pintaría una vez por cargo y la
+      // fila del mes la sumaría repetida —en Mi Casita, una factura de 8 meses
+      // con RD$13,702 de mora salía ocho veces—. Por eso solo la lleva UN cargo
+      // por factura: el de menor id que no esté anulado (un anulado no se
+      // pinta y con él la mora desaparecería). Los demás traen 0.
+      moraCentavos: sql<number>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN COALESCE((
+        SELECT SUM(nd.monto_total) FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+      ), 0) ELSE 0 END)::int`,
+      // GREATEST por nota, como el motor de mora: una nota sobrepagada no
+      // puede restarle saldo a las demás.
+      moraSaldoCentavos: sql<number>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN COALESCE((
+        SELECT SUM(GREATEST(0, nd.monto_total - COALESCE((
+          SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
+           WHERE pr.ecf_document_id = nd.id AND pr.team_id = ${teamId}
+        ), 0)))
+        FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+      ), 0) ELSE 0 END)::int`,
+      moraNotaId: sql<number | null>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN (
+        SELECT nd.id FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+         ORDER BY nd.id DESC LIMIT 1
+      ) END)`,
+      moraNotaCount: sql<number>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN (
+        SELECT COUNT(*) FROM ${ecfDocuments} nd
+         WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
+           AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
+      ) ELSE 0 END)::int`,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarConceptosPago, and(
@@ -350,11 +406,15 @@ export async function facturasSueltasDeEstudiante(teamId: number, dependienteId:
         SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
          WHERE p.ecf_document_id = ecf_documents.id AND p.team_id = ${teamId}
       ), 0)::int`,
+      // Lo que se debe, con la regla de Cuentas por cobrar. Monto menos pagos
+      // contaba como deuda una factura ANULADA y una histórica ya pagada.
+      saldoCentavos: sql<number>`(${saldoFacturaSql('ecf_documents')})::int`,
     })
     .from(ecfDocuments)
     .where(and(
       eq(ecfDocuments.teamId, teamId),
       eq(ecfDocuments.dependienteId, dependienteId),
+      sql`${esVentaSql('ecf_documents')}`,
       // Las que ya tienen cargo salen en su mes, con su concepto: repetirlas
       // aquí haría creer que se le cobró dos veces.
       sql`NOT EXISTS (SELECT 1 FROM admin_escolar_cargos c WHERE c.ecf_document_id = ecf_documents.id)`,
@@ -366,6 +426,58 @@ export async function facturasSueltasDeEstudiante(teamId: number, dependienteId:
     ...f,
     lineas: lineasDelAlumno(lineasJson, dependienteId),
   }));
+}
+
+/**
+ * Lo que la familia debe en Facturación por facturas que NO son de este alumno.
+ *
+ * Las facturas hechas en Facturación a nombre del padre, sin beneficiario, no
+ * tienen cómo llegar a la ficha de ningún hijo: no hay de quién son. Y la
+ * secretaria que abría la ficha del alumno veía «Al día» con la familia
+ * debiendo, y tenía que irse a Cuentas por cobrar para enterarse.
+ *
+ * Se enseña como aviso y NO se suma a la deuda del alumno: repartirla entre
+ * los hermanos sería inventar de quién es. Entran también las de un hermano
+ * —son deuda de la familia— y quedan fuera las de este alumno, que ya salen en
+ * su lista con su saldo, y las que cuelgan de un cargo, que son del plan.
+ *
+ * La mora de esas facturas se devuelve aparte (`moraCentavos`), como en la
+ * ficha de la familia: es deuda y entra en el total, pero no se mezcla con el
+ * saldo de la factura.
+ */
+export async function deudaFamiliarEnFacturacion(
+  teamId: number,
+  clientId: number | null,
+  dependienteId: number | null,
+): Promise<{ saldoCentavos: number; facturas: number; moraCentavos: number }> {
+  if (!clientId) return { saldoCentavos: 0, facturas: 0, moraCentavos: 0 };
+  const filas = await db.execute(sql`
+    SELECT COALESCE(SUM(s.capital + s.mora), 0)::bigint AS saldo,
+           COALESCE(SUM(s.mora), 0)::bigint AS mora,
+           count(*)::int AS facturas
+      FROM (
+        SELECT ${saldoFacturaSql('x')} AS capital, ${moraFacturaSql('x')} AS mora
+          FROM ecf_documents x
+         WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
+           AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
+           AND ${esVentaSql('x')}
+           ${dependienteId == null
+             // Sin beneficiario no hay facturas «suyas» que apartar. Con el
+             // parámetro nulo, «IS DISTINCT FROM NULL» dejaba fuera justo las
+             // facturas sin beneficiario —la factura a nombre del padre, el
+             // caso de todos los alumnos importados de SIGERD— y la ficha
+             // decía «Al día» con la familia debiendo.
+             ? sql``
+             : sql`AND x.dependiente_id IS DISTINCT FROM ${dependienteId}`}
+           AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g WHERE g.ecf_document_id = x.id)
+      ) s
+     WHERE s.capital + s.mora > 0`);
+  const f = (filas as unknown as Record<string, unknown>[])[0] ?? {};
+  return {
+    saldoCentavos: Number(f.saldo ?? 0),
+    facturas: Number(f.facturas ?? 0),
+    moraCentavos: Number(f.mora ?? 0),
+  };
 }
 
 /**
@@ -563,11 +675,12 @@ export async function fichaEstudiante(teamId: number, estudianteId: number) {
 
   // Las facturas viejas del alumno, las que no salieron de ningún cargo. Va
   // después porque hace falta el `dependienteId` del estudiante ya leído.
-  const [facturasSueltas, pagosSueltos, avisos, avisosProgramados] = await Promise.all([
+  const [facturasSueltas, pagosSueltos, avisos, avisosProgramados, deudaFamiliar] = await Promise.all([
     facturasSueltasDeEstudiante(teamId, estudiante.dependienteId),
     pagosSueltosDeEstudiante(teamId, estudiante.dependienteId),
     avisosDeEstudiante(teamId, estudianteId),
     avisosProgramadosDeEstudiante(teamId, estudianteId),
+    deudaFamiliarEnFacturacion(teamId, estudiante.facturarAClientId, estudiante.dependienteId),
   ]);
 
   /**
@@ -578,13 +691,11 @@ export async function fichaEstudiante(teamId: number, estudianteId: number) {
    * RD$5,500 sin cobrar delante. No hay doble conteo posible — las facturas
    * que sí cuelgan de un cargo están excluidas de esta lista.
    */
-  const deudaFacturasCentavos = facturasSueltas.reduce(
-    (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0,
-  );
+  const deudaFacturasCentavos = facturasSueltas.reduce((s, f) => s + f.saldoCentavos, 0);
 
   return {
     estudiante, matriculas, cargos, pagos, tutores, planes, cobro,
-    facturasSueltas, pagosSueltos, deudaFacturasCentavos, avisos, avisosProgramados,
+    facturasSueltas, pagosSueltos, deudaFacturasCentavos, deudaFamiliar, avisos, avisosProgramados,
   };
 }
 

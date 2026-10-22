@@ -42,6 +42,7 @@ import {
   adminEscolarEstudiantes,
   adminEscolarMatriculas,
   ecfDocuments,
+  facturasRecurrentes,
 } from '@/lib/db/schema';
 import { calcularTotales } from '@/lib/ecf/types';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
@@ -95,8 +96,14 @@ export interface ResultadoFacturacion {
  * calendario factura solo lo demás, que hasta ahora se quedaba sin factura
  * hasta que alguien se acordara.
  *
- * Basta con que UNA matrícula del año tenga plan: es una decisión del colegio,
- * no de cada alumno. Un colegio sin recurrentes no cambia en nada.
+ * Basta con que UNA matrícula del año tenga plan ACTIVO: es una decisión del
+ * colegio, no de cada alumno. Un colegio sin recurrentes no cambia en nada.
+ *
+ * Solo cuentan los planes activos. Un plan finalizado o pausado ya no factura
+ * nada; si se contara, la colegiatura se quedaba sin nadie que la facturara.
+ * Pasó con Mi Casita (21-10-2026): finalizó sus planes para pasarse al
+ * calendario y sus 106 matrículas seguían apuntando a ellos, así que el
+ * calendario seguía cediendo la colegiatura a planes que ya no corrían.
  */
 export function cargosQueFacturaElCalendario<T extends { conceptoTipo: string | null }>(
   cargos: T[],
@@ -213,9 +220,16 @@ export async function facturarCuotasEmitidas(
 
   if (emitidos.length === 0) return vacio();
 
+  // Solo un plan ACTIVO le quita la colegiatura al calendario (ver
+  // `cargosQueFacturaElCalendario`): uno finalizado o pausado no factura.
   const [conPlan] = await db
     .select({ id: adminEscolarMatriculas.id })
     .from(adminEscolarMatriculas)
+    .innerJoin(facturasRecurrentes, and(
+      eq(facturasRecurrentes.id, adminEscolarMatriculas.facturaRecurrenteId),
+      eq(facturasRecurrentes.teamId, teamId),
+      eq(facturasRecurrentes.estado, 'activa'),
+    ))
     .where(and(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.periodoId, periodoId),

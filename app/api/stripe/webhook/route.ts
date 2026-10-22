@@ -11,8 +11,13 @@ import {
   destinatarioDeSuscripcion, type DestinatarioSuscripcion,
 } from '@/lib/suscripcion/destinatario';
 import {
-  enviarCobroFallido, enviarPruebaPorVencer, enviarCancelacionProgramada,
+  enviarCobroFallido, enviarCancelacionProgramada,
 } from '@/lib/email/suscripcion';
+import {
+  avisarCuentaActivada, avisarPagoRecibido, avisarPruebaPorVencer,
+} from '@/lib/suscripcion/avisos';
+import { debeAvisarPago } from '@/lib/suscripcion/datos-aviso';
+import { equipoPorMetadata } from '@/lib/suscripcion/avisos-almacen';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
@@ -50,6 +55,24 @@ async function avisar(
     await enviar(destinatario);
   } catch (err) {
     console.error(`[webhook] no se pudo avisar al team ${teamId}:`, err);
+  }
+}
+
+/**
+ * Lo mismo para los avisos que ya traen su propio control de duplicados y su
+ * propia búsqueda del destinatario (`lib/suscripcion/avisos.ts`): se traga el
+ * error por la misma razón que `avisar`, y deja dicho de cuál se trataba.
+ */
+async function avisarSinFallar(
+  que: string,
+  teamId: number,
+  aviso: () => Promise<string>,
+): Promise<void> {
+  try {
+    const r = await aviso();
+    console.log(`[webhook] aviso ${que} — team ${teamId} → ${r}`);
+  } catch (err) {
+    console.error(`[webhook] no se pudo avisar (${que}) al team ${teamId}:`, err);
   }
 }
 
@@ -141,6 +164,20 @@ export async function POST(request: NextRequest) {
         // de cancelación saldría en cada uno de ellos.
         const team = await getTeamByStripeCustomerId(customerId);
         if (!team) {
+          // La carrera de siempre: `created` llega antes de que el onboarding
+          // (o `checkout.session.completed`) ate el customer a la empresa. El
+          // sync no se toca —la fila aún no tiene customer, y sincronizar así
+          // la dejaría sin plan—, pero la bienvenida sí puede salir: la
+          // empresa se reconoce por el teamId que grabamos en la suscripción.
+          if (event.type === 'customer.subscription.created') {
+            const aun = await equipoPorMetadata(subscription.metadata?.teamId, customerId);
+            if (aun) {
+              console.log(`[webhook] created antes de atar el customer — team ${aun.id}`);
+              await avisarSinFallar('cuenta-activada', aun.id,
+                () => avisarCuentaActivada(aun.id, subscription.id));
+              break;
+            }
+          }
           console.error(`${event.type}: team not found for customer`, customerId);
           break;
         }
@@ -155,6 +192,17 @@ export async function POST(request: NextRequest) {
           await avisar(team.id, d => enviarCancelacionProgramada({
             ...d, activoHasta: new Date(finPeriodo * 1000),
           }));
+        }
+
+        // «Tu cuenta está lista». Solo en `created`, y DESPUÉS del sync: el
+        // correo lee la suscripción vigente a Stripe, no el sobre, así que el
+        // orden no cambia lo que dice — pero si el sync revienta, el cliente
+        // no recibe una bienvenida a una cuenta que la base aún no conoce.
+        // El control de duplicados (Stripe reintenta; ampliar una prueba
+        // recrea la suscripción) vive en avisarCuentaActivada.
+        if (event.type === 'customer.subscription.created') {
+          await avisarSinFallar('cuenta-activada', team.id,
+            () => avisarCuentaActivada(team.id, subscription.id));
         }
 
         console.log(`[webhook] ${event.type} — team ${team.id} →`, r);
@@ -211,10 +259,35 @@ export async function POST(request: NextRequest) {
         const customerId = invoice.customer as string;
         const team       = await getTeamByStripeCustomerId(customerId);
 
-        if (!team || team.morosoDesde == null) break;
+        if (!team) {
+          // El primer pago de un checkout puede llegar antes que
+          // `checkout.session.completed`, que es quien ata el customer a la
+          // empresa. No hay mora que cerrar (no hay empresa atada), pero el
+          // recibo sí: la empresa sale de la metadata de la suscripción.
+          if (debeAvisarPago(invoice)) {
+            const aun = await equipoPorMetadata(
+              invoice.parent?.subscription_details?.metadata?.teamId, customerId,
+            );
+            if (aun) {
+              await avisarSinFallar('pago-recibido', aun.id,
+                () => avisarPagoRecibido(aun.id, invoice));
+            }
+          }
+          break;
+        }
 
-        const r = await sincronizarPorCustomer(customerId);
-        console.log(`[webhook] payment succeeded — team ${team.id} sale de mora →`, r);
+        if (team.morosoDesde != null) {
+          const r = await sincronizarPorCustomer(customerId);
+          console.log(`[webhook] payment succeeded — team ${team.id} sale de mora →`, r);
+        }
+
+        // «Recibimos tu pago». Después de cerrar la mora, y solo si hubo dinero:
+        // la factura de $0 con la que Stripe abre una prueba también trae este
+        // evento. Una empresa que sale de mora y paga recibe el recibo igual.
+        if (debeAvisarPago(invoice)) {
+          await avisarSinFallar('pago-recibido', team.id,
+            () => avisarPagoRecibido(team.id, invoice));
+        }
         break;
       }
 
@@ -227,12 +300,14 @@ export async function POST(request: NextRequest) {
         const team = await getTeamByStripeCustomerId(subscription.customer as string);
         if (!team || !subscription.trial_end) break;
 
-        const venceEl = new Date(subscription.trial_end * 1000);
-        const dias = Math.max(1, Math.ceil((venceEl.getTime() - Date.now()) / 86_400_000));
+        // Con o sin tarjeta, y con los días contados por fecha dominicana, lo
+        // resuelve avisarPruebaPorVencer mirando la suscripción vigente. La
+        // llave `prueba-3:{suscripción}` evita el duplicado si Stripe reintenta.
+        await avisarSinFallar('prueba-3-dias', team.id, () => avisarPruebaPorVencer({
+          teamId: team.id, suscripcionId: subscription.id, diasAntes: 3,
+        }));
 
-        await avisar(team.id, d => enviarPruebaPorVencer({ ...d, diasRestantes: dias, venceEl }));
-
-        console.log(`[webhook] trial_will_end — team ${team.id}, ${dias} días`);
+        console.log(`[webhook] trial_will_end — team ${team.id}`);
         break;
       }
 

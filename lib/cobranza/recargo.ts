@@ -102,6 +102,39 @@ export async function aplicarRecargosMoraVencidos(
         // Vencida: tiene fecha límite y ya pasó
         sql`${ecfDocuments.fechaLimitePago} IS NOT NULL`,
         sql`${ecfDocuments.fechaLimitePago} < ${hoy}`,
+        // Respetar el "Cobrar recargo por mora" del concepto escolar. El motor
+        // de mora corre a nivel factura y solo miraba el interruptor del team
+        // (recargoMoraActivo), ignorando que cada concepto escolar tiene su
+        // propio `cobra_mora`. Resultado en prod (Mi Casita): las facturas de
+        // "Evaluación" (cobra_mora=false) recibían mora porque el team tenía la
+        // mora global activa por las colegiaturas.
+        //
+        // Regla: si la factura está respaldada SOLO por cargos escolares cuyo
+        // concepto NO cobra mora, se excluye. Una factura sin cargo escolar
+        // (venta normal) o con al menos un cargo cuyo concepto SÍ cobra mora
+        // sigue siendo elegible — no se toca la cobranza regular ni la mixta.
+        // OJO: `ecf_documents.id` va LITERAL, no `${ecfDocuments.id}`. Drizzle
+        // renderiza esa interpolación sin calificar ("id") dentro de un sql
+        // anidado, y como admin_escolar_cargos también tiene `id` la correlación
+        // casaría con la tabla interna. El subquery de `pagado` de arriba usa el
+        // mismo literal por la misma razón.
+        // El `aec.team_id = ecf_documents.team_id` no cambia el resultado (la
+        // factura y sus cargos son del mismo team), pero deja que Postgres use
+        // el índice admin_escolar_cargos_team_factura_idx (team_id, ecf_document_id).
+        sql`NOT (
+          EXISTS (
+            SELECT 1 FROM admin_escolar_cargos aec
+            WHERE aec.ecf_document_id = ecf_documents.id
+              AND aec.team_id = ecf_documents.team_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM admin_escolar_cargos aec
+            JOIN admin_escolar_conceptos_pago cp ON cp.id = aec.concepto_id
+            WHERE aec.ecf_document_id = ecf_documents.id
+              AND aec.team_id = ecf_documents.team_id
+              AND cp.cobra_mora = true
+          )
+        )`,
       ));
 
     for (const factura of facturas) {

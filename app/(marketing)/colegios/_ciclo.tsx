@@ -23,19 +23,18 @@ type Hito = {
 };
 
 const AL_DIA: Hito[] = [
-  { cuando: 'Día 1', titulo: 'La mensualidad se emite sola', detalle: 'Se factura con su comprobante fiscal y el padre recibe el enlace de pago por WhatsApp y correo.' },
-  { cuando: 'Día 25', titulo: 'Aviso antes de vencer', detalle: 'Sale solo, con el monto y la fecha. Nadie del colegio tuvo que acordarse.' },
-  { cuando: 'Día 28', titulo: 'El padre paga desde el teléfono', detalle: 'Con tarjeta por el enlace, o subiendo el comprobante de su transferencia.', tono: 'bueno' },
-  { cuando: 'El mismo día', titulo: 'Entra al sistema', detalle: 'El pago se registra, el saldo del estudiante baja y la contabilidad queda asentada.', tono: 'bueno' },
+  { cuando: 'Día 1', titulo: 'La mensualidad aparece sola', detalle: 'Cae en la cuenta de cada estudiante y el padre recibe su enlace por WhatsApp y correo. El comprobante fiscal sale cuando el colegio la revisa y la emite.' },
+  { cuando: 'Día 30', titulo: 'Aviso el día que vence', detalle: 'Sale solo, con el monto y la fecha. Nadie del colegio tuvo que acordarse.' },
+  { cuando: 'Ese mismo día', titulo: 'El padre paga desde el teléfono', detalle: 'Transfiere desde su banco y sube el comprobante por el enlace.', tono: 'bueno' },
+  { cuando: 'Al aprobarlo', titulo: 'Entra al sistema', detalle: 'El colegio aprueba el comprobante: el pago se registra, el saldo del estudiante baja y la contabilidad queda asentada.', tono: 'bueno' },
 ];
 
 const SE_ATRASA: Hito[] = [
-  { cuando: 'Día 1', titulo: 'La mensualidad se emite sola', detalle: 'Igual que siempre: facturada, con su enlace de pago enviado.' },
-  { cuando: 'Día 25', titulo: 'Aviso antes de vencer', detalle: 'El primero de los tres, con el saldo pendiente.' },
-  { cuando: 'Día 30', titulo: 'Vence y nadie pagó', detalle: 'El estudiante pasa a la lista de morosos, con sus días de atraso contados.', tono: 'alerta' },
+  { cuando: 'Día 1', titulo: 'La mensualidad aparece sola', detalle: 'Igual que siempre: en la cuenta del estudiante, con su enlace enviado.' },
+  { cuando: 'Día 30', titulo: 'Vence y nadie pagó', detalle: 'Le llega el aviso del vencimiento y el estudiante pasa a la lista de morosos, con sus días de atraso contados.', tono: 'alerta' },
+  { cuando: 'Día 34', titulo: 'Aviso antes del recargo', detalle: 'El último, por WhatsApp, SMS o correo: si paga ya, se ahorra la mora.' },
   { cuando: 'Día 35', titulo: 'La mora se aplica sola', detalle: 'El recargo que configuró el colegio entra al cargo. No depende de que alguien se acuerde de aplicarlo.', tono: 'alerta' },
-  { cuando: 'Día 36', titulo: 'Aviso con el recargo incluido', detalle: 'El padre recibe el nuevo monto y su enlace, por WhatsApp, SMS o correo.' },
-  { cuando: 'Cuando paga', titulo: 'Se cobra completo', detalle: 'Mensualidad y mora, con su recibo. El colegio dejó de regalar ese dinero.', tono: 'bueno' },
+  { cuando: 'Cuando paga', titulo: 'Se cobra completo', detalle: 'Mensualidad y mora juntas. El colegio dejó de regalar ese dinero.', tono: 'bueno' },
 ];
 
 const TONOS = {
