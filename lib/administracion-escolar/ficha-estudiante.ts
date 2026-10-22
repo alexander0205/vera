@@ -40,6 +40,7 @@ import {
 import { CANALES_DEL_AVISO } from '@/lib/administracion-escolar/ciclo-cobro';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { cargarPlan, type PlanCargado } from '@/lib/administracion-escolar/plan-matricula';
+import { esVentaSql, moraFacturaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
 
 /** Ficha del alumno + deuda + el contacto de Contactos al que está enlazado. */
 export async function estudianteConDependiente(teamId: number, estudianteId: number) {
@@ -405,11 +406,15 @@ export async function facturasSueltasDeEstudiante(teamId: number, dependienteId:
         SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
          WHERE p.ecf_document_id = ecf_documents.id AND p.team_id = ${teamId}
       ), 0)::int`,
+      // Lo que se debe, con la regla de Cuentas por cobrar. Monto menos pagos
+      // contaba como deuda una factura ANULADA y una histórica ya pagada.
+      saldoCentavos: sql<number>`(${saldoFacturaSql('ecf_documents')})::int`,
     })
     .from(ecfDocuments)
     .where(and(
       eq(ecfDocuments.teamId, teamId),
       eq(ecfDocuments.dependienteId, dependienteId),
+      sql`${esVentaSql('ecf_documents')}`,
       // Las que ya tienen cargo salen en su mes, con su concepto: repetirlas
       // aquí haría creer que se le cobró dos veces.
       sql`NOT EXISTS (SELECT 1 FROM admin_escolar_cargos c WHERE c.ecf_document_id = ecf_documents.id)`,
@@ -421,6 +426,51 @@ export async function facturasSueltasDeEstudiante(teamId: number, dependienteId:
     ...f,
     lineas: lineasDelAlumno(lineasJson, dependienteId),
   }));
+}
+
+/**
+ * Lo que la familia debe en Facturación por facturas que NO son de este alumno.
+ *
+ * Las facturas hechas en Facturación a nombre del padre, sin beneficiario, no
+ * tienen cómo llegar a la ficha de ningún hijo: no hay de quién son. Y la
+ * secretaria que abría la ficha del alumno veía «Al día» con la familia
+ * debiendo, y tenía que irse a Cuentas por cobrar para enterarse.
+ *
+ * Se enseña como aviso y NO se suma a la deuda del alumno: repartirla entre
+ * los hermanos sería inventar de quién es. Entran también las de un hermano
+ * —son deuda de la familia— y quedan fuera las de este alumno, que ya salen en
+ * su lista con su saldo, y las que cuelgan de un cargo, que son del plan.
+ *
+ * La mora de esas facturas se devuelve aparte (`moraCentavos`), como en la
+ * ficha de la familia: es deuda y entra en el total, pero no se mezcla con el
+ * saldo de la factura.
+ */
+export async function deudaFamiliarEnFacturacion(
+  teamId: number,
+  clientId: number | null,
+  dependienteId: number | null,
+): Promise<{ saldoCentavos: number; facturas: number; moraCentavos: number }> {
+  if (!clientId) return { saldoCentavos: 0, facturas: 0, moraCentavos: 0 };
+  const filas = await db.execute(sql`
+    SELECT COALESCE(SUM(s.capital + s.mora), 0)::bigint AS saldo,
+           COALESCE(SUM(s.mora), 0)::bigint AS mora,
+           count(*)::int AS facturas
+      FROM (
+        SELECT ${saldoFacturaSql('x')} AS capital, ${moraFacturaSql('x')} AS mora
+          FROM ecf_documents x
+         WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
+           AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
+           AND ${esVentaSql('x')}
+           AND x.dependiente_id IS DISTINCT FROM ${dependienteId}
+           AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g WHERE g.ecf_document_id = x.id)
+      ) s
+     WHERE s.capital + s.mora > 0`);
+  const f = (filas as unknown as Record<string, unknown>[])[0] ?? {};
+  return {
+    saldoCentavos: Number(f.saldo ?? 0),
+    facturas: Number(f.facturas ?? 0),
+    moraCentavos: Number(f.mora ?? 0),
+  };
 }
 
 /**
@@ -618,11 +668,12 @@ export async function fichaEstudiante(teamId: number, estudianteId: number) {
 
   // Las facturas viejas del alumno, las que no salieron de ningún cargo. Va
   // después porque hace falta el `dependienteId` del estudiante ya leído.
-  const [facturasSueltas, pagosSueltos, avisos, avisosProgramados] = await Promise.all([
+  const [facturasSueltas, pagosSueltos, avisos, avisosProgramados, deudaFamiliar] = await Promise.all([
     facturasSueltasDeEstudiante(teamId, estudiante.dependienteId),
     pagosSueltosDeEstudiante(teamId, estudiante.dependienteId),
     avisosDeEstudiante(teamId, estudianteId),
     avisosProgramadosDeEstudiante(teamId, estudianteId),
+    deudaFamiliarEnFacturacion(teamId, estudiante.facturarAClientId, estudiante.dependienteId),
   ]);
 
   /**
@@ -633,13 +684,11 @@ export async function fichaEstudiante(teamId: number, estudianteId: number) {
    * RD$5,500 sin cobrar delante. No hay doble conteo posible — las facturas
    * que sí cuelgan de un cargo están excluidas de esta lista.
    */
-  const deudaFacturasCentavos = facturasSueltas.reduce(
-    (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0,
-  );
+  const deudaFacturasCentavos = facturasSueltas.reduce((s, f) => s + f.saldoCentavos, 0);
 
   return {
     estudiante, matriculas, cargos, pagos, tutores, planes, cobro,
-    facturasSueltas, pagosSueltos, deudaFacturasCentavos, avisos, avisosProgramados,
+    facturasSueltas, pagosSueltos, deudaFacturasCentavos, deudaFamiliar, avisos, avisosProgramados,
   };
 }
 
