@@ -1,6 +1,25 @@
 import 'server-only';
-import sharp from 'sharp';
 import { randomBytes } from 'crypto';
+
+/**
+ * sharp se carga PEREZOSO, no con un `import` arriba.
+ *
+ * El módulo nativo de sharp (`@img/sharp-win32-x64`) a veces no abre en el
+ * runtime de dev de Next en Windows —`ERR_DLOPEN_FAILED: procedure not found`—
+ * tras un `pnpm install` de otro worktree. Con el import arriba, ese fallo
+ * tumbaba CUALQUIER página que solo importara este módulo para `urlDeFoto`
+ * —que ni toca sharp—: la ficha del alumno y la de la familia caían en 500 por
+ * no poder redimensionar una foto que ni se estaba subiendo.
+ *
+ * Cargándolo dentro de las funciones que de verdad lo usan (validar/procesar al
+ * SUBIR), leer y mostrar fotos no depende del binario. Si no abre, solo falla la
+ * subida de fotos (degradada), no la pantalla entera.
+ */
+let _sharp: typeof import('sharp').default | null = null;
+async function cargarSharp() {
+  if (!_sharp) _sharp = (await import('sharp')).default;
+  return _sharp;
+}
 
 /**
  * Almacenamiento de fotos (estudiantes, personal, productos, logo…).
@@ -54,6 +73,7 @@ export interface ImagenValida {
 export async function validarImagen(entrada: Buffer): Promise<ImagenValida | null> {
   if (entrada.length === 0 || entrada.length > MAX_BYTES_SUBIDA) return null;
   try {
+    const sharp = await cargarSharp();
     const meta = await sharp(entrada).metadata();
     if (!meta.format || !FORMATOS_ACEPTADOS.has(meta.format)) return null;
     if (!meta.width || !meta.height) return null;
@@ -81,6 +101,7 @@ export interface OpcionesProceso {
  */
 export async function procesarImagen(entrada: Buffer, opciones: OpcionesProceso = {}): Promise<Buffer> {
   const lado = opciones.lado ?? LADO_FOTO;
+  const sharp = await cargarSharp();
   return sharp(entrada)
     .rotate()
     .resize(lado, lado, { fit: 'inside', withoutEnlargement: true })
@@ -129,6 +150,7 @@ export async function subirFotoConMiniatura(
     procesarImagen(entrada, { lado: LADO_FOTO }),
     procesarImagen(entrada, { lado: LADO_MINIATURA, calidad: 75 }),
   ]);
+  const sharp = await cargarSharp();
   const meta = await sharp(grande).metadata();
   const [ref, refMiniatura] = await Promise.all([
     guardarJpeg(grande, keyHint),

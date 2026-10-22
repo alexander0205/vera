@@ -31,7 +31,7 @@ const ESTADO: Record<string, { label: string; clase: string }> = {
 };
 
 export function NotasMoraTable({
-  notas, conEstado = true,
+  notas, conEstado = true, enlazarDocumentos = true,
 }: {
   notas: NotaMoraFila[];
   /**
@@ -40,6 +40,8 @@ export function NotasMoraTable({
    * pagadas y el estado es lo que las distingue.
    */
   conEstado?: boolean;
+  /** En Gobernanza hay roles que pueden consultar la cartera sin entrar al módulo Facturación. */
+  enlazarDocumentos?: boolean;
 }) {
   if (notas.length === 0) return null;
 
@@ -75,12 +77,14 @@ export function NotasMoraTable({
                 return (
                   <tr key={nd.id} className="bg-white">
                     <td className="px-4 py-2.5">
-                      <Link
-                        href={`/dashboard/facturas/${nd.id}`}
-                        className="whitespace-nowrap font-mono text-xs text-zero-700 underline decoration-zero-200 underline-offset-2 hover:decoration-zero-600"
-                      >
-                        {nd.codigo ?? `ND #${nd.id}`}
-                      </Link>
+                      {enlazarDocumentos ? (
+                        <Link
+                          href={`/dashboard/facturas/${nd.id}`}
+                          className="whitespace-nowrap font-mono text-xs text-zero-700 underline decoration-zero-200 underline-offset-2 hover:decoration-zero-600"
+                        >
+                          {nd.codigo ?? `ND #${nd.id}`}
+                        </Link>
+                      ) : <span className="whitespace-nowrap font-mono text-xs text-gray-700">{nd.codigo ?? `ND #${nd.id}`}</span>}
                     </td>
                     <td className="px-3 py-2.5 text-xs tabular-nums text-gray-600">
                       {nd.fechaEmision ? fmtFechaCorta(nd.fechaEmision as string) : ''}

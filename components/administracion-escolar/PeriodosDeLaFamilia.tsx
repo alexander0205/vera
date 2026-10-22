@@ -42,10 +42,11 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { cargoDeFila, mesesConFactura, mesYaFacturado, montoCorregible } from '@/lib/administracion-escolar/acciones-cargo';
 import type { HijoConPeriodos, PeriodoDeHijo, FilaMes } from '@/lib/administracion-escolar/periodos-familia';
 import { CargoActionsMenu } from './CargoActionsMenu';
+import { ChipEstado as Chip } from './ChipEstado';
 import { CrearCargoEstudianteDialog } from './CrearCargoEstudianteDialog';
 import { HuecoDelLapiz, MontoEditable } from './MontoEditable';
 import type { AccionesDeCargo } from './useAccionesDeCargo';
@@ -92,27 +93,6 @@ const tituloFila = (f: FilaMes) =>
 
 // ─── Piezas visuales ─────────────────────────────────────────────────────────
 
-const CHIP = {
-  verde:  { bg: '#E8F6EF', fg: '#0F7A4A' },
-  rojo:   { bg: '#FDECEC', fg: '#B4231F' },
-  ambar:  { bg: '#FEF6E7', fg: '#B45309' },
-  violeta:{ bg: '#F3EFFE', fg: '#6D28D9' },
-  gris:   { bg: '#F2F4FA', fg: '#4A5164' },
-} as const;
-
-function Chip({ tono, children }: { tono: keyof typeof CHIP; children: React.ReactNode }) {
-  const c = CHIP[tono];
-  return (
-    <Box component="span" sx={{
-      display: 'inline-grid', placeItems: 'center', height: 22, px: 1.125,
-      borderRadius: '6px', bgcolor: c.bg, color: c.fg,
-      fontSize: '0.6875rem', fontWeight: 600, whiteSpace: 'nowrap',
-    }}>
-      {children}
-    </Box>
-  );
-}
-
 function EstadoChip({ fila, hoy }: { fila: FilaMes; hoy: string }) {
   if (fila.saldoCentavos <= 0) return <Chip tono="verde">Pagado</Chip>;
   // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
@@ -122,6 +102,35 @@ function EstadoChip({ fila, hoy }: { fila: FilaMes; hoy: string }) {
   if (fila.fechaVencimiento && fila.fechaVencimiento < hoy) return <Chip tono="rojo">Vencido</Chip>;
   if (fila.saldoCentavos < fila.montoCentavos) return <Chip tono="ambar">Parcial</Chip>;
   return <Chip tono="gris">Pendiente</Chip>;
+}
+
+/**
+ * La mora de un cargo: las notas de débito (tipo 33) de su factura.
+ *
+ * Enseña lo que sigue impago —si ya se pagó, lo recargado en gris— y enlaza a
+ * la nota cuando es una sola, o a la factura padre si hay varias. Sin mora, un
+ * guion. De una línea para caber en su columna estrecha.
+ */
+function MoraFamilia({ fila }: { fila: FilaMes }) {
+  if (!fila.moraCentavos || fila.moraCentavos <= 0) {
+    return <Box component="span" sx={{ color: '#C3C8D4' }}>—</Box>;
+  }
+  const saldada = fila.moraSaldoCentavos <= 0;
+  const href = fila.moraNotaCount === 1 && fila.moraNotaId != null
+    ? `/dashboard/facturas/${fila.moraNotaId}`
+    : fila.ecfDocumentId != null ? `/dashboard/facturas/${fila.ecfDocumentId}` : null;
+  const inner = (
+    <Box component="span" sx={{
+      fontWeight: saldada ? 400 : 600,
+      color: saldada ? '#6B7280' : '#D4183D',
+      fontVariantNumeric: 'tabular-nums',
+    }}>
+      {fmtDOP(saldada ? fila.moraCentavos : fila.moraSaldoCentavos)}
+    </Box>
+  );
+  return href
+    ? <Link href={href} title="Ver la nota de débito por mora" style={{ textDecoration: 'none' }}>{inner}</Link>
+    : inner;
 }
 
 const ENCABEZADO = {
@@ -210,7 +219,22 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
     });
   }
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  /**
+   * Tarjetas plegadas, por estudianteId. Alex pidió poder minimizar la tarjeta
+   * de cada hijo (tipo acordeón): con varios hijos, en «General» hay que bajar
+   * por todas, y plegar las que no interesan deja a la vista solo la que se
+   * está mirando. Por defecto abiertas.
+   */
+  const [colapsadas, setColapsadas] = useState<Set<number>>(new Set());
+  function alternarColapso(estudianteId: number) {
+    setColapsadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(estudianteId)) next.delete(estudianteId); else next.add(estudianteId);
+      return next;
+    });
+  }
+
+  const hoy = hoyRD();
   const hijos = data?.hijos ?? [];
 
   /**
@@ -297,7 +321,12 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
   }
   if (hijos.length === 0) return null;
 
-  const visibles = soloHijo == null ? hijos : hijos.filter((h) => h.estudianteId === soloHijo);
+  // En «General» NO se listan las tarjetas de los hijos: esa vista es la de la
+  // familia —sus cuentas por cobrar, notas de débito, pagos y demás van en las
+  // pestañas de abajo—, y el total de todos los hijos uno debajo de otro era
+  // justo lo que sobraba. Cada hijo se abre desde su pastilla, y solo entonces
+  // se pinta su tarjeta con sus cargos.
+  const visibles = soloHijo == null ? [] : hijos.filter((h) => h.estudianteId === soloHijo);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -309,39 +338,42 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
         están leyendo, y con un selector por hijo se podían acabar comparando
         dos años distintos creyendo que era el mismo.
 
-        Las pastillas de estudiante solo con más de un hijo: con uno serían
-        «Todos» y su nombre, las dos enseñando lo mismo. El año se dice
-        siempre, aunque no haya otro que elegir —entonces como rótulo y no como
-        desplegable, que ofrecer una lista de una opción es prometer algo que
-        no se puede hacer—.
+        Las pastillas van SIEMPRE, también con un solo hijo. Antes se escondían
+        con uno —«General» y su nombre decían lo mismo—, pero ahora «General»
+        no lista las tarjetas de los hijos: es la vista de la familia (sus
+        cuentas por cobrar y demás, en las pestañas de abajo). La pastilla de
+        cada hijo es la única forma de abrir su tarjeta, así que tiene que estar
+        aunque el hijo sea uno solo. El año se dice siempre, aunque no haya otro
+        que elegir —entonces como rótulo y no como desplegable, que ofrecer una
+        lista de una opción es prometer algo que no se puede hacer—.
       */}
-      {anios.length > 0 && (
-        <Paper
-          variant="outlined"
-          sx={{
-            borderRadius: '14px', borderColor: '#E6E8F0', p: 0.875,
-            display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap',
-            boxShadow: '0 1px 2px rgba(15,17,24,.03)',
-          }}
-        >
-          {hijos.length > 1 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0, overflowX: 'auto' }}>
-              <Pastilla activa={soloHijo == null} insignia={String(hijos.length)} onClick={() => setSoloHijo(null)}>
-                Todos los estudiantes
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: '14px', borderColor: '#E6E8F0', p: 0.875,
+          display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap',
+          boxShadow: '0 1px 2px rgba(15,17,24,.03)',
+        }}
+      >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            {/* «General»: la vista de la familia, por defecto. No muestra las
+                tarjetas de los hijos; esas se abren eligiendo al hijo. */}
+            <Pastilla activa={soloHijo == null} insignia={String(hijos.length)} onClick={() => setSoloHijo(null)}>
+              General
+            </Pastilla>
+            {hijos.map((h) => (
+              <Pastilla
+                key={h.estudianteId}
+                activa={soloHijo === h.estudianteId}
+                insignia={iniciales(h.alumno)}
+                onClick={() => setSoloHijo(h.estudianteId)}
+              >
+                {h.alumno}
               </Pastilla>
-              {hijos.map((h) => (
-                <Pastilla
-                  key={h.estudianteId}
-                  activa={soloHijo === h.estudianteId}
-                  insignia={iniciales(h.alumno)}
-                  onClick={() => setSoloHijo(h.estudianteId)}
-                >
-                  {h.alumno}
-                </Pastilla>
-              ))}
-            </Box>
-          )}
+            ))}
+          </Box>
 
+          {anios.length > 0 && (
           <Box sx={{
             // Siempre a la derecha, haya pastillas o no: es el mismo control
             // en el mismo sitio para una familia de un hijo y para una de
@@ -380,8 +412,8 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
               </Typography>
             )}
           </Box>
-        </Paper>
-      )}
+          )}
+      </Paper>
 
       {visibles.map((h) => {
         const periodos = h.periodos;
@@ -438,6 +470,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
         const totalCargos = cargos.reduce((s, f) => s + f.montoCentavos, 0);
         const cobrados = cargos.filter((f) => f.saldoCentavos <= 0).length;
         const ultimoPrevisto = previstos.at(-1);
+        const colapsado = colapsadas.has(h.estudianteId);
 
         return (
           <Paper
@@ -448,8 +481,16 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
               boxShadow: '0 1px 2px rgba(15,17,24,.03)',
             }}
           >
-            <CabeceraHijo hijo={h} periodo={p} />
+            <CabeceraHijo
+              hijo={h}
+              periodo={p}
+              colapsado={colapsado}
+              onToggle={() => alternarColapso(h.estudianteId)}
+            />
 
+            {/* El cuerpo de la tarjeta se oculta cuando está plegada: queda solo
+                la cabecera con el resumen (curso, deuda, por salir). */}
+            {!colapsado && (<>
             {/* Por qué estos meses van a ir saliendo solos — o por qué no van a
                 salir, que es lo que nadie descubre a tiempo. */}
             <Box sx={{ px: 2.75, pt: 1.75 }}>
@@ -493,7 +534,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                     gridTemplateColumns: [
                       puedeFacturar ? '30px' : null,
                       puedeFacturar ? 'minmax(140px, 1fr)' : 'minmax(150px, 1fr)',
-                      '92px 92px 132px',
+                      '92px 92px 132px 96px',
                       // La columna de acción está SIEMPRE: quien solo puede
                       // mirar también abre la factura desde los tres puntos.
                       // Mide lo que lleva dentro. Con cobro, los 88 px que ya
@@ -516,6 +557,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Vence</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'center' }}>Estado</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Monto</Box>
+                    <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Mora</Box>
                     <Box sx={{ ...ENCABEZADO, textAlign: 'right' }}>Acción</Box>
 
                     {cargosVisibles.map((f) => {
@@ -579,6 +621,12 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                                 editable={montoCorregible(c, puedeGestionar)}
                                 concepto={tituloFila(f)} onGuardado={alCambiar} />
                             ) : <>{fmtDOP(f.montoCentavos)}<HuecoDelLapiz /></>}
+                          </Box>
+                          {/* La mora de la factura de este cargo, enlazada a su
+                              nota de débito. El colegio la pedía a la vista aquí
+                              y no solo en Facturación. */}
+                          <Box sx={{ ...CELDA, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            <MoraFamilia fila={f} />
                           </Box>
                           {/*
                             Cobrar el mes sin salir de la familia.
@@ -687,8 +735,9 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                       }}>
                         {fmtDOP(totalCargos)}<HuecoDelLapiz />
                       </Box>
-                      {/* La columna de acción no suma nada: va vacía para que
-                          el total siga cayendo bajo «Monto» y no se corra. */}
+                      {/* Mora y acción no suman nada: van vacías para que el
+                          total siga cayendo bajo «Monto» y no se corra. */}
+                      <Box />
                       <Box />
                     </Box>
                   </Box>
@@ -762,6 +811,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
               </Box>
               )}
             </Box>
+            </>)}
           </Paper>
         );
       })}
@@ -968,9 +1018,13 @@ function TiraAutomatizacion({ periodo }: { periodo: PeriodoDeHijo }) {
   );
 }
 
-function CabeceraHijo({ hijo, periodo }: {
+function CabeceraHijo({ hijo, periodo, colapsado, onToggle }: {
   hijo: HijoConPeriodos;
   periodo?: PeriodoDeHijo;
+  /** Si la tarjeta está plegada (solo se ve esta cabecera). */
+  colapsado?: boolean;
+  /** Pliega/despliega la tarjeta. Sin él, no se pinta el botón de acordeón. */
+  onToggle?: () => void;
 }) {
   const alDia = (periodo?.pendienteCentavos ?? 0) <= 0;
   const porCobrar = periodo?.porCobrarCentavos ?? 0;
@@ -979,7 +1033,8 @@ function CabeceraHijo({ hijo, periodo }: {
     <Box sx={{
       px: 2.75, pt: 2, pb: 1.875,
       display: 'flex', alignItems: 'center', gap: 1.75, flexWrap: 'wrap',
-      borderBottom: '1px solid #EDEFF5',
+      // Sin línea inferior cuando está plegada: la cabecera es toda la tarjeta.
+      borderBottom: colapsado ? 'none' : '1px solid #EDEFF5',
     }}>
       <Box sx={{
         width: 40, height: 40, flex: '0 0 40px', borderRadius: '50%',
@@ -1029,6 +1084,30 @@ function CabeceraHijo({ hijo, periodo }: {
           escribirlo otra vez en cada tarjeta lo pone tres veces en pantalla
           para una familia de tres hijos. Lo que sí es de este hijo —su
           curso— ya está en el chip de al lado del nombre. */}
+
+      {/* Acordeón: pliega/despliega la tarjeta de este hijo. Es un botón aparte
+          del nombre (que es un enlace a su ficha), para no pelearse con él. */}
+      {onToggle && (
+        <Box
+          component="button"
+          type="button"
+          onClick={onToggle}
+          aria-label={colapsado ? 'Desplegar tarjeta' : 'Plegar tarjeta'}
+          aria-expanded={!colapsado}
+          sx={{
+            flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 30, height: 30, borderRadius: '8px',
+            border: '1px solid #E6E8F0', bgcolor: '#fff', color: '#6B7280', cursor: 'pointer',
+            transition: 'background .12s, color .12s',
+            '&:hover': { bgcolor: '#F2F4FA', color: '#2A48C4' },
+          }}
+        >
+          <ChevronDown
+            size={16}
+            style={{ transform: colapsado ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}
+          />
+        </Box>
+      )}
     </Box>
   );
 }

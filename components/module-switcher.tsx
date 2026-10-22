@@ -108,8 +108,12 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
               key={mod}
               component="a"
               href={active ? undefined : moduleUrl(mod)}
-              onClick={() => {
+              onClick={(e) => {
                 setAnchor(null);
+                // El aviso de cambios sin guardar cancela el enlace durante la
+                // captura del click. Cerramos el menú, pero no anunciamos una
+                // navegación ni mostramos el loader si quedó cancelada.
+                if (e.defaultPrevented) return;
                 // Sin preventDefault: el enlace navega igual, el loader solo
                 // cubre el hueco hasta que el módulo nuevo pinte.
                 if (!active) {

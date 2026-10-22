@@ -460,7 +460,7 @@ export function ConceptosPanel() {
              entera: la recarga volvía a pedir período, estructura, conceptos y
              tarifas para una fila que ya se sabe cómo quedó, y de paso reabría
              todas las ramas del árbol y perdía dónde estabas mirando. */
-          onGuardado={(precio) => {
+          onGuardado={(precio, producto) => {
             setModal(null);
             setData((d) => d && ({
               ...d,
@@ -475,6 +475,13 @@ export function ConceptosPanel() {
                 )),
                 precio,
               ],
+              // El servicio recién creado entra YA al catálogo en memoria: sin
+              // esto la fila «Se factura como …» no encontraba el producto y la
+              // referencia solo aparecía al recargar, y el mismo servicio no se
+              // podía reusar en otro grado hasta recargar (lo que Alex pedía).
+              productos: producto && !d.productos.some((p) => p.id === producto.id)
+                ? [...d.productos, producto].sort((a, b) => a.nombre.localeCompare(b.nombre))
+                : d.productos,
             }));
           }}
         />
@@ -604,7 +611,7 @@ function ModalTarifa({
   productos: Producto[];
   usados: number[];
   onCerrar: () => void;
-  onGuardado: (precio: Precio) => void;
+  onGuardado: (precio: Precio, producto?: Producto | null) => void;
 }) {
   const [busca, setBusca] = useState('');
   const [elegido, setElegido] = useState<Producto | null>(null);
@@ -670,8 +677,8 @@ function ModalTarifa({
       if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo guardar.'); return; }
       // `guardado` y no `precio`: aquí `precio` ya es el importe que se teclea
       // en el formulario, y reusar el nombre lo tapaba.
-      const { precio: guardado } = await r.json();
-      onGuardado(guardado as Precio);
+      const { precio: guardado, producto } = await r.json();
+      onGuardado(guardado as Precio, (producto ?? null) as Producto | null);
     } finally { setOcupado(false); }
   }
 

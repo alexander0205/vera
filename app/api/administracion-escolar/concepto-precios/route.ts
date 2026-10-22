@@ -141,16 +141,22 @@ export async function POST(req: NextRequest) {
   // del servicio recién creado, o el del servicio existente que se eligió.
   let montoCentavos = monto != null ? Math.round(Number(monto) * 100) : null;
   let prodId: number | null = null;
+  // El servicio recién creado, para devolvérselo a la pantalla: así la fila
+  // «Se factura como …» y la referencia aparecen al instante y el servicio se
+  // puede reusar en otros grados sin recargar (lo que Alex pedía arreglar).
+  let productoCreado: { id: number; nombre: string; referencia: string | null; precio: number } | null = null;
 
   if (nuevoProducto?.nombre?.trim()) {
     const precioNuevo = Math.round(Number(nuevoProducto.precio) * 100);
     if (!Number.isFinite(precioNuevo) || precioNuevo < 0) {
       return NextResponse.json({ error: 'Precio inválido' }, { status: 400 });
     }
+    const nombreLimpio = String(nuevoProducto.nombre).trim();
+    const refLimpia = nuevoProducto.referencia ? String(nuevoProducto.referencia).trim().slice(0, 100) : null;
     const [creado] = await db.insert(products).values({
       teamId: t,
-      nombre: String(nuevoProducto.nombre).trim(),
-      referencia: nuevoProducto.referencia ? String(nuevoProducto.referencia).trim().slice(0, 100) : null,
+      nombre: nombreLimpio,
+      referencia: refLimpia,
       precio: precioNuevo,
       // La enseñanza es servicio exento de itbis; el POS no la vende en mostrador.
       tasaItbis: 'exento',
@@ -160,6 +166,7 @@ export async function POST(req: NextRequest) {
     }).returning({ id: products.id, precio: products.precio });
     prodId = creado.id;
     montoCentavos ??= creado.precio;
+    productoCreado = { id: creado.id, nombre: nombreLimpio, referencia: refLimpia, precio: creado.precio };
   } else if (productId != null) {
     const [p] = await db.select({ id: products.id, precio: products.precio }).from(products)
       .where(and(eq(products.id, Number(productId)), eq(products.teamId, t))).limit(1);
@@ -241,7 +248,7 @@ export async function POST(req: NextRequest) {
     console.error('[concepto-precios] devengo al alta de tarifa falló:', e);
   }
 
-  return NextResponse.json({ precio: row, cargosCreados });
+  return NextResponse.json({ precio: row, cargosCreados, producto: productoCreado });
 }
 
 /**

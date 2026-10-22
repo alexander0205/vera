@@ -131,9 +131,13 @@ export function EstudianteFicha({ estudiante: e }: Props) {
           <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
         ) : (
           <div className="space-y-2">
-            <TotalRow icon={Receipt} tone="gray" label="Deuda total" value={fmtDOP(totales.deuda)} />
-            <TotalRow icon={HandCoins} tone="verde" label="Pago total" value={fmtDOP(totales.pagado)} />
-            <TotalRow icon={AlertTriangle} tone="red" label="Pendiente total" value={fmtDOP(totales.pendiente)}
+            {/* Etiquetas de anualidad (md mora 21-oct): estas cifras suman TODOS
+                los cargos del año, no lo exigible hoy. «Pendiente total» leía
+                como deuda inmediata; se nombra la anualidad para que no se
+                confunda con lo vencido. */}
+            <TotalRow icon={Receipt} tone="gray" label="Total del año" value={fmtDOP(totales.deuda)} />
+            <TotalRow icon={HandCoins} tone="verde" label="Pagado" value={fmtDOP(totales.pagado)} />
+            <TotalRow icon={AlertTriangle} tone="red" label="Pendiente anualidad" value={fmtDOP(totales.pendiente)}
               muted={totales.pendiente === 0} />
           </div>
         )}
