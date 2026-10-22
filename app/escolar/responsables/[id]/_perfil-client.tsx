@@ -225,16 +225,13 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   */
   const facturadoCargos = data.cargos.reduce((s, g) => s + g.montoCentavos, 0);
   const pendienteCargos = data.cargos.reduce((s, g) => s + g.saldoCentavos, 0);
-  // El saldo viene del servidor con la regla de Cuentas por cobrar: una
-  // histórica marcada pagada sin pagos registrados no es deuda, aunque monto
-  // menos pagos diga que sí.
-  const deudaFacturas = data.facturas.reduce((s, f) => s + f.saldoCentavos, 0);
+  const deudaFacturas = data.facturas.reduce(
+    (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0);
   const facturadoSueltas = data.facturas.reduce((s, f) => s + f.montoTotal, 0);
-  // Lo cobrado es lo facturado que ya no se debe. Así no puede pasar de lo
-  // facturado —un cobro de más sobre una factura con centavos— y cuadra con
-  // el pendiente de arriba.
+  // Acotado al monto: un cobro de más —una transferencia redonda sobre una
+  // factura con centavos— no puede hacer que lo cobrado pase de lo facturado.
   const cobradoSueltas = data.facturas.reduce(
-    (s, f) => s + Math.max(0, f.montoTotal - f.saldoCentavos), 0);
+    (s, f) => s + Math.min(f.pagadoCentavos, f.montoTotal), 0);
 
   const facturado = facturadoCargos + facturadoSueltas;
   const pendiente = pendienteCargos + deudaFacturas;
@@ -710,7 +707,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
                   { nombre: 'Pendiente', ancho: '120px', alinear: 'right' },
                 ]}
                 filas={data.facturas.map((f) => {
-                  const saldo = f.saldoCentavos;
+                  const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
                   return {
                     key: String(f.id),
                     celdas: [
@@ -845,7 +842,7 @@ function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
       ...d.facturas.map((f) => [
         f.fecha.slice(0, 10), f.encf || f.codigo || '',
         (f.montoTotal / 100).toFixed(2), (f.pagadoCentavos / 100).toFixed(2),
-        (f.saldoCentavos / 100).toFixed(2),
+        (Math.max(0, f.montoTotal - f.pagadoCentavos) / 100).toFixed(2),
       ]),
     ]);
   } else {

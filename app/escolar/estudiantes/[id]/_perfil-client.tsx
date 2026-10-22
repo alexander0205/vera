@@ -93,7 +93,7 @@ interface FichaResp {
    * Lo que la familia debe en Facturación por facturas que no son de este
    * alumno. Se enseña aparte: no es deuda suya.
    */
-  deudaFamiliar: { saldoCentavos: number; facturas: number };
+  deudaFamiliar: { saldoCentavos: number; facturas: number; moraCentavos: number };
   /** Pagos de esas facturas: no pasan por ningún cargo. */
   pagosSueltos: PagoSuelto[];
   /** Recordatorios ya mandados: constancia, y marca por canal en cada cargo. */
@@ -150,7 +150,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
   const cobro      = data?.cobro ?? null;
   const facturasSueltas = data?.facturasSueltas ?? [];
   const deudaFacturas = data?.deudaFacturasCentavos ?? 0;
-  const deudaFamiliar = data?.deudaFamiliar ?? { saldoCentavos: 0, facturas: 0 };
+  const deudaFamiliar = data?.deudaFamiliar ?? { saldoCentavos: 0, facturas: 0, moraCentavos: 0 };
   const pagosSueltos = data?.pagosSueltos ?? [];
   const avisos = data?.avisos ?? [];
   const avisosProgramados = data?.avisosProgramados ?? [];
@@ -487,7 +487,11 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
               <span className="block text-xs text-amber-800/80">
                 {deudaFamiliar.facturas} {deudaFamiliar.facturas === 1 ? 'factura' : 'facturas'} a
                 nombre de {responsable.razonSocial} que no {deudaFamiliar.facturas === 1 ? 'es' : 'son'} de
-                este alumno. No se {deudaFamiliar.facturas === 1 ? 'suma' : 'suman'} a su pendiente.
+                este alumno
+                {/* La mora se nombra aparte, como en la ficha de la familia: no
+                    es parte de la factura, es su nota de débito. */}
+                {deudaFamiliar.moraCentavos > 0 && <>, con {fmtDOP(deudaFamiliar.moraCentavos)} de mora</>}.
+                {' '}No se {deudaFamiliar.facturas === 1 ? 'suma' : 'suman'} a su pendiente.
               </span>
             </span>
           </p>

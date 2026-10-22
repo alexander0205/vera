@@ -52,7 +52,7 @@ interface Detalle {
   hijos: { estudianteId: number | null; nombre: string; curso: string | null;
     estado: string | null; deudaCentavos: number; cargos: number }[];
   facturas: { id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number; saldoCentavos: number }[];
+    montoTotal: number; pagadoCentavos: number }[];
   avisos: { id: number; enviadoAt: string; tipo: string; canal: string;
     destino: string | null; alumno: string; concepto: string | null }[];
 }
@@ -406,7 +406,7 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
   const deuda = fila.deudaEscolarCentavos + fila.deudaFacturasCentavos;
   const hijos = detalle?.hijos ?? [];
   const facturasPendientes = (detalle?.facturas ?? [])
-    .filter((f) => f.saldoCentavos > 0).length;
+    .filter((f) => f.montoTotal - f.pagadoCentavos > 0).length;
 
   return (
     // Misma tarjeta que la ficha del estudiante: encabezado con iniciales,

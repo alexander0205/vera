@@ -40,7 +40,7 @@ import {
 import { CANALES_DEL_AVISO } from '@/lib/administracion-escolar/ciclo-cobro';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { cargarPlan, type PlanCargado } from '@/lib/administracion-escolar/plan-matricula';
-import { esVentaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
+import { esVentaSql, moraFacturaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
 
 /** Ficha del alumno + deuda + el contacto de Contactos al que está enlazado. */
 export async function estudianteConDependiente(teamId: number, estudianteId: number) {
@@ -385,17 +385,23 @@ export async function facturasSueltasDeEstudiante(teamId: number, dependienteId:
  * los hermanos sería inventar de quién es. Entran también las de un hermano
  * —son deuda de la familia— y quedan fuera las de este alumno, que ya salen en
  * su lista con su saldo, y las que cuelgan de un cargo, que son del plan.
+ *
+ * La mora de esas facturas se devuelve aparte (`moraCentavos`), como en la
+ * ficha de la familia: es deuda y entra en el total, pero no se mezcla con el
+ * saldo de la factura.
  */
 export async function deudaFamiliarEnFacturacion(
   teamId: number,
   clientId: number | null,
   dependienteId: number | null,
-): Promise<{ saldoCentavos: number; facturas: number }> {
-  if (!clientId) return { saldoCentavos: 0, facturas: 0 };
+): Promise<{ saldoCentavos: number; facturas: number; moraCentavos: number }> {
+  if (!clientId) return { saldoCentavos: 0, facturas: 0, moraCentavos: 0 };
   const filas = await db.execute(sql`
-    SELECT COALESCE(SUM(s.saldo), 0)::bigint AS saldo, count(*)::int AS facturas
+    SELECT COALESCE(SUM(s.capital + s.mora), 0)::bigint AS saldo,
+           COALESCE(SUM(s.mora), 0)::bigint AS mora,
+           count(*)::int AS facturas
       FROM (
-        SELECT ${saldoFacturaSql('x')} AS saldo
+        SELECT ${saldoFacturaSql('x')} AS capital, ${moraFacturaSql('x')} AS mora
           FROM ecf_documents x
          WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
            AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
@@ -403,9 +409,13 @@ export async function deudaFamiliarEnFacturacion(
            AND x.dependiente_id IS DISTINCT FROM ${dependienteId}
            AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g WHERE g.ecf_document_id = x.id)
       ) s
-     WHERE s.saldo > 0`);
+     WHERE s.capital + s.mora > 0`);
   const f = (filas as unknown as Record<string, unknown>[])[0] ?? {};
-  return { saldoCentavos: Number(f.saldo ?? 0), facturas: Number(f.facturas ?? 0) };
+  return {
+    saldoCentavos: Number(f.saldo ?? 0),
+    facturas: Number(f.facturas ?? 0),
+    moraCentavos: Number(f.mora ?? 0),
+  };
 }
 
 /**
