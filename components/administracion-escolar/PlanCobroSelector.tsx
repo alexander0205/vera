@@ -17,12 +17,12 @@ import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/c
  * No cobra nada: los cargos nacen pendientes y salen en su estado de cuenta.
  */
 
-interface CuotaPlan {
+export interface CuotaPlan {
   cuotaId: number; numero: number; etiqueta: string; mes: number | null;
   fechaEmision: string; fechaVencimiento: string; montoCentavos: number; omitida: boolean;
 }
 
-interface LineaPlan {
+export interface LineaPlan {
   conceptoId: number; nombre: string; tipo: string;
   admiteBeca: boolean; montoCentavos: number; origen: string;
   cuotas: CuotaPlan[]; totalCentavos: number; omitidas: number;
@@ -38,6 +38,31 @@ interface LineaPlan {
 const fmtRD = (centavos: number) =>
   `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+
+/**
+ * El plan como quedaría con los precios propios puestos.
+ *
+ * Un precio propio es el de CADA cuota, no el del año: sala de tareas a 1,100
+ * son 1,100 al mes. Se reescriben las cuotas vivas y se recalcula el total,
+ * para que lo que se enseña sea lo que el alumno va a deber de verdad.
+ *
+ * Suelta para que «Matricular desde SIGERD» sume a cada alumno de la lista con
+ * la misma cuenta con la que este selector lo enseña.
+ */
+export function aplicarPreciosPropios<L extends LineaPlan>(plan: L[], propios: Map<number, number>): L[] {
+  if (propios.size === 0) return plan;
+  return plan.map((l) => {
+    const propio = propios.get(l.conceptoId);
+    if (propio == null) return l;
+    const cuotas = l.cuotas.map((c) => (c.omitida ? c : { ...c, montoCentavos: propio }));
+    return {
+      ...l,
+      montoCentavos: propio,
+      cuotas,
+      totalCentavos: cuotas.reduce((s, c) => s + (c.omitida ? 0 : c.montoCentavos), 0),
+    };
+  });
+}
 
 function resumenCuotas(l: LineaPlan): string {
   const vigentes = l.cuotas.filter((c) => !c.omitida);
@@ -62,7 +87,7 @@ function resumenCuotas(l: LineaPlan): string {
   return `${vigentes.length} cuotas${monto} · desde ${fmtFechaCorta(referencia)}`;
 }
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onCambio, onPrecios }: {
+export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, inicial, onPlan, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
@@ -74,6 +99,18 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
    * nacía con otro.
    */
   estudianteId?: number | null;
+  /**
+   * Lo que ya se había decidido para este alumno, para volver a enseñarlo al
+   * reabrirlo: qué conceptos llevaba marcados y qué precios propios. Sin esto
+   * el selector arranca con todo marcado y a precio de la sección. Solo se lee
+   * al llegar el plan.
+   */
+  inicial?: { conceptos?: number[]; precios?: { conceptoId: number; montoCentavos: number }[] };
+  /**
+   * Llegó el plan. Hasta entonces los conceptos marcados son una lista vacía
+   * que no significa «ninguno»: quien guarda lo que dice `onCambio` espera esto.
+   */
+  onPlan?: (lineas: LineaPlan[]) => void;
   /** Los conceptos marcados, cada vez que cambian. */
   onCambio: (conceptosIds: number[]) => void;
   /**
@@ -101,6 +138,12 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
   const [borrador, setBorrador] = useState('');
   /** Se va a Cancelar o pulsó Escape: el blur no debe aplicar lo escrito. */
   const cancelando = useRef(false);
+  // En una ref: el plan no se vuelve a pedir porque quien lo usa pase otra
+  // copia del mismo objeto en cada pintada.
+  const inicialRef = useRef(inicial);
+  inicialRef.current = inicial;
+  const onPlanRef = useRef(onPlan);
+  onPlanRef.current = onPlan;
 
   useEffect(() => {
     if (!periodoId || !cursoId) { setPlan([]); setPlanError(null); return; }
@@ -122,11 +165,17 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
         // grado, así que ya vienen filtrados por lo que ese grado paga. Quién es
         // la excepción se sabe con el alumno delante, no al configurar el
         // concepto meses antes.
-        setMarcados(new Set(lineas.map((l) => l.conceptoId)));
+        const ids = new Set(lineas.map((l) => l.conceptoId));
+        const ini = inicialRef.current;
+        setMarcados(ini?.conceptos ? new Set(ini.conceptos.filter((c) => ids.has(c))) : ids);
         // Cambió el curso o la fecha: el plan es otro y los precios escritos
-        // para el anterior no tienen por qué valer aquí.
-        setPropios(new Map());
+        // para el anterior no tienen por qué valer aquí. Los que se traen de
+        // antes sí, si su concepto sigue en el plan.
+        setPropios(new Map((ini?.precios ?? [])
+          .filter((p) => ids.has(p.conceptoId))
+          .map((p) => [p.conceptoId, p.montoCentavos])));
         setEditandoId(null);
+        onPlanRef.current?.(lineas);
       })
       .catch((e) => { if (vigente) setPlanError(e instanceof Error ? e.message : 'Error'); })
       .finally(() => { if (vigente) setPlanCargando(false); });
@@ -135,27 +184,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, onC
 
   useEffect(() => { onCambio([...marcados]); }, [marcados, onCambio]);
 
-  /**
-   * El plan como quedaría con los precios propios puestos.
-   *
-   * Un precio propio es el de CADA cuota, no el del año: sala de tareas a 1,100
-   * son 1,100 al mes. Se reescriben las cuotas vivas y se recalcula el total,
-   * para que lo que se enseña abajo sea lo que el alumno va a deber de verdad.
-   */
-  const planEfectivo = useMemo(() => {
-    if (propios.size === 0) return plan;
-    return plan.map((l) => {
-      const propio = propios.get(l.conceptoId);
-      if (propio == null) return l;
-      const cuotas = l.cuotas.map((c) => (c.omitida ? c : { ...c, montoCentavos: propio }));
-      return {
-        ...l,
-        montoCentavos: propio,
-        cuotas,
-        totalCentavos: cuotas.reduce((s, c) => s + (c.omitida ? 0 : c.montoCentavos), 0),
-      };
-    });
-  }, [plan, propios]);
+  const planEfectivo = useMemo(() => aplicarPreciosPropios(plan, propios), [plan, propios]);
 
   // Solo los que de verdad cambian algo: si alguien escribe el mismo precio que
   // ya tenía, no hay excepción que guardar.
