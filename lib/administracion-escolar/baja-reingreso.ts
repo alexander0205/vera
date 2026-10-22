@@ -89,6 +89,26 @@ export function esFechaValida(fecha: string): boolean {
 }
 
 /** Otro usuario —u otra pestaña— cambió al alumno mientras se confirmaba. */
+/**
+ * Las matrículas que una baja cierra: las de años que no han terminado a la
+ * fecha de la baja (o sin fecha de fin). Las de años pasados que quedaron
+ * «activa» —las importaciones de SIGERD las crean así— no se tocan: cerrarlas
+ * cambiaba los números de esos años, y el reingreso, que solo reabre la del año
+ * activo, no las devolvía.
+ */
+function deAnoVigente(fecha: string) {
+  return sql`(${adminEscolarPeriodos.id} IS NULL OR ${adminEscolarPeriodos.activo} = true
+    OR ${adminEscolarPeriodos.fechaFin} IS NULL OR ${adminEscolarPeriodos.fechaFin} >= ${fecha})`;
+}
+
+/** Una segunda baja sin nada que cerrar: no se registra otra vez. */
+export class YaDeBajaError extends Error {
+  constructor() {
+    super('Este alumno ya está dado de baja y no le queda matrícula ni mensualidad que cerrar.');
+    this.name = 'YaDeBajaError';
+  }
+}
+
 export class AlumnoCambiadoError extends Error {
   constructor() {
     super('Alguien acaba de cambiar a este alumno. Cierra el diálogo y vuelve a abrirlo.');
@@ -169,6 +189,7 @@ export async function previaBaja(teamId: number, estudianteId: number, fecha: st
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.estudianteId, estudianteId),
       eq(adminEscolarMatriculas.estado, 'activa'),
+      deAnoVigente(fecha),
     ));
 
   /**
@@ -254,9 +275,16 @@ export async function darDeBaja(teamId: number, estudianteId: number, opts: {
     .from(adminEscolarEstudiantes)
     .where(and(eq(adminEscolarEstudiantes.id, estudianteId), eq(adminEscolarEstudiantes.teamId, teamId)))
     .limit(1);
+  // Ya de baja y sin nada abierto: otra fila de historial solo movería la fecha
+  // de la última baja y haría fallar un reingreso legítimo anterior a ella.
+  const quedanCuotas = opts.anularPosteriores && previa.cargosPosteriores.length > 0;
+  if (antes?.estado !== 'activo' && previa.matriculas.length === 0 && previa.recurrentes.length === 0 && !quedanCuotas) {
+    throw new YaDeBajaError();
+  }
   const etiqueta = { retirado: 'Retirado', inactivo: 'Inactivo', graduado: 'Graduado' }[opts.estado];
   const texto = `Baja: ${etiqueta}${opts.motivo ? ` — ${opts.motivo}` : ''}.`;
 
+  let anuladasTotal = 0;
   await db.transaction(async (tx) => {
     await bloquearAlumno(tx, teamId, estudianteId);
     // Lo que se enseñó en la vista previa tiene que seguir siendo verdad.
@@ -266,10 +294,12 @@ export async function darDeBaja(teamId: number, estudianteId: number, opts: {
       .limit(1);
     const activasAhora = await tx.select({ id: adminEscolarMatriculas.id })
       .from(adminEscolarMatriculas)
+      .leftJoin(adminEscolarPeriodos, eq(adminEscolarPeriodos.id, adminEscolarMatriculas.periodoId))
       .where(and(
         eq(adminEscolarMatriculas.teamId, teamId),
         eq(adminEscolarMatriculas.estudianteId, estudianteId),
         eq(adminEscolarMatriculas.estado, 'activa'),
+        deAnoVigente(opts.fecha),
       ));
     const mismas = activasAhora.length === previa.matriculas.length
       && activasAhora.every((a) => previa.matriculas.some((m) => m.id === a.id));
@@ -302,6 +332,28 @@ export async function darDeBaja(teamId: number, estudianteId: number, opts: {
     }
 
     /**
+     * Las cuotas futuras, anuladas con la condición vuelta a mirar dentro del
+     * bloqueo: entre la vista previa y aquí el cron pudo facturar una o alguien
+     * abonarla, y esas ya no se tocan. Solo lo que de verdad se anuló queda en
+     * la constancia, que es lo que el reingreso devuelve.
+     */
+    const anuladas = new Set<number>();
+    if (opts.anularPosteriores && previa.cargosPosteriores.length > 0) {
+      const filas = await tx.update(adminEscolarCargos)
+        .set({ estado: 'anulado', saldoCentavos: 0, updatedAt: new Date() })
+        .where(and(
+          eq(adminEscolarCargos.teamId, teamId),
+          inArray(adminEscolarCargos.id, previa.cargosPosteriores.map((c) => c.id)),
+          isNull(adminEscolarCargos.ecfDocumentId),
+          ne(adminEscolarCargos.estado, 'anulado'),
+          sql`${adminEscolarCargos.saldoCentavos} = ${adminEscolarCargos.montoCentavos}`,
+        ))
+        .returning({ id: adminEscolarCargos.id });
+      for (const f of filas) anuladas.add(f.id);
+    }
+    anuladasTotal = anuladas.size;
+
+    /**
      * La constancia: una fila por matrícula cerrada —o una sola si no tenía—,
      * con las cuotas que se le anularon. Es lo que lee el reingreso.
      */
@@ -316,29 +368,20 @@ export async function darDeBaja(teamId: number, estudianteId: number, opts: {
       estadoNuevo: opts.estado,
       fecha: opts.fecha,
       motivo: opts.motivo,
-      cuotasAnuladas: opts.anularPosteriores && m
-        ? previa.cargosPosteriores.filter((c) => c.matriculaId === m.id).map((c) => c.id)
+      cuotasAnuladas: m
+        ? previa.cargosPosteriores.filter((c) => c.matriculaId === m.id && anuladas.has(c.id)).map((c) => c.id)
         : [],
       recurrenteId: m
         ? (m.facturaRecurrenteId != null && pausadas.has(m.facturaRecurrenteId) ? m.facturaRecurrenteId : null)
         : (previa.recurrentes[0]?.id ?? null),
       userId: opts.userId,
     })));
-
-    if (opts.anularPosteriores && previa.cargosPosteriores.length > 0) {
-      await tx.update(adminEscolarCargos)
-        .set({ estado: 'anulado', saldoCentavos: 0, updatedAt: new Date() })
-        .where(and(
-          eq(adminEscolarCargos.teamId, teamId),
-          inArray(adminEscolarCargos.id, previa.cargosPosteriores.map((c) => c.id)),
-        ));
-    }
   });
 
   return {
     matriculas: previa.matriculas.length,
     recurrentesPausadas: previa.recurrentes.length,
-    cargosAnulados: opts.anularPosteriores ? previa.cargosPosteriores.length : 0,
+    cargosAnulados: anuladasTotal,
   };
 }
 

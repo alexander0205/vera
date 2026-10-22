@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { avisosProgramadosDeEstudiante } from '@/lib/administracion-escolar/ficha-estudiante';
 import { coincideDocumento } from '@/lib/busqueda/documento';
+import { esVentaSql, moraFacturaSql, saldoFacturaSql } from './saldo-factura';
 
 export interface FilaResponsable {
   clientId: number;
@@ -108,7 +109,12 @@ export async function listarResponsables(
            COALESCE(a.alumnos, 0)::int                    AS alumnos,
            COALESCE(a.fichas, 0)::int                     AS fichas,
            COALESCE(b.beneficiarios, 0)::int              AS beneficiarios,
-           COALESCE(a.deuda, 0)::bigint                   AS deuda_escolar,
+           -- Lo escolar que falta por facturar sale de los cargos; lo ya
+           -- facturado, del saldo de SU FACTURA, como en Cuentas por cobrar. El
+           -- saldo del cargo y el de la factura se separan cuando la factura se
+           -- cobra en parte o lleva renglones sin cargo (Mi Casita: 7 familias
+           -- con cargos saldados y la factura aún debiendo).
+           (COALESCE(a.por_facturar, 0) + COALESCE(f.escolar_facturada, 0))::bigint AS deuda_escolar,
            COALESCE(a.por_facturar, 0)::bigint            AS por_facturar,
            COALESCE(f.saldo, 0)::bigint                   AS deuda_facturas,
            COALESCE(f.mora, 0)::bigint                    AS deuda_mora,
@@ -143,19 +149,22 @@ export async function listarResponsables(
         -- cifra). Las notas de crédito (34) y las compras (41/43/47) no son
         -- deuda de la familia, y un e-CF rechazado no se cobra: fuera, con la
         -- misma regla que Cuentas por cobrar.
-        SELECT SUM(GREATEST(0, x.monto_total - COALESCE(p.pagado, 0)))
-                 FILTER (WHERE x.mora_origen_id IS NULL) AS saldo,
-               SUM(GREATEST(0, x.monto_total - COALESCE(p.pagado, 0)))
-                 FILTER (WHERE x.mora_origen_id IS NOT NULL) AS mora
+        --
+        -- El saldo y la mora salen de la MISMA regla que Cuentas por cobrar
+        -- (saldo-factura.ts): monto menos pagos y NC aplicadas, y solo si sigue
+        -- PENDIENTE/PARCIAL. Restar los pagos a mano contaba como deuda una
+        -- histórica marcada pagada sin pagos registrados (Mi Casita: RD$5,000
+        -- de más en una familia) y la mora de una NC. La mora se cuenta por
+        -- factura de origen, también la de las facturas escolares.
+        SELECT SUM(${saldoFacturaSql('x')})
+                 FILTER (WHERE NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g2 WHERE g2.ecf_document_id = x.id)) AS saldo,
+               SUM(${saldoFacturaSql('x')})
+                 FILTER (WHERE EXISTS (SELECT 1 FROM admin_escolar_cargos g2 WHERE g2.ecf_document_id = x.id)) AS escolar_facturada,
+               SUM(${moraFacturaSql('x')}) AS mora
           FROM ecf_documents x
-          LEFT JOIN LATERAL (
-            SELECT SUM(pr.monto_centavos) AS pagado FROM pagos_recibidos pr
-             WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}
-          ) p ON true
          WHERE x.client_id = c.id AND x.team_id = ${teamId}
            AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
-           AND COALESCE(x.tipo_ecf, '') NOT IN ('34', '41', '43', '47')
-           AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g2 WHERE g2.ecf_document_id = x.id)
+           AND ${esVentaSql('x')}
       ) f ON true
      WHERE c.team_id = ${teamId}
        AND (COALESCE(a.fichas, 0) > 0 OR COALESCE(b.beneficiarios, 0) > 0)
@@ -345,6 +354,12 @@ export interface DetalleResponsable {
   facturas: {
     id: number; codigo: string | null; encf: string | null; fecha: string;
     montoTotal: number; pagadoCentavos: number; esMora: boolean;
+    /**
+     * Lo que se debe, con la regla de Cuentas por cobrar (saldo-factura.ts).
+     * La pantalla restaba monto menos pagos y contaba como deuda una histórica
+     * marcada pagada sin pagos registrados.
+     */
+    saldoCentavos: number;
   }[];
   /** Los que TODAVÍA no han salido, con la fecha en que les toca. */
   avisosProgramados: {
@@ -431,7 +446,8 @@ export async function detalleResponsable(
       SELECT x.id, x.codigo, x.encf, x.fecha_emision, x.monto_total,
              (x.mora_origen_id IS NOT NULL) AS es_mora,
              COALESCE((SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
-                        WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}), 0)::int AS pagado
+                        WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}), 0)::int AS pagado,
+             ${saldoFacturaSql('x')} AS saldo
         FROM ecf_documents x
        WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
          -- Misma regla que la lista y que Cuentas por cobrar: ni anuladas ni
@@ -561,6 +577,7 @@ export async function detalleResponsable(
       montoTotal: Number(f.monto_total ?? 0),
       pagadoCentavos: Number(f.pagado ?? 0),
       esMora: f.es_mora === true,
+      saldoCentavos: Number(f.saldo ?? 0),
     })),
     cargos: filas(cargos).map((g) => ({
       id: Number(g.id),

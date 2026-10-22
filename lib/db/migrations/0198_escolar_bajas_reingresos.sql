@@ -1,4 +1,4 @@
--- 0197 · Historial de bajas y reingresos de cada alumno.
+-- 0198 · Historial de bajas y reingresos de cada alumno.
 --
 -- Los alumnos se van del colegio y a veces vuelven. Cada vez que pasa, el
 -- sistema toca cosas que importan para el dinero: cierra la matrícula, pausa la

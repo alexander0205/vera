@@ -18,7 +18,7 @@ import { adminEscolarEstudiantes } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { hoyRD } from '@/lib/utils/format';
 import {
-  AlumnoCambiadoError, ESTADOS_DE_BAJA, FechaReingresoError, darDeBaja, esFechaValida,
+  AlumnoCambiadoError, YaDeBajaError, ESTADOS_DE_BAJA, FechaReingresoError, darDeBaja, esFechaValida,
   movimientosDeEstudiante, previaBaja, previaReingreso, reingresar, type EstadoDeBaja,
 } from '@/lib/administracion-escolar/baja-reingreso';
 
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar', { escritura: true });
   if (!auth.ok) return auth.response;
   const est = await delTeam(auth.teamId, (await params).id);
   if (!est) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
@@ -95,7 +95,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch (err) {
     // Dos pestañas a la vez, o una fecha de vuelta anterior a la baja: un
     // mensaje que se entiende, no un error del servidor.
-    if (err instanceof AlumnoCambiadoError) return NextResponse.json({ error: err.message }, { status: 409 });
+    if (err instanceof AlumnoCambiadoError || err instanceof YaDeBajaError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof FechaReingresoError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;
   }

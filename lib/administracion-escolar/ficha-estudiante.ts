@@ -461,7 +461,14 @@ export async function deudaFamiliarEnFacturacion(
          WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
            AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
            AND ${esVentaSql('x')}
-           AND x.dependiente_id IS DISTINCT FROM ${dependienteId}
+           ${dependienteId == null
+             // Sin beneficiario no hay facturas «suyas» que apartar. Con el
+             // parámetro nulo, «IS DISTINCT FROM NULL» dejaba fuera justo las
+             // facturas sin beneficiario —la factura a nombre del padre, el
+             // caso de todos los alumnos importados de SIGERD— y la ficha
+             // decía «Al día» con la familia debiendo.
+             ? sql``
+             : sql`AND x.dependiente_id IS DISTINCT FROM ${dependienteId}`}
            AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g WHERE g.ecf_document_id = x.id)
       ) s
      WHERE s.capital + s.mora > 0`);
