@@ -56,11 +56,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       becaValor:        adminEscolarMatriculas.becaValor,
       conceptoId:       adminEscolarMatriculas.conceptoMensualidadId,
       frId:             adminEscolarMatriculas.facturaRecurrenteId,
+      estado:           adminEscolarMatriculas.estado,
     })
     .from(adminEscolarMatriculas)
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
     .limit(1);
   if (!mat) return NextResponse.json({ error: 'Matrícula no encontrada' }, { status: 404 });
+
+  /**
+   * Una matrícula retirada no genera deuda. Al darle de baja a un alumno se
+   * anulan sus cuotas futuras; sin esta guarda, guardar su «Configuración
+   * mensual» las revivía todas —también las de los meses en que no estuvo—.
+   * El precio se guarda igual; las cuotas vuelven cuando se le reactive.
+   */
+  if (mat.estado !== 'activa') {
+    return NextResponse.json({ cargosCreados: 0, matriculaNoActiva: true });
+  }
 
   // Sin mensualidad recurrente configurada no hay calendario al que alinear: no
   // se inventa uno. Guardar el precio sigue valiendo; solo no se crea deuda.

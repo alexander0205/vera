@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Receipt, HandCoins, AlertTriangle, Pencil, Trash2, History } from 'lucide-react';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 /**
@@ -43,6 +45,8 @@ interface CargoRow {
   montoCentavos: number;
   saldoCentavos: number;
   estado: string;
+  fechaVencimiento: string | null;
+  ecfDocumentId: number | null;
 }
 
 function iniciales(nombres: string | null, apellidos: string | null): string {
@@ -98,13 +102,18 @@ export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar
     // ya nadie lo debe.
     const vivos = cargos.filter((c) => c.estado !== 'anulado');
     const deEste = vivos.filter((c) => c.matriculaId === m.id);
-    const facturado = deEste.reduce((s, c) => s + c.montoCentavos, 0);
     const pendiente = deEste.reduce((s, c) => s + c.saldoCentavos, 0);
     const arrastre = vivos
       .filter((c) => c.matriculaId !== m.id)
       .reduce((s, c) => s + c.saldoCentavos, 0);
+    // Vencido / próximo pago / falta del año / pagado, con la regla de todas
+    // las fichas (resumen-cobro.ts).
+    const resumen = resumirCobro(deEste.map((c) => ({
+      saldoCentavos: c.saldoCentavos, montoCentavos: c.montoCentavos,
+      vence: c.fechaVencimiento, facturada: c.ecfDocumentId != null,
+    })), hoyRD());
     return {
-      facturado, pendiente, pagado: facturado - pendiente, arrastre,
+      resumen, arrastre,
       cargos: deEste.length,
       totalAlumno: pendiente + arrastre,
     };
@@ -189,10 +198,7 @@ export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar
               <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
                 Este período · {totales.cargos} cargo{totales.cargos !== 1 ? 's' : ''}
               </p>
-              <TotalRow icon={Receipt} tone="gray" label="Facturado" value={fmtDOP(totales.facturado)} />
-              <TotalRow icon={HandCoins} tone="verde" label="Pagado" value={fmtDOP(totales.pagado)} />
-              <TotalRow icon={AlertTriangle} tone="red" label="Pendiente" value={fmtDOP(totales.pendiente)}
-                muted={totales.pendiente === 0} />
+              <ResumenCobroFilas resumen={totales.resumen} />
             </div>
           )}
         </div>
@@ -204,7 +210,7 @@ export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar
             <TotalRow icon={History} tone="amber" label="Arrastre de otros períodos"
               value={fmtDOP(totales.arrastre)} />
             <div className="flex items-baseline justify-between rounded-lg bg-gray-50 px-3 py-2">
-              <span className="text-sm font-medium text-gray-900">Total del estudiante</span>
+              <span className="text-sm font-medium text-gray-900">Debe en total (este período y anteriores)</span>
               <span className="text-base font-semibold text-gray-900">{fmtDOP(totales.totalAlumno)}</span>
             </div>
           </div>

@@ -14,7 +14,9 @@ import { Button } from '@/components/ui/button';
 import { Paginador } from '@/components/ui/paginador';
 import { NativeSelect } from '@/components/ui/native-select';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { partidasDeFamilia, resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
@@ -53,7 +55,10 @@ interface Detalle {
   hijos: { estudianteId: number | null; nombre: string; curso: string | null;
     estado: string | null; deudaCentavos: number; cargos: number }[];
   facturas: { id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number; esMora: boolean }[];
+    montoTotal: number; pagadoCentavos: number; esMora: boolean; saldoCentavos: number; vence: string }[];
+  /** Los cargos de sus hijos: con ellos y las facturas sale el resumen de cobro. */
+  cargos: { saldoCentavos: number; montoCentavos: number; fechaVencimiento: string | null;
+    ecfDocumentId: number | null; estado: string }[];
   avisos: { id: number; enviadoAt: string; tipo: string; canal: string;
     destino: string | null; alumno: string; concepto: string | null }[];
 }
@@ -421,17 +426,13 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
   detalle: Detalle | undefined;
   onCerrar: () => void;
 }) {
-  // El dinero, separado como pide el video de mora (21-oct): lo escolar YA
-  // facturado (exigible) aparte de la anualidad que todavía no tiene factura.
-  const escolarPorCobrar = Math.max(0, fila.deudaEscolarCentavos - fila.porFacturarCentavos);
-  const porFacturar = fila.porFacturarCentavos;
-  // «Debe en total» es lo exigible hoy: escolar facturada + otras facturas +
-  // mora. Lo por facturar es futuro y se muestra aparte, no se suma aquí.
-  const debeTotal = escolarPorCobrar + fila.deudaFacturasCentavos + fila.deudaMoraCentavos;
   const hijos = detalle?.hijos ?? [];
-  // Las notas de mora no son facturas: tienen su fila «Mora» abajo.
+  // Las notas de mora no son facturas: van en «Vencido» con lo demás.
   const facturasPendientes = (detalle?.facturas ?? [])
-    .filter((f) => !f.esMora && f.montoTotal - f.pagadoCentavos > 0).length;
+    .filter((f) => !f.esMora && f.saldoCentavos > 0).length;
+  // Vencido / próximo pago / falta del año / pagado: la misma cuenta que la
+  // ficha completa de la familia (resumen-cobro.ts).
+  const resumen = detalle ? resumirCobro(partidasDeFamilia(detalle), hoyRD()) : null;
 
   return (
     // Misma tarjeta que la ficha del estudiante: encabezado con iniciales,
@@ -475,26 +476,10 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
           falta={!destinoDeContacto(fila, 'sms')} />
       </div>
 
-      <div className="space-y-2 border-t border-gray-100 pt-3">
-        {/* Escolar YA facturada: lo que de verdad se le puede cobrar hoy. */}
-        <TotalRow icon={Receipt} tone="red" label="Deuda escolar"
-          value={fmtDOP(escolarPorCobrar)} muted={escolarPorCobrar === 0} />
-        {/* La anualidad que aún no tiene factura: futuro, no exigible todavía.
-            Se enseña solo si hay algo, para no meter un «RD$0» sin sentido. */}
-        {porFacturar > 0 && (
-          <TotalRow icon={CalendarClock} tone="gray" label="Por facturar"
-            value={fmtDOP(porFacturar)} />
-        )}
-        <TotalRow icon={FileText} tone="amber" label="Otras facturas"
-          value={fmtDOP(fila.deudaFacturasCentavos)} muted={fila.deudaFacturasCentavos === 0} />
-        {/* La mora de sus facturas (notas de débito), aparte: no es «otra
-            factura» sino el recargo de una escolar. Solo si hay. */}
-        {fila.deudaMoraCentavos > 0 && (
-          <TotalRow icon={AlertTriangle} tone="red" label="Mora"
-            value={fmtDOP(fila.deudaMoraCentavos)} />
-        )}
-        <TotalRow icon={AlertTriangle} tone="red" label="Debe en total"
-          value={fmtDOP(debeTotal)} muted={debeTotal === 0} />
+      <div className="border-t border-gray-100 pt-3">
+        {resumen
+          ? <ResumenCobroFilas resumen={resumen} />
+          : <div className="flex justify-center py-3"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>}
       </div>
 
       {/* Los hijos, con lo que debe cada uno: es lo que se mira antes de

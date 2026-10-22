@@ -242,6 +242,8 @@ export interface FacturaSuelta {
   montoTotal: number;
   /** Lo abonado, sumado de sus pagos: un abono parcial también cuenta. */
   pagadoCentavos: number;
+  /** Lo que se debe de ella, con la regla de Cuentas por cobrar. */
+  saldoCentavos: number;
   estado: string;
   estadoPago: string;
   /** Lo que la factura le cobra a ESTE alumno, línea por línea. */
@@ -865,7 +867,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                         {f.encf || f.codigo || `Factura #${f.id}`}
                       </Link>,
                       fmtDOP(f.montoTotal),
-                      f.montoTotal - f.pagadoCentavos <= 0 ? 'PAGADO'
+                      f.estado === 'ANULADO' ? 'ANULADA'
+                        : f.saldoCentavos <= 0 ? 'PAGADO'
                         : f.pagadoCentavos > 0 ? 'PARCIAL' : 'PENDIENTE',
                     ]),
                   ]} />
@@ -1628,7 +1631,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
               reales y los conceptos dicen por qué se le cobró. */}
           {facturasSueltas.flatMap((f) => {
             const anulada = f.estado === 'ANULADO';
-            const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
+            const saldo = f.saldoCentavos;
             const filas = [(
               <tr key={`fs-${f.id}`} className="border-t border-gray-100 hover:bg-gray-50/60">
                 {/* La columna de las casillas. Vacía aquí: no es un cargo
@@ -3248,9 +3251,11 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
  */
 export function FacturasSueltas({ facturas }: { facturas: FacturaSuelta[] }) {
   if (facturas.length === 0) return null;
-  const total = facturas.reduce((s, f) => s + f.montoTotal, 0);
-  const pagado = facturas.reduce((s, f) => s + f.pagadoCentavos, 0);
-  const pendiente = Math.max(0, total - pagado);
+  // Las anuladas se listan tachadas pero no suman: no se facturaron.
+  const vivas = facturas.filter((f) => f.estado !== 'ANULADO');
+  const total = vivas.reduce((s, f) => s + f.montoTotal, 0);
+  const pagado = vivas.reduce((s, f) => s + f.pagadoCentavos, 0);
+  const pendiente = facturas.reduce((s, f) => s + f.saldoCentavos, 0);
 
   return (
     <div className="space-y-2">
@@ -3286,7 +3291,7 @@ export function FacturasSueltas({ facturas }: { facturas: FacturaSuelta[] }) {
           </thead>
           <tbody>
             {facturas.map((f) => {
-              const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
+              const saldo = f.saldoCentavos;
               const anulada = f.estado === 'ANULADO';
               return (
                 <tr key={f.id} className="border-t border-gray-100 hover:bg-gray-50/60">
