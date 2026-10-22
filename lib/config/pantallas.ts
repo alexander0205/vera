@@ -14,9 +14,9 @@
  * se puede apagar: siempre ve todo. Equipo, Roles y Usuarios no están en la
  * lista a propósito: apagarlas dejaría a un rol sin poder arreglar lo que apagó.
  *
- * Ocultar NO es un permiso: la pantalla sale del menú y por URL se ve un aviso,
- * pero el rol conserva lo que sus permisos le dejan hacer (las APIs no cambian).
- * Para que un rol no pueda hacer algo, se quita el permiso en Roles y permisos.
+ * Una pantalla oculta no se puede abrir: sale del menú y el proxy no la sirve
+ * —ni al escribir su dirección ni navegando— (lib/auth/pantallas-proxy.ts). Las
+ * APIs de datos siguen mandadas por los permisos del rol.
  *
  * TypeScript puro: lo usan el servidor (layout, API) y el cliente (menú, panel).
  */

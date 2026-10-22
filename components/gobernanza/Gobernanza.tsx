@@ -16,7 +16,8 @@
  * Facturación). Tras cada cambio se refresca la ruta y se vuelve a pedir
  * /api/user para que lo tome al momento.
  *
- * Ocultar no quita permisos (ver lib/config/pantallas.ts): el panel lo dice.
+ * Una pantalla oculta no se puede abrir: además de este aviso en el cliente, el
+ * proxy no la sirve (lib/auth/pantallas-proxy.ts).
  */
 
 import { useCallback, useEffect, useId, useState } from 'react';
@@ -33,7 +34,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import ButtonBase from '@mui/material/ButtonBase';
-import { Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { Lock, ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
@@ -108,18 +109,35 @@ export function GuardPantalla({ ocultas, inicio, puede, children }: {
 
   if (!oculta) return <>{children}</>;
   if (seguir) return null;
+  return <AvisoPantallaOculta pantalla={pantalla} alternativa={alternativa} />;
+}
 
+/**
+ * Lo que ve quien llega a una pantalla que su empresa no le puso en el menú.
+ * Lo pinta `GuardPantalla` en el cliente y, antes, la página `pantalla-oculta`
+ * que el proxy sirve en lugar de la pantalla (ver lib/auth/pantallas-proxy.ts):
+ * el mismo aviso por las dos puertas.
+ *
+ * El tono importa: «no está disponible para ti» con un candado en ámbar se leía
+ * como un rechazo a la persona. Esto es organización del trabajo, y se dice así,
+ * sin candado ni color de alerta.
+ */
+export function AvisoPantallaOculta({ pantalla, alternativa }: {
+  pantalla: Pick<PantallaDef, 'label'>;
+  alternativa: Pick<PantallaDef, 'label' | 'href'> | null;
+}) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', p: { xs: 2, sm: 6 } }}>
       <Box sx={{ maxWidth: 420, textAlign: 'center' }}>
-        <Box sx={{ width: 48, height: 48, borderRadius: '14px', bgcolor: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
-          <Lock size={22} aria-hidden />
+        <Box sx={{ width: 48, height: 48, borderRadius: '14px', bgcolor: '#eef2fe', color: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+          <LayoutGrid size={22} aria-hidden />
         </Box>
         <Typography sx={{ fontWeight: 600, fontSize: '1.125rem', color: '#111827' }}>
-          {pantalla.label} no está disponible para ti
+          Esta pantalla no está en tu menú
         </Typography>
         <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: '#6b7280' }}>
-          El administrador la ocultó para tu rol. Si la necesitas, pídele que te la muestre.
+          Cada persona ve las pantallas que usa en su trabajo. Si necesitas «{pantalla.label}»,
+          pide al administrador de la empresa que te la active.
         </Typography>
         {alternativa && (
           <Box sx={{ mt: 3 }}>
@@ -179,8 +197,8 @@ export function PantallasDelRol({ roleId }: { roleId: number }) {
           Pantallas
         </Typography>
         <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-          Muestra u oculta pantallas para este rol. Se guarda al instante. Ocultar no quita permisos:
-          para que no pueda hacer algo, quítale el permiso arriba.
+          Muestra u oculta pantallas para este rol. Una pantalla oculta sale del menú y no se puede
+          abrir ni escribiendo su dirección. Se aplica en unos segundos.
         </Typography>
       </Box>
       {modulos.map((m, i) => (
@@ -354,8 +372,8 @@ export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
           Mostrar u ocultar pantallas por rol
         </Typography>
         <Typography component="span" sx={{ display: 'block', fontSize: '0.8125rem', color: '#6b7280', fontWeight: 400 }}>
-          Elige una pantalla y apágala para los roles que no deben verla. Se guarda al instante.
-          Solo la oculta: lo que el rol puede hacer se cambia en Roles y permisos.
+          Elige una pantalla y apágala para los roles que no deben entrar. Sale del menú y no se puede
+          abrir ni por su dirección. Se aplica en unos segundos.
         </Typography>
       </DialogTitle>
       <DialogContent>
