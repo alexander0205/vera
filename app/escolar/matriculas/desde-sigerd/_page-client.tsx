@@ -44,7 +44,7 @@ interface Omitido { nombre: string; ubicacion: string }
 interface Pendientes {
   disponible: boolean;
   motivo?: string;
-  periodo: { id: number; nombre: string } | null;
+  periodo: { id: number; nombre: string; fechaInicio: string | null } | null;
   anoAcademico: number | null;
   descargadaEl: string | null;
   grupos: Grupo[];
@@ -113,11 +113,14 @@ const enAlcance = (g: Grupo, alcance: string | null) =>
 /** Montos de la tabla del árbol: sin centavos, para que quepan. */
 const rdCorto = (centavos: number) => `RD$${Math.round(centavos / 100).toLocaleString('es-DO')}`;
 
-/** Cuánto se le carga hoy y cuánto en el año, con sus conceptos y sus precios. */
-function cuentaDe(lineas: LineaPlan[], conceptos: number[], ajuste: Ajuste | undefined, fecha: string) {
+/**
+ * Cuánto se le carga hoy y cuánto en el año, con sus conceptos y sus precios.
+ * `corte` es hasta dónde se carga ya (hoy): lo vencido antes nace como cargo.
+ */
+function cuentaDe(lineas: LineaPlan[], conceptos: number[], ajuste: Ajuste | undefined, corte: string) {
   const propios = new Map((ajuste?.precios ?? []).map((p) => [p.conceptoId, p.montoCentavos]));
   const plan = aplicarPreciosPropios(lineas, propios);
-  const { ahora, despues } = cuotasAlMatricular(plan, conceptos, fecha);
+  const { ahora, despues } = cuotasAlMatricular(plan, conceptos, corte);
   const hoy = sumaCentavos(ahora);
   return { hoy, cargos: ahora.length, anio: hoy + sumaCentavos(despues) };
 }
@@ -128,7 +131,13 @@ export default function MatricularDesdeSigerd() {
 
   const [datos, setDatos] = useState<Pendientes | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [fecha, setFecha] = useState(hoyRD);
+  /**
+   * La inscripción es, salvo que se cambie, el INICIO del año escolar: quien
+   * viene de SIGERD está en el colegio desde agosto y le tocan las diez cuotas,
+   * no solo las que quedan desde hoy (antes se omitían las ya emitidas). Lo ya
+   * vencido se carga hoy como pendiente (`corte`); lo demás, el devengo.
+   */
+  const [fechaElegida, setFecha] = useState<string | null>(null);
   const [planes, setPlanes] = useState<Map<number, PlanSeccion>>(new Map());
 
   const [fuera, setFuera] = useState<Set<number>>(new Set());
@@ -144,6 +153,10 @@ export default function MatricularDesdeSigerd() {
   const [confirmar, setConfirmar] = useState(false);
   const [avance, setAvance] = useState<Avance[] | null>(null);
   const corriendo = avance?.some((a) => a.estado === 'esperando' || a.estado === 'corriendo') ?? false;
+
+  const hoy = hoyRD();
+  const fecha = fechaElegida ?? datos?.periodo?.fechaInicio ?? hoy;
+  const corte = fecha > hoy ? fecha : hoy;
 
   const cargar = useCallback(async () => {
     setErrorCarga(null);
@@ -199,11 +212,11 @@ export default function MatricularDesdeSigerd() {
       if (p?.estado !== 'listo') continue;
       for (const e of g.estudiantes) {
         const conceptos = conceptosDe(e.id, g.cursoId) ?? [];
-        m.set(e.id, cuentaDe(p.lineas, conceptos, ajustes.get(e.id), fecha));
+        m.set(e.id, cuentaDe(p.lineas, conceptos, ajustes.get(e.id), corte));
       }
     }
     return m;
-  }, [datos, planes, conceptosDe, ajustes, fecha]);
+  }, [datos, planes, conceptosDe, ajustes, corte]);
 
   const resumen = useMemo(() => {
     const r = { alumnos: 0, secciones: 0, hoy: 0, anio: 0, cargos: 0, sinResponsable: 0, conCambios: ajustes.size };
@@ -428,7 +441,7 @@ export default function MatricularDesdeSigerd() {
           <input type="date" value={fecha} max="2100-12-31"
             onChange={(e) => { if (e.target.value) setFecha(e.target.value); }}
             className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
-          <span className="text-[11px] text-gray-500">Decide qué cuotas se cargan hoy</span>
+          <span className="text-[11px] text-gray-500">Desde esta fecha se le cobran las cuotas; lo ya vencido se carga hoy</span>
         </label>
       </div>
 
@@ -711,6 +724,7 @@ export default function MatricularDesdeSigerd() {
             grupo={editando.grupo}
             periodoId={datos.periodo.id}
             fecha={fecha}
+            corte={corte}
             inicial={{
               conceptos: conceptosDe(editando.alumno.id, editando.grupo.cursoId) ?? undefined,
               precios: ajustes.get(editando.alumno.id)?.precios ?? [],
@@ -858,12 +872,13 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar,
+  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar,
 }: {
   alumno: Alumno;
   grupo: Grupo;
   periodoId: number;
   fecha: string;
+  corte: string;
   inicial: { conceptos?: number[]; precios: Ajuste['precios'] };
   puedePrecios: boolean;
   conCambios: boolean;
@@ -912,6 +927,7 @@ function EditorAlumno({
           periodoId={String(periodoId)}
           cursoId={String(grupo.cursoId)}
           desde={fecha}
+          corte={corte}
           estudianteId={alumno.id}
           inicial={inicialFijo}
           onPlan={alLlegarPlan}

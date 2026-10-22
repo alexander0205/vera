@@ -27,6 +27,7 @@ import { invalidarEstructura } from '@/lib/cache/escolar';
 import { LoteError, matricularLote, type ResultadoLote } from './matricula-lote';
 import { contextoDeSeccion } from './tarifas';
 import { armarPlanDeCobro } from './plan-cobro';
+import { hoyRD } from '@/lib/utils/format';
 import type { ArbolCentro } from '@/lib/sigerd/sync';
 
 export interface GrupoSigerd {
@@ -63,7 +64,12 @@ export interface PendientesSigerd {
   /** Falso si no hay descarga de SIGERD o no hay año escolar activo. */
   disponible: boolean;
   motivo?: string;
-  periodo: { id: number; nombre: string } | null;
+  /**
+   * El año activo. `fechaInicio` es la inscripción por defecto: quien viene de
+   * SIGERD está en el colegio desde que empezó el año, así que le tocan todas
+   * las cuotas del calendario, no solo las que faltan desde hoy.
+   */
+  periodo: { id: number; nombre: string; fechaInicio: string | null } | null;
   anoAcademico: number | null;
   /** Cuándo se bajó de SIGERD lo que se está enseñando: lo de después no está. */
   descargadaEl: string | null;
@@ -99,7 +105,7 @@ export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesS
   const arbol = dump?.estructura as ArbolCentro | undefined;
   if (!arbol) return vacio('No hay descarga de SIGERD todavía.');
 
-  const [periodo] = await db.select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre })
+  const [periodo] = await db.select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre, fechaInicio: adminEscolarPeriodos.fechaInicio })
     .from(adminEscolarPeriodos)
     .where(and(eq(adminEscolarPeriodos.teamId, teamId), eq(adminEscolarPeriodos.activo, true)))
     .limit(1);
@@ -317,6 +323,9 @@ export async function matricularSeccionDesdeSigerd(teamId: number, entrada: {
       conceptos: 'todos',
       porEstudiante: new Map(alumnos.map((a) => [a.estudianteId, { conceptos: a.conceptos }])),
       fechaInscripcion: fecha,
+      // Con la inscripción al inicio del año, lo ya vencido (agosto, septiembre…)
+      // se carga ahora como pendiente; lo que viene lo crea el devengo.
+      corteCargos: hoyRD(),
       dryRun: false,
     });
   } catch (err) {
