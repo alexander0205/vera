@@ -35,6 +35,17 @@ const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then((r) => r.jso
 /** Mismo aspecto que las flechas del árbol de Estructura: se ordena igual. */
 const FLECHA = 'shrink-0 rounded text-gray-300 enabled:hover:bg-gray-200 enabled:hover:text-gray-700 disabled:opacity-30';
 
+// La Navigation API permite cancelar Atrás/Adelante antes de que Next cambie
+// de pantalla. Los tipos DOM de la versión actual de TypeScript aún no la incluyen.
+interface NavegacionNativa extends EventTarget {
+  traverseTo(key: string): { finished: Promise<void> };
+}
+
+interface EventoNavegacion extends Event {
+  navigationType: string;
+  destination: { url: string; key: string };
+}
+
 /** Impacto de borrar un concepto (lo calcula el servidor con `?preview=1`). */
 interface ImpactoConcepto {
   conceptoId: number; nombre: string;
@@ -71,7 +82,13 @@ export function ConceptosCatalogo() {
   const [sobre, setSobre] = useState<{ id: number; lado: 'arriba' | 'abajo' } | null>(null);
   const router = useRouter();
   /** Salida pendiente de confirmar por haber cambios sin guardar. */
-  const [salida, setSalida] = useState<{ tipo: 'concepto'; id: number } | { tipo: 'nav'; href: string } | null>(null);
+  const [salida, setSalida] = useState<
+    | { tipo: 'concepto'; id: number }
+    | { tipo: 'nav'; href: string; externa: boolean }
+    | { tipo: 'historial'; key: string }
+    | null
+  >(null);
+  const salidaConfirmada = useRef(false);
 
   // Al abrir, el primero de la lista: una pantalla de detalle vacía no dice
   // nada sobre lo que hay dentro.
@@ -99,7 +116,9 @@ export function ConceptosCatalogo() {
   // navegador. El calendario se consulta en el momento por su ref.
   useEffect(() => {
     const avisar = (e: BeforeUnloadEvent) => {
-      if (conceptoSucio || calendario.current?.sucio) { e.preventDefault(); e.returnValue = ''; }
+      if (!salidaConfirmada.current && (conceptoSucio || calendario.current?.sucio)) {
+        e.preventDefault(); e.returnValue = '';
+      }
     };
     window.addEventListener('beforeunload', avisar);
     return () => window.removeEventListener('beforeunload', avisar);
@@ -114,14 +133,37 @@ export function ConceptosCatalogo() {
       if (!conceptoSucio && !calendario.current?.sucio) return;
       const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
       if (!a) return;
+      if (a.target === '_blank' || a.hasAttribute('download')) return;
       const href = a.getAttribute('href') ?? '';
-      if (!href.startsWith('/')) return;                                // externo o ancla: lo cubre beforeunload
-      if (href.startsWith('/escolar/configuracion/conceptos')) return; // sigue en esta pantalla
+      if (!href || href.startsWith('#')) return;
+      const destino = new URL(a.href);
+      if (!['http:', 'https:'].includes(destino.protocol)) return;
+      if (destino.origin === window.location.origin
+        && destino.pathname === window.location.pathname) return;
       e.preventDefault();
-      setSalida({ tipo: 'nav', href });
+      setSalida({ tipo: 'nav', href: destino.href, externa: destino.origin !== window.location.origin || !href.startsWith('/') });
     };
     document.addEventListener('click', alHacerClic, true);
     return () => document.removeEventListener('click', alHacerClic, true);
+  }, [conceptoSucio]);
+
+  // Atrás/Adelante en Chrome hacen una navegación SPA sin click ni beforeunload.
+  // El evento "navigate" sí es cancelable antes de tocar la URL o el historial.
+  useEffect(() => {
+    const navegacion = (window as Window & { navigation?: NavegacionNativa }).navigation;
+    if (!navegacion) return;
+    const alNavegar = (event: Event) => {
+      const e = event as EventoNavegacion;
+      if (salidaConfirmada.current || e.navigationType !== 'traverse' || !e.cancelable) return;
+      if (!conceptoSucio && !calendario.current?.sucio) return;
+      const destino = new URL(e.destination.url);
+      if (destino.origin === window.location.origin
+        && destino.pathname === window.location.pathname) return;
+      e.preventDefault();
+      setSalida({ tipo: 'historial', key: e.destination.key });
+    };
+    navegacion.addEventListener('navigate', alNavegar);
+    return () => navegacion.removeEventListener('navigate', alNavegar);
   }, [conceptoSucio]);
 
   /** Cambiar de concepto en la lista: con algo sin guardar, se confirma antes. */
@@ -460,8 +502,18 @@ export function ConceptosCatalogo() {
           onConfirm={() => {
             const s = salida;
             setSalida(null);
-            if (s.tipo === 'concepto') setSelId(s.id);
-            else router.push(s.href);
+            if (s.tipo === 'concepto') { setSelId(s.id); return; }
+            if (s.tipo === 'nav' && !s.externa) {
+              const destino = new URL(s.href);
+              router.push(destino.pathname + destino.search + destino.hash);
+              return;
+            }
+            salidaConfirmada.current = true;
+            if (s.tipo === 'nav') window.location.assign(s.href);
+            else {
+              const navegacion = (window as Window & { navigation?: NavegacionNativa }).navigation;
+              void navegacion?.traverseTo(s.key).finished.catch(() => { salidaConfirmada.current = false; });
+            }
           }} />
       )}
     </div>
