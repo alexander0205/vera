@@ -11,7 +11,7 @@ vi.mock('@/lib/db/drizzle', () => ({ db: {} }));
 
 import {
   alinearAlCalendario, anotar, esCargoPosteriorAnulable, esDelReingresoEnAdelante,
-  estadoMatriculaDeBaja,
+  esFechaValida, estadoMatriculaDeBaja,
 } from '@/lib/administracion-escolar/baja-reingreso';
 
 describe('alinearAlCalendario', () => {
@@ -74,5 +74,20 @@ describe('esDelReingresoEnAdelante', () => {
     expect(esDelReingresoEnAdelante({ mes: 2, anio: 2027 }, '2027-02-10')).toBe(true);
     expect(esDelReingresoEnAdelante({ mes: 1, anio: 2027 }, '2027-02-10')).toBe(false);
     expect(esDelReingresoEnAdelante({ mes: null, anio: 2027 }, '2027-02-10')).toBe(false);
+  });
+});
+
+describe('esFechaValida', () => {
+  it('acepta fechas de calendario reales', () => {
+    expect(esFechaValida('2026-10-22')).toBe(true);
+    expect(esFechaValida('2028-02-29')).toBe(true);
+  });
+
+  it('rechaza las que cumplen el patrón pero no existen, y las mal escritas', () => {
+    expect(esFechaValida('2026-13-45')).toBe(false);
+    expect(esFechaValida('2026-02-30')).toBe(false);
+    expect(esFechaValida('2027-02-29')).toBe(false);
+    expect(esFechaValida('22/10/2026')).toBe(false);
+    expect(esFechaValida('')).toBe(false);
   });
 });

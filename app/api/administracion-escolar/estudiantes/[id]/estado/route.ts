@@ -18,11 +18,9 @@ import { adminEscolarEstudiantes } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { hoyRD } from '@/lib/utils/format';
 import {
-  ESTADOS_DE_BAJA, darDeBaja, movimientosDeEstudiante, previaBaja, previaReingreso, reingresar,
-  type EstadoDeBaja,
+  AlumnoCambiadoError, ESTADOS_DE_BAJA, FechaReingresoError, darDeBaja, esFechaValida,
+  movimientosDeEstudiante, previaBaja, previaReingreso, reingresar, type EstadoDeBaja,
 } from '@/lib/administracion-escolar/baja-reingreso';
-
-const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 async function delTeam(teamId: number, id: string) {
   const estudianteId = Number(id);
@@ -41,7 +39,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!est) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
   const sp = req.nextUrl.searchParams;
-  const fecha = FECHA.test(sp.get('fecha') ?? '') ? sp.get('fecha')! : hoyRD();
+  // La vista previa se pide mientras se teclea la fecha: una a medias se
+  // calcula con hoy en vez de reventar.
+  const pedida = sp.get('fecha') ?? '';
+  const fecha = esFechaValida(pedida) ? pedida : hoyRD();
   if (sp.get('accion') === 'historial') {
     return NextResponse.json({ movimientos: await movimientosDeEstudiante(auth.teamId, est.id) });
   }
@@ -58,29 +59,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!est) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
-  const fecha = typeof body.fecha === 'string' && FECHA.test(body.fecha) ? body.fecha : hoyRD();
-
-  if (body.accion === 'baja') {
-    if (!ESTADOS_DE_BAJA.includes(body.estado)) {
-      return NextResponse.json({ error: 'Elige si se retira, queda inactivo o se gradúa.' }, { status: 400 });
-    }
-    // En una línea: va a las notas de la matrícula, una línea por baja.
-    const motivo = typeof body.motivo === 'string'
-      ? body.motivo.replace(/\s+/g, ' ').trim().slice(0, 200) || null
-      : null;
-    const r = await darDeBaja(auth.teamId, est.id, {
-      estado: body.estado as EstadoDeBaja, fecha, motivo, anularPosteriores: body.anularPosteriores === true,
-      userId: auth.user.id,
-    });
-    return NextResponse.json({ ok: true, ...r });
+  // Sin fecha, hoy. Con una que no existe —«2026-13-45»— no se adivina: se dice.
+  // Antes pasaba el patrón, llegaba a Postgres y salía un 500.
+  const pedida = body.fecha;
+  if (pedida != null && pedida !== '' && !(typeof pedida === 'string' && esFechaValida(pedida))) {
+    return NextResponse.json({ error: 'La fecha no es válida.' }, { status: 400 });
   }
+  const fecha: string = typeof pedida === 'string' && pedida ? pedida : hoyRD();
 
-  if (body.accion === 'reingreso') {
-    if (est.estado === 'activo') {
-      return NextResponse.json({ error: 'El alumno ya está activo.' }, { status: 409 });
+  try {
+    if (body.accion === 'baja') {
+      if (!ESTADOS_DE_BAJA.includes(body.estado)) {
+        return NextResponse.json({ error: 'Elige si se retira, queda inactivo o se gradúa.' }, { status: 400 });
+      }
+      // En una línea: va a las notas de la matrícula, una línea por baja.
+      const motivo = typeof body.motivo === 'string'
+        ? body.motivo.replace(/\s+/g, ' ').trim().slice(0, 200) || null
+        : null;
+      const r = await darDeBaja(auth.teamId, est.id, {
+        estado: body.estado as EstadoDeBaja, fecha, motivo, anularPosteriores: body.anularPosteriores === true,
+        userId: auth.user.id,
+      });
+      return NextResponse.json({ ok: true, ...r });
     }
-    const r = await reingresar(auth.teamId, est.id, { fecha, reabrirMatricula: body.reabrirMatricula === true, userId: auth.user.id });
-    return NextResponse.json({ ok: true, ...r });
+
+    if (body.accion === 'reingreso') {
+      if (est.estado === 'activo') {
+        return NextResponse.json({ error: 'El alumno ya está activo.' }, { status: 409 });
+      }
+      const r = await reingresar(auth.teamId, est.id, {
+        fecha, reabrirMatricula: body.reabrirMatricula === true, userId: auth.user.id,
+      });
+      return NextResponse.json({ ok: true, ...r });
+    }
+  } catch (err) {
+    // Dos pestañas a la vez, o una fecha de vuelta anterior a la baja: un
+    // mensaje que se entiende, no un error del servidor.
+    if (err instanceof AlumnoCambiadoError) return NextResponse.json({ error: err.message }, { status: 409 });
+    if (err instanceof FechaReingresoError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
   }
 
   return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });

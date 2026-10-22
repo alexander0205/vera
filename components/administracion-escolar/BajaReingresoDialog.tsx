@@ -32,6 +32,7 @@ interface PreviaReingreso {
   matricula: { id: number; periodo: string | null; curso: string | null; estado: string; fechaInscripcion: string | null } | null;
   recurrente: { id: number; nombre: string; estado: string; proximaActual: string; proximaNueva: string | null } | null;
   cuotasARestaurar: { id: number; concepto: string | null; mes: number; anio: number; montoCentavos: number }[];
+  fechaUltimaBaja: string | null;
 }
 
 const MOTIVOS = [
@@ -80,6 +81,8 @@ export function BajaReingresoDialog({ estudianteId, nombre, accion, abierto, onC
   const baja = accion === 'baja' ? (previa as PreviaBaja | null) : null;
   const reingreso = accion === 'reingreso' ? (previa as PreviaReingreso | null) : null;
   const reabrible = reingreso?.matricula?.estado === 'retirada' ? reingreso.matricula : null;
+  // No puede volver antes de haberse ido: el servidor lo rechaza, y aquí se dice antes.
+  const antesDeLaBaja = !!reingreso?.fechaUltimaBaja && fecha < reingreso.fechaUltimaBaja;
 
   async function confirmar() {
     setGuardando(true);
@@ -185,6 +188,10 @@ export function BajaReingresoDialog({ estudianteId, nombre, accion, abierto, onC
                 </li>
               )}
             </ul>
+          ) : reingreso && antesDeLaBaja ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              Se dio de baja el {fmtFechaCorta(reingreso.fechaUltimaBaja!)}. La fecha en que vuelve no puede ser anterior.
+            </p>
           ) : reingreso ? (
             <ul className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
               {reabrible ? (
@@ -222,7 +229,7 @@ export function BajaReingresoDialog({ estudianteId, nombre, accion, abierto, onC
 
         <DialogFooter>
           <Button variant="outline" onClick={onCerrar} disabled={guardando}>Cancelar</Button>
-          <Button onClick={confirmar} disabled={guardando || cargando || !previa}
+          <Button onClick={confirmar} disabled={guardando || cargando || !previa || (accion === 'reingreso' && antesDeLaBaja)}
             variant={accion === 'baja' ? 'destructive' : 'default'}>
             {guardando
               ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

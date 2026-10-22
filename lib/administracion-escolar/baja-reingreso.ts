@@ -75,6 +75,45 @@ export function alinearAlCalendario(
   return cursor;
 }
 
+/**
+ * ¿Es una fecha de calendario real en formato YYYY-MM-DD?
+ *
+ * El patrón solo no basta: «2026-13-45» lo cumple, llega a Postgres como fecha
+ * y la consulta revienta con un 500 en vez de un mensaje.
+ */
+export function esFechaValida(fecha: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const [y, m, d] = fecha.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** Otro usuario —u otra pestaña— cambió al alumno mientras se confirmaba. */
+export class AlumnoCambiadoError extends Error {
+  constructor() {
+    super('Alguien acaba de cambiar a este alumno. Cierra el diálogo y vuelve a abrirlo.');
+    this.name = 'AlumnoCambiadoError';
+  }
+}
+
+/** La fecha de vuelta no puede ser anterior a la baja. */
+export class FechaReingresoError extends Error {
+  constructor(public fechaBaja: string) {
+    super(`La fecha en que vuelve no puede ser anterior a la baja (${fechaBaja}).`);
+    this.name = 'FechaReingresoError';
+  }
+}
+
+/**
+ * Un alumno a la vez. Dos clics seguidos —o dos pestañas— calculaban la vista
+ * previa los dos antes de que ninguno escribiera, y la baja quedaba dos veces en
+ * el historial. Llave propia (`hashtext`) para no compartir espacio con el
+ * candado de dos enteros del devengo.
+ */
+async function bloquearAlumno(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, teamId: number, estudianteId: number) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`baja-reingreso:${teamId}:${estudianteId}`}))`);
+}
+
 /** Añade una línea fechada a las notas, sin pisar lo que ya había. */
 export function anotar(notas: string | null, fecha: string, texto: string): string {
   const linea = `[${fecha}] ${texto}`;
@@ -132,7 +171,20 @@ export async function previaBaja(teamId: number, estudianteId: number, fecha: st
       eq(adminEscolarMatriculas.estado, 'activa'),
     ));
 
-  const idsRecurrentes = matriculas.map((m) => m.facturaRecurrenteId).filter((x): x is number => x != null);
+  /**
+   * Las mensualidades a pausar salen de TODAS sus matrículas, no solo de las
+   * activas. Un alumno dado de baja con el camino viejo podía tener la matrícula
+   * ya retirada y la mensualidad todavía emitiendo: «Terminar la baja» no la
+   * encontraba, no la pausaba, y el aviso rojo no se iba nunca.
+   */
+  const todas = await db
+    .select({ facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId })
+    .from(adminEscolarMatriculas)
+    .where(and(
+      eq(adminEscolarMatriculas.teamId, teamId),
+      eq(adminEscolarMatriculas.estudianteId, estudianteId),
+    ));
+  const idsRecurrentes = [...new Set(todas.map((m) => m.facturaRecurrenteId).filter((x): x is number => x != null))];
   const [recurrentes, compartidas, cargos] = await Promise.all([
     idsRecurrentes.length === 0 ? Promise.resolve([]) : db
       .select({ id: facturasRecurrentes.id, nombre: facturasRecurrentes.nombre, estado: facturasRecurrentes.estado })
@@ -206,6 +258,23 @@ export async function darDeBaja(teamId: number, estudianteId: number, opts: {
   const texto = `Baja: ${etiqueta}${opts.motivo ? ` — ${opts.motivo}` : ''}.`;
 
   await db.transaction(async (tx) => {
+    await bloquearAlumno(tx, teamId, estudianteId);
+    // Lo que se enseñó en la vista previa tiene que seguir siendo verdad.
+    const [ahora] = await tx.select({ estado: adminEscolarEstudiantes.estado })
+      .from(adminEscolarEstudiantes)
+      .where(and(eq(adminEscolarEstudiantes.id, estudianteId), eq(adminEscolarEstudiantes.teamId, teamId)))
+      .limit(1);
+    const activasAhora = await tx.select({ id: adminEscolarMatriculas.id })
+      .from(adminEscolarMatriculas)
+      .where(and(
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.estudianteId, estudianteId),
+        eq(adminEscolarMatriculas.estado, 'activa'),
+      ));
+    const mismas = activasAhora.length === previa.matriculas.length
+      && activasAhora.every((a) => previa.matriculas.some((m) => m.id === a.id));
+    if (ahora?.estado !== antes?.estado || !mismas) throw new AlumnoCambiadoError();
+
     await tx.update(adminEscolarEstudiantes)
       .set({ estado: opts.estado, updatedAt: new Date() })
       .where(and(eq(adminEscolarEstudiantes.id, estudianteId), eq(adminEscolarEstudiantes.teamId, teamId)));
@@ -250,7 +319,9 @@ export async function darDeBaja(teamId: number, estudianteId: number, opts: {
       cuotasAnuladas: opts.anularPosteriores && m
         ? previa.cargosPosteriores.filter((c) => c.matriculaId === m.id).map((c) => c.id)
         : [],
-      recurrenteId: m?.facturaRecurrenteId != null && pausadas.has(m.facturaRecurrenteId) ? m.facturaRecurrenteId : null,
+      recurrenteId: m
+        ? (m.facturaRecurrenteId != null && pausadas.has(m.facturaRecurrenteId) ? m.facturaRecurrenteId : null)
+        : (previa.recurrentes[0]?.id ?? null),
       userId: opts.userId,
     })));
 
@@ -277,6 +348,8 @@ export interface PreviaReingreso {
   recurrente: { id: number; nombre: string; estado: string; proximaActual: string; proximaNueva: string | null } | null;
   /** Las cuotas que anuló la baja y caen del mes del reingreso en adelante. */
   cuotasARestaurar: { id: number; concepto: string | null; mes: number; anio: number; montoCentavos: number }[];
+  /** El día de su última baja: no puede volver antes de haberse ido. */
+  fechaUltimaBaja: string | null;
 }
 
 /**
@@ -285,6 +358,18 @@ export interface PreviaReingreso {
  * nuevo en el actual.
  */
 export async function previaReingreso(teamId: number, estudianteId: number, fecha: string): Promise<PreviaReingreso> {
+  const [ultimaBaja] = await db
+    .select({ fecha: adminEscolarEstudianteMovimientos.fecha })
+    .from(adminEscolarEstudianteMovimientos)
+    .where(and(
+      eq(adminEscolarEstudianteMovimientos.teamId, teamId),
+      eq(adminEscolarEstudianteMovimientos.estudianteId, estudianteId),
+      eq(adminEscolarEstudianteMovimientos.tipo, 'baja'),
+    ))
+    .orderBy(desc(adminEscolarEstudianteMovimientos.id))
+    .limit(1);
+  const fechaUltimaBaja = ultimaBaja?.fecha ? String(ultimaBaja.fecha) : null;
+
   const [m] = await db
     .select({
       id: adminEscolarMatriculas.id,
@@ -306,7 +391,7 @@ export async function previaReingreso(teamId: number, estudianteId: number, fech
     .orderBy(desc(adminEscolarMatriculas.id))
     .limit(1);
 
-  if (!m) return { matricula: null, recurrente: null, cuotasARestaurar: [] };
+  if (!m) return { matricula: null, recurrente: null, cuotasARestaurar: [], fechaUltimaBaja };
 
   /**
    * Lo que anuló la ÚLTIMA baja de esta matrícula. Si lo último que pasó fue un
@@ -370,6 +455,7 @@ export async function previaReingreso(teamId: number, estudianteId: number, fech
     },
     recurrente,
     cuotasARestaurar: m.estado === 'retirada' ? cuotasARestaurar : [],
+    fechaUltimaBaja,
   };
 }
 
@@ -379,6 +465,9 @@ export async function reingresar(teamId: number, estudianteId: number, opts: {
   userId: number | null;
 }) {
   const previa = await previaReingreso(teamId, estudianteId, opts.fecha);
+  if (previa.fechaUltimaBaja && opts.fecha < previa.fechaUltimaBaja) {
+    throw new FechaReingresoError(previa.fechaUltimaBaja);
+  }
   const [antes] = await db.select({ estado: adminEscolarEstudiantes.estado })
     .from(adminEscolarEstudiantes)
     .where(and(eq(adminEscolarEstudiantes.id, estudianteId), eq(adminEscolarEstudiantes.teamId, teamId)))
@@ -388,6 +477,13 @@ export async function reingresar(teamId: number, estudianteId: number, opts: {
   const r = reabre ? previa.recurrente : null;
 
   await db.transaction(async (tx) => {
+    await bloquearAlumno(tx, teamId, estudianteId);
+    const [ahora] = await tx.select({ estado: adminEscolarEstudiantes.estado })
+      .from(adminEscolarEstudiantes)
+      .where(and(eq(adminEscolarEstudiantes.id, estudianteId), eq(adminEscolarEstudiantes.teamId, teamId)))
+      .limit(1);
+    if (ahora?.estado !== antes?.estado || ahora?.estado === 'activo') throw new AlumnoCambiadoError();
+
     const [fr] = r
       ? await tx.select({ notas: facturasRecurrentes.notas, fechaInicio: facturasRecurrentes.fechaInicio })
         .from(facturasRecurrentes).where(eq(facturasRecurrentes.id, r.id)).limit(1)
@@ -422,8 +518,10 @@ export async function reingresar(teamId: number, estudianteId: number, opts: {
       .set({
         estado: 'activa',
         // El devengo arma el plan desde aquí: lo de antes del reingreso no se
-        // vuelve a generar, y lo que se cobró antes de irse ya existe.
-        fechaInscripcion: opts.fecha,
+        // vuelve a generar, y lo que se cobró antes de irse ya existe. Nunca
+        // hacia atrás: con una fecha anterior a la inscripción original el
+        // devengo cobraría meses de antes de que el alumno entrara.
+        fechaInscripcion: m.fechaInscripcion && m.fechaInscripcion > opts.fecha ? m.fechaInscripcion : opts.fecha,
         notas: anotar(actual?.notas ?? null, opts.fecha, `Reingreso (${inscripcionAntes}; se movió al reingreso para no cobrar los meses fuera).`),
         updatedAt: new Date(),
       })
