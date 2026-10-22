@@ -345,7 +345,7 @@ export default function MatriculasClient() {
       </div>
 
       {/* «Tienes X alumnos de SIGERD sin matricular». Solo sale si hay alguno. */}
-      {puedeGestionar && <MatricularSigerdAviso onSaved={() => { void cargarMatriculas(); }} />}
+      {puedeGestionar && <MatricularSigerdAviso />}
 
       {/* Contadores del team, no de la página: los cuenta el servidor sobre
           todo lo filtrado. */}

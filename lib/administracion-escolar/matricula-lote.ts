@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarEstudiantes } from '@/lib/db/schema';
+import { adminEscolarConceptoPrecios, adminEscolarEstudiantes } from '@/lib/db/schema';
 import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
 import { armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
@@ -62,6 +62,12 @@ export async function matricularLote(params: {
   fechaInscripcion?: string | null;
   documentoListaId?: number | null;
   notas?: string | null;
+  /**
+   * Lo que cambia para un alumno concreto del grupo: los conceptos que se le
+   * cobran a ÉL (al que no usa transporte se le quita). Quien no tiene entrada
+   * va con lo del grupo.
+   */
+  porEstudiante?: Map<number, { conceptos: number[] }>;
   dryRun: boolean;
 }): Promise<RespuestaLote> {
   const { teamId, estudianteIds: ids, fechaInscripcion, documentoListaId, notas, dryRun } = params;
@@ -112,6 +118,23 @@ export async function matricularLote(params: {
     ));
   const porId = new Map(encontrados.map((e) => [e.id, e]));
 
+  // Quien tiene tarifa PERSONAL de algún concepto este año no puede usar el
+  // plan del grupo: ese plan sale de la tarifa de la sección y su precio propio
+  // no estaría. Se le arma el suyo, como hace el alta individual al pasar el
+  // alumno. Una consulta para todo el grupo; casi nunca hay ninguno.
+  const conPrecioPropio = ctx
+    ? new Set((await db
+        .selectDistinct({ id: adminEscolarConceptoPrecios.objetivoId })
+        .from(adminEscolarConceptoPrecios)
+        .where(and(
+          eq(adminEscolarConceptoPrecios.teamId, teamId),
+          eq(adminEscolarConceptoPrecios.periodoId, periodoIdOk),
+          eq(adminEscolarConceptoPrecios.objetivoTipo, 'estudiante'),
+          eq(adminEscolarConceptoPrecios.activo, true),
+          inArray(adminEscolarConceptoPrecios.objetivoId, ids),
+        ))).map((r) => r.id))
+    : new Set<number>();
+
   const resultados: ResultadoLote[] = [];
 
   for (const id of ids) {
@@ -140,6 +163,16 @@ export async function matricularLote(params: {
       continue;
     }
 
+    // Su plan y sus conceptos, si no son los del grupo. Los conceptos se
+    // recortan a los que su plan cobra: un id que no tenga tarifa aquí no es
+    // algo que se le pueda cargar.
+    const planAlumno = ctx && conPrecioPropio.has(id)
+      ? await armarPlanDeCobro(teamId, { ...ctx, estudianteId: id }, inscripcion)
+      : plan;
+    const suyos = params.porEstudiante?.get(id)?.conceptos;
+    const enPlan = new Set(planAlumno.map((l) => l.conceptoId));
+    const pedidosAlumno = suyos ? suyos.filter((c) => enPlan.has(c)) : pedidos;
+
     // Cada alumno en su propia transacción: si uno choca (carrera con otra alta),
     // los demás del lote siguen matriculándose igual.
     try {
@@ -159,8 +192,8 @@ export async function matricularLote(params: {
         becaTipo: null,
         becaValor: null,
         becaMotivo: null,
-        conceptos: pedidos,
-      }, plan);
+        conceptos: pedidosAlumno,
+      }, planAlumno);
       resultados.push({ estudianteId: id, nombre, codigo, resultado: 'creada', matriculaId: matricula.id });
     } catch (err: unknown) {
       // Choque con el índice parcial: alguien lo matriculó entremedio.
