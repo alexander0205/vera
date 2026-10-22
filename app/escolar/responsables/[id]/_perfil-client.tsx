@@ -4,7 +4,7 @@ import { useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import useSWR, { mutate as revalidar } from 'swr';
 import {
-  AlertTriangle, ArrowLeft, CalendarDays, Check, Download,
+  AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, CalendarRange, Check, Download,
   HandCoins, Loader2, Mail, MessageCircle, Pencil, Receipt, Smartphone,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -25,6 +25,8 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { DetalleResponsable } from '@/lib/administracion-escolar/responsables';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
+import { partidasDeFamilia, resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { textosResumenCobro } from '@/components/administracion-escolar/ResumenCobro';
 
 /**
  * La ficha completa de una familia.
@@ -242,10 +244,18 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const cobradoSueltas = data.facturas.reduce(
     (s, f) => s + Math.min(f.pagadoCentavos, f.montoTotal), 0);
 
-  const facturado = facturadoCargos + facturadoSueltas;
+  /*
+    Vencido / próximo pago / falta del año / pagado: la regla de todas las
+    fichas (resumen-cobro.ts), la misma que el panel de Responsables. Reemplaza
+    «Facturado / Cobrado / Pendiente / Vencido», que no decían si lo pendiente
+    ya se debía o era de junio.
+  */
+  const resumen = resumirCobro(partidasDeFamilia(data), hoy);
+  const textos = textosResumenCobro(resumen,
+    `${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`);
+  const facturado = resumen.totalCentavos;
   const pendiente = pendienteCargos + deudaFacturas;
-  const cobrado = (facturadoCargos - pendienteCargos) + cobradoSueltas;
-  const vencido = porHijo.reduce((s, h) => s + h.vencido, 0);
+  const cobrado = resumen.pagadoCentavos;
   const totalPagado = data.pagos.reduce((s, p) => s + p.montoCentavos, 0);
 
   /*
@@ -477,43 +487,14 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         }}
       >
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
-          <Cifra icon={Receipt} label="Facturado" valor={fmtDOP(facturado)}
-            detalle={[
-              `${data.cargos.length} ${data.cargos.length === 1 ? 'cargo' : 'cargos'} del año escolar`,
-              // Se nombran aparte porque no salen del plan de cobro: si no,
-              // la cifra no cuadra con los cargos que se ven más abajo.
-              sueltas.length > 0
-                ? `${sueltas.length} ${sueltas.length === 1 ? 'factura suelta' : 'facturas sueltas'}`
-                : null,
-              notasMora > 0
-                ? `${notasMora} ${notasMora === 1 ? 'nota de mora' : 'notas de mora'}`
-                : null,
-            ].filter(Boolean).join(' · ')}
-            primera />
-          <Cifra icon={HandCoins} label="Cobrado" valor={fmtDOP(cobrado)}
-            detalle={`${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`}
-            tono={cobrado > 0 ? 'verde' : 'gris'} />
-          <Cifra icon={AlertTriangle} label="Pendiente" valor={fmtDOP(pendiente)}
-            // Rojo siempre que quede algo pendiente (lo pidió Alex): aunque sea
-            // «aún por facturar», la familia debe verlo destacado. El desglose
-            // de abajo sigue separando lo exigible de lo que falta emitir.
-            detalle={pendientePorCobrar > 0 && pendientePorFacturar > 0
-              ? `Por cobrar ${fmtDOP(pendientePorCobrar)} · por facturar ${fmtDOP(pendientePorFacturar)}`
-              : pendientePorCobrar > 0
-              ? (deudaFacturas > 0
-                  ? `con ${[
-                      deudaSueltas > 0 ? `${fmtDOP(deudaSueltas)} de facturas sueltas` : null,
-                      deudaMora > 0 ? `${fmtDOP(deudaMora)} de mora` : null,
-                    ].filter(Boolean).join(' y ')}`
-                  : 'Del plan de cobro')
-              : pendientePorFacturar > 0 ? 'Aún por facturar'
-              : 'Nada por cobrar'}
-            tono={pendiente > 0 ? 'rojo' : 'gris'} />
-          <Cifra icon={CalendarDays} label="Vencido" valor={fmtDOP(vencido)}
-            // Solo del plan de cobro: una factura suelta no lleva fecha de
-            // vencimiento en el módulo, y contarla aquí sería inventarle una.
-            detalle={vencido > 0 ? 'Ya pasó su fecha · del plan de cobro' : 'Sin atrasos registrados'}
-            tono={vencido > 0 ? 'rojo' : 'gris'} />
+          <Cifra icon={AlertTriangle} label="Vencido" valor={fmtDOP(resumen.vencido.centavos)}
+            detalle={textos.vencido} tono={resumen.vencido.centavos > 0 ? 'rojo' : 'gris'} primera />
+          <Cifra icon={CalendarClock} label="Próximo pago" valor={fmtDOP(resumen.proximo.centavos)}
+            detalle={textos.proximo} tono={resumen.proximo.centavos > 0 ? 'ambar' : 'gris'} />
+          <Cifra icon={CalendarRange} label="Falta del año" valor={fmtDOP(resumen.falta.centavos)}
+            detalle={textos.falta} />
+          <Cifra icon={HandCoins} label="Pagado" valor={fmtDOP(resumen.pagadoCentavos)}
+            detalle={textos.pagado} tono={resumen.pagadoCentavos > 0 ? 'verde' : 'gris'} />
         </Box>
 
         {/* Cuánto de lo facturado ya entró. Sin nada emitido no hay porcentaje
@@ -911,6 +892,7 @@ const TONOS = {
   gris:  '#0F1118',
   verde: '#0F7A4A',
   rojo:  '#B4231F',
+  ambar: '#B45309',
 } as const;
 
 /**

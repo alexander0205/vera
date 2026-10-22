@@ -360,6 +360,8 @@ export interface DetalleResponsable {
      * marcada pagada sin pagos registrados.
      */
     saldoCentavos: number;
+    /** `yyyy-MM-dd`: su fecha límite, o la de emisión si no tiene (de contado). */
+    vence: string;
   }[];
   /** Los que TODAVÍA no han salido, con la fecha en que les toca. */
   avisosProgramados: {
@@ -447,7 +449,12 @@ export async function detalleResponsable(
              (x.mora_origen_id IS NOT NULL) AS es_mora,
              COALESCE((SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
                         WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}), 0)::int AS pagado,
-             ${saldoFacturaSql('x')} AS saldo
+             ${saldoFacturaSql('x')} AS saldo,
+             -- De contado se paga al facturar: sin fecha límite vence el día
+             -- de la factura.
+             -- (fecha_limite_pago es texto: solo se toma si es una fecha.)
+             COALESCE(substring(x.fecha_limite_pago from '^[0-9]{4}-[0-9]{2}-[0-9]{2}'),
+                      to_char(x.fecha_emision, 'YYYY-MM-DD')) AS vence
         FROM ecf_documents x
        WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
          -- Misma regla que la lista y que Cuentas por cobrar: ni anuladas ni
@@ -578,6 +585,7 @@ export async function detalleResponsable(
       pagadoCentavos: Number(f.pagado ?? 0),
       esMora: f.es_mora === true,
       saldoCentavos: Number(f.saldo ?? 0),
+      vence: String(f.vence).slice(0, 10),
     })),
     cargos: filas(cargos).map((g) => ({
       id: Number(g.id),
