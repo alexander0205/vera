@@ -21,6 +21,7 @@ import 'pdf-parse/worker';
 import { PDFParse } from 'pdf-parse';
 import { SigerdError } from './types';
 import type { SigerdClient } from './client';
+import { separarPegadas } from './nombres';
 
 const RUTA = '/ModuloReportes/Estudiantes/ReporteFichaEstudiantePDF';
 const PAGINA_INSCRIPCION = '/modulo-registro/inscripcion';
@@ -126,7 +127,7 @@ export function parsearParientesDeTexto(texto: string): ParientePdf[] {
     const resto = linea.slice(m[1].length).trim();
 
     const c = resto.match(CEDULA);
-    const nombre = (c ? resto.slice(0, c.index).trim() : resto).replace(/\s+/g, ' ');
+    const nombre = separarPegadas((c ? resto.slice(0, c.index).trim() : resto).replace(/\s+/g, ' '));
     if (!nombre) continue;
 
     // Lo que sigue a la cédula son celular y teléfono, en ese orden y ambos

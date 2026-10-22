@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { partirApellidos, partirNombre } from '@/lib/sigerd/nombres';
+import { partirApellidos, partirNombre, separarPegadas } from '@/lib/sigerd/nombres';
 
 /**
  * Los casos salen de nombres reales del listado de Andrés Bello. No se prueba
@@ -102,5 +102,16 @@ describe('partirApellidos', () => {
     expect(partirApellidos('  INVENTADO    FICTICIO '))
       .toEqual({ primero: 'INVENTADO', segundo: 'FICTICIO', dudoso: false });
     expect(partirApellidos('   ')).toEqual({ primero: '', segundo: '', dudoso: false });
+  });
+});
+
+describe('separarPegadas', () => {
+  it('separa las palabras que el PDF de SIGERD dejó juntas', () => {
+    expect(separarPegadas('Rosa MaríaPeñaPaniagua')).toBe('Rosa María Peña Paniagua');
+    expect(separarPegadas('JuanPérez')).toBe('Juan Pérez');
+  });
+  it('deja como viene lo que ya está bien, y lo que va todo en mayúsculas', () => {
+    expect(separarPegadas('Rosa María Peña Paniagua')).toBe('Rosa María Peña Paniagua');
+    expect(separarPegadas('ROSA MARIAPEÑA')).toBe('ROSA MARIAPEÑA');
   });
 });
