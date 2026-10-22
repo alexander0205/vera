@@ -12,14 +12,20 @@
  *  - **Solo lo que existe.** Un asistente repite lo que lee aquí como un hecho.
  *    Lo que todavía no se puede va en `TODAVIA_NO`, dicho así, y no se promete
  *    fecha.
- *  - **Los nombres son los del código.** La lista de herramientas y los topes
- *    están amarrados por una prueba a `app/api/mcp/route.ts` y a
+ *  - **Los nombres son los del código.** La lista de herramientas SALE del
+ *    registro único `lib/mcp/herramientas.ts` (el mismo que registra el
+ *    conector en `app/api/mcp/route.ts` y que alimenta la documentación de
+ *    mcp.zero.com.do), y los topes están amarrados por una prueba a
  *    `lib/auth/api-key-guard.ts` (`tests/unit/agentes-contenido.test.ts`): si
  *    allí cambia algo y aquí no, la prueba falla.
  */
 
 import { BASE_PUBLICA, SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
+import {
+  FILAS_MAXIMO, FILAS_POR_DEFECTO, HERRAMIENTAS_MCP, detalleDeParametro, parametrosDe,
+} from '@/lib/mcp/herramientas';
+import { MCP_BASE, MCP_URL } from '@/lib/mcp/conector';
 
 /** ISO. Se enseña en la página y encabeza el texto. Se cambia al cambiar el contenido. */
 export const ACTUALIZADA = '2026-10-14';
@@ -39,40 +45,42 @@ export const CONECTOR = {
   topePorLlave: 300,
   topePorDireccion: 120,
   /** Filas que devuelve un listado si no se pide otra cosa, y el máximo. */
-  filasPorDefecto: 200,
-  filasMaximo: 500,
+  filasPorDefecto: FILAS_POR_DEFECTO,
+  filasMaximo: FILAS_MAXIMO,
   dondeSeCreaLaLlave: `${BASE_PUBLICA}/dashboard/api-keys`,
   /** Las mismas consultas, por HTTP directo, para quien no habla MCP. */
   rest: `${BASE_PUBLICA}/api/mcp/v1`,
+  /**
+   * La documentación del conector y su dirección en el subdominio propio. La
+   * de `url` sigue funcionando: son dos puertas al mismo conector.
+   */
+  documentacion: MCP_BASE,
+  urlEnSubdominio: MCP_URL,
 } as const;
 
 /**
  * Las consultas por HTTP directo: cada una devuelve lo mismo que su herramienta.
- * Amarradas por la prueba a las carpetas de `app/api/mcp/v1/`.
+ * Salen del registro (la ruta de cada herramienta) y la prueba las amarra a las
+ * carpetas de `app/api/mcp/v1/`.
  */
-export const RUTAS_REST: readonly { ruta: string; herramienta: string }[] = [
-  { ruta: '/clientes', herramienta: 'list_clients' },
-  { ruta: '/clientes/{id}', herramienta: 'get_client' },
-  { ruta: '/facturas', herramienta: 'list_invoices' },
-  { ruta: '/facturas/{id}', herramienta: 'get_invoice' },
-  { ruta: '/facturas-recurrentes', herramienta: 'list_recurring_invoices' },
-  { ruta: '/facturas-recurrentes/{id}', herramienta: 'get_recurring_invoice' },
-  { ruta: '/cuentas-por-cobrar', herramienta: 'get_accounts_receivable' },
-  { ruta: '/pagos', herramienta: 'list_payments' },
-  { ruta: '/pagos/{id}', herramienta: 'get_payment' },
-  { ruta: '/cargos-escolares', herramienta: 'list_school_charges' },
-  { ruta: '/cargos-escolares/{id}', herramienta: 'get_school_charge' },
-];
+export const RUTAS_REST: readonly { ruta: string; herramienta: string }[] = HERRAMIENTAS_MCP.map((h) => ({
+  ruta: h.http.ruta,
+  herramienta: h.nombre,
+}));
 
 /** Dónde se pega la dirección y la llave en cada asistente. Los mismos pasos que enseña Zero por dentro. */
 export const DONDE_SE_PEGA: readonly { asistente: string; camino: string }[] = [
   {
-    asistente: 'ChatGPT',
-    camino: 'Ajustes → Conectores → agregar servidor MCP, con autenticación por API key. Antes hay que activar el modo desarrollador en Ajustes → Aplicaciones → Configuración avanzada.',
+    asistente: 'Claude Code',
+    camino: 'En la terminal: claude mcp add --transport http zero https://mcp.zero.com.do/mcp --header "Authorization: Bearer TU_LLAVE".',
   },
   {
-    asistente: 'Claude',
-    camino: 'Configuración → Conectores → agregar conector personalizado, con la misma dirección y la misma llave.',
+    asistente: 'Cursor y VS Code',
+    camino: 'Se agrega el servidor con su dirección y la cabecera Authorization con la llave, como en el ejemplo de abajo.',
+  },
+  {
+    asistente: 'ChatGPT y Claude en la web',
+    camino: 'Todavía no: esos asistentes piden inicio de sesión (OAuth) y no aceptan una llave pegada. Zero lo está preparando.',
   },
 ];
 
@@ -101,74 +109,20 @@ export type Herramienta = {
   parametros: readonly Parametro[];
 };
 
-const ID: Parametro = { nombre: 'id', tipo: 'entero', detalle: 'Obligatorio. El id que devuelve el listado.' };
-const LIMIT: Parametro = { nombre: 'limit', tipo: 'entero', detalle: 'Opcional. De 1 a 500; por defecto 200.' };
-const DESDE: Parametro = { nombre: 'desde', tipo: 'fecha', detalle: 'Opcional. `YYYY-MM-DD`.' };
-const HASTA: Parametro = { nombre: 'hasta', tipo: 'fecha', detalle: 'Opcional. `YYYY-MM-DD`.' };
-const CLIENTE: Parametro = { nombre: 'clientId', tipo: 'entero', detalle: 'Opcional. Limita a un cliente.' };
-
-/** Las herramientas del conector, en el orden en que se registran. Todas leen; ninguna escribe. */
-export const HERRAMIENTAS: readonly Herramienta[] = [
-  {
-    nombre: 'list_clients',
-    paraQue: 'Lista los clientes de la empresa. Busca por nombre, RNC o correo.',
-    parametros: [{ nombre: 'q', tipo: 'texto', detalle: 'Opcional. Nombre, RNC o correo.' }, LIMIT],
-  },
-  { nombre: 'get_client', paraQue: 'Devuelve un cliente.', parametros: [ID] },
-  {
-    nombre: 'list_invoices',
-    paraQue: 'Lista facturas y demás comprobantes, del más antiguo al más reciente por fecha de emisión.',
-    parametros: [
-      { nombre: 'q', tipo: 'texto', detalle: 'Opcional. Número de comprobante, código, nombre o RNC del comprador.' },
-      { nombre: 'estado', tipo: 'texto', detalle: 'Opcional. Estado del documento, tal como lo devuelve el listado.' },
-      { nombre: 'estadoPago', tipo: 'texto', detalle: 'Opcional. Estado de cobro, tal como lo devuelve el listado.' },
-      CLIENTE, DESDE, HASTA, LIMIT,
-    ],
-  },
-  { nombre: 'get_invoice', paraQue: 'Devuelve una factura.', parametros: [ID] },
-  {
-    nombre: 'list_recurring_invoices',
-    paraQue: 'Lista los planes de facturación recurrente (lo que se genera solo cada período, como borrador).',
-    parametros: [
-      { nombre: 'q', tipo: 'texto', detalle: 'Opcional. Texto a buscar.' },
-      { nombre: 'estado', tipo: 'texto', detalle: 'Opcional. Estado del plan.' },
-      CLIENTE, LIMIT,
-    ],
-  },
-  { nombre: 'get_recurring_invoice', paraQue: 'Devuelve un plan de facturación recurrente.', parametros: [ID] },
-  {
-    nombre: 'get_accounts_receivable',
-    paraQue: 'Cuentas por cobrar: quién debe, cuánto y desde cuándo, con totales y antigüedad del saldo.',
-    parametros: [
-      CLIENTE,
-      { nombre: 'soloVencidas', tipo: 'sí/no', detalle: 'Opcional. `true` deja solo lo vencido.' },
-    ],
-  },
-  {
-    nombre: 'list_payments',
-    paraQue: 'Lista los cobros recibidos: cuándo, cuánto y por qué vía. Trae `total` y `count` de todo lo que cumple el filtro, no solo de la página.',
-    parametros: [
-      { nombre: 'metodo', tipo: 'texto', detalle: 'Opcional. `efectivo`, `transferencia`, `tarjeta`, `cheque`, `deposito`, `nota_credito`.' },
-      { nombre: 'ecfDocumentId', tipo: 'entero', detalle: 'Opcional. Cobros de una factura.' },
-      CLIENTE, DESDE, HASTA, LIMIT,
-    ],
-  },
-  { nombre: 'get_payment', paraQue: 'Devuelve un cobro.', parametros: [ID] },
-  {
-    nombre: 'list_school_charges',
-    paraQue: 'Colegios: cargos del plan de pago de los alumnos (mensualidades, inscripción y demás), con su vencimiento. Es la única que mira hacia adelante: lo que todavía no se ha cobrado.',
-    parametros: [
-      { nombre: 'estado', tipo: 'texto', detalle: 'Opcional. Estado del cargo.' },
-      { nombre: 'estudianteId', tipo: 'entero', detalle: 'Opcional. Cargos de un alumno.' },
-      { nombre: 'mes', tipo: 'entero', detalle: 'Opcional. De 1 a 12.' },
-      { nombre: 'anio', tipo: 'entero', detalle: 'Opcional.' },
-      { ...DESDE, detalle: 'Opcional. `YYYY-MM-DD`, sobre la fecha de vencimiento.' },
-      { ...HASTA, detalle: 'Opcional. `YYYY-MM-DD`, sobre la fecha de vencimiento.' },
-      LIMIT,
-    ],
-  },
-  { nombre: 'get_school_charge', paraQue: 'Devuelve un cargo escolar.', parametros: [ID] },
-];
+/**
+ * Las herramientas del conector, en el orden en que se registran. Todas leen;
+ * ninguna escribe. Salen del registro: nombre, para qué sirve y cada parámetro
+ * (con su tipo y si es obligatorio, leídos del esquema de entrada).
+ */
+export const HERRAMIENTAS: readonly Herramienta[] = HERRAMIENTAS_MCP.map((h) => ({
+  nombre: h.nombre,
+  paraQue: h.descripcion,
+  parametros: parametrosDe(h.inputSchema).map((p) => ({
+    nombre: p.nombre,
+    tipo: p.tipo,
+    detalle: detalleDeParametro(p),
+  })),
+}));
 
 /** Lo que un agente puede hacer hoy, sin matices. */
 export const HOY_PUEDE: readonly string[] = [
@@ -348,6 +302,7 @@ El alta iniciada por un agente y la escritura por el conector están previstas y
 
 ## Dónde está la información
 
+- Documentación del conector MCP (cada herramienta por módulo, seguridad y cómo conectarlo en Claude, Cursor y VS Code): ${CONECTOR.documentacion}
 - Todas las funciones de Zero, módulo por módulo: ${SITIO_PUBLICO}${RUTA_FUNCIONES_MD}
 - Resumen, productos, precios y guías: ${SITIO_PUBLICO}/llms.txt
 - Planes y precios: ${SITIO_PUBLICO}/precios
@@ -366,7 +321,7 @@ ${pasos(PASOS_DE_CONEXION)}
 
 | Dato | Valor |
 |---|---|
-| Dirección | \`${CONECTOR.url}\` |
+| Dirección | \`${CONECTOR.url}\` (también \`${CONECTOR.urlEnSubdominio}\`) |
 | Protocolo | ${CONECTOR.protocolo} |
 | Transporte | ${CONECTOR.transporte} |
 | Autenticación | \`${CONECTOR.cabecera}\` |

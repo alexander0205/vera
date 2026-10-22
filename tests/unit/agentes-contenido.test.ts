@@ -6,10 +6,17 @@
  * si la página nombra una herramienta que ya no existe, o un tope que cambió,
  * el agente falla delante del cliente y la culpa es de la documentación.
  *
- * El conector registra sus herramientas dentro de `app/api/mcp/route.ts`, y los
- * topes viven como constantes privadas del guard. Para no tocar ninguno de los
- * dos —son la puerta de la API— esta prueba lee su fuente y lo compara con lo
- * publicado. Cambiar uno sin el otro la rompe, que es exactamente el aviso.
+ * Las herramientas del conector salen del registro único
+ * `lib/mcp/herramientas.ts`: de ahí las registra `app/api/mcp/route.ts` y de ahí
+ * las publica `lib/agentes/contenido.ts`. Esta prueba comprueba que la ruta no
+ * registra nada por su cuenta (si una herramienta se colara inline, no saldría
+ * en la documentación) y que lo publicado es lo del registro. Los topes viven
+ * como constantes privadas del guard; para no tocarlo —es la puerta de la API—
+ * se lee su fuente y se compara con lo publicado. Cambiar uno sin el otro la
+ * rompe, que es exactamente el aviso.
+ *
+ * El detalle del conector (que lo que registra coincide con el registro, las
+ * anotaciones, la ruta de cada herramienta) está en `mcp-herramientas.test.ts`.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -21,47 +28,40 @@ import {
 } from '@/lib/agentes/contenido';
 import { BASE_PUBLICA } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
+import { HERRAMIENTAS_MCP } from '@/lib/mcp/herramientas';
 
 const leer = (ruta: string) => readFileSync(path.join(process.cwd(), ruta), 'utf8');
 
 const RUTA_MCP = leer('app/api/mcp/route.ts');
 const GUARD = leer('lib/auth/api-key-guard.ts');
 
-/** Cada `registerTool('nombre', { … inputSchema: z.object({ … }) })` del conector. */
-function herramientasDelCodigo(): { nombre: string; parametros: string[] }[] {
-  const trozos = RUTA_MCP.split('server.registerTool(').slice(1);
-  return trozos.map((trozo) => {
-    const nombre = trozo.match(/^\s*'([a-z_]+)'/)?.[1] ?? '';
-    // El esquema llega hasta el `async` del manejador; ahí dentro, cada
-    // `clave: z.` es un parámetro.
-    const esquema = trozo.slice(trozo.indexOf('inputSchema'), trozo.indexOf('async'));
-    const parametros = [...esquema.matchAll(/(\w+):\s*z\./g)].map((m) => m[1]).filter((p) => p !== 'inputSchema');
-    return { nombre, parametros };
-  });
-}
-
 describe('lo publicado coincide con el conector', () => {
-  const delCodigo = herramientasDelCodigo();
-
-  it('lee al menos una herramienta del fuente (la prueba no se quedó ciega)', () => {
-    expect(delCodigo.length).toBeGreaterThan(5);
-    expect(delCodigo.every((h) => h.nombre.length > 0)).toBe(true);
+  it('la ruta del conector no registra herramientas por su cuenta: todas salen del registro', () => {
+    expect(RUTA_MCP).not.toContain('registerTool(');
+    expect(RUTA_MCP).toContain('registrarHerramientas');
+    expect(RUTA_MCP).toContain("from '@/lib/mcp/registrar'");
   });
 
-  it('publica exactamente las herramientas que registra el conector, en su orden', () => {
-    expect(HERRAMIENTAS.map((h) => h.nombre)).toEqual(delCodigo.map((h) => h.nombre));
+  it('publica exactamente las herramientas del registro, en su orden', () => {
+    expect(HERRAMIENTAS.length).toBeGreaterThan(5);
+    expect(HERRAMIENTAS.map((h) => h.nombre)).toEqual(HERRAMIENTAS_MCP.map((h) => h.nombre));
   });
 
-  it('publica exactamente los parámetros de cada herramienta', () => {
-    for (const h of delCodigo) {
+  it('publica exactamente los parámetros del esquema de cada herramienta', () => {
+    for (const h of HERRAMIENTAS_MCP) {
       const publicada = HERRAMIENTAS.find((x) => x.nombre === h.nombre);
-      expect(publicada?.parametros.map((p) => p.nombre), h.nombre).toEqual(h.parametros);
+      expect(publicada?.parametros.map((p) => p.nombre), h.nombre).toEqual(Object.keys(h.inputSchema.shape));
     }
   });
 
   it('no publica ninguna herramienta que escriba: el conector es de solo lectura', () => {
     expect(RUTA_MCP).toContain('Endpoint MCP de solo lectura');
+    // Mientras `TODAVIA_NO` diga que el conector no escribe, el registro no
+    // puede traer una herramienta que no sea de lectura: al añadirla, esta
+    // prueba obliga a corregir primero lo que se le promete a los agentes.
+    expect(HERRAMIENTAS_MCP.every((h) => h.nivel === 'lectura')).toBe(true);
     expect(HERRAMIENTAS.every((h) => /^(list|get)_/.test(h.nombre))).toBe(true);
+    expect(TODAVIA_NO.some((t) => t.includes('solo lectura'))).toBe(true);
   });
 
   it('los topes publicados son los del guard', () => {
@@ -81,7 +81,10 @@ describe('lo publicado coincide con el conector', () => {
 
   it('la dirección del conector sale de la base pública, no de un texto a mano', () => {
     expect(CONECTOR.url).toBe(`${BASE_PUBLICA}/api/mcp`);
-    expect(RUTA_MCP).toContain("streamableHttpEndpoint: '/api/mcp'");
+    expect(RUTA_MCP).toContain("const ENDPOINT_APP = '/api/mcp'");
+    expect(RUTA_MCP).toContain("const ENDPOINT_MCP = '/mcp'");
+    // La misma puerta, en el subdominio del conector.
+    expect(CONECTOR.urlEnSubdominio).toBe(`${CONECTOR.documentacion}/mcp`);
   });
 });
 
@@ -166,6 +169,13 @@ describe('las puertas hacia la información', () => {
     expect(llms).toContain('RUTA_AGENTES_MD');
     expect(llms).toContain('RUTA_FUNCIONES_MD');
     expect(llms).toContain('CONECTOR.url');
+  });
+
+  it('llevan a la documentación del conector (mcp.zero.com.do)', () => {
+    expect(leer('app/llms.txt/route.ts')).toContain('CONECTOR.documentacion');
+    expect(leer('app/(marketing)/agentes/page.tsx')).toContain('CONECTOR.documentacion');
+    expect(agentesMarkdown()).toContain(CONECTOR.documentacion);
+    expect(CONECTOR.documentacion).toBe('https://mcp.zero.com.do');
   });
 
   it('la página declara su gemelo en texto y está en el mapa del sitio', () => {

@@ -5,7 +5,7 @@
  *
  * Vive acá y no en un README porque quien crea la key es quien necesita el
  * instructivo, en ese mismo momento: la key se muestra UNA sola vez y hay que
- * pegarla en ChatGPT antes de cerrar el diálogo.
+ * pegarla en el asistente antes de cerrar el diálogo.
  */
 
 import { useState } from 'react';
@@ -89,7 +89,7 @@ export function GuiaConexion() {
           className="flex w-full items-center justify-between gap-3 text-left"
         >
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Conectar con ChatGPT o Claude</h2>
+            <h2 className="text-base font-semibold text-gray-900">Conectar con un asistente de IA</h2>
             <p className="mt-0.5 text-sm text-gray-500">
               Preguntá por tu facturación en lenguaje natural. Solo lectura.
             </p>
@@ -114,23 +114,24 @@ export function GuiaConexion() {
                 </p>
               </Paso>
 
-              <Paso n={2} titulo="En ChatGPT, prendé el modo desarrollador">
+              <Paso n={2} titulo="Agregá el conector en Claude Code, Cursor o VS Code">
                 <p>
-                  Ajustes → Aplicaciones → Configuración avanzada → <strong>Modo desarrollador</strong>.
-                  Está disponible en las cuentas Plus, Pro, Business, Enterprise y Edu, desde el
-                  navegador. En cuentas de empresa puede hacer falta que el administrador lo habilite
-                  en Permisos y roles.
+                  En Claude Code, desde la terminal (cambiá <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">TU_KEY</code> por la tuya):
+                </p>
+                <Copiable
+                  texto={`claude mcp add --transport http zero ${url} --header "Authorization: Bearer TU_KEY"`}
+                  etiqueta="el comando"
+                />
+                <p className="text-gray-500">
+                  En Cursor y VS Code se agrega en su archivo de configuración de MCP, con la misma
+                  dirección y la cabecera <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">Authorization: Bearer TU_KEY</code>.
                 </p>
               </Paso>
 
-              <Paso n={3} titulo="Agregá el conector">
+              <Paso n={3} titulo="ChatGPT y Claude en la web, todavía no">
                 <p>
-                  Ajustes → Conectores → agregar servidor MCP. Pegá la dirección de arriba, elegí
-                  autenticación por <strong>API key</strong> y pegá la tuya.
-                </p>
-                <p className="text-gray-500">
-                  En Claude es el mismo camino: Configuración → Conectores → agregar conector
-                  personalizado, con la misma dirección y la misma key.
+                  Esos asistentes piden inicio de sesión con la cuenta (OAuth) y no aceptan una key
+                  pegada. Lo estamos preparando; cuando esté, se conectan sin key.
                 </p>
               </Paso>
 

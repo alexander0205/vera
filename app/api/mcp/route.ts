@@ -3,14 +3,24 @@
  * Endpoint MCP de solo lectura. Cada tool llama por HTTP a su ruta hermana
  * bajo /api/mcp/v1/*, reenviando el mismo Bearer key que llegó en esta
  * request — nunca toca la base de datos directamente desde aquí.
+ *
+ * Qué herramientas hay NO se decide aquí: salen del registro único
+ * `lib/mcp/herramientas.ts`, que también alimenta la documentación de
+ * mcp.zero.com.do. Se sirve por dos puertas: `app.zero.com.do/api/mcp` (la de
+ * siempre) y `mcp.zero.com.do/mcp`, que el proxy reescribe hasta aquí.
  */
 import { NextRequest } from 'next/server';
 import { createMcpHandler } from 'mcp-handler';
-import { z } from 'zod';
 import { requireApiKey } from '@/lib/auth/api-key-guard';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
+import { SERVIDOR_MCP } from '@/lib/mcp/herramientas';
+import { registrarHerramientas } from '@/lib/mcp/registrar';
 
-function construirHandler(origin: string, authHeader: string) {
+/** Las dos direcciones públicas del conector. La segunda llega aquí reescrita por `proxy.ts`. */
+const ENDPOINT_APP = '/api/mcp';
+const ENDPOINT_MCP = '/mcp';
+
+function construirHandler(origin: string, authHeader: string, endpoint: string) {
   async function llamar(path: string, params: Record<string, string | undefined> = {}) {
     const url = new URL(`/api/mcp/v1${path}`, origin);
     for (const [k, v] of Object.entries(params)) {
@@ -27,140 +37,14 @@ function construirHandler(origin: string, authHeader: string) {
     };
   }
 
-  return createMcpHandler((server) => {
-    server.registerTool(
-      'list_clients',
-      { title: 'Listar clientes', description: 'Lista los clientes del tenant, con búsqueda opcional por nombre/RNC/email.',
-        inputSchema: z.object({ q: z.string().optional(), limit: z.number().int().min(1).max(500).optional() }) },
-      async ({ q, limit }) => llamar('/clientes', { q, limit: limit?.toString() }),
-    );
-
-    server.registerTool(
-      'get_client',
-      { title: 'Detalle de cliente', description: 'Obtiene un cliente por id.',
-        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
-      async ({ id }) => llamar(`/clientes/${id}`),
-    );
-
-    server.registerTool(
-      'list_invoices',
-      { title: 'Listar facturas', description: 'Lista facturas con filtros opcionales (estado, estadoPago, clientId, desde, hasta, q).',
-        inputSchema: z.object({
-          q: z.string().optional(),
-          estado: z.string().optional(),
-          estadoPago: z.string().optional(),
-          clientId: z.number().int().optional(),
-          desde: z.string().optional(),
-          hasta: z.string().optional(),
-          limit: z.number().int().min(1).max(500).optional(),
-        }) },
-      async (args) => llamar('/facturas', {
-        q: args.q, estado: args.estado, estadoPago: args.estadoPago,
-        clientId: args.clientId?.toString(), desde: args.desde, hasta: args.hasta,
-        limit: args.limit?.toString(),
-      }),
-    );
-
-    server.registerTool(
-      'get_invoice',
-      { title: 'Detalle de factura', description: 'Obtiene una factura por id.',
-        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
-      async ({ id }) => llamar(`/facturas/${id}`),
-    );
-
-    server.registerTool(
-      'list_recurring_invoices',
-      { title: 'Listar facturas recurrentes', description: 'Lista los planes de facturación recurrente, con filtros opcionales (estado, clientId, q).',
-        inputSchema: z.object({
-          q: z.string().optional(),
-          estado: z.string().optional(),
-          clientId: z.number().int().optional(),
-          limit: z.number().int().min(1).max(500).optional(),
-        }) },
-      async (args) => llamar('/facturas-recurrentes', {
-        q: args.q, estado: args.estado, clientId: args.clientId?.toString(), limit: args.limit?.toString(),
-      }),
-    );
-
-    server.registerTool(
-      'get_recurring_invoice',
-      { title: 'Detalle de factura recurrente', description: 'Obtiene un plan de facturación recurrente por id.',
-        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
-      async ({ id }) => llamar(`/facturas-recurrentes/${id}`),
-    );
-
-    server.registerTool(
-      'get_accounts_receivable',
-      { title: 'Cuentas por cobrar', description: 'Lista cuentas por cobrar con totales y antigüedad de saldo. Filtros opcionales: clientId, soloVencidas.',
-        inputSchema: z.object({
-          clientId: z.number().int().optional(),
-          soloVencidas: z.boolean().optional(),
-        }) },
-      async (args) => llamar('/cuentas-por-cobrar', {
-        clientId: args.clientId?.toString(),
-        soloVencidas: args.soloVencidas ? 'true' : undefined,
-      }),
-    );
-
-    server.registerTool(
-      'list_payments',
-      { title: 'Listar pagos recibidos',
-        description:
-          'Lista los pagos cobrados: cuándo, por cuánto y por qué vía. Devuelve además `total` (centavos) y `count` de TODOS los pagos que cumplen el filtro, no solo de la página — usa esos para responder cuánto se cobró, sin sumar a mano. Filtros opcionales: metodo (efectivo, transferencia, tarjeta, cheque, deposito, nota_credito…), ecfDocumentId, clientId, desde, hasta (YYYY-MM-DD). Ojo: un pago con metodo="nota_credito" no es dinero que entró.',
-        inputSchema: z.object({
-          metodo: z.string().optional(),
-          ecfDocumentId: z.number().int().optional(),
-          clientId: z.number().int().optional(),
-          desde: z.string().optional(),
-          hasta: z.string().optional(),
-          limit: z.number().int().min(1).max(500).optional(),
-        }) },
-      async (args) => llamar('/pagos', {
-        metodo: args.metodo,
-        ecfDocumentId: args.ecfDocumentId?.toString(),
-        clientId: args.clientId?.toString(),
-        desde: args.desde, hasta: args.hasta,
-        limit: args.limit?.toString(),
-      }),
-    );
-
-    server.registerTool(
-      'get_payment',
-      { title: 'Detalle de pago', description: 'Obtiene un pago recibido por id.',
-        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
-      async ({ id }) => llamar(`/pagos/${id}`),
-    );
-
-    server.registerTool(
-      'list_school_charges',
-      { title: 'Listar cargos escolares',
-        description:
-          'Cargos del plan de pago de los estudiantes: mensualidades, inscripción y demás conceptos, con su fecha de vencimiento. Es la única herramienta que mira HACIA ADELANTE — las otras cuentan lo ya facturado, un cargo con vencimiento futuro es dinero que todavía no se cobró. Usá `desde`/`hasta` sobre el VENCIMIENTO para responder «¿a quién le vence esta semana?» o «¿cuánto voy a cobrar en octubre?». Devuelve `total` (lo facturado), `saldo` (lo que FALTA cobrar, este es el que responde cuánto se va a cobrar) y `count`, calculados sobre todo el filtro y no sobre la página. Filtros: estado, estudianteId, mes (1-12), anio, desde, hasta (YYYY-MM-DD).',
-        inputSchema: z.object({
-          estado: z.string().optional(),
-          estudianteId: z.number().int().optional(),
-          mes: z.number().int().min(1).max(12).optional(),
-          anio: z.number().int().optional(),
-          desde: z.string().optional(),
-          hasta: z.string().optional(),
-          limit: z.number().int().min(1).max(500).optional(),
-        }) },
-      async (args) => llamar('/cargos-escolares', {
-        estado: args.estado,
-        estudianteId: args.estudianteId?.toString(),
-        mes: args.mes?.toString(), anio: args.anio?.toString(),
-        desde: args.desde, hasta: args.hasta,
-        limit: args.limit?.toString(),
-      }),
-    );
-
-    server.registerTool(
-      'get_school_charge',
-      { title: 'Detalle de cargo escolar', description: 'Obtiene un cargo escolar por id.',
-        inputSchema: z.object({ id: z.number().int().positive().safe() }) },
-      async ({ id }) => llamar(`/cargos-escolares/${id}`),
-    );
-  }, {}, { streamableHttpEndpoint: '/api/mcp', disableSse: true });
+  return createMcpHandler(
+    (server) => registrarHerramientas(server, llamar),
+    // Lo que el conector dice de sí mismo en `initialize`. Sin esto salía
+    // «mcp-typescript server on vercel 0.1.0», el valor por defecto de la
+    // librería.
+    { serverInfo: { name: SERVIDOR_MCP.nombre, version: SERVIDOR_MCP.version } },
+    { streamableHttpEndpoint: endpoint, disableSse: true },
+  );
 }
 
 async function manejar(req: NextRequest) {
@@ -169,6 +53,16 @@ async function manejar(req: NextRequest) {
 
   const authHeader = req.headers.get('authorization')!;
 
+  /**
+   * La librería compara el camino de `req.url` con `streamableHttpEndpoint` y,
+   * si no coinciden, contesta 404. Cuando el proxy reescribe `mcp.zero.com.do/mcp`
+   * hasta esta ruta, Next conserva en `req.url` el camino que pidió el cliente
+   * (`/mcp`), no el destino (`/api/mcp`) — se comprobó con un registro en
+   * local —, así que se le dice a la librería cuál de las dos puertas es.
+   * Solo hay dos posibles; cualquier otra cosa cae en la de siempre y la
+   * librería la rechaza.
+   */
+  const endpoint = new URL(req.url).pathname === ENDPOINT_MCP ? ENDPOINT_MCP : ENDPOINT_APP;
   /**
    * La base sale del entorno, NO de la petición.
    *
@@ -184,7 +78,7 @@ async function manejar(req: NextRequest) {
    * servidor que además lleva la key del cliente encaja ahí. Ninguna cabecera
    * la mueve.
    */
-  const handler = construirHandler(baseDeEnlaces(), authHeader);
+  const handler = construirHandler(baseDeEnlaces(), authHeader, endpoint);
   return handler(req);
 }
 
