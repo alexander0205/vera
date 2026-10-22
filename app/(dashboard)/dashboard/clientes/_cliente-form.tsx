@@ -13,7 +13,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Users, Plus, X, ArrowLeft } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import { formatTelefonoDO } from '@/lib/utils/format';
-import { useVolver } from '@/lib/hooks/useVolver';
+import { useVolver, hayHistorialPropio } from '@/lib/hooks/useVolver';
 
 interface Dependiente {
   id: number;   // > 0 persistido en DB; < 0 temporal (en memoria, modo crear)
@@ -88,9 +88,18 @@ function Field({ label, field, type = 'text', placeholder, form, setForm, ayuda 
  */
 export default function ClienteForm({
   clienteId, embebido = false, dependientesEditables = true,
-  valoresIniciales, onGuardado, onCancelar, onSucioChange,
+  valoresIniciales, onGuardado, onCancelar, onSucioChange, volverA = null,
 }: {
   clienteId?: number;
+  /**
+   * La pantalla que mandó aquí (`?volver=`), ya validada por la página.
+   *
+   * «Editar contacto» se abre desde Responsables del colegio, pero el
+   * formulario vive en Facturación: guardar llevaba siempre al listado de
+   * clientes y la secretaria quedaba en otro módulo, lejos de la familia que
+   * estaba atendiendo. Con esto, guardar y cancelar regresan a esa pantalla.
+   */
+  volverA?: string | null;
   /**
    * Dentro de un diálogo: sin cabecera de página ni botón de volver, y al
    * guardar avisa en vez de navegar. Existe para que la ficha del alumno pueda
@@ -133,8 +142,19 @@ export default function ClienteForm({
   onSucioChange?: (sucio: boolean) => void;
 }) {
   const router = useRouter();
-  const volverPagina = useVolver('/dashboard/clientes');
+  const volverPagina = useVolver(volverA ?? '/dashboard/clientes');
   const volver = onCancelar ?? volverPagina;
+
+  /**
+   * Salida tras guardar. Con `volverA` y una pantalla nuestra detrás se
+   * retrocede, para no dejar el formulario en el historial (el «atrás» del
+   * navegador lo volvería a abrir); en una pestaña nueva o tras recargar se
+   * va directo. Sin `volverA`, al listado de siempre.
+   */
+  const salirTrasGuardar = () => {
+    if (volverA && hayHistorialPropio()) router.back();
+    else router.push(volverA ?? '/dashboard/clientes');
+  };
   const isEdit = clienteId != null;
 
   const [form, setForm]       = useState<ClienteForm>({ ...EMPTY_FORM, ...valoresIniciales });
@@ -338,7 +358,7 @@ export default function ClienteForm({
       // el listado aparece igual que antes y no queda señal de que el guardado
       // llegó a ocurrir. Quien nos embebe (`onGuardado`) ya avisa a su manera.
       toast.success(isEdit ? 'Cliente actualizado' : `Cliente «${form.razonSocial.trim()}» creado`);
-      router.push('/dashboard/clientes');
+      salirTrasGuardar();
       router.refresh();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error guardando');
@@ -363,7 +383,7 @@ export default function ClienteForm({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <IconButton
             onClick={volver}
-            title="Volver a clientes"
+            title={volverA ? 'Volver' : 'Volver a clientes'}
             sx={{ ml: -1, borderRadius: '8px', color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
           >
             <ArrowLeft size={20} />

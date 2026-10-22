@@ -293,6 +293,19 @@ export const teamRolePermissions = pgTable('team_role_permissions', {
   rolePermUnique: uniqueIndex('team_role_perm_idx').on(t.teamRoleId, t.permission),
 }));
 
+// Pantallas apagadas por rol (lista negra; sin filas el rol ve todo). El
+// catálogo de pantallas vive en lib/config/pantallas.ts.
+export const teamRolePantallasOcultas = pgTable('team_role_pantallas_ocultas', {
+  id: serial('id').primaryKey(),
+  teamRoleId: integer('team_role_id')
+    .notNull()
+    .references(() => teamRoles.id, { onDelete: 'cascade' }),
+  pantalla: varchar('pantalla', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  rolePantallaUnique: uniqueIndex('team_role_pantalla_idx').on(t.teamRoleId, t.pantalla),
+}));
+
 export const activityLogs = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')

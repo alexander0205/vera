@@ -506,7 +506,9 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
           <Link href={`/escolar/responsables/${fila.clientId}`}>Abrir ficha completa</Link>
         </Button>
         <Button asChild variant="outline" className="w-full">
-          <Link href={`/dashboard/clientes/${fila.clientId}/editar`}>Editar contacto</Link>
+          <Link href={`/dashboard/clientes/${fila.clientId}/editar?volver=${encodeURIComponent(`/escolar/responsables?familia=${fila.clientId}`)}`}>
+            Editar contacto
+          </Link>
         </Button>
       </div>
     </div>

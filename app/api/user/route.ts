@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
+import { pantallasOcultasDe } from '@/lib/auth/pantallas';
 
 export async function GET() {
   const user = await getUser();
@@ -30,7 +31,13 @@ export async function GET() {
     ? await getUserModules(teamId, user.platformRole, teamRole)
     : [];
 
-  return Response.json({ ...safe, teamRole, permissions, modules });
+  // Pantallas que el dueño le apagó a este rol (o que le faltan por permiso):
+  // el menú de Facturación y su bloqueo las leen de aquí.
+  const pantallasOcultas = teamId
+    ? await pantallasOcultasDe(teamId, user.platformRole, teamRole)
+    : [];
+
+  return Response.json({ ...safe, teamRole, permissions, modules, pantallasOcultas });
 }
 
 export async function PATCH(req: Request) {

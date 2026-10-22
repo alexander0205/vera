@@ -11,7 +11,7 @@
  *  · la máquina de estados de los desplegables (useDesplegables).
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MODULE_HOME, type ModuleKey } from '@/lib/config/modules';
@@ -20,6 +20,8 @@ import Collapse from '@mui/material/Collapse';
 import { ChevronDown, Plus } from 'lucide-react';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { useOrdenNav, registrarVisitaNav } from '@/lib/hooks/useOrdenNav';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { rutaOculta } from '@/lib/config/pantallas';
 import { CURVA_DESPLIEGUE, FUENTE_SECCION, TINTA } from './estilos';
 import { useDesplegables } from './useDesplegables';
 import type { RailItem, RailSeccion } from './tipos';
@@ -132,6 +134,20 @@ export function RailSecciones({
   puedeVer?: (href: string) => boolean;
 }) {
   const rutaNavegador = usePathname();
+  // Lo que el dueño le apagó a este rol (lib/config/pantallas.ts): sale del
+  // menú, y un grupo sin hijos visibles sale entero. Va aquí y no en cada rail
+  // para que lo respeten todos los módulos.
+  const { pantallasOcultas } = usePermissions();
+  secciones = useMemo(() => {
+    if (pantallasOcultas.length === 0) return secciones;
+    const inicio = MODULE_HOME[modulo];
+    const oculta = (href: string) => rutaOculta(href, pantallasOcultas, inicio);
+    return secciones.flatMap<RailSeccion>(s => {
+      if (s.tipo === 'item') return oculta(s.href) ? [] : [s];
+      const hijos = s.children.filter(c => !oculta(c.href));
+      return hijos.length ? [{ ...s, children: hijos }] : [];
+    });
+  }, [secciones, pantallasOcultas, modulo]);
   // En la portada de un subdominio de módulo, la ruta efectiva es la del
   // módulo aunque el navegador diga `/`.
   const pathname = rutaNavegador === '/' ? MODULE_HOME[modulo] : rutaNavegador;
