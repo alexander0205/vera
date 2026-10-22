@@ -29,11 +29,15 @@ const EVENTO_UI: Record<EventoCartera['tipo'], {
 };
 
 export function DetallePanel({
-  cuenta, onClose, onCobrar,
+  cuenta, onClose, onCobrar, puedeCobrar = true, puedeAbrirFactura = true,
+  puedeGestionarCobro = true,
 }: {
   cuenta: Cuenta;
   onClose: () => void;
   onCobrar: (c: Cuenta) => void;
+  puedeCobrar?: boolean;
+  puedeAbrirFactura?: boolean;
+  puedeGestionarCobro?: boolean;
 }) {
   const [detalle, setDetalle] = useState<DetalleCuenta | null>(null);
   const [origenEscolar, setOrigenEscolar] = useState<OrigenEscolarFactura[]>([]);
@@ -74,18 +78,20 @@ export function DetallePanel({
           <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
             {nombreDeCuenta(actual) ?? 'Consumidor Final'}
           </Typography>
-          <Box
-            component={Link}
-            href={`/dashboard/facturas/${actual.id}`}
-            sx={{
-              fontSize: '0.75rem', fontFamily: 'monospace', color: 'primary.main',
-              display: 'inline-flex', alignItems: 'center', gap: 0.5,
-              textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
-            }}
-          >
-            {actual.codigo ?? actual.encf}
-            <ExternalLink style={{ width: 12, height: 12 }} />
-          </Box>
+          {puedeAbrirFactura ? (
+            <Box
+              component={Link}
+              href={`/dashboard/facturas/${actual.id}`}
+              sx={{
+                fontSize: '0.75rem', fontFamily: 'monospace', color: 'primary.main',
+                display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+              }}
+            >
+              {actual.codigo ?? actual.encf}
+              <ExternalLink style={{ width: 12, height: 12 }} />
+            </Box>
+          ) : <Typography sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>{actual.codigo ?? actual.encf}</Typography>}
         </Box>
         <IconButton size="small" onClick={onClose} aria-label="Cerrar" sx={{ color: '#9ca3af', flexShrink: 0 }}>
           <X style={{ width: 20, height: 20 }} />
@@ -210,27 +216,31 @@ export function DetallePanel({
         {/* Gestión de cobro: qué se ha hecho y qué sigue. Separado del
             historial de arriba porque ese es el movimiento del dinero y este
             es la gestión — mezclarlos confundiría lo fiscal con lo interno. */}
-        <GestionCobro docId={actual.id} />
+        {puedeGestionarCobro && <GestionCobro docId={actual.id} />}
       </Box>
 
       {/* Acciones */}
-      <Box component="footer" sx={{ px: 2, py: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Button
-          variant="contained" fullWidth
-          onClick={() => onCobrar(actual)}
-          disabled={actual.saldo <= 0}
-          startIcon={<Wallet2 style={{ width: 16, height: 16 }} />}
-        >
-          Registrar pago
-        </Button>
-        <Button
-          component={Link} href={`/dashboard/facturas/${actual.id}`} nativeButton={false}
-          variant="outlined" color="inherit"
-          sx={{ color: '#374151', borderColor: '#d1d5db', whiteSpace: 'nowrap', flexShrink: 0 }}
-        >
-          Ver factura
-        </Button>
-      </Box>
+      {(puedeCobrar || puedeAbrirFactura) && <Box component="footer" sx={{ px: 2, py: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 1 }}>
+        {puedeCobrar && (
+          <Button
+            variant="contained" fullWidth
+            onClick={() => onCobrar(actual)}
+            disabled={actual.saldo <= 0}
+            startIcon={<Wallet2 style={{ width: 16, height: 16 }} />}
+          >
+            Registrar pago
+          </Button>
+        )}
+        {puedeAbrirFactura && (
+          <Button
+            component={Link} href={`/dashboard/facturas/${actual.id}`} nativeButton={false}
+            variant="outlined" color="inherit"
+            sx={{ color: '#374151', borderColor: '#d1d5db', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Ver factura
+          </Button>
+        )}
+      </Box>}
     </Drawer>
   );
 }

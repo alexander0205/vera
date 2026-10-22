@@ -50,8 +50,10 @@ export interface FilaResponsable {
   porFacturarCentavos: number;
   /** Con filtro por concepto: sus cargos vivos de ese concepto y lo que queda por pagar de ellos. */
   delConcepto: { cargos: number; saldoCentavos: number } | null;
-  /** Saldo de sus facturas que no salieron de ningún cargo. */
+  /** Saldo de sus facturas que no salieron de ningún cargo (sin la mora). */
   deudaFacturasCentavos: number;
+  /** Saldo de sus notas de débito por mora: aparte de las «otras facturas». */
+  deudaMoraCentavos: number;
   /** El vencimiento más viejo sin pagar, para saber a quién llamar primero. */
   venceMasViejo: string | null;
 }
@@ -70,6 +72,10 @@ export interface ListaResponsables {
     familias: number;
     conDeuda: number;
     deudaTotalCentavos: number;
+    /** Lo exigible hoy: escolar facturada + otras facturas (sin lo por facturar). */
+    deudaExigibleCentavos: number;
+    /** La anualidad escolar que aún no tiene factura: futuro, no exigible todavía. */
+    porFacturarCentavos: number;
     incontactables: number;
   };
 }
@@ -105,6 +111,7 @@ export async function listarResponsables(
            COALESCE(a.deuda, 0)::bigint                   AS deuda_escolar,
            COALESCE(a.por_facturar, 0)::bigint            AS por_facturar,
            COALESCE(f.saldo, 0)::bigint                   AS deuda_facturas,
+           COALESCE(f.mora, 0)::bigint                    AS deuda_mora,
            a.vence_mas_viejo::text                        AS vence_mas_viejo
       FROM clients c
       LEFT JOIN LATERAL (
@@ -129,14 +136,25 @@ export async function listarResponsables(
       LEFT JOIN LATERAL (
         -- Facturas del contacto sin cargo escolar detrás: lo que se le cobró
         -- por fuera del plan y que ninguna pantalla del módulo contaba.
-        SELECT SUM(GREATEST(0, x.monto_total - COALESCE(p.pagado, 0))) AS saldo
+        --
+        -- Las notas de débito por MORA van aparte (\`mora\`): cuelgan de una
+        -- factura —casi siempre escolar— y contarlas como «otras facturas» las
+        -- hacía pasar por deuda ajena al plan (en Mi Casita eran el 91% de esa
+        -- cifra). Las notas de crédito (34) y las compras (41/43/47) no son
+        -- deuda de la familia, y un e-CF rechazado no se cobra: fuera, con la
+        -- misma regla que Cuentas por cobrar.
+        SELECT SUM(GREATEST(0, x.monto_total - COALESCE(p.pagado, 0)))
+                 FILTER (WHERE x.mora_origen_id IS NULL) AS saldo,
+               SUM(GREATEST(0, x.monto_total - COALESCE(p.pagado, 0)))
+                 FILTER (WHERE x.mora_origen_id IS NOT NULL) AS mora
           FROM ecf_documents x
           LEFT JOIN LATERAL (
             SELECT SUM(pr.monto_centavos) AS pagado FROM pagos_recibidos pr
              WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}
           ) p ON true
          WHERE x.client_id = c.id AND x.team_id = ${teamId}
-           AND x.estado <> 'ANULADO'
+           AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
+           AND COALESCE(x.tipo_ecf, '') NOT IN ('34', '41', '43', '47')
            AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g2 WHERE g2.ecf_document_id = x.id)
       ) f ON true
      WHERE c.team_id = ${teamId}
@@ -156,7 +174,9 @@ export async function listarResponsables(
    * algo —que es justo a la que hay que seguir llamando—; el resto pasa a
    * «Sin hijos activos».
    */
-  const debe = sql`(deuda_escolar + deuda_facturas) > 0`;
+  // La mora cuenta como deuda igual que antes, cuando iba mezclada en
+  // «otras facturas»: separarla no puede sacar a nadie de la lista.
+  const debe = sql`(deuda_escolar + deuda_facturas + deuda_mora) > 0`;
   const vigente = sql`(alumnos > 0 OR (fichas > 0 AND ${debe}))`;
   const retirada = sql`(fichas > 0 AND alumnos = 0 AND NOT ${debe})`;
   const sinFichaEscolar = sql`fichas = 0`;
@@ -223,7 +243,7 @@ export async function listarResponsables(
   const [filas, cuantas, conteo] = await Promise.all([
     db.execute(sql`
       ${conFiltro}
-       ORDER BY (deuda_escolar + deuda_facturas) DESC, razon_social ASC
+       ORDER BY (deuda_escolar + deuda_facturas + deuda_mora) DESC, razon_social ASC
        LIMIT ${limit} OFFSET ${offset}`),
     /**
      * Cuántas filas tiene LO QUE SE ESTÁ MIRANDO: es lo que necesita el
@@ -243,8 +263,15 @@ export async function listarResponsables(
              count(*) FILTER (WHERE ${retirada})::int                          retiradas,
              count(*) FILTER (WHERE ${vigente})::int                           familias,
              count(*) FILTER (WHERE ${vigente} AND ${debe})::int               con_deuda,
-             COALESCE(SUM(deuda_escolar + deuda_facturas)
-               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_total
+             COALESCE(SUM(deuda_escolar + deuda_facturas + deuda_mora)
+               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_total,
+             -- Lo EXIGIBLE hoy: la deuda escolar YA facturada (se le quita lo que
+             -- aún no tiene factura), las otras facturas y la mora. Lo «por
+             -- facturar» es la anualidad que todavía no se le ha cobrado.
+             COALESCE(SUM(GREATEST(0, deuda_escolar - por_facturar) + deuda_facturas + deuda_mora)
+               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_exigible,
+             COALESCE(SUM(por_facturar)
+               FILTER (WHERE ${vigente}), 0)::bigint                           por_facturar_total
         FROM (${sinFiltroDeTexto}) t`),
   ]);
 
@@ -267,6 +294,7 @@ export async function listarResponsables(
       delConcepto: r.cargos_concepto == null ? null
         : { cargos: Number(r.cargos_concepto), saldoCentavos: Number(r.saldo_concepto ?? 0) },
       deudaFacturasCentavos: Number(r.deuda_facturas ?? 0),
+      deudaMoraCentavos: Number(r.deuda_mora ?? 0),
       venceMasViejo: (r.vence_mas_viejo as string) ?? null,
     })),
     total: Number((cuantas as unknown as Record<string, unknown>[])[0]?.n ?? 0),
@@ -277,6 +305,8 @@ export async function listarResponsables(
       familias: Number(c0.familias ?? 0),
       conDeuda: Number(c0.con_deuda ?? 0),
       deudaTotalCentavos: Number(c0.deuda_total ?? 0),
+      deudaExigibleCentavos: Number(c0.deuda_exigible ?? 0),
+      porFacturarCentavos: Number(c0.por_facturar_total ?? 0),
       incontactables: Number(c0.incontactables ?? 0),
     },
   };
@@ -307,10 +337,14 @@ export interface DetalleResponsable {
     direccion: string | null;
   } | null;
   hijos: HijoResponsable[];
-  /** Facturas suyas sin cargo escolar detrás, con su saldo. */
+  /**
+   * Facturas suyas sin cargo escolar detrás, con su saldo. Incluye las notas
+   * de débito por mora marcadas con `esMora`: cuentan en el total de la familia
+   * pero no son «facturas sueltas» y la pantalla las nombra aparte.
+   */
   facturas: {
     id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number;
+    montoTotal: number; pagadoCentavos: number; esMora: boolean;
   }[];
   /** Los que TODAVÍA no han salido, con la fecha en que les toca. */
   avisosProgramados: {
@@ -395,14 +429,22 @@ export async function detalleResponsable(
 
     db.execute(sql`
       SELECT x.id, x.codigo, x.encf, x.fecha_emision, x.monto_total,
+             (x.mora_origen_id IS NOT NULL) AS es_mora,
              COALESCE((SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
                         WHERE pr.ecf_document_id = x.id AND pr.team_id = ${teamId}), 0)::int AS pagado
         FROM ecf_documents x
        WHERE x.client_id = ${clientId} AND x.team_id = ${teamId}
-         AND x.estado <> 'ANULADO'
+         -- Misma regla que la lista y que Cuentas por cobrar: ni anuladas ni
+         -- rechazadas, y las notas de crédito y compras no son deuda.
+         AND x.estado NOT IN ('ANULADO', 'RECHAZADO')
+         AND COALESCE(x.tipo_ecf, '') NOT IN ('34', '41', '43', '47')
          AND NOT EXISTS (SELECT 1 FROM admin_escolar_cargos g WHERE g.ecf_document_id = x.id)
        ORDER BY x.fecha_emision DESC
-       LIMIT 50`),
+       -- La ficha SUMA sobre esta lista (pendiente, facturado, cobrado), así
+       -- que un tope bajo recortaba la deuda en silencio: la mora deja una nota
+       -- por mes y factura, y el orden por fecha cortaba justo las más viejas,
+       -- que suelen ser las impagas. 500 es holgado para una familia.
+       LIMIT 500`),
 
     db.execute(sql`
       SELECT v.id, v.enviado_at, v.tipo, v.canal, v.destino,
@@ -518,6 +560,7 @@ export async function detalleResponsable(
       fecha: new Date(f.fecha_emision as string).toISOString(),
       montoTotal: Number(f.monto_total ?? 0),
       pagadoCentavos: Number(f.pagado ?? 0),
+      esMora: f.es_mora === true,
     })),
     cargos: filas(cargos).map((g) => ({
       id: Number(g.id),

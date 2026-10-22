@@ -76,13 +76,15 @@ export default async function EscolarPage() {
 
   const estado = await estadoConfiguracion(equipo.id);
 
-  // Ya hay algo cargado: a trabajar, que es a lo que se entra.
-  // A Estudiantes, salvo que el dueño se la haya ocultado a este rol: entonces
-  // a la primera pantalla del colegio que sí ve, no a un aviso de «no disponible».
+  // Ya hay algo cargado: se entra al Panorama, no al listado de estudiantes.
+  // Alex lo pidió así: quien abre el módulo ve primero cómo va el cobro del
+  // colegio. Salvo que el dueño le haya ocultado el Panorama a este rol (la
+  // vendedora de Mi Casita, por ejemplo): entonces a la primera pantalla del
+  // colegio que sí ve, no a un aviso.
   if (!estado.enBlanco) {
     const [usuario, rol] = await Promise.all([getUser(), getTeamRoleForUser()]);
     const ocultas = await pantallasOcultasDe(equipo.id, usuario?.platformRole, rol);
-    redirect(primeraVisible('escolar', ocultas, undefined, 'escolar-estudiantes')?.href ?? '/escolar/estudiantes');
+    redirect(primeraVisible('escolar', ocultas, undefined, 'escolar-panorama')?.href ?? '/escolar/dashboard');
   }
 
   // Las horas de implementación salen del plan que tiene contratado, no de un

@@ -34,6 +34,12 @@ export interface FilaMes {
   codigo: string | null;
   /** Estado ante la DGII. null sin factura o en un previsto. Sin él «Emitir en DGII» saldría en toda factura. */
   facturaEstado: string | null;
+  /** Mora (notas de débito) de la factura de este cargo. 0 sin factura o sin mora. */
+  moraCentavos: number;
+  moraSaldoCentavos: number;
+  /** Enlace a la mora: a la nota si es una sola, a la factura padre si hay varias. */
+  moraNotaId: number | null;
+  moraNotaCount: number;
 }
 
 export interface PeriodoDeHijo {
