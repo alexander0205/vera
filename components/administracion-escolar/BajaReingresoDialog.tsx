@@ -166,6 +166,15 @@ export function BajaReingresoDialog({ estudianteId, nombre, accion, abierto, onC
                       <span className="block text-xs text-gray-500">
                         {baja.cargosPosteriores.map((c) => `${c.concepto ?? 'Cargo'} ${MESES[c.mes]} ${c.anio}`).join(' · ')}
                       </span>
+                      {/* La facturación por calendario factura todo cargo que ya
+                          existe cuando llega su fecha, esté o no el alumno en el
+                          colegio: es deuda. Quien las deja vivas tiene que saber
+                          que se van a facturar. */}
+                      {!anular && (
+                        <span className="mt-1 block text-xs font-medium text-amber-700">
+                          Si no las anulas, se le facturarán a la familia cuando llegue la fecha de cada una.
+                        </span>
+                      )}
                     </span>
                   </label>
                 </li>
