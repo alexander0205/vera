@@ -21,6 +21,12 @@ export const tagEstructura = (teamId: number) => `escolar:estructura:${teamId}`;
 export const tagTarifas = (teamId: number) => `escolar:tarifas:${teamId}`;
 /** Todo lo derivado del snapshot de Sigerd. */
 export const tagSigerd = (teamId: number) => `escolar:sigerd:${teamId}`;
+/**
+ * Pantallas apagadas por rol (lib/auth/pantallas.ts). Vive aquí con las demás
+ * etiquetas aunque no es solo del colegio: se lee en cada carga de cualquier
+ * módulo y solo cambia cuando alguien la toca.
+ */
+export const tagPantallas = (teamId: number) => `pantallas:${teamId}`;
 
 /**
  * Envuelve una lectura para que se sirva de caché hasta que alguien invalide su
@@ -43,9 +49,9 @@ export function cachearPorTag<T>(
  * `lib/dgii/catalogos.ts`, y para que un fallo al invalidar no tumbe la
  * escritura que acaba de guardarse bien.
  */
-function invalidar(tag: string): void {
+function invalidar(tag: string, perfil: string | { expire: number } = 'max'): void {
   try {
-    (revalidateTag as (tag: string, scope?: string) => void)(tag, 'max');
+    (revalidateTag as (tag: string, perfil?: string | { expire: number }) => void)(tag, perfil);
   } catch (err) {
     console.warn('[cache.escolar] no se pudo invalidar', tag, err instanceof Error ? err.message : err);
   }
@@ -71,4 +77,13 @@ export function invalidarTarifas(teamId: number): void {
 export function invalidarSigerd(teamId: number): void {
   invalidar(tagSigerd(teamId));
   invalidar(tagEstructura(teamId));
+}
+
+/**
+ * Tras mostrar u ocultar pantallas de un rol. Caduca en el acto (`expire: 0`)
+ * y no «sirve lo viejo mientras refresca» como las demás: quien acaba de
+ * ocultar una pantalla espera que en la siguiente carga ya no salga.
+ */
+export function invalidarPantallas(teamId: number): void {
+  invalidar(tagPantallas(teamId), { expire: 0 });
 }

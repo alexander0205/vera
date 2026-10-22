@@ -22,6 +22,9 @@ import { BannerSuscripcion } from '@/components/banner-suscripcion';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import type { UserInfo } from '@/components/profile-dropdown';
 import type { ModuleKey } from '@/lib/config/modules';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { AtajoPantallaRoles, GuardPantalla } from '@/components/gobernanza/Gobernanza';
+import { MODULE_HOME } from '@/lib/config/modules';
 
 interface Props {
   /** Rail de escritorio (se oculta solo por debajo de lg). */
@@ -45,6 +48,9 @@ export function ModuleShell(props: Props) {
 function ShellInterno({ rail, railMovil, current, titulo, user, children }: Props) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const { fijo, alternar } = useNavFijo();
+  const { can, pantallasOcultas } = usePermissions();
+  // La portada del módulo: en su subdominio la barra dice «/» y no /pos o /nomina.
+  const inicio = MODULE_HOME[current ?? 'facturacion'];
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f9fafb', color: '#111827' }}>
@@ -74,10 +80,12 @@ function ShellInterno({ rail, railMovil, current, titulo, user, children }: Prop
         {/* Fuera del área que hace scroll: un aviso de cobro que se pierde al
             bajar la página no sirve de nada. */}
         <BannerSuscripcion />
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          {children}
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative' }}>
+          <GuardPantalla ocultas={pantallasOcultas} inicio={inicio}>{children}</GuardPantalla>
         </Box>
       </Box>
+      {/* Alt+Shift+R: mostrar/ocultar pantallas por rol, desde cualquier módulo. */}
+      {can('equipo:gestionar') && <AtajoPantallaRoles inicio={inicio} />}
     </Box>
   );
 }
