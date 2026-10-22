@@ -159,6 +159,20 @@ export function matriculasDeEstudiante(teamId: number, estudianteId: number) {
 }
 
 /**
+ * El cargo que lleva la mora de su factura: el de menor id, no anulado, entre
+ * todos los del team que apuntan a esa factura —de este alumno o de un
+ * hermano—. Así la mora sale una sola vez aunque la factura cubra varios
+ * cargos. Sin factura, ningún cargo es representante.
+ */
+function esRepresentanteDeFactura(teamId: number) {
+  return sql`${adminEscolarCargos.id} = (
+    SELECT MIN(g2.id) FROM admin_escolar_cargos g2
+     WHERE g2.ecf_document_id = ${adminEscolarCargos.ecfDocumentId}
+       AND g2.team_id = ${teamId} AND g2.estado <> 'anulado'
+  )`;
+}
+
+/**
  * Cargos del estudiante (más reciente primero).
  *
  * No sincroniza saldos: eso lo hace quien llama, una sola vez por carga.
@@ -195,35 +209,41 @@ export function cargosDeEstudiante(teamId: number, estudianteId: number) {
       // `moraCentavos` es lo recargado; `moraSaldoCentavos`, lo que de eso
       // sigue sin cobrarse; `moraNotaId`/`moraNotaCount` dan el enlace al
       // documento (a la nota si es una sola, a la factura padre si hay varias).
-      // `ecf_document_id` va sin calificar a propósito: dentro de un `sql`
-      // crudo Drizzle lo emite pelado y solo `admin_escolar_cargos` tiene esa
-      // columna en el alcance, así que la correlación resuelve bien (ver la
-      // nota de `facturasSueltasDeEstudiante` sobre este mismo detalle).
-      moraCentavos: sql<number>`COALESCE((
+      //
+      // La mora es de la FACTURA, no del cargo: una factura puede cubrir varios
+      // cargos (varios meses, o hijos de la misma familia). Si cada cargo
+      // trajera la mora entera, la ficha la pintaría una vez por cargo y la
+      // fila del mes la sumaría repetida —en Mi Casita, una factura de 8 meses
+      // con RD$13,702 de mora salía ocho veces—. Por eso solo la lleva UN cargo
+      // por factura: el de menor id que no esté anulado (un anulado no se
+      // pinta y con él la mora desaparecería). Los demás traen 0.
+      moraCentavos: sql<number>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN COALESCE((
         SELECT SUM(nd.monto_total) FROM ${ecfDocuments} nd
          WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
            AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
-      ), 0)::int`,
-      moraSaldoCentavos: sql<number>`COALESCE((
-        SELECT SUM(nd.monto_total - COALESCE((
+      ), 0) ELSE 0 END)::int`,
+      // GREATEST por nota, como el motor de mora: una nota sobrepagada no
+      // puede restarle saldo a las demás.
+      moraSaldoCentavos: sql<number>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN COALESCE((
+        SELECT SUM(GREATEST(0, nd.monto_total - COALESCE((
           SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
            WHERE pr.ecf_document_id = nd.id AND pr.team_id = ${teamId}
-        ), 0))
+        ), 0)))
         FROM ${ecfDocuments} nd
          WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
            AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
-      ), 0)::int`,
-      moraNotaId: sql<number | null>`(
+      ), 0) ELSE 0 END)::int`,
+      moraNotaId: sql<number | null>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN (
         SELECT nd.id FROM ${ecfDocuments} nd
          WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
            AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
          ORDER BY nd.id DESC LIMIT 1
-      )`,
-      moraNotaCount: sql<number>`(
-        SELECT COUNT(*)::int FROM ${ecfDocuments} nd
+      ) END)`,
+      moraNotaCount: sql<number>`(CASE WHEN ${esRepresentanteDeFactura(teamId)} THEN (
+        SELECT COUNT(*) FROM ${ecfDocuments} nd
          WHERE nd.mora_origen_id = ${adminEscolarCargos.ecfDocumentId}
            AND nd.team_id = ${teamId} AND nd.estado <> 'ANULADO'
-      )`,
+      ) ELSE 0 END)::int`,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarConceptosPago, and(

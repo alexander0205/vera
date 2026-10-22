@@ -126,7 +126,7 @@ describe('«Cobrar» sigue a la vista en la familia, y no es otro cobro', () => 
 describe('la columna de acción se alcanza aunque la tabla no quepa', () => {
   it('la tabla de cargos se desplaza de lado en vez de quedar recortada', () => {
     // El trozo que va de las pistas de la rejilla de cargos a su cabecera.
-    const desde = tarjetas.indexOf("'92px 92px 132px',");
+    const desde = tarjetas.indexOf("'92px 92px 132px 96px',");
     const hasta = tarjetas.indexOf('<Box sx={ENCABEZADO}>Concepto</Box>', desde);
     expect(desde).toBeGreaterThan(0);
     expect(hasta).toBeGreaterThan(desde);

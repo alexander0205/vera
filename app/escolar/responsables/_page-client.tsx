@@ -53,7 +53,7 @@ interface Detalle {
   hijos: { estudianteId: number | null; nombre: string; curso: string | null;
     estado: string | null; deudaCentavos: number; cargos: number }[];
   facturas: { id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number }[];
+    montoTotal: number; pagadoCentavos: number; esMora: boolean }[];
   avisos: { id: number; enviadoAt: string; tipo: string; canal: string;
     destino: string | null; alumno: string; concepto: string | null }[];
 }
@@ -79,6 +79,7 @@ const EXPORTAR: ExportTabla<FilaResponsable> = {
     { titulo: 'Deuda escolar', valor: f => Math.max(0, f.deudaEscolarCentavos - f.porFacturarCentavos), tipo: 'moneda', total: true, ancho: 1 },
     { titulo: 'Por facturar', valor: f => f.porFacturarCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
     { titulo: 'Otras facturas', valor: f => f.deudaFacturasCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Mora', valor: f => f.deudaMoraCentavos || null, tipo: 'moneda', total: true, ancho: 0.9 },
     { titulo: 'Vence más viejo', valor: f => (f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : null), ancho: 0.9 },
   ],
 };
@@ -298,7 +299,7 @@ export default function ResponsablesClient() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-lg border border-gray-100">
-                <table className="w-full min-w-[52rem] text-sm">
+                <table className="w-full min-w-[58rem] text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                       <th className="px-3 py-2 font-medium">Familia</th>
@@ -306,6 +307,7 @@ export default function ResponsablesClient() {
                       <th className="px-3 py-2 font-medium">Avisos</th>
                       <th className="px-3 py-2 text-right font-medium">Deuda escolar</th>
                       <th className="px-3 py-2 text-right font-medium">Otras facturas</th>
+                      <th className="px-3 py-2 text-right font-medium">Mora</th>
                       <th className="px-3 py-2 font-medium">Más viejo sin pagar</th>
                     </tr>
                   </thead>
@@ -364,6 +366,14 @@ export default function ResponsablesClient() {
                             ? <span className="font-medium text-amber-700">{fmtDOP(f.deudaFacturasCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
+                        {/* Las notas de débito por mora, aparte de «otras
+                            facturas»: cuelgan de una factura escolar y antes se
+                            colaban ahí como si fueran deuda ajena al plan. */}
+                        <td className="px-3 py-2.5 text-right">
+                          {f.deudaMoraCentavos > 0
+                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaMoraCentavos)}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
                           {f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : '—'}
                         </td>
@@ -415,12 +425,13 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
   // facturado (exigible) aparte de la anualidad que todavía no tiene factura.
   const escolarPorCobrar = Math.max(0, fila.deudaEscolarCentavos - fila.porFacturarCentavos);
   const porFacturar = fila.porFacturarCentavos;
-  // «Debe en total» es lo exigible hoy: escolar facturada + otras facturas. Lo
-  // por facturar es futuro y se muestra aparte, no se suma aquí.
-  const debeTotal = escolarPorCobrar + fila.deudaFacturasCentavos;
+  // «Debe en total» es lo exigible hoy: escolar facturada + otras facturas +
+  // mora. Lo por facturar es futuro y se muestra aparte, no se suma aquí.
+  const debeTotal = escolarPorCobrar + fila.deudaFacturasCentavos + fila.deudaMoraCentavos;
   const hijos = detalle?.hijos ?? [];
+  // Las notas de mora no son facturas: tienen su fila «Mora» abajo.
   const facturasPendientes = (detalle?.facturas ?? [])
-    .filter((f) => f.montoTotal - f.pagadoCentavos > 0).length;
+    .filter((f) => !f.esMora && f.montoTotal - f.pagadoCentavos > 0).length;
 
   return (
     // Misma tarjeta que la ficha del estudiante: encabezado con iniciales,
@@ -476,6 +487,12 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
         )}
         <TotalRow icon={FileText} tone="amber" label="Otras facturas"
           value={fmtDOP(fila.deudaFacturasCentavos)} muted={fila.deudaFacturasCentavos === 0} />
+        {/* La mora de sus facturas (notas de débito), aparte: no es «otra
+            factura» sino el recargo de una escolar. Solo si hay. */}
+        {fila.deudaMoraCentavos > 0 && (
+          <TotalRow icon={AlertTriangle} tone="red" label="Mora"
+            value={fmtDOP(fila.deudaMoraCentavos)} />
+        )}
         <TotalRow icon={AlertTriangle} tone="red" label="Debe en total"
           value={fmtDOP(debeTotal)} muted={debeTotal === 0} />
       </div>

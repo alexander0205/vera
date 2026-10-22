@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { ChevronDown, ChevronUp, Loader2, Plus, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,9 @@ export function ConceptosCatalogo() {
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
   const [arrastre, setArrastre] = useState<number | null>(null);
   const [sobre, setSobre] = useState<{ id: number; lado: 'arriba' | 'abajo' } | null>(null);
+  const router = useRouter();
+  /** Salida pendiente de confirmar por haber cambios sin guardar. */
+  const [salida, setSalida] = useState<{ tipo: 'concepto'; id: number } | { tipo: 'nav'; href: string } | null>(null);
 
   // Al abrir, el primero de la lista: una pantalla de detalle vacía no dice
   // nada sobre lo que hay dentro.
@@ -81,6 +85,51 @@ export function ConceptosCatalogo() {
     setBorrador(seleccionado ? { ...seleccionado } : null);
     setError(null);
   }, [seleccionado]);
+
+  /**
+   * Cambios sin guardar (lo pidió Alex tras salir de una mensualidad y perder lo
+   * que había metido): el borrador difiere del concepto guardado, o el
+   * calendario tiene cuotas tocadas sin persistir. El estado del calendario se
+   * lee por su ref, en vivo, no es estado de aquí.
+   */
+  const conceptoSucio = !!borrador && !!seleccionado
+    && JSON.stringify(borrador) !== JSON.stringify(seleccionado);
+
+  // Cerrar la pestaña, recargar o salir del sitio: el aviso nativo del
+  // navegador. El calendario se consulta en el momento por su ref.
+  useEffect(() => {
+    const avisar = (e: BeforeUnloadEvent) => {
+      if (conceptoSucio || calendario.current?.sucio) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', avisar);
+    return () => window.removeEventListener('beforeunload', avisar);
+  }, [conceptoSucio]);
+
+  // Navegación interna (las pestañas de Configuración, la barra lateral): el
+  // beforeunload NO salta en los cambios de ruta de Next, así que se intercepta
+  // el clic sobre un enlace que saque de esta pantalla y se pide confirmar.
+  useEffect(() => {
+    const alHacerClic = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (!conceptoSucio && !calendario.current?.sucio) return;
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a) return;
+      const href = a.getAttribute('href') ?? '';
+      if (!href.startsWith('/')) return;                                // externo o ancla: lo cubre beforeunload
+      if (href.startsWith('/escolar/configuracion/conceptos')) return; // sigue en esta pantalla
+      e.preventDefault();
+      setSalida({ tipo: 'nav', href });
+    };
+    document.addEventListener('click', alHacerClic, true);
+    return () => document.removeEventListener('click', alHacerClic, true);
+  }, [conceptoSucio]);
+
+  /** Cambiar de concepto en la lista: con algo sin guardar, se confirma antes. */
+  function intentarSeleccionar(id: number) {
+    if (id === selId) return;
+    if (conceptoSucio || calendario.current?.sucio) { setSalida({ tipo: 'concepto', id }); return; }
+    setSelId(id);
+  }
 
   async function guardar() {
     if (!borrador) return;
@@ -286,9 +335,13 @@ export function ConceptosCatalogo() {
             <span className="pl-1.5 opacity-0 transition-opacity group-hover:opacity-100">
               <Agarradera />
             </span>
-            <button type="button" onClick={() => setSelId(c.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm">
-              <span className={`min-w-0 flex-1 truncate ${c.activo ? '' : 'text-gray-400 line-through'}`}>
+            <button type="button" onClick={() => intentarSeleccionar(c.id)}
+              className="flex min-w-0 flex-1 items-start gap-2 px-2 py-2 text-left text-sm">
+              {/* El nombre se envuelve en lugar de cortarse: en una columna de
+                  220px «Avance de Anualidad» salía como «Avance de Anu…» y no se
+                  podía distinguir de otro parecido. Lo pidió Alex. */}
+              <span title={c.nombre}
+                className={`min-w-0 flex-1 break-words leading-snug ${c.activo ? '' : 'text-gray-400 line-through'}`}>
                 {c.nombre}
               </span>
               {c.frecuencia !== 'unico' && (
@@ -387,6 +440,30 @@ export function ConceptosCatalogo() {
             }} />
         );
       })()}
+
+      {/* Cambios sin guardar: avisa antes de cambiar de concepto o de salir de
+          la pantalla por un enlace (lo pidió Alex). */}
+      {salida && (
+        <ConfirmDialog
+          open
+          onOpenChange={(o: boolean) => { if (!o) setSalida(null); }}
+          title="Tienes cambios sin guardar"
+          description={
+            <>
+              Hiciste cambios en este concepto o en su calendario y todavía no los has
+              guardado. Si sales ahora, se pierden.
+            </>
+          }
+          confirmLabel="Salir sin guardar"
+          cancelLabel="Seguir editando"
+          destructive
+          onConfirm={() => {
+            const s = salida;
+            setSalida(null);
+            if (s.tipo === 'concepto') setSelId(s.id);
+            else router.push(s.href);
+          }} />
+      )}
     </div>
   );
 }

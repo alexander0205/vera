@@ -228,6 +228,14 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const pendienteCargos = data.cargos.reduce((s, g) => s + g.saldoCentavos, 0);
   const deudaFacturas = data.facturas.reduce(
     (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0);
+  // La mora (notas de débito) cuenta en el total de la familia —es deuda—,
+  // pero no es una «factura suelta»: se nombra aparte y su lista vive en la
+  // pestaña «Notas de débito». Antes se colaba entera como factura suelta.
+  const sueltas = data.facturas.filter((f) => !f.esMora);
+  const notasMora = data.facturas.length - sueltas.length;
+  const deudaSueltas = sueltas.reduce(
+    (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0);
+  const deudaMora = deudaFacturas - deudaSueltas;
   const facturadoSueltas = data.facturas.reduce((s, f) => s + f.montoTotal, 0);
   // Acotado al monto: un cobro de más —una transferencia redonda sobre una
   // factura con centavos— no puede hacer que lo cobrado pase de lo facturado.
@@ -474,8 +482,11 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
               `${data.cargos.length} ${data.cargos.length === 1 ? 'cargo' : 'cargos'} del año escolar`,
               // Se nombran aparte porque no salen del plan de cobro: si no,
               // la cifra no cuadra con los cargos que se ven más abajo.
-              data.facturas.length > 0
-                ? `${data.facturas.length} ${data.facturas.length === 1 ? 'factura suelta' : 'facturas sueltas'}`
+              sueltas.length > 0
+                ? `${sueltas.length} ${sueltas.length === 1 ? 'factura suelta' : 'facturas sueltas'}`
+                : null,
+              notasMora > 0
+                ? `${notasMora} ${notasMora === 1 ? 'nota de mora' : 'notas de mora'}`
                 : null,
             ].filter(Boolean).join(' · ')}
             primera />
@@ -489,7 +500,12 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             detalle={pendientePorCobrar > 0 && pendientePorFacturar > 0
               ? `Por cobrar ${fmtDOP(pendientePorCobrar)} · por facturar ${fmtDOP(pendientePorFacturar)}`
               : pendientePorCobrar > 0
-              ? (deudaFacturas > 0 ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas` : 'Del plan de cobro')
+              ? (deudaFacturas > 0
+                  ? `con ${[
+                      deudaSueltas > 0 ? `${fmtDOP(deudaSueltas)} de facturas sueltas` : null,
+                      deudaMora > 0 ? `${fmtDOP(deudaMora)} de mora` : null,
+                    ].filter(Boolean).join(' y ')}`
+                  : 'Del plan de cobro')
               : pendientePorFacturar > 0 ? 'Aún por facturar'
               : 'Nada por cobrar'}
             tono={pendiente > 0 ? 'rojo' : 'gris'} />
@@ -531,8 +547,11 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
               )}
               {/* Lo que antes hacía que la barra dijera 100 % con dinero vivo.
                   Ahora ni se esconde ni descuadra: se nombra. */}
-              {deudaFacturas > 0 && (
-                <>{' · '}{fmtDOP(deudaFacturas)} en facturas sueltas</>
+              {deudaSueltas > 0 && (
+                <>{' · '}{fmtDOP(deudaSueltas)} en facturas sueltas</>
+              )}
+              {deudaMora > 0 && (
+                <>{' · '}{fmtDOP(deudaMora)} de mora</>
               )}
             </Typography>
           </Box>
@@ -598,7 +617,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           {([['cxc', 'Cuentas por cobrar'],
              ['notas', 'Notas de débito'],
              ['pagos', `Pagos (${data.pagos.length})`],
-             ['facturas', `Facturas sueltas (${data.facturas.length})`],
+             ['facturas', `Facturas sueltas (${sueltas.length})`],
              ['avisos', `Recordatorios (${data.avisosProgramados.length + data.avisos.length})`]] as const)
             .map(([v, etiqueta]) => (
             <Box
@@ -684,7 +703,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           )}
 
           {vista === 'facturas' && (
-            data.facturas.length === 0 ? (
+            sueltas.length === 0 ? (
               <Vacio texto="Ninguna factura fuera del plan de cobro." />
             ) : (
               <TablaLista
@@ -695,7 +714,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
                   { nombre: 'Pagado', ancho: '120px', alinear: 'right' },
                   { nombre: 'Pendiente', ancho: '120px', alinear: 'right' },
                 ]}
-                filas={data.facturas.map((f) => {
+                filas={sueltas.map((f) => {
                   const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
                   return {
                     key: String(f.id),
@@ -819,7 +838,8 @@ function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
   } else if (vista === 'facturas') {
     descargarCsv(`facturas-${nombre}.csv`, [
       ['Fecha', 'Comprobante', 'Monto', 'Pagado', 'Pendiente'],
-      ...d.facturas.map((f) => [
+      // Sin las notas de mora: tienen su propio export en «Notas de débito».
+      ...d.facturas.filter((f) => !f.esMora).map((f) => [
         f.fecha.slice(0, 10), f.encf || f.codigo || '',
         (f.montoTotal / 100).toFixed(2), (f.pagadoCentavos / 100).toFixed(2),
         (Math.max(0, f.montoTotal - f.pagadoCentavos) / 100).toFixed(2),
