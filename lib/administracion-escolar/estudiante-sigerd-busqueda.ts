@@ -59,6 +59,17 @@ export interface BusquedaDeFicha {
    * sistema; el RNE lo teclea una persona.
    */
   nacio?: string;
+  /**
+   * Lo que el diálogo enseña en sus campos: el nombre y los apellidos del
+   * alumno, aunque la búsqueda vaya por su id o su RNE.
+   *
+   * Abrir con los campos vacíos y una lista con un niño dentro no decía a
+   * quién se había buscado. Se enseña el nombre y NO el identificador: si la
+   * persona vuelve a pulsar «Buscar», el portal junta los campos con «y», y un
+   * id con un nombre escrito un poco distinto no devolvería a nadie.
+   * Sin él, el diálogo enseña los `criterios`.
+   */
+  aLaVista?: CriteriosSigerd;
 }
 
 /**
@@ -82,43 +93,49 @@ export function busquedaDesdeFicha(
   ficha: FichaParaBuscar,
   { soloPorNombre = false }: { soloPorNombre?: boolean } = {},
 ): BusquedaDeFicha | null {
-  const id = ficha.sigerdId;
-  if (!soloPorNombre && typeof id === 'number' && Number.isInteger(id) && id > 0) {
-    return { por: 'id', criterios: { ...SIN_CRITERIOS, idEstudiante: String(id) } };
-  }
-
   const fecha = (ficha.fechaNacimiento ?? '').trim();
   const fechaIso = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : '';
+  const nombre = criteriosPorNombre(ficha, fechaIso);
+
+  const id = ficha.sigerdId;
+  if (!soloPorNombre && typeof id === 'number' && Number.isInteger(id) && id > 0) {
+    const criterios = { ...SIN_CRITERIOS, idEstudiante: String(id) };
+    return { por: 'id', criterios, aLaVista: nombre ?? criterios };
+  }
 
   const rne = (ficha.codigoRne ?? '').trim();
   if (!soloPorNombre && rne) {
-    return { por: 'rne', criterios: { ...SIN_CRITERIOS, rne }, ...(fechaIso ? { nacio: fechaIso } : {}) };
+    const criterios = { ...SIN_CRITERIOS, rne };
+    return { por: 'rne', criterios, aLaVista: nombre ?? criterios, ...(fechaIso ? { nacio: fechaIso } : {}) };
   }
 
+  // Una fecha suelta no identifica a nadie en un padrón nacional.
+  if (!nombre) return null;
+  return { por: 'nombre', criterios: nombre, aLaVista: nombre };
+}
+
+/** El nombre de la ficha como criterios del portal, o `null` si no trae nombre. */
+function criteriosPorNombre(ficha: FichaParaBuscar, fechaIso: string): CriteriosSigerd | null {
   const nombres = (ficha.nombres ?? '').replace(/\s+/g, ' ').trim();
   const apellidos = partirApellidos(ficha.apellidos ?? '');
-  // Una fecha suelta no identifica a nadie en un padrón nacional.
   if (!nombres && !apellidos.primero) return null;
 
   return {
-    por: 'nombre',
-    criterios: {
-      ...SIN_CRITERIOS,
-      // Solo el PRIMER nombre. El portal guarda el segundo en otra columna
-      // (`Nombre2`) y no tiene filtro para ella; si `nombres` compara contra la
-      // primera, como `primerApellido` contra `Apellido1`, los dos juntos no
-      // encuentran a nadie. No está comprobado contra el portal, y por eso se
-      // va a lo seguro: buscar de menos solo alarga una lista que ya acortan
-      // los apellidos y la fecha; buscar de más la deja vacía.
-      nombres: nombres.split(' ')[0],
-      primerApellido: apellidos.primero,
-      // Con tres apellidos o más no se sabe cuál es el segundo, y uno mal
-      // puesto vacía la búsqueda. Mejor una lista más larga que ninguna.
-      segundoApellido: apellidos.dudoso ? '' : apellidos.segundo,
-      // El campo del diálogo es de tipo fecha: algo que no sea `yyyy-MM-dd` se
-      // vería en blanco y aun así viajaría como filtro invisible.
-      fechaNacimiento: fechaIso,
-    },
+    ...SIN_CRITERIOS,
+    // Solo el PRIMER nombre. El portal guarda el segundo en otra columna
+    // (`Nombre2`) y no tiene filtro para ella; si `nombres` compara contra la
+    // primera, como `primerApellido` contra `Apellido1`, los dos juntos no
+    // encuentran a nadie. No está comprobado contra el portal, y por eso se
+    // va a lo seguro: buscar de menos solo alarga una lista que ya acortan
+    // los apellidos y la fecha; buscar de más la deja vacía.
+    nombres: nombres.split(' ')[0],
+    primerApellido: apellidos.primero,
+    // Con tres apellidos o más no se sabe cuál es el segundo, y uno mal
+    // puesto vacía la búsqueda. Mejor una lista más larga que ninguna.
+    segundoApellido: apellidos.dudoso ? '' : apellidos.segundo,
+    // El campo del diálogo es de tipo fecha: algo que no sea `yyyy-MM-dd` se
+    // vería en blanco y aun así viajaría como filtro invisible.
+    fechaNacimiento: fechaIso,
   };
 }
 
