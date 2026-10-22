@@ -321,7 +321,12 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
   }
   if (hijos.length === 0) return null;
 
-  const visibles = soloHijo == null ? hijos : hijos.filter((h) => h.estudianteId === soloHijo);
+  // En «General» NO se listan las tarjetas de los hijos: esa vista es la de la
+  // familia —sus cuentas por cobrar, notas de débito, pagos y demás van en las
+  // pestañas de abajo—, y el total de todos los hijos uno debajo de otro era
+  // justo lo que sobraba. Cada hijo se abre desde su pastilla, y solo entonces
+  // se pinta su tarjeta con sus cargos.
+  const visibles = soloHijo == null ? [] : hijos.filter((h) => h.estudianteId === soloHijo);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -333,42 +338,42 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
         están leyendo, y con un selector por hijo se podían acabar comparando
         dos años distintos creyendo que era el mismo.
 
-        Las pastillas de estudiante solo con más de un hijo: con uno serían
-        «General» y su nombre, las dos enseñando lo mismo. El año se dice
-        siempre, aunque no haya otro que elegir —entonces como rótulo y no como
-        desplegable, que ofrecer una lista de una opción es prometer algo que
-        no se puede hacer—.
+        Las pastillas van SIEMPRE, también con un solo hijo. Antes se escondían
+        con uno —«General» y su nombre decían lo mismo—, pero ahora «General»
+        no lista las tarjetas de los hijos: es la vista de la familia (sus
+        cuentas por cobrar y demás, en las pestañas de abajo). La pastilla de
+        cada hijo es la única forma de abrir su tarjeta, así que tiene que estar
+        aunque el hijo sea uno solo. El año se dice siempre, aunque no haya otro
+        que elegir —entonces como rótulo y no como desplegable, que ofrecer una
+        lista de una opción es prometer algo que no se puede hacer—.
       */}
-      {anios.length > 0 && (
-        <Paper
-          variant="outlined"
-          sx={{
-            borderRadius: '14px', borderColor: '#E6E8F0', p: 0.875,
-            display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap',
-            boxShadow: '0 1px 2px rgba(15,17,24,.03)',
-          }}
-        >
-          {hijos.length > 1 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0, overflowX: 'auto' }}>
-              {/* «General»: la vista de toda la familia, por defecto. Antes
-                  decía «Todos los estudiantes»; Alex la renombró —abre aquí y,
-                  al elegir un hijo, se filtra a él—. */}
-              <Pastilla activa={soloHijo == null} insignia={String(hijos.length)} onClick={() => setSoloHijo(null)}>
-                General
+      <Paper
+        variant="outlined"
+        sx={{
+          borderRadius: '14px', borderColor: '#E6E8F0', p: 0.875,
+          display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap',
+          boxShadow: '0 1px 2px rgba(15,17,24,.03)',
+        }}
+      >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            {/* «General»: la vista de la familia, por defecto. No muestra las
+                tarjetas de los hijos; esas se abren eligiendo al hijo. */}
+            <Pastilla activa={soloHijo == null} insignia={String(hijos.length)} onClick={() => setSoloHijo(null)}>
+              General
+            </Pastilla>
+            {hijos.map((h) => (
+              <Pastilla
+                key={h.estudianteId}
+                activa={soloHijo === h.estudianteId}
+                insignia={iniciales(h.alumno)}
+                onClick={() => setSoloHijo(h.estudianteId)}
+              >
+                {h.alumno}
               </Pastilla>
-              {hijos.map((h) => (
-                <Pastilla
-                  key={h.estudianteId}
-                  activa={soloHijo === h.estudianteId}
-                  insignia={iniciales(h.alumno)}
-                  onClick={() => setSoloHijo(h.estudianteId)}
-                >
-                  {h.alumno}
-                </Pastilla>
-              ))}
-            </Box>
-          )}
+            ))}
+          </Box>
 
+          {anios.length > 0 && (
           <Box sx={{
             // Siempre a la derecha, haya pastillas o no: es el mismo control
             // en el mismo sitio para una familia de un hijo y para una de
@@ -407,8 +412,8 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
               </Typography>
             )}
           </Box>
-        </Paper>
-      )}
+          )}
+      </Paper>
 
       {visibles.map((h) => {
         const periodos = h.periodos;
