@@ -70,6 +70,10 @@ export interface ListaResponsables {
     familias: number;
     conDeuda: number;
     deudaTotalCentavos: number;
+    /** Lo exigible hoy: escolar facturada + otras facturas (sin lo por facturar). */
+    deudaExigibleCentavos: number;
+    /** La anualidad escolar que aún no tiene factura: futuro, no exigible todavía. */
+    porFacturarCentavos: number;
     incontactables: number;
   };
 }
@@ -244,7 +248,14 @@ export async function listarResponsables(
              count(*) FILTER (WHERE ${vigente})::int                           familias,
              count(*) FILTER (WHERE ${vigente} AND ${debe})::int               con_deuda,
              COALESCE(SUM(deuda_escolar + deuda_facturas)
-               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_total
+               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_total,
+             -- Lo EXIGIBLE hoy: la deuda escolar YA facturada (se le quita lo que
+             -- aún no tiene factura) más las otras facturas. Lo «por facturar» es
+             -- la anualidad que todavía no se le ha cobrado y no se suma aquí.
+             COALESCE(SUM(GREATEST(0, deuda_escolar - por_facturar) + deuda_facturas)
+               FILTER (WHERE ${vigente}), 0)::bigint                           deuda_exigible,
+             COALESCE(SUM(por_facturar)
+               FILTER (WHERE ${vigente}), 0)::bigint                           por_facturar_total
         FROM (${sinFiltroDeTexto}) t`),
   ]);
 
@@ -277,6 +288,8 @@ export async function listarResponsables(
       familias: Number(c0.familias ?? 0),
       conDeuda: Number(c0.con_deuda ?? 0),
       deudaTotalCentavos: Number(c0.deuda_total ?? 0),
+      deudaExigibleCentavos: Number(c0.deuda_exigible ?? 0),
+      porFacturarCentavos: Number(c0.por_facturar_total ?? 0),
       incontactables: Number(c0.incontactables ?? 0),
     },
   };

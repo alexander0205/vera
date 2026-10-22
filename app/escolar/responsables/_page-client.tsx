@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  AlertTriangle, FileText, Loader2, Mail, MessageCircle, Receipt, Search,
+  AlertTriangle, CalendarClock, FileText, Loader2, Mail, MessageCircle, Receipt, Search,
   Smartphone, Users, Wallet, X,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,7 +44,8 @@ interface Resp {
   retiradas: number;
   stats: {
     familias: number; conDeuda: number;
-    deudaTotalCentavos: number; incontactables: number;
+    deudaTotalCentavos: number; deudaExigibleCentavos: number;
+    porFacturarCentavos: number; incontactables: number;
   };
 }
 
@@ -75,7 +76,8 @@ const EXPORTAR: ExportTabla<FilaResponsable> = {
     { titulo: 'WhatsApp', valor: f => destinoDeContacto(f, 'whatsapp'), sub: f => destinoDeContacto(f, 'correo'), ancho: 1.3 },
     { titulo: 'SMS / teléfono', valor: f => destinoDeContacto(f, 'sms') ?? f.telefono, ancho: 1 },
     { titulo: 'Hijos', valor: f => f.alumnos, tipo: 'numero', total: true, ancho: 0.5 },
-    { titulo: 'Deuda escolar', valor: f => f.deudaEscolarCentavos, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Deuda escolar', valor: f => Math.max(0, f.deudaEscolarCentavos - f.porFacturarCentavos), tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Por facturar', valor: f => f.porFacturarCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
     { titulo: 'Otras facturas', valor: f => f.deudaFacturasCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
     { titulo: 'Vence más viejo', valor: f => (f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : null), ancho: 0.9 },
   ],
@@ -185,9 +187,12 @@ export default function ResponsablesClient() {
           la página ni del filtro. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={Users} label="Familias" value={data ? String(data.stats.familias) : '—'} />
-        <StatCard icon={Wallet} label="Deuda total"
-          value={data ? fmtDOP(data.stats.deudaTotalCentavos) : '—'}
-          accent={(data?.stats.deudaTotalCentavos ?? 0) > 0} />
+        {/* «Por cobrar» = lo exigible hoy (escolar ya facturada + otras
+            facturas). Lo que aún no tiene factura es anualidad futura y no se
+            mezcla aquí: se ve como «por facturar» en cada familia. */}
+        <StatCard icon={Wallet} label="Por cobrar"
+          value={data ? fmtDOP(data.stats.deudaExigibleCentavos) : '—'}
+          accent={(data?.stats.deudaExigibleCentavos ?? 0) > 0} />
         <StatCard icon={AlertTriangle} label="Con deuda"
           value={data ? String(data.stats.conDeuda) : '—'}
           accent={(data?.stats.conDeuda ?? 0) > 0} />
@@ -338,8 +343,11 @@ export default function ResponsablesClient() {
                         </td>
                         <td className="px-3 py-2.5"><Canales fila={f} /></td>
                         <td className="px-3 py-2.5 text-right">
-                          {f.deudaEscolarCentavos > 0
-                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos)}</span>
+                          {/* La cifra grande es lo EXIGIBLE (escolar ya facturada);
+                              lo que aún no tiene factura va debajo como «sin
+                              factura», que es la anualidad futura. */}
+                          {f.deudaEscolarCentavos - f.porFacturarCentavos > 0
+                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos - f.porFacturarCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
                           {f.delConcepto && nombreConcepto && (
                             <span className="block text-xs text-zero-700">
@@ -403,7 +411,13 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
   detalle: Detalle | undefined;
   onCerrar: () => void;
 }) {
-  const deuda = fila.deudaEscolarCentavos + fila.deudaFacturasCentavos;
+  // El dinero, separado como pide el video de mora (21-oct): lo escolar YA
+  // facturado (exigible) aparte de la anualidad que todavía no tiene factura.
+  const escolarPorCobrar = Math.max(0, fila.deudaEscolarCentavos - fila.porFacturarCentavos);
+  const porFacturar = fila.porFacturarCentavos;
+  // «Debe en total» es lo exigible hoy: escolar facturada + otras facturas. Lo
+  // por facturar es futuro y se muestra aparte, no se suma aquí.
+  const debeTotal = escolarPorCobrar + fila.deudaFacturasCentavos;
   const hijos = detalle?.hijos ?? [];
   const facturasPendientes = (detalle?.facturas ?? [])
     .filter((f) => f.montoTotal - f.pagadoCentavos > 0).length;
@@ -451,12 +465,19 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
       </div>
 
       <div className="space-y-2 border-t border-gray-100 pt-3">
-        <TotalRow icon={Receipt} tone="gray" label="Deuda escolar"
-          value={fmtDOP(fila.deudaEscolarCentavos)} muted={fila.deudaEscolarCentavos === 0} />
+        {/* Escolar YA facturada: lo que de verdad se le puede cobrar hoy. */}
+        <TotalRow icon={Receipt} tone="red" label="Deuda escolar"
+          value={fmtDOP(escolarPorCobrar)} muted={escolarPorCobrar === 0} />
+        {/* La anualidad que aún no tiene factura: futuro, no exigible todavía.
+            Se enseña solo si hay algo, para no meter un «RD$0» sin sentido. */}
+        {porFacturar > 0 && (
+          <TotalRow icon={CalendarClock} tone="gray" label="Por facturar"
+            value={fmtDOP(porFacturar)} />
+        )}
         <TotalRow icon={FileText} tone="amber" label="Otras facturas"
           value={fmtDOP(fila.deudaFacturasCentavos)} muted={fila.deudaFacturasCentavos === 0} />
         <TotalRow icon={AlertTriangle} tone="red" label="Debe en total"
-          value={fmtDOP(deuda)} muted={deuda === 0} />
+          value={fmtDOP(debeTotal)} muted={debeTotal === 0} />
       </div>
 
       {/* Los hijos, con lo que debe cada uno: es lo que se mira antes de
