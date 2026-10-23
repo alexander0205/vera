@@ -11,6 +11,7 @@
  *   ECF_VOID              — anulación enviada a la DGII
  *   DGII_AUTH             — autenticación exitosa contra la DGII
  *   DGII_AUTH_FAIL        — autenticación fallida contra la DGII
+ *   ESCOLAR_MATRICULA_MOVIDA_SIGERD — matrícula movida a la sección que dice SIGERD
  *
  * Uso:
  *   logAudit({ teamId, userId, actor: user.email, action: 'CERT_UPLOAD' });
@@ -85,7 +86,12 @@ export type AuditAction =
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
-  | 'SUSCRIPCION_AVISO';
+  | 'SUSCRIPCION_AVISO'
+  // «Mover a la sección de SIGERD»: la matrícula de un alumno pasó de un curso
+  // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
+  // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
+  // `resource` es `matricula:<id>` y el meta lleva curso de origen y de destino.
+  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD';
 
 export interface AuditParams {
   teamId:    number;

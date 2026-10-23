@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,8 +14,10 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, LogOut, ShieldCheck, TriangleAlert, Link2, Search, ListTree,
-  Database, CalendarClock, Trash2,
+  Database, CalendarClock, Trash2, GitCompareArrows,
 } from 'lucide-react';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { CompletarDatosSigerd } from '@/components/administracion-escolar/CompletarDatosSigerd';
 
 import {
   ObtenerSigerd, CLAVE_ESTADO_SIGERD, traerEstadoSigerd as traerEstado, type EstadoObtener,
@@ -296,6 +299,8 @@ export default function SigerdPageClient() {
  */
 function ResumenDatos() {
   const { data: estado, mutate } = useSWR<EstadoObtener>(CLAVE_ESTADO_SIGERD, traerEstado);
+  const { can } = usePermissions();
+  const puedeConfigurar = can('administracion-escolar:configurar');
   const [borrando, setBorrando] = useState(false);
   /**
    * Confirmación propia, no `window.confirm`: en el navegador embebido de la
@@ -320,7 +325,9 @@ function ResumenDatos() {
     }
   }
 
-  if (!estado || estado.estado !== 'completado') return null;
+  // Con una descarga buena guardada se enseña aunque el último intento de
+  // actualizarla esté corriendo o haya fallado: el volcado anterior sigue ahí.
+  if (!estado || !(estado.estado === 'completado' || estado.conDescarga)) return null;
 
   const fecha = estado.completadoEn
     ? new Date(estado.completadoEn).toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -350,8 +357,26 @@ function ResumenDatos() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Conéctate abajo solo si quieres volver a sincronizar con SIGERD.
+          Conéctate abajo solo si quieres volver a sincronizar con SIGERD. Lo que ves es lo de la
+          última descarga: para ver lo de hoy, vuelve a bajar.
         </p>
+
+        {puedeConfigurar && (
+          <div className="space-y-3 border-t border-emerald-100 pt-3">
+            <CompletarDatosSigerd />
+            <div className="space-y-1.5">
+              <p className="text-sm text-muted-foreground">
+                Alumnos nuevos o retirados, cambios de sección y secciones nuevas, comparados con la
+                última descarga.
+              </p>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/escolar/configuracion/sigerd/cambios">
+                  <GitCompareArrows className="mr-1.5 h-4 w-4" /> Revisar cambios de SIGERD
+                </Link>
+              </Button>
+            </div>
+          </div>
+        )}
 
         <Button
           variant="outline"
