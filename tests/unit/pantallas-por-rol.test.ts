@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   PANTALLAS, esPantalla, pantallaDeRuta, primeraVisible, rutaOculta, veLaPantalla,
 } from '@/lib/config/pantallas';
@@ -63,6 +65,13 @@ describe('pantallaDeRuta', () => {
     expect(id('/dashboard/pos-terminales')).toBe('pos-configuracion');
   });
 
+  it('«Facturar por lote» es una pantalla propia: se le puede quitar a un rol sin quitarle Responsables', () => {
+    expect(id('/escolar/facturar')).toBe('escolar-facturar');
+    expect(id('/escolar/responsables')).toBe('escolar-responsables');
+    expect(rutaOculta('/escolar/facturar', ['escolar-facturar'])).toBe(true);
+    expect(rutaOculta('/escolar/responsables', ['escolar-facturar'])).toBe(false);
+  });
+
   it('«Pagos recibidos» es de Reportes', () => {
     expect(id('/dashboard/pagos')).toBe('fact-reportes');
   });
@@ -110,5 +119,30 @@ describe('validación', () => {
   it('el Propietario ve todo aunque tenga filas', () => {
     expect(veLaPantalla({ key: 'owner', ocultas: ['fact-facturas'] }, 'fact-facturas')).toBe(true);
     expect(veLaPantalla({ key: 'user', ocultas: ['fact-facturas'] }, 'fact-facturas')).toBe(false);
+  });
+});
+
+/**
+ * El menú oculta una entrada comparando su `id` con la lista de pantallas
+ * apagadas. Si un id del menú no es una pantalla del catálogo, el dueño no
+ * podría apagarla nunca — y nadie se entera, porque no falla nada.
+ */
+describe('el menú de Gobernanza y el catálogo de pantallas', () => {
+  const rail = readFileSync(join(process.cwd(), 'components/escolar-nav-rail.tsx'), 'utf8');
+  // Las entradas con `oculto: true` no salen en el menú ni se pueden apagar:
+  // sus rutas cuelgan de otra pantalla (Condición académica, Personal).
+  const idsDelMenu = rail.split('\n')
+    .filter((l) => !l.includes('oculto: true'))
+    .flatMap((l) => [...l.matchAll(/id: '(escolar-[a-z-]+)'/g)].map((m) => m[1]));
+
+  it('cada entrada del menú es una pantalla que se puede apagar', () => {
+    expect(idsDelMenu.length).toBeGreaterThan(5);
+    for (const idMenu of idsDelMenu) expect(esPantalla(idMenu), idMenu).toBe(true);
+  });
+
+  it('«Facturar por lote» está en el menú y solo se ofrece a quien puede gestionar', () => {
+    const linea = rail.split('\n').find((l) => l.includes("id: 'escolar-facturar'")) ?? '';
+    expect(linea).toContain("href: '/escolar/facturar'");
+    expect(linea).toContain("permiso: 'administracion-escolar:gestionar'");
   });
 });
