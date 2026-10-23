@@ -94,6 +94,17 @@ const traerCanales = (u: string): Promise<CanalesActivos> =>
  * No marca nada como avisado: el recordatorio que le tocaba a cada cargo sigue
  * pendiente después de probar.
  */
+/** Lo que significa un fallo de WhatsApp, dicho para quien está probando. */
+function motivoFalloWhatsApp(error: string | null | undefined): string {
+  const e = error ?? '';
+  if (e.includes('131047')) {
+    return 'No llegó: WhatsApp solo deja mandar texto libre a quien le escribió al número del colegio en las últimas 24 horas. Escríbele primero desde ese teléfono y vuelve a probar.';
+  }
+  if (e.includes('131026')) return 'No llegó: ese número no tiene WhatsApp o está mal escrito.';
+  if (e.includes('132001')) return 'No llegó: la plantilla todavía no está aprobada en Meta para este número.';
+  return `No llegó${e ? `: ${e}` : '.'}`;
+}
+
 function ProbarCanal({ canal, etiqueta, placeholder, disponible, motivo }: {
   canal: 'correo' | 'whatsapp' | 'sms';
   etiqueta: string;
@@ -124,7 +135,28 @@ function ProbarCanal({ canal, etiqueta, placeholder, disponible, motivo }: {
       // única pantalla donde ese número se puede ver antes de mandarle a un
       // colegio entero.
       const partes = json.partes ? ` · ${json.partes} parte(s), ${json.codificacion}` : '';
-      setResultado({ ok: true, texto: `Enviado a ${json.telefono ?? json.destino}${partes}` });
+      const a = `${json.telefono ?? json.destino}`;
+      setResultado({ ok: true, texto: `Enviado a ${a}${partes}` });
+      // WhatsApp: «enviado» solo quiere decir que Meta lo aceptó. Se espera la
+      // entrega de verdad y se dice si llegó o por qué no.
+      if (canal === 'whatsapp' && json.messageId && json.conversationId) {
+        const como = json.via === 'plantilla' ? `con la plantilla «${json.plantilla}»` : 'como texto libre';
+        setResultado({ ok: true, texto: `Enviado a ${a} ${como}. Esperando que WhatsApp confirme la entrega…` });
+        for (let i = 0; i < 10; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const q = new URLSearchParams({ mensaje: json.messageId, conversacion: json.conversationId });
+          const e = await fetch(`/api/administracion-escolar/avisos/probar?${q}`).then((r) => r.json()).catch(() => ({}));
+          if (e.estado === 'entregado' || e.estado === 'leido') {
+            setResultado({ ok: true, texto: `Llegó a ${a}${e.estado === 'leido' ? ' y ya lo leyeron' : ''} ✓` });
+            return;
+          }
+          if (e.estado === 'fallido') {
+            setResultado({ ok: false, texto: motivoFalloWhatsApp(e.error) });
+            return;
+          }
+        }
+        setResultado({ ok: true, texto: `Enviado a ${a}. WhatsApp todavía no confirma la entrega: revisa el teléfono.` });
+      }
     } catch {
       setResultado({ ok: false, texto: 'Error de conexión' });
     } finally {
