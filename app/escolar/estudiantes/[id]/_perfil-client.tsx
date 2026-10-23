@@ -856,6 +856,10 @@ function AvisosEstudiante({ avisos, programados }: {
                           {a.mes ? `${MESES[a.mes]} ${a.anio}` : a.anio} · {fmtDOP(a.montoCentavos ?? 0)}
                           {a.saldoCentavos === 0 ? ' · ya pagado' : ''}
                         </span>
+                        {/* Los cobros de una familia que salieron en UN mensaje
+                            lo dicen: si no, parece que a este hijo le llegó
+                            solo y la constancia engaña. */}
+                        {a.detalle && <span className="block text-xs text-gray-400">{a.detalle}</span>}
                       </>
                     )}
                   </td>

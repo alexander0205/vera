@@ -16,13 +16,33 @@ function escapar(s: string): string {
   }[c]!));
 }
 
+/**
+ * El cuerpo del aviso en HTML.
+ *
+ * Un aviso de UN cobro es un párrafo corrido y sale tal cual siempre. El de
+ * varios lleva una lista («• Ana – Colegiatura: RD$5,000.00») y un enlace, y
+ * HTML colapsa los saltos de línea en un espacio: sin convertirlos en `<br>` la
+ * lista se leería como una sola línea. Por eso es opt-in (`multilinea`) y no
+ * se aplica a todos: no hay razón para tocar el correo de quien no tiene hermanos.
+ */
+export function cuerpoDeAvisoHtml(texto: string, multilinea = false): string {
+  const seguro = escapar(texto);
+  if (!multilinea) return seguro;
+  return seguro
+    .replace(/\n/g, '<br>')
+    // Las URL no llevan nada de lo que `escapar` toca (base64url, `/`, `:`).
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#2a45c4;">$1</a>');
+}
+
 export async function enviarAvisoCobroEmail(opts: {
   email: string;
   colegio: string;
   asunto: string;
   texto: string;
+  /** El texto trae saltos de línea y una lista: respetarlos. Ver `cuerpoDeAvisoHtml`. */
+  multilinea?: boolean;
 }) {
-  const texto = escapar(opts.texto);
+  const texto = cuerpoDeAvisoHtml(opts.texto, opts.multilinea);
   const colegio = escapar(opts.colegio);
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',

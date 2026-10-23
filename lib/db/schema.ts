@@ -2588,6 +2588,17 @@ export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados
   /** Qué se mandó, en palabras: «Acta de nacimiento», «Ficha de datos». */
   detalle: varchar('detalle', { length: 200 }),
   /**
+   * Qué MENSAJE fue, cuando varios cobros de una familia viajaron juntos
+   * (migración 0202). Todas las filas de ese mensaje —una por cargo, porque el
+   * índice único, la reconciliación y los paneles trabajan por cargo— llevan el
+   * mismo valor. NULL = el mensaje fue de un solo cobro (todo lo anterior).
+   *
+   * Existe para contar bien: la cuota mensual y el presupuesto de la corrida
+   * miden mensajes, y el SMS y el correo no devuelven un id que los distinga.
+   * Se cuenta con `count(distinct coalesce(grupo, id::text))`.
+   */
+  grupo: varchar('grupo', { length: 40 }),
+  /**
    * El id del mensaje en el CRM. Sin esto no se puede volver a preguntar si
    * LLEGÓ: el 201 del envío solo dice que Meta aceptó la petición, y un aviso
    * que falla después queda marcado como enviado para siempre —esta tabla es la
