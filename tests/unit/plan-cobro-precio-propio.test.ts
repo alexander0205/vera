@@ -30,7 +30,7 @@ function linea(tipo: string, tarifa: number, n: number, omitidas = 0): LineaPlan
 
 describe('precio propio de un alumno', () => {
   it('en un concepto que reparte, lo enseñado es lo que el servidor carga', () => {
-    const l = linea('otro', 500000, 10);
+    const l = linea('actividad', 500000, 10);
     expect(porCuotaDe(l)).toBe(50000);
 
     // Se escribe 5,000 por cuota: la tarifa que se guarda es el total, 50,000.
@@ -51,7 +51,7 @@ describe('precio propio de un alumno', () => {
   });
 
   it('las cuotas que se omiten cuentan en el reparto pero no se cobran', () => {
-    const l = linea('otro', 500000, 10, 2);
+    const l = linea('actividad', 500000, 10, 2);
     const tarifa = tarifaDesdeEscrito(l, 60000); // 600 por cuota × las 10 del calendario
     const [conPropio] = aplicarPreciosPropios([l], new Map([[7, tarifa]]));
     expect(conPropio.cuotas.filter((c) => !c.omitida).every((c) => c.montoCentavos === 60000)).toBe(true);
@@ -59,7 +59,7 @@ describe('precio propio de un alumno', () => {
   });
 
   it('con cuotas de distinto peso se escribe el total del año', () => {
-    const l = linea('otro', 350000, 2);
+    const l = linea('actividad', 350000, 2);
     l.cuotas[0].porcentajeMilesimas = 60000;
     l.cuotas[1].porcentajeMilesimas = 40000;
     expect(modoPrecio(l)).toBe('total');

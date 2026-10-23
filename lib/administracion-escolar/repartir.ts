@@ -30,16 +30,26 @@ export function repartir(
 }
 
 /**
- * Si el número de Tarifas es lo de CADA cuota (true) o el total del año que se
- * reparte entre ellas (false).
+ * Lo que se cobra en partes: el número de Tarifas es el TOTAL y se reparte entre
+ * las cuotas («inscripción 3,500 en dos pagos», la evaluación trimestral).
+ */
+const SE_REPARTE = new Set(['inscripcion', 'actividad', 'uniforme']);
+
+/**
+ * Si el número de Tarifas es lo de CADA cuota (true) o el total que se reparte
+ * entre ellas (false).
  *
- * Lo decide el colegio en el concepto (`precioPorCuota`). Sin decidir, la
- * regla de siempre: la colegiatura cobra la tarifa en cada cuota y lo demás la
- * reparte. Esa regla sola no bastaba: un almuerzo de 5,000 al mes en 11 cuotas
- * se cobraba a 455 porque no era «colegiatura».
+ * Lo que se repite —colegiatura, almuerzo, transporte, horario extendido, las
+ * categorías propias del colegio— cobra el precio en cada cuota: así lo piensa
+ * el colegio («el almuerzo son 5,000 al mes»). Antes solo la colegiatura lo
+ * hacía, y un almuerzo de 5,000 en 11 cuotas salía a 455. Inscripción,
+ * actividades y uniformes siguen repartiendo el total.
+ *
+ * `precioPorCuota` del concepto, si alguien lo fijó, manda sobre la regla. No
+ * tiene pantalla: la elección confundía más de lo que ayudaba.
  */
 export function precioEsPorCuota(concepto: { tipo: string; precioPorCuota?: boolean | null }): boolean {
-  return concepto.precioPorCuota ?? concepto.tipo === 'mensualidad';
+  return concepto.precioPorCuota ?? !SE_REPARTE.has(concepto.tipo);
 }
 
 /**

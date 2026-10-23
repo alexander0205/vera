@@ -323,7 +323,6 @@ export function ConceptoDetalle({
   const [nuevaCategoria, setNuevaCategoria] = useState<string | null>(null);
   const todasLasCategorias = [...new Set([...categorias, ...(borrador.categoria ? [borrador.categoria] : [])])]
     .sort((a, b) => a.localeCompare(b, 'es'));
-  const porCuota = precioEsPorCuota(borrador);
 
   // Estado de los canales que dependen de una cuenta enlazada. Solo hace falta
   // saber si se pueden ofrecer, no reconciliar nada.
@@ -535,29 +534,6 @@ export function ConceptoDetalle({
                 colegiatura, un concepto nuevo que se repite nace «Otro cobro»:
                 si era la colegiatura y nadie tocó el desplegable, 2.800 al mes
                 pasaban a 280 en silencio. Por eso, con «Otro cobro», ámbar. */}
-            {/* Qué significa el número de Tarifas cuando el cobro se repite.
-                Antes lo decidía solo el tipo: la colegiatura cobraba la tarifa
-                en cada cuota y todo lo demás la repartía, así que un almuerzo de
-                5,000 al mes en 11 cuotas salía a 455. Ahora se pregunta. */}
-            {periodico && (
-              <div className="space-y-1.5 px-3 py-2.5">
-                <span className="block text-sm text-gray-900">El precio que pongas en Tarifas es…</span>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {[
-                    { valor: true, titulo: 'Lo de cada cuota', detalle: 'Con 5,000 y 10 cuotas se cobran 5,000 cada mes (50,000 en el año).' },
-                    { valor: false, titulo: 'El total del año', detalle: 'Con 5,000 y 10 cuotas se reparte: 500 cada mes.' },
-                  ].map((o) => (
-                    <button key={String(o.valor)} type="button" onClick={() => editar('precioPorCuota', o.valor)}
-                      className={`rounded-lg border px-3 py-2 text-left transition-colors ${porCuota === o.valor
-                        ? 'border-zero-500 bg-zero-50 ring-1 ring-zero-500' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <span className="block text-sm font-medium text-gray-900">{o.titulo}</span>
-                      <span className="block text-xs text-gray-500">{o.detalle}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {periodico && (
               <div className="grid gap-3 px-3 py-2.5 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -600,7 +576,7 @@ export function ConceptoDetalle({
             <Paso n={paso.calendario} titulo="El calendario que genera" />
             <CalendarioCuotas conceptoId={borrador.id} nombre={borrador.nombre}
               frecuencia={borrador.frecuencia} api={calendario}
-              porCuota={tipoDelBorrador === 'mensualidad'}
+              porCuota={precioEsPorCuota({ tipo: tipoDelBorrador, precioPorCuota: borrador.precioPorCuota })}
               diaEmision={diaEmision} diasParaPago={borrador.diasParaPago} />
           </div>
         )}

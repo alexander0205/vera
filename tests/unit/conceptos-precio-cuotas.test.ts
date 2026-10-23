@@ -10,25 +10,29 @@ import { sugerirMontoDelCargo } from '@/lib/administracion-escolar/precio-cargo-
 const once = Array.from({ length: 11 }, () => 100000 / 11);
 
 describe('precio por cuota o total del año', () => {
-  it('sin decirlo, decide el tipo: la colegiatura por cuota y lo demás repartido', () => {
+  it('sin decirlo: lo que se repite cobra por cuota; inscripción, actividad y uniformes reparten', () => {
     expect(precioEsPorCuota({ tipo: 'mensualidad' })).toBe(true);
-    expect(precioEsPorCuota({ tipo: 'otro' })).toBe(false);
-    expect(precioEsPorCuota({ tipo: 'otro', precioPorCuota: null })).toBe(false);
+    expect(precioEsPorCuota({ tipo: 'otro' })).toBe(true);
+    expect(precioEsPorCuota({ tipo: 'otro', precioPorCuota: null })).toBe(true);
+    expect(precioEsPorCuota({ tipo: 'actividad' })).toBe(false);
+    expect(precioEsPorCuota({ tipo: 'inscripcion' })).toBe(false);
+    expect(precioEsPorCuota({ tipo: 'uniforme' })).toBe(false);
   });
 
   it('lo que dice el concepto gana al tipo', () => {
-    expect(precioEsPorCuota({ tipo: 'otro', precioPorCuota: true })).toBe(true);
+    expect(precioEsPorCuota({ tipo: 'actividad', precioPorCuota: true })).toBe(true);
+    expect(precioEsPorCuota({ tipo: 'otro', precioPorCuota: false })).toBe(false);
     expect(precioEsPorCuota({ tipo: 'mensualidad', precioPorCuota: false })).toBe(false);
   });
 
-  it('el almuerzo de 5,000 por cuota cobra 5,000 cada mes', () => {
-    const m = montosPorCuota('otro', 500000, once, true);
+  it('el almuerzo de 5,000 («Otro cobro») cobra 5,000 cada mes', () => {
+    const m = montosPorCuota('otro', 500000, once);
     expect(m).toHaveLength(11);
     expect(m.every((x) => x === 500000)).toBe(true);
   });
 
-  it('sin decir nada sigue repartiendo, como antes', () => {
-    const m = montosPorCuota('otro', 500000, once);
+  it('una actividad en cuotas sigue repartiendo el total, como antes', () => {
+    const m = montosPorCuota('actividad', 500000, once);
     expect(m.reduce((a, b) => a + b, 0)).toBe(500000);
   });
 });
