@@ -61,7 +61,11 @@ export function PasoConceptosLote({
                       onChange={() => onConceptos(marcarVarios(seleccionados, [c.id], !seleccionados.has(c.id)))} />
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-900">{c.nombre}</span>
                     <span className="shrink-0 text-xs tabular-nums text-gray-600">
-                      {c.sinFactura} {c.sinFactura === 1 ? 'cargo' : 'cargos'} · {fmtDOP(c.sinFacturaCentavos)}
+                      {c.sinFactura > 0
+                        ? <>{c.sinFactura} {c.sinFactura === 1 ? 'cargo' : 'cargos'} · {fmtDOP(c.sinFacturaCentavos)}</>
+                        // Sin cargo todavía: se factura adelantando sus cuotas
+                        // hasta la fecha de corte de abajo.
+                        : <span className="text-gray-400">Sin cargos todavía</span>}
                     </span>
                   </label>
                 </li>
@@ -71,13 +75,13 @@ export function PasoConceptosLote({
         )}
       </fieldset>
 
-      <div className="max-w-xs space-y-1.5">
+      <div className="max-w-md space-y-1.5">
         <Label htmlFor="facturar-lote-hasta">Cuotas emitidas hasta</Label>
         <Input id="facturar-lote-hasta" type="date" value={hasta} error={!fechaOk}
           onChange={(e) => onHasta(e.target.value)} />
         <p className="text-xs text-gray-500">
           {fechaOk
-            ? <>Entra lo que ya se emitió el {fechaEnLetras(hasta)} o antes. Lo que se emite después queda para otro día.</>
+            ? <>Entra lo que se emite el {fechaEnLetras(hasta)} o antes. Para facturar por adelantado (la cuota del mes que viene), pon una fecha más adelante: al crear las facturas se generan esas cuotas, y el cobro automático no las repite.</>
             : 'Escribe una fecha válida.'}
         </p>
       </div>

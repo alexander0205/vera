@@ -10,6 +10,7 @@ import {
   type RespuestaLote,
 } from '@/lib/administracion-escolar/facturar-lote';
 import {
+  adelantarCuotasDelLote,
   cargarDatosDelLote,
   catalogoDelLote,
   crearFacturasDelPlan,
@@ -98,8 +99,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No hay un año escolar activo' }, { status: 404 });
   }
 
+  // Las cuotas que se emiten hasta el corte y aún no son cargo (la de un mes
+  // que no ha llegado, si se puso una fecha más adelante): en la vista previa
+  // se enseñan sin crearlas; al confirmar se crean y el plan se recalcula con
+  // lo que hay en la base.
+  const adelantadas = await adelantarCuotasDelLote(
+    teamId, periodo.id, p.estudianteIds, p.conceptoIds, p.hasta, !confirmar,
+  );
   const { alumnos, cargos } = await cargarDatosDelLote(teamId, periodo.id, p.estudianteIds, p.conceptoIds);
-  const plan = planearFacturasPorLote(cargos, {
+  const plan = planearFacturasPorLote([...cargos, ...adelantadas], {
     alumnos,
     conceptoIds: p.conceptoIds,
     hasta: p.hasta,

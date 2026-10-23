@@ -27,6 +27,7 @@ import {
 } from '@/lib/db/schema';
 import { fechaRD } from '@/lib/utils/format';
 import { facturarGrupos, type GrupoAFacturar } from './facturar-emision';
+import { devengarPeriodo } from './devengar';
 import type {
   AlumnoCatalogo, AlumnoLote, CargoLote, ConceptoCatalogo, FacturaCreada, FacturaFallida, FacturaPlan,
 } from './facturar-lote';
@@ -169,8 +170,11 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
     porConcepto.set(p.conceptoId, c);
   }
 
-  const idsConcepto = [...porConcepto.keys()];
-  const conceptos: ConceptoCatalogo[] = idsConcepto.length === 0 ? [] : (await db
+  // TODOS los conceptos activos, no solo los que ya tienen un cargo sin
+  // facturar: lo pidió Alex («déjalo abierto, que puedas seleccionar cualquier
+  // concepto»). Un concepto sin cargo todavía se factura adelantando sus
+  // cuotas hasta la fecha de corte (ver `adelantarCuotasDelLote`).
+  const conceptos: ConceptoCatalogo[] = (await db
     .select({
       id: adminEscolarConceptosPago.id,
       nombre: adminEscolarConceptosPago.nombre,
@@ -179,7 +183,7 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
     .from(adminEscolarConceptosPago)
     .where(and(
       eq(adminEscolarConceptosPago.teamId, teamId),
-      inArray(adminEscolarConceptosPago.id, idsConcepto),
+      eq(adminEscolarConceptosPago.activo, true),
     )))
     .map((c) => ({
       ...c,
@@ -189,6 +193,61 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
   return { alumnos: [...alumnos.values()], conceptos };
+}
+
+/**
+ * Adelanta las cuotas de los conceptos elegidos hasta la fecha de corte.
+ *
+ * «Facturar por lote» deja elegir cualquier concepto, también uno cuya cuota
+ * todavía no se ha emitido (la de noviembre en octubre). Para facturarla tiene
+ * que existir su cargo, y quien lo crea es el devengo —el mismo del cron, con
+ * el mismo precio, calendario y beca—, solo que hasta la fecha que se eligió y
+ * no hasta hoy. Como cada cuota tiene su índice único, cuando el cron llegue
+ * a esa fecha la encuentra hecha y no la repite; y como ya tendrá factura, la
+ * facturación automática tampoco.
+ *
+ * Solo lo que el alumno tiene en su plan: un concepto que no eligió al
+ * matricular no se le inventa aquí (se agrega en «Servicios por alumno»).
+ *
+ * Con `simular` no escribe nada y devuelve los cargos que crearía, con ids
+ * negativos, para la vista previa. Sin él los crea, y el plan se vuelve a
+ * calcular con lo que hay en la base.
+ */
+export async function adelantarCuotasDelLote(
+  teamId: number, periodoId: number, estudianteIds: number[], conceptoIds: number[],
+  hasta: string, simular: boolean,
+): Promise<CargoLote[]> {
+  if (estudianteIds.length === 0 || conceptoIds.length === 0) return [];
+  const matriculas = await db
+    .select({ id: adminEscolarMatriculas.id })
+    .from(adminEscolarMatriculas)
+    .where(and(
+      eq(adminEscolarMatriculas.teamId, teamId),
+      eq(adminEscolarMatriculas.periodoId, periodoId),
+      eq(adminEscolarMatriculas.estado, 'activa'),
+      inArray(adminEscolarMatriculas.estudianteId, estudianteIds),
+    ));
+  if (matriculas.length === 0) return [];
+
+  const r = await devengarPeriodo(teamId, periodoId, hasta, false, {
+    soloMatriculas: matriculas.map((m) => m.id),
+    soloConceptos: conceptoIds,
+  }, { simular });
+  if (!simular) return [];
+
+  return (r.porCrear ?? []).map((x, i) => ({
+    id: -(i + 1),
+    estudianteId: x.fila.estudianteId,
+    conceptoId: x.fila.conceptoId,
+    conceptoNombre: x.concepto,
+    mes: x.fila.mes ?? null,
+    anio: x.fila.anio ?? Number(x.fechaEmision.slice(0, 4)),
+    estado: 'pendiente',
+    saldoCentavos: x.fila.saldoCentavos ?? x.fila.montoCentavos,
+    fechaVencimiento: x.fila.fechaVencimiento ? String(x.fila.fechaVencimiento).slice(0, 10) : null,
+    fechaEmision: x.fechaEmision,
+    ecfDocumentId: null,
+  }));
 }
 
 /**

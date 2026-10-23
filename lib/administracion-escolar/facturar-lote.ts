@@ -196,7 +196,7 @@ function razonSinNada(
   if (cuenta.hechos > 0) {
     return { ...base, motivo: 'ya-facturado', detalle: 'Lo de estos conceptos ya está facturado o pagado.' };
   }
-  return { ...base, motivo: 'sin-cargos', detalle: 'No tiene cargos de los conceptos elegidos este año.' };
+  return { ...base, motivo: 'sin-cargos', detalle: 'No tiene esos conceptos en su plan, o sus cuotas se emiten después del corte. Para agregárselos, usa «Servicios por alumno».' };
 }
 
 /**

@@ -26,6 +26,8 @@ vi.mock('@/lib/administracion-escolar/facturar-lote-datos', () => ({
   periodosDelColegio: async () => [{ id: 3, nombre: '2026-2027', activo: true }],
   catalogoDelLote: async () => ({ alumnos: [], conceptos: [] }),
   cargarDatosDelLote: async () => ({ alumnos, cargos }),
+  // Adelantar cuotas: aquí no hay nada que adelantar.
+  adelantarCuotasDelLote: async () => [],
   crearFacturasDelPlan: (...a: unknown[]) => crearFacturasDelPlan(...a),
 }));
 

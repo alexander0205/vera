@@ -8,6 +8,7 @@ import { logAudit, getIp } from '@/lib/audit';
 import { aGsm7 } from '@/lib/sms/mensaje';
 import { enviarSms } from '@/lib/sms/enviar';
 import { enviarWhatsApp } from '@/lib/whatsapp/enviar';
+import { aE164 } from '@/lib/whatsapp/telefono';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import type { Canal } from '@/lib/administracion-escolar/ciclo-cobro';
 
@@ -78,8 +79,16 @@ export async function POST(req: NextRequest) {
         email: destino, colegio, asunto: 'Prueba de envío', texto,
       });
     } else if (canal === 'whatsapp') {
-      const res = await enviarWhatsApp(teamId, destino, texto);
-      detalle = { messageId: res.messageId };
+      // Se normaliza AQUÍ y se rechaza lo imposible: antes salía tal cual y un
+      // dígito de menos terminaba en «Enviado» hacia un número inexistente.
+      const telefono = aE164(destino);
+      if (!telefono) {
+        return NextResponse.json({
+          error: 'Ese número no está completo. Un número de RD lleva 10 dígitos: 809, 829 u 849 y siete más (ej. +1 829 359 6602).',
+        }, { status: 400 });
+      }
+      const res = await enviarWhatsApp(teamId, telefono, texto);
+      detalle = { messageId: res.messageId, telefono: `+${telefono}` };
     } else {
       // Mismo trato que en el envío real: sin acentos, porque una sola `í`
       // parte el SMS en tres. Si la prueba fuera con acentos, el mensaje de

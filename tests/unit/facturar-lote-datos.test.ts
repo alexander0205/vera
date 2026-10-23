@@ -135,16 +135,14 @@ describe('catalogoDelLote', () => {
     expect(r.alumnos[0].nombre).toBe('Ana Pérez 1');
   });
 
-  it('sin nada pendiente no hay conceptos que ofrecer (ni consulta de conceptos)', async () => {
-    let pidioConceptos = false;
+  it('sin nada pendiente igual ofrece los conceptos activos, en cero (se pueden adelantar)', async () => {
     respuesta = (c) => {
-      if ('tipo' in c) pidioConceptos = true;
+      if ('tipo' in c) return [{ id: 7, nombre: 'Almuerzo', tipo: 'otro' }];
       return 'nombres' in c ? [matricula(1)] : [];
     };
     const r = await datos.catalogoDelLote(1, 1);
 
-    expect(r.conceptos).toEqual([]);
-    expect(pidioConceptos).toBe(false);
+    expect(r.conceptos).toEqual([{ id: 7, nombre: 'Almuerzo', tipo: 'otro', sinFactura: 0, sinFacturaCentavos: 0 }]);
   });
 
   it('un alumno sin curso ni responsable no rompe nada', async () => {
