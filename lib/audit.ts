@@ -73,6 +73,10 @@ export type AuditAction =
   // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
   // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
   | 'ESCOLAR_AVISO_CORRIDA'
+  // «Facturar por lote»: una tanda de facturas en borrador creada a mano. El
+  // cron no deja rastro de quién; esto sí, porque aquí hay una persona que
+  // eligió alumnos, conceptos y corte. El `meta` lleva cuántas y por cuánto.
+  | 'ESCOLAR_FACTURAS_LOTE'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
