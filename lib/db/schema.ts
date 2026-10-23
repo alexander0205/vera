@@ -2605,6 +2605,12 @@ export const adminEscolarCanales = pgTable('admin_escolar_canales', {
   correoActivo:   boolean('correo_activo').notNull().default(true),
   whatsappActivo: boolean('whatsapp_activo').notNull().default(true),
   smsActivo:      boolean('sms_activo').notNull().default(true),
+  /**
+   * Por dónde salen los WhatsApp: 'zero' (número de Zero), 'propio' (el del
+   * colegio, y si no está conectado no sale) o null = el del colegio si lo
+   * conectó y si no el de Zero, como siempre. Ver `elegirRemitente`.
+   */
+  whatsappVia:    varchar('whatsapp_via', { length: 8 }).$type<'zero' | 'propio'>(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
 

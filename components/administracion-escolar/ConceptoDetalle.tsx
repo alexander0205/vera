@@ -71,6 +71,9 @@ interface EstadoWhatsApp {
   configurado: boolean;
   conectado: boolean;
   numeroWhatsapp: string | null;
+  /** Por dónde saldría hoy un mensaje (Zero o el colegio); null = por ninguno. */
+  efectivo?: 'zero' | 'propio' | null;
+  listo?: boolean;
 }
 
 /**
@@ -328,7 +331,8 @@ export function ConceptoDetalle({
   // saber si se pueden ofrecer, no reconciliar nada.
   const { data: whatsapp } = useSWR<EstadoWhatsApp>('/api/whatsapp/estado', traerEstado);
   const { data: sms } = useSWR<EstadoSms>('/api/sms/estado', traerSms);
-  const whatsappListo = whatsapp?.conectado === true;
+  // Listo = hay por dónde salir: el número del colegio o el de Zero, según lo elegido en Avisos.
+  const whatsappListo = whatsapp?.listo ?? whatsapp?.conectado === true;
   const smsListo = sms?.habilitado === true;
 
   /**
@@ -813,10 +817,10 @@ export function ConceptoDetalle({
                     Enviar por WhatsApp
                     <span className="block text-xs text-gray-500">
                       {whatsappListo
-                        ? `Solo los dos primeros avisos${whatsapp?.numeroWhatsapp ? ` · ${whatsapp.numeroWhatsapp}` : ''}`
+                        ? `Solo los dos primeros avisos · ${whatsapp?.efectivo === 'zero' ? 'por el WhatsApp de Zero' : `por el del colegio${whatsapp?.numeroWhatsapp ? ` · ${whatsapp.numeroWhatsapp}` : ''}`}`
                         : (
                           <>
-                            Falta conectar la cuenta en{' '}
+                            Elige cómo sale el WhatsApp en{' '}
                             <a href="/escolar/configuracion" className="underline hover:text-zero-600">
                               Configuración escolar › Avisos
                             </a>.
@@ -865,8 +869,8 @@ export function ConceptoDetalle({
                   concepto sigue diciendo que manda por WhatsApp y no manda. */}
               {borrador.avisoWhatsapp && !whatsappListo && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Este concepto tiene WhatsApp encendido, pero la cuenta no está conectada. No saldrá por ahí
-                  hasta enlazarla en Configuración escolar › Avisos.
+                  Este concepto tiene WhatsApp encendido, pero el colegio no tiene por dónde enviarlo. No saldrá
+                  hasta elegir «WhatsApp de Zero» o conectar «Mi WhatsApp» en Configuración escolar › Avisos.
                 </p>
               )}
 
