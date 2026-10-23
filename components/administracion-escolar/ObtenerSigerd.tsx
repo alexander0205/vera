@@ -24,6 +24,10 @@ export const traerEstadoSigerd = (url: string) => fetch(url).then((r) => r.json(
 export interface EstadoObtener {
   estado: 'ninguno' | 'pendiente' | 'corriendo' | 'error' | 'completado';
   mensaje: string | null;
+  /** Hay una descarga buena guardada, aunque el último intento de actualizar falló. */
+  conDescarga: boolean;
+  /** Año académico (id de SIGERD) de la última descarga. */
+  anoAcademico: number | null;
   nEstudiantes: number | null;
   nSecciones: number | null;
   nEmpleados: number | null;
@@ -68,18 +72,6 @@ export function ObtenerSigerd({ onCompletado }: {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
-  const delPortal = (aniosResp?.anios ?? []).map((a) => ({ value: String(a.id), label: a.nombre }));
-  const anios = delPortal.length > 0 ? delPortal : ANIOS_RESERVA;
-  const sonDeReserva = delPortal.length === 0;
-
-  // Vacío hasta que se sepan los años: el portal manda cuál es el primero, y
-  // fijar '24' a mano era justo lo que hacía elegir un año equivocado.
-  const [anio, setAnio] = useState('');
-  const elegido = anio || anios[0]?.value || '';
-  const [lanzando, setLanzando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
-
   // Misma clave que el resumen de arriba: SWR la comparte, así que la pantalla
   // pide el estado una sola vez. Mientras el servidor está descargando se
   // vuelve a preguntar cada cinco segundos; sin eso, quien recargaba la página
@@ -91,8 +83,32 @@ export function ObtenerSigerd({ onCompletado }: {
     { refreshInterval: (d) => (d?.estado === 'corriendo' ? 5000 : 0) },
   );
 
+  const delPortal = (aniosResp?.anios ?? []).map((a) => ({ value: String(a.id), label: a.nombre }));
+  const sonDeReserva = delPortal.length === 0;
+  const baseAnios = sonDeReserva ? ANIOS_RESERVA : delPortal;
+
+  // El año que ya se bajó. Volver a bajar es refrescar ESE año: por defecto el
+  // desplegable arrancaba en el primero del portal, que puede ser otro, y la
+  // «actualización» terminaba guardando un año distinto al que el colegio usa.
+  const descargado = estado?.anoAcademico != null ? String(estado.anoAcademico) : '';
+  const anios = descargado && !baseAnios.some((a) => a.value === descargado)
+    ? [{ value: descargado, label: `Año académico ${descargado}` }, ...baseAnios]
+    : baseAnios;
+
+  // Vacío hasta que se sepan los años: el portal manda cuál es el primero, y
+  // fijar '24' a mano era justo lo que hacía elegir un año equivocado.
+  const [anio, setAnio] = useState('');
+  const elegido = anio || descargado || anios[0]?.value || '';
+  const [lanzando, setLanzando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
   const cargarEstado = useCallback(() => refrescarEstado(), [refrescarEstado]);
   const corriendo = lanzando || estado?.estado === 'corriendo';
+  // Con una descarga ya guardada el botón no «obtiene»: la REPITE. Antes de
+  // esto quedaba el mismo texto, y sobre todo, el colegio no tenía forma de ver
+  // lo que SIGERD cambió después (alumnos nuevos, cambios de sección).
+  const yaHayDescarga = estado?.estado === 'completado' || estado?.conDescarga === true;
   const setCorriendo = setLanzando;
 
   async function obtener() {
@@ -133,8 +149,9 @@ export function ObtenerSigerd({ onCompletado }: {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Trae todos los datos de tu centro en SIGERD (cursos, estudiantes, condición, personal) y los
-        guarda aquí. Con una sola vez basta; luego no hace falta reconectar.
+        {yaHayDescarga
+          ? 'Vuelve a traer los datos de tu centro para ver lo que cambió en SIGERD desde la última vez. Reemplaza la descarga anterior de ese año; no borra nada de lo que ya tienes en Zero.'
+          : 'Trae todos los datos de tu centro en SIGERD (cursos, estudiantes, condición, personal) y los guarda aquí. Con una sola vez basta; luego no hace falta reconectar.'}
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +170,7 @@ export function ObtenerSigerd({ onCompletado }: {
 
         <Button onClick={obtener} disabled={corriendo}>
           {corriendo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
-          {corriendo ? 'Sincronizando…' : 'Obtener información'}
+          {corriendo ? 'Sincronizando…' : yaHayDescarga ? 'Volver a bajar de SIGERD' : 'Obtener información'}
         </Button>
       </div>
 

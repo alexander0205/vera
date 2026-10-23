@@ -22,13 +22,15 @@
  */
 
 import 'server-only';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCursos, adminEscolarEstudiantes, adminEscolarGrados,
-  adminEscolarServicios, sigerdImportaciones, sigerdPersonal,
+  adminEscolarServicios, sigerdPersonal,
 } from '@/lib/db/schema';
+import { hayParientesEnDump } from './dump-parientes';
 import type { ArbolCentro } from './sync';
+import { ultimoDumpSigerd } from './ultimo-dump';
 
 /** Estado de una fila frente a lo que ya tenemos. */
 export type EstadoFila = 'nuevo' | 'existe' | 'dudoso';
@@ -116,13 +118,12 @@ function soloDigitos(s: string | null | undefined): string {
 }
 
 export async function construirPlan(teamId: number): Promise<PlanMigracion | null> {
-  const [imp] = await db.select()
-    .from(sigerdImportaciones)
-    .where(and(eq(sigerdImportaciones.teamId, teamId), eq(sigerdImportaciones.estado, 'completado')))
-    .limit(1);
-  if (!imp?.dump) return null;
+  // La descarga más reciente: con dos años guardados, un `.limit(1)` sin orden
+  // enseñaba cualquiera de los dos.
+  const imp = await ultimoDumpSigerd(teamId);
+  if (!imp) return null;
 
-  const dump = imp.dump as Record<string, unknown>;
+  const dump = imp.dump;
   const arbol = dump.estructura as ArbolCentro | undefined;
   const fichas = (dump.personalFichas ?? []) as Array<Record<string, unknown>>;
   const personalCrudo = (dump.personal ?? []) as Array<Record<string, unknown>>;
@@ -265,12 +266,13 @@ export async function construirPlan(teamId: number): Promise<PlanMigracion | nul
 
   return {
     anoAcademico: (dump.anoAcademico as number | undefined) ?? imp.anoAcademico ?? null,
-    bajadoEn: imp.completadoEn ?? imp.createdAt ?? null,
+    bajadoEn: imp.bajadoEn,
     estructura,
     estudiantes: filasEstudiante,
     personal,
-    // Los parientes vendrán con la descarga larga; hoy el dump no los trae.
-    padresDisponibles: Array.isArray(dump.parientes) && (dump.parientes as unknown[]).length > 0,
+    // La clave real del volcado es `estudianteParientes`; se miraba `parientes`,
+    // que no existe, y nunca detectaba los padres que la descarga sí trae.
+    padresDisponibles: hayParientesEnDump(dump),
     totales: {
       servicios: estructura.length,
       grados: estructura.reduce((n, s) => n + s.grados.length, 0),
