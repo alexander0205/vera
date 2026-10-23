@@ -21,7 +21,7 @@ import { MatriculaLoteDialog } from '@/components/administracion-escolar/Matricu
 import { MatricularSigerdAviso } from '@/components/administracion-escolar/MatricularSigerdAviso';
 import { MatriculaFicha, EstadoMatriculaBadge } from '@/components/administracion-escolar/MatriculaFicha';
 import { ModalHeader } from '@/components/ui/modal-header';
-import { CalendarDays, ClipboardList, GraduationCap, Loader2, Plus, Search, Users } from 'lucide-react';
+import { CalendarDays, ClipboardList, GraduationCap, Grid3x3, Loader2, Plus, Search, Users } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
@@ -333,6 +333,9 @@ export default function MatriculasClient() {
           <ExportarListado armar={armarExport} deshabilitado={loading || paginaInfo.total === 0} testId="exportar-matriculas" />
         {puedeGestionar && (
           <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/escolar/matriculas/servicios"><Grid3x3 className="h-4 w-4 mr-2" />Servicios por alumno</Link>
+            </Button>
             <Button variant="outline" onClick={() => setShowLote(true)} disabled={loading || sinCatalogos}>
               <Users className="h-4 w-4 mr-2" />Matricular en lote
             </Button>

@@ -73,6 +73,10 @@ export type AuditAction =
   // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
   // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
   | 'ESCOLAR_AVISO_CORRIDA'
+  // «Servicios por alumno»: conceptos agregados o quitados por lote a una
+  // matrícula. `resource` = `matricula:<id>`; meta con lo agregado, lo quitado
+  // y cuántos cargos sin facturar se anularon.
+  | 'ESCOLAR_CONCEPTOS_LOTE'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
