@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
@@ -169,6 +169,17 @@ export default function MatricularDesdeSigerd() {
   const [alcance, setAlcance] = useState<string | null>(null);
   const [verOmitidos, setVerOmitidos] = useState(false);
   const [editando, setEditando] = useState<{ alumno: Alumno; grupo: Grupo } | null>(null);
+  // Cambios en el panel sin «Guardar»: cerrar pregunta antes de perderlos.
+  const [editorSucio, setEditorSucio] = useState(false);
+  const [avisoSalir, setAvisoSalir] = useState(false);
+  useEffect(() => { if (!editando) setEditorSucio(false); }, [editando]);
+  const cerrarEditor = useCallback(() => {
+    if (editorSucio) setAvisoSalir(true);
+    else setEditando(null);
+  }, [editorSucio]);
+  const deshacerAjuste = useCallback((id: number) => {
+    setAjustes((m) => { const n = new Map(m); n.delete(id); return n; });
+  }, []);
   const [confirmar, setConfirmar] = useState(false);
   const [avance, setAvance] = useState<Avance[] | null>(null);
   const corriendo = avance?.some((a) => a.estado === 'esperando' || a.estado === 'corriendo') ?? false;
@@ -706,6 +717,7 @@ export default function MatricularDesdeSigerd() {
                           <p className={`truncate text-sm ${sale ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{e.nombre}</p>
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             {sale && <Chip tono="gris">No se matricula ahora</Chip>}
+                            {!sale && a && <Chip tono="verde"><Check className="mr-0.5 h-3 w-3" />Plan cambiado</Chip>}
                             {!sale && a?.precios.map((p) => {
                               const l = lineas.find((x) => x.conceptoId === p.conceptoId);
                               return <Chip key={p.conceptoId} tono="ambar">{l?.nombre ?? 'Concepto'}: {fmtDOP(p.montoCentavos)}</Chip>;
@@ -733,6 +745,13 @@ export default function MatricularDesdeSigerd() {
                                 className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-zero-300 hover:text-zero-700 disabled:opacity-40">
                                 <Pencil className="h-3.5 w-3.5" />Editar
                               </button>
+                              {a && (
+                                <button type="button" onClick={() => deshacerAjuste(e.id)}
+                                  title="Deshacer los cambios: vuelve a lo de su sección" aria-label={`Deshacer los cambios de ${e.nombre}`}
+                                  className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                                  <RotateCcw className="h-4 w-4" />
+                                </button>
+                              )}
                               <button type="button" onClick={() => alternarFuera([e.id], true)}
                                 title="No matricular a este alumno ahora" aria-label={`No matricular a ${e.nombre}`}
                                 className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
@@ -782,12 +801,12 @@ export default function MatricularDesdeSigerd() {
         )}
         confirmLabel="Sí, matricular" onConfirm={() => void matricular()} />
 
-      <Drawer anchor="right" open={!!editando} onClose={() => setEditando(null)} keepMounted={false}
+      <Drawer anchor="right" open={!!editando} onClose={cerrarEditor} keepMounted={false}
         slotProps={{
           backdrop: { sx: { backdropFilter: 'blur(2px)' } },
-          // Ancho: el precio, «Cambiar» y «Volver a …» de cada concepto caben
-          // en una línea y se leen de un vistazo.
-          paper: { sx: { width: { xs: '100%', sm: 640, lg: 760 }, borderTopLeftRadius: { sm: 16 }, borderBottomLeftRadius: { sm: 16 } } },
+          // Ancho: la tabla de cargos (concepto, cuotas, por cuota, total y
+          // acciones) se lee en una línea sin apretar. Lo pidió Alex.
+          paper: { sx: { width: { xs: '100%', sm: 760, lg: 1000, xl: 1120 }, borderTopLeftRadius: { sm: 16 }, borderBottomLeftRadius: { sm: 16 } } },
         }}>
         {editando && datos.periodo && (
           <EditorAlumno
@@ -804,15 +823,24 @@ export default function MatricularDesdeSigerd() {
             puedePrecios={puedePrecios}
             onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
             onRestablecer={() => {
-              setAjustes((m) => { const n = new Map(m); n.delete(editando.alumno.id); return n; });
+              deshacerAjuste(editando.alumno.id);
               setEditando(null);
             }}
             onSacar={() => { alternarFuera([editando.alumno.id], true); setEditando(null); }}
-            onCerrar={() => setEditando(null)}
+            onCerrar={cerrarEditor}
+            onSucio={setEditorSucio}
             conCambios={ajustes.has(editando.alumno.id)}
           />
         )}
       </Drawer>
+
+      <ConfirmDialog open={avisoSalir} onOpenChange={setAvisoSalir}
+        title="Tienes cambios sin guardar"
+        description="Cambiaste los conceptos o los precios de este alumno y todavía no los has guardado. Si sales ahora, se pierden."
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        destructive
+        onConfirm={() => { setAvisoSalir(false); setEditando(null); }} />
     </section>
   );
 }
@@ -944,7 +972,7 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar,
+  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -958,6 +986,8 @@ function EditorAlumno({
   onRestablecer: () => void;
   onSacar: () => void;
   onCerrar: () => void;
+  /** Avisa si hay cambios sin guardar, para preguntar antes de cerrar. */
+  onSucio?: (sucio: boolean) => void;
 }) {
   // Lo que el selector va diciendo. Antes de que llegue el plan su lista de
   // conceptos va vacía sin querer decir «ninguno»: hasta entonces no se guarda.
@@ -966,11 +996,28 @@ function EditorAlumno({
   const [precios, setPrecios] = useState<Ajuste['precios']>(inicial.precios);
   const [inicialFijo] = useState(inicial);
 
-  const alLlegarPlan = useCallback(() => setCargado(true), []);
-  const alCambiar = useCallback((ids: number[]) => setConceptos(ids), []);
-  const alCambiarPrecios = useCallback((ps: { conceptoId: number; montoCentavos: number }[]) => {
-    setPrecios(ps.map((p) => ({ conceptoId: p.conceptoId, montoCentavos: p.montoCentavos })));
+  // Lo que había al abrir, para saber si se tocó algo. El selector avisa del
+  // plan (`onPlan`) ANTES de mandar la primera lista de conceptos y precios,
+  // así que lo primero que llega después de cargar es el punto de partida.
+  const cargadoRef = useRef(false);
+  const base = useRef<{ conceptos: string | null; precios: string | null }>({ conceptos: null, precios: null });
+
+  const alLlegarPlan = useCallback(() => { cargadoRef.current = true; setCargado(true); }, []);
+  const alCambiar = useCallback((ids: number[]) => {
+    setConceptos(ids);
+    if (cargadoRef.current && base.current.conceptos === null) base.current.conceptos = claveIds(ids);
   }, []);
+  const alCambiarPrecios = useCallback((ps: { conceptoId: number; montoCentavos: number }[]) => {
+    const limpios = ps.map((p) => ({ conceptoId: p.conceptoId, montoCentavos: p.montoCentavos }));
+    setPrecios(limpios);
+    if (cargadoRef.current && base.current.precios === null) base.current.precios = clavePrecios(limpios);
+  }, []);
+
+  const sucio = cargado && base.current.conceptos !== null && (
+    claveIds(conceptos) !== base.current.conceptos
+    || (base.current.precios !== null && clavePrecios(precios) !== base.current.precios)
+  );
+  useEffect(() => { onSucio?.(sucio); }, [sucio, onSucio]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1130,9 +1177,14 @@ function Kpi({ icono, etiqueta, valor, nota, destacado }: {
   );
 }
 
-function Chip({ tono: t, children }: { tono: 'gris' | 'ambar' | 'rojo'; children: ReactNode }) {
+function Chip({ tono: t, children }: { tono: 'gris' | 'ambar' | 'rojo' | 'verde'; children: ReactNode }) {
   const c = t === 'ambar' ? 'bg-amber-50 text-amber-800 ring-amber-200'
+    : t === 'verde' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
     : t === 'rojo' ? 'bg-red-50 text-red-700 ring-red-200'
     : 'bg-gray-100 text-gray-600 ring-gray-200';
   return <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] ring-1 ring-inset ${c}`}>{children}</span>;
 }
+
+const claveIds = (ids: number[]) => [...ids].sort((a, b) => a - b).join(',');
+const clavePrecios = (ps: { conceptoId: number; montoCentavos: number }[]) =>
+  ps.map((p) => `${p.conceptoId}:${p.montoCentavos}`).sort().join(',');

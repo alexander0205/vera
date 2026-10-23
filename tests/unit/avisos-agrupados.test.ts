@@ -205,7 +205,7 @@ describe('el mensaje de varios cobros', () => {
 
   it('enumera «alumno – concepto: monto», suma el total y dice cuántas son', () => {
     const { largo } = redactarGrupo(grupoDe(VENCER), 'Colegio X');
-    expect(largo).toContain('Hoy vencieron 3 facturas, RD$15,000.00 en total:');
+    expect(largo).toContain('Hoy vencieron 3 cobros, RD$15,000.00 en total:');
     expect(largo).toContain('• Ana Pérez – Colegiatura de octubre: RD$5,000.00');
     expect(largo).toContain('• Luis Pérez – Colegiatura de octubre: RD$5,000.00');
     expect(largo).toContain('• Pedro Pérez – Colegiatura de octubre: RD$5,000.00');
@@ -226,8 +226,8 @@ describe('el mensaje de varios cobros', () => {
       fila({ cargoId: 2, estudianteId: 11, estudiante: 'Pedro Pérez', fechaVencimiento: '2026-10-03' }),
     ];
     const { largo } = redactarGrupo(grupoDe(EMITIR, filas), 'C');
-    expect(largo).toContain('Ya están listas 2 facturas');
-    expect(largo).toContain('Tienes hasta el 3 de octubre para pagarlas.');
+    expect(largo).toContain('Ya están listos 2 cobros');
+    expect(largo).toContain('Tienes hasta el 3 de octubre para pagarlos.');
     expect(largo).not.toContain('10 de octubre');
   });
 
@@ -243,9 +243,9 @@ describe('el mensaje de varios cobros', () => {
     expect(largo).toContain('Ya se les aplicó el recargo por mora.');
   });
 
-  it('sin mora la cola es «págalas»', () => {
+  it('sin mora la cola es «págalos»', () => {
     const filas = HERMANOS.map((f) => ({ ...f, cobraMora: false }));
-    expect(redactarGrupo(grupoDe(VENCER, filas), 'C').largo).toContain('Págalas para ponerte al día.');
+    expect(redactarGrupo(grupoDe(VENCER, filas), 'C').largo).toContain('Págalos para ponerte al día.');
   });
 
   it('una familia enorme se resume en vez de hacer un mensaje interminable', () => {
@@ -253,7 +253,7 @@ describe('el mensaje de varios cobros', () => {
       cargoId: 100 + i, estudianteId: 200 + i, estudiante: `Alumno ${String(i).padStart(2, '0')}`,
     }));
     const { largo } = redactarGrupo(grupoDe(VENCER, muchos), 'C');
-    expect(largo).toContain('20 facturas');
+    expect(largo).toContain('20 cobros');
     expect(largo).toContain('• y 8 cobros más');
     expect(largo.split('\n').filter((l) => l.startsWith('• ')).length).toBe(13);
   });
@@ -406,9 +406,9 @@ describe('asuntoDeAviso', () => {
   });
 
   it('varios: en plural', () => {
-    expect(asuntoDeAviso('al-vencer', 3)).toBe('Tus facturas vencieron hoy');
-    expect(asuntoDeAviso('al-emitir', 3)).toBe('Tienes 3 facturas nuevas');
-    expect(asuntoDeAviso('antes-mora', 3)).toBe('Tus facturas están próximas a vencer');
+    expect(asuntoDeAviso('al-vencer', 3)).toBe('Tus cobros vencieron hoy');
+    expect(asuntoDeAviso('al-emitir', 3)).toBe('Tienes 3 cobros nuevos');
+    expect(asuntoDeAviso('antes-mora', 3)).toBe('Tus cobros están próximos a vencer');
   });
 });
 

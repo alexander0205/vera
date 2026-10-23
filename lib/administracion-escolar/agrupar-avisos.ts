@@ -243,7 +243,8 @@ function ajustarSms(colegio: string, cuerpo: string, enlace: string | null): str
  * agrupar no puede cambiarle ni una coma a quien no tiene hermanos. Con varios,
  * enumera «alumno – concepto: monto», suma el total y da la fecha más cercana.
  *
- * `enlace` es el de la FAMILIA y ya lista todo lo que debe, así que va uno solo.
+ * `enlace` lleva a la factura del mensaje (o a lo que debe la familia si junta
+ * varias; ver `facturaDelMensaje`), así que va uno solo.
  * Solo entra en el SMS de varios cobros (ahí sin él el padre no sabría cuáles);
  * el de un cobro sigue sin enlace, como siempre, porque 60 caracteres de URL se
  * comen media parte.
@@ -272,23 +273,25 @@ export function redactarGrupo(
   let cuerpoSms: string;
 
   if (aviso === 'al-emitir') {
-    intro = `Ya están listas ${r.cobros} facturas, ${total} en total:`;
-    cierre = r.fechaVencimiento ? `Tienes hasta el ${enLetra(r.fechaVencimiento)} para pagarlas.` : '';
+    // «Cobros» y no «facturas»: la facturación automática hace UNA factura por
+    // familia con todas sus líneas; decir «3 facturas» hace buscar tres.
+    intro = `Ya están listos ${r.cobros} cobros, ${total} en total:`;
+    cierre = r.fechaVencimiento ? `Tienes hasta el ${enLetra(r.fechaVencimiento)} para pagarlos.` : '';
     cuerpoSms = `${r.cobros} cobros por ${total}${r.fechaVencimiento ? `, vencen el ${diaMes(r.fechaVencimiento)}` : ''}.`;
   } else if (aviso === 'al-vencer') {
     // Mismo reparto que `redactar()`: todos los de un grupo comparten el hueco,
     // así que la cola de uno vale para todos. En plural.
-    intro = `Hoy vencieron ${r.cobros} facturas, ${total} en total:`;
+    intro = `Hoy vencieron ${r.cobros} cobros, ${total} en total:`;
     cierre = fila.cobraMora
       ? (fila.moraDiasGracia > 0
           ? `Tienes ${fila.moraDiasGracia} día(s) antes de que se les aplique el recargo.`
           : 'Ya se les aplicó el recargo por mora.')
-      : 'Págalas para ponerte al día.';
+      : 'Págalos para ponerte al día.';
     cuerpoSms = `${r.cobros} cobros por ${total} vencieron hoy.`;
   } else {
     // antes-mora: la fecha es la del RECARGO, la más cercana de las del grupo.
     const fechaMora = r.fechaRecargo ? enLetra(r.fechaRecargo) : 'pronto';
-    intro = `Tienes ${r.cobros} facturas vencidas, ${total} en total:`;
+    intro = `Tienes ${r.cobros} cobros vencidos, ${total} en total:`;
     cierre = `Paga ${total} antes del ${fechaMora} y evita el recargo por mora.`;
     cuerpoSms = `Paga ${total} (${r.cobros} cobros) antes del ${r.fechaRecargo ? diaMes(r.fechaRecargo) : 'pronto'} y evita el recargo.`;
   }
@@ -299,12 +302,12 @@ export function redactarGrupo(
   };
 }
 
-/** El asunto del correo: en plural cuando el mensaje trae varios cobros. */
+/** El asunto del correo: en plural (cobros) cuando el mensaje trae varios. */
 export function asuntoDeAviso(aviso: Aviso, cobros: number): string {
   const varios = cobros > 1;
-  if (aviso === 'al-vencer') return varios ? 'Tus facturas vencieron hoy' : 'Tu factura venció hoy';
-  if (aviso === 'al-emitir') return varios ? `Tienes ${cobros} facturas nuevas` : 'Tienes una factura nueva';
-  return varios ? 'Tus facturas están próximas a vencer' : 'Tu factura está próxima a vencer';
+  if (aviso === 'al-vencer') return varios ? 'Tus cobros vencieron hoy' : 'Tu factura venció hoy';
+  if (aviso === 'al-emitir') return varios ? `Tienes ${cobros} cobros nuevos` : 'Tienes una factura nueva';
+  return varios ? 'Tus cobros están próximos a vencer' : 'Tu factura está próxima a vencer';
 }
 
 // ─── Las variables de la plantilla de WhatsApp ───────────────────────────────
@@ -353,4 +356,41 @@ export function datosWhatsAppDeGrupo(
     // La fecha del RECARGO, no la del vencimiento — igual que en `redactar()`.
     fechaRecargo: r.fechaRecargo ? enLetra(r.fechaRecargo) : null,
   };
+}
+
+// ─── El enlace de pago del mensaje ───────────────────────────────────────────
+
+/**
+ * La factura del mensaje, si es UNA sola.
+ *
+ * El enlace de la familia (`/pagar/<token>`) enseña TODO lo que debe; con
+ * `?f=<factura>` enseña y cobra solo esa factura, y la página valida que sea de
+ * esa familia. Un aviso de «ya está lista tu factura» tiene que llevar a ESA
+ * factura, no a la deuda entera. La facturación automática hace una factura
+ * por familia, así que lo normal es que todos los cobros del mensaje
+ * compartan la misma. Si el mensaje junta varias facturas, o algún cobro aún
+ * no está facturado, no hay una sola que enseñar: va el enlace de la familia.
+ */
+export function facturaDelMensaje(miembros: readonly Pick<AvisoPendiente, 'fila'>[]): number | null {
+  const ids = new Set(miembros.map((m) => m.fila.ecfDocumentId ?? null));
+  if (ids.size !== 1) return null;
+  const [id] = ids;
+  return id ?? null;
+}
+
+/** El enlace de la familia acotado a una factura, si la hay. */
+export function enlaceDeFactura(enlaceFamilia: string, facturaId: number | null): string {
+  return facturaId != null ? `${enlaceFamilia}?f=${facturaId}` : enlaceFamilia;
+}
+
+/**
+ * Lo que rellena la variable del botón «Ver y pagar» de WhatsApp.
+ *
+ * Meta solo deja variable AL FINAL de la URL del botón: la plantilla lleva
+ * `https://…/pagar/{{1}}` y aquí va lo que sigue —el token y, si hay, `?f=`—.
+ * Mandar la URL entera la duplicaría (`…/pagar/https://…/pagar/abc`).
+ */
+export function sufijoDeBoton(enlace: string): string {
+  const i = enlace.indexOf('/pagar/');
+  return i >= 0 ? enlace.slice(i + '/pagar/'.length) : enlace;
 }

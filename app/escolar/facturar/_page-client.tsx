@@ -301,7 +301,7 @@ export default function FacturarLoteClient() {
   }, [catalogo]);
 
   return (
-    <section className="mx-auto max-w-4xl space-y-5 p-6">
+    <section className="mx-auto max-w-[1600px] space-y-5 p-6">
       <div>
         <Link href="/escolar/responsables" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
           <ArrowLeft className="h-4 w-4" aria-hidden />Responsables

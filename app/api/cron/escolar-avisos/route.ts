@@ -6,7 +6,7 @@ import {
   avisosDeHoy, candidatos, despachar, equiposConAvisos, mensajesEnviados,
   type AvisoPendiente, type EnvioHecho,
 } from '@/lib/administracion-escolar/avisos';
-import { asuntoDeAviso, datosWhatsAppDeGrupo } from '@/lib/administracion-escolar/agrupar-avisos';
+import { asuntoDeAviso, datosWhatsAppDeGrupo, sufijoDeBoton } from '@/lib/administracion-escolar/agrupar-avisos';
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import { enviarWhatsApp, enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
@@ -222,8 +222,9 @@ export async function GET(req: NextRequest) {
           const r = await enviarWhatsAppPlantilla(teamId, numero, {
             nombre,
             idioma: plantilla.idioma,
-            // El enlace del padre, que es lo que rellena la {{1}} del botón.
-            botonUrl: necesitaBoton ? enlace : null,
+            // La {{1}} del botón es el FINAL de la URL (`…/pagar/{{1}}`): el
+            // token y la factura, no la URL entera.
+            botonUrl: necesitaBoton && enlace ? sufijoDeBoton(enlace) : null,
             // La MISMA plantilla aprobada con las variables combinadas cuando
             // son varios cobros (alumno «Ana y Pedro», concepto «Colegiatura
             // (2)», monto el total). Con uno solo, los valores de siempre.

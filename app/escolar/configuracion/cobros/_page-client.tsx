@@ -50,7 +50,64 @@ const CUENTA_VACIA: Cuenta = { id: null, banco: '', tipoCuenta: '', numeroCuenta
 const BANCOS = [
   'Banco Popular', 'Banreservas', 'BHD', 'Scotiabank', 'Banco Santa Cruz',
   'Banesco', 'Banco Caribe', 'Banco Promerica', 'APAP', 'Asociación Cibao',
+  'Asociación La Nacional',
 ];
+
+const TIPOS_CUENTA = ['Ahorros', 'Corriente'];
+
+const OTRO = '__otro__';
+
+const sinAcentos = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/**
+ * La opción de la lista que corresponde a lo guardado. Lo de antes se escribió
+ * a mano y viene de mil formas («Cuenta corriente», «Ahorro», «Banco BHD»):
+ * sin esto todas caerían en «Otro…» aunque sean un banco de la lista.
+ */
+export function opcionQueCoincide(valor: string, opciones: string[]): string | null {
+  const v = sinAcentos(valor);
+  if (!v) return null;
+  return opciones.find((o) => {
+    const x = sinAcentos(o);
+    return x === v || (v.length >= 3 && (v.includes(x) || x.includes(v)));
+  }) ?? null;
+}
+const claseLista = 'h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-zero-500 focus:outline-none focus:ring-1 focus:ring-zero-500';
+
+/**
+ * Una lista para elegir, con una salida «Otro…» que abre una casilla para
+ * escribirlo. Antes era un campo con sugerencias del navegador: aceptaba
+ * cualquier texto, pero parecía un desplegable cerrado y nadie veía cómo poner
+ * un banco que no estaba.
+ */
+function ListaConOtro({ valor, opciones, etiquetaOtro, placeholderOtro, onCambio }: {
+  valor: string;
+  opciones: string[];
+  etiquetaOtro: string;
+  placeholderOtro: string;
+  onCambio: (v: string) => void;
+}) {
+  const coincide = opcionQueCoincide(valor, opciones);
+  const [escribiendo, setEscribiendo] = useState(!coincide && valor.trim() !== '');
+  return (
+    <div className="space-y-2">
+      <select className={claseLista} value={escribiendo ? OTRO : coincide ?? ''}
+        onChange={(e) => {
+          if (e.target.value === OTRO) { setEscribiendo(true); onCambio(''); return; }
+          setEscribiendo(false);
+          onCambio(e.target.value);
+        }}>
+        <option value="" disabled>Elige…</option>
+        {opciones.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value={OTRO}>{etiquetaOtro}</option>
+      </select>
+      {escribiendo && (
+        <Input autoFocus value={valor} placeholder={placeholderOtro}
+          onChange={(e) => onCambio(e.target.value)} />
+      )}
+    </div>
+  );
+}
 
 export default function CobrosClient() {
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
@@ -175,13 +232,15 @@ export default function CobrosClient() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-gray-700">Banco</span>
-                      <Input list="bancos-rd" value={c.banco}
-                        onChange={(e) => editar(i, 'banco', e.target.value)} />
+                      <ListaConOtro valor={c.banco} opciones={BANCOS} etiquetaOtro="Otro banco…"
+                        placeholderOtro="Escribe el nombre del banco"
+                        onCambio={(v) => editar(i, 'banco', v)} />
                     </label>
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-gray-700">Tipo de cuenta</span>
-                      <Input value={c.tipoCuenta} placeholder="Corriente o de ahorros"
-                        onChange={(e) => editar(i, 'tipoCuenta', e.target.value)} />
+                      <ListaConOtro valor={c.tipoCuenta} opciones={TIPOS_CUENTA} etiquetaOtro="Otro…"
+                        placeholderOtro="Escribe el tipo de cuenta"
+                        onCambio={(v) => editar(i, 'tipoCuenta', v)} />
                     </label>
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-gray-700">Número de cuenta</span>
@@ -214,10 +273,6 @@ export default function CobrosClient() {
               ))}
             </div>
           )}
-
-          <datalist id="bancos-rd">
-            {BANCOS.map((b) => <option key={b} value={b} />)}
-          </datalist>
         </CardContent>
       </Card>
 

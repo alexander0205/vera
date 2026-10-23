@@ -8,7 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { aGsm7 } from '@/lib/sms/mensaje';
 import {
-  agruparPendientes, redactarGrupo, type GrupoAviso, type MensajeAviso,
+  agruparPendientes, redactarGrupo, enlaceDeFactura, facturaDelMensaje, type GrupoAviso, type MensajeAviso,
 } from './agrupar-avisos';
 import { sumarDias } from './calendario';
 import { CANALES_TODOS_ACTIVOS, type CanalesActivos } from './canales';
@@ -538,7 +538,9 @@ export async function despachar(
             link = urlDelLink((await getOCrearLink(g.teamId, g.clientId)).token);
             enlaces.set(g.clientId, link);
           }
-          enlace = link;
+          // El de la familia se memoriza; lo que cambia por mensaje es la
+          // factura: el aviso lleva a ESA factura, no a toda la deuda.
+          enlace = enlaceDeFactura(link, facturaDelMensaje(miembros));
         } catch (err) {
           // Que no se pueda crear el enlace no puede impedir el aviso: el padre
           // prefiere enterarse de que debe, aunque sea sin botón.

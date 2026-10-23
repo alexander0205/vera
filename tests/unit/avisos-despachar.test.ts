@@ -172,7 +172,8 @@ describe('despachar: un mensaje por familia', () => {
     await despachar([p], opts);
 
     const correo = enviados.find((e) => e.canal === 'correo')!;
-    expect(correo.texto).toBe(`${redactar(p, 'Colegio X').largo}\n\nPaga o sube tu comprobante aquí: https://app.zero.com.do/pagar/tok123`);
+    // El enlace lleva a SU factura (`?f=`), no a toda la deuda de la familia.
+    expect(correo.texto).toBe(`${redactar(p, 'Colegio X').largo}\n\nPaga o sube tu comprobante aquí: https://app.zero.com.do/pagar/tok123?f=${p.fila.ecfDocumentId}`);
     expect(filas().every((f) => f.grupo === null)).toBe(true);
     expect(filas().every((f) => f.detalle === undefined)).toBe(true);
     // El SMS de un cobro no lleva enlace.
@@ -198,7 +199,7 @@ describe('despachar: un mensaje por familia', () => {
     await despachar(pendientesDe(FAMILIA_PEREZ), opts);
     const correo = enviados.find((e) => e.canal === 'correo')!;
     expect(correo.cobros).toEqual([1, 3]);
-    expect(correo.texto).toContain('2 facturas');
+    expect(correo.texto).toContain('2 cobros');
     // Y a esos dos no se les marca como enviados «con 1 más» del que ya salió.
     expect(filas().filter((f) => f.canal === 'correo' && f.cargoId !== 2)
       .every((f) => f.detalle === 'Enviado en un solo mensaje con 1 cobro(s) más')).toBe(true);
