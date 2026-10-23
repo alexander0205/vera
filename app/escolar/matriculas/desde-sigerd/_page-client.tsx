@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Link from 'next/link';
 import Drawer from '@mui/material/Drawer';
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GraduationCap,
+  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GitCompareArrows, GraduationCap,
   Loader2, Pencil, RotateCcw, Search, UserCheck, UserMinus, UserX, Users, X, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -128,6 +128,8 @@ function cuentaDe(lineas: LineaPlan[], conceptos: number[], ajuste: Ajuste | und
 export default function MatricularDesdeSigerd() {
   const { can, isLoading: cargandoPermisos } = usePermissions();
   const puedePrecios = can('administracion-escolar:configurar');
+  // Mover a un alumno de sección es de configurar, igual que cambiar tarifas.
+  const puedeRevisarCambios = puedePrecios;
 
   const [datos, setDatos] = useState<Pendientes | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -400,6 +402,17 @@ export default function MatricularDesdeSigerd() {
               Ir a Configuración › SIGERD
             </Link>
           )}
+          {datos.disponible && puedeRevisarCambios && (
+            <>
+              <p className="mt-3 max-w-md text-xs text-gray-400">
+                Quien ya tiene matrícula no sale aquí aunque SIGERD lo haya cambiado de sección.
+              </p>
+              <Link href="/escolar/configuracion/sigerd/cambios"
+                className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-zero-700 hover:underline">
+                <GitCompareArrows className="h-4 w-4" /> Revisar cambios de SIGERD
+              </Link>
+            </>
+          )}
         </div>
       </section>
     );
@@ -434,6 +447,13 @@ export default function MatricularDesdeSigerd() {
               Cada alumno entra en el grado y la sección que tiene en SIGERD · {datos.periodo?.nombre}
               {descargada && <span className="text-gray-400"> · datos descargados el {descargada}</span>}
             </p>
+            {puedeRevisarCambios && (
+              <Link href="/escolar/configuracion/sigerd/cambios"
+                className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:underline">
+                <GitCompareArrows className="h-3.5 w-3.5" /> Revisar cambios de SIGERD
+                <span className="font-normal text-gray-400">(quien ya está matriculado y cambió de sección)</span>
+              </Link>
+            )}
           </div>
         </div>
         <label className="flex flex-col gap-1 self-start lg:self-auto">
