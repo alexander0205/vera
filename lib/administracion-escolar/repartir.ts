@@ -30,16 +30,40 @@ export function repartir(
 }
 
 /**
- * Lo que sale en cada cuota según qué es el cobro. Es la regla de
- * `armarPlanDeCobro`: la colegiatura cobra la tarifa entera en cada cuota; lo
- * demás toma la tarifa como el total del año y la reparte.
+ * Si el número de Tarifas es lo de CADA cuota (true) o el total del año que se
+ * reparte entre ellas (false).
+ *
+ * Lo decide el colegio en el concepto (`precioPorCuota`). Sin decidir, la
+ * regla de siempre: la colegiatura cobra la tarifa en cada cuota y lo demás la
+ * reparte. Esa regla sola no bastaba: un almuerzo de 5,000 al mes en 11 cuotas
+ * se cobraba a 455 porque no era «colegiatura».
+ */
+export function precioEsPorCuota(concepto: { tipo: string; precioPorCuota?: boolean | null }): boolean {
+  return concepto.precioPorCuota ?? concepto.tipo === 'mensualidad';
+}
+
+/**
+ * Las cuotas del calendario que cobra una tarifa: las primeras `n`, o todas.
+ * Maternal e Infantes pagan 11 meses y los demás grados 10 con el mismo
+ * concepto: el calendario tiene 11 y la tarifa de esos grados dice 10.
+ */
+export function cuotasDeLaTarifa<T>(cuotas: T[], n: number | null | undefined): T[] {
+  return n != null && n > 0 && n < cuotas.length ? cuotas.slice(0, n) : cuotas;
+}
+
+/**
+ * Lo que sale en cada cuota. Es la regla de `armarPlanDeCobro`: si el precio es
+ * por cuota, se cobra entero en cada una; si es el total del año, se reparte.
+ * `precioPorCuota` es lo que dijo el colegio en el concepto; sin él, decide el
+ * tipo (`precioEsPorCuota`).
  */
 export function montosPorCuota(
   tipoDeConcepto: string,
   montoCentavos: number,
   pesos: number[],
+  precioPorCuota?: boolean | null,
 ): number[] {
-  return tipoDeConcepto === 'mensualidad'
+  return precioEsPorCuota({ tipo: tipoDeConcepto, precioPorCuota })
     ? pesos.map(() => montoCentavos)
     : repartir(montoCentavos, pesos);
 }

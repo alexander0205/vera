@@ -26,6 +26,9 @@ export async function GET() {
       productId: adminEscolarConceptosPago.productId,
       productNombre: products.nombre,
       admiteBeca:       adminEscolarConceptosPago.admiteBeca,
+      opcional:         adminEscolarConceptosPago.opcional,
+      precioPorCuota:   adminEscolarConceptosPago.precioPorCuota,
+      categoria:        adminEscolarConceptosPago.categoria,
       cobraMora:        adminEscolarConceptosPago.cobraMora,
       diaEmision:       adminEscolarConceptosPago.diaEmision,
       diasParaPago:     adminEscolarConceptosPago.diasParaPago,
@@ -92,6 +95,9 @@ export async function POST(req: NextRequest) {
     // Si la beca del alumno descuenta aquí. Por defecto no: una beca cubre la
     // mensualidad, no la inscripción ni el uniforme.
     admiteBeca: admiteBeca === true,
+    opcional: body.opcional === true,
+    precioPorCuota: typeof body.precioPorCuota === 'boolean' ? body.precioPorCuota : null,
+    categoria: typeof body.categoria === 'string' && body.categoria.trim() ? body.categoria.trim().slice(0, 60) : null,
     ...camposCiclo(body),
   }).returning();
   invalidarEstructura(teamId);

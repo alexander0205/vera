@@ -48,6 +48,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
        * uniformes: una beca cubre la mensualidad, no la ropa.
        */
       ...(admiteBeca !== undefined ? { admiteBeca: admiteBeca === true } : {}),
+      // Obligatorio u opcional: si llega marcado al matricular.
+      ...(body.opcional !== undefined ? { opcional: body.opcional === true } : {}),
+      // El precio de Tarifas es por cuota o el total del año. null = por el tipo.
+      ...(body.precioPorCuota !== undefined
+        ? { precioPorCuota: typeof body.precioPorCuota === 'boolean' ? body.precioPorCuota : null } : {}),
+      // Categoría propia: solo un nombre para clasificar; vacía = la del tipo.
+      ...(body.categoria !== undefined
+        ? { categoria: typeof body.categoria === 'string' && body.categoria.trim() ? body.categoria.trim().slice(0, 60) : null } : {}),
       ...camposCiclo(body),
       updatedAt: new Date(),
     })

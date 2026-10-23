@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GraduationCap,
@@ -110,6 +111,14 @@ const claveSeccion = (g: Grupo) => `s:${g.cursoId}`;
 const enAlcance = (g: Grupo, alcance: string | null) =>
   !alcance || alcance === claveNivel(g) || alcance === claveGrado(g) || alcance === claveSeccion(g);
 
+/**
+ * Si la sección cobra este concepto. Por defecto, los obligatorios sí y los
+ * opcionales (uniforme, transporte) no; `cambiados` son los que alguien
+ * alternó a mano en los chips de la sección.
+ */
+const cobraEnSeccion = (l: Pick<LineaPlan, 'conceptoId' | 'opcional'>, cambiados?: Set<number>) =>
+  !l.opcional !== (cambiados?.has(l.conceptoId) ?? false);
+
 /** Montos de la tabla del árbol: sin centavos, para que quepan. */
 const rdCorto = (centavos: number) => `RD$${Math.round(centavos / 100).toLocaleString('es-DO')}`;
 
@@ -141,7 +150,15 @@ export default function MatricularDesdeSigerd() {
   const [planes, setPlanes] = useState<Map<number, PlanSeccion>>(new Map());
 
   const [fuera, setFuera] = useState<Set<number>>(new Set());
-  const [quitadosSeccion, setQuitadosSeccion] = useState<Map<number, Set<number>>>(new Map());
+  /** Paquetes del colegio (Configuración › Paquetes): aplicar uno a toda una sección. */
+  const { data: dataPaquetes } = useSWR<{ paquetes: { id: number; nombre: string; conceptosIds: number[] }[] }>(
+    '/api/administracion-escolar/paquetes',
+    (url: string) => fetch(url).then((r) => (r.ok ? r.json() : { paquetes: [] })),
+    { revalidateOnFocus: false },
+  );
+  const paquetes = dataPaquetes?.paquetes ?? [];
+  /** Por sección, los conceptos alternados a mano respecto de lo de por defecto (`cobraEnSeccion`). */
+  const [cambiadosSeccion, setCambiadosSeccion] = useState<Map<number, Set<number>>>(new Map());
   const [ajustes, setAjustes] = useState<Map<number, Ajuste>>(new Map());
 
   const [busqueda, setBusqueda] = useState('');
@@ -198,9 +215,9 @@ export default function MatricularDesdeSigerd() {
     if (a) return a.conceptos;
     const p = planes.get(cursoId);
     if (p?.estado !== 'listo') return null;
-    const quitados = quitadosSeccion.get(cursoId);
-    return p.lineas.map((l) => l.conceptoId).filter((c) => !quitados?.has(c));
-  }, [ajustes, planes, quitadosSeccion]);
+    const cambiados = cambiadosSeccion.get(cursoId);
+    return p.lineas.filter((l) => cobraEnSeccion(l, cambiados)).map((l) => l.conceptoId);
+  }, [ajustes, planes, cambiadosSeccion]);
 
   // Por sección: cada alumno con su cuenta. Es lo que pinta la lista y lo que
   // suma el resumen.
@@ -263,12 +280,13 @@ export default function MatricularDesdeSigerd() {
    * Quitar (o volver a poner) un concepto a toda la sección. A quien ya se le
    * había abierto también se le aplica: «a la sección» es a todos.
    */
-  function alternarConceptoSeccion(g: Grupo, conceptoId: number) {
-    const quitar = !quitadosSeccion.get(g.cursoId)?.has(conceptoId);
-    setQuitadosSeccion((m) => {
+  function alternarConceptoSeccion(g: Grupo, linea: LineaPlan) {
+    const conceptoId = linea.conceptoId;
+    const quitar = cobraEnSeccion(linea, cambiadosSeccion.get(g.cursoId));
+    setCambiadosSeccion((m) => {
       const n = new Map(m);
       const s = new Set(n.get(g.cursoId));
-      if (quitar) s.add(conceptoId); else s.delete(conceptoId);
+      if (s.has(conceptoId)) s.delete(conceptoId); else s.add(conceptoId);
       n.set(g.cursoId, s);
       return n;
     });
@@ -286,12 +304,35 @@ export default function MatricularDesdeSigerd() {
     });
   }
 
+  /**
+   * Aplicar un paquete a toda la sección: la sección cobra justo sus conceptos
+   * (los que tengan tarifa aquí), y a quien ya se le había abierto el cajón se
+   * le cambian también los conceptos; sus precios propios se quedan.
+   */
+  function aplicarPaqueteSeccion(g: Grupo, lineas: LineaPlan[], conceptosDelPaquete: number[]) {
+    const quiere = new Set(conceptosDelPaquete);
+    setCambiadosSeccion((m) => {
+      const n = new Map(m);
+      n.set(g.cursoId, new Set(lineas.filter((l) => cobraEnSeccion(l) !== quiere.has(l.conceptoId)).map((l) => l.conceptoId)));
+      return n;
+    });
+    const conceptos = lineas.filter((l) => quiere.has(l.conceptoId)).map((l) => l.conceptoId);
+    setAjustes((m) => {
+      const n = new Map(m);
+      for (const e of g.estudiantes) {
+        const a = n.get(e.id);
+        if (a) n.set(e.id, { ...a, conceptos });
+      }
+      return n;
+    });
+  }
+
   /** Lo que devuelve el cajón de un alumno. Igual que su sección = sin ajuste. */
   const guardarAjuste = useCallback((alumnoId: number, cursoId: number, a: Ajuste) => {
     const p = planes.get(cursoId);
-    const quitados = quitadosSeccion.get(cursoId);
+    const cambiados = cambiadosSeccion.get(cursoId);
     const deSeccion = p?.estado === 'listo'
-      ? p.lineas.map((l) => l.conceptoId).filter((c) => !quitados?.has(c)) : null;
+      ? p.lineas.filter((l) => cobraEnSeccion(l, cambiados)).map((l) => l.conceptoId) : null;
     const igual = deSeccion != null && a.precios.length === 0
       && a.conceptos.length === deSeccion.length && deSeccion.every((c) => a.conceptos.includes(c));
     setAjustes((m) => {
@@ -299,7 +340,7 @@ export default function MatricularDesdeSigerd() {
       if (igual) n.delete(alumnoId); else n.set(alumnoId, a);
       return n;
     });
-  }, [planes, quitadosSeccion]);
+  }, [planes, cambiadosSeccion]);
 
   async function matricular() {
     if (!datos) return;
@@ -552,7 +593,7 @@ export default function MatricularDesdeSigerd() {
           {visibles.map((g) => {
             const completo = datos.grupos.find((x) => x.cursoId === g.cursoId)!;
             const plan = planes.get(g.cursoId);
-            const quitados = quitadosSeccion.get(g.cursoId);
+            const cambiados = cambiadosSeccion.get(g.cursoId);
             const dentro = completo.estudiantes.filter((e) => !fuera.has(e.id));
             const todosDentro = dentro.length === completo.estudiantes.length;
             const hoySeccion = dentro.reduce((s, e) => s + (cuentas.get(e.id)?.hoy ?? 0), 0);
@@ -589,13 +630,24 @@ export default function MatricularDesdeSigerd() {
                     <p className="text-xs text-amber-700">Esta sección no tiene tarifas: las matrículas se crean sin cargos.</p>
                   ) : (
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {paquetes.length > 0 && (
+                        <select value="" aria-label="Aplicar un paquete a toda la sección"
+                          onChange={(e) => {
+                            const pq = paquetes.find((x) => x.id === Number(e.target.value));
+                            if (pq) aplicarPaqueteSeccion(completo, plan.lineas, pq.conceptosIds);
+                          }}
+                          className="mr-1 h-7 rounded-md border border-zero-200 bg-white px-1.5 text-xs text-zero-700 focus:border-zero-500 focus:outline-none">
+                          <option value="">Aplicar paquete…</option>
+                          {paquetes.map((pq) => <option key={pq.id} value={pq.id}>{pq.nombre}</option>)}
+                        </select>
+                      )}
                       <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">Cobra</span>
                       {plan.lineas.map((l) => {
-                        const activo = !quitados?.has(l.conceptoId);
+                        const activo = cobraEnSeccion(l, cambiados);
                         return (
                           <button key={l.conceptoId} type="button"
-                            onClick={() => alternarConceptoSeccion(completo, l.conceptoId)}
-                            title={activo ? 'Quitar a toda la sección' : 'Volver a cobrar a toda la sección'}
+                            onClick={() => alternarConceptoSeccion(completo, l)}
+                            title={activo ? 'Quitar a toda la sección' : l.opcional ? 'Opcional: cobrar a toda la sección' : 'Volver a cobrar a toda la sección'}
                             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                               activo
                                 ? 'border-zero-200 bg-white text-gray-800 hover:border-zero-300'
@@ -603,7 +655,7 @@ export default function MatricularDesdeSigerd() {
                             {activo ? <Check className="h-3 w-3 text-zero-600" /> : <X className="h-3 w-3" />}
                             {l.nombre}
                             <span className="tabular-nums text-gray-500">
-                              {fmtDOP(l.montoCentavos)}{l.tipo === 'mensualidad' ? '/mes' : ''}
+                              {fmtDOP(l.montoCentavos)}{l.cuotas.length > 1 ? (l.precioPorCuota ? '/cuota' : ' en el año') : ''}
                             </span>
                           </button>
                         );
@@ -619,7 +671,7 @@ export default function MatricularDesdeSigerd() {
                     const a = ajustes.get(e.id);
                     const lineas = plan?.estado === 'listo' ? plan.lineas : [];
                     const suyos = new Set(conceptosDe(e.id, g.cursoId) ?? []);
-                    const sinEstos = lineas.filter((l) => !suyos.has(l.conceptoId) && !quitados?.has(l.conceptoId));
+                    const sinEstos = lineas.filter((l) => !suyos.has(l.conceptoId) && cobraEnSeccion(l, cambiados));
                     return (
                       <li key={e.id}
                         className={`group flex items-center gap-3 px-4 py-2.5 transition-colors ${sale ? 'bg-gray-50' : 'hover:bg-zero-50/40'}`}>

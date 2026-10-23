@@ -107,6 +107,7 @@ export async function cargarContextoColegio(c: CorridaCandidata): Promise<Contex
         nombre: adminEscolarConceptosPago.nombre,
         tipo: adminEscolarConceptosPago.tipo,
         admiteBeca: adminEscolarConceptosPago.admiteBeca,
+        precioPorCuota: adminEscolarConceptosPago.precioPorCuota,
         productId: adminEscolarConceptosPago.productId,
         activo: adminEscolarConceptosPago.activo,
       })
@@ -167,6 +168,7 @@ export async function cargarContextoColegio(c: CorridaCandidata): Promise<Contex
         objetivoId: adminEscolarConceptoPrecios.objetivoId,
         montoCentavos: adminEscolarConceptoPrecios.montoCentavos,
         productId: adminEscolarConceptoPrecios.productId,
+        cuotas: adminEscolarConceptoPrecios.cuotas,
       })
       .from(adminEscolarConceptoPrecios)
       .where(and(

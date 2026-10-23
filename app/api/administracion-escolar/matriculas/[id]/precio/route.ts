@@ -7,7 +7,7 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
-import { montosPorCuota } from '@/lib/administracion-escolar/repartir';
+import { cuotasDeLaTarifa, montosPorCuota, precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
 import { sugerirMontoDelCargo } from '@/lib/administracion-escolar/precio-cargo-individual';
 
 /**
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!matricula) return NextResponse.json({ error: 'Matrícula no encontrada' }, { status: 404 });
 
   const [concepto] = await db
-    .select({ tipo: adminEscolarConceptosPago.tipo })
+    .select({ tipo: adminEscolarConceptosPago.tipo, precioPorCuota: adminEscolarConceptosPago.precioPorCuota })
     .from(adminEscolarConceptosPago)
     .where(and(eq(adminEscolarConceptosPago.id, conceptoId), eq(adminEscolarConceptosPago.teamId, teamId)))
     .limit(1);
@@ -102,18 +102,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     delConcepto,
     mes != null && Number.isInteger(mes) ? mes : null,
     cuotaElegida,
+    concepto.precioPorCuota,
   );
   // Un concepto repartido enseña sus cuotas para que se elija cuál es este
   // cargo: el cargo se ata a ella y el devengo ya no la vuelve a crear.
-  const montos = tarifa && delConcepto.length > 1 && concepto.tipo !== 'mensualidad'
-    ? montosPorCuota(concepto.tipo, tarifa.montoCentavos, delConcepto.map((c) => c.porcentajeMilesimas))
+  const deLaTarifa = cuotasDeLaTarifa(delConcepto, tarifa?.cuotas);
+  const montos = tarifa && deLaTarifa.length > 1 && !precioEsPorCuota(concepto)
+    ? montosPorCuota(concepto.tipo, tarifa.montoCentavos, deLaTarifa.map((c) => c.porcentajeMilesimas), concepto.precioPorCuota)
     : null;
 
   return NextResponse.json({
     curso: `${matricula.grado} ${matricula.seccion}`.trim(),
     sugerencia,
     cuotas: montos
-      ? delConcepto.map((c, i) => ({ id: c.id, etiqueta: c.etiqueta, montoCentavos: montos[i], cargada: c.cargada }))
+      ? deLaTarifa.map((c, i) => ({ id: c.id, etiqueta: c.etiqueta, montoCentavos: montos[i], cargada: c.cargada }))
       : [],
   });
 }

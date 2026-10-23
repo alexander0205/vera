@@ -2368,6 +2368,24 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
    */
   aplicaPorDefecto: boolean('aplica_por_defecto').notNull().default(false),
   /**
+   * Opcional: llega DESMARCADO al matricular y se marca solo a quien lo usa
+   * (uniforme, transporte, almuerzo). Los obligatorios llegan marcados. Por
+   * defecto false para que nada cambie hasta que el colegio lo diga
+   * (`aplicaPorDefecto` quedó sin pantalla y casi todos en false).
+   */
+  opcional: boolean('opcional').notNull().default(false),
+  /**
+   * El precio de Tarifas es lo de cada cuota (true) o el total del año que se
+   * reparte (false). null = por el tipo: la colegiatura por cuota, lo demás
+   * repartido (`precioEsPorCuota`).
+   */
+  precioPorCuota: boolean('precio_por_cuota'),
+  /**
+   * Categoría propia del colegio («Servicios», «Transporte»…). Solo clasifica:
+   * cómo se cobra lo dicen el tipo, `precioPorCuota`, la beca y la mora.
+   */
+  categoria: varchar('categoria', { length: 60 }),
+  /**
    * Si la beca lo descuenta. La beca escolar es sobre lo que se paga cada mes,
    * y la inscripción, los uniformes y los materiales se cobran completos. No
    * se pregunta en pantalla —se derivaba en una casilla que nadie sabía para
@@ -2467,6 +2485,23 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
  * Secundario vs Primario, o por grado/sección. `objetivoTipo` + `objetivoId`
  * apuntan a servicios / grados / cursos(=sección).
  */
+/**
+ * Paquetes de conceptos: una lista de conceptos con nombre («Horario regular»,
+ * «Horario extendido», «Registro SIGERD») que se asigna a un niño o a muchos
+ * de una vez. No guarda precios: cada concepto cobra su tarifa.
+ */
+export const adminEscolarPaquetes = pgTable('admin_escolar_paquetes', {
+  id:           serial('id').primaryKey(),
+  teamId:       integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  nombre:       varchar('nombre', { length: 80 }).notNull(),
+  descripcion:  varchar('descripcion', { length: 200 }),
+  conceptosIds: integer('conceptos_ids').array().notNull().default(sql`'{}'::integer[]`),
+  orden:        integer('orden').notNull().default(0),
+  activo:       boolean('activo').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [index('admin_escolar_paquetes_team_idx').on(t.teamId)]);
+
 export const adminEscolarConceptoPrecios = pgTable('admin_escolar_concepto_precios', {
   id:            serial('id').primaryKey(),
   teamId:        integer('team_id').notNull().references(() => teams.id),
@@ -2488,6 +2523,8 @@ export const adminEscolarConceptoPrecios = pgTable('admin_escolar_concepto_preci
    * hereda el precio del servicio hereda también su producto.
    */
   productId:     integer('product_id').references(() => products.id),
+  /** Cuántas cuotas del calendario cobra esta tarifa: las primeras N. null = todas. */
+  cuotas:        smallint('cuotas'),
   activo:        boolean('activo').notNull().default(true),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),

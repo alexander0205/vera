@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import {
   CheckCircle2, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
@@ -18,6 +19,7 @@ import {
   type TipoDeConcepto,
 } from '@/lib/administracion-escolar/tipo-concepto';
 import { moduleUrl } from '@/lib/config/modules';
+import { precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
 import { CalendarioCuotas, type ApiCalendario } from './CalendarioCuotas';
 
 /**
@@ -41,6 +43,12 @@ export interface Concepto {
   frecuencia: Frecuencia;
   activo: boolean;
   admiteBeca: boolean;
+  /** Llega desmarcado al matricular; se marca solo a quien lo usa. */
+  opcional: boolean;
+  /** El precio de Tarifas es por cuota (true) o el total del año (false). null = por el tipo. */
+  precioPorCuota: boolean | null;
+  /** Categoría propia del colegio. null = la del tipo. */
+  categoria: string | null;
   cobraMora: boolean;
   diaEmision: number | null;
   diasParaPago: number | null;
@@ -269,9 +277,11 @@ function Paso({ n, titulo, extra }: { n: number; titulo: string; extra?: React.R
 }
 
 export function ConceptoDetalle({
-  borrador, setBorrador, guardando, error, onGuardar, onBorrar, calendario,
+  borrador, setBorrador, guardando, error, onGuardar, onBorrar, calendario, categorias = [],
 }: {
   borrador: Concepto;
+  /** Las categorías propias que ya usa el colegio en otros conceptos. */
+  categorias?: string[];
   setBorrador: (f: (b: Concepto | null) => Concepto | null) => void;
   guardando: boolean;
   error: string | null;
@@ -301,7 +311,19 @@ export function ConceptoDetalle({
    * que hace que una evaluación trimestral deje de nacer descontando beca.
    */
   const cambiarTipo = (tipo: TipoDeConcepto) =>
-    setBorrador((b) => (b ? { ...b, tipo, admiteBeca: becaPorDefecto(tipo) } : b));
+    setBorrador((b) => (b ? { ...b, tipo, categoria: null, admiteBeca: becaPorDefecto(tipo) } : b));
+
+  /**
+   * Una categoría propia («Servicios», «Transporte»…) se cobra como «Otro
+   * cobro»: es un nombre para ordenar y sacar reportes, no cambia la regla.
+   * Cómo se cobra lo dicen el precio por cuota, la beca y la mora.
+   */
+  const elegirCategoria = (categoria: string) =>
+    setBorrador((b) => (b ? { ...b, tipo: 'otro', categoria, admiteBeca: b.tipo === 'otro' ? b.admiteBeca : becaPorDefecto('otro') } : b));
+  const [nuevaCategoria, setNuevaCategoria] = useState<string | null>(null);
+  const todasLasCategorias = [...new Set([...categorias, ...(borrador.categoria ? [borrador.categoria] : [])])]
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  const porCuota = precioEsPorCuota(borrador);
 
   // Estado de los canales que dependen de una cuenta enlazada. Solo hace falta
   // saber si se pueden ofrecer, no reconciliar nada.
@@ -401,7 +423,7 @@ export function ConceptoDetalle({
   const diaRepetido = diasConAviso.find((d, i) => diasConAviso.indexOf(d) !== i);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+    <div className="grid gap-4 xl:grid-cols-[1fr_300px] 2xl:grid-cols-[1fr_340px]">
       <div className="space-y-0 rounded-lg border border-gray-200 bg-white">
 
         {/* ── 1. Qué es y cada cuánto ───────────────────────────────────── */}
@@ -421,12 +443,38 @@ export function ConceptoDetalle({
                 colegiatura. */}
             <div className="w-full min-w-0 space-y-1.5 sm:w-56">
               <Label htmlFor="concepto-tipo">¿Qué es este cobro?</Label>
-              <NativeSelect id="concepto-tipo" value={tipoDelBorrador}
-                onChange={(e) => cambiarTipo(e.target.value as TipoDeConcepto)}>
-                {TIPOS_DE_CONCEPTO.map((t) => (
-                  <option key={t} value={t}>{ETIQUETA_TIPO[t]}</option>
-                ))}
-              </NativeSelect>
+              {nuevaCategoria === null ? (
+                <NativeSelect id="concepto-tipo" value={borrador.categoria ? `cat:${borrador.categoria}` : tipoDelBorrador}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '__nueva') setNuevaCategoria('');
+                    else if (v.startsWith('cat:')) elegirCategoria(v.slice(4));
+                    else cambiarTipo(v as TipoDeConcepto);
+                  }}>
+                  {TIPOS_DE_CONCEPTO.map((t) => (
+                    <option key={t} value={t}>{ETIQUETA_TIPO[t]}</option>
+                  ))}
+                  {todasLasCategorias.length > 0 && (
+                    <optgroup label="Del colegio">
+                      {todasLasCategorias.map((c) => <option key={c} value={`cat:${c}`}>{c}</option>)}
+                    </optgroup>
+                  )}
+                  <option value="__nueva">+ Agregar categoría…</option>
+                </NativeSelect>
+              ) : (
+                <div className="flex gap-1.5">
+                  <Input autoFocus value={nuevaCategoria} maxLength={60} placeholder="Ej.: Servicios"
+                    onChange={(e) => setNuevaCategoria(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && nuevaCategoria.trim()) { e.preventDefault(); elegirCategoria(nuevaCategoria.trim()); setNuevaCategoria(null); }
+                      if (e.key === 'Escape') setNuevaCategoria(null);
+                    }} />
+                  <Button type="button" size="sm" className="h-9" disabled={!nuevaCategoria.trim()}
+                    onClick={() => { elegirCategoria(nuevaCategoria.trim()); setNuevaCategoria(null); }}>
+                    Agregar
+                  </Button>
+                </div>
+              )}
             </div>
             <Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
               className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600">
@@ -442,6 +490,21 @@ export function ConceptoDetalle({
               consigo un calendario y un día de emisión que no significan nada
               para un cobro que ocurre una vez. */}
           <div className="mt-3 divide-y divide-gray-100 rounded-lg border border-gray-200">
+            {/* Si llega marcado al matricular. La inscripción y la colegiatura
+                las paga todo el mundo; el uniforme o el transporte no, y
+                desmarcarlos alumno por alumno es peor que marcarlos a quien toca. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+              <Interruptor activo={!borrador.opcional} etiqueta="Obligatorio al matricular"
+                onCambiar={(v) => setBorrador((b) => b && ({ ...b, opcional: !v }))} />
+              <span className="min-w-[10rem] flex-1 text-sm">
+                <span className="block text-gray-900">Obligatorio al matricular</span>
+                <span className="block text-xs text-gray-500">
+                  {borrador.opcional
+                    ? 'Opcional: llega sin marcar al matricular y se marca solo a quien lo use.'
+                    : 'Llega marcado al matricular a todos los de su grado. Se puede quitar a un alumno si no le toca.'}
+                </span>
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
               <Interruptor activo={periodico} etiqueta="Se cobra varias veces al año"
                 onCambiar={(v) => setBorrador((b) => b && ({
@@ -472,18 +535,26 @@ export function ConceptoDetalle({
                 colegiatura, un concepto nuevo que se repite nace «Otro cobro»:
                 si era la colegiatura y nadie tocó el desplegable, 2.800 al mes
                 pasaban a 280 en silencio. Por eso, con «Otro cobro», ámbar. */}
-            {periodico && tipoDelBorrador !== 'mensualidad' && (
-              <div className="px-3 py-2.5">
-                <p className={tipoDelBorrador === 'otro'
-                  ? 'rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800'
-                  : 'text-xs text-gray-500'}>
-                  La tarifa que pongas en Tarifas es el <strong>total del año</strong> y se reparte entre
-                  las cuotas: con 2,800 y 10 cuotas, cada una sale de 280.
-                  {tipoDelBorrador === 'otro' && (
-                    <> Si es la colegiatura que se paga cada mes, elige <strong>«Colegiatura»</strong> en
-                    «¿Qué es este cobro?»: así cada cuota cobra la tarifa entera.</>
-                  )}
-                </p>
+            {/* Qué significa el número de Tarifas cuando el cobro se repite.
+                Antes lo decidía solo el tipo: la colegiatura cobraba la tarifa
+                en cada cuota y todo lo demás la repartía, así que un almuerzo de
+                5,000 al mes en 11 cuotas salía a 455. Ahora se pregunta. */}
+            {periodico && (
+              <div className="space-y-1.5 px-3 py-2.5">
+                <span className="block text-sm text-gray-900">El precio que pongas en Tarifas es…</span>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    { valor: true, titulo: 'Lo de cada cuota', detalle: 'Con 5,000 y 10 cuotas se cobran 5,000 cada mes (50,000 en el año).' },
+                    { valor: false, titulo: 'El total del año', detalle: 'Con 5,000 y 10 cuotas se reparte: 500 cada mes.' },
+                  ].map((o) => (
+                    <button key={String(o.valor)} type="button" onClick={() => editar('precioPorCuota', o.valor)}
+                      className={`rounded-lg border px-3 py-2 text-left transition-colors ${porCuota === o.valor
+                        ? 'border-zero-500 bg-zero-50 ring-1 ring-zero-500' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <span className="block text-sm font-medium text-gray-900">{o.titulo}</span>
+                      <span className="block text-xs text-gray-500">{o.detalle}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 

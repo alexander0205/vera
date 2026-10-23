@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 import { cuotasYaEmitidas } from '@/lib/administracion-escolar/cargo-desde-tarifa';
-import { montosPorCuota } from '@/lib/administracion-escolar/repartir';
+import { cuotasDeLaTarifa, montosPorCuota } from '@/lib/administracion-escolar/repartir';
 
 interface Alumno {
   estudianteId: number;
@@ -29,11 +29,13 @@ interface Cuota {
 
 /** Asigna el concepto entero; cada cuota se cobra en su fecha. */
 export function CargarConceptoDialog({
-  concepto, grupoNombre, montoCentavos, periodo, cursoIds, onCerrar, onCreado,
+  concepto, grupoNombre, montoCentavos, cuotasTarifa, periodo, cursoIds, onCerrar, onCreado,
 }: {
-  concepto: { id: number; nombre: string; tipo: string };
+  concepto: { id: number; nombre: string; tipo: string; precioPorCuota?: boolean | null };
   grupoNombre: string;
   montoCentavos: number;
+  /** Cuántas cuotas del calendario cobra la tarifa de la fila (las primeras N). */
+  cuotasTarifa?: number | null;
   periodo: { id: number; nombre: string; activo: boolean };
   cursoIds: number[];
   onCerrar: () => void;
@@ -118,8 +120,9 @@ export function CargarConceptoDialog({
   const esColegiatura = concepto.tipo === 'mensualidad';
   // Lo que sale en cada pago con la tarifa de la fila, con la misma regla que
   // el plan del año. Un alumno con beca o precio propio paga distinto.
-  const montos = cuotas && cuotas.length > 0
-    ? montosPorCuota(concepto.tipo, montoCentavos, cuotas.map((q) => q.porcentajeMilesimas))
+  const deLaTarifa = cuotas ? cuotasDeLaTarifa(cuotas, cuotasTarifa) : null;
+  const montos = deLaTarifa && deLaTarifa.length > 0
+    ? montosPorCuota(concepto.tipo, montoCentavos, deLaTarifa.map((q) => q.porcentajeMilesimas), concepto.precioPorCuota)
     : null;
   const todosIguales = montos != null && montos.every((m) => m === montos[0]);
   const yaEmitidas = cuotas ? cuotasYaEmitidas(cuotas, hoyRD()) : 0;
