@@ -33,6 +33,7 @@ import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
 import { pesos, enLetra } from '@/lib/administracion-escolar/avisos';
+import { registrarReenvioAviso } from '@/lib/administracion-escolar/reenvio-aviso';
 
 /** Uno por cargo cada 24 horas. Ver `esperaRestante`. */
 const HORAS_ENTRE_AVISOS = 24;
@@ -279,18 +280,17 @@ export async function POST(
      * reenvío a mano que falla en silencio es exactamente el problema que este
      * botón viene a resolver.
      *
-     * `offsetDias: -1` lo distingue de los del cron sin chocar con su índice
-     * único. El tope de 24 h de arriba es lo que impide repetirlo, no el índice.
+     * Cada reenvío lleva su propio offset negativo (-1, -2, …) para no chocar
+     * con el índice único ni con los del cron. Antes todos usaban -1 y solo el
+     * primero quedaba anotado: los siguientes no contaban para la cuota mensual
+     * ni para el tope de 24 h de arriba, que se lee de esta tabla.
      */
-    await db.insert(adminEscolarAvisosEnviados).values({
+    await registrarReenvioAviso({
       teamId: auth.teamId,
       cargoId,
-      tipo: 'al-vencer',
-      offsetDias: -1,
-      canal: 'whatsapp',
       destino: aviso.destino,
       mensajeId: r.messageId ?? null,
-    }).onConflictDoNothing();
+    });
 
     return NextResponse.json({ ok: true, destino: aviso.destino, messageId: r.messageId });
   } catch (e) {
