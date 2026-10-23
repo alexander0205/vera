@@ -50,7 +50,8 @@ export async function GET() {
     // o un empate heredado de la migración— saldrían en orden de la base, que
     // puede cambiar entre dos lecturas y hace que la lista baile sola.
     .orderBy(asc(adminEscolarConceptosPago.orden), asc(adminEscolarConceptosPago.nombre)),
-    ['escolar', 'conceptos', String(teamId)],
+    // `v2`: trae opcional, precio por cuota y categoría; la clave vieja serviría la forma de antes.
+    ['escolar', 'conceptos', 'v2', String(teamId)],
     [tagEstructura(teamId)],
   )();
   return NextResponse.json({ conceptos: rows });

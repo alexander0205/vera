@@ -38,7 +38,9 @@ export async function GET(req: NextRequest) {
   // escritura de estructura o tarifas lo invalida.
   const datos = await cachearPorTag(
     () => leer(t, pedidoUrl),
-    ['escolar', 'concepto-precios', String(t), String(pedidoUrl)],
+    // `v2`: la respuesta trae ahora el precio por cuota y las cuotas de cada
+    // concepto; con la clave de antes se serviría la forma vieja hasta caducar.
+    ['escolar', 'concepto-precios', 'v3', String(t), String(pedidoUrl)],
     [tagEstructura(t)],
   )();
   return NextResponse.json(datos);
@@ -80,8 +82,10 @@ async function leer(t: number, pedido: number) {
         orden: adminEscolarConceptosPago.orden, precioPorCuota: adminEscolarConceptosPago.precioPorCuota,
         // Cuántas cuotas tiene su calendario este año: con eso Tarifas ofrece
         // «10 de 11 cuotas» para el grado que no paga la undécima.
+        // Con el nombre de la tabla escrito: dentro de la subconsulta, un «id»
+        // suelto sería el de la cuota y el conteo daría 0.
         cuotasCalendario: sql<number>`(select count(*)::int from admin_escolar_concepto_cuotas q
-          where q.concepto_id = ${adminEscolarConceptosPago.id} and q.periodo_id = ${periodo.id} and q.activo)`,
+          where q.concepto_id = admin_escolar_conceptos_pago.id and q.periodo_id = ${periodo.id} and q.activo)`,
       })
       .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t))
       .orderBy(asc(adminEscolarConceptosPago.orden), asc(adminEscolarConceptosPago.nombre)),
