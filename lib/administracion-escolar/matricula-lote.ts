@@ -68,6 +68,11 @@ export async function matricularLote(params: {
    * va con lo del grupo.
    */
   porEstudiante?: Map<number, { conceptos: number[] }>;
+  /**
+   * Hasta qué fecha se crean ya los cargos (ver `corteCargos` en
+   * matricula-alta.ts). Nunca antes de la inscripción.
+   */
+  corteCargos?: string | null;
   dryRun: boolean;
 }): Promise<RespuestaLote> {
   const { teamId, estudianteIds: ids, fechaInscripcion, documentoListaId, notas, dryRun } = params;
@@ -82,6 +87,7 @@ export async function matricularLote(params: {
   const cursoIdOk   = refs.ids.curso!;
 
   const inscripcion = fechaInscripcion || new Date().toISOString().slice(0, 10);
+  const corte = params.corteCargos && params.corteCargos > inscripcion ? params.corteCargos : inscripcion;
   const todos = params.conceptos === 'todos';
   const pedidosCrudos = todos ? [] : (params.conceptos as number[]);
 
@@ -97,7 +103,7 @@ export async function matricularLote(params: {
   // comparten sección y fecha. Se enseña en la revisión, y sale de la misma
   // regla con la que `crearMatriculaConCargos` crea los cargos: lo que se
   // confirma es lo que queda.
-  const { ahora } = cuotasAlMatricular(plan, pedidos, inscripcion);
+  const { ahora } = cuotasAlMatricular(plan, pedidos, corte);
   const cargoTotalCentavos = sumaCentavos(ahora);
   const cargoCount = ahora.length;
 
@@ -187,6 +193,7 @@ export async function matricularLote(params: {
         codigoMatricula: null,
         fechaInscripcion: fechaInscripcion || null,
         inscripcionEfectiva: inscripcion,
+        corteCargos: corte,
         estado: 'activa',
         notas: notas?.trim() || null,
         becaTipo: null,

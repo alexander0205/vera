@@ -87,11 +87,17 @@ function resumenCuotas(l: LineaPlan): string {
   return `${vigentes.length} cuotas${monto} · desde ${fmtFechaCorta(referencia)}`;
 }
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, inicial, onPlan, onCambio, onPrecios }: {
+export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, onPlan, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
   desde: string;
+  /**
+   * Hasta qué fecha se cargan ya las cuotas, si no es la de inscripción.
+   * «Matricular desde SIGERD» inscribe al inicio del año y corta en hoy: lo ya
+   * vencido se carga al matricular. Ver `corteCargos` en matricula-alta.ts.
+   */
+  corte?: string;
   /**
    * El alumno, si ya existe. Sirve para que la vista previa aplique su tarifa
    * PERSONAL y no la del grado: al re-matricular a alguien que ya tiene un
@@ -222,7 +228,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, ini
   const resumenPlan = useMemo(() => {
     // La misma regla con la que se crean los cargos al guardar: lo que se ve
     // aquí es lo que queda. Se compara la EMISIÓN, igual que el devengo.
-    const { ahora, despues } = cuotasAlMatricular(planEfectivo, marcados, desde);
+    const { ahora, despues } = cuotasAlMatricular(planEfectivo, marcados, corte ?? desde);
     const ahoraCentavos = sumaCentavos(ahora);
     const despuesCentavos = sumaCentavos(despues);
     return {
@@ -230,7 +236,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, estudianteId, ini
       despues: despuesCentavos, despuesCargos: despues.length,
       total: ahoraCentavos + despuesCentavos,
     };
-  }, [planEfectivo, marcados, desde]);
+  }, [planEfectivo, marcados, desde, corte]);
 
   if (!cursoId) return null;
 
