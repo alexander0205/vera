@@ -22,6 +22,7 @@ import {
 } from './shared';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /** Cobra por hora: jornada por horas y tarifa cargada. */
 const cobraPorHora = (e: Empleado) => e.jornada === 'por_horas' && (e.tarifaHoraCents ?? 0) > 0;
@@ -155,9 +156,11 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
         {puedeGestionar && (
           <div className="flex flex-wrap gap-2">
             {tieneEscolar && (
-              <Button variant="outline" onClick={() => setImportAbierto(true)} className="gap-1.5">
-                <GraduationCap className="h-4 w-4" /> Importar del colegio
-              </Button>
+              <Tooltip text="Trae al personal del colegio a la nómina; no duplica a quien ya está">
+                <Button variant="outline" onClick={() => setImportAbierto(true)} className="gap-1.5">
+                  <GraduationCap className="h-4 w-4" /> Importar del colegio
+                </Button>
+              </Tooltip>
             )}
             <Button onClick={irNuevo} className="gap-1.5">
               <Plus className="h-4 w-4" /> Nuevo empleado
@@ -250,26 +253,36 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                   )}
                 </div>
                 <div className="flex flex-shrink-0 gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => irContrato(e.id)} aria-label="Contrato" title="Contrato">
-                    <FileText className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes" title="Dependientes del seguro de salud">
-                    <HeartPulse className="h-4 w-4" />
-                  </Button>
-                  {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
-                    <Button variant="ghost" size="icon" onClick={() => pedirEnlace(e)} aria-label="Enlace de horas" title="Enlace para que registre sus horas">
-                      <Clock className="h-4 w-4" />
+                  <Tooltip text="Abre el contrato de este empleado">
+                    <Button variant="ghost" size="icon" onClick={() => irContrato(e.id)} aria-label="Contrato">
+                      <FileText className="h-4 w-4" />
                     </Button>
+                  </Tooltip>
+                  <Tooltip text="Abre los dependientes que cuentan para el seguro de salud">
+                    <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes">
+                      <HeartPulse className="h-4 w-4" />
+                    </Button>
+                  </Tooltip>
+                  {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
+                    <Tooltip text="Genera un enlace para que este empleado registre sus horas">
+                      <Button variant="ghost" size="icon" onClick={() => pedirEnlace(e)} aria-label="Enlace de horas">
+                        <Clock className="h-4 w-4" />
+                      </Button>
+                    </Tooltip>
                   )}
                   {puedeGestionar && (
                     <>
-                      <Button variant="ghost" size="icon" onClick={() => irEditar(e.id)} aria-label="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {esActivo(e.estado) && (
-                        <Button variant="ghost" size="icon" onClick={() => pedirBaja(e)} aria-label="Dar de baja">
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                      <Tooltip text="Edita los datos de este empleado">
+                        <Button variant="ghost" size="icon" onClick={() => irEditar(e.id)} aria-label="Editar">
+                          <Pencil className="h-4 w-4" />
                         </Button>
+                      </Tooltip>
+                      {esActivo(e.estado) && (
+                        <Tooltip text="Da de baja al empleado; su historial se conserva">
+                          <Button variant="ghost" size="icon" onClick={() => pedirBaja(e)} aria-label="Dar de baja">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </Tooltip>
                       )}
                     </>
                   )}

@@ -10,6 +10,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ArrowLeft, Loader2, FileText, Download, Upload, Plus, Check } from 'lucide-react';
 import { Empleado, fetcher, nombreCompleto } from '../../shared';
 
@@ -197,10 +198,12 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
                       {plantillas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </NativeSelect>
                   </div>
-                  <Button variant="outline" onClick={verPreview} disabled={cargandoPreview} className="gap-1.5">
-                    {cargandoPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                    Vista previa
-                  </Button>
+                  <Tooltip text="Muestra cómo queda el contrato con los datos del empleado; todavía no lo emite">
+                    <Button variant="outline" onClick={verPreview} disabled={cargandoPreview} className="gap-1.5">
+                      {cargandoPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                      Vista previa
+                    </Button>
+                  </Tooltip>
                 </div>
 
                 {/* Vista previa del contrato lleno, antes de emitirlo */}
@@ -211,10 +214,12 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
                     </div>
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>Cerrar</Button>
-                      <Button size="sm" onClick={pedirGenerar} disabled={generando} className="gap-1.5">
-                        {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                        Generar contrato
-                      </Button>
+                      <Tooltip text="Emite el contrato con esta plantilla; si ya tiene uno, lo reemplaza">
+                        <Button size="sm" onClick={pedirGenerar} disabled={generando} className="gap-1.5">
+                          {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                          Generar contrato
+                        </Button>
+                      </Tooltip>
                     </div>
                   </div>
                 )}
@@ -274,11 +279,13 @@ export default function ContratoEmpleadoClient({ id }: { id: string }) {
 
                       {puedeGestionar && c.estado !== 'firmado' && (
                         <div className="flex items-center gap-2 pl-6">
-                          <Button variant="secondary" size="sm" className="gap-1.5"
-                            onClick={() => enviarAFirmar(c.id)} disabled={enviandoId === c.id}>
-                            {enviandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            {c.estado === 'enviado' ? 'Regenerar enlace' : 'Enviar a firmar'}
-                          </Button>
+                          <Tooltip text="Crea un enlace para que el empleado firme el contrato en línea">
+                            <Button variant="secondary" size="sm" className="gap-1.5"
+                              onClick={() => enviarAFirmar(c.id)} disabled={enviandoId === c.id}>
+                              {enviandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                              {c.estado === 'enviado' ? 'Regenerar enlace' : 'Enviar a firmar'}
+                            </Button>
+                          </Tooltip>
                         </div>
                       )}
 

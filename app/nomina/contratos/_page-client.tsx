@@ -11,6 +11,7 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
 import { FileText, Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Plantilla, fetcher, resumenClausulas } from './shared';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export default function ContratosClient() {
   const router = useRouter();
@@ -91,12 +92,16 @@ export default function ContratosClient() {
                 </div>
                 {puedeConfig && (
                   <div className="flex shrink-0 gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => irEditar(p.id)} aria-label="Editar">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setABorrar(p)} aria-label="Borrar">
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <Tooltip text="Edita esta plantilla de contrato">
+                      <Button variant="ghost" size="icon" onClick={() => irEditar(p.id)} aria-label="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </Tooltip>
+                    <Tooltip text="Borra esta plantilla; los contratos ya generados con ella se conservan">
+                      <Button variant="ghost" size="icon" onClick={() => setABorrar(p)} aria-label="Borrar">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </Tooltip>
                   </div>
                 )}
               </CardContent>

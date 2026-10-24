@@ -18,6 +18,7 @@ import { Check, Clock, Loader2, Plus, X } from 'lucide-react';
 import { RangoFechas } from '@/components/reportes/rango-fechas';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Registro {
   id: number;
@@ -186,12 +187,16 @@ export default function HorasNominaClient() {
         <RangoFechas desde={desde} hasta={hasta} onCambiar={(d, h) => { setDesde(d); setHasta(h); setSel(new Set()); }} />
         {puedeRevisar && estado === 'pendiente' && sel.size > 0 && (
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => revisar('aprobada', [...sel])} disabled={trabajando} className="gap-1.5">
-              {trabajando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Aprobar ({sel.size})
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setRechazando(true)} disabled={trabajando} className="gap-1.5">
-              <X className="h-3.5 w-3.5" /> Rechazar ({sel.size})
-            </Button>
+            <Tooltip text="Marca como aprobadas las horas seleccionadas">
+              <Button size="sm" onClick={() => revisar('aprobada', [...sel])} disabled={trabajando} className="gap-1.5">
+                {trabajando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Aprobar ({sel.size})
+              </Button>
+            </Tooltip>
+            <Tooltip text="Pide el motivo y rechaza las horas seleccionadas">
+              <Button size="sm" variant="outline" onClick={() => setRechazando(true)} disabled={trabajando} className="gap-1.5">
+                <X className="h-3.5 w-3.5" /> Rechazar ({sel.size})
+              </Button>
+            </Tooltip>
           </div>
         )}
       </div>

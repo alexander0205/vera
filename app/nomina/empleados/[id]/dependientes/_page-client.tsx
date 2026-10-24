@@ -11,6 +11,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
+import { Tooltip } from '@/components/ui/tooltip';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   LABEL_PARENTESCO, PARENTESCOS, tipoSegunTSS,
@@ -333,17 +334,23 @@ export default function DependientesEmpleadoClient({ id }: { id: string }) {
                   )}
                   {puedeGestionar && (
                     <div className="flex shrink-0 gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => abrirEdicion(d)} aria-label={`Editar ${d.nombre}`} title="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {d.hasta === null && (
-                        <Button variant="ghost" size="icon" onClick={() => setADarDeBaja(d)} aria-label={`Dar de baja a ${d.nombre}`} title="Dar de baja">
-                          <UserMinus className="h-4 w-4" />
+                      <Tooltip text="Edita los datos de este dependiente">
+                        <Button variant="ghost" size="icon" onClick={() => abrirEdicion(d)} aria-label={`Editar ${d.nombre}`}>
+                          <Pencil className="h-4 w-4" />
                         </Button>
+                      </Tooltip>
+                      {d.hasta === null && (
+                        <Tooltip text="Deja de contar desde hoy; las nóminas ya calculadas no cambian">
+                          <Button variant="ghost" size="icon" onClick={() => setADarDeBaja(d)} aria-label={`Dar de baja a ${d.nombre}`}>
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        </Tooltip>
                       )}
-                      <Button variant="ghost" size="icon" onClick={() => setABorrar(d)} aria-label={`Borrar ${d.nombre}`} title="Borrar (registro hecho por error)">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <Tooltip text="Úsalo solo si se registró por error; si ya salió, mejor dar de baja">
+                        <Button variant="ghost" size="icon" onClick={() => setABorrar(d)} aria-label={`Borrar ${d.nombre}`}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </Tooltip>
                     </div>
                   )}
                 </div>
