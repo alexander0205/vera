@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Loader2, Mail, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -151,14 +152,14 @@ export function EnlaceDocumentoDialog({ matriculaId, requeridoId, documento, ope
                     onFocus={(e) => e.currentTarget.select()}
                     className="min-w-0 flex-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-600"
                   />
-                  <Button variant="outline" size="sm" className="shrink-0"
+                  <Tooltip text="Copia el enlace al portapapeles"><Button aria-label="Copiar enlace" variant="outline" size="sm" className="shrink-0"
                     onClick={() => {
                       void navigator.clipboard.writeText(enlace.url);
                       setCopiado(true);
                       setTimeout(() => setCopiado(false), 1800);
                     }}>
                     {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  </Button>
+                  </Button></Tooltip>
                 </div>
 
                 <p className="text-xs text-gray-400">

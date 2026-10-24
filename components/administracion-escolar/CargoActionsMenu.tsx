@@ -66,6 +66,7 @@ export function CargoActionsMenu<C extends CargoAccionable>({ cargo, puedePagos,
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          title="Más acciones de este cargo"
           aria-label={`Acciones de ${cargo.concepto ?? 'cargo'}`}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 data-[state=open]:bg-gray-100"
         >

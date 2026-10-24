@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -168,10 +169,10 @@ export function ObtenerSigerd({ onCompletado }: {
           </SelectContent>
         </Select>
 
-        <Button onClick={obtener} disabled={corriendo}>
+        <Tooltip text="Trae los datos del portal de SIGERD a Zero"><Button onClick={obtener} disabled={corriendo}>
           {corriendo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
           {corriendo ? 'Sincronizando…' : yaHayDescarga ? 'Volver a bajar de SIGERD' : 'Obtener información'}
-        </Button>
+        </Button></Tooltip>
       </div>
 
       {sonDeReserva && aniosResp !== undefined && (

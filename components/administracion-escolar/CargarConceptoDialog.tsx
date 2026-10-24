@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
@@ -180,12 +181,12 @@ export function CargarConceptoDialog({
             <div className="flex flex-wrap gap-2">
               <div className="relative min-w-48 flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
                 <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="pl-8" placeholder="Buscar por nombre…" aria-label="Buscar alumno" /></div>
-              <Button type="button" size="sm" variant="outline" disabled={!marcables.length} onClick={() => setSeleccion((s) => {
+              <Tooltip text="Desmarca a los alumnos que se ven en esta lista"><Button type="button" size="sm" variant="outline" disabled={!marcables.length} onClick={() => setSeleccion((s) => {
                 const n = new Set(s); marcables.forEach((a) => n.delete(a.estudianteId)); return n;
-              })}>Quitar marcas visibles</Button>
-              <Button type="button" size="sm" variant="outline" disabled={!marcables.length} onClick={() => setSeleccion((s) => {
+              })}>Quitar marcas visibles</Button></Tooltip>
+              <Tooltip text="Marca a todos los alumnos que se ven en esta lista"><Button type="button" size="sm" variant="outline" disabled={!marcables.length} onClick={() => setSeleccion((s) => {
                 const n = new Set(s); marcables.forEach((a) => n.add(a.estudianteId)); return n;
-              })}>Marcar visibles</Button>
+              })}>Marcar visibles</Button></Tooltip>
             </div>
             <ul className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
               {visibles.map((a) => <li key={a.estudianteId}>

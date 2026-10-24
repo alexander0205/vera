@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { CapturaFoto } from '@/components/fotos/CapturaFoto';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -336,18 +337,18 @@ export function TutoresPanel({
                       {/* Al que ya paga no se le ofrece: pulsarlo no haría nada
                           y deja pensando si se hizo algo. */}
                       {onHacerResponsable && !esResponsable(t) && (
-                        <Button variant="ghost" size="sm" title="Hacer responsable de pago"
+                        <Tooltip text="Hace a este tutor el responsable del pago; los cobros le llegarán a esa persona"><Button variant="ghost" size="sm"
                           onClick={() => onHacerResponsable(t)}>
                           <Wallet className="h-3.5 w-3.5 text-gray-400" />
                           <span className="ml-1 hidden text-xs sm:inline">Hacer responsable</span>
-                        </Button>
+                        </Button></Tooltip>
                       )}
-                      <Button variant="ghost" size="sm" onClick={() => abrirEdicion(t)} title="Editar tutor">
+                      <Tooltip text="Cambia los datos de este tutor"><Button variant="ghost" size="sm" onClick={() => abrirEdicion(t)}>
                         <Pencil className="h-3.5 w-3.5 text-gray-400" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setQuitarTarget(t)} title="Quitar del estudiante">
+                      </Button></Tooltip>
+                      <Tooltip text="Quita a este tutor de este estudiante"><Button variant="ghost" size="sm" onClick={() => setQuitarTarget(t)}>
                         <X className="h-3.5 w-3.5 text-red-400" />
-                      </Button>
+                      </Button></Tooltip>
                     </div>
                   </td>
                 </tr>
@@ -520,10 +521,10 @@ function ImagenTutorBox({ imagen, onPick, onClear }: {
         {imagen ? (
           <>
             <img src={imagen} alt="Tutor" className="h-full w-full rounded-lg object-cover" />
-            <button type="button" onClick={(e) => { e.preventDefault(); onClear(); }}
+            <Tooltip text="Quita la foto de este tutor"><button aria-label="Quitar foto" type="button" onClick={(e) => { e.preventDefault(); onClear(); }}
               className="absolute right-1 top-1 rounded-full bg-white/90 p-0.5 text-gray-600 shadow hover:bg-white">
               <X className="h-3 w-3" />
-            </button>
+            </button></Tooltip>
           </>
         ) : (
           <>

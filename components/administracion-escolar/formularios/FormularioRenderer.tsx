@@ -14,6 +14,7 @@
 //    momento para poder ver el campo funcionando.
 //  - `configuracion` deja fuera `crearProspecto` (no hay leads en Zero).
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Tooltip as Ayuda } from '@/components/ui/tooltip';
 import {
   Alert, Box, Button, CircularProgress, Divider, FormControlLabel, Checkbox,
   Radio, RadioGroup, Stack, TextField, ToggleButton, ToggleButtonGroup,
@@ -437,8 +438,9 @@ function CampoRenderer({
         return (
           <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
             {[1, 2, 3, 4, 5].map((n) => (
+              <Ayuda key={n} text={`Califica con ${n} ${n === 1 ? 'estrella' : 'estrellas'}`}>
               <IconButton
-                key={n}
+                aria-label={`Calificar con ${n} ${n === 1 ? 'estrella' : 'estrellas'}`}
                 type="button"
                 size="small"
                 onClick={() => onChange(n)}
@@ -446,6 +448,7 @@ function CampoRenderer({
               >
                 <StarIcon sx={{ fontSize: 28, color: n <= rating ? colorPrimario : 'action.disabled' }} />
               </IconButton>
+              </Ayuda>
             ))}
             {rating > 0 && <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>{rating}/5</Typography>}
           </Stack>
@@ -480,9 +483,11 @@ function CampoRenderer({
                   <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{v.nombre}</Typography>
                   <Typography variant="caption">{v.size ? `${Math.round(v.size / 1024)} KB` : ''} · subido</Typography>
                 </Box>
-                <IconButton type="button" size="small" onClick={() => onChange(undefined)} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+                <Ayuda text="Quita el archivo subido en este campo">
+                <IconButton aria-label="Quitar archivo" type="button" size="small" onClick={() => onChange(undefined)} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
                   <CloseIcon fontSize="small" />
                 </IconButton>
+                </Ayuda>
               </Stack>
             ) : subiendo ? (
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'center', p: 3, borderRadius: 1, border: '2px dashed', borderColor: 'divider' }}>

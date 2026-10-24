@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CalendarRange, Loader2, Lock, Plus, Trash2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import {
   agregarCuota, cuantasCuotas, generarCalendario, repartirMilesimasEntre, vencimientoDe, type Frecuencia,
@@ -312,13 +313,13 @@ export function CalendarioCuotas({
           <Plus className="h-3.5 w-3.5" />
           Agregar cuota
         </Button>
-        <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={regenerar} disabled={sinFechas}>
+        <Tooltip text="Vuelve a calcular las cuotas del año desde sus fechas"><Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={regenerar} disabled={sinFechas}>
           <Wand2 className="h-3.5 w-3.5" />
           {filas.length === 0 ? 'Generar calendario' : 'Rehacer'}
           {!sinFechas && sugeridas > 0 && (
             <span className="text-xs text-gray-400">({sugeridas} cuota{sugeridas === 1 ? '' : 's'})</span>
           )}
-        </Button>
+        </Button></Tooltip>
       </div>
 
       {sinFechas && (
@@ -373,12 +374,13 @@ export function CalendarioCuotas({
                       {/* Las facturadas no se quitan: la cuota es la deuda que
                           un padre ya tiene, y borrar la fila no borra el cargo
                           —lo dejaría apuntando a algo que no existe. */}
+                      <Tooltip text={bloqueada ? 'Ya facturada: no se puede quitar' : 'Quitar esta cuota'}>
                       <button type="button" onClick={() => quitar(i)} disabled={bloqueada}
-                        title={bloqueada ? 'Ya facturada: no se puede quitar' : 'Quitar esta cuota'}
                         aria-label={`Quitar ${f.etiqueta}`}
                         className="rounded p-1 text-gray-300 enabled:hover:bg-red-50 enabled:hover:text-red-600 disabled:opacity-30">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                      </Tooltip>
                     </td>
                   </tr>
                 );

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { mutate as revalidar } from 'swr';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -580,9 +581,9 @@ export function MatriculaFormulario({
                   ))}
                 </NativeSelect>
                 {puedeConfigurar && (
-                  <Button type="button" variant="outline" size="icon" onClick={() => setNuevoPeriodo('')} title="Nuevo período">
+                  <Tooltip text="Abre la casilla para escribir el nombre de un período nuevo"><Button aria-label="Nuevo período" type="button" variant="outline" size="icon" onClick={() => setNuevoPeriodo('')}>
                     <Plus className="h-4 w-4" />
-                  </Button>
+                  </Button></Tooltip>
                 )}
               </div>
             )}
@@ -758,12 +759,12 @@ function InlineCrear({ value, onChange, onGuardar, onCancelar, saving, placehold
       <Input autoFocus placeholder={placeholder} value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
-      <Button type="button" size="icon" className="bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={saving}>
+      <Tooltip text="Guarda lo escrito y lo agrega a la lista"><Button aria-label="Guardar" type="button" size="icon" className="bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={saving}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-      </Button>
-      <Button type="button" variant="outline" size="icon" onClick={onCancelar} disabled={saving}>
+      </Button></Tooltip>
+      <Tooltip text="Descarta lo escrito sin guardar"><Button aria-label="Cancelar" type="button" variant="outline" size="icon" onClick={onCancelar} disabled={saving}>
         <X className="h-4 w-4" />
-      </Button>
+      </Button></Tooltip>
     </div>
   );
 }

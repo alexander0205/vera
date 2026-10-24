@@ -3,6 +3,7 @@
 import { useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Check, Loader2, Pencil, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tooltip } from '@/components/ui/tooltip';
 import { fmtDOP, parseDOPaCentavos } from '@/lib/utils/format';
 
 /**
@@ -100,12 +101,11 @@ export function MontoEditable({ cargoId, montoCentavos, editable, concepto, onGu
     return (
       <span className="inline-flex items-center justify-end gap-1">
         <span>{fmtDOP(montoCentavos)}</span>
-        <button type="button" onClick={abrir}
-          title="Cambiar el monto"
+        <Tooltip text="Cambia el monto de este cargo"><button type="button" onClick={abrir}
           aria-label={`Cambiar el monto de ${concepto ?? 'este cargo'}`}
           className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-zero-700">
           <Pencil className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        </button></Tooltip>
       </span>
     );
   }
@@ -125,16 +125,16 @@ export function MontoEditable({ cargoId, montoCentavos, editable, concepto, onGu
           aria-label={`Monto nuevo de ${concepto ?? 'este cargo'}`}
           className={`h-8 w-24 rounded-md border px-2 text-right text-sm tabular-nums text-gray-900 outline-none focus:ring-2 focus:ring-zero-500 ${
             malo ? 'border-red-400' : 'border-gray-300'}`} />
-        <button type="button" onClick={() => void guardar()} disabled={guardando}
-          title="Guardar" aria-label="Guardar el monto"
+        <Tooltip text="Guarda el nuevo monto"><button type="button" onClick={() => void guardar()} disabled={guardando}
+          aria-label="Guardar el monto"
           className="flex h-8 w-8 items-center justify-center rounded-md bg-zero-600 text-white transition-colors hover:bg-zero-700 disabled:opacity-60">
           {guardando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
-        </button>
-        <button type="button" onClick={() => setEditando(false)} disabled={guardando}
-          title="Cancelar" aria-label="Cancelar el cambio de monto"
+        </button></Tooltip>
+        <Tooltip text="Descarta el cambio de monto"><button type="button" onClick={() => setEditando(false)} disabled={guardando}
+          aria-label="Cancelar el cambio de monto"
           className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-60">
           <X className="h-4 w-4" aria-hidden />
-        </button>
+        </button></Tooltip>
       </span>
     </span>
   );

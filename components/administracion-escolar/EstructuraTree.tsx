@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -102,10 +103,14 @@ function CamposEdicion({ edicion, setEdicion, onGuardar }: {
             onKeyDown={teclas} />
         </>
       )}
-      <button type="button" className="shrink-0 text-zero-600 hover:text-zero-700" title="Guardar"
-        onClick={onGuardar}><Check className="h-4 w-4" /></button>
-      <button type="button" className="shrink-0 text-gray-400 hover:text-gray-600" title="Cancelar"
-        onClick={() => setEdicion(null)}><X className="h-3.5 w-3.5" /></button>
+      <Tooltip text="Guarda el nombre y las fechas de este renglón">
+        <button type="button" className="shrink-0 text-zero-600 hover:text-zero-700" aria-label="Guardar"
+          onClick={onGuardar}><Check className="h-4 w-4" /></button>
+      </Tooltip>
+      <Tooltip text="Descarta lo escrito y deja el renglón como estaba">
+        <button type="button" className="shrink-0 text-gray-400 hover:text-gray-600" aria-label="Cancelar"
+          onClick={() => setEdicion(null)}><X className="h-3.5 w-3.5" /></button>
+      </Tooltip>
     </>
   );
 }
@@ -115,12 +120,16 @@ function Mover({ arriba, abajo }: { arriba?: () => void; abajo?: () => void }) {
   const cls = 'shrink-0 rounded text-gray-300 enabled:hover:bg-gray-200 enabled:hover:text-gray-700 disabled:opacity-30';
   return (
     <span className="flex shrink-0 items-center">
-      <button type="button" className={cls} disabled={!arriba} onClick={arriba} title="Subir">
-        <ChevronUp className="h-3.5 w-3.5" />
-      </button>
-      <button type="button" className={cls} disabled={!abajo} onClick={abajo} title="Bajar">
-        <ChevronDown className="h-3.5 w-3.5" />
-      </button>
+      <Tooltip text="Sube este elemento entre sus hermanos">
+        <button type="button" className={cls} disabled={!arriba} onClick={arriba} aria-label="Subir">
+          <ChevronUp className="h-3.5 w-3.5" />
+        </button>
+      </Tooltip>
+      <Tooltip text="Baja este elemento entre sus hermanos">
+        <button type="button" className={cls} disabled={!abajo} onClick={abajo} aria-label="Bajar">
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      </Tooltip>
     </span>
   );
 }
@@ -532,7 +541,7 @@ export function EstructuraTree() {
                     onClick={() => { if (svs.length) alternar(clave); }}>{p.nombre}</Nombre>
                   {p.activo
                     ? <Badge className="border-zero-200 bg-zero-50 text-zero-700">Activo</Badge>
-                    : <button onClick={() => activarPeriodo(p.id)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-zero-600"><CheckCircle2 className="h-3.5 w-3.5" />Activar</button>}
+                    : <Tooltip text="Deja este año como el activo; el que estaba activo se desactiva"><button onClick={() => activarPeriodo(p.id)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-zero-600"><CheckCircle2 className="h-3.5 w-3.5" />Activar</button></Tooltip>}
                   {/* Las fechas se enseñan en la fila, no solo al editar: sin
                       ellas el calendario de cobro no sabe cuántas cuotas caben
                       en el año, y el aviso tiene que verse antes de llegar a
@@ -543,10 +552,10 @@ export function EstructuraTree() {
                   {!abierto && svs.length > 0 && (
                     <Resumen partes={[plural(svs.length, 'servicio', 'servicios'), plural(seccDelPeriodo, 'sección', 'secciones')]} />
                   )}
-                  <button className={btnDel} title="Renombrar y fechar el año escolar"
-                    onClick={() => abrirEdicion('periodo', p.id, p.nombre, '', { inicio: p.fechaInicio, fin: p.fechaFin })}><Pencil className="h-3.5 w-3.5" /></button>
-                  <button className={btnAdd} onClick={() => abrir('servicio', p.id)}><Plus className="h-3 w-3" /> Servicio</button>
-                  <button className={btnDel} title="Eliminar período" onClick={() => borrar(`/api/administracion-escolar/periodos/${p.id}`, `¿Eliminar el período "${p.nombre}"?`)}><Trash2 className="h-4 w-4" /></button>
+                  <Tooltip text="Cambia el nombre y las fechas de este año escolar"><button className={btnDel} aria-label="Editar año escolar"
+                    onClick={() => abrirEdicion('periodo', p.id, p.nombre, '', { inicio: p.fechaInicio, fin: p.fechaFin })}><Pencil className="h-3.5 w-3.5" /></button></Tooltip>
+                  <Tooltip text="Agrega un servicio dentro de este año escolar"><button className={btnAdd} onClick={() => abrir('servicio', p.id)}><Plus className="h-3 w-3" /> Servicio</button></Tooltip>
+                  <Tooltip text="Elimina este año escolar"><button className={btnDel} aria-label="Eliminar año escolar" onClick={() => borrar(`/api/administracion-escolar/periodos/${p.id}`, `¿Eliminar el período "${p.nombre}"?`)}><Trash2 className="h-4 w-4" /></button></Tooltip>
                   </>)}
                 </Fila>
 
@@ -573,9 +582,9 @@ export function EstructuraTree() {
                       <Mover
                         arriba={iSv > 0 ? () => void colocarServicio(p.id, sv.id, iSv - 1) : undefined}
                         abajo={iSv < svs.length - 1 ? () => void colocarServicio(p.id, sv.id, iSv + 1) : undefined} />
-                      <button className={btnDel} title="Renombrar servicio" onClick={() => abrirEdicion('servicio', sv.id, sv.nombre, sv.tanda)}><Pencil className="h-3.5 w-3.5" /></button>
-                      <button className={btnAdd} onClick={() => abrir('curso', sv.id)}><Plus className="h-3 w-3" /> Grado</button>
-                      <button className={btnDel} title="Eliminar servicio" onClick={() => borrar(`/api/administracion-escolar/servicios/${sv.id}`, `¿Eliminar el servicio "${sv.nombre}"?`)}><X className="h-3.5 w-3.5" /></button>
+                      <Tooltip text="Cambia el nombre y la tanda de este servicio"><button className={btnDel} aria-label="Editar servicio" onClick={() => abrirEdicion('servicio', sv.id, sv.nombre, sv.tanda)}><Pencil className="h-3.5 w-3.5" /></button></Tooltip>
+                      <Tooltip text="Agrega un grado dentro de este servicio"><button className={btnAdd} onClick={() => abrir('curso', sv.id)}><Plus className="h-3 w-3" /> Grado</button></Tooltip>
+                      <Tooltip text="Elimina este servicio"><button className={btnDel} aria-label="Eliminar servicio" onClick={() => borrar(`/api/administracion-escolar/servicios/${sv.id}`, `¿Eliminar el servicio "${sv.nombre}"?`)}><X className="h-3.5 w-3.5" /></button></Tooltip>
                       </>)}
                     </Fila>
 
@@ -602,9 +611,9 @@ export function EstructuraTree() {
                           <Mover
                             arriba={iGr > 0 ? () => void colocarGrado(sv.id, c.id, iGr - 1) : undefined}
                             abajo={iGr < grs.length - 1 ? () => void colocarGrado(sv.id, c.id, iGr + 1) : undefined} />
-                          <button className={btnDel} title="Renombrar grado" onClick={() => abrirEdicion('grado', c.id, c.nombre)}><Pencil className="h-3.5 w-3.5" /></button>
-                          <button className={btnAdd} onClick={() => abrirSeccion(c.id)}><Plus className="h-3 w-3" /> Sección</button>
-                          <button className={btnDel} title="Eliminar grado" onClick={() => borrar(`/api/administracion-escolar/grados/${c.id}`, `¿Eliminar el grado "${c.nombre}"?`)}><X className="h-3.5 w-3.5" /></button>
+                          <Tooltip text="Cambia el nombre de este grado"><button className={btnDel} aria-label="Editar grado" onClick={() => abrirEdicion('grado', c.id, c.nombre)}><Pencil className="h-3.5 w-3.5" /></button></Tooltip>
+                          <Tooltip text="Agrega una sección dentro de este grado"><button className={btnAdd} onClick={() => abrirSeccion(c.id)}><Plus className="h-3 w-3" /> Sección</button></Tooltip>
+                          <Tooltip text="Elimina este grado"><button className={btnDel} aria-label="Eliminar grado" onClick={() => borrar(`/api/administracion-escolar/grados/${c.id}`, `¿Eliminar el grado "${c.nombre}"?`)}><X className="h-3.5 w-3.5" /></button></Tooltip>
                           </>)}
                         </Fila>
                         {abiertoG && secs.map((s) => (
@@ -618,8 +627,8 @@ export function EstructuraTree() {
                             ) : (
                               <>
                                 <span className="min-w-0 flex-1 truncate text-sm text-gray-700">Sección {s.nombre}</span>
-                                <button className={btnDel} title="Renombrar sección" onClick={() => abrirEdicion('seccion', s.id, s.nombre)}><Pencil className="h-3.5 w-3.5" /></button>
-                                <button className={btnDel} title="Eliminar sección" onClick={() => borrar(`/api/administracion-escolar/cursos/${s.id}`, `¿Eliminar la sección "${s.nombre}"?`)}><X className="h-3.5 w-3.5" /></button>
+                                <Tooltip text="Cambia el nombre de esta sección"><button className={btnDel} aria-label="Editar sección" onClick={() => abrirEdicion('seccion', s.id, s.nombre)}><Pencil className="h-3.5 w-3.5" /></button></Tooltip>
+                                <Tooltip text="Elimina esta sección"><button className={btnDel} aria-label="Eliminar sección" onClick={() => borrar(`/api/administracion-escolar/cursos/${s.id}`, `¿Eliminar la sección "${s.nombre}"?`)}><X className="h-3.5 w-3.5" /></button></Tooltip>
                               </>
                             )}
                           </Fila>

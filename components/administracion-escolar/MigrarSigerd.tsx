@@ -8,6 +8,7 @@ import {
   KeyRound, Loader2, Lock, Trash2, Users, UsersRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { EstadoFila, PlanMigracion } from '@/lib/sigerd/plan-migracion';
@@ -272,16 +273,16 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
                 )}
               </div>
               <div className="flex shrink-0 gap-2">
-                <Button variant={verificadas ? 'outline' : 'default'} size="sm"
+                <Tooltip text="Comprueba que el usuario y la clave entran al portal de SIGERD"><Button variant={verificadas ? 'outline' : 'default'} size="sm"
                   onClick={() => void probar()} disabled={probando || guardando}
                   className={verificadas ? '' : 'bg-zero-600 hover:bg-zero-700'}>
                   {probando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                   {probando ? 'Probando con el portal…' : verificadas ? 'Probar de nuevo' : 'Probar conexión'}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => void olvidar()} disabled={guardando || probando}
+                </Button></Tooltip>
+                <Tooltip text="Borra de Zero las credenciales de SIGERD guardadas"><Button variant="outline" size="sm" onClick={() => void olvidar()} disabled={guardando || probando}
                   className="text-destructive hover:text-destructive">
                   <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Olvidar
-                </Button>
+                </Button></Tooltip>
               </div>
             </div>
           );
@@ -322,10 +323,10 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
             {guardando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />} Guardar
           </Button>
         )}
-        <Button variant={cred?.configurado ? 'default' : 'outline'} onClick={onSeguir}
+        <Tooltip text="Pasa al siguiente paso; sin guardar, las credenciales no quedan en Zero"><Button variant={cred?.configurado ? 'default' : 'outline'} onClick={onSeguir}
           className={cred?.configurado ? 'bg-zero-600 hover:bg-zero-700' : ''}>
           {cred?.configurado ? 'Seguir' : 'Seguir sin guardar'}
-        </Button>
+        </Button></Tooltip>
       </div>
 
       {!cred?.configurado && (
@@ -523,11 +524,11 @@ function Cabecera({ titulo, ayuda, nuevos, marcados, paso, excluir, onSeguir, et
           <span className="text-sm text-gray-500">
             {nuevos === 0 ? 'nada nuevo' : `${marcados} de ${nuevos} nuevos`}
           </span>
-          <Button onClick={() => void cruzar()} disabled={corriendo}
+          <Tooltip text="Crea en Zero los alumnos nuevos marcados de SIGERD; si no hay, solo avanza"><Button onClick={() => void cruzar()} disabled={corriendo}
             className="bg-zero-600 hover:bg-zero-700">
             {corriendo && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             {corriendo ? 'Creando…' : etiquetaBoton}
-          </Button>
+          </Button></Tooltip>
         </div>
       </div>
 

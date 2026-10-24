@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Loader2, ShieldCheck, TriangleAlert, FileCheck2 } from 'lucide-react';
 import type { ResultadoCompletar } from '@/lib/administracion-escolar/completar-datos-sigerd';
 
@@ -52,12 +53,12 @@ export function CompletarDatosSigerd({ onCompletado, compacto = false }: {
         </p>
       )}
 
-      <Button variant="outline" size="sm" onClick={() => void completar()} disabled={corriendo}>
+      <Tooltip text="Trae desde SIGERD los datos que faltan a estos alumnos"><Button variant="outline" size="sm" onClick={() => void completar()} disabled={corriendo}>
         {corriendo
           ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
           : <FileCheck2 className="mr-1.5 h-4 w-4" />}
         {corriendo ? 'Completando…' : 'Completar datos desde SIGERD'}
-      </Button>
+      </Button></Tooltip>
 
       {error && (
         <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-sm text-destructive">

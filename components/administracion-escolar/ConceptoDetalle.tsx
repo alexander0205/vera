@@ -6,6 +6,7 @@ import {
   CheckCircle2, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -216,7 +217,7 @@ function Interruptor({ activo, onCambiar, etiqueta, disabled }: {
   activo: boolean; onCambiar: (v: boolean) => void; etiqueta: string; disabled?: boolean;
 }) {
   return (
-    <button type="button" role="switch" aria-checked={activo} aria-label={etiqueta}
+    <Tooltip text="Activa o desactiva los avisos por este canal para este concepto"><button type="button" role="switch" aria-checked={activo} aria-label={etiqueta}
       disabled={disabled} onClick={() => onCambiar(!activo)}
       className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
         disabled ? 'cursor-not-allowed bg-gray-200' : activo ? 'bg-zero-600' : 'bg-gray-300'
@@ -224,7 +225,7 @@ function Interruptor({ activo, onCambiar, etiqueta, disabled }: {
       <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
         activo ? 'translate-x-5' : 'translate-x-0'
       }`} />
-    </button>
+    </button></Tooltip>
   );
 }
 
@@ -479,10 +480,10 @@ export function ConceptoDetalle({
                 </div>
               )}
             </div>
-            <Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
+            <Tooltip text="Elimina este concepto del catálogo"><Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
               className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600">
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </Button></Tooltip>
           </div>
           <p className="mt-1.5 text-xs text-gray-500">{PISTA_TIPO[tipoDelBorrador]}</p>
 

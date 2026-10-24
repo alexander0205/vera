@@ -1,4 +1,5 @@
 'use client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * El enlace de pago de una familia.
@@ -61,7 +62,7 @@ export function EnlacePagoFamilia({ clientId }: { clientId: number }) {
       <div className="mt-1 flex items-center gap-1.5">
         <a href={url} target="_blank" rel="noopener noreferrer"
           className="min-w-0 flex-1 truncate text-[11px] text-zero-600 hover:underline">{url}</a>
-        <button type="button" title="Copiar el enlace"
+        <Tooltip text="Copia el enlace de pago al portapapeles"><button aria-label="Copiar el enlace" type="button"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(url);
@@ -71,7 +72,7 @@ export function EnlacePagoFamilia({ clientId }: { clientId: number }) {
           }}
           className={`shrink-0 ${copiado ? 'text-emerald-600' : 'text-gray-400 hover:text-gray-700'}`}>
           {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
+        </button></Tooltip>
       </div>
       <p className="mt-1 text-[10px] leading-snug text-gray-400">
         Lleva todo lo que la familia debe, de todos sus hijos. No caduca.

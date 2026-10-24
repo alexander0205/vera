@@ -8,6 +8,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Box, Card, Chip, IconButton, Stack, Typography } from '@mui/material';
+import { Tooltip } from '@/components/ui/tooltip';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import TuneIcon from '@mui/icons-material/Tune';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
@@ -90,7 +91,7 @@ export default function FieldCard({ campo, isSelected, onSelect, onDelete }: Fie
   const Icon = TIPO_ICONS[campo.tipo] || TextFieldsIcon;
 
   const dragHandle = (
-    <IconButton
+    <Tooltip text="Arrastra para cambiar el orden de este campo"><IconButton aria-label="Arrastrar para reordenar"
       {...attributes}
       {...listeners}
       size="small"
@@ -100,7 +101,7 @@ export default function FieldCard({ campo, isSelected, onSelect, onDelete }: Fie
       sx={{ touchAction: 'none', cursor: 'grab', color: 'text.disabled', flexShrink: 0, '&:active': { cursor: 'grabbing' } }}
     >
       <DragIndicatorIcon fontSize="small" />
-    </IconButton>
+    </IconButton></Tooltip>
   );
 
   if (campo.tipo === 'salto_pagina') {
@@ -124,9 +125,9 @@ export default function FieldCard({ campo, isSelected, onSelect, onDelete }: Fie
           <Typography variant="caption" sx={{ fontWeight: 600, color: 'inherit' }}>Nueva página</Typography>
         </Stack>
         <Box sx={{ flex: 1, borderTop: '1px dashed', borderColor: 'divider' }} />
-        <IconButton size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} data-hover-actions sx={{ ...HOVER_ACTIONS, color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+        <Tooltip text="Elimina este campo del formulario"><IconButton aria-label="Eliminar campo" size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} data-hover-actions sx={{ ...HOVER_ACTIONS, color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
           <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
-        </IconButton>
+        </IconButton></Tooltip>
       </Card>
     );
   }
@@ -159,12 +160,12 @@ export default function FieldCard({ campo, isSelected, onSelect, onDelete }: Fie
           </Typography>
         </Box>
         <Stack direction="row" spacing={0.5} data-hover-actions sx={HOVER_ACTIONS}>
-          <IconButton size="small" type="button" onClick={(e) => { e.stopPropagation(); onSelect(); }} sx={{ color: 'text.disabled' }}>
+          <Tooltip text="Abre las propiedades de este campo"><IconButton aria-label="Configurar campo" size="small" type="button" onClick={(e) => { e.stopPropagation(); onSelect(); }} sx={{ color: 'text.disabled' }}>
             <TuneIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-          <IconButton size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+          </IconButton></Tooltip>
+          <Tooltip text="Elimina este campo del formulario"><IconButton aria-label="Eliminar campo" size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
             <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
-          </IconButton>
+          </IconButton></Tooltip>
         </Stack>
       </Card>
     );
@@ -187,9 +188,9 @@ export default function FieldCard({ campo, isSelected, onSelect, onDelete }: Fie
         <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
         <Typography variant="caption">Separador</Typography>
         <Box sx={{ flex: 1, height: '1px', bgcolor: 'divider' }} />
-        <IconButton size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} data-hover-actions sx={{ ...HOVER_ACTIONS, color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+        <Tooltip text="Elimina este campo del formulario"><IconButton aria-label="Eliminar campo" size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} data-hover-actions sx={{ ...HOVER_ACTIONS, color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
           <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
-        </IconButton>
+        </IconButton></Tooltip>
       </Card>
     );
   }
@@ -252,12 +253,12 @@ export default function FieldCard({ campo, isSelected, onSelect, onDelete }: Fie
 
       {/* Acciones */}
       <Stack direction="row" spacing={0.5} data-hover-actions sx={HOVER_ACTIONS}>
-        <IconButton size="small" type="button" onClick={(e) => { e.stopPropagation(); onSelect(); }} sx={{ color: 'text.disabled' }}>
+        <Tooltip text="Abre las propiedades de este campo"><IconButton aria-label="Configurar campo" size="small" type="button" onClick={(e) => { e.stopPropagation(); onSelect(); }} sx={{ color: 'text.disabled' }}>
           <TuneIcon sx={{ fontSize: 16 }} />
-        </IconButton>
-        <IconButton size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+        </IconButton></Tooltip>
+        <Tooltip text="Elimina este campo del formulario"><IconButton aria-label="Eliminar campo" size="small" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
           <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
-        </IconButton>
+        </IconButton></Tooltip>
       </Stack>
     </Card>
   );

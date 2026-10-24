@@ -1,4 +1,5 @@
 'use client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Piezas comunes del árbol Período → Servicio → Grado → Sección.
@@ -56,10 +57,13 @@ export function Plegador({ abierto, vacio, onClick }: {
 }) {
   if (vacio) return <span className="w-[18px] shrink-0" aria-hidden />;
   return (
+    <Tooltip text={abierto ? 'Pliega esta parte' : 'Despliega esta parte'}>
     <button type="button" onClick={onClick} aria-expanded={abierto}
+      aria-label={abierto ? 'Plegar' : 'Desplegar'}
       className="shrink-0 rounded text-gray-400 hover:bg-gray-200 hover:text-gray-700">
       <ChevronRight className={`h-[18px] w-[18px] transition-transform ${abierto ? 'rotate-90' : ''}`} />
     </button>
+    </Tooltip>
   );
 }
 

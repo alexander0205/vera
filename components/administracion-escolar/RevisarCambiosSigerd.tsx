@@ -8,6 +8,7 @@ import {
   ArrowLeft, LayoutGrid, Loader2, Pencil, UserMinus, UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ObtenerSigerd } from '@/components/administracion-escolar/ObtenerSigerd';
 import type { RevisionSigerd, ResultadoMover } from '@/lib/administracion-escolar/cambios-sigerd';
@@ -374,11 +375,11 @@ function CambiosDeSeccion({ cambios, onMovido }: { cambios: CambioDeSeccion[]; o
             className="h-4 w-4 cursor-pointer accent-zero-600 disabled:opacity-40" />
           Elegir todos los que tienen destino ({movibles.length})
         </label>
-        <Button size="sm" className="ml-auto bg-zero-600 hover:bg-zero-700"
+        <Tooltip text="Pasa a los alumnos marcados a la sección que tiene SIGERD; te pedirá confirmar"><Button size="sm" className="ml-auto bg-zero-600 hover:bg-zero-700"
           disabled={elegidos.size === 0 || moviendo} onClick={() => setConfirmando(true)}>
           {moviendo && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
           Mover a la sección de SIGERD{elegidos.size > 0 ? ` (${elegidos.size})` : ''}
-        </Button>
+        </Button></Tooltip>
       </div>
       {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {resultado && <ResultadoDelMovimiento r={resultado} />}

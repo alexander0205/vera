@@ -1,5 +1,7 @@
 'use client';
 
+import { Tooltip } from '@/components/ui/tooltip';
+
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { Check, ExternalLink, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
@@ -395,25 +397,23 @@ export function ConceptosDeLaMatricula({
                       {/* No se apaga cuando no se puede: se deja pulsar y lo
                           explica en el renglón, igual que la papelera. Un botón
                           apagado no dice por qué en un teléfono ni a un lector. */}
-                      <button type="button" disabled={ocupado} aria-disabled={!puedePrecio}
+                      <Tooltip text="Cambia el monto de este concepto para este alumno"><button type="button" disabled={ocupado} aria-disabled={!puedePrecio}
                         onClick={() => {
                           cerrarTodo();
                           setValor(f.montosLibres.length === 1 ? (f.montosLibres[0] / 100).toFixed(2) : '');
                           setAbierto({ id: f.conceptoId, que: 'precio' });
                         }}
-                        title="Cambiar el monto"
                         aria-label={`Cambiar el monto de ${f.nombre}`}
                         className={`rounded p-1.5 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed ${
                           puedePrecio ? 'text-gray-500 hover:text-zero-700' : 'text-gray-300'}`}>
                         <Pencil className="h-4 w-4" aria-hidden />
-                      </button>
-                      <button type="button" disabled={ocupado}
+                      </button></Tooltip>
+                      <Tooltip text="Quita este concepto del alumno; te preguntará qué hacer con sus cargos"><button type="button" disabled={ocupado}
                         onClick={() => { cerrarTodo(); setAbierto({ id: f.conceptoId, que: 'quitar' }); }}
-                        title="Quitar este concepto"
                         aria-label={`Quitar ${f.nombre}`}
                         className="rounded p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-gray-300">
                         <Trash2 className="h-4 w-4" aria-hidden />
-                      </button>
+                      </button></Tooltip>
                     </>
                   )}
                 </span>
@@ -647,10 +647,10 @@ function Explicacion({ children, onCerrar }: { children: React.ReactNode; onCerr
     <div role="status"
       className="flex basis-full items-start justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
       <p className="text-xs text-amber-900">{children}</p>
-      <button type="button" onClick={onCerrar} aria-label="Cerrar"
+      <Tooltip text="Cierra esta ventana"><button type="button" onClick={onCerrar} aria-label="Cerrar"
         className="rounded p-1 text-amber-700 hover:bg-amber-100">
         <X className="h-4 w-4" aria-hidden />
-      </button>
+      </button></Tooltip>
     </div>
   );
 }
