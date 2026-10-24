@@ -19,11 +19,15 @@ import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCursos, adminEscolarEstudiantes, adminEscolarGrados,
   adminEscolarPeriodos, adminEscolarServicios,
-  sigerdImportaciones, sigerdPersonal,
+  sigerdPersonal,
 } from '@/lib/db/schema';
 import { invalidarEstructura, invalidarSigerd } from '@/lib/cache/escolar';
+import {
+  completarDatosDesdeSigerd, type ResultadoCompletar,
+} from '@/lib/administracion-escolar/completar-datos-sigerd';
 import { partirNombre } from './nombres';
 import type { ArbolCentro } from './sync';
+import { ultimoDumpSigerd } from './ultimo-dump';
 
 export interface ResultadoCruce {
   creados: number;
@@ -32,15 +36,19 @@ export interface ResultadoCruce {
   fallos: Array<{ que: string; motivo: string }>;
   /** Filas creadas cuyo dato conviene que alguien mire. */
   avisos: Array<{ que: string; motivo: string }>;
+  /** Solo en estudiantes: lo que se completó (RNE, sexo, fecha) desde las fichas. */
+  datos?: ResultadoCompletar;
 }
 
 const vacio = (): ResultadoCruce => ({ creados: 0, omitidos: 0, fallos: [], avisos: [] });
 
+/**
+ * La descarga más reciente. Antes era un `.limit(1)` sin orden: con dos años
+ * guardados, cruzar leía el que la base devolviera primero, que no tenía por
+ * qué ser el que el asistente acababa de enseñar.
+ */
 async function snapshot(teamId: number) {
-  const [imp] = await db.select().from(sigerdImportaciones)
-    .where(and(eq(sigerdImportaciones.teamId, teamId), eq(sigerdImportaciones.estado, 'completado')))
-    .limit(1);
-  return (imp?.dump ?? null) as Record<string, unknown> | null;
+  return (await ultimoDumpSigerd(teamId))?.dump ?? null;
 }
 
 /** El año escolar activo. Sin él no hay dónde matricular. */
@@ -207,6 +215,21 @@ export async function cruzarEstudiantes(teamId: number, excluir: Set<number>): P
 
   invalidarEstructura(teamId);
   invalidarSigerd(teamId);
+
+  // Los alumnos nacen con nombre e id; el RNE, el sexo y la fecha ya están en
+  // las fichas de la misma descarga. Se completan aquí, en el mismo paso, para
+  // que quien acaba de cruzar no tenga que acordarse de otro botón. También
+  // alcanza a los que se cruzaron antes de que existiera este paso. Si falla,
+  // los alumnos ya están creados: se avisa y el botón de la pantalla lo repite.
+  try {
+    r.datos = await completarDatosDesdeSigerd(teamId, dump);
+  } catch (err) {
+    console.error('[sigerd/cruzar] completar datos', err);
+    r.avisos.push({
+      que: 'Datos de las fichas',
+      motivo: 'Los estudiantes se crearon, pero no se pudieron completar RNE, sexo y fecha de nacimiento. Pulsa «Completar datos desde SIGERD».',
+    });
+  }
   return r;
 }
 

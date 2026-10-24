@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GraduationCap,
+  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GitCompareArrows, GraduationCap,
   Loader2, Pencil, RotateCcw, Search, UserCheck, UserMinus, UserX, Users, X, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -110,6 +111,14 @@ const claveSeccion = (g: Grupo) => `s:${g.cursoId}`;
 const enAlcance = (g: Grupo, alcance: string | null) =>
   !alcance || alcance === claveNivel(g) || alcance === claveGrado(g) || alcance === claveSeccion(g);
 
+/**
+ * Si la sección cobra este concepto. Por defecto, los obligatorios sí y los
+ * opcionales (uniforme, transporte) no; `cambiados` son los que alguien
+ * alternó a mano en los chips de la sección.
+ */
+const cobraEnSeccion = (l: Pick<LineaPlan, 'conceptoId' | 'opcional'>, cambiados?: Set<number>) =>
+  !l.opcional !== (cambiados?.has(l.conceptoId) ?? false);
+
 /** Montos de la tabla del árbol: sin centavos, para que quepan. */
 const rdCorto = (centavos: number) => `RD$${Math.round(centavos / 100).toLocaleString('es-DO')}`;
 
@@ -128,6 +137,8 @@ function cuentaDe(lineas: LineaPlan[], conceptos: number[], ajuste: Ajuste | und
 export default function MatricularDesdeSigerd() {
   const { can, isLoading: cargandoPermisos } = usePermissions();
   const puedePrecios = can('administracion-escolar:configurar');
+  // Mover a un alumno de sección es de configurar, igual que cambiar tarifas.
+  const puedeRevisarCambios = puedePrecios;
 
   const [datos, setDatos] = useState<Pendientes | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -141,7 +152,15 @@ export default function MatricularDesdeSigerd() {
   const [planes, setPlanes] = useState<Map<number, PlanSeccion>>(new Map());
 
   const [fuera, setFuera] = useState<Set<number>>(new Set());
-  const [quitadosSeccion, setQuitadosSeccion] = useState<Map<number, Set<number>>>(new Map());
+  /** Paquetes del colegio (Configuración › Paquetes): aplicar uno a toda una sección. */
+  const { data: dataPaquetes } = useSWR<{ paquetes: { id: number; nombre: string; conceptosIds: number[] }[] }>(
+    '/api/administracion-escolar/paquetes',
+    (url: string) => fetch(url).then((r) => (r.ok ? r.json() : { paquetes: [] })),
+    { revalidateOnFocus: false },
+  );
+  const paquetes = dataPaquetes?.paquetes ?? [];
+  /** Por sección, los conceptos alternados a mano respecto de lo de por defecto (`cobraEnSeccion`). */
+  const [cambiadosSeccion, setCambiadosSeccion] = useState<Map<number, Set<number>>>(new Map());
   const [ajustes, setAjustes] = useState<Map<number, Ajuste>>(new Map());
 
   const [busqueda, setBusqueda] = useState('');
@@ -150,6 +169,17 @@ export default function MatricularDesdeSigerd() {
   const [alcance, setAlcance] = useState<string | null>(null);
   const [verOmitidos, setVerOmitidos] = useState(false);
   const [editando, setEditando] = useState<{ alumno: Alumno; grupo: Grupo } | null>(null);
+  // Cambios en el panel sin «Guardar»: cerrar pregunta antes de perderlos.
+  const [editorSucio, setEditorSucio] = useState(false);
+  const [avisoSalir, setAvisoSalir] = useState(false);
+  useEffect(() => { if (!editando) setEditorSucio(false); }, [editando]);
+  const cerrarEditor = useCallback(() => {
+    if (editorSucio) setAvisoSalir(true);
+    else setEditando(null);
+  }, [editorSucio]);
+  const deshacerAjuste = useCallback((id: number) => {
+    setAjustes((m) => { const n = new Map(m); n.delete(id); return n; });
+  }, []);
   const [confirmar, setConfirmar] = useState(false);
   const [avance, setAvance] = useState<Avance[] | null>(null);
   const corriendo = avance?.some((a) => a.estado === 'esperando' || a.estado === 'corriendo') ?? false;
@@ -198,9 +228,9 @@ export default function MatricularDesdeSigerd() {
     if (a) return a.conceptos;
     const p = planes.get(cursoId);
     if (p?.estado !== 'listo') return null;
-    const quitados = quitadosSeccion.get(cursoId);
-    return p.lineas.map((l) => l.conceptoId).filter((c) => !quitados?.has(c));
-  }, [ajustes, planes, quitadosSeccion]);
+    const cambiados = cambiadosSeccion.get(cursoId);
+    return p.lineas.filter((l) => cobraEnSeccion(l, cambiados)).map((l) => l.conceptoId);
+  }, [ajustes, planes, cambiadosSeccion]);
 
   // Por sección: cada alumno con su cuenta. Es lo que pinta la lista y lo que
   // suma el resumen.
@@ -263,12 +293,13 @@ export default function MatricularDesdeSigerd() {
    * Quitar (o volver a poner) un concepto a toda la sección. A quien ya se le
    * había abierto también se le aplica: «a la sección» es a todos.
    */
-  function alternarConceptoSeccion(g: Grupo, conceptoId: number) {
-    const quitar = !quitadosSeccion.get(g.cursoId)?.has(conceptoId);
-    setQuitadosSeccion((m) => {
+  function alternarConceptoSeccion(g: Grupo, linea: LineaPlan) {
+    const conceptoId = linea.conceptoId;
+    const quitar = cobraEnSeccion(linea, cambiadosSeccion.get(g.cursoId));
+    setCambiadosSeccion((m) => {
       const n = new Map(m);
       const s = new Set(n.get(g.cursoId));
-      if (quitar) s.add(conceptoId); else s.delete(conceptoId);
+      if (s.has(conceptoId)) s.delete(conceptoId); else s.add(conceptoId);
       n.set(g.cursoId, s);
       return n;
     });
@@ -286,12 +317,35 @@ export default function MatricularDesdeSigerd() {
     });
   }
 
+  /**
+   * Aplicar un paquete a toda la sección: la sección cobra justo sus conceptos
+   * (los que tengan tarifa aquí), y a quien ya se le había abierto el cajón se
+   * le cambian también los conceptos; sus precios propios se quedan.
+   */
+  function aplicarPaqueteSeccion(g: Grupo, lineas: LineaPlan[], conceptosDelPaquete: number[]) {
+    const quiere = new Set(conceptosDelPaquete);
+    setCambiadosSeccion((m) => {
+      const n = new Map(m);
+      n.set(g.cursoId, new Set(lineas.filter((l) => cobraEnSeccion(l) !== quiere.has(l.conceptoId)).map((l) => l.conceptoId)));
+      return n;
+    });
+    const conceptos = lineas.filter((l) => quiere.has(l.conceptoId)).map((l) => l.conceptoId);
+    setAjustes((m) => {
+      const n = new Map(m);
+      for (const e of g.estudiantes) {
+        const a = n.get(e.id);
+        if (a) n.set(e.id, { ...a, conceptos });
+      }
+      return n;
+    });
+  }
+
   /** Lo que devuelve el cajón de un alumno. Igual que su sección = sin ajuste. */
   const guardarAjuste = useCallback((alumnoId: number, cursoId: number, a: Ajuste) => {
     const p = planes.get(cursoId);
-    const quitados = quitadosSeccion.get(cursoId);
+    const cambiados = cambiadosSeccion.get(cursoId);
     const deSeccion = p?.estado === 'listo'
-      ? p.lineas.map((l) => l.conceptoId).filter((c) => !quitados?.has(c)) : null;
+      ? p.lineas.filter((l) => cobraEnSeccion(l, cambiados)).map((l) => l.conceptoId) : null;
     const igual = deSeccion != null && a.precios.length === 0
       && a.conceptos.length === deSeccion.length && deSeccion.every((c) => a.conceptos.includes(c));
     setAjustes((m) => {
@@ -299,7 +353,7 @@ export default function MatricularDesdeSigerd() {
       if (igual) n.delete(alumnoId); else n.set(alumnoId, a);
       return n;
     });
-  }, [planes, quitadosSeccion]);
+  }, [planes, cambiadosSeccion]);
 
   async function matricular() {
     if (!datos) return;
@@ -400,6 +454,17 @@ export default function MatricularDesdeSigerd() {
               Ir a Configuración › SIGERD
             </Link>
           )}
+          {datos.disponible && puedeRevisarCambios && (
+            <>
+              <p className="mt-3 max-w-md text-xs text-gray-400">
+                Quien ya tiene matrícula no sale aquí aunque SIGERD lo haya cambiado de sección.
+              </p>
+              <Link href="/escolar/configuracion/sigerd/cambios"
+                className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-zero-700 hover:underline">
+                <GitCompareArrows className="h-4 w-4" /> Revisar cambios de SIGERD
+              </Link>
+            </>
+          )}
         </div>
       </section>
     );
@@ -434,6 +499,13 @@ export default function MatricularDesdeSigerd() {
               Cada alumno entra en el grado y la sección que tiene en SIGERD · {datos.periodo?.nombre}
               {descargada && <span className="text-gray-400"> · datos descargados el {descargada}</span>}
             </p>
+            {puedeRevisarCambios && (
+              <Link href="/escolar/configuracion/sigerd/cambios"
+                className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:underline">
+                <GitCompareArrows className="h-3.5 w-3.5" /> Revisar cambios de SIGERD
+                <span className="font-normal text-gray-400">(quien ya está matriculado y cambió de sección)</span>
+              </Link>
+            )}
           </div>
         </div>
         <label className="flex flex-col gap-1 self-start lg:self-auto">
@@ -552,7 +624,7 @@ export default function MatricularDesdeSigerd() {
           {visibles.map((g) => {
             const completo = datos.grupos.find((x) => x.cursoId === g.cursoId)!;
             const plan = planes.get(g.cursoId);
-            const quitados = quitadosSeccion.get(g.cursoId);
+            const cambiados = cambiadosSeccion.get(g.cursoId);
             const dentro = completo.estudiantes.filter((e) => !fuera.has(e.id));
             const todosDentro = dentro.length === completo.estudiantes.length;
             const hoySeccion = dentro.reduce((s, e) => s + (cuentas.get(e.id)?.hoy ?? 0), 0);
@@ -589,13 +661,24 @@ export default function MatricularDesdeSigerd() {
                     <p className="text-xs text-amber-700">Esta sección no tiene tarifas: las matrículas se crean sin cargos.</p>
                   ) : (
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {paquetes.length > 0 && (
+                        <select value="" aria-label="Aplicar un paquete a toda la sección"
+                          onChange={(e) => {
+                            const pq = paquetes.find((x) => x.id === Number(e.target.value));
+                            if (pq) aplicarPaqueteSeccion(completo, plan.lineas, pq.conceptosIds);
+                          }}
+                          className="mr-1 h-7 rounded-md border border-zero-200 bg-white px-1.5 text-xs text-zero-700 focus:border-zero-500 focus:outline-none">
+                          <option value="">Aplicar paquete…</option>
+                          {paquetes.map((pq) => <option key={pq.id} value={pq.id}>{pq.nombre}</option>)}
+                        </select>
+                      )}
                       <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">Cobra</span>
                       {plan.lineas.map((l) => {
-                        const activo = !quitados?.has(l.conceptoId);
+                        const activo = cobraEnSeccion(l, cambiados);
                         return (
                           <button key={l.conceptoId} type="button"
-                            onClick={() => alternarConceptoSeccion(completo, l.conceptoId)}
-                            title={activo ? 'Quitar a toda la sección' : 'Volver a cobrar a toda la sección'}
+                            onClick={() => alternarConceptoSeccion(completo, l)}
+                            title={activo ? 'Quitar a toda la sección' : l.opcional ? 'Opcional: cobrar a toda la sección' : 'Volver a cobrar a toda la sección'}
                             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                               activo
                                 ? 'border-zero-200 bg-white text-gray-800 hover:border-zero-300'
@@ -603,7 +686,7 @@ export default function MatricularDesdeSigerd() {
                             {activo ? <Check className="h-3 w-3 text-zero-600" /> : <X className="h-3 w-3" />}
                             {l.nombre}
                             <span className="tabular-nums text-gray-500">
-                              {fmtDOP(l.montoCentavos)}{l.tipo === 'mensualidad' ? '/mes' : ''}
+                              {fmtDOP(l.montoCentavos)}{l.cuotas.length > 1 ? (l.precioPorCuota ? '/cuota' : ' en el año') : ''}
                             </span>
                           </button>
                         );
@@ -619,7 +702,7 @@ export default function MatricularDesdeSigerd() {
                     const a = ajustes.get(e.id);
                     const lineas = plan?.estado === 'listo' ? plan.lineas : [];
                     const suyos = new Set(conceptosDe(e.id, g.cursoId) ?? []);
-                    const sinEstos = lineas.filter((l) => !suyos.has(l.conceptoId) && !quitados?.has(l.conceptoId));
+                    const sinEstos = lineas.filter((l) => !suyos.has(l.conceptoId) && cobraEnSeccion(l, cambiados));
                     return (
                       <li key={e.id}
                         className={`group flex items-center gap-3 px-4 py-2.5 transition-colors ${sale ? 'bg-gray-50' : 'hover:bg-zero-50/40'}`}>
@@ -634,6 +717,7 @@ export default function MatricularDesdeSigerd() {
                           <p className={`truncate text-sm ${sale ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{e.nombre}</p>
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             {sale && <Chip tono="gris">No se matricula ahora</Chip>}
+                            {!sale && a && <Chip tono="verde"><Check className="mr-0.5 h-3 w-3" />Plan cambiado</Chip>}
                             {!sale && a?.precios.map((p) => {
                               const l = lineas.find((x) => x.conceptoId === p.conceptoId);
                               return <Chip key={p.conceptoId} tono="ambar">{l?.nombre ?? 'Concepto'}: {fmtDOP(p.montoCentavos)}</Chip>;
@@ -661,6 +745,13 @@ export default function MatricularDesdeSigerd() {
                                 className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-zero-300 hover:text-zero-700 disabled:opacity-40">
                                 <Pencil className="h-3.5 w-3.5" />Editar
                               </button>
+                              {a && (
+                                <button type="button" onClick={() => deshacerAjuste(e.id)}
+                                  title="Deshacer los cambios: vuelve a lo de su sección" aria-label={`Deshacer los cambios de ${e.nombre}`}
+                                  className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                                  <RotateCcw className="h-4 w-4" />
+                                </button>
+                              )}
                               <button type="button" onClick={() => alternarFuera([e.id], true)}
                                 title="No matricular a este alumno ahora" aria-label={`No matricular a ${e.nombre}`}
                                 className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
@@ -710,12 +801,12 @@ export default function MatricularDesdeSigerd() {
         )}
         confirmLabel="Sí, matricular" onConfirm={() => void matricular()} />
 
-      <Drawer anchor="right" open={!!editando} onClose={() => setEditando(null)} keepMounted={false}
+      <Drawer anchor="right" open={!!editando} onClose={cerrarEditor} keepMounted={false}
         slotProps={{
           backdrop: { sx: { backdropFilter: 'blur(2px)' } },
-          // Ancho: el precio, «Cambiar» y «Volver a …» de cada concepto caben
-          // en una línea y se leen de un vistazo.
-          paper: { sx: { width: { xs: '100%', sm: 640, lg: 760 }, borderTopLeftRadius: { sm: 16 }, borderBottomLeftRadius: { sm: 16 } } },
+          // Ancho: la tabla de cargos (concepto, cuotas, por cuota, total y
+          // acciones) se lee en una línea sin apretar. Lo pidió Alex.
+          paper: { sx: { width: { xs: '100%', sm: 760, lg: 1000, xl: 1120 }, borderTopLeftRadius: { sm: 16 }, borderBottomLeftRadius: { sm: 16 } } },
         }}>
         {editando && datos.periodo && (
           <EditorAlumno
@@ -732,15 +823,24 @@ export default function MatricularDesdeSigerd() {
             puedePrecios={puedePrecios}
             onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
             onRestablecer={() => {
-              setAjustes((m) => { const n = new Map(m); n.delete(editando.alumno.id); return n; });
+              deshacerAjuste(editando.alumno.id);
               setEditando(null);
             }}
             onSacar={() => { alternarFuera([editando.alumno.id], true); setEditando(null); }}
-            onCerrar={() => setEditando(null)}
+            onCerrar={cerrarEditor}
+            onSucio={setEditorSucio}
             conCambios={ajustes.has(editando.alumno.id)}
           />
         )}
       </Drawer>
+
+      <ConfirmDialog open={avisoSalir} onOpenChange={setAvisoSalir}
+        title="Tienes cambios sin guardar"
+        description="Cambiaste los conceptos o los precios de este alumno y todavía no los has guardado. Si sales ahora, se pierden."
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        destructive
+        onConfirm={() => { setAvisoSalir(false); setEditando(null); }} />
     </section>
   );
 }
@@ -872,7 +972,7 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar,
+  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -886,6 +986,8 @@ function EditorAlumno({
   onRestablecer: () => void;
   onSacar: () => void;
   onCerrar: () => void;
+  /** Avisa si hay cambios sin guardar, para preguntar antes de cerrar. */
+  onSucio?: (sucio: boolean) => void;
 }) {
   // Lo que el selector va diciendo. Antes de que llegue el plan su lista de
   // conceptos va vacía sin querer decir «ninguno»: hasta entonces no se guarda.
@@ -894,11 +996,28 @@ function EditorAlumno({
   const [precios, setPrecios] = useState<Ajuste['precios']>(inicial.precios);
   const [inicialFijo] = useState(inicial);
 
-  const alLlegarPlan = useCallback(() => setCargado(true), []);
-  const alCambiar = useCallback((ids: number[]) => setConceptos(ids), []);
-  const alCambiarPrecios = useCallback((ps: { conceptoId: number; montoCentavos: number }[]) => {
-    setPrecios(ps.map((p) => ({ conceptoId: p.conceptoId, montoCentavos: p.montoCentavos })));
+  // Lo que había al abrir, para saber si se tocó algo. El selector avisa del
+  // plan (`onPlan`) ANTES de mandar la primera lista de conceptos y precios,
+  // así que lo primero que llega después de cargar es el punto de partida.
+  const cargadoRef = useRef(false);
+  const base = useRef<{ conceptos: string | null; precios: string | null }>({ conceptos: null, precios: null });
+
+  const alLlegarPlan = useCallback(() => { cargadoRef.current = true; setCargado(true); }, []);
+  const alCambiar = useCallback((ids: number[]) => {
+    setConceptos(ids);
+    if (cargadoRef.current && base.current.conceptos === null) base.current.conceptos = claveIds(ids);
   }, []);
+  const alCambiarPrecios = useCallback((ps: { conceptoId: number; montoCentavos: number }[]) => {
+    const limpios = ps.map((p) => ({ conceptoId: p.conceptoId, montoCentavos: p.montoCentavos }));
+    setPrecios(limpios);
+    if (cargadoRef.current && base.current.precios === null) base.current.precios = clavePrecios(limpios);
+  }, []);
+
+  const sucio = cargado && base.current.conceptos !== null && (
+    claveIds(conceptos) !== base.current.conceptos
+    || (base.current.precios !== null && clavePrecios(precios) !== base.current.precios)
+  );
+  useEffect(() => { onSucio?.(sucio); }, [sucio, onSucio]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1058,9 +1177,14 @@ function Kpi({ icono, etiqueta, valor, nota, destacado }: {
   );
 }
 
-function Chip({ tono: t, children }: { tono: 'gris' | 'ambar' | 'rojo'; children: ReactNode }) {
+function Chip({ tono: t, children }: { tono: 'gris' | 'ambar' | 'rojo' | 'verde'; children: ReactNode }) {
   const c = t === 'ambar' ? 'bg-amber-50 text-amber-800 ring-amber-200'
+    : t === 'verde' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
     : t === 'rojo' ? 'bg-red-50 text-red-700 ring-red-200'
     : 'bg-gray-100 text-gray-600 ring-gray-200';
   return <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] ring-1 ring-inset ${c}`}>{children}</span>;
 }
+
+const claveIds = (ids: number[]) => [...ids].sort((a, b) => a - b).join(',');
+const clavePrecios = (ps: { conceptoId: number; montoCentavos: number }[]) =>
+  ps.map((p) => `${p.conceptoId}:${p.montoCentavos}`).sort().join(',');

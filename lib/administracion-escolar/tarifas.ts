@@ -41,6 +41,8 @@ export interface TarifaResuelta {
    * que permite saber cuánto ingresó cada curso de verdad.
    */
   productId: number | null;
+  /** Cuántas cuotas del calendario cobra esta tarifa (las primeras N). null = todas. */
+  cuotas?: number | null;
 }
 
 /**
@@ -146,6 +148,7 @@ export async function resolverTarifas(
         objetivoId:    adminEscolarConceptoPrecios.objetivoId,
         montoCentavos: adminEscolarConceptoPrecios.montoCentavos,
         productId:     adminEscolarConceptoPrecios.productId,
+        cuotas:        adminEscolarConceptoPrecios.cuotas,
       })
       .from(adminEscolarConceptoPrecios)
       .where(and(
@@ -177,6 +180,7 @@ export interface PrecioConfigurado {
   objetivoId: number;
   montoCentavos: number;
   productId: number | null;
+  cuotas?: number | null;
 }
 
 /**
@@ -218,6 +222,7 @@ export function resolverTarifasEnMemoria(
           origen: nivel.tipo,
           objetivoId: hit.objetivoId,
           productId: hit.productId,
+          cuotas: hit.cuotas ?? null,
         };
         break;
       }
@@ -237,6 +242,8 @@ export function resolverTarifasEnMemoria(
         resuelto.set(conceptoId, {
           montoCentavos: conBeca, origen: 'beca', objetivoId: null,
           productId: tarifa?.productId ?? null,
+          // La beca cambia el monto, no cuántos meses se pagan.
+          cuotas: tarifa?.cuotas ?? null,
         });
         continue;
       }
@@ -286,6 +293,7 @@ export async function resolverTarifa(
       objetivoId:    adminEscolarConceptoPrecios.objetivoId,
       montoCentavos: adminEscolarConceptoPrecios.montoCentavos,
       productId:     adminEscolarConceptoPrecios.productId,
+      cuotas:        adminEscolarConceptoPrecios.cuotas,
     })
     .from(adminEscolarConceptoPrecios)
     .where(and(
@@ -313,6 +321,7 @@ export async function resolverTarifa(
         origen: nivel.tipo,
         objetivoId: hit.objetivoId,
         productId: hit.productId,
+        cuotas: hit.cuotas ?? null,
       };
       break;
     }
@@ -343,7 +352,7 @@ export async function resolverTarifa(
         : ctx.becaValor;
 
       if (conBeca != null) {
-        return { montoCentavos: conBeca, origen: 'beca', objetivoId: null, productId: tarifa?.productId ?? null };
+        return { montoCentavos: conBeca, origen: 'beca', objetivoId: null, productId: tarifa?.productId ?? null, cuotas: tarifa?.cuotas ?? null };
       }
     }
   }

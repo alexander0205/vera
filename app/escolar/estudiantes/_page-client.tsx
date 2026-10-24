@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { fmtDOP } from '@/lib/utils/format';
 import { EstudianteFicha, type EstudianteEnriquecido } from '@/components/administracion-escolar/EstudianteFicha';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { codigoVisible } from '@/lib/administracion-escolar/estudiante-utils';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { TraerDeContactosDialog } from '@/components/administracion-escolar/TraerDeContactosDialog';
 import {
@@ -54,7 +55,7 @@ const EXPORTAR: ExportTabla<EstudianteEnriquecido> = {
   titulo: 'Estudiantes',
   archivo: 'estudiantes',
   columnas: [
-    { titulo: 'Estudiante', valor: e => `${e.nombres} ${e.apellidos}`.trim(), sub: e => e.codigo, ancho: 2 },
+    { titulo: 'Estudiante', valor: e => `${e.nombres} ${e.apellidos}`.trim(), sub: e => codigoVisible(e), ancho: 2 },
     { titulo: 'Curso', valor: e => e.cursoActual, ancho: 1.4 },
     { titulo: 'Estado', valor: e => e.estado ?? (e.origen === 'dependiente' ? 'Sin matricular' : null), ancho: 0.8 },
     { titulo: 'Responsable', valor: e => e.tutorResponsable ?? e.contacto, sub: e => e.tutorTelefono ?? e.tutorEmail, ancho: 1.8 },
@@ -413,7 +414,7 @@ export default function EstudiantesClient() {
                                     </Badge>
                                   )}
                                 </div>
-                                <p className="text-xs text-gray-400">{e.codigo ?? '—'}</p>
+                                <p className="text-xs text-gray-400">{codigoVisible(e) ?? '—'}</p>
                               </div>
                             </div>
                           </td>

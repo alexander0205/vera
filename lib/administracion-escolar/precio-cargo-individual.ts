@@ -11,7 +11,7 @@
  * calendario, y esto decide qué número se pone. Pruebas en
  * `tests/unit/precio-cargo-individual.test.ts`.
  */
-import { montosPorCuota } from './repartir';
+import { cuotasDeLaTarifa, montosPorCuota, precioEsPorCuota } from './repartir';
 import type { OrigenTarifa } from './tarifas';
 
 export interface CuotaDelConcepto {
@@ -48,18 +48,22 @@ export interface SugerenciaDeMonto {
  */
 export function sugerirMontoDelCargo(
   tipoDeConcepto: string,
-  tarifa: { montoCentavos: number; origen: OrigenTarifa } | null,
-  cuotas: CuotaDelConcepto[],
+  tarifa: { montoCentavos: number; origen: OrigenTarifa; cuotas?: number | null } | null,
+  todasLasCuotas: CuotaDelConcepto[],
   mes: number | null,
   elegida: number | null = null,
+  /** Lo que dijo el colegio en el concepto; sin él decide el tipo (`precioEsPorCuota`). */
+  precioPorCuota: boolean | null = null,
 ): SugerenciaDeMonto | null {
   if (!tarifa) return null;
+  // Las cuotas que cobra esta tarifa (un grado puede pagar 10 de 11).
+  const cuotas = cuotasDeLaTarifa(todasLasCuotas, tarifa.cuotas);
   const base = { tarifaCentavos: tarifa.montoCentavos, origen: tarifa.origen };
-  if (tipoDeConcepto === 'mensualidad' || cuotas.length <= 1) {
+  if (precioEsPorCuota({ tipo: tipoDeConcepto, precioPorCuota }) || cuotas.length <= 1) {
     return { ...base, montoCentavos: tarifa.montoCentavos, cuota: null };
   }
   const montos = montosPorCuota(
-    tipoDeConcepto, tarifa.montoCentavos, cuotas.map((c) => c.porcentajeMilesimas));
+    tipoDeConcepto, tarifa.montoCentavos, cuotas.map((c) => c.porcentajeMilesimas), precioPorCuota);
   const i = indiceCuota(cuotas, mes, elegida);
   return {
     ...base,

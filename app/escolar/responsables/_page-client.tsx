@@ -99,7 +99,7 @@ export default function ResponsablesClient() {
    * antes de quitarla.
    */
   const concepto = params.get('concepto') ?? '';
-  const { can } = usePermissions();
+  const { can, pantallasOcultas } = usePermissions();
   const { data: catalogo } = useSWR<{ conceptos?: { id: number; nombre: string; activo: boolean }[] }>(
     '/api/administracion-escolar/conceptos', traer, { revalidateOnFocus: false, dedupingInterval: 60_000 });
   const conceptos = catalogo?.conceptos ?? [];
@@ -183,6 +183,12 @@ export default function ResponsablesClient() {
           {can('administracion-escolar:gestionar') && (
             <Button asChild variant="outline" size="sm">
               <Link href="/escolar/cobrar-grupo">Cobrar a un grupo</Link>
+            </Button>
+          )}
+          {/* La otra mitad: ya hay cargos, falta ponerles factura a muchos. */}
+          {can('administracion-escolar:gestionar') && !pantallasOcultas.includes('escolar-facturar') && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/escolar/facturar">Facturar por lote</Link>
             </Button>
           )}
           <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-responsables" />

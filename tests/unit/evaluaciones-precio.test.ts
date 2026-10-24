@@ -20,10 +20,15 @@ describe('lo que sale en cada cuota según qué es el cobro', () => {
       .toEqual([280_000, 280_000, 280_000]);
   });
 
-  it('lo demás reparte la tarifa como total del año', () => {
+  it('inscripción, actividad y uniformes reparten la tarifa como total del año', () => {
     expect(montosPorCuota('actividad', 60_000, [33_334, 33_333, 33_333]))
       .toEqual([20_000, 20_000, 20_000]);
-    expect(montosPorCuota('otro', 280_000, Array(10).fill(10_000)))
+    expect(montosPorCuota('inscripcion', 280_000, Array(10).fill(10_000)))
       .toEqual(Array(10).fill(28_000));
+  });
+
+  it('«Otro cobro» que se repite (almuerzo, transporte) cobra la tarifa en cada cuota', () => {
+    expect(montosPorCuota('otro', 500_000, Array(11).fill(9_091)))
+      .toEqual(Array(11).fill(500_000));
   });
 });

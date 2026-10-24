@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Pencil } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
+import { Loader2, Pencil, RotateCcw } from 'lucide-react';
 import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
+import { montosPorCuota, precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
 
 /**
  * Lo que va a deber el alumno al matricularlo, con lo que no aplique
@@ -20,11 +22,17 @@ import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/c
 export interface CuotaPlan {
   cuotaId: number; numero: number; etiqueta: string; mes: number | null;
   fechaEmision: string; fechaVencimiento: string; montoCentavos: number; omitida: boolean;
+  /** Peso de la cuota en el reparto (100000 = 100 %). */
+  porcentajeMilesimas?: number;
 }
 
 export interface LineaPlan {
   conceptoId: number; nombre: string; tipo: string;
   admiteBeca: boolean; montoCentavos: number; origen: string;
+  /** Llega desmarcado al matricular: se marca solo a quien lo usa. */
+  opcional?: boolean;
+  /** `montoCentavos` es lo de cada cuota (true) o el total que se reparte (false). */
+  precioPorCuota?: boolean;
   cuotas: CuotaPlan[]; totalCentavos: number; omitidas: number;
   /**
    * El producto con el que se facturaría esta línea, ya resuelto por la cadena
@@ -39,12 +47,17 @@ const fmtRD = (centavos: number) =>
   `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 
+/** Pesos del reparto. Sin ellos (un plan pedido antes de que viajaran), cuotas iguales. */
+const pesosDe = (l: LineaPlan) => l.cuotas.map((c) => c.porcentajeMilesimas ?? 1);
+
 /**
  * El plan como quedaría con los precios propios puestos.
  *
- * Un precio propio es el de CADA cuota, no el del año: sala de tareas a 1,100
- * son 1,100 al mes. Se reescriben las cuotas vivas y se recalcula el total,
- * para que lo que se enseña sea lo que el alumno va a deber de verdad.
+ * Un precio propio es la TARIFA de ese alumno y se reparte con la misma regla
+ * que la del grado (`montosPorCuota`): en una mensualidad es lo de cada cuota;
+ * en lo demás, el total que se divide entre las cuotas. Antes aquí se ponía en
+ * cada cuota sin mirar el tipo, y en un concepto «otro» de diez cuotas la
+ * pantalla enseñaba diez veces lo que el servidor después cargaba.
  *
  * Suelta para que «Matricular desde SIGERD» sume a cada alumno de la lista con
  * la misma cuenta con la que este selector lo enseña.
@@ -54,7 +67,8 @@ export function aplicarPreciosPropios<L extends LineaPlan>(plan: L[], propios: M
   return plan.map((l) => {
     const propio = propios.get(l.conceptoId);
     if (propio == null) return l;
-    const cuotas = l.cuotas.map((c) => (c.omitida ? c : { ...c, montoCentavos: propio }));
+    const montos = montosPorCuota(l.tipo, propio, pesosDe(l), l.precioPorCuota);
+    const cuotas = l.cuotas.map((c, i) => (c.omitida ? c : { ...c, montoCentavos: montos[i] }));
     return {
       ...l,
       montoCentavos: propio,
@@ -64,27 +78,54 @@ export function aplicarPreciosPropios<L extends LineaPlan>(plan: L[], propios: M
   });
 }
 
-function resumenCuotas(l: LineaPlan): string {
+/** Lo de cada cuota que queda, si todas pagan lo mismo; `null` si varía. */
+export function porCuotaDe(l: LineaPlan): number | null {
+  const vivas = l.cuotas.filter((c) => !c.omitida);
+  if (vivas.length === 0) return null;
+  return vivas.every((c) => c.montoCentavos === vivas[0].montoCentavos) ? vivas[0].montoCentavos : null;
+}
+
+/**
+ * Qué se escribe en «Cambiar precio»: lo de CADA cuota, que es como se habla
+ * del precio («5,000 al mes»). Solo si las cuotas no pesan igual —no hay «una
+ * cuota» que escribir— se escribe el total del año.
+ */
+const porCuota = (l: LineaPlan) => precioEsPorCuota(l);
+
+export function modoPrecio(l: LineaPlan): 'cuota' | 'total' {
+  if (porCuota(l)) return 'cuota';
+  const pesos = pesosDe(l);
+  return pesos.length > 0 && Math.max(...pesos) - Math.min(...pesos) <= 1 ? 'cuota' : 'total';
+}
+
+/**
+ * De lo escrito a la tarifa que se guarda. En una mensualidad son lo mismo; en
+ * un concepto que reparte, la tarifa es el total: la cuota por cuántas hay en
+ * el calendario (también las que se omiten, que son parte del reparto).
+ */
+export function tarifaDesdeEscrito(l: LineaPlan, centavos: number): number {
+  return porCuota(l) || modoPrecio(l) === 'total' ? centavos : centavos * l.cuotas.length;
+}
+
+/** Lo que se enseña en el campo al abrirlo: la cuota o el total, según `modoPrecio`. */
+function escritoDesdeTarifa(l: LineaPlan, tarifa: number): number {
+  return porCuota(l) || modoPrecio(l) === 'total'
+    ? tarifa : Math.round(tarifa / Math.max(1, l.cuotas.length));
+}
+
+/** Cuándo se cobra, sin montos: los montos van en sus columnas. */
+function cuandoSeCobra(l: LineaPlan): string {
   const vigentes = l.cuotas.filter((c) => !c.omitida);
   if (vigentes.length === 0) return 'sin cuotas pendientes';
-
   const primera = vigentes[0];
-  // Sin fecha límite no se escribe "vence —": un guion donde debería ir una
-  // fecha parece un dato que falta, no una decisión del colegio. Se calla, y
-  // así el renglón dice solo lo que hay.
   if (vigentes.length === 1) {
-    return primera.fechaVencimiento
-      ? `1 pago · vence ${fmtFechaCorta(primera.fechaVencimiento)}`
-      : '1 pago';
+    // Sin fecha límite no se escribe "vence —": un guion donde debería ir una
+    // fecha parece un dato que falta, no una decisión del colegio.
+    return primera.fechaVencimiento ? `vence ${fmtFechaCorta(primera.fechaVencimiento)}` : 'pago único';
   }
-
-  const iguales = vigentes.every((c) => c.montoCentavos === primera.montoCentavos);
-  const monto = iguales ? ` de ${fmtRD(primera.montoCentavos)}` : '';
-  // Para varias cuotas sí hace falta una fecha de referencia: sin ella, "10
-  // cuotas" no dice cuándo empiezan. Si no vencen, sirve la de emisión — es el
-  // día en que el cargo le aparece a la familia.
-  const referencia = primera.fechaVencimiento ?? primera.fechaEmision;
-  return `${vigentes.length} cuotas${monto} · desde ${fmtFechaCorta(referencia)}`;
+  // Si no vencen, sirve la de emisión: es el día en que el cargo le aparece a la familia.
+  const ultima = vigentes[vigentes.length - 1];
+  return `${fmtFechaCorta(primera.fechaVencimiento ?? primera.fechaEmision)} – ${fmtFechaCorta(ultima.fechaVencimiento ?? ultima.fechaEmision)}`;
 }
 
 export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, onPlan, onCambio, onPrecios }: {
@@ -127,6 +168,13 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
   onPrecios?: (precios: { conceptoId: number; montoCentavos: number; productId: number | null }[]) => void;
 }) {
   const [plan, setPlan] = useState<LineaPlan[]>([]);
+  // Paquetes del colegio: elegir uno marca sus conceptos de un clic.
+  const { data: dataPaquetes } = useSWR<{ paquetes: { id: number; nombre: string; conceptosIds: number[] }[] }>(
+    '/api/administracion-escolar/paquetes',
+    (url: string) => fetch(url).then((r) => (r.ok ? r.json() : { paquetes: [] })),
+    { revalidateOnFocus: false },
+  );
+  const paquetes = dataPaquetes?.paquetes ?? [];
   const [planCargando, setPlanCargando] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
@@ -167,13 +215,15 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
       .then((lineas) => {
         if (!vigente) return;
         setPlan(lineas);
-        // Marcados todos: aquí solo aparecen los conceptos con tarifa para este
-        // grado, así que ya vienen filtrados por lo que ese grado paga. Quién es
-        // la excepción se sabe con el alumno delante, no al configurar el
-        // concepto meses antes.
+        // Marcados los obligatorios: aquí solo aparecen los conceptos con tarifa
+        // para este grado, así que ya vienen filtrados por lo que ese grado
+        // paga. Los opcionales (uniforme, transporte) llegan sin marcar y se
+        // marcan a quien los use; lo dice el colegio en Conceptos.
         const ids = new Set(lineas.map((l) => l.conceptoId));
         const ini = inicialRef.current;
-        setMarcados(ini?.conceptos ? new Set(ini.conceptos.filter((c) => ids.has(c))) : ids);
+        setMarcados(ini?.conceptos
+          ? new Set(ini.conceptos.filter((c) => ids.has(c)))
+          : new Set(lineas.filter((l) => !l.opcional).map((l) => l.conceptoId)));
         // Cambió el curso o la fecha: el plan es otro y los precios escritos
         // para el anterior no tienen por qué valer aquí. Los que se traen de
         // antes sí, si su concepto sigue en el plan.
@@ -208,18 +258,19 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
 
   function abrirPrecio(l: LineaPlan) {
     setEditandoId(l.conceptoId);
-    setBorrador(((propios.get(l.conceptoId) ?? l.montoCentavos) / 100).toFixed(2));
+    setBorrador((escritoDesdeTarifa(l, propios.get(l.conceptoId) ?? l.montoCentavos) / 100).toFixed(2));
   }
 
   function guardarPrecio(l: LineaPlan) {
     const centavos = parseDOPaCentavos(borrador);
     if (centavos == null) return;
+    const tarifa = tarifaDesdeEscrito(l, centavos);
     setPropios((m) => {
       const n = new Map(m);
       // Volver a la tarifa del grado es quitar la excepción, no guardar el
       // mismo número como si fuera propio.
-      if (centavos === l.montoCentavos) n.delete(l.conceptoId);
-      else n.set(l.conceptoId, centavos);
+      if (tarifa === l.montoCentavos) n.delete(l.conceptoId);
+      else n.set(l.conceptoId, tarifa);
       return n;
     });
     setEditandoId(null);
@@ -244,7 +295,26 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
             <div className="rounded-lg border border-gray-200">
               <div className="flex items-baseline justify-between border-b border-gray-100 px-3 py-2">
                 <span className="text-sm font-medium text-gray-900">Cargos del año</span>
-                <span className="text-xs text-gray-500">desmarca lo que no aplique</span>
+                {paquetes.length > 0 && plan.length > 0 ? (
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                    Paquete
+                    <select
+                      value={paquetes.find((pq) => {
+                        const suyos = plan.filter((l) => pq.conceptosIds.includes(l.conceptoId)).map((l) => l.conceptoId);
+                        return suyos.length === marcados.size && suyos.every((id) => marcados.has(id));
+                      })?.id ?? ''}
+                      onChange={(e) => {
+                        const pq = paquetes.find((x) => x.id === Number(e.target.value));
+                        if (pq) setMarcados(new Set(plan.filter((l) => pq.conceptosIds.includes(l.conceptoId)).map((l) => l.conceptoId)));
+                      }}
+                      className="h-7 rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-800 focus:border-zero-500 focus:outline-none">
+                      <option value="">— a mano —</option>
+                      {paquetes.map((pq) => <option key={pq.id} value={pq.id}>{pq.nombre}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <span className="text-xs text-gray-500">desmarca lo que no aplique</span>
+                )}
               </div>
 
               {planCargando ? (
@@ -259,125 +329,153 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
                 </p>
               ) : (
                 <>
-                  {planEfectivo.map((l) => {
-                    const activo = marcados.has(l.conceptoId);
-                    const base = plan.find((p) => p.conceptoId === l.conceptoId)!;
-                    const esPropio = propios.has(l.conceptoId);
-                    // La beca ya es un descuento sobre la tarifa; dejar escribir
-                    // además un precio propio pone dos mecanismos a pelear por
-                    // la misma cifra. Se edita la beca donde se puso la beca.
-                    const puedeEditar = !!onPrecios && activo && l.origen !== 'beca';
-                    return (
-                      <div key={l.conceptoId}
-                        className="border-b border-gray-100 px-3 py-2.5 last:border-b-0 hover:bg-gray-50">
-                        <label className="flex cursor-pointer gap-2.5">
-                          <input type="checkbox" checked={activo}
-                            onChange={() => setMarcados((s) => {
-                              const n = new Set(s);
-                              if (n.has(l.conceptoId)) n.delete(l.conceptoId); else n.add(l.conceptoId);
-                              return n;
-                            })}
-                            className="mt-0.5 h-4 w-4 shrink-0 accent-zero-600" />
-                          <span className={`min-w-0 flex-1 ${activo ? '' : 'opacity-50'}`}>
-                            <span className="flex justify-between gap-2">
-                              <span className="text-sm text-gray-900">{l.nombre}</span>
-                              <span className="whitespace-nowrap text-sm font-medium text-gray-900">
-                                {fmtRD(l.totalCentavos)}
-                              </span>
-                            </span>
-                            <span className="mt-0.5 block text-xs text-gray-500">{resumenCuotas(l)}</span>
-                            {l.origen === 'beca' && (
-                              <span className="mt-1 inline-block rounded bg-zero-50 px-2 py-0.5 text-[11px] text-zero-700">
-                                con beca
-                              </span>
-                            )}
-                            {l.omitidas > 0 && (
-                              <span className="mt-1 block text-xs text-amber-700">
-                                se omiten {l.omitidas} cuota(s) emitida(s) antes de su entrada
-                              </span>
-                            )}
-                          </span>
-                        </label>
-
-                        {puedeEditar && (
-                          <div className="mt-1.5 pl-[26px]">
-                            {editandoId === l.conceptoId ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-gray-500">RD$</span>
-                                <input
-                                  type="text" inputMode="decimal" autoFocus
-                                  value={borrador}
-                                  onChange={(e) => setBorrador(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { e.preventDefault(); guardarPrecio(base); }
-                                    if (e.key === 'Escape') { cancelando.current = true; setEditandoId(null); }
-                                  }}
-                                  /*
-                                    Lo escrito se aplica al salir del campo.
-
-                                    Antes solo contaba «Aplicar»: quien escribía
-                                    el precio y pulsaba directo «Crear
-                                    matrícula» creaba la matrícula con la tarifa
-                                    del grado y su número se perdía sin aviso.
-                                    Pulsar fuera ya es salir del campo, así que
-                                    el guardado del diálogo lo recoge.
-
-                                    Salvo si se va a Cancelar o se pulsó Escape:
-                                    `onMouseDown` corre antes que el blur, así
-                                    que para entonces la bandera ya está puesta.
-                                  */
-                                  onBlur={() => {
-                                    if (cancelando.current) { cancelando.current = false; return; }
-                                    guardarPrecio(base);
-                                  }}
-                                  className="h-7 w-28 rounded border border-gray-300 px-2 text-sm tabular-nums focus:border-zero-500 focus:outline-none"
-                                />
-                                <button type="button" onClick={() => guardarPrecio(base)}
-                                  className="rounded bg-zero-600 px-2 py-1 text-xs font-medium text-white hover:bg-zero-700">
-                                  Aplicar
-                                </button>
-                                <button type="button"
-                                  onMouseDown={() => { cancelando.current = true; }}
-                                  onClick={() => setEditandoId(null)}
-                                  className="px-1.5 py-1 text-xs text-gray-500 hover:text-gray-700">
-                                  Cancelar
-                                </button>
-                                <span className="text-xs text-gray-400">por cuota</span>
-                              </div>
-                            ) : esPropio ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
-                                  precio propio · {fmtRD(l.montoCentavos)} por cuota
-                                </span>
-                                <button type="button" onClick={() => abrirPrecio(base)}
-                                  className="text-xs text-zero-700 hover:underline">Cambiar</button>
-                                <button type="button"
-                                  onClick={() => setPropios((m) => {
-                                    const n = new Map(m); n.delete(l.conceptoId); return n;
-                                  })}
-                                  className="text-xs text-gray-500 hover:text-gray-700">
-                                  Volver a {fmtRD(base.montoCentavos)}
-                                </button>
-                              </div>
-                            ) : (
-                              // El precio y la acción van separados, y la acción con
-                              // forma de botón: como una sola línea gris no se leía
-                              // como algo que se pudiera pulsar, y quien matriculaba
-                              // no encontraba dónde poner el monto de ese alumno.
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs text-gray-600">{fmtRD(l.montoCentavos)} por cuota</span>
-                                <button type="button" onClick={() => abrirPrecio(base)}
-                                  className="inline-flex items-center gap-1 rounded-md border border-zero-200 bg-white px-2 py-1 text-xs font-medium text-zero-700 hover:bg-zero-50">
-                                  <Pencil className="h-3 w-3" aria-hidden />
-                                  Cambiar precio para este alumno
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                          <th className="w-8 py-2 pl-3">
+                            {/* Todos de un clic: marcar los servicios de un niño que lo usa todo, o vaciar para empezar de cero. */}
+                            <input type="checkbox" aria-label="Marcar todos los conceptos"
+                              title={marcados.size === plan.length ? 'Desmarcar todos' : 'Marcar todos'}
+                              checked={plan.length > 0 && marcados.size === plan.length}
+                              ref={(el) => { if (el) el.indeterminate = marcados.size > 0 && marcados.size < plan.length; }}
+                              onChange={() => setMarcados(marcados.size === plan.length ? new Set() : new Set(plan.map((l) => l.conceptoId)))}
+                              className="h-4 w-4 cursor-pointer accent-zero-600" />
+                          </th>
+                          <th className="py-2 pr-2 text-left font-medium">Concepto</th>
+                          <th className="px-2 py-2 text-right font-medium">Cuotas</th>
+                          <th className="px-2 py-2 text-right font-medium">Por cuota</th>
+                          <th className="px-2 py-2 text-right font-medium">Total del año</th>
+                          <th className="w-[72px] py-2 pr-3" aria-label="Acciones" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {planEfectivo.map((l) => {
+                          const activo = marcados.has(l.conceptoId);
+                          const base = plan.find((p) => p.conceptoId === l.conceptoId)!;
+                          const esPropio = propios.has(l.conceptoId);
+                          // La beca ya es un descuento sobre la tarifa; dejar escribir
+                          // además un precio propio pone dos mecanismos a pelear por
+                          // la misma cifra. Se edita la beca donde se puso la beca.
+                          const puedeEditar = !!onPrecios && activo && l.origen !== 'beca';
+                          const vivas = l.cuotas.filter((c) => !c.omitida).length;
+                          const cuota = porCuotaDe(l);
+                          const editando = editandoId === l.conceptoId;
+                          const modo = modoPrecio(base);
+                          const apagado = activo ? '' : 'opacity-50';
+                          const escrito = editando ? parseDOPaCentavos(borrador) : null;
+                          return (
+                            <Fragment key={l.conceptoId}>
+                              <tr className={`align-top ${editando ? '' : 'border-b border-gray-100'} hover:bg-gray-50`}>
+                                <td className="py-2.5 pl-3">
+                                  <input type="checkbox" checked={activo} aria-label={`Cobrar ${l.nombre}`}
+                                    onChange={() => setMarcados((s) => {
+                                      const n = new Set(s);
+                                      if (n.has(l.conceptoId)) n.delete(l.conceptoId); else n.add(l.conceptoId);
+                                      return n;
+                                    })}
+                                    className="mt-0.5 h-4 w-4 cursor-pointer accent-zero-600" />
+                                </td>
+                                <td className={`py-2.5 pr-2 ${apagado}`}>
+                                  <span className="block text-gray-900">{l.nombre}</span>
+                                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                                    {cuandoSeCobra(l)}
+                                    {l.opcional && (
+                                      <span className="rounded bg-gray-100 px-1.5 py-px text-[11px] text-gray-600">opcional</span>
+                                    )}
+                                    {esPropio && (
+                                      <span className="rounded bg-amber-50 px-1.5 py-px text-[11px] text-amber-800">precio propio</span>
+                                    )}
+                                    {l.origen === 'beca' && (
+                                      <span className="rounded bg-zero-50 px-1.5 py-px text-[11px] text-zero-700">con beca</span>
+                                    )}
+                                  </span>
+                                  {l.omitidas > 0 && (
+                                    <span className="mt-0.5 block text-xs text-amber-700">
+                                      no se le cobran {l.omitidas} cuota(s) de antes de su entrada
+                                    </span>
+                                  )}
+                                </td>
+                                <td className={`whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-gray-700 ${apagado}`}>
+                                  {l.omitidas > 0 ? `${vivas} de ${l.cuotas.length}` : vivas}
+                                </td>
+                                <td className={`whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-gray-700 ${apagado}`}>
+                                  {cuota == null ? <span className="text-gray-400">varía</span> : fmtRD(cuota)}
+                                </td>
+                                <td className={`whitespace-nowrap px-2 py-2.5 text-right font-medium tabular-nums text-gray-900 ${apagado}`}>
+                                  {fmtRD(l.totalCentavos)}
+                                </td>
+                                <td className="py-2 pr-3">
+                                  {puedeEditar && !editando && (
+                                    <div className="flex justify-end gap-1">
+                                      {esPropio && (
+                                        <button type="button" title={`Volver al precio del grado (${fmtRD(escritoDesdeTarifa(base, base.montoCentavos))}${modo === 'cuota' ? ' por cuota' : ''})`}
+                                          aria-label="Volver al precio del grado"
+                                          onClick={() => setPropios((m) => { const n = new Map(m); n.delete(l.conceptoId); return n; })}
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
+                                          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                                        </button>
+                                      )}
+                                      <button type="button" title="Cambiar precio para este alumno" aria-label={`Cambiar precio de ${l.nombre} para este alumno`}
+                                        onClick={() => abrirPrecio(base)}
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zero-200 text-zero-700 hover:bg-zero-50">
+                                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                              {editando && (
+                                <tr className="border-b border-gray-100 bg-zero-50/40">
+                                  <td />
+                                  <td colSpan={5} className="pb-3 pr-3 pt-0.5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-xs font-medium text-gray-700">
+                                        {modo === 'cuota' ? 'Precio por cuota' : 'Total del año'} para este alumno: RD$
+                                      </span>
+                                      <input
+                                        type="text" inputMode="decimal" autoFocus
+                                        value={borrador}
+                                        onChange={(e) => setBorrador(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') { e.preventDefault(); guardarPrecio(base); }
+                                          if (e.key === 'Escape') { cancelando.current = true; setEditandoId(null); }
+                                        }}
+                                        /*
+                                          Lo escrito se aplica al salir del campo: quien escribía el
+                                          precio y pulsaba directo «Crear matrícula» perdía su número.
+                                          Salvo si se va a Cancelar o se pulsó Escape: `onMouseDown`
+                                          corre antes que el blur, así que la bandera ya está puesta.
+                                        */
+                                        onBlur={() => {
+                                          if (cancelando.current) { cancelando.current = false; return; }
+                                          guardarPrecio(base);
+                                        }}
+                                        className="h-7 w-28 rounded border border-gray-300 bg-white px-2 text-sm tabular-nums focus:border-zero-500 focus:outline-none"
+                                      />
+                                      <button type="button" onClick={() => guardarPrecio(base)}
+                                        className="rounded bg-zero-600 px-2 py-1 text-xs font-medium text-white hover:bg-zero-700">
+                                        Aplicar
+                                      </button>
+                                      <button type="button"
+                                        onMouseDown={() => { cancelando.current = true; }}
+                                        onClick={() => setEditandoId(null)}
+                                        className="px-1.5 py-1 text-xs text-gray-500 hover:text-gray-700">
+                                        Cancelar
+                                      </button>
+                                      {modo === 'cuota' && vivas > 1 && escrito != null && (
+                                        <span className="text-xs text-gray-500">= {fmtRD(escrito * vivas)} en {vivas} cuotas</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                   <div className="bg-gray-50 px-3 py-2.5">
                     <div className="flex items-baseline justify-between">
                       <span className="text-sm font-medium text-gray-900">Se le carga ahora</span>

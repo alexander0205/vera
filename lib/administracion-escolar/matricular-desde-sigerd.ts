@@ -16,12 +16,12 @@
  * El resto se cuenta y se explica, no se fuerza.
  */
 import 'server-only';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarConceptoPrecios, adminEscolarConceptosPago, adminEscolarCursos,
   adminEscolarEstudiantes, adminEscolarGrados, adminEscolarMatriculas,
-  adminEscolarPeriodos, adminEscolarServicios, sigerdImportaciones,
+  adminEscolarPeriodos, adminEscolarServicios,
 } from '@/lib/db/schema';
 import { invalidarEstructura } from '@/lib/cache/escolar';
 import { LoteError, matricularLote, type ResultadoLote } from './matricula-lote';
@@ -29,6 +29,7 @@ import { contextoDeSeccion } from './tarifas';
 import { armarPlanDeCobro } from './plan-cobro';
 import { hoyRD } from '@/lib/utils/format';
 import type { ArbolCentro } from '@/lib/sigerd/sync';
+import { ultimoDumpSigerd } from '@/lib/sigerd/ultimo-dump';
 
 export interface GrupoSigerd {
   cursoId: number;
@@ -92,16 +93,10 @@ const vacio = (motivo: string): PendientesSigerd => ({
 
 export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesSigerd> {
   // La descarga más reciente: es la que dice dónde está cada alumno este año.
-  const [imp] = await db.select({
-    dump: sigerdImportaciones.dump,
-    ano: sigerdImportaciones.anoAcademico,
-    actualizada: sigerdImportaciones.updatedAt,
-  })
-    .from(sigerdImportaciones)
-    .where(and(eq(sigerdImportaciones.teamId, teamId), eq(sigerdImportaciones.estado, 'completado')))
-    .orderBy(desc(sigerdImportaciones.anoAcademico))
-    .limit(1);
-  const dump = (imp?.dump ?? null) as Record<string, unknown> | null;
+  // Misma regla que «Revisar cambios» y el asistente (`ultimoDumpSigerd`): si
+  // no, una pantalla diría «no hay descarga» mientras otra enseña datos.
+  const imp = await ultimoDumpSigerd(teamId);
+  const dump = imp?.dump ?? null;
   const arbol = dump?.estructura as ArbolCentro | undefined;
   if (!arbol) return vacio('No hay descarga de SIGERD todavía.');
 
@@ -241,8 +236,8 @@ export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesS
   return {
     disponible: true,
     periodo,
-    anoAcademico: (dump?.anoAcademico as number | undefined) ?? imp?.ano ?? null,
-    descargadaEl: imp?.actualizada ? new Date(imp.actualizada).toISOString() : null,
+    anoAcademico: (dump?.anoAcademico as number | undefined) ?? imp?.anoAcademico ?? null,
+    descargadaEl: imp?.bajadoEn ? imp.bajadoEn.toISOString() : null,
     grupos: lista,
     porMatricular: lista.reduce((n, g) => n + g.estudiantes.length, 0),
     yaMatriculados, sinEstudiante, sinSeccion,

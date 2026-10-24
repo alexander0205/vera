@@ -18,11 +18,20 @@ export function aE164(crudo: string | null | undefined): string | null {
   const digitos = crudo.replace(/\D/g, '');
   if (digitos.length === 0) return null;
 
+  // En el plan NANP (RD, EE. UU.) ningún código de área empieza en 0 ni en 1.
+  // Sin esta regla, «+1 823 596 602» —al que se le cayó un dígito— son diez
+  // dígitos que empiezan en 1, y se le pegaba OTRO 1 delante: el mensaje salía
+  // a un número que no existe y la pantalla decía «Enviado».
+  const areaValida = (d: string) => /^[2-9]/.test(d);
+
   // 10 dígitos = NANP sin código de país (809/829/849 en RD).
-  if (digitos.length === 10) return `1${digitos}`;
+  if (digitos.length === 10) return areaValida(digitos) ? `1${digitos}` : null;
 
   // 11 empezando en 1 = ya viene completo.
-  if (digitos.length === 11 && digitos.startsWith('1')) return digitos;
+  if (digitos.length === 11 && digitos.startsWith('1')) return areaValida(digitos.slice(1)) ? digitos : null;
+
+  // Un +1 seguido de menos o más de diez dígitos no es un número NANP.
+  if (crudo.trim().startsWith('+1') && digitos.startsWith('1')) return null;
 
   // Internacional: entre 11 y 15 dígitos es un E.164 plausible de otro país.
   // Se deja pasar porque un colegio puede tener un padre en el extranjero, y

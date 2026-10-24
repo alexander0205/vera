@@ -3,14 +3,14 @@ import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import {
-  avisosDeHoy, candidatos, despachar, equiposConAvisos, pesos, enLetra,
+  avisosDeHoy, candidatos, despachar, equiposConAvisos, mensajesEnviados,
   type AvisoPendiente, type EnvioHecho,
 } from '@/lib/administracion-escolar/avisos';
-import { sumarDias } from '@/lib/administracion-escolar/calendario';
+import { asuntoDeAviso, datosWhatsAppDeGrupo, sufijoDeBoton } from '@/lib/administracion-escolar/agrupar-avisos';
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import { enviarWhatsApp, enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
-import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/plantillas';
+import { resolverPlantilla, parametrosDeAviso } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
@@ -35,6 +35,12 @@ import { AL_CANCELAR } from '@/lib/config/suscripcion';
  * `?dry=1` fuerza el simulacro aunque esté encendido, para poder inspeccionar
  * qué saldría hoy sin mandarlo.
  *
+ * UN MENSAJE POR FAMILIA. Los cargos de un mismo responsable de pago que caen el
+ * mismo día, en el mismo momento y por el mismo canal salen juntos (ver
+ * `agruparPendientes`): tres hermanos son un correo, un WhatsApp y un SMS, no
+ * nueve. Por eso aquí todo lo que se cuenta —el lote, la cuota, `enviados`— son
+ * MENSAJES; `cobrosAvisados` es la cuenta por cargo.
+ *
  * HORARIO. En `vercel.json` corre cada quince minutos entre las 12 y las 15
  * UTC, que en la República Dominicana (UTC-4, sin horario de verano) son las
  * 8:00 y las 11:45 de la mañana. La primera tanda sale a las 8 en punto y las
@@ -55,6 +61,8 @@ export async function GET(req: NextRequest) {
 
   /**
    * El tamaño de la tanda y el ritmo dentro de ella.
+   *
+   * Son mensajes, no cargos: una familia con tres hijos gasta uno por canal.
    *
    * No se manda el día entero de una vez: un colegio grande son más de mil
    * mensajes y WhatsApp lee esa ráfaga como abuso. Se manda de a poco, y lo
@@ -138,13 +146,14 @@ export async function GET(req: NextRequest) {
       pausaMs,
       restantePorCanal: cuota.restante,
       enviar: {
-        correo: (destino, texto, p) => enviarAvisoCobroEmail({
+        correo: (destino, texto, m) => enviarAvisoCobroEmail({
           email: destino,
           colegio,
-          asunto: p.aviso === 'al-vencer' ? 'Tu factura venció hoy'
-            : p.aviso === 'al-emitir' ? 'Tienes una factura nueva'
-            : 'Tu factura está próxima a vencer',
+          asunto: asuntoDeAviso(m.aviso, m.miembros.length),
           texto,
+          // La lista de varios cobros necesita sus saltos de línea. El de un
+          // solo cobro sale como siempre.
+          multilinea: m.miembros.length > 1,
         }),
         /**
          * WhatsApp va por PLANTILLA, no por texto libre.
@@ -159,13 +168,16 @@ export async function GET(req: NextRequest) {
          * texto libre a propósito: dentro de la ventana sí llega, y es mejor
          * que no mandar nada mientras se configura.
          */
-        whatsapp: async (destino, texto, p, enlace) => {
+        whatsapp: async (destino, texto, m, enlace) => {
           // Al CRM siempre con código de país: `8293596602` y `18293596602`
           // le abren DOS conversaciones del mismo padre.
           const numero = aE164(destino) ?? destino;
 
+          // Todos los cobros de un mensaje comparten hueco (así se agrupan), y
+          // con él la mora que decide la plantilla: basta mirar el primero.
+          const { fila: base } = m.miembros[0];
           const plantilla = await resolverPlantilla(
-            teamId, p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia,
+            teamId, m.aviso, base.cobraMora, base.moraDiasGracia,
           );
           /**
            * Sin plantilla asignada, o con una que lleva botón, se manda texto
@@ -210,26 +222,21 @@ export async function GET(req: NextRequest) {
           const r = await enviarWhatsAppPlantilla(teamId, numero, {
             nombre,
             idioma: plantilla.idioma,
-            // El enlace del padre, que es lo que rellena la {{1}} del botón.
-            botonUrl: necesitaBoton ? enlace : null,
+            // La {{1}} del botón es el FINAL de la URL (`…/pagar/{{1}}`): el
+            // token y la factura, no la URL entera.
+            botonUrl: necesitaBoton && enlace ? sufijoDeBoton(enlace) : null,
+            // La MISMA plantilla aprobada con las variables combinadas cuando
+            // son varios cobros (alumno «Ana y Pedro», concepto «Colegiatura
+            // (2)», monto el total). Con uno solo, los valores de siempre.
+            // La fecha del recargo es la del RECARGO y no la del vencimiento,
+            // igual que en `redactar()`: decirle que pague «antes del 3»
+            // cuando el recargo entra el 8 le quita cinco días que tiene.
             parametros: parametrosDeAviso(
-              huecoDe(p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia),
-              {
+              m.hueco,
+              datosWhatsAppDeGrupo(m.miembros, {
                 colegio,
-                concepto: p.fila.concepto,
-                estudiante: p.fila.estudiante,
-                monto: pesos(p.fila.saldoCentavos),
                 telefonoColegio: telefonos.get(teamId) ?? '',
-                fechaLimite: p.fila.fechaVencimiento
-                  ? enLetra(p.fila.fechaVencimiento) : null,
-                diasGracia: p.fila.moraDiasGracia,
-                // La fecha del RECARGO, no la del vencimiento — igual que en
-                // `redactar()`. Decirle que pague «antes del 3» cuando el
-                // recargo entra el 8 le quita cinco días que tiene.
-                fechaRecargo: p.fila.fechaVencimiento
-                  ? enLetra(sumarDias(p.fila.fechaVencimiento, Math.max(0, p.fila.moraDiasGracia)))
-                  : null,
-              },
+              }),
             ),
           });
           return r.messageId ?? null;
@@ -239,8 +246,9 @@ export async function GET(req: NextRequest) {
     });
 
     // Solo cuentan los que de verdad salieron: un tutor sin correo no gasta
-    // cupo de la tanda, porque tampoco gastó una llamada al proveedor.
-    presupuesto -= envios.filter((e) => e.ok).length;
+    // cupo de la tanda, porque tampoco gastó una llamada al proveedor. Y se
+    // cuentan MENSAJES: tres hermanos en un correo gastan uno.
+    presupuesto -= mensajesEnviados(envios);
 
     /**
      * Antes de terminar, preguntar por los acuses de las corridas anteriores.
@@ -295,7 +303,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const enviados = todos.filter((e) => e.ok).length;
+  const cobrosAvisados = todos.filter((e) => e.ok).length;
+  // Mensajes distintos, no filas: en simulacro es lo que SALDRÍA.
+  const enviados = mensajesEnviados(todos);
   return NextResponse.json({
     hoy,
     dryRun,
@@ -306,6 +316,9 @@ export async function GET(req: NextRequest) {
     equipos: equipos.length,
     avisos: resumen.reduce((n, r) => n + r.pendientes, 0),
     enviados,
+    // Cuántos cargos cubrieron esos mensajes. Igual a `enviados` cuando nadie
+    // tiene hermanos; mayor cuando una familia recibió un solo mensaje por varios.
+    cobrosAvisados,
     fallidos: fallos.length,
     sinCupo: sinCupo.length,
     // Colegios que hoy no recibieron nada por no tener plan vivo. Va explícito

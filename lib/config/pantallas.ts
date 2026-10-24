@@ -79,6 +79,10 @@ export const PANTALLAS: PantallaDef[] = [
   esc({ id: 'escolar-documentos',    label: 'Documentos', href: '/escolar/documentos', descripcion: 'Documentos requeridos y formularios' }),
   esc({ id: 'escolar-responsables',  label: 'Responsables', href: '/escolar/responsables', rutas: ['/escolar/cobrar-grupo'], descripcion: 'Las familias que pagan y lo que deben' }),
   esc({ id: 'escolar-pagos',         label: 'Pagos', href: '/escolar/pagos', descripcion: 'Pagos aplicados y comprobantes por aprobar' }),
+  // Pantalla propia y no una subruta de Responsables (como Cobrar a un grupo):
+  // crea documentos, y el dueño puede querer quitársela a un rol que sí ve las
+  // familias.
+  esc({ id: 'escolar-facturar',      label: 'Facturar por lote', href: '/escolar/facturar', descripcion: 'Crear en borrador las facturas de muchos alumnos de una vez' }),
   esc({ id: 'escolar-avisos',        label: 'Avisos', href: '/escolar/avisos', descripcion: 'Recordatorios de cobro que se enviaron' }),
   esc({ id: 'escolar-configuracion', label: 'Configuración', href: '/escolar/configuracion', rutas: ['/escolar/sigerd', '/escolar/personal'], descripcion: 'Períodos, cursos, tarifas y conceptos' }),
 

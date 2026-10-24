@@ -11,6 +11,7 @@
  *   ECF_VOID              — anulación enviada a la DGII
  *   DGII_AUTH             — autenticación exitosa contra la DGII
  *   DGII_AUTH_FAIL        — autenticación fallida contra la DGII
+ *   ESCOLAR_MATRICULA_MOVIDA_SIGERD — matrícula movida a la sección que dice SIGERD
  *
  * Uso:
  *   logAudit({ teamId, userId, actor: user.email, action: 'CERT_UPLOAD' });
@@ -73,6 +74,14 @@ export type AuditAction =
   // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
   // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
   | 'ESCOLAR_AVISO_CORRIDA'
+  // «Servicios por alumno»: conceptos agregados o quitados por lote a una
+  // matrícula. `resource` = `matricula:<id>`; meta con lo agregado, lo quitado
+  // y cuántos cargos sin facturar se anularon.
+  | 'ESCOLAR_CONCEPTOS_LOTE'
+  // «Facturar por lote»: una tanda de facturas en borrador creada a mano. El
+  // cron no deja rastro de quién; esto sí, porque aquí hay una persona que
+  // eligió alumnos, conceptos y corte. El `meta` lleva cuántas y por cuánto.
+  | 'ESCOLAR_FACTURAS_LOTE'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
@@ -81,7 +90,12 @@ export type AuditAction =
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
-  | 'SUSCRIPCION_AVISO';
+  | 'SUSCRIPCION_AVISO'
+  // «Mover a la sección de SIGERD»: la matrícula de un alumno pasó de un curso
+  // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
+  // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
+  // `resource` es `matricula:<id>` y el meta lleva curso de origen y de destino.
+  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD';
 
 export interface AuditParams {
   teamId:    number;

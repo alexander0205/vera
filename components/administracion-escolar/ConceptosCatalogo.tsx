@@ -346,7 +346,7 @@ export function ConceptosCatalogo() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+    <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
 
       {/* ── Lista ──────────────────────────────────────────────────────── */}
       <div className="rounded-lg border border-gray-200 bg-white">
@@ -385,6 +385,12 @@ export function ConceptosCatalogo() {
               <span title={c.nombre}
                 className={`min-w-0 flex-1 break-words leading-snug ${c.activo ? '' : 'text-gray-400 line-through'}`}>
                 {c.nombre}
+                {c.categoria && (
+                  <span className="ml-1.5 whitespace-nowrap rounded bg-zero-50 px-1.5 py-px align-middle text-[10px] font-medium text-zero-700">{c.categoria}</span>
+                )}
+                {c.opcional && (
+                  <span className="ml-1.5 whitespace-nowrap rounded bg-gray-100 px-1.5 py-px align-middle text-[10px] font-medium text-gray-500">opcional</span>
+                )}
               </span>
               {c.frecuencia !== 'unico' && (
                 <Repeat className="h-3.5 w-3.5 shrink-0 opacity-60" aria-label={ETIQUETA_FRECUENCIA[c.frecuencia]} />
@@ -421,6 +427,7 @@ export function ConceptosCatalogo() {
         </div>
       ) : (
         <ConceptoDetalle
+          categorias={[...new Set(conceptos.map((c) => c.categoria).filter((c): c is string => !!c))]}
           borrador={borrador}
           setBorrador={setBorrador}
           guardando={guardando}

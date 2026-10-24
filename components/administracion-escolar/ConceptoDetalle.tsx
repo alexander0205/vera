@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import {
   CheckCircle2, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
@@ -18,6 +19,7 @@ import {
   type TipoDeConcepto,
 } from '@/lib/administracion-escolar/tipo-concepto';
 import { moduleUrl } from '@/lib/config/modules';
+import { precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
 import { CalendarioCuotas, type ApiCalendario } from './CalendarioCuotas';
 
 /**
@@ -41,6 +43,12 @@ export interface Concepto {
   frecuencia: Frecuencia;
   activo: boolean;
   admiteBeca: boolean;
+  /** Llega desmarcado al matricular; se marca solo a quien lo usa. */
+  opcional: boolean;
+  /** El precio de Tarifas es por cuota (true) o el total del año (false). null = por el tipo. */
+  precioPorCuota: boolean | null;
+  /** Categoría propia del colegio. null = la del tipo. */
+  categoria: string | null;
   cobraMora: boolean;
   diaEmision: number | null;
   diasParaPago: number | null;
@@ -63,6 +71,9 @@ interface EstadoWhatsApp {
   configurado: boolean;
   conectado: boolean;
   numeroWhatsapp: string | null;
+  /** Por dónde saldría hoy un mensaje (Zero o el colegio); null = por ninguno. */
+  efectivo?: 'zero' | 'propio' | null;
+  listo?: boolean;
 }
 
 /**
@@ -269,9 +280,11 @@ function Paso({ n, titulo, extra }: { n: number; titulo: string; extra?: React.R
 }
 
 export function ConceptoDetalle({
-  borrador, setBorrador, guardando, error, onGuardar, onBorrar, calendario,
+  borrador, setBorrador, guardando, error, onGuardar, onBorrar, calendario, categorias = [],
 }: {
   borrador: Concepto;
+  /** Las categorías propias que ya usa el colegio en otros conceptos. */
+  categorias?: string[];
   setBorrador: (f: (b: Concepto | null) => Concepto | null) => void;
   guardando: boolean;
   error: string | null;
@@ -301,13 +314,25 @@ export function ConceptoDetalle({
    * que hace que una evaluación trimestral deje de nacer descontando beca.
    */
   const cambiarTipo = (tipo: TipoDeConcepto) =>
-    setBorrador((b) => (b ? { ...b, tipo, admiteBeca: becaPorDefecto(tipo) } : b));
+    setBorrador((b) => (b ? { ...b, tipo, categoria: null, admiteBeca: becaPorDefecto(tipo) } : b));
+
+  /**
+   * Una categoría propia («Servicios», «Transporte»…) se cobra como «Otro
+   * cobro»: es un nombre para ordenar y sacar reportes, no cambia la regla.
+   * Cómo se cobra lo dicen el precio por cuota, la beca y la mora.
+   */
+  const elegirCategoria = (categoria: string) =>
+    setBorrador((b) => (b ? { ...b, tipo: 'otro', categoria, admiteBeca: b.tipo === 'otro' ? b.admiteBeca : becaPorDefecto('otro') } : b));
+  const [nuevaCategoria, setNuevaCategoria] = useState<string | null>(null);
+  const todasLasCategorias = [...new Set([...categorias, ...(borrador.categoria ? [borrador.categoria] : [])])]
+    .sort((a, b) => a.localeCompare(b, 'es'));
 
   // Estado de los canales que dependen de una cuenta enlazada. Solo hace falta
   // saber si se pueden ofrecer, no reconciliar nada.
   const { data: whatsapp } = useSWR<EstadoWhatsApp>('/api/whatsapp/estado', traerEstado);
   const { data: sms } = useSWR<EstadoSms>('/api/sms/estado', traerSms);
-  const whatsappListo = whatsapp?.conectado === true;
+  // Listo = hay por dónde salir: el número del colegio o el de Zero, según lo elegido en Avisos.
+  const whatsappListo = whatsapp?.listo ?? whatsapp?.conectado === true;
   const smsListo = sms?.habilitado === true;
 
   /**
@@ -401,7 +426,7 @@ export function ConceptoDetalle({
   const diaRepetido = diasConAviso.find((d, i) => diasConAviso.indexOf(d) !== i);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+    <div className="grid gap-4 xl:grid-cols-[1fr_300px] 2xl:grid-cols-[1fr_340px]">
       <div className="space-y-0 rounded-lg border border-gray-200 bg-white">
 
         {/* ── 1. Qué es y cada cuánto ───────────────────────────────────── */}
@@ -421,12 +446,38 @@ export function ConceptoDetalle({
                 colegiatura. */}
             <div className="w-full min-w-0 space-y-1.5 sm:w-56">
               <Label htmlFor="concepto-tipo">¿Qué es este cobro?</Label>
-              <NativeSelect id="concepto-tipo" value={tipoDelBorrador}
-                onChange={(e) => cambiarTipo(e.target.value as TipoDeConcepto)}>
-                {TIPOS_DE_CONCEPTO.map((t) => (
-                  <option key={t} value={t}>{ETIQUETA_TIPO[t]}</option>
-                ))}
-              </NativeSelect>
+              {nuevaCategoria === null ? (
+                <NativeSelect id="concepto-tipo" value={borrador.categoria ? `cat:${borrador.categoria}` : tipoDelBorrador}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '__nueva') setNuevaCategoria('');
+                    else if (v.startsWith('cat:')) elegirCategoria(v.slice(4));
+                    else cambiarTipo(v as TipoDeConcepto);
+                  }}>
+                  {TIPOS_DE_CONCEPTO.map((t) => (
+                    <option key={t} value={t}>{ETIQUETA_TIPO[t]}</option>
+                  ))}
+                  {todasLasCategorias.length > 0 && (
+                    <optgroup label="Del colegio">
+                      {todasLasCategorias.map((c) => <option key={c} value={`cat:${c}`}>{c}</option>)}
+                    </optgroup>
+                  )}
+                  <option value="__nueva">+ Agregar categoría…</option>
+                </NativeSelect>
+              ) : (
+                <div className="flex gap-1.5">
+                  <Input autoFocus value={nuevaCategoria} maxLength={60} placeholder="Ej.: Servicios"
+                    onChange={(e) => setNuevaCategoria(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && nuevaCategoria.trim()) { e.preventDefault(); elegirCategoria(nuevaCategoria.trim()); setNuevaCategoria(null); }
+                      if (e.key === 'Escape') setNuevaCategoria(null);
+                    }} />
+                  <Button type="button" size="sm" className="h-9" disabled={!nuevaCategoria.trim()}
+                    onClick={() => { elegirCategoria(nuevaCategoria.trim()); setNuevaCategoria(null); }}>
+                    Agregar
+                  </Button>
+                </div>
+              )}
             </div>
             <Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
               className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600">
@@ -442,6 +493,21 @@ export function ConceptoDetalle({
               consigo un calendario y un día de emisión que no significan nada
               para un cobro que ocurre una vez. */}
           <div className="mt-3 divide-y divide-gray-100 rounded-lg border border-gray-200">
+            {/* Si llega marcado al matricular. La inscripción y la colegiatura
+                las paga todo el mundo; el uniforme o el transporte no, y
+                desmarcarlos alumno por alumno es peor que marcarlos a quien toca. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+              <Interruptor activo={!borrador.opcional} etiqueta="Obligatorio al matricular"
+                onCambiar={(v) => setBorrador((b) => b && ({ ...b, opcional: !v }))} />
+              <span className="min-w-[10rem] flex-1 text-sm">
+                <span className="block text-gray-900">Obligatorio al matricular</span>
+                <span className="block text-xs text-gray-500">
+                  {borrador.opcional
+                    ? 'Opcional: llega sin marcar al matricular y se marca solo a quien lo use.'
+                    : 'Llega marcado al matricular a todos los de su grado. Se puede quitar a un alumno si no le toca.'}
+                </span>
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
               <Interruptor activo={periodico} etiqueta="Se cobra varias veces al año"
                 onCambiar={(v) => setBorrador((b) => b && ({
@@ -472,21 +538,6 @@ export function ConceptoDetalle({
                 colegiatura, un concepto nuevo que se repite nace «Otro cobro»:
                 si era la colegiatura y nadie tocó el desplegable, 2.800 al mes
                 pasaban a 280 en silencio. Por eso, con «Otro cobro», ámbar. */}
-            {periodico && tipoDelBorrador !== 'mensualidad' && (
-              <div className="px-3 py-2.5">
-                <p className={tipoDelBorrador === 'otro'
-                  ? 'rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800'
-                  : 'text-xs text-gray-500'}>
-                  La tarifa que pongas en Tarifas es el <strong>total del año</strong> y se reparte entre
-                  las cuotas: con 2,800 y 10 cuotas, cada una sale de 280.
-                  {tipoDelBorrador === 'otro' && (
-                    <> Si es la colegiatura que se paga cada mes, elige <strong>«Colegiatura»</strong> en
-                    «¿Qué es este cobro?»: así cada cuota cobra la tarifa entera.</>
-                  )}
-                </p>
-              </div>
-            )}
-
             {periodico && (
               <div className="grid gap-3 px-3 py-2.5 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -529,7 +580,7 @@ export function ConceptoDetalle({
             <Paso n={paso.calendario} titulo="El calendario que genera" />
             <CalendarioCuotas conceptoId={borrador.id} nombre={borrador.nombre}
               frecuencia={borrador.frecuencia} api={calendario}
-              porCuota={tipoDelBorrador === 'mensualidad'}
+              porCuota={precioEsPorCuota({ tipo: tipoDelBorrador, precioPorCuota: borrador.precioPorCuota })}
               diaEmision={diaEmision} diasParaPago={borrador.diasParaPago} />
           </div>
         )}
@@ -766,10 +817,10 @@ export function ConceptoDetalle({
                     Enviar por WhatsApp
                     <span className="block text-xs text-gray-500">
                       {whatsappListo
-                        ? `Solo los dos primeros avisos${whatsapp?.numeroWhatsapp ? ` · ${whatsapp.numeroWhatsapp}` : ''}`
+                        ? `Solo los dos primeros avisos · ${whatsapp?.efectivo === 'zero' ? 'por el WhatsApp de Zero' : `por el del colegio${whatsapp?.numeroWhatsapp ? ` · ${whatsapp.numeroWhatsapp}` : ''}`}`
                         : (
                           <>
-                            Falta conectar la cuenta en{' '}
+                            Elige cómo sale el WhatsApp en{' '}
                             <a href="/escolar/configuracion" className="underline hover:text-zero-600">
                               Configuración escolar › Avisos
                             </a>.
@@ -818,8 +869,8 @@ export function ConceptoDetalle({
                   concepto sigue diciendo que manda por WhatsApp y no manda. */}
               {borrador.avisoWhatsapp && !whatsappListo && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Este concepto tiene WhatsApp encendido, pero la cuenta no está conectada. No saldrá por ahí
-                  hasta enlazarla en Configuración escolar › Avisos.
+                  Este concepto tiene WhatsApp encendido, pero el colegio no tiene por dónde enviarlo. No saldrá
+                  hasta elegir «WhatsApp de Zero» o conectar «Mi WhatsApp» en Configuración escolar › Avisos.
                 </p>
               )}
 

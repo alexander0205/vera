@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BellRing, Coins, DownloadCloud, Landmark, Layers, Tag } from 'lucide-react';
+import { BellRing, Coins, DownloadCloud, Landmark, Layers, Package, Tag } from 'lucide-react';
 
 /**
  * Sub-navegación de Configuración escolar, con rutas de verdad.
@@ -23,6 +23,8 @@ export const TABS = [
     hint: 'Qué se cobra: tipo, ciclo de cobro y recordatorios.' },
   { href: '/escolar/configuracion/tarifas', label: 'Tarifas', icon: Coins,
     hint: 'Cuánto cuesta cada concepto por servicio, grado o sección.' },
+  { href: '/escolar/configuracion/paquetes', label: 'Paquetes', icon: Package,
+    hint: 'Grupos de conceptos con nombre para matricular de un clic: horario regular, extendido…' },
   // "Documentos" se mudó a /escolar/documentos (menú principal, junto al
   // constructor de formularios): se usa mucho más seguido que el resto de
   // esta configuración y no tenía sentido dejarlo enterrado en una pestaña.

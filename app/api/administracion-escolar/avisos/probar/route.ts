@@ -7,7 +7,11 @@ import { rateLimitDb } from '@/lib/rate-limit';
 import { logAudit, getIp } from '@/lib/audit';
 import { aGsm7 } from '@/lib/sms/mensaje';
 import { enviarSms } from '@/lib/sms/enviar';
-import { enviarWhatsApp } from '@/lib/whatsapp/enviar';
+import { enviarWhatsApp, enviarWhatsAppPlantilla, WhatsAppPlantillaRechazadaError } from '@/lib/whatsapp/enviar';
+import { resolverPlantilla, parametrosDeAviso } from '@/lib/whatsapp/plantillas';
+import { CRM_SOPORTA_BOTONES, listarMensajes } from '@/lib/whatsapp/client';
+import { resolverRemitente } from '@/lib/whatsapp/config';
+import { aE164 } from '@/lib/whatsapp/telefono';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import type { Canal } from '@/lib/administracion-escolar/ciclo-cobro';
 
@@ -78,8 +82,46 @@ export async function POST(req: NextRequest) {
         email: destino, colegio, asunto: 'Prueba de envío', texto,
       });
     } else if (canal === 'whatsapp') {
-      const res = await enviarWhatsApp(teamId, destino, texto);
-      detalle = { messageId: res.messageId };
+      // Se normaliza AQUÍ y se rechaza lo imposible: antes salía tal cual y un
+      // dígito de menos terminaba en «Enviado» hacia un número inexistente.
+      const telefono = aE164(destino);
+      if (!telefono) {
+        return NextResponse.json({
+          error: 'Ese número no está completo. Un número de RD lleva 10 dígitos: 809, 829 u 849 y siete más (ej. +1 829 359 6602).',
+        }, { status: 400 });
+      }
+      // Con la plantilla del aviso «ya está lista la factura», si el colegio
+      // tiene una asignada: es lo que de verdad le llega al padre, y una
+      // plantilla aprobada no depende de la ventana de 24 h. El texto libre
+      // solo llega si esa persona le escribió al número ese día; con él, la
+      // prueba decía «Enviado» y no llegaba nada.
+      const plantilla = await resolverPlantilla(teamId, 'al-emitir', false, 0);
+      const usable = plantilla && !(plantilla.conBoton && !CRM_SOPORTA_BOTONES);
+      let res: { messageId: string; conversationId: string } | null = null;
+      let via: 'plantilla' | 'texto' = 'texto';
+      if (usable) {
+        try {
+          res = await enviarWhatsAppPlantilla(teamId, telefono, {
+            nombre: plantilla.nombre,
+            idioma: plantilla.idioma,
+            parametros: parametrosDeAviso(plantilla.aviso, {
+              colegio, telefonoColegio: '', concepto: 'PRUEBA (no es un cobro)', estudiante: 'prueba de envío',
+              monto: 'RD$0.00', fechaLimite: 'hoy', diasGracia: 0, fechaRecargo: null,
+            }),
+            botonUrl: plantilla.conBoton ? 'prueba' : null,
+          });
+          via = 'plantilla';
+        } catch (e) {
+          // Aún sin aprobar en Meta, o con otras variables: se prueba igual
+          // con texto libre y se dice cuál salió.
+          if (!(e instanceof WhatsAppPlantillaRechazadaError)) throw e;
+        }
+      }
+      if (!res) res = await enviarWhatsApp(teamId, telefono, texto);
+      detalle = {
+        messageId: res.messageId, conversationId: res.conversationId,
+        telefono: `+${telefono}`, via, plantilla: via === 'plantilla' ? plantilla!.nombre : null,
+      };
     } else {
       // Mismo trato que en el envío real: sin acentos, porque una sola `í`
       // parte el SMS en tres. Si la prueba fuera con acentos, el mensaje de
@@ -110,5 +152,31 @@ export async function POST(req: NextRequest) {
       },
       { status: 502 },
     );
+  }
+}
+
+/**
+ * GET ?mensaje=<id>&conversacion=<id> → si el WhatsApp de prueba LLEGÓ.
+ *
+ * El 201 del envío solo dice que Meta aceptó la petición; la entrega (o el
+ * fallo, con su código: 131047 fuera de las 24 h, 131026 número sin WhatsApp)
+ * llega segundos después por el webhook del CRM. La pantalla pregunta aquí
+ * cada dos segundos y enseña lo que pasó de verdad.
+ */
+export async function GET(req: NextRequest) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
+  if (!auth.ok) return auth.response;
+  const mensaje = req.nextUrl.searchParams.get('mensaje') ?? '';
+  const conversacion = req.nextUrl.searchParams.get('conversacion') ?? '';
+  if (!mensaje || !conversacion) return NextResponse.json({ error: 'Falta el mensaje' }, { status: 400 });
+
+  const remitente = await resolverRemitente(auth.teamId);
+  if (!remitente) return NextResponse.json({ error: 'WhatsApp no está conectado' }, { status: 409 });
+  try {
+    const { messages } = await listarMensajes(remitente.apiKey, { conversationId: conversacion, limit: 10 });
+    const m = messages.find((x) => x.id === mensaje);
+    return NextResponse.json({ estado: m?.deliveryStatus ?? null, error: m?.errorDelivery ?? null });
+  } catch {
+    return NextResponse.json({ estado: null, error: null });
   }
 }

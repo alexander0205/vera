@@ -55,8 +55,9 @@ export async function matricularLote(params: {
   cursoId: unknown;
   estudianteIds: number[];
   /**
-   * Conceptos que se cobran. `'todos'` = todos los que tienen tarifa en la
-   * sección, que es lo que el selector de plan deja marcado por defecto.
+   * Conceptos que se cobran. `'todos'` = los obligatorios con tarifa en la
+   * sección (los opcionales no), que es lo que el selector de plan deja
+   * marcado por defecto.
    */
   conceptos: number[] | 'todos';
   fechaInscripcion?: string | null;
@@ -97,7 +98,8 @@ export async function matricularLote(params: {
     ? await contextoDeSeccion(teamId, periodoIdOk, cursoIdOk)
     : null;
   const plan = ctx ? await armarPlanDeCobro(teamId, ctx, inscripcion) : [];
-  const pedidos = todos ? [...new Set(plan.map((l) => l.conceptoId))] : pedidosCrudos;
+  // «Todos» es lo que el selector deja marcado por defecto: los obligatorios.
+  const pedidos = todos ? [...new Set(plan.filter((l) => !l.opcional).map((l) => l.conceptoId))] : pedidosCrudos;
 
   // Lo que va a deber cada alumno del grupo: el mismo total para todos, porque
   // comparten sección y fecha. Se enseña en la revisión, y sale de la misma
