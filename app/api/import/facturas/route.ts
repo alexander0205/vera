@@ -25,6 +25,7 @@ import {
   decodeBuffer, parseCsv, pick, normKey, toCents, toIsoDate, isPlaceholderRnc,
   type ImportRow, type ImportResult,
 } from '@/lib/import/csv';
+import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
 
 interface LineaData {
   nombre: string;
@@ -178,10 +179,14 @@ export async function POST(req: NextRequest) {
       }
 
       // 3. Insertar facturas históricas.
+      // Las filas sin cliente en la hoja van a «CONSUMIDOR FINAL», no a NULL.
+      const sinDueno = parsed.some(f => !(f.clienteRnc && clientByRnc.get(f.clienteRnc)) && !clientByName.get(normKey(f.clienteNombre)));
+      const consumidorFinalId = sinDueno ? await clienteDeLaFactura(db as never, { teamId }) : null;
       const docValues = parsed.map(f => {
         let clientId: number | null = null;
         if (f.clienteRnc) clientId = clientByRnc.get(f.clienteRnc) ?? null;
         if (clientId == null) clientId = clientByName.get(normKey(f.clienteNombre)) ?? null;
+        if (clientId == null) clientId = consumidorFinalId;
         return {
           teamId,
           clientId,
