@@ -16,6 +16,7 @@ import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/c
 import {
   PlanCobroSelector, aplicarPreciosPropios, type LineaPlan,
 } from '@/components/administracion-escolar/PlanCobroSelector';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Matricular de una vez a los alumnos que SIGERD ya tiene en su grado y
@@ -539,8 +540,10 @@ export default function MatricularDesdeSigerd() {
                 <span className="font-medium">{resumen.sinResponsable} alumno(s) sin responsable de pago.</span>{' '}
                 Se matriculan igual, pero sus cargos no se facturan ni les llegan avisos hasta asignarles uno en su ficha.
               </p>
-              <button type="button" onClick={() => setFiltro('sin-responsable')}
-                className="ml-auto shrink-0 text-xs font-medium text-amber-800 hover:underline">Ver</button>
+              <Tooltip text="Filtra la lista a los alumnos que no tienen responsable de pago">
+                <button type="button" onClick={() => setFiltro('sin-responsable')}
+                  className="ml-auto shrink-0 text-xs font-medium text-amber-800 hover:underline">Ver</button>
+              </Tooltip>
             </div>
           )}
           {omitidos.length > 0 && (
@@ -676,9 +679,9 @@ export default function MatricularDesdeSigerd() {
                       {plan.lineas.map((l) => {
                         const activo = cobraEnSeccion(l, cambiados);
                         return (
-                          <button key={l.conceptoId} type="button"
+                          <Tooltip key={l.conceptoId} text={activo ? 'Quitar a toda la sección' : l.opcional ? 'Opcional: cobrar a toda la sección' : 'Volver a cobrar a toda la sección'}>
+                          <button type="button"
                             onClick={() => alternarConceptoSeccion(completo, l)}
-                            title={activo ? 'Quitar a toda la sección' : l.opcional ? 'Opcional: cobrar a toda la sección' : 'Volver a cobrar a toda la sección'}
                             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                               activo
                                 ? 'border-zero-200 bg-white text-gray-800 hover:border-zero-300'
@@ -689,6 +692,7 @@ export default function MatricularDesdeSigerd() {
                               {fmtDOP(l.montoCentavos)}{l.cuotas.length > 1 ? (l.precioPorCuota ? '/cuota' : ' en el año') : ''}
                             </span>
                           </button>
+                          </Tooltip>
                         );
                       })}
                     </div>
@@ -734,29 +738,37 @@ export default function MatricularDesdeSigerd() {
                         )}
                         <div className="flex shrink-0 items-center gap-1">
                           {sale ? (
-                            <button type="button" onClick={() => alternarFuera([e.id], false)}
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zero-700 hover:bg-zero-50">
-                              <RotateCcw className="h-3.5 w-3.5" />Incluir
-                            </button>
+                            <Tooltip text="Vuelve a incluirlo en esta matrícula">
+                              <button type="button" onClick={() => alternarFuera([e.id], false)}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zero-700 hover:bg-zero-50">
+                                <RotateCcw className="h-3.5 w-3.5" />Incluir
+                              </button>
+                            </Tooltip>
                           ) : (
                             <>
-                              <button type="button" onClick={() => setEditando({ alumno: e, grupo: completo })}
-                                disabled={plan?.estado !== 'listo'}
-                                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-zero-300 hover:text-zero-700 disabled:opacity-40">
-                                <Pencil className="h-3.5 w-3.5" />Editar
-                              </button>
-                              {a && (
-                                <button type="button" onClick={() => deshacerAjuste(e.id)}
-                                  title="Deshacer los cambios: vuelve a lo de su sección" aria-label={`Deshacer los cambios de ${e.nombre}`}
-                                  className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-                                  <RotateCcw className="h-4 w-4" />
+                              <Tooltip text="Cambia el plan de cobro solo para este alumno; no toca a su sección">
+                                <button type="button" onClick={() => setEditando({ alumno: e, grupo: completo })}
+                                  disabled={plan?.estado !== 'listo'}
+                                  className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:border-zero-300 hover:text-zero-700 disabled:opacity-40">
+                                  <Pencil className="h-3.5 w-3.5" />Editar
                                 </button>
+                              </Tooltip>
+                              {a && (
+                                <Tooltip text="Deshace sus cambios: vuelve a lo de su sección">
+                                  <button type="button" onClick={() => deshacerAjuste(e.id)}
+                                    aria-label={`Deshacer los cambios de ${e.nombre}`}
+                                    className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                                    <RotateCcw className="h-4 w-4" />
+                                  </button>
+                                </Tooltip>
                               )}
-                              <button type="button" onClick={() => alternarFuera([e.id], true)}
-                                title="No matricular a este alumno ahora" aria-label={`No matricular a ${e.nombre}`}
-                                className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
-                                <UserMinus className="h-4 w-4" />
-                              </button>
+                              <Tooltip text="No matricular a este alumno ahora">
+                                <button type="button" onClick={() => alternarFuera([e.id], true)}
+                                  aria-label={`No matricular a ${e.nombre}`}
+                                  className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
+                                  <UserMinus className="h-4 w-4" />
+                                </button>
+                              </Tooltip>
                             </>
                           )}
                         </div>
@@ -906,11 +918,13 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
         <td className="py-1.5 pr-2" style={{ paddingLeft: 8 + Math.max(hondura - 1, 0) * 16 }}>
           <div className="flex min-w-0 items-center gap-1.5">
             {plegable && clave ? (
-              <button type="button" onClick={() => plegar(clave)} aria-label={abierta ? `Plegar ${etiqueta}` : `Desplegar ${etiqueta}`}
-                aria-expanded={abierta}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-gray-700">
-                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${abierta ? 'rotate-90' : ''}`} />
-              </button>
+              <Tooltip text={abierta ? 'Pliega lo que hay debajo de esta fila' : 'Despliega lo que hay debajo de esta fila'}>
+                <button type="button" onClick={() => plegar(clave)} aria-label={abierta ? `Plegar ${etiqueta}` : `Desplegar ${etiqueta}`}
+                  aria-expanded={abierta}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-gray-700">
+                  <ChevronRight className={`h-3.5 w-3.5 transition-transform ${abierta ? 'rotate-90' : ''}`} />
+                </button>
+              </Tooltip>
             ) : <span className="w-5 shrink-0" />}
             <input type="checkbox" checked={todos}
               ref={(el) => { if (el) el.indeterminate = t.dentro > 0 && !todos; }}
@@ -1029,10 +1043,12 @@ function EditorAlumno({
           <h2 className="truncate text-base font-semibold text-gray-900">{alumno.nombre}</h2>
           <p className="text-xs text-gray-500">{titulo(grupo)}{grupo.tanda ? ` · ${grupo.tanda}` : ''}</p>
         </div>
-        <button type="button" onClick={onCerrar} aria-label="Cerrar"
-          className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-          <X className="h-4 w-4" />
-        </button>
+        <Tooltip text="Cierra esta ventana">
+          <button type="button" onClick={onCerrar} aria-label="Cerrar"
+            className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
@@ -1062,15 +1078,19 @@ function EditorAlumno({
 
       <div className="flex flex-col-reverse gap-2 border-t border-gray-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-1">
-          <button type="button" onClick={onSacar}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
-            <UserMinus className="h-4 w-4" />No matricular ahora
-          </button>
-          {conCambios && (
-            <button type="button" onClick={onRestablecer}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100">
-              <RotateCcw className="h-4 w-4" />Lo de su sección
+          <Tooltip text="Lo deja fuera de esta matrícula por ahora">
+            <button type="button" onClick={onSacar}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
+              <UserMinus className="h-4 w-4" />No matricular ahora
             </button>
+          </Tooltip>
+          {conCambios && (
+            <Tooltip text="Vuelve a los cobros y precios de su sección; quita sus cambios">
+              <button type="button" onClick={onRestablecer}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100">
+                <RotateCcw className="h-4 w-4" />Lo de su sección
+              </button>
+            </Tooltip>
           )}
         </div>
         <div className="flex gap-2">

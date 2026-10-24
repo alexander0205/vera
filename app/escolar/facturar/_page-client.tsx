@@ -20,6 +20,7 @@ import {
   type OmitidoPlan, type PlanLote,
 } from '@/lib/administracion-escolar/facturar-lote';
 import { fmtDOP } from '@/lib/utils/format';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * El cajón de «Ver factura» monta la pantalla entera de una factura, de las más
@@ -363,11 +364,13 @@ export default function FacturarLoteClient() {
                   : `Hay ${totalPendiente.cargos} ${totalPendiente.cargos === 1 ? 'cargo' : 'cargos'} sin factura (${fmtDOP(totalPendiente.centavos)}) de ${totalPendiente.alumnos} ${totalPendiente.alumnos === 1 ? 'alumno' : 'alumnos'}. Marca a todos los alumnos y todos los conceptos, con corte hoy, y te muestra la vista previa.`}
               </p>
             </div>
-            <Button variant="outline" className="bg-white" onClick={todoLoPendiente}
-              disabled={revisando || creando || totalPendiente.cargos === 0}>
-              {revisando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Zap className="mr-1.5 h-4 w-4" aria-hidden />}
-              Todo lo pendiente
-            </Button>
+            <Tooltip text="Marca todo con corte hoy y muestra la vista previa; aún no crea facturas">
+              <Button variant="outline" className="bg-white" onClick={todoLoPendiente}
+                disabled={revisando || creando || totalPendiente.cargos === 0}>
+                {revisando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Zap className="mr-1.5 h-4 w-4" aria-hidden />}
+                Todo lo pendiente
+              </Button>
+            </Tooltip>
           </div>
 
           {errorRevision && (
@@ -399,12 +402,14 @@ export default function FacturarLoteClient() {
                 hasta={hasta} onHasta={cambiarHasta} juntar={juntar} onJuntar={cambiarJuntar} />
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
                 <Button variant="outline" onClick={() => setPaso(1)}>Atrás</Button>
-                <Button className="bg-zero-600 hover:bg-zero-700"
-                  disabled={conceptosMarcados === 0 || !fechaOk || revisando}
-                  onClick={() => void revisar()}>
-                  {revisando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />}
-                  {conceptosMarcados === 0 ? 'Marca al menos un concepto' : 'Revisar las facturas'}
-                </Button>
+                <Tooltip text="Calcula la vista previa de lo que se va a facturar; aún no crea nada">
+                  <Button className="bg-zero-600 hover:bg-zero-700"
+                    disabled={conceptosMarcados === 0 || !fechaOk || revisando}
+                    onClick={() => void revisar()}>
+                    {revisando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />}
+                    {conceptosMarcados === 0 ? 'Marca al menos un concepto' : 'Revisar las facturas'}
+                  </Button>
+                </Tooltip>
               </div>
             </PasoLote>
           ) : paso === 3 ? (
@@ -426,7 +431,9 @@ export default function FacturarLoteClient() {
               {!revisando && !vista && (
                 <div className="flex flex-wrap items-center gap-3 px-5 py-6">
                   <p className="text-sm text-gray-600">No hay una vista previa calculada.</p>
-                  <Button variant="outline" onClick={() => void revisar()}>Calcular de nuevo</Button>
+                  <Tooltip text="Vuelve a calcular la vista previa con lo que está marcado">
+                    <Button variant="outline" onClick={() => void revisar()}>Calcular de nuevo</Button>
+                  </Tooltip>
                 </div>
               )}
               {vista && (
@@ -438,10 +445,12 @@ export default function FacturarLoteClient() {
                       {' · '}{vista.plan.totalCargos} {vista.plan.totalCargos === 1 ? 'cargo' : 'cargos'}
                       {' · '}<span className="tabular-nums">{fmtDOP(vista.plan.totalCentavos)}</span>
                     </div>
-                    <Button className="bg-zero-600 hover:bg-zero-700" disabled={vista.plan.facturas.length === 0}
-                      onClick={() => { setErrorCrear(null); setConfirmando(true); }}>
-                      {vista.plan.facturas.length === 0 ? 'No hay nada que crear' : textoCrear(vista.plan.facturas.length)}
-                    </Button>
+                    <Tooltip text="Abre la confirmación; al aceptar crea las facturas de esta vista previa">
+                      <Button className="bg-zero-600 hover:bg-zero-700" disabled={vista.plan.facturas.length === 0}
+                        onClick={() => { setErrorCrear(null); setConfirmando(true); }}>
+                        {vista.plan.facturas.length === 0 ? 'No hay nada que crear' : textoCrear(vista.plan.facturas.length)}
+                      </Button>
+                    </Tooltip>
                   </div>
                 </>
               )}

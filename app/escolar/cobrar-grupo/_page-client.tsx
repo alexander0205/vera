@@ -30,6 +30,7 @@ import {
 } from '@/lib/administracion-escolar/cargo-lote';
 import { ArrowLeft, Check, Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Cobrarle lo mismo a un grupo: la excursión, el día de cine, la foto del curso.
@@ -1246,10 +1247,12 @@ export default function CargoLoteClient() {
               {periodos.length > 1 && !hayResultado && (
                 // Abre y cierra: quien lo abrió por mirar tiene que poder
                 // dejarlo como estaba sin elegir nada.
-                <button type="button" className={ENLACE} aria-expanded={selectorAbierto}
-                  aria-controls="lote-anio-escolar" onClick={() => setCambiandoAnio((a) => !a)}>
-                  Cambiar
-                </button>
+                <Tooltip text="Cambia el año escolar al que se carga el cobro">
+                  <button type="button" className={ENLACE} aria-expanded={selectorAbierto}
+                    aria-controls="lote-anio-escolar" onClick={() => setCambiandoAnio((a) => !a)}>
+                    Cambiar
+                  </button>
+                </Tooltip>
               )}
             </div>
           )}

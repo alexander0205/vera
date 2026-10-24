@@ -18,6 +18,7 @@ import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 // Solo el tipo: `dashboard.ts` es `server-only` y la importación de tipo se
 // borra al compilar, así que nada de la base llega al bundle del navegador.
 import type { DashboardEscolar, PuntoMensual } from '@/lib/administracion-escolar/dashboard';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * El panorama financiero del colegio.
@@ -227,18 +228,22 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
               ))}
             </NativeSelect>
           </div>
-          <Button variant="outline" size="sm" onClick={() => mutate()} disabled={cargando}>
-            {cargando
-              ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Calculando…</>
-              : <><RefreshCw className="mr-1.5 h-4 w-4" />Actualizar</>}
-          </Button>
+          <Tooltip text="Vuelve a calcular los números con los cobros más recientes">
+            <Button variant="outline" size="sm" onClick={() => mutate()} disabled={cargando}>
+              {cargando
+                ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Calculando…</>
+                : <><RefreshCw className="mr-1.5 h-4 w-4" />Actualizar</>}
+            </Button>
+          </Tooltip>
           {/* «Nueva factura» desde el Panorama: abre el mismo cajón lateral que
               la ficha de la familia, en blanco. El responsable se elige dentro,
               en el buscador de cliente del formulario. */}
           {puedeFacturar && (
-            <Button variant="default" size="sm" onClick={() => setParams({ factura: 'nueva' })}>
-              <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
-            </Button>
+            <Tooltip text="Abre una factura en blanco; el responsable se elige dentro">
+              <Button variant="default" size="sm" onClick={() => setParams({ factura: 'nueva' })}>
+                <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -268,7 +273,11 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
                 {mayuscula(mesCorto(p.mes))}
                 {/* El año solo donde hace falta para no confundir dos eneros. */}
                 <span className="ml-1 text-[10px] opacity-60">{String(p.anio).slice(2)}</span>
-                {p.enCurso && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle" aria-label="mes en curso" />}
+                {p.enCurso && (
+                  <Tooltip text="Es el mes en curso">
+                    <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle" aria-label="mes en curso" />
+                  </Tooltip>
+                )}
               </Pastilla>
             ))}
           </div>
@@ -688,11 +697,11 @@ function Pastilla({ activa, onClick, titulo, children }: {
   activa: boolean; onClick: () => void; titulo?: string; children: React.ReactNode;
 }) {
   return (
+    <Tooltip text={titulo ?? ''}>
     <button
       type="button"
       onClick={onClick}
       aria-pressed={activa}
-      title={titulo}
       className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
         activa
           ? 'border-zero-600 bg-zero-600 font-medium text-white'
@@ -701,6 +710,7 @@ function Pastilla({ activa, onClick, titulo, children }: {
     >
       {children}
     </button>
+    </Tooltip>
   );
 }
 

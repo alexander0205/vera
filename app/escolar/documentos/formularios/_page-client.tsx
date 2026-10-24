@@ -27,6 +27,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/administracion-escolar/formularios/EmptyState';
 import type { AdminEscolarFormulario } from '@/lib/db/schema';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then((r) => r.json());
 const API = '/api/administracion-escolar/formularios';
@@ -176,9 +177,11 @@ export default function FormulariosClient() {
                       <Typography variant="caption" noWrap>{formatoRelativo(String(f.updatedAt))}</Typography>
                     </Stack>
                   </Box>
-                  <IconButton size="small" onClick={(e) => setMenuFor({ el: e.currentTarget, f })}>
-                    <MoreVertIcon fontSize="small" />
-                  </IconButton>
+                  <Tooltip text="Acciones: duplicar, activar o eliminar">
+                    <IconButton size="small" aria-label="Más acciones" onClick={(e) => setMenuFor({ el: e.currentTarget, f })}>
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </Stack>
 
                 <Box sx={{

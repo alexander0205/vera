@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, Receipt, Smartphone, UserMinus, UserPlus, Users } from 'lucide-react';
 import { BajaReingresoDialog } from '@/components/administracion-escolar/BajaReingresoDialog';
@@ -302,9 +303,11 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
             Está <b>{estudiante.estado}</b>, pero su matrícula o su mensualidad automática siguen activas:
             se le siguen generando cuotas y facturas.
           </p>
-          <Button size="sm" variant="outline" onClick={() => setCambioEstado('baja')}>
-            Terminar la baja
-          </Button>
+          <Tooltip text="Abre el diálogo de baja, que muestra qué matrícula y cuotas se tocan">
+            <Button size="sm" variant="outline" onClick={() => setCambioEstado('baja')}>
+              Terminar la baja
+            </Button>
+          </Tooltip>
         </div>
       )}
 
@@ -365,15 +368,19 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                           por un diálogo que enseña qué se toca antes de hacerlo. */}
                       {puedeGestionar && (
                         estudiante.estado === 'activo' ? (
-                          <Button variant="ghost" size="sm" className="shrink-0 text-gray-500"
-                            onClick={() => setCambioEstado('baja')}>
-                            <UserMinus className="h-4 w-4 mr-1.5" />Dar de baja
-                          </Button>
+                          <Tooltip text="Abre el diálogo de baja, que muestra qué matrícula y cuotas se tocan">
+                            <Button variant="ghost" size="sm" className="shrink-0 text-gray-500"
+                              onClick={() => setCambioEstado('baja')}>
+                              <UserMinus className="h-4 w-4 mr-1.5" />Dar de baja
+                            </Button>
+                          </Tooltip>
                         ) : (
-                          <Button variant="outline" size="sm" className="shrink-0"
-                            onClick={() => setCambioEstado('reingreso')}>
-                            <UserPlus className="h-4 w-4 mr-1.5" />Reactivar
-                          </Button>
+                          <Tooltip text="Abre el diálogo de reingreso, que muestra qué se reactiva antes de confirmar">
+                            <Button variant="outline" size="sm" className="shrink-0"
+                              onClick={() => setCambioEstado('reingreso')}>
+                              <UserPlus className="h-4 w-4 mr-1.5" />Reactivar
+                            </Button>
+                          </Tooltip>
                         )
                       )}
                     </div>
@@ -464,10 +471,12 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                       <Pencil className="h-4 w-4 mr-1.5" />Editar responsable
                     </Button>
                   ) : (
-                    <Button variant="outline" size="sm" className="shrink-0 self-start md:self-center"
-                      onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
-                      <Wallet className="h-4 w-4 mr-1.5" />Asignar responsable
-                    </Button>
+                    <Tooltip text="Elige quién paga las cuotas de este estudiante">
+                      <Button variant="outline" size="sm" className="shrink-0 self-start md:self-center"
+                        onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                        <Wallet className="h-4 w-4 mr-1.5" />Asignar responsable
+                      </Button>
+                    </Tooltip>
                   )
                 )}
               </div>
@@ -526,6 +535,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                sin él no hay a quién emitirle la factura, y eso se resuelve con
                «Asignar responsable», que está arriba. */
             puedeFacturar && grupoActivo && responsable && (
+              <Tooltip text="Abre el formulario para facturar al responsable de pago">
               <Button
                 size="sm"
                 variant="default"
@@ -536,6 +546,7 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
               >
                 <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
               </Button>
+              </Tooltip>
             )
           )}
         </div>
@@ -635,10 +646,12 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                   )}
                 </div>
                 {puedeGestionar && (
-                  <Button variant="outline" size="sm" className="shrink-0"
-                    onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
-                    <Wallet className="mr-1.5 h-4 w-4" />{responsable ? 'Cambiar' : 'Asignar'}
-                  </Button>
+                  <Tooltip text="Elige quién paga las cuotas de este estudiante">
+                    <Button variant="outline" size="sm" className="shrink-0"
+                      onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                      <Wallet className="mr-1.5 h-4 w-4" />{responsable ? 'Cambiar' : 'Asignar'}
+                    </Button>
+                  </Tooltip>
                 )}
               </div>
             </div>
@@ -920,10 +933,11 @@ function ContactoResponsable({ responsable, onArreglar }: {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
       {canales.map((c) => (
-        <button key={c.key} type="button"
+        <Tooltip key={c.key} text={c.valor ? `${c.label}: ${c.valor}` : c.falta}>
+        <button type="button"
           disabled={!onArreglar}
           onClick={onArreglar}
-          title={c.valor ? `${c.label}: ${c.valor}` : c.falta}
+          aria-label={c.valor ? `${c.label}: ${c.valor}` : c.falta}
           className={`inline-flex ${onArreglar ? 'cursor-pointer' : 'cursor-default'}`}>
           {/* Lo que falta va en ROJO, no en gris: gris se lee como «apagado» o
               como decoración, y el usuario lo pasaba por alto. Es un canal por
@@ -931,6 +945,7 @@ function ContactoResponsable({ responsable, onArreglar }: {
           <c.icon className={`h-4 w-4 ${c.valor ? 'text-zero-600' : 'text-red-500 hover:text-red-600'}`}
             aria-label={c.valor ? `${c.label}: ${c.valor}` : c.falta} />
         </button>
+        </Tooltip>
       ))}
       {/* El aviso se queda mientras falte ALGO, no solo cuando falta todo:
           con el correo puesto y sin celular desaparecía, y esa familia sigue
