@@ -63,9 +63,9 @@ export function PasoConceptosLote({
                     <span className="shrink-0 text-xs tabular-nums text-gray-600">
                       {c.sinFactura > 0
                         ? <>{c.sinFactura} {c.sinFactura === 1 ? 'cargo' : 'cargos'} · {fmtDOP(c.sinFacturaCentavos)}</>
-                        // Sin cargo todavía: se factura adelantando sus cuotas
-                        // hasta la fecha de corte de abajo.
-                        : <span className="text-gray-400">Sin cargos todavía</span>}
+                        // Nada sin facturar (o aún sin cargos): se puede igual
+                        // adelantando sus cuotas hasta la fecha de corte de abajo.
+                        : <span className="text-gray-400">Nada pendiente</span>}
                     </span>
                   </label>
                 </li>
