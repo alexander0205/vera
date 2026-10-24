@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, Receipt, Smartphone, UserMinus, UserPlus, Users } from 'lucide-react';
 import { BajaReingresoDialog } from '@/components/administracion-escolar/BajaReingresoDialog';
 import { MovimientosEstudiante, claveMovimientosEstudiante } from '@/components/administracion-escolar/MovimientosEstudiante';
+import { TareasEstudiante } from '@/components/administracion-escolar/TareasEstudiante';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
@@ -376,6 +377,11 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
                           </Button>
                         )
                       )}
+                      {/* Lo pendiente de decidir de este alumno y de su familia:
+                          su número a la vista y la conversación en un panel. */}
+                      <TareasEstudiante estudianteId={estudiante.id}
+                        nombre={nombreCorto(estudiante.nombres)}
+                        puedeGestionar={puedeGestionar} />
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       <InfoChip k="Código" v={estudiante.codigo ?? '—'} />
@@ -1059,4 +1065,10 @@ function Historial({ matriculas, pagos }: { matriculas: Matricula[]; pagos: Pago
       ))}
     </div>
   );
+}
+
+/** «LUIS ENRIQUE» → «Luis»: el primer nombre, como se le dice, para los botones de tareas. */
+function nombreCorto(nombres: string) {
+  const primero = nombres.trim().split(/\s+/)[0] ?? '';
+  return primero ? primero[0].toLocaleUpperCase('es-DO') + primero.slice(1).toLocaleLowerCase('es-DO') : nombres;
 }
