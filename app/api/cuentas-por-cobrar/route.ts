@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
   const [data, promesas] = await Promise.all([
     getCuentasPorCobrar(teamId, {
       clientId: clientId && !isNaN(clientId) ? clientId : undefined,
+      familia:  sp.get('familia') === '1',
       soloVencidas,
       search:  sp.get('search') ?? undefined,
       tipoDoc: tipoDocRaw === 'factura' || tipoDocRaw === 'nota-debito' ? tipoDocRaw : undefined,
