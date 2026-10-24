@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { EmpresaPerfil } from '../utils/types';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Props {
   empresa: EmpresaPerfil | null;
@@ -25,10 +26,10 @@ export function EmpresaBlock({ empresa, showCambiarEmpresa = false, logoSize = '
           style={{ height: logoH, maxWidth: logoMW, objectFit: 'contain', flexShrink: 0 }}
         />
       ) : (
+        <Tooltip text="Sube el logo de tu empresa desde Configuración">
         <Box
           component={Link}
           href="/dashboard/configuracion"
-          title="Subir logo en Configuración"
           sx={{
             width: 80, height: logoH, flexShrink: 0,
             border: '2px dashed #d1d5db', borderRadius: '6px',
@@ -38,6 +39,7 @@ export function EmpresaBlock({ empresa, showCambiarEmpresa = false, logoSize = '
         >
           <Typography sx={{ fontSize: '0.5625rem', color: '#6b7280', textAlign: 'center', lineHeight: 1.3, px: 0.5 }}>Logo</Typography>
         </Box>
+        </Tooltip>
       )}
       <Box sx={{ minWidth: 0 }}>
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

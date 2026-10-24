@@ -14,6 +14,7 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Props {
   /** Esconde «Personalizar opciones»: almacén, lista de precios y vendedor no
@@ -91,6 +92,7 @@ export function NavBar({
 
       {!ocultarPersonalizar && (
       <Box ref={personalizarRef} sx={{ position: 'relative', ml: 'auto' }}>
+        <Tooltip text="Muestra u oculta opciones opcionales del formulario">
         <Button
           type="button"
           variant="outlined"
@@ -103,6 +105,7 @@ export function NavBar({
         >
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Personalizar opciones</Box>
         </Button>
+        </Tooltip>
         {showPersonalizar && (
           <Box sx={{ position: 'absolute', right: 0, top: '100%', mt: 0.5, zIndex: 50, bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', p: 2, width: 208 }}>
             <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.5 }}>

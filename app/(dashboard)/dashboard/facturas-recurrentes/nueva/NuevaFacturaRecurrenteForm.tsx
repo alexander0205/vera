@@ -869,6 +869,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                               size="small"
                               onClick={() => setFechaFin('')}
                               title="Quitar fecha de fin"
+                              aria-label="Quitar fecha de fin"
                               sx={{
                                 position: 'absolute',
                                 right: 6,

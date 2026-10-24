@@ -10,6 +10,7 @@ import IconButton from '@mui/material/IconButton';
 import { X } from 'lucide-react';
 import { RETENCIONES_PREDEFINIDAS } from '../utils/types';
 import type { Retencion } from '../utils/types';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Props {
   retenciones: Retencion[];
@@ -173,6 +174,7 @@ export function RetencionesSection({
                 />
               </Box>
 
+              <Tooltip text="Quita esta retención de la factura">
               <IconButton
                 type="button"
                 onClick={() => setRetenciones(prev => prev.filter((_, i) => i !== idx))}
@@ -182,6 +184,7 @@ export function RetencionesSection({
               >
                 <X size={16} />
               </IconButton>
+              </Tooltip>
             </Box>
           </Box>
         ))}

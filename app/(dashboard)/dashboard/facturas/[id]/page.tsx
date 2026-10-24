@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
 import {
@@ -221,6 +222,7 @@ function EstadoDgiiCard({
         <CheckCircle className="h-4 w-4 text-zero-600 shrink-0" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
         {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
+          <Tooltip text="Pregunta a la DGII si el estado cambió; no envía nada">
           <button
             type="button"
             onClick={onConsultar}
@@ -230,6 +232,7 @@ function EstadoDgiiCard({
             <RefreshCw className={`h-3 w-3 ${consultarStatus === 'loading' ? 'animate-spin' : ''}`} />
             Consultar
           </button>
+          </Tooltip>
         )}
       </header>
       {/* El e-NCF manda: es lo que se viene a buscar. Antes eran cinco filas
@@ -994,29 +997,31 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
               estaba en ella; con link directo no hay contexto que recorrer. */}
           {navLista && (
             <div className="hidden md:flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 p-0.5 mr-1">
+              <Tooltip text="Ir al documento anterior de la lista">
               <Button
                 variant="ghost" size="sm"
                 className="h-7 w-7 p-0"
                 disabled={!navLista.anteriorId}
-                title="Anterior"
                 aria-label="Documento anterior"
                 onClick={() => navLista.anteriorId && router.push(`${ui.backHref}/${navLista.anteriorId}`)}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
+              </Tooltip>
               <span className="px-1.5 text-[11px] font-medium text-gray-600 tabular-nums whitespace-nowrap">
                 {navLista.posicion} de {navLista.total.toLocaleString('es-DO')}
               </span>
+              <Tooltip text="Ir al documento siguiente de la lista">
               <Button
                 variant="ghost" size="sm"
                 className="h-7 w-7 p-0"
                 disabled={!navLista.siguienteId}
-                title="Siguiente"
                 aria-label="Documento siguiente"
                 onClick={() => navLista.siguienteId && router.push(`${ui.backHref}/${navLista.siguienteId}`)}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
+              </Tooltip>
             </div>
           )}
 
@@ -1034,6 +1039,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
           </Button>
 
           {puedePolling && (
+            <Tooltip text="Pregunta a la DGII si el estado cambió; no envía nada">
             <Button
               variant="outline" size="sm"
               onClick={consultarEstado}
@@ -1042,6 +1048,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
               <RefreshCw className={`h-4 w-4 mr-1 ${pollingStatus === 'loading' ? 'animate-spin' : ''}`} />
               Consultar DGII
             </Button>
+            </Tooltip>
           )}
 
           {/* «Enviar a DGII» no se repite aquí: vive en la barra inferior, que
@@ -1120,7 +1127,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
           {/* Más acciones — agrupadas en dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" title="Más acciones" aria-label="Más acciones">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -1356,6 +1363,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
                 sin emitir — puedes enviarla cuando quieras (no es obligatorio).
               </p>
               {canEmitir && (
+                <Tooltip text="Abre la confirmación para enviar este documento a la DGII">
                 <button
                   type="button"
                   onClick={triggerEnviarDgii}
@@ -1363,6 +1371,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
                 >
                   Enviar a DGII →
                 </button>
+                </Tooltip>
               )}
             </div>
           )}
@@ -1715,6 +1724,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
               </p>
               <div className="space-y-2">
                 <Button
+                  title="Cancela el intento rechazado y reintenta con un e-NCF nuevo"
                   onClick={() => handleResetEmision(false)}
                   disabled={reseteando}
                   className="w-full bg-zero-600 hover:bg-zero-700 text-white h-9 text-sm disabled:opacity-50"
@@ -1723,6 +1733,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
                 </Button>
                 <button
                   type="button"
+                  title="Reintenta el envío con el mismo e-NCF ya asignado"
                   onClick={() => handleResetEmision(true)}
                   disabled={reseteando}
                   className="w-full text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
@@ -1950,6 +1961,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
                 <Button
                   type="button"
                   className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  title={sinLineas && canEdit ? undefined : 'Abre la confirmación para enviar esta factura a la DGII'}
                   onClick={triggerEnviarDgii}
                 >
                   <Send className="h-4 w-4 mr-1.5" />
@@ -2396,6 +2408,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
               <Button
                 variant="outline"
                 className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                title="Sigue a la confirmación de envío a la DGII sin registrar el cobro"
                 onClick={() => {
                   setShowPagoMissingAlert(false);
                   setEnviandoDgiiError(null);

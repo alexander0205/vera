@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { Tooltip } from '@/components/ui/tooltip';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
@@ -201,15 +202,18 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
                 {data.promesaActiva.promesaMonto ? ` · ${fmtDOP(data.promesaActiva.promesaMonto)}` : ''}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Button
-                  variant="contained" size="small" color="success"
-                  disabled={guardando}
-                  onClick={() => enviar({ accion: 'cerrar-promesa', eventoId: data.promesaActiva!.id, estado: 'cumplida' })}
-                  startIcon={<Check style={{ width: 12, height: 12 }} />}
-                  sx={{ fontSize: '0.75rem', py: 0.25 }}
-                >
-                  Cumplida
-                </Button>
+                <Tooltip text="Cierra la promesa de pago y la marca como cumplida">
+                  <Button
+                    variant="contained" size="small" color="success"
+                    disabled={guardando}
+                    onClick={() => enviar({ accion: 'cerrar-promesa', eventoId: data.promesaActiva!.id, estado: 'cumplida' })}
+                    startIcon={<Check style={{ width: 12, height: 12 }} />}
+                    sx={{ fontSize: '0.75rem', py: 0.25 }}
+                  >
+                    Cumplida
+                  </Button>
+                </Tooltip>
+                <Tooltip text="Cierra la promesa de pago y la marca como incumplida">
                 <Button
                   variant="outlined" size="small" color="error"
                   disabled={guardando}
@@ -219,6 +223,7 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
                 >
                   Incumplida
                 </Button>
+                </Tooltip>
               </Box>
             </Box>
           )}

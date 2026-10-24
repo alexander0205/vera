@@ -6,6 +6,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Props {
   showReferencia: boolean;
@@ -33,6 +34,7 @@ export function ColumnasToggle({
 
   return (
     <Box ref={ref} sx={{ position: 'relative' }}>
+      <Tooltip text="Muestra u oculta columnas opcionales de la tabla">
       <Box
         component="button"
         type="button"
@@ -49,6 +51,7 @@ export function ColumnasToggle({
         <Settings2 size={14} />
         Columnas
       </Box>
+      </Tooltip>
       {open && (
         <Box sx={{ position: 'absolute', right: 0, top: '100%', mt: 0.5, zIndex: 50, bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', p: 1.5, width: 208 }}>
           <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
