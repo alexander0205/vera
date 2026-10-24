@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type AplicaA = 'bien' | 'servicio' | 'ambos' | 'manual';
 type Entidad = 'producto' | 'factura';
@@ -305,12 +306,16 @@ export default function MaestrosPage() {
                   <TableCell><Typography variant="body2" sx={{ color: '#6b7280' }}>{m.valores.length}</Typography></TableCell>
                   <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <IconButton size="small" onClick={() => abrirEdicion(m)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
-                        <Pencil size={16} />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => { setDeleteTarget(m); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
-                        <Trash2 size={16} />
-                      </IconButton>
+                      <Tooltip text="Cambia el nombre, los valores o dónde aplica">
+                        <IconButton size="small" aria-label="Editar" onClick={() => abrirEdicion(m)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                          <Pencil size={16} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip text="Elimina el maestro; los productos solo pierden este atributo">
+                        <IconButton size="small" aria-label="Eliminar" onClick={() => { setDeleteTarget(m); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -419,10 +424,12 @@ export default function MaestrosPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); agregarValor(); } }}
                   sx={fieldSx}
                 />
-                <Button type="button" variant="outlined" onClick={agregarValor} disabled={valorBusy || !nuevoValor.trim()}
-                  sx={{ borderRadius: '8px', textTransform: 'none', minWidth: 44, px: 1.5, borderColor: '#d1d5db', color: '#374151' }}>
-                  {valorBusy ? <CircularProgress size={16} /> : <Plus size={16} />}
-                </Button>
+                <Tooltip text="Agrega el valor escrito a la lista">
+                  <Button type="button" variant="outlined" aria-label="Agregar valor" onClick={agregarValor} disabled={valorBusy || !nuevoValor.trim()}
+                    sx={{ borderRadius: '8px', textTransform: 'none', minWidth: 44, px: 1.5, borderColor: '#d1d5db', color: '#374151' }}>
+                    {valorBusy ? <CircularProgress size={16} /> : <Plus size={16} />}
+                  </Button>
+                </Tooltip>
               </Box>
               {editTarget.valores.length === 0 ? (
                 <Typography variant="caption" sx={{ color: '#9ca3af' }}>Aún no hay valores. Agrega al menos uno.</Typography>
@@ -432,15 +439,18 @@ export default function MaestrosPage() {
                     <Box key={v.id}
                       sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: '#f3f4f6', color: '#374151', fontSize: '0.875rem', borderRadius: '9999px', pl: 1.5, pr: 0.5, py: 0.5 }}>
                       {v.valor}
-                      <IconButton
-                        type="button"
-                        size="small"
-                        onClick={() => eliminarValor(v)}
-                        disabled={valorBusy}
-                        sx={{ p: 0.25, color: 'inherit', '&:hover': { bgcolor: '#d1d5db' } }}
-                      >
-                        <X size={12} />
-                      </IconButton>
+                      <Tooltip text="Quita este valor de la lista">
+                        <IconButton
+                          type="button"
+                          size="small"
+                          aria-label="Quitar valor"
+                          onClick={() => eliminarValor(v)}
+                          disabled={valorBusy}
+                          sx={{ p: 0.25, color: 'inherit', '&:hover': { bgcolor: '#d1d5db' } }}
+                        >
+                          <X size={12} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   ))}
                 </Box>

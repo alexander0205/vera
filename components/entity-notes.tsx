@@ -9,6 +9,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Note {
   id:        number;
@@ -140,15 +141,17 @@ export function EntityNotes({ entityType, entityId }: Props) {
             >
               <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
                 <Typography sx={{ fontSize: '0.875rem', color: '#1f2937', whiteSpace: 'pre-wrap', flex: 1 }}>{n.text}</Typography>
-                <IconButton
-                  type="button"
-                  onClick={() => handleDelete(n.id)}
-                  title="Eliminar"
-                  size="small"
-                  sx={{ p: 0.5, color: '#9ca3af', flexShrink: 0, '&:hover': { color: '#dc2626' } }}
-                >
-                  <Trash2 style={{ width: 14, height: 14 }} />
-                </IconButton>
+                <Tooltip text="Borra esta nota; pide confirmación antes">
+                  <IconButton
+                    type="button"
+                    onClick={() => handleDelete(n.id)}
+                    aria-label="Eliminar nota"
+                    size="small"
+                    sx={{ p: 0.5, color: '#9ca3af', flexShrink: 0, '&:hover': { color: '#dc2626' } }}
+                  >
+                    <Trash2 style={{ width: 14, height: 14 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
               <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
                 {n.userName || n.userEmail || 'Sistema'} · {fmtDate(n.createdAt)}

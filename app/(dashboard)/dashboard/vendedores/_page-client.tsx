@@ -21,6 +21,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { UserCheck, Plus, Pencil, Trash2, Search, AlertTriangle, X } from 'lucide-react';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Vendedor {
   id: number;
@@ -155,7 +156,7 @@ export default function VendedoresPage() {
               startAdornment: <InputAdornment position="start"><Search size={16} color="#9ca3af" /></InputAdornment>,
               endAdornment: search ? (
                 <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => { setSearch(''); cargar(''); }}>
+                  <IconButton size="small" title="Borra la búsqueda" aria-label="Limpiar búsqueda" onClick={() => { setSearch(''); cargar(''); }}>
                     <X size={14} color="#9ca3af" />
                   </IconButton>
                 </InputAdornment>
@@ -216,12 +217,16 @@ export default function VendedoresPage() {
                   </TableCell>
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <IconButton size="small" onClick={() => abrirEdicion(v)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
-                        <Pencil size={16} />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => { setDeleteTarget(v); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
-                        <Trash2 size={16} />
-                      </IconButton>
+                      <Tooltip text="Cambia el nombre, la identificación o la observación">
+                        <IconButton size="small" aria-label="Editar" onClick={() => abrirEdicion(v)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                          <Pencil size={16} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip text="Quita al vendedor del selector de facturas">
+                        <IconButton size="small" aria-label="Eliminar" onClick={() => { setDeleteTarget(v); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>

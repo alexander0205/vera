@@ -14,6 +14,7 @@ import { Users, Plus, X, ArrowLeft } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { useVolver, hayHistorialPropio } from '@/lib/hooks/useVolver';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Dependiente {
   id: number;   // > 0 persistido en DB; < 0 temporal (en memoria, modo crear)
@@ -381,13 +382,15 @@ export default function ClienteForm({
       {/* Encabezado — dentro de un diálogo lo pone el propio diálogo. */}
       {!embebido && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <IconButton
-            onClick={volver}
-            title={volverA ? 'Volver' : 'Volver a clientes'}
-            sx={{ ml: -1, borderRadius: '8px', color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
-          >
-            <ArrowLeft size={20} />
-          </IconButton>
+          <Tooltip text={volverA ? 'Vuelve a la pantalla anterior sin guardar' : 'Vuelve al listado sin guardar'}>
+            <IconButton
+              onClick={volver}
+              aria-label="Volver"
+              sx={{ ml: -1, borderRadius: '8px', color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
+            >
+              <ArrowLeft size={20} />
+            </IconButton>
+          </Tooltip>
           <Box>
             <Typography variant="h5" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>
               {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
@@ -442,12 +445,14 @@ export default function ClienteForm({
             ayuda={!form.whatsapp.trim() && form.celular.trim() ? (
               <Typography component="span" sx={{ fontSize: '0.75rem', color: '#6B7280' }}>
                 Vacío: no se le escribe por WhatsApp.{' '}
-                <Box component="button" type="button"
-                  onClick={() => setForm((f) => ({ ...f, whatsapp: f.celular }))}
-                  sx={{ border: 0, p: 0, background: 'none', cursor: 'pointer', font: 'inherit',
-                    color: '#1d4ed8', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
-                  Usar el mismo del celular
-                </Box>
+                <Tooltip text="Copia el número del celular al campo WhatsApp">
+                  <Box component="button" type="button"
+                    onClick={() => setForm((f) => ({ ...f, whatsapp: f.celular }))}
+                    sx={{ border: 0, p: 0, background: 'none', cursor: 'pointer', font: 'inherit',
+                      color: '#1d4ed8', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
+                    Usar el mismo del celular
+                  </Box>
+                </Tooltip>
               </Typography>
             ) : undefined} />
           <Field label="Email" field="email" type="email" placeholder="facturacion@empresa.com" form={form} setForm={setForm} />
@@ -560,16 +565,18 @@ export default function ClienteForm({
                 <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937' }}>
                   {dep.nombre} {dep.apellido}
                 </Typography>
-                <IconButton
-                  onClick={() => handleEliminarDependiente(dep)}
-                  disabled={deletingDepId === dep.id}
-                  title="Eliminar dependiente"
-                  sx={{ ml: 1, p: 0.5, borderRadius: '6px', color: '#9ca3af', '&:hover': { color: '#ef4444', bgcolor: '#fef2f2' }, '&.Mui-disabled': { opacity: 0.5 } }}
-                >
-                  {deletingDepId === dep.id
-                    ? <CircularProgress size={16} sx={{ color: 'inherit' }} />
-                    : <X size={16} />}
-                </IconButton>
+                <Tooltip text="Quita a esta persona; si ya estaba guardada, se borra al instante">
+                  <IconButton
+                    onClick={() => handleEliminarDependiente(dep)}
+                    disabled={deletingDepId === dep.id}
+                    aria-label="Eliminar dependiente"
+                    sx={{ ml: 1, p: 0.5, borderRadius: '6px', color: '#9ca3af', '&:hover': { color: '#ef4444', bgcolor: '#fef2f2' }, '&.Mui-disabled': { opacity: 0.5 } }}
+                  >
+                    {deletingDepId === dep.id
+                      ? <CircularProgress size={16} sx={{ color: 'inherit' }} />
+                      : <X size={16} />}
+                  </IconButton>
+                </Tooltip>
               </Box>
             ))}
           </Box>
