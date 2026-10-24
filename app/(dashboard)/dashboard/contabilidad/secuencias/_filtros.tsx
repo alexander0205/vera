@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const ESTADOS = [
   { value: '',                     label: 'Todos los estados' },
@@ -100,14 +101,16 @@ export function LibroFiltros({
         </Button>
 
         {hayFiltros && (
-          <Button
-            type="button" color="inherit"
-            onClick={() => startTransition(() => router.push(pathname))}
-            startIcon={<X style={{ width: 16, height: 16 }} />}
-            sx={{ color: '#6b7280', '&:hover': { color: '#374151' } }}
-          >
-            Limpiar
-          </Button>
+          <Tooltip text="Quita todos los filtros de la búsqueda">
+            <Button
+              type="button" color="inherit"
+              onClick={() => startTransition(() => router.push(pathname))}
+              startIcon={<X style={{ width: 16, height: 16 }} />}
+              sx={{ color: '#6b7280', '&:hover': { color: '#374151' } }}
+            >
+              Limpiar
+            </Button>
+          </Tooltip>
         )}
       </Box>
     </Box>

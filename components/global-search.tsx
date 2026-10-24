@@ -35,6 +35,7 @@ import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 
 import type { TipoResultado, GrupoResultados } from '@/lib/busqueda/tipos';
 
@@ -483,6 +484,7 @@ export function GlobalSearch({
         onClick={abrir}
         size="small"
         aria-label="Buscar en todo el sistema"
+        title="Buscar en todo el sistema"
         aria-expanded={open}
         sx={{ display: { xs: 'flex', sm: 'none' }, color: 'text.secondary' }}
       >
@@ -544,13 +546,15 @@ export function GlobalSearch({
                     autoFocus
                   />
                   {query && (
-                    <IconButton
-                      onClick={() => setQuery('')}
-                      aria-label="Limpiar búsqueda"
-                      sx={{ p: 0.25, color: '#9ca3af', '&:hover': { color: '#4b5563', bgcolor: 'transparent' } }}
-                    >
-                      <X style={{ width: 16, height: 16 }} />
-                    </IconButton>
+                    <Tooltip text="Borra el texto de la búsqueda">
+                      <IconButton
+                        onClick={() => setQuery('')}
+                        aria-label="Limpiar búsqueda"
+                        sx={{ p: 0.25, color: '#9ca3af', '&:hover': { color: '#4b5563', bgcolor: 'transparent' } }}
+                      >
+                        <X style={{ width: 16, height: 16 }} />
+                      </IconButton>
+                    </Tooltip>
                   )}
                   <Box
                     component="kbd"

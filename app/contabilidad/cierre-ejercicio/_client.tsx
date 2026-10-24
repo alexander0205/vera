@@ -17,6 +17,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface SaldoResultado { cuentaId: number; codigo: string; nombre: string; netoCents: number }
 interface Preview {
@@ -113,9 +114,11 @@ export function CierreEjercicioClient({
               >
                 {aniosDisponibles.map((a) => <MenuItem key={a} value={String(a)}>{a}</MenuItem>)}
               </TextField>
-              <Button variant="outlined" disabled={!anio || cargando} onClick={() => previsualizar(anio)} sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}>
-                {cargando ? 'Calculando…' : 'Previsualizar'}
-              </Button>
+              <Tooltip text="Calcula cómo quedaría el cierre; todavía no cierra nada">
+                <Button variant="outlined" disabled={!anio || cargando} onClick={() => previsualizar(anio)} sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}>
+                  {cargando ? 'Calculando…' : 'Previsualizar'}
+                </Button>
+              </Tooltip>
             </Box>
           )}
 
@@ -159,13 +162,15 @@ export function CierreEjercicioClient({
               {preview.bloqueo ? (
                 <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>{preview.bloqueo}</Alert>
               ) : (
-                <Button
-                  variant="contained" disabled={trabajando} onClick={cerrar}
-                  startIcon={<Lock style={{ width: 16, height: 16 }} />}
-                  sx={{ alignSelf: 'flex-start', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
-                >
-                  {trabajando ? 'Cerrando…' : `Confirmar cierre de ${preview.ejercicio}`}
-                </Button>
+                <Tooltip text="Cierra el ejercicio y guarda su resultado; luego se puede reabrir">
+                  <Button
+                    variant="contained" disabled={trabajando} onClick={cerrar}
+                    startIcon={<Lock style={{ width: 16, height: 16 }} />}
+                    sx={{ alignSelf: 'flex-start', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+                  >
+                    {trabajando ? 'Cerrando…' : `Confirmar cierre de ${preview.ejercicio}`}
+                  </Button>
+                </Tooltip>
               )}
             </Box>
           )}
@@ -201,13 +206,15 @@ export function CierreEjercicioClient({
                     </Box>
                     <Box component="td" sx={{ ...celda, textAlign: 'right' }}>
                       {puedeGestionar && c.esUltimo && (
-                        <Button
-                          size="small" disabled={trabajando} onClick={() => reabrir(c.ejercicio)}
-                          startIcon={<Unlock style={{ width: 14, height: 14 }} />}
-                          sx={{ color: '#6b7280' }}
-                        >
-                          Reabrir
-                        </Button>
+                        <Tooltip text="Vuelve a abrir este ejercicio cerrado para poder corregirlo">
+                          <Button
+                            size="small" disabled={trabajando} onClick={() => reabrir(c.ejercicio)}
+                            startIcon={<Unlock style={{ width: 14, height: 14 }} />}
+                            sx={{ color: '#6b7280' }}
+                          >
+                            Reabrir
+                          </Button>
+                        </Tooltip>
                       )}
                     </Box>
                   </Box>

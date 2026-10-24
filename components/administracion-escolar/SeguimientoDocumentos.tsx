@@ -8,6 +8,7 @@ import {
   Loader2, Mail, Check, AlertTriangle, Search, MailWarning,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -153,7 +154,7 @@ export function SeguimientoDocumentos() {
           </p>
         </div>
 
-        <Button
+        <Tooltip text="Revisa lo que saldrá antes de mandar; todavía no envía nada"><Button
           disabled={elegidas.size === 0}
           onClick={() => void pedirPrevia()}
         >
@@ -161,7 +162,7 @@ export function SeguimientoDocumentos() {
           {elegidas.size === 0
             ? 'Reclamar por correo'
             : `Reclamar a ${elegidas.size}`}
-        </Button>
+        </Button></Tooltip>
       </div>
 
       {/* Filtros */}

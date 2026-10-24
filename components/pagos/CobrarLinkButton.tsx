@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { CreditCard, Copy, Check, MessageCircle, Loader2 } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Props {
   ecfDocumentId?: number;
@@ -185,9 +186,11 @@ export function CobrarLinkButton({ ecfDocumentId, cotizacionId, telefonoCliente,
               <div className="flex gap-2">
                 <input readOnly value={link.url}
                   className="flex-1 border rounded px-2 py-1.5 text-sm bg-slate-50" />
-                <Button type="button" size="sm" variant="outline" onClick={copiar}>
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
+                <Tooltip text="Copia el enlace de cobro">
+                  <Button type="button" size="sm" variant="outline" onClick={copiar} aria-label="Copiar enlace">
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </Tooltip>
               </div>
 
               <div className="flex gap-2">

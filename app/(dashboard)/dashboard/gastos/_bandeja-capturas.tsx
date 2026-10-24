@@ -5,6 +5,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { AlertTriangle, Camera, FileText, Loader2, QrCode, Sparkles, Trash2, RotateCw } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/lib/toast';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import type { FilaCaptura } from '@/lib/compras/captura/consultas';
@@ -138,21 +139,27 @@ export function BandejaCapturas({ inicial }: { inicial: FilaCaptura[] }) {
                     className="inline-flex h-8 items-center rounded-lg bg-zero-600 px-3 text-xs font-semibold text-white hover:bg-zero-700">
                     {esCompra ? 'Registrar compra' : 'Registrar gasto'}
                   </Link>
-                  <Link href={esCompra ? `/dashboard/gastos/registrar?captura=${c.id}` : `/dashboard/compras/registrar?captura=${c.id}`}
-                    className="inline-flex h-8 items-center rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">
-                    {esCompra ? 'Es un gasto' : 'Es compra de inventario'}
-                  </Link>
+                  <Tooltip text={esCompra ? 'Corrige y registra esta factura como gasto' : 'Corrige y registra esta factura como compra de inventario'}>
+                    <Link href={esCompra ? `/dashboard/gastos/registrar?captura=${c.id}` : `/dashboard/compras/registrar?captura=${c.id}`}
+                      className="inline-flex h-8 items-center rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                      {esCompra ? 'Es un gasto' : 'Es compra de inventario'}
+                    </Link>
+                  </Tooltip>
                   {/* También con lectura: el modelo no lee igual dos veces y una
                       segunda pasada puede sacar lo que la primera no vio. */}
-                  <button type="button" onClick={() => accion(c, 'volver-a-leer')} disabled={ocupado} title="Leer otra vez"
-                    aria-label="Leer otra vez" data-testid={`releer-${c.id}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
-                    <RotateCw className="h-3.5 w-3.5" />
-                  </button>
-                  <button type="button" onClick={() => setDescartar(c)} disabled={ocupado} aria-label="Descartar" data-testid={`descartar-${c.id}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-700">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip text="Vuelve a leer la factura por si los datos salieron mal">
+                    <button type="button" onClick={() => accion(c, 'volver-a-leer')} disabled={ocupado}
+                      aria-label="Leer otra vez" data-testid={`releer-${c.id}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
+                      <RotateCw className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
+                  <Tooltip text="Descarta esta captura; no se registra como factura">
+                    <button type="button" onClick={() => setDescartar(c)} disabled={ocupado} aria-label="Descartar" data-testid={`descartar-${c.id}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-700">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
                 </div>
               )}
             </div>

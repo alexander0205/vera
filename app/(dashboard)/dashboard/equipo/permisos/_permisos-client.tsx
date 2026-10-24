@@ -13,6 +13,7 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 import TextField from '@mui/material/TextField';
 import Switch from '@mui/material/Switch';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -306,15 +307,19 @@ function MiPinCard() {
 
         {!editando && (
           <Box sx={{ display: 'flex', flexShrink: 0, gap: 1 }}>
-            <Button onClick={() => setEditando(true)} variant="outlined" size="small"
-              sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }}>
-              {data?.tienePin ? 'Cambiar PIN' : 'Configurar PIN'}
-            </Button>
-            {data?.tienePin && (
-              <Button onClick={() => guardar(null)} disabled={saving} variant="outlined" size="small"
-                sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
-                Quitar
+            <Tooltip text={data?.tienePin ? 'Escribe un PIN nuevo; reemplaza el actual' : 'Crea tu PIN de 4 a 6 dígitos'}>
+              <Button onClick={() => setEditando(true)} variant="outlined" size="small"
+                sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }}>
+                {data?.tienePin ? 'Cambiar PIN' : 'Configurar PIN'}
               </Button>
+            </Tooltip>
+            {data?.tienePin && (
+              <Tooltip text="Borra tu PIN: los cajeros ya no podrán quitar ítems con tu autorización">
+                <Button onClick={() => guardar(null)} disabled={saving} variant="outlined" size="small"
+                  sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
+                  Quitar
+                </Button>
+              </Tooltip>
             )}
           </Box>
         )}
@@ -440,13 +445,16 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
                   {label}
                 </Typography>
                 {!isOwner && (
-                  <IconButton
-                    onClick={() => setEditingLabel(true)}
-                    size="small"
-                    sx={{ color: '#9ca3af', p: 0.25, '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
-                  >
-                    <Pencil style={{ width: 14, height: 14 }} />
-                  </IconButton>
+                  <Tooltip text="Cambia el nombre de este rol">
+                    <IconButton
+                      onClick={() => setEditingLabel(true)}
+                      aria-label="Editar nombre del rol"
+                      size="small"
+                      sx={{ color: '#9ca3af', p: 0.25, '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
+                    >
+                      <Pencil style={{ width: 14, height: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                 )}
                 {isOwner && <Lock style={{ width: 16, height: 16, color: '#9ca3af' }} />}
               </Box>
@@ -459,19 +467,21 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {!role.isSystem && (
-            <Button
-              variant="outlined"
-              onClick={() => setConfirmDelete(true)}
-              startIcon={<Trash2 style={{ width: 16, height: 16 }} />}
-              sx={{
-                textTransform: 'none',
-                color: '#dc2626',
-                borderColor: '#d1d5db',
-                '&:hover': { color: '#b91c1c', borderColor: '#9ca3af', bgcolor: '#f9fafb' },
-              }}
-            >
-              Borrar
-            </Button>
+            <Tooltip text="Borra este rol; sus usuarios pasan a Vendedor">
+              <Button
+                variant="outlined"
+                onClick={() => setConfirmDelete(true)}
+                startIcon={<Trash2 style={{ width: 16, height: 16 }} />}
+                sx={{
+                  textTransform: 'none',
+                  color: '#dc2626',
+                  borderColor: '#d1d5db',
+                  '&:hover': { color: '#b91c1c', borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+                }}
+              >
+                Borrar
+              </Button>
+            </Tooltip>
           )}
           {!isOwner && (
             <Button
@@ -548,7 +558,9 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
                     sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}
                   >
                     <Box component="span" sx={{ fontSize: '0.875rem', color: '#374151' }}>{p.label}</Box>
-                    <Toggle on={on} disabled={isOwner} onClick={() => toggle(p.key)} />
+                    <Tooltip text={isOwner ? 'El dueño siempre tiene todos los permisos' : 'Permite o quita este permiso para el rol'}>
+                      <Toggle on={on} disabled={isOwner} onClick={() => toggle(p.key)} />
+                    </Tooltip>
                   </Box>
                 );
               })}

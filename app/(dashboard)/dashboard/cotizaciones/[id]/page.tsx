@@ -18,6 +18,7 @@ import {
   Clock, ChevronDown, Mail, Pencil, FileCheck, MoreVertical,
 } from 'lucide-react';
 import { useVolver } from '@/lib/hooks/useVolver';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -306,7 +307,7 @@ export default function CotizacionDetallePage() {
           {/* Más acciones */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" title="Más acciones" aria-label="Más acciones">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -499,7 +500,7 @@ export default function CotizacionDetallePage() {
             {puedeConvertir && (
               <Button
                 className="w-full bg-zero-600 hover:bg-zero-700 text-sm"
-                onClick={() => setShowConfirmConvert(true)}
+                title="Crea un borrador de factura a partir de esta cotización" onClick={() => setShowConfirmConvert(true)}
                 disabled={converting}
               >
                 {converting
@@ -540,7 +541,7 @@ export default function CotizacionDetallePage() {
           {puedeConvertir && (
             <Button
               className="bg-zero-600 hover:bg-zero-700 h-11 sm:h-9 flex-1 sm:flex-none"
-              onClick={() => setShowConfirmConvert(true)}
+              title="Crea un borrador de factura a partir de esta cotización" onClick={() => setShowConfirmConvert(true)}
               disabled={converting}
             >
               {converting

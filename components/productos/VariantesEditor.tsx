@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Layers, Plus, X } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -136,10 +137,12 @@ export function VariantesEditor({ onChange, resetSignal = 0 }: {
                     onChange={(e) => setEjeNombre(idx, e.target.value)}
                   />
                   {ejes.length > 1 && (
-                    <button type="button" onClick={() => removeEje(idx)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Quitar eje">
-                      <X className="h-4 w-4" />
-                    </button>
+                    <Tooltip text="Quita este eje y todos sus valores">
+                      <button type="button" onClick={() => removeEje(idx)} aria-label="Quitar eje"
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
 
@@ -148,9 +151,11 @@ export function VariantesEditor({ onChange, resetSignal = 0 }: {
                     {eje.valores.map(v => (
                       <span key={v} className="inline-flex items-center gap-1 bg-zero-100 text-zero-800 text-xs font-medium px-2 py-1 rounded-full">
                         {v}
-                        <button type="button" onClick={() => removeValor(idx, v)} className="hover:text-zero-950">
-                          <X className="h-3 w-3" />
-                        </button>
+                        <Tooltip text="Quita este valor de la lista">
+                          <button type="button" onClick={() => removeValor(idx, v)} aria-label="Quitar valor" className="hover:text-zero-950">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Tooltip>
                       </span>
                     ))}
                   </div>
@@ -164,9 +169,11 @@ export function VariantesEditor({ onChange, resetSignal = 0 }: {
                     onChange={(e) => setValorInput(prev => ({ ...prev, [idx]: e.target.value }))}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addValor(idx); } }}
                   />
-                  <Button type="button" variant="outline" size="sm" onClick={() => addValor(idx)}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <Tooltip text="Agrega el valor escrito a este eje">
+                    <Button type="button" variant="outline" size="sm" aria-label="Agregar valor" onClick={() => addValor(idx)}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </Tooltip>
                 </div>
               </div>
             ))}

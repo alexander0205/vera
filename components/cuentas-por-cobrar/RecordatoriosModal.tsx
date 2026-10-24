@@ -12,6 +12,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import { fmtDOP } from '@/lib/utils/format';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Modal de recordatorios de pago por correo.
@@ -119,9 +120,11 @@ export function RecordatoriosModal({
               : `${docIds.length} cuenta${docIds.length !== 1 ? 's' : ''} seleccionada${docIds.length !== 1 ? 's' : ''}`}
           </Typography>
         </Box>
-        <IconButton size="small" onClick={onClose} sx={{ color: '#9ca3af' }}>
-          <X style={{ width: 16, height: 16 }} />
-        </IconButton>
+        <Tooltip text="Cierra esta ventana">
+          <IconButton size="small" onClick={onClose} aria-label="Cerrar" sx={{ color: '#9ca3af' }}>
+            <X style={{ width: 16, height: 16 }} />
+          </IconButton>
+        </Tooltip>
       </DialogTitle>
 
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -228,6 +231,7 @@ export function RecordatoriosModal({
           <Button
             variant="contained"
             onClick={enviar}
+            title="Envía un correo de recordatorio a cada cliente de la lista; no se puede deshacer"
             disabled={enviando || cargando || enviables.length === 0}
             startIcon={enviando
               ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />

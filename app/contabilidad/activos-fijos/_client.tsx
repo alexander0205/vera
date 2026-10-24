@@ -21,6 +21,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface ActivoFijo {
   id: number;
@@ -193,13 +194,15 @@ export function ActivosFijosClient({
           >
             Registrar activo
           </Button>
-          <Button
-            variant="outlined" onClick={generar} disabled={generando}
-            startIcon={<RefreshCw style={{ width: 16, height: 16 }} />}
-            sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}
-          >
-            {generando ? 'Generando…' : 'Generar depreciaciones'}
-          </Button>
+          <Tooltip text="Registra las cuotas de depreciación pendientes de cada activo">
+            <Button
+              variant="outlined" onClick={generar} disabled={generando}
+              startIcon={<RefreshCw style={{ width: 16, height: 16 }} />}
+              sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}
+            >
+              {generando ? 'Generando…' : 'Generar depreciaciones'}
+            </Button>
+          </Tooltip>
         </Box>
       )}
       </Box>

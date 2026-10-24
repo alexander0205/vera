@@ -23,6 +23,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Zap, Users, RotateCcw, AlertTriangle } from 'lucide-react';
 import { CARD, INPUT, Chip, Boton, Etiqueta, type PlantillaVista } from './_comunes';
 import { VistaPrevia } from './_vista-previa';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export interface Hueco {
   clave: string; titulo: string; detalle: string; sugerida: string; variables: string[];
@@ -154,9 +155,11 @@ export function TabAvisos({
                           ))}
                         </TextField>
                         {modo === 'negocio' && a?.propia && a.nombre && (
-                          <Boton variante="suave" onClick={() => asignar(h.clave, '')}>
-                            <RotateCcw size={13} /> Volver a la global
-                          </Boton>
+                          <Tooltip text="Quita la plantilla propia de este negocio y vuelve a la de Automatizaciones">
+                            <Boton variante="suave" onClick={() => asignar(h.clave, '')}>
+                              <RotateCcw size={13} /> Volver a la global
+                            </Boton>
+                          </Tooltip>
                         )}
                       </Box>
 

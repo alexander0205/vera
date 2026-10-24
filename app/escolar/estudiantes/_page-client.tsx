@@ -29,6 +29,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import { notaDeCorte } from '@/lib/export/paginas';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 const PAGE_SIZE = 25;
@@ -345,10 +346,12 @@ export default function EstudiantesClient() {
                   Hay {sinMatricular} beneficiario{sinMatricular !== 1 ? 's' : ''} en Contactos
                   {sinMatricular !== 1 ? ' que no son alumnos' : ' que no es alumno'} todavía.
                 </span>
-                <Button variant="outline" size="sm" className="shrink-0"
-                  onClick={() => setTraerAbierto(true)}>
-                  Traerlos
-                </Button>
+                <Tooltip text="Trae alumnos del padrón de SIGERD a esta lista">
+                  <Button variant="outline" size="sm" className="shrink-0"
+                    onClick={() => setTraerAbierto(true)}>
+                    Traerlos
+                  </Button>
+                </Tooltip>
               </div>
             )}
 
@@ -438,14 +441,16 @@ export default function EstudiantesClient() {
                             {!deContactos ? (
                               <span className="text-xs capitalize text-gray-600">{e.estado}</span>
                             ) : puedeGestionar ? (
-                              <Button variant="outline" size="sm" className="text-xs"
-                                disabled={creando === e.id}
-                                onClick={() => crearAlumnoDesdeContacto(e.id)}>
-                                {creando === e.id
-                                  ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                                  : <UserPlus className="h-3.5 w-3.5 mr-1" />}
-                                Crear alumno
-                              </Button>
+                              <Tooltip text="Crea la ficha de alumno con los datos de este contacto">
+                                <Button variant="outline" size="sm" className="text-xs"
+                                  disabled={creando === e.id}
+                                  onClick={() => crearAlumnoDesdeContacto(e.id)}>
+                                  {creando === e.id
+                                    ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                    : <UserPlus className="h-3.5 w-3.5 mr-1" />}
+                                  Crear alumno
+                                </Button>
+                              </Tooltip>
                             ) : (
                               <span className="text-xs text-gray-500">Sin matricular</span>
                             )}
@@ -456,6 +461,7 @@ export default function EstudiantesClient() {
                               qué meses se le van a cobrar. */}
                           <td className="whitespace-nowrap px-3 py-2.5 text-right">
                             {!deContactos && puedeGestionar && (
+                              <Tooltip text="Abre sus mensualidades para elegir qué facturar">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -467,6 +473,7 @@ export default function EstudiantesClient() {
                               >
                                 <Receipt className="mr-1 h-3.5 w-3.5" />Facturar
                               </Button>
+                              </Tooltip>
                             )}
                           </td>
                         </tr>
@@ -482,15 +489,19 @@ export default function EstudiantesClient() {
                 <div className="flex items-center justify-between text-sm text-gray-500">
                   <span>Mostrando {desde}–{hasta} de {total}</span>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled={page === 0}
-                      onClick={() => irAPagina(page - 1)}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
+                    <Tooltip text="Página anterior">
+                      <Button variant="outline" size="sm" disabled={page === 0}
+                        onClick={() => irAPagina(page - 1)} aria-label="Página anterior">
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                    </Tooltip>
                     <span className="tabular-nums">{page + 1} / {totalPaginas}</span>
-                    <Button variant="outline" size="sm" disabled={page + 1 >= totalPaginas}
-                      onClick={() => irAPagina(page + 1)}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    <Tooltip text="Página siguiente">
+                      <Button variant="outline" size="sm" disabled={page + 1 >= totalPaginas}
+                        onClick={() => irAPagina(page + 1)} aria-label="Página siguiente">
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </Tooltip>
                   </div>
                 </div>
               </>

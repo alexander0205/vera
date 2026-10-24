@@ -14,6 +14,7 @@ import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 import { getPlan, planChipColors } from '@/lib/config/plans';
 
@@ -112,22 +113,30 @@ export default function PerfilPage() {
                       autoFocus size="small"
                       sx={{ width: 200, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontWeight: 600 } }}
                     />
-                    <IconButton size="small" onClick={saveName} disabled={loading}
-                      sx={{ bgcolor: 'primary.main', color: '#fff', '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { opacity: 0.5 } }}>
-                      {loading ? <CircularProgress size={14} color="inherit" /> : <Check style={{ width: 14, height: 14 }} />}
-                    </IconButton>
-                    <IconButton size="small" onClick={cancelEdit} sx={{ border: '1px solid #e5e7eb', color: 'text.secondary' }}>
-                      <X style={{ width: 14, height: 14 }} />
-                    </IconButton>
+                    <Tooltip text="Guarda el nombre nuevo">
+                      <IconButton size="small" onClick={saveName} disabled={loading}
+                        aria-label="Guardar nombre"
+                        sx={{ bgcolor: 'primary.main', color: '#fff', '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { opacity: 0.5 } }}>
+                        {loading ? <CircularProgress size={14} color="inherit" /> : <Check style={{ width: 14, height: 14 }} />}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip text="Descarta el cambio del nombre">
+                      <IconButton size="small" aria-label="Cancelar cambio de nombre" onClick={cancelEdit} sx={{ border: '1px solid #e5e7eb', color: 'text.secondary' }}>
+                        <X style={{ width: 14, height: 14 }} />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 ) : (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
                       {user?.name ?? 'Sin nombre'}
                     </Typography>
-                    <IconButton size="small" onClick={() => setEditing(true)} sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#eef2fe' } }}>
-                      <Pencil style={{ width: 14, height: 14 }} />
-                    </IconButton>
+                    <Tooltip text="Cambia tu nombre">
+                      <IconButton size="small" onClick={() => setEditing(true)}
+                        aria-label="Editar nombre" sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#eef2fe' } }}>
+                        <Pencil style={{ width: 14, height: 14 }} />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 )}
                 {error && <Typography variant="caption" sx={{ color: 'error.main', display: 'block', mt: 0.5 }}>{error}</Typography>}

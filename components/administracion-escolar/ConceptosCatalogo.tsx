@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { ChevronDown, ChevronUp, Loader2, Plus, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { ETIQUETA_FRECUENCIA } from '@/lib/administracion-escolar/calendario';
 import { ConceptoDetalle, type Concepto } from './ConceptoDetalle';
@@ -401,12 +402,12 @@ export function ConceptosCatalogo() {
                 fila dos puestos con el mouse es más fácil pulsando dos veces
                 que arrastrando. */}
             <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-              <button type="button" title="Subir" aria-label={`Subir ${c.nombre}`}
+              <Tooltip text="Sube este concepto en la lista"><button type="button" aria-label={`Subir ${c.nombre}`}
                 disabled={i === 0} onClick={() => void colocar(c.id, i - 1)}
-                className={FLECHA}><ChevronUp className="h-3.5 w-3.5" /></button>
-              <button type="button" title="Bajar" aria-label={`Bajar ${c.nombre}`}
+                className={FLECHA}><ChevronUp className="h-3.5 w-3.5" /></button></Tooltip>
+              <Tooltip text="Baja este concepto en la lista"><button type="button" aria-label={`Bajar ${c.nombre}`}
                 disabled={i === conceptos.length - 1} onClick={() => void colocar(c.id, i + 1)}
-                className={FLECHA}><ChevronDown className="h-3.5 w-3.5" /></button>
+                className={FLECHA}><ChevronDown className="h-3.5 w-3.5" /></button></Tooltip>
             </span>
           </div>
         ))}
@@ -414,10 +415,10 @@ export function ConceptosCatalogo() {
           <Input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void crear(); }}
             placeholder="Nuevo concepto" className="h-8 text-sm" />
-          <Button size="sm" variant="outline" onClick={() => void crear()}
+          <Tooltip text="Crea el concepto con el nombre escrito"><Button aria-label="Crear concepto" size="sm" variant="outline" onClick={() => void crear()}
             disabled={creando || !nuevoNombre.trim()} className="h-8 shrink-0 px-2">
             {creando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-          </Button>
+          </Button></Tooltip>
         </div>
       </div>
 

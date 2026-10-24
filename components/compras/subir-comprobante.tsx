@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileUp, Loader2, Upload, X } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter,
 } from '@/components/ui/dialog';
@@ -175,11 +176,13 @@ export function SubirComprobante({ etiqueta = 'Subir comprobante', variante = 'o
                   <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
                     <span className="min-w-0 flex-1 truncate">{f.name}</span>
                     <span className="shrink-0 text-xs text-gray-500">{pesoMb(f.size)} MB</span>
-                    <button type="button" aria-label={`Quitar ${f.name}`} disabled={ocupado}
-                      onClick={() => setArchivos((previos) => previos.filter((_, j) => j !== i))}
-                      className="shrink-0 text-gray-400 hover:text-red-600 disabled:opacity-40">
-                      <X className="h-4 w-4" />
-                    </button>
+                    <Tooltip text="Quita este archivo de la lista">
+                      <button type="button" aria-label={`Quitar ${f.name}`} disabled={ocupado}
+                        onClick={() => setArchivos((previos) => previos.filter((_, j) => j !== i))}
+                        className="shrink-0 text-gray-400 hover:text-red-600 disabled:opacity-40">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </Tooltip>
                   </li>
                 ))}
               </ul>

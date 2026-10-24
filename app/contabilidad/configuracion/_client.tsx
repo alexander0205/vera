@@ -27,6 +27,7 @@ import type {
   ConfigContable, MetodoConfigurado, OverrideIngreso,
 } from '@/lib/contabilidad/config';
 import type { EstadoConfiguracion } from '@/lib/contabilidad/validacion';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
@@ -214,9 +215,11 @@ export function ConfigClient({
               provisiones y formas de cobro— y crea las que falten. No cambia lo que ya elegiste ni enciende nada.
             </Typography>
           </Box>
-          <Button variant="contained" size="small" disabled={guardando} onClick={aplicarRecomendada}>
-            Completar con la recomendada
-          </Button>
+          <Tooltip text="Llena lo que falta con cuentas estándar; no cambia lo que ya elegiste">
+            <Button variant="contained" size="small" disabled={guardando} onClick={aplicarRecomendada}>
+              Completar con la recomendada
+            </Button>
+          </Tooltip>
         </Box>
       )}
 
@@ -258,16 +261,18 @@ export function ConfigClient({
                 <strong>{estadoInicial.activa ? 'encendida' : 'apagada'}</strong>
               </Typography>
               {puedeConfigurar && (
-                <Button
-                  size="small"
-                  variant={estadoInicial.activa ? 'outlined' : 'contained'}
-                  color={estadoInicial.activa ? 'inherit' : 'primary'}
-                  disabled={guardando || (!estadoInicial.completa && !estadoInicial.activa)}
-                  onClick={() => enviar({ seccion: 'activar', activa: !estadoInicial.activa })}
-                  sx={estadoInicial.activa ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
-                >
-                  {estadoInicial.activa ? 'Apagar' : 'Encender'}
-                </Button>
+                <Tooltip text="Enciende o apaga la contabilidad automática de la empresa">
+                  <Button
+                    size="small"
+                    variant={estadoInicial.activa ? 'outlined' : 'contained'}
+                    color={estadoInicial.activa ? 'inherit' : 'primary'}
+                    disabled={guardando || (!estadoInicial.completa && !estadoInicial.activa)}
+                    onClick={() => enviar({ seccion: 'activar', activa: !estadoInicial.activa })}
+                    sx={estadoInicial.activa ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
+                  >
+                    {estadoInicial.activa ? 'Apagar' : 'Encender'}
+                  </Button>
+                </Tooltip>
               )}
             </Box>
 
@@ -394,16 +399,20 @@ export function ConfigClient({
               </Typography>
             </Box>
             {puedeConfigurar && (
-              <Button
-                size="small"
-                variant={configInicial.provisionarNomina ? 'outlined' : 'contained'}
-                color={configInicial.provisionarNomina ? 'inherit' : 'primary'}
-                disabled={guardando}
-                onClick={() => enviar({ seccion: 'nomina', provisionarNomina: !configInicial.provisionarNomina })}
-                sx={configInicial.provisionarNomina ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
-              >
-                {configInicial.provisionarNomina ? 'Apagar' : 'Encender'}
-              </Button>
+              <Tooltip text={configInicial.provisionarNomina
+                ? 'Deja de asentar cada mes la provisión de regalía, vacaciones y cesantía'
+                : 'Asienta cada mes la provisión de regalía, vacaciones y cesantía'}>
+                <Button
+                  size="small"
+                  variant={configInicial.provisionarNomina ? 'outlined' : 'contained'}
+                  color={configInicial.provisionarNomina ? 'inherit' : 'primary'}
+                  disabled={guardando}
+                  onClick={() => enviar({ seccion: 'nomina', provisionarNomina: !configInicial.provisionarNomina })}
+                  sx={configInicial.provisionarNomina ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
+                >
+                  {configInicial.provisionarNomina ? 'Apagar' : 'Encender'}
+                </Button>
+              </Tooltip>
             )}
           </Box>
 
@@ -552,13 +561,15 @@ export function ConfigClient({
                     </TableCell>
                     {puedeConfigurar && (
                       <TableCell align="right">
-                        <IconButton
-                          size="small" title="Quitar"
-                          onClick={() => enviar({ seccion: 'ingreso', id: o.id, cuentaId: null })}
-                          sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
-                        >
-                          <Trash2 style={{ width: 16, height: 16 }} />
-                        </IconButton>
+                        <Tooltip text="Quita esta excepción de la lista">
+                          <IconButton
+                            size="small" aria-label="Quitar"
+                            onClick={() => enviar({ seccion: 'ingreso', id: o.id, cuentaId: null })}
+                            sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
+                          >
+                            <Trash2 style={{ width: 16, height: 16 }} />
+                          </IconButton>
+                        </Tooltip>
                       </TableCell>
                     )}
                   </TableRow>
@@ -631,14 +642,16 @@ export function ConfigClient({
             </Box>
           </Box>
         ) : (
-          <Button
-            variant="outlined" color="inherit" size="small"
-            onClick={() => setNuevoOverride({ tipo: 'categoria', destinoId: '', cuentaId: '' })}
-            startIcon={<Plus style={{ width: 16, height: 16 }} />}
-            sx={{ alignSelf: 'flex-start', color: '#374151', borderColor: '#d1d5db' }}
-          >
-            Agregar excepción
-          </Button>
+          <Tooltip text="Pone otra cuenta de ingreso a una categoría o producto concreto">
+            <Button
+              variant="outlined" color="inherit" size="small"
+              onClick={() => setNuevoOverride({ tipo: 'categoria', destinoId: '', cuentaId: '' })}
+              startIcon={<Plus style={{ width: 16, height: 16 }} />}
+              sx={{ alignSelf: 'flex-start', color: '#374151', borderColor: '#d1d5db' }}
+            >
+              Agregar excepción
+            </Button>
+          </Tooltip>
         ))}
       </Box>
 

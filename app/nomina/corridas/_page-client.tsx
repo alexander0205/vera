@@ -23,6 +23,7 @@ import { CalendarClock, Loader2, Plus, ChevronRight, CalendarDays, Info } from '
 import { RangoFechas } from '@/components/reportes/rango-fechas';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Corrida {
   id: number;
@@ -142,9 +143,11 @@ export default function CorridasClient() {
           <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, corridas, filtroTexto)}
             deshabilitado={isLoading || corridas.length === 0} testId="exportar-corridas" />
           {puedeCorrer && (
-            <Button onClick={() => setAbierto(true)} className="gap-1.5">
-              <Plus className="h-4 w-4" /> Nueva corrida
-            </Button>
+            <Tooltip text="Calcula una nómina para un período; queda en borrador hasta aprobarla">
+              <Button onClick={() => setAbierto(true)} className="gap-1.5">
+                <Plus className="h-4 w-4" /> Nueva corrida
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -164,9 +167,11 @@ export default function CorridasClient() {
           <CalendarDays className="h-8 w-8" />
           <p>{(todas?.length ?? 0) > 0 ? 'Ninguna corrida en estas fechas.' : 'Aún no has corrido ninguna nómina.'}</p>
           {puedeCorrer && !todas?.length && (
-            <Button variant="outline" onClick={() => setAbierto(true)} className="mt-2 gap-1.5">
-              <Plus className="h-4 w-4" /> Correr la primera
-            </Button>
+            <Tooltip text="Calcula la primera nómina; queda en borrador hasta aprobarla">
+              <Button variant="outline" onClick={() => setAbierto(true)} className="mt-2 gap-1.5">
+                <Plus className="h-4 w-4" /> Correr la primera
+              </Button>
+            </Tooltip>
           )}
         </CardContent></Card>
       ) : (

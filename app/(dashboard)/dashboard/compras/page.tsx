@@ -11,6 +11,7 @@ import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import { Tooltip } from '@/components/ui/tooltip';
 import { DataTable, type DataTableColumn, type ExportTabla } from '@/components/data-table';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtFechaCorta, fmtDOP, hoyRD } from '@/lib/utils/format';
@@ -281,10 +282,11 @@ export default function ComprasPage() {
         </Box>
         {canRegistrar && (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Button component={Link} href="/dashboard/compras/nueva" variant="outlined" size="small" startIcon={<UserRound style={{ width: 16, height: 16 }} />}
-              title="Para personas sin RNC que no pueden darte comprobante: lo emites tú (e41)">
-              Compra a informal (e41)
-            </Button>
+            <Tooltip text="Para personas sin RNC que no pueden darte comprobante: lo emites tú (e41)">
+              <Button component={Link} href="/dashboard/compras/nueva" variant="outlined" size="small" startIcon={<UserRound style={{ width: 16, height: 16 }} />}>
+                Compra a informal (e41)
+              </Button>
+            </Tooltip>
             <Button component={Link} href="/dashboard/compras/registrar" variant="contained" size="small" startIcon={<Plus style={{ width: 16, height: 16 }} />}>
               Registrar compra
             </Button>

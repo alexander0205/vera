@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -278,9 +279,9 @@ export function MatriculaLoteDialog({ open, onClose, onSaved }: Props) {
                   <Input className="pl-8" placeholder="Buscar por nombre o código…"
                     value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                 </div>
-                <Button variant="outline" size="sm" onClick={marcarVisibles} disabled={filtrados.length === 0}>
+                <Tooltip text="Marca, o quita si ya están marcados, los alumnos que se ven con el filtro"><Button variant="outline" size="sm" onClick={marcarVisibles} disabled={filtrados.length === 0}>
                   {todosVisiblesMarcados ? 'Quitar visibles' : 'Marcar visibles'}
-                </Button>
+                </Button></Tooltip>
               </div>
               <p className="text-xs text-gray-500">
                 {seleccion.size} seleccionado(s){cursoNombre ? ` · sección ${cursoNombre}` : ''}

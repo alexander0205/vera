@@ -16,6 +16,7 @@ import {
   Loader2, LogOut, ShieldCheck, TriangleAlert, Link2, Search, ListTree,
   Database, CalendarClock, Trash2, GitCompareArrows,
 } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { CompletarDatosSigerd } from '@/components/administracion-escolar/CompletarDatosSigerd';
 
@@ -378,16 +379,18 @@ function ResumenDatos() {
           </div>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setConfirmando(true)}
-          disabled={borrando}
-          className="text-destructive hover:text-destructive"
-        >
-          {borrando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
-          Eliminar datos guardados
-        </Button>
+        <Tooltip text="Borra lo traído de SIGERD (alumnos, secciones, personal); no se puede deshacer">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmando(true)}
+            disabled={borrando}
+            className="text-destructive hover:text-destructive"
+          >
+            {borrando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
+            Eliminar datos guardados
+          </Button>
+        </Tooltip>
 
         <ConfirmDialog
           open={confirmando}

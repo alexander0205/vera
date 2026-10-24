@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Loader2, Pencil, RotateCcw } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 import { montosPorCuota, precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
@@ -409,18 +410,20 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
                                   {puedeEditar && !editando && (
                                     <div className="flex justify-end gap-1">
                                       {esPropio && (
-                                        <button type="button" title={`Volver al precio del grado (${fmtRD(escritoDesdeTarifa(base, base.montoCentavos))}${modo === 'cuota' ? ' por cuota' : ''})`}
+                                        <Tooltip text={`Vuelve al precio del grado (${fmtRD(escritoDesdeTarifa(base, base.montoCentavos))}${modo === 'cuota' ? ' por cuota' : ''})`}>
+                                        <button type="button"
                                           aria-label="Volver al precio del grado"
                                           onClick={() => setPropios((m) => { const n = new Map(m); n.delete(l.conceptoId); return n; })}
                                           className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
                                           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                                         </button>
+                                        </Tooltip>
                                       )}
-                                      <button type="button" title="Cambiar precio para este alumno" aria-label={`Cambiar precio de ${l.nombre} para este alumno`}
+                                      <Tooltip text="Cambia el precio que paga solo este alumno en este concepto"><button type="button" aria-label={`Cambiar precio de ${l.nombre} para este alumno`}
                                         onClick={() => abrirPrecio(base)}
                                         className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zero-200 text-zero-700 hover:bg-zero-50">
                                         <Pencil className="h-3.5 w-3.5" aria-hidden />
-                                      </button>
+                                      </button></Tooltip>
                                     </div>
                                   )}
                                 </td>

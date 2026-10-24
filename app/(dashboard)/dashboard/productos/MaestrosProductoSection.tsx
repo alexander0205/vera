@@ -18,6 +18,7 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import { Plus, Check } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Valor { id: number; valor: string; }
 interface Maestro {
@@ -152,26 +153,27 @@ export default function MaestrosProductoSection({ productId }: { productId: numb
                   {m.valores.map((v) => {
                     const on = set.has(v.id);
                     return (
-                      <Button
-                        key={v.id}
-                        type="button"
-                        onClick={() => toggleMulti(m.id, v.id)}
-                        disableElevation
-                        variant={on ? 'contained' : 'outlined'}
-                        sx={{
-                          textTransform: 'none',
-                          borderRadius: '9999px',
-                          px: 1.5,
-                          py: 0.5,
-                          minWidth: 0,
-                          fontSize: '0.875rem',
-                          ...(on
-                            ? { bgcolor: '#3658e1', color: '#fff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }
-                            : { bgcolor: '#fff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#8193f5', bgcolor: '#fff' } }),
-                        }}
-                      >
-                        {v.valor}
-                      </Button>
+                      <Tooltip key={v.id} text={`${on ? 'Quita' : 'Marca'} «${v.valor}» en este producto; se guarda al instante`}>
+                        <Button
+                          type="button"
+                          onClick={() => toggleMulti(m.id, v.id)}
+                          disableElevation
+                          variant={on ? 'contained' : 'outlined'}
+                          sx={{
+                            textTransform: 'none',
+                            borderRadius: '9999px',
+                            px: 1.5,
+                            py: 0.5,
+                            minWidth: 0,
+                            fontSize: '0.875rem',
+                            ...(on
+                              ? { bgcolor: '#3658e1', color: '#fff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }
+                              : { bgcolor: '#fff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#8193f5', bgcolor: '#fff' } }),
+                          }}
+                        >
+                          {v.valor}
+                        </Button>
+                      </Tooltip>
                     );
                   })}
                 </Box>

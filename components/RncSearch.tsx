@@ -23,6 +23,7 @@ import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import CircularProgress from '@mui/material/CircularProgress';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -220,40 +221,44 @@ export function RncSearch({
         <Box sx={{ px: 2, py: 2, textAlign: 'center' }}>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 0.5 }}>No se encontraron resultados en el padrón DGII</Typography>
           {puedeUsarManual && (
-            <Box
-              component="button"
-              type="button"
-              onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
-              onClick={() => usarManual(valorManual)}
-              sx={{
-                mt: 0.5, mb: 1, display: 'inline-flex', alignItems: 'center', gap: 0.75,
-                borderRadius: '8px', bgcolor: '#eef2fe', px: 1.5, py: 0.75, fontSize: '0.875rem',
-                fontWeight: 500, color: '#2a45c4', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'background-color 0.15s', '&:hover': { bgcolor: '#e0e7fd' },
-              }}
-            >
-              Usar «{valorManual}» de todos modos
-            </Box>
+            <Tooltip text="Usa este número aunque no esté en el padrón de la DGII">
+              <Box
+                component="button"
+                type="button"
+                onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+                onClick={() => usarManual(valorManual)}
+                sx={{
+                  mt: 0.5, mb: 1, display: 'inline-flex', alignItems: 'center', gap: 0.75,
+                  borderRadius: '8px', bgcolor: '#eef2fe', px: 1.5, py: 0.75, fontSize: '0.875rem',
+                  fontWeight: 500, color: '#2a45c4', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'background-color 0.15s', '&:hover': { bgcolor: '#e0e7fd' },
+                }}
+              >
+                Usar «{valorManual}» de todos modos
+              </Box>
+            </Tooltip>
           )}
           {showSyncHint && (
             <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
               ¿Padrón vacío?{' '}
-              <Box
-                component="button"
-                type="button"
-                onClick={async () => {
-                  setOpen(false);
-                  alert('Sincronizando padrón DGII, esto puede tomar 1-2 minutos…');
-                  await fetch('/api/rnc/sync', { method: 'POST' });
-                  alert('¡Listo! Vuelve a buscar el RNC o nombre.');
-                }}
-                sx={{
-                  color: '#3658e1', textDecoration: 'underline', border: 'none', bgcolor: 'transparent',
-                  p: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
-                }}
-              >
-                Sincronizar ahora
-              </Box>
+              <Tooltip text="Descarga de nuevo el padrón DGII; tarda 1-2 minutos">
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={async () => {
+                    setOpen(false);
+                    alert('Sincronizando padrón DGII, esto puede tomar 1-2 minutos…');
+                    await fetch('/api/rnc/sync', { method: 'POST' });
+                    alert('¡Listo! Vuelve a buscar el RNC o nombre.');
+                  }}
+                  sx={{
+                    color: '#3658e1', textDecoration: 'underline', border: 'none', bgcolor: 'transparent',
+                    p: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
+                  }}
+                >
+                  Sincronizar ahora
+                </Box>
+              </Tooltip>
             </Typography>
           )}
         </Box>
@@ -358,15 +363,17 @@ export function RncSearch({
             endAdornment: loading ? (
               <CircularProgress size={14} sx={{ color: '#9ca3af' }} />
             ) : query.trim() ? (
-              <IconButton
-                aria-label="Borrar"
-                size="small"
-                onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
-                onClick={clear}
-                sx={{ p: 0.25, color: '#9ca3af', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}
-              >
-                <X style={{ width: 14, height: 14 }} />
-              </IconButton>
+              <Tooltip text="Borra lo escrito y quita la selección">
+                <IconButton
+                  aria-label="Borrar"
+                  size="small"
+                  onMouseDown={(e: React.MouseEvent) => e.preventDefault()}
+                  onClick={clear}
+                  sx={{ p: 0.25, color: '#9ca3af', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}
+                >
+                  <X style={{ width: 14, height: 14 }} />
+                </IconButton>
+              </Tooltip>
             ) : null,
           },
         }}

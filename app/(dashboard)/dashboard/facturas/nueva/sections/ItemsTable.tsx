@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Tooltip from '@mui/material/Tooltip';
+import { Tooltip as Ayuda } from '@/components/ui/tooltip';
 import { Info, X } from 'lucide-react';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
@@ -273,6 +274,7 @@ export function ItemsTable({
                 Línea {idx + 1}
               </Typography>
               {items.length > 1 && (
+                <Ayuda text="Quita esta línea de la factura">
                 <IconButton
                   size="small"
                   onClick={() => onRemoveItem(item.id)}
@@ -281,6 +283,7 @@ export function ItemsTable({
                 >
                   <X size={20} />
                 </IconButton>
+                </Ayuda>
               )}
             </Box>
 
@@ -901,6 +904,7 @@ export function ItemsTable({
                 {/* Action */}
                 <TableCell sx={{ px: 1, py: 1 }}>
                   {items.length > 1 && (
+                    <Ayuda text="Quita esta línea de la factura">
                     <IconButton
                       size="small"
                       className="remove-btn"
@@ -916,6 +920,7 @@ export function ItemsTable({
                     >
                       <X size={16} />
                     </IconButton>
+                    </Ayuda>
                   )}
                 </TableCell>
               </TableRow>
@@ -955,6 +960,7 @@ export function ItemsTable({
           + Agregar línea
         </Button>
         {!ocultarConduce && (
+        <Ayuda text="Función próxima; todavía no está disponible">
         <Button
           type="button"
           variant="text"
@@ -972,6 +978,7 @@ export function ItemsTable({
         >
           + Agregar Conduce
         </Button>
+        </Ayuda>
         )}
       </Box>
       {dialog}

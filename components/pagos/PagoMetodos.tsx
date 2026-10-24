@@ -8,6 +8,7 @@ import TextField from '@mui/material/TextField';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 import InputAdornment from '@mui/material/InputAdornment';
 import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
 import { useCuentasBanco } from '@/lib/hooks/useCuentasBanco';
@@ -258,23 +259,24 @@ export function PagoMetodos({
             </Box>
 
             {lineas.length > 1 && (
-              <IconButton
-                type="button"
-                onClick={() => quitarLinea(i)}
-                disabled={disabled}
-                title="Quitar método"
-                aria-label="Quitar método"
-                sx={{
-                  flexShrink: 0,
-                  height: 36,
-                  borderRadius: '8px',
-                  border: '1px solid #fecaca',
-                  color: '#ef4444',
-                  '&:hover': { bgcolor: '#fef2f2', borderColor: '#fecaca' },
-                }}
-              >
-                <Trash2 style={{ width: 16, height: 16 }} />
-              </IconButton>
+              <Tooltip text="Quita esta línea de pago">
+                <IconButton
+                  type="button"
+                  onClick={() => quitarLinea(i)}
+                  disabled={disabled}
+                  aria-label="Quitar método"
+                  sx={{
+                    flexShrink: 0,
+                    height: 36,
+                    borderRadius: '8px',
+                    border: '1px solid #fecaca',
+                    color: '#ef4444',
+                    '&:hover': { bgcolor: '#fef2f2', borderColor: '#fecaca' },
+                  }}
+                >
+                  <Trash2 style={{ width: 16, height: 16 }} />
+                </IconButton>
+              </Tooltip>
             )}
           </Box>
 
@@ -382,32 +384,36 @@ export function PagoMetodos({
           {!disabled && ((showCuenta && !cuentaVisible(i, l)) || (showReferencia && !refVisible(i, l))) && (
             <Box sx={{ display: 'flex', gap: 1.5 }}>
               {showCuenta && !cuentaVisible(i, l) && (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={() => setVerCuenta(s => toggleSet(s, i))}
-                  sx={{
-                    border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
-                    fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
-                    '&:hover': { color: '#2a45c4' },
-                  }}
-                >
-                  + Cuenta
-                </Box>
+                <Tooltip text="Muestra el campo para anotar la cuenta de este pago">
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={() => setVerCuenta(s => toggleSet(s, i))}
+                    sx={{
+                      border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
+                      '&:hover': { color: '#2a45c4' },
+                    }}
+                  >
+                    + Cuenta
+                  </Box>
+                </Tooltip>
               )}
               {showReferencia && !refVisible(i, l) && (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={() => setVerReferencia(s => toggleSet(s, i))}
-                  sx={{
-                    border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
-                    fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
-                    '&:hover': { color: '#2a45c4' },
-                  }}
-                >
-                  + Referencia
-                </Box>
+                <Tooltip text="Muestra el campo para anotar la referencia de este pago">
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={() => setVerReferencia(s => toggleSet(s, i))}
+                    sx={{
+                      border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
+                      '&:hover': { color: '#2a45c4' },
+                    }}
+                  >
+                    + Referencia
+                  </Box>
+                </Tooltip>
               )}
             </Box>
           )}
@@ -430,20 +436,22 @@ export function PagoMetodos({
         >
           <Plus style={{ width: 14, height: 14 }} /> Agregar otro método
         </Box>
-        <Box
-          component="button"
-          type="button"
-          onClick={repartirResto}
-          disabled={disabled || restoCents <= 0}
-          sx={{
-            border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.75rem', fontWeight: 500, color: '#6b7280',
-            '&:hover': { color: '#374151' },
-            '&:disabled': { opacity: 0.4, cursor: 'default' },
-          }}
-        >
-          Repartir resto
-        </Box>
+        <Tooltip text="Pone lo que falta del total en la última línea">
+          <Box
+            component="button"
+            type="button"
+            onClick={repartirResto}
+            disabled={disabled || restoCents <= 0}
+            sx={{
+              border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: '0.75rem', fontWeight: 500, color: '#6b7280',
+              '&:hover': { color: '#374151' },
+              '&:disabled': { opacity: 0.4, cursor: 'default' },
+            }}
+          >
+            Repartir resto
+          </Box>
+        </Tooltip>
       </Box>
 
       <Box

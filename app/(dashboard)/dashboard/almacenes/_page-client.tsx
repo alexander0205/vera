@@ -24,6 +24,7 @@ import IconButton from '@mui/material/IconButton';
 import { Warehouse, Plus, Pencil, Trash2 } from 'lucide-react';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Almacen {
   id: number;
@@ -229,12 +230,16 @@ export default function AlmacenesPage() {
                   </TableCell>
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <IconButton size="small" onClick={() => abrirEdicion(a)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
-                        <Pencil size={16} />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => { setDeleteTarget(a); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
-                        <Trash2 size={16} />
-                      </IconButton>
+                      <Tooltip text="Cambia el nombre, la dirección o el uso de este almacén">
+                        <IconButton size="small" aria-label="Editar" onClick={() => abrirEdicion(a)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                          <Pencil size={16} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip text="Borra este almacén; pide confirmar antes">
+                        <IconButton size="small" aria-label="Borrar almacén" onClick={() => { setDeleteTarget(a); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>

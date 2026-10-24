@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
+import { Tooltip } from '@/components/ui/tooltip';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
@@ -98,9 +99,9 @@ export default function FieldPropertiesPanel({
           <Typography variant="overline" sx={{ display: 'block', lineHeight: 1.4 }}>Propiedades</Typography>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>{TIPO_LABELS[campo.tipo] || campo.tipo}</Typography>
         </Box>
-        <IconButton size="small" onClick={onClose} sx={{ color: 'text.disabled' }}>
+        <Tooltip text="Cierra el panel de propiedades"><IconButton aria-label="Cerrar" size="small" onClick={onClose} sx={{ color: 'text.disabled' }}>
           <CloseIcon fontSize="small" />
-        </IconButton>
+        </IconButton></Tooltip>
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
@@ -266,7 +267,7 @@ export default function FieldPropertiesPanel({
                   {(campo.opciones || []).map((op, i) => (
                     <Stack key={op} direction="row" spacing={0.5} sx={{ alignItems: 'center', '&:hover [data-hover-remove]': { opacity: 1 } }}>
                       <Stack sx={{ alignItems: 'center' }}>
-                        <IconButton
+                        <Tooltip text="Sube esta opción en la lista"><IconButton aria-label="Subir opción"
                           type="button"
                           size="small"
                           onClick={() => moveOpcion(i, -1)}
@@ -274,8 +275,8 @@ export default function FieldPropertiesPanel({
                           sx={{ p: 0, color: 'text.disabled' }}
                         >
                           <KeyboardArrowUpIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
-                        <IconButton
+                        </IconButton></Tooltip>
+                        <Tooltip text="Baja esta opción en la lista"><IconButton aria-label="Bajar opción"
                           type="button"
                           size="small"
                           onClick={() => moveOpcion(i, 1)}
@@ -283,7 +284,7 @@ export default function FieldPropertiesPanel({
                           sx={{ p: 0, color: 'text.disabled' }}
                         >
                           <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
+                        </IconButton></Tooltip>
                       </Stack>
                       <DragIndicatorIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
                       <Typography
@@ -293,7 +294,7 @@ export default function FieldPropertiesPanel({
                       >
                         {op}
                       </Typography>
-                      <IconButton
+                      <Tooltip text="Quita esta opción de la lista"><IconButton aria-label="Quitar opción"
                         type="button"
                         size="small"
                         onClick={() => removeOpcion(op)}
@@ -304,7 +305,7 @@ export default function FieldPropertiesPanel({
                         }}
                       >
                         <CloseIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
+                      </IconButton></Tooltip>
                     </Stack>
                   ))}
                   <Stack direction="row" spacing={1}>
@@ -314,9 +315,9 @@ export default function FieldPropertiesPanel({
                       placeholder="Nueva opción..."
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOpcion(); } }}
                     />
-                    <Button type="button" size="small" variant="outlined" color="inherit" onClick={addOpcion} sx={{ minWidth: 40, px: 1 }}>
+                    <Tooltip text="Agrega a la lista la opción escrita arriba"><Button aria-label="Agregar opción" type="button" size="small" variant="outlined" color="inherit" onClick={addOpcion} sx={{ minWidth: 40, px: 1 }}>
                       <AddIcon fontSize="small" />
-                    </Button>
+                    </Button></Tooltip>
                   </Stack>
                 </Stack>
               </CardContent>

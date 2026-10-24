@@ -25,6 +25,7 @@ import { Loader2, Search, ArrowRight, AlertTriangle, CheckCircle2, Pencil } from
 import { guardarEmpresa } from './actions';
 import type { ActionState } from '@/lib/auth/middleware';
 import type { LineaKey } from '@/lib/onboarding/deducir';
+import { Tooltip } from '@/components/ui/tooltip';
 
 type Hallazgo = {
   encontrado: boolean;
@@ -116,13 +117,15 @@ export function PasoEmpresa({
             inputMode="numeric" maxLength={13} placeholder="131793916"
             aria-label="RNC" className={campo}
           />
-          <button
-            type="button" onClick={buscar} disabled={buscando}
-            className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-zero-600 px-6 text-[15px] font-semibold text-white transition hover:bg-zero-700 disabled:opacity-60"
-          >
-            {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            Buscar
-          </button>
+          <Tooltip text="Busca los datos de la empresa con este RNC">
+            <button
+              type="button" onClick={buscar} disabled={buscando}
+              className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-zero-600 px-6 text-[15px] font-semibold text-white transition hover:bg-zero-700 disabled:opacity-60"
+            >
+              {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Buscar
+            </button>
+          </Tooltip>
         </div>
       )}
 

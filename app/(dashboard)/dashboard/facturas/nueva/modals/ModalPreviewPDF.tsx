@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { CheckCircle, Download, Printer } from 'lucide-react';
 import { TIPOS_ECF } from '@/lib/ecf/types';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export function ModalPreviewPDF({
   open, onOpenChange, tipoEcf, previewUrl, loading, onEmitir,
@@ -153,6 +154,7 @@ export function ModalPreviewPDF({
               </Button>
             </>
           )}
+          <Tooltip text="Emite el comprobante con lo que ves en esta vista previa">
           <Button
             variant="contained"
             size="small"
@@ -164,6 +166,7 @@ export function ModalPreviewPDF({
           >
             Emitir
           </Button>
+          </Tooltip>
         </Box>
       </DialogActions>
     </Dialog>

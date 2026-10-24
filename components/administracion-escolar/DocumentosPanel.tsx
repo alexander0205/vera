@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -318,21 +319,21 @@ export function DocumentosPanel() {
                 <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
                   {listaActiva.nombre}
                 </h2>
-                <button type="button" title="Renombrar" aria-label={`Renombrar ${listaActiva.nombre}`}
+                <Tooltip text="Cambia el nombre de este listado"><button type="button" aria-label={`Renombrar ${listaActiva.nombre}`}
                   onClick={() => setRenombrando(listaActiva)}
                   className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
                   <Pencil className="h-4 w-4" />
-                </button>
-                <button type="button" title="Duplicar" aria-label={`Duplicar ${listaActiva.nombre}`}
+                </button></Tooltip>
+                <Tooltip text="Crea una copia de este listado con sus documentos"><button type="button" aria-label={`Duplicar ${listaActiva.nombre}`}
                   onClick={() => void duplicarLista(listaActiva)}
                   className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
                   <Copy className="h-4 w-4" />
-                </button>
-                <button type="button" title="Quitar listado" aria-label={`Quitar ${listaActiva.nombre}`}
+                </button></Tooltip>
+                <Tooltip text="Quita este listado; te pedirá confirmar"><button type="button" aria-label={`Quitar ${listaActiva.nombre}`}
                   onClick={() => setPorBorrarLista(listaActiva)}
                   className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
                   <Trash2 className="h-4 w-4" />
-                </button>
+                </button></Tooltip>
               </div>
 
               <div className="hidden items-center gap-2 border-b border-gray-100 bg-gray-50/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:flex">
@@ -353,13 +354,13 @@ export function DocumentosPanel() {
                       llamaba ningún botón: llenar un listado a mano son diez
                       documentos escritos uno a uno. Es idempotente, así que
                       pulsarlo dos veces no duplica nada. */}
-                  <Button size="sm" variant="outline" disabled={sembrando}
+                  <Tooltip text="Agrega los documentos típicos de un colegio; no repite los que ya existen"><Button size="sm" variant="outline" disabled={sembrando}
                     onClick={() => void sembrar()}>
                     {sembrando
                       ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                       : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
                     Traer los documentos habituales
-                  </Button>
+                  </Button></Tooltip>
                 </div>
               ) : (
                 <ul>
@@ -369,18 +370,18 @@ export function DocumentosPanel() {
                       {/* Subir y bajar: el orden es el que verá la familia, y
                           hasta ahora era el de creación y punto. */}
                       <div className="flex shrink-0 flex-col">
-                        <button type="button" aria-label={`Subir ${d.nombre}`} title="Subir"
+                        <Tooltip text="Sube este documento en la lista"><button type="button" aria-label={`Subir ${d.nombre}`}
                           disabled={i === 0}
                           onClick={() => void moverDoc(i, -1)}
                           className="rounded p-0.5 text-gray-300 transition-colors hover:text-gray-600 disabled:opacity-30">
                           <ChevronUp className="h-3.5 w-3.5" />
-                        </button>
-                        <button type="button" aria-label={`Bajar ${d.nombre}`} title="Bajar"
+                        </button></Tooltip>
+                        <Tooltip text="Baja este documento en la lista"><button type="button" aria-label={`Bajar ${d.nombre}`}
                           disabled={i === delListado.length - 1}
                           onClick={() => void moverDoc(i, 1)}
                           className="rounded p-0.5 text-gray-300 transition-colors hover:text-gray-600 disabled:opacity-30">
                           <ChevronDown className="h-3.5 w-3.5" />
-                        </button>
+                        </button></Tooltip>
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -421,11 +422,11 @@ export function DocumentosPanel() {
                           className="text-center text-xs" />
                       </div>
 
-                      <button type="button" aria-label={`Quitar ${d.nombre}`} title="Quitar"
+                      <Tooltip text="Quita este documento de la lista"><button type="button" aria-label={`Quitar ${d.nombre}`}
                         onClick={() => setPorBorrarDoc(d)}
                         className="w-8 shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600">
                         <Trash2 className="h-4 w-4" />
-                      </button>
+                      </button></Tooltip>
                     </li>
                   ))}
                 </ul>

@@ -5,6 +5,7 @@ import { LogOut } from 'lucide-react';
 import { IsotipoZero } from '@/components/marca-zero';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export default async function LiteLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
@@ -33,14 +34,16 @@ export default async function LiteLayout({ children }: { children: React.ReactNo
             <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontSize: '0.875rem', color: '#4b5563', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.email}
             </Typography>
-            <Box
-              component="a"
-              href="/sign-out"
-              title="Cerrar sesión"
-              sx={{ display: 'flex', alignItems: 'center', color: '#4b5563', '&:hover': { color: '#111827' }, p: '4px' }}
-            >
-              <LogOut size={16} />
-            </Box>
+            <Tooltip text="Sale de tu cuenta en este dispositivo">
+              <Box
+                component="a"
+                href="/sign-out"
+                aria-label="Cerrar sesión"
+                sx={{ display: 'flex', alignItems: 'center', color: '#4b5563', '&:hover': { color: '#111827' }, p: '4px' }}
+              >
+                <LogOut size={16} />
+              </Box>
+            </Tooltip>
           </Box>
         </Box>
       </Box>

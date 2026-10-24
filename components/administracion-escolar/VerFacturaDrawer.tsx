@@ -1,4 +1,5 @@
 'use client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 import Drawer from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
@@ -49,7 +50,7 @@ export function VerFacturaDrawer({ documentoId, onCerrar }: {
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
         {/* El detalle ya trae su propia cabecera con «Comprobantes», el código y
             las acciones. La X va encima porque esa cabecera es pegajosa. */}
-        <IconButton
+        <Tooltip text="Cierra el detalle de la factura"><IconButton
           onClick={onCerrar}
           aria-label="Cerrar"
           size="small"
@@ -60,7 +61,7 @@ export function VerFacturaDrawer({ documentoId, onCerrar }: {
           }}
         >
           <CloseIcon fontSize="small" />
-        </IconButton>
+        </IconButton></Tooltip>
 
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {documentoId != null && (

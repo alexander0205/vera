@@ -20,6 +20,7 @@ import DialogContent from '@mui/material/DialogContent';
 import { Plus, Search, Send, Trash2, Pencil, X, AlertTriangle, Eye } from 'lucide-react';
 import { CARD, INPUT, Chip, ChipCategoria, CATEGORIAS, Boton, ESTADOS, type PlantillaVista, type VariableVista } from './_comunes';
 import { VistaPrevia } from './_vista-previa';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const FILTROS = [
   { clave: 'todas',      texto: 'Todas' },
@@ -239,15 +240,24 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
               <Box sx={{ ml: 'auto', display: 'flex', gap: 0.75 }}>
                 <Boton variante="suave" onClick={() => setViendo(p)}><Eye size={13} /> Ver</Boton>
                 {p.esBorrador && (
-                  <Boton onClick={() => publicar(p)} disabled={ocupado}><Send size={13} /> Publicar</Boton>
+                  <Tooltip text="Manda el borrador a Meta para aprobación; luego su nombre queda ocupado">
+                    <Boton onClick={() => publicar(p)} disabled={ocupado}><Send size={13} /> Publicar</Boton>
+                  </Tooltip>
                 )}
                 {p.id != null && (
-                  <Boton variante="suave" onClick={() => abrirEdicion(p)} disabled={ocupado || p.estado === 'PENDING' || p.estado === 'PENDING_REVIEW'}
-                    title={p.estado.startsWith('PENDING') ? 'Meta no deja editar mientras está en revisión' : undefined}>
-                    <Pencil size={13} /> Editar
-                  </Boton>
+                  <Tooltip text={p.estado.startsWith('PENDING')
+                    ? 'Meta no deja editar mientras está en revisión'
+                    : 'Cambia el texto; si ya está en Meta, vuelve a revisión'}>
+                    <Boton variante="suave" onClick={() => abrirEdicion(p)} disabled={ocupado || p.estado === 'PENDING' || p.estado === 'PENDING_REVIEW'}>
+                      <Pencil size={13} /> Editar
+                    </Boton>
+                  </Tooltip>
                 )}
-                <Boton variante="peligro" onClick={() => borrar(p)} disabled={ocupado}><Trash2 size={13} /></Boton>
+                <Tooltip text={p.esBorrador
+                  ? 'Descarta este borrador; no llega a Meta'
+                  : 'Borra la plantilla de Meta; si un aviso la usa, deja de enviarse'}>
+                  <Boton variante="peligro" onClick={() => borrar(p)} disabled={ocupado} ariaLabel={p.esBorrador ? 'Descartar borrador' : 'Borrar plantilla'}><Trash2 size={13} /></Boton>
+                </Tooltip>
               </Box>
             </Box>
           </Box>
@@ -274,10 +284,12 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
               </Typography>
               <Chip estado={viendo.estado} />
               <ChipCategoria categoria={viendo.categoria} />
-              <Box component="button" onClick={() => setViendo(null)}
-                sx={{ ml: 'auto', border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'flex', p: 0.5 }}>
-                <X size={17} />
-              </Box>
+              <Tooltip text="Cierra la vista previa sin cambiar nada">
+                <Box component="button" onClick={() => setViendo(null)} aria-label="Cerrar"
+                  sx={{ ml: 'auto', border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'flex', p: 0.5 }}>
+                  <X size={17} />
+                </Box>
+              </Tooltip>
             </Box>
 
             <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
@@ -348,9 +360,11 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', pt: 0.5 }}>
               <Boton variante="suave" onClick={() => setViendo(null)}>Cerrar</Boton>
               {viendo.id != null && !viendo.estado.startsWith('PENDING') && (
-                <Boton onClick={() => { abrirEdicion(viendo); setViendo(null); }}>
-                  <Pencil size={13} /> Editar
-                </Boton>
+                <Tooltip text="Abre el editor; si ya está en Meta, vuelve a revisión al guardar">
+                  <Boton onClick={() => { abrirEdicion(viendo); setViendo(null); }}>
+                    <Pencil size={13} /> Editar
+                  </Boton>
+                </Tooltip>
               )}
             </Box>
           </DialogContent>
@@ -364,10 +378,12 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: '#111827' }}>
               {editor.id == null ? 'Nueva plantilla' : `Editar ${editor.nombre}`}
             </Typography>
-            <Box component="button" onClick={() => setEditor(null)}
-              sx={{ ml: 'auto', border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'flex', p: 0.5 }}>
-              <X size={16} />
-            </Box>
+            <Tooltip text="Cierra el editor; lo que no hayas guardado se pierde">
+              <Box component="button" onClick={() => setEditor(null)} aria-label="Cerrar editor"
+                sx={{ ml: 'auto', border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'flex', p: 0.5 }}>
+                <X size={16} />
+              </Box>
+            </Tooltip>
           </Box>
 
           <TextField label="Nombre" size="small" fullWidth sx={INPUT}
@@ -425,12 +441,14 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
             onChange={(e) => setEditor({ ...editor, cuerpo: e.target.value, variables: deducir(e.target.value, editor.variables) })} />
 
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Boton variante="suave" onClick={() => {
-              const n = variables.length + 1;
-              setEditor({ ...editor, cuerpo: `${editor.cuerpo}{{${n}}}` });
-            }}>
-              <Plus size={13} /> Insertar variable
-            </Boton>
+            <Tooltip text="Agrega una variable {{n}} al final del mensaje; luego ponle nombre y ejemplo">
+              <Boton variante="suave" onClick={() => {
+                const n = variables.length + 1;
+                setEditor({ ...editor, cuerpo: `${editor.cuerpo}{{${n}}}` });
+              }}>
+                <Plus size={13} /> Insertar variable
+              </Boton>
+            </Tooltip>
           </Box>
 
           {variables.length > 0 && (
@@ -476,16 +494,20 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>Botón</Typography>
-              <Boton variante="suave"
-                onClick={() => setEditor({
-                  ...editor,
-                  boton: editor.boton ? null : {
-                    texto: 'Ver factura', url: URL_FACTURA,
-                    ejemplo: URL_FACTURA.replace('{{1}}', 'abc123'),
-                  },
-                })}>
-                {editor.boton ? <><X size={12} /> Quitar</> : <><Plus size={12} /> Agregar</>}
-              </Boton>
+              <Tooltip text={editor.boton
+                ? 'Quita el botón; el mensaje llegará solo con texto'
+                : 'Agrega un botón «Ver factura» que lleva al enlace de la factura'}>
+                <Boton variante="suave"
+                  onClick={() => setEditor({
+                    ...editor,
+                    boton: editor.boton ? null : {
+                      texto: 'Ver factura', url: URL_FACTURA,
+                      ejemplo: URL_FACTURA.replace('{{1}}', 'abc123'),
+                    },
+                  })}>
+                  {editor.boton ? <><X size={12} /> Quitar</> : <><Plus size={12} /> Agregar</>}
+                </Boton>
+              </Tooltip>
             </Box>
 
             {editor.boton ? (
@@ -520,10 +542,14 @@ export function TabPlantillas({ plantillas, cargando, onRecargar, onAviso, onErr
 
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
             <Boton variante="suave" onClick={() => setEditor(null)} disabled={ocupado}>Cancelar</Boton>
-            <Boton onClick={guardar} disabled={ocupado || !editor.nombre.trim() || !editor.cuerpo.trim()}>
-              {ocupado ? <CircularProgress size={13} sx={{ color: '#fff' }} /> : null}
-              {editor.id == null ? 'Guardar borrador' : 'Guardar cambios'}
-            </Boton>
+            <Tooltip text={editor.id == null
+              ? 'Guarda como borrador; todavía no se manda a Meta'
+              : 'Si ya está en Meta, la vuelve a mandar a revisión'}>
+              <Boton onClick={guardar} disabled={ocupado || !editor.nombre.trim() || !editor.cuerpo.trim()}>
+                {ocupado ? <CircularProgress size={13} sx={{ color: '#fff' }} /> : null}
+                {editor.id == null ? 'Guardar borrador' : 'Guardar cambios'}
+              </Boton>
+            </Tooltip>
           </Box>
         </Box>
       )}

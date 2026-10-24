@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Maximize2, X, Paperclip, Camera, Send } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
@@ -149,20 +150,24 @@ export function TicketWidget() {
       <div style={{ background: '#3658e1', color: 'white', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 700, fontSize: 15 }}>Soporte</span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <Link
-            href="/dashboard/soporte"
-            title="Abrir en pantalla completa"
-            style={{ color: 'white', opacity: 0.9, display: 'flex', alignItems: 'center' }}
-          >
-            <Maximize2 size={16} />
-          </Link>
-          <button
-            onClick={() => setOpen(false)}
-            title="Cerrar"
-            style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-          >
-            <X size={18} />
-          </button>
+          <Tooltip text="Abre el soporte en una pantalla más grande">
+            <Link
+              href="/dashboard/soporte"
+              aria-label="Abrir en pantalla completa"
+              style={{ color: 'white', opacity: 0.9, display: 'flex', alignItems: 'center' }}
+            >
+              <Maximize2 size={16} />
+            </Link>
+          </Tooltip>
+          <Tooltip text="Cierra la ventana de soporte">
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Cerrar"
+              style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            >
+              <X size={18} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -317,21 +322,25 @@ export function TicketWidget() {
       {vista === 'chat' && (
       <div style={{ display: 'flex', borderTop: '1px solid #eee', alignItems: 'center' }}>
         <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={chat.onFileSelected} style={{ display: 'none' }} />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          title={ADJUNTO_TITLE}
-          style={{ border: 'none', background: 'none', padding: '0 8px', cursor: 'pointer', display: 'flex', color: '#64748b' }}
-        >
-          <Paperclip size={19} />
-        </button>
-        <button
-          onClick={() => chat.captureScreenshot(panelRef.current)}
-          title={CAPTURA_TITLE}
-          disabled={chat.loading}
-          style={{ border: 'none', background: 'none', padding: '0 8px', cursor: chat.loading ? 'default' : 'pointer', display: 'flex', color: '#64748b' }}
-        >
-          <Camera size={19} />
-        </button>
+        <Tooltip text={ADJUNTO_TITLE}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Adjuntar archivo"
+            style={{ border: 'none', background: 'none', padding: '0 8px', cursor: 'pointer', display: 'flex', color: '#64748b' }}
+          >
+            <Paperclip size={19} />
+          </button>
+        </Tooltip>
+        <Tooltip text={CAPTURA_TITLE}>
+          <button
+            onClick={() => chat.captureScreenshot(panelRef.current)}
+            aria-label="Capturar pantalla"
+            disabled={chat.loading}
+            style={{ border: 'none', background: 'none', padding: '0 8px', cursor: chat.loading ? 'default' : 'pointer', display: 'flex', color: '#64748b' }}
+          >
+            <Camera size={19} />
+          </button>
+        </Tooltip>
         <input
           value={chat.input}
           onChange={(e) => chat.onInputChange(e.target.value)}
@@ -342,6 +351,7 @@ export function TicketWidget() {
         <button
           onClick={chat.send}
           title="Enviar mensaje"
+          aria-label="Enviar mensaje"
           style={{ border: 'none', background: '#3658e1', color: 'white', padding: '0 16px', height: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           <Send size={17} />

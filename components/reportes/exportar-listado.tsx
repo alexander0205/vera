@@ -13,6 +13,7 @@ import Box from '@mui/material/Box';
 import { toast } from 'sonner';
 import type { ListadoEnvio } from '@/lib/export/listado';
 import { hoyRD } from '@/lib/utils/format';
+import { Tooltip } from '@/components/ui/tooltip';
 import { imprimirPdf } from '@/lib/reportes/imprimir-pdf';
 
 const sx = {
@@ -71,10 +72,20 @@ export function ExportarListado({ armar, deshabilitado, testId, mostrarCsv = tru
   const off = deshabilitado || ocupado !== null;
   return (
     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }} data-testid={testId}>
-      <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('imprimir')}>{icono('imprimir', Printer)} Imprimir</Box>
-      <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('pdf')}>{icono('pdf', FileText)} PDF</Box>
-      <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('xlsx')}>{icono('xlsx', Download)} Excel</Box>
-      {mostrarCsv && <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('csv')}>{icono('csv', Download)} CSV</Box>}
+      <Tooltip text="Abre el listado listo para imprimir">
+        <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('imprimir')}>{icono('imprimir', Printer)} Imprimir</Box>
+      </Tooltip>
+      <Tooltip text="Descarga el listado en PDF, listo para compartir">
+        <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('pdf')}>{icono('pdf', FileText)} PDF</Box>
+      </Tooltip>
+      <Tooltip text="Descarga el listado en Excel para seguir trabajando con los datos">
+        <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('xlsx')}>{icono('xlsx', Download)} Excel</Box>
+      </Tooltip>
+      {mostrarCsv && (
+        <Tooltip text="Descarga el listado en CSV, un archivo de texto simple">
+          <Box component="button" type="button" sx={sx} disabled={off} onClick={() => exportar('csv')}>{icono('csv', Download)} CSV</Box>
+        </Tooltip>
+      )}
     </Box>
   );
 }

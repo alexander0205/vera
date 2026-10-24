@@ -23,6 +23,7 @@ import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import { notaDeCorte } from '@/lib/export/paginas';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Las familias que pagan.
@@ -224,11 +225,13 @@ export default function ResponsablesClient() {
             {data?.incontactables} de {data?.stats.familias} familias no tienen correo, celular ni WhatsApp:
             a esas no les llega ningún recordatorio.
           </p>
-          <button type="button" onClick={cerrarAviso}
-            className="shrink-0 rounded p-0.5 text-amber-700/70 hover:bg-amber-100 hover:text-amber-900"
-            aria-label="Ocultar el aviso">
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <Tooltip text="Oculta este aviso">
+            <button type="button" onClick={cerrarAviso}
+              className="shrink-0 rounded p-0.5 text-amber-700/70 hover:bg-amber-100 hover:text-amber-900"
+              aria-label="Ocultar el aviso">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
         </div>
       )}
 
@@ -456,11 +459,13 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
             {fila.rnc ?? 'Sin documento'} · {fila.alumnos} {fila.alumnos === 1 ? 'hijo activo' : 'hijos activos'}
           </p>
         </div>
-        <button type="button" onClick={onCerrar}
-          className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          aria-label="Cerrar la ficha">
-          <X className="h-4 w-4" />
-        </button>
+        <Tooltip text="Cierra la ficha lateral de la familia">
+          <button type="button" onClick={onCerrar}
+            className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            aria-label="Cerrar la ficha">
+            <X className="h-4 w-4" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -627,10 +632,12 @@ function Canales({ fila }: { fila: FilaResponsable }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {canales.map((c) => (
-        <span key={c.label} title={c.valor ? `${c.label}: ${c.valor}` : `Sin ${c.label}`}>
-          <c.icon className={`h-4 w-4 ${c.valor ? 'text-zero-600' : 'text-red-500'}`}
-            aria-label={c.valor ? `${c.label} puesto` : `Sin ${c.label}`} />
-        </span>
+        <Tooltip key={c.label} text={c.valor ? `${c.label}: ${c.valor}` : `Sin ${c.label}`}>
+          <span>
+            <c.icon className={`h-4 w-4 ${c.valor ? 'text-zero-600' : 'text-red-500'}`}
+              aria-label={c.valor ? `${c.label} puesto` : `Sin ${c.label}`} />
+          </span>
+        </Tooltip>
       ))}
       {faltan === canales.length && (
         <Badge variant="outline" className="border-red-200 bg-red-50 text-[10px] text-red-700">

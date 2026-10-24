@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { CheckCircle2, ExternalLink, Loader2, Mail, MessageCircle, Smartphone } from 'lucide-react';
 import { SaludWhatsApp } from './SaludWhatsApp';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { CanalesActivos } from '@/lib/administracion-escolar/canales';
 
 /**
@@ -62,7 +63,7 @@ function Interruptor({ activo, onCambiar, etiqueta, disabled }: {
   activo: boolean; onCambiar: (v: boolean) => void; etiqueta: string; disabled?: boolean;
 }) {
   return (
-    <button type="button" role="switch" aria-checked={activo} aria-label={etiqueta}
+    <Tooltip text="Activa o pausa los avisos por este canal"><button type="button" role="switch" aria-checked={activo} aria-label={etiqueta}
       disabled={disabled} onClick={() => onCambiar(!activo)}
       className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
         disabled ? 'cursor-not-allowed bg-gray-200' : activo ? 'bg-zero-600' : 'bg-gray-300'
@@ -70,7 +71,7 @@ function Interruptor({ activo, onCambiar, etiqueta, disabled }: {
       <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
         activo ? 'translate-x-5' : 'translate-x-0'
       }`} />
-    </button>
+    </button></Tooltip>
   );
 }
 
@@ -180,9 +181,9 @@ function ProbarCanal({ canal, etiqueta, placeholder, disponible, motivo }: {
             placeholder={placeholder}
             className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-zero-600"
           />
-          <Button size="sm" variant="outline" disabled={enviando || !destino.trim()} onClick={() => void probar()}>
+          <Tooltip text="Manda un mensaje de prueba solo a ese número o correo"><Button size="sm" variant="outline" disabled={enviando || !destino.trim()} onClick={() => void probar()}>
             {enviando ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Enviando…</> : 'Enviar prueba'}
-          </Button>
+          </Button></Tooltip>
         </div>
       )}
       {resultado && (
@@ -493,13 +494,13 @@ export function CanalesAviso() {
             </p>
           ) : !configurado ? (
             <div className="space-y-3">
-              <Button
+              <Tooltip text="Crea una cuenta de WhatsApp nueva; si ya tiene una, usa «Enlazarla»"><Button
                 className="bg-zero-600 hover:bg-zero-700"
                 disabled={ocupado}
                 onClick={() => void llamar('/api/whatsapp/conectar', true)}
               >
                 {ocupado ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Conectando…</> : 'Conectar WhatsApp'}
-              </Button>
+              </Button></Tooltip>
 
               {/* El otro camino, el de quien ya tiene la cuenta montada. Sin
                   esto, «Conectar» era la única salida y creaba una cuenta
@@ -507,10 +508,10 @@ export function CanalesAviso() {
               {!enlazando ? (
                 <p className="text-xs text-gray-500">
                   ¿El colegio ya tiene su cuenta en crm-escolar?{' '}
-                  <button type="button" onClick={() => setEnlazando(true)}
+                  <Tooltip text="Usa la cuenta que el colegio ya tiene en crm-escolar, sin crear una nueva"><button type="button" onClick={() => setEnlazando(true)}
                     className="font-medium text-zero-600 underline hover:text-zero-700">
                     Enlazarla con su clave
-                  </button>
+                  </button></Tooltip>
                 </p>
               ) : (
                 <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -541,23 +542,23 @@ export function CanalesAviso() {
               <p className="text-sm text-gray-700">
                 La cuenta está creada pero falta confirmar el número en Meta.
               </p>
-              <Button
+              <Tooltip text="Abre Meta para confirmar el número de WhatsApp del colegio"><Button
                 variant="outline"
                 disabled={ocupado}
                 onClick={() => void llamar('/api/whatsapp/estado', true)}
               >
                 {ocupado ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Abriendo…</> : 'Terminar el enlace'}
-              </Button>
+              </Button></Tooltip>
             </div>
           ) : (
-            <Button
+            <Tooltip text="Consulta si el número ya está conectado; no cambia nada"><Button
               variant="outline"
               size="sm"
               disabled={ocupado}
               onClick={() => void llamar('/api/whatsapp/estado', false)}
             >
               {ocupado ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Revisando…</> : 'Revisar conexión'}
-            </Button>
+            </Button></Tooltip>
           )}
 
           <ProbarCanal

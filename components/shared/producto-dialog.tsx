@@ -26,6 +26,7 @@ import {
   OPCIONES_DONDE_SE_VENDE, aBanderas, defaultPorTipo, type DondeSeVende,
 } from '@/lib/productos/donde-se-vende';
 import { toast } from 'sonner';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface CategoriaOpt { id: number; nombre: string }
 
@@ -119,7 +120,9 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>
             {tipo === 'servicio' ? 'Nuevo servicio' : 'Nuevo producto'}
           </Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cierra sin crear el producto">
+            <IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          </Tooltip>
         </Box>
 
         {/* Toggle bien/servicio — mismo modal para ambos */}
@@ -144,7 +147,7 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
         </Box>
 
         {tipo === 'bien' && (
-          <Box component="label" sx={{ position: 'relative', mx: 'auto', mb: 1.5, display: 'flex', height: 80, width: 80, cursor: 'pointer', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '8px', border: '2px dashed #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af' }}>
+          <Box component="label" title="Sube una foto del producto (máx. 800 KB)" aria-label="Subir imagen" sx={{ position: 'relative', mx: 'auto', mb: 1.5, display: 'flex', height: 80, width: 80, cursor: 'pointer', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '8px', border: '2px dashed #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af' }}>
             <Box component="input" type="file" accept="image/*" sx={{ display: 'none' }}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) handleImagen(f); }} />
             {imagen ? <Box component="img" src={imagen} alt="" sx={{ height: '100%', width: '100%', objectFit: 'cover' }} /> : <Camera style={{ width: 24, height: 24 }} />}
@@ -206,7 +209,9 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
               <Star style={{ width: 16, height: 16, color: '#fbbf24' }} />
               <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Favorito (se muestra primero)</Typography>
             </Box>
-            <Switch checked={favorito} onChange={(_, v) => setFavorito(v)} color="primary" />
+            <Tooltip text="Aparece primero en la caja del POS">
+              <Switch checked={favorito} onChange={(_, v) => setFavorito(v)} color="primary" />
+            </Tooltip>
           </Box>
         </Box>
 

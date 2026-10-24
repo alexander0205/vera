@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Textarea } from '@/components/ui/textarea';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -290,10 +291,12 @@ export function DocumentosEstudiante({ matriculaId, puedeGestionar }: Props) {
 
         {puedeGestionar && (
           <div className="flex gap-2">
-            <Button size="sm" variant="outline"
-              onClick={() => setEnlacePara({ requeridoId: null, nombre: null })}>
-              <Link2 className="mr-1.5 h-3.5 w-3.5" />Enlace de todo el expediente
-            </Button>
+            <Tooltip text="Abre el enlace personal para que la familia envíe todo el expediente">
+              <Button size="sm" variant="outline"
+                onClick={() => setEnlacePara({ requeridoId: null, nombre: null })}>
+                <Link2 className="mr-1.5 h-3.5 w-3.5" />Enlace de todo el expediente
+              </Button>
+            </Tooltip>
 
             {/* Un menú y no tres botones: los tres caminos acaban en la misma
                 fila del checklist, y puestos en fila competirían por atención
@@ -601,14 +604,16 @@ function FilaDocumento({
                 </a>
                 <span className="text-gray-400">{Math.max(1, Math.round(a.tamanoBytes / 1024))} KB</span>
                 {puedeGestionar && (
-                  <button
-                    type="button"
-                    onClick={() => onBorrarArchivo(a.id)}
-                    className="text-gray-400 hover:text-red-600"
-                    aria-label={`Quitar ${a.archivoNombre ?? 'archivo'}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  <Tooltip text="Quita este archivo de este documento">
+                    <button
+                      type="button"
+                      onClick={() => onBorrarArchivo(a.id)}
+                      className="text-gray-400 hover:text-red-600"
+                      aria-label={`Quitar ${a.archivoNombre ?? 'archivo'}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Tooltip>
                 )}
               </li>
             ))}
@@ -635,14 +640,17 @@ function FilaDocumento({
                   <Eye className="mr-1.5 h-3.5 w-3.5" />Ver respuesta
                 </Button>
               ) : hayQueRevisar && fila.estado !== 'aprobado' ? (
-                <Button size="sm" onClick={onAprobar}>
-                  <Check className="mr-1.5 h-3.5 w-3.5" />Aprobar
-                </Button>
+                <Tooltip text="Marca el documento como aprobado, con tu nombre y la fecha de hoy">
+                  <Button size="sm" onClick={onAprobar}>
+                    <Check className="mr-1.5 h-3.5 w-3.5" />Aprobar
+                  </Button>
+                </Tooltip>
               ) : esFormulario ? (
-                <Button size="sm" variant="outline" onClick={onCopiarFormulario}
-                  title="Copiar el enlace del formulario para esta familia">
-                  <Link2 className="mr-1.5 h-3.5 w-3.5" />Copiar enlace
-                </Button>
+                <Tooltip text="Copia el enlace del formulario para esta familia">
+                  <Button size="sm" variant="outline" onClick={onCopiarFormulario}>
+                    <Link2 className="mr-1.5 h-3.5 w-3.5" />Copiar enlace
+                  </Button>
+                </Tooltip>
               ) : (
                 <Button size="sm" variant="outline" onClick={onSubir} disabled={subiendo}>
                   {subiendo
@@ -656,7 +664,7 @@ function FilaDocumento({
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" aria-label={`Más acciones de ${fila.nombre}`}>
+                  <Button size="sm" variant="ghost" aria-label={`Más acciones de ${fila.nombre}`} title="Más acciones para este documento">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>

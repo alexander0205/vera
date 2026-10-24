@@ -1,4 +1,5 @@
 'use client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * «Cuando llegue la fecha de emisión, saca la factura tú.»
@@ -29,7 +30,7 @@ function Interruptor({ activo, onCambiar, etiqueta, disabled }: {
   activo: boolean; onCambiar: (v: boolean) => void; etiqueta: string; disabled?: boolean;
 }) {
   return (
-    <button type="button" role="switch" aria-checked={activo} aria-label={etiqueta}
+    <Tooltip text="Activa o pausa esta facturación automática"><button type="button" role="switch" aria-checked={activo} aria-label={etiqueta}
       disabled={disabled} onClick={() => onCambiar(!activo)}
       className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
         disabled ? 'cursor-not-allowed bg-gray-200' : activo ? 'bg-zero-600' : 'bg-gray-300'
@@ -37,7 +38,7 @@ function Interruptor({ activo, onCambiar, etiqueta, disabled }: {
       <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
         activo ? 'translate-x-5' : 'translate-x-0'
       }`} />
-    </button>
+    </button></Tooltip>
   );
 }
 

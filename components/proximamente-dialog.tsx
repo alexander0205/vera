@@ -58,6 +58,7 @@ export function ProximamenteDialog({ open, feature, onClose }: DialogProps) {
         <IconButton
           onClick={onClose}
           aria-label="Cerrar"
+          title="Cerrar"
           sx={{ color: '#9ca3af', p: 0.5, m: '-4px', '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
         >
           <X style={{ width: 20, height: 20 }} />

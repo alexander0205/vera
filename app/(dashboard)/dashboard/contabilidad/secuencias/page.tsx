@@ -17,6 +17,7 @@ import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export const dynamic = 'force-dynamic';
 
@@ -237,13 +238,15 @@ export default async function SecuenciasPage({
                           </Typography>
                         </Link>
                         {f.urlVerificacion && (
-                          <Box
-                            component="a" href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
-                            title="Verificar en el portal de la DGII"
-                            sx={{ display: 'inline-flex', color: '#9ca3af', '&:hover': { color: '#3658e1' } }}
-                          >
-                            <ExternalLink style={{ width: 14, height: 14 }} />
-                          </Box>
+                          <Tooltip text="Abre la verificación de esta factura en el portal de la DGII">
+                            <Box
+                              component="a" href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
+                              aria-label="Verificar en el portal de la DGII"
+                              sx={{ display: 'inline-flex', color: '#9ca3af', '&:hover': { color: '#3658e1' } }}
+                            >
+                              <ExternalLink style={{ width: 14, height: 14 }} />
+                            </Box>
+                          </Tooltip>
                         )}
                       </Box>
                     </TableCell>

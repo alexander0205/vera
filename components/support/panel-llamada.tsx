@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Phone, ScreenShare, ScreenShareOff, PhoneOff, Volume2, MonitorUp, Maximize, Minimize, ChevronsLeftRight, ChevronsRightLeft } from 'lucide-react';
 import type { EstadoLlamada } from '@/lib/webrtc/useLlamada';
 import { PulsoLlamada } from './pulso-llamada';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // Fuera del componente: es el mismo objeto siempre, no hay por qué rehacerlo
 // en cada render.
@@ -176,23 +177,25 @@ export function PanelLlamada({
             significa nada, así que el botón de ensanchar desaparece ahí. */}
         <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
           {onAlternarAncho && !pantallaCompleta ? (
+            <Tooltip text={ancho ? 'Vuelve el video a su tamaño normal' : 'Agranda el video dentro del panel'}>
+              <button
+                onClick={onAlternarAncho}
+                aria-label={ancho ? 'Achicar el video' : 'Agrandar el video'}
+                style={BOTON_ESQUINA}
+              >
+                {ancho ? <ChevronsRightLeft size={16} /> : <ChevronsLeftRight size={16} />}
+              </button>
+            </Tooltip>
+          ) : null}
+          <Tooltip text={pantallaCompleta ? 'Sale de la pantalla completa' : 'Muestra el video a pantalla completa'}>
             <button
-              onClick={onAlternarAncho}
-              title={ancho ? 'Achicar el video' : 'Agrandar el video'}
-              aria-label={ancho ? 'Achicar el video' : 'Agrandar el video'}
+              onClick={alternarPantallaCompleta}
+              aria-label={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
               style={BOTON_ESQUINA}
             >
-              {ancho ? <ChevronsRightLeft size={16} /> : <ChevronsLeftRight size={16} />}
+              {pantallaCompleta ? <Minimize size={16} /> : <Maximize size={16} />}
             </button>
-          ) : null}
-          <button
-            onClick={alternarPantallaCompleta}
-            title={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
-            aria-label={pantallaCompleta ? 'Salir de pantalla completa' : 'Pantalla completa'}
-            style={BOTON_ESQUINA}
-          >
-            {pantallaCompleta ? <Minimize size={16} /> : <Maximize size={16} />}
-          </button>
+          </Tooltip>
         </div>
       </div>
       {estado === 'activa' && (
@@ -201,42 +204,45 @@ export function PanelLlamada({
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 10, padding: 14, background: '#1e293b' }}>
-        <button
-          onClick={onAlternarMicrofono}
-          title={micActivo ? 'Silenciar micrófono' : 'Activar micrófono'}
-          aria-label={micActivo ? 'Silenciar micrófono' : 'Activar micrófono'}
-          style={{
-            width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: micActivo ? '#334155' : '#dc2626', color: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {micActivo ? <Mic size={18} /> : <MicOff size={18} />}
-        </button>
-        <button
-          onClick={onAlternarPantalla}
-          title={compartiendoPantalla ? 'Dejar de compartir pantalla' : 'Compartir pantalla'}
-          aria-label={compartiendoPantalla ? 'Dejar de compartir pantalla' : 'Compartir pantalla'}
-          style={{
-            width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: compartiendoPantalla ? '#3658e1' : '#334155', color: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {compartiendoPantalla ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
-        </button>
-        <button
-          onClick={onColgar}
-          title="Colgar"
-          aria-label="Colgar"
-          style={{
-            width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: '#dc2626', color: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <PhoneOff size={18} />
-        </button>
+        <Tooltip text={micActivo ? 'Silencia tu micrófono; no te oirán' : 'Vuelve a activar tu micrófono'}>
+          <button
+            onClick={onAlternarMicrofono}
+            aria-label={micActivo ? 'Silenciar micrófono' : 'Activar micrófono'}
+            style={{
+              width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
+              background: micActivo ? '#334155' : '#dc2626', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {micActivo ? <Mic size={18} /> : <MicOff size={18} />}
+          </button>
+        </Tooltip>
+        <Tooltip text={compartiendoPantalla ? 'Deja de mostrar tu pantalla' : 'Muestra tu pantalla a la otra persona'}>
+          <button
+            onClick={onAlternarPantalla}
+            aria-label={compartiendoPantalla ? 'Dejar de compartir pantalla' : 'Compartir pantalla'}
+            style={{
+              width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
+              background: compartiendoPantalla ? '#3658e1' : '#334155', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {compartiendoPantalla ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
+          </button>
+        </Tooltip>
+        <Tooltip text="Termina la llamada">
+          <button
+            onClick={onColgar}
+            aria-label="Colgar"
+            style={{
+              width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
+              background: '#dc2626', color: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <PhoneOff size={18} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

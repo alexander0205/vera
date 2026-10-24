@@ -9,6 +9,7 @@
 import { Filter, X } from 'lucide-react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const inputSx = {
   border: '1px solid #e5e7eb', borderRadius: '8px', px: 1.5, py: 0.875,
@@ -33,9 +34,11 @@ export function RangoFechas({ desde, hasta, onCambiar, label }: {
       <Box component="input" type="date" aria-label="Hasta" value={hasta} min={desde || undefined} sx={inputSx}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onCambiar(desde, e.target.value)} />
       {(desde || hasta) && (
-        <IconButton size="small" onClick={() => onCambiar('', '')} title="Limpiar fechas">
-          <X style={{ width: 14, height: 14 }} />
-        </IconButton>
+        <Tooltip text="Quita el rango de fechas del filtro">
+          <IconButton size="small" onClick={() => onCambiar('', '')} aria-label="Limpiar fechas">
+            <X style={{ width: 14, height: 14 }} />
+          </IconButton>
+        </Tooltip>
       )}
     </Box>
   );

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Loader2, Search, Square, SquareCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
@@ -157,7 +158,7 @@ export function TraerDeContactosDialog({ open, onOpenChange, onImportado }: {
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
                   <th className="w-10 py-2">
-                    <button
+                    <Tooltip text="Marca o desmarca a todos los alumnos de esta lista"><button
                       type="button"
                       onClick={alternarTodos}
                       aria-label={todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
@@ -166,7 +167,7 @@ export function TraerDeContactosDialog({ open, onOpenChange, onImportado }: {
                       {todosMarcados
                         ? <SquareCheck className="h-4 w-4 text-zero-600" />
                         : <Square className="h-4 w-4" />}
-                    </button>
+                    </button></Tooltip>
                   </th>
                   <th className="py-2 font-medium">Estudiante</th>
                   <th className="py-2 font-medium">Padre / contacto</th>

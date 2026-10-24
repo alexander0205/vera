@@ -1,4 +1,5 @@
 'use client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Copiar el enlace de pago del responsable, desde cualquier tabla del colegio.
@@ -135,16 +136,15 @@ export function CopiarLinkPago({ clientId, facturaId, nombre, como = 'menu', sol
           {icono}Copiar link de pago
         </div>
       ) : (
-        <button
+        <Tooltip text="Copia el enlace de pago para mandárselo a la familia"><button
           type="button"
           onClick={alHacerClic}
           disabled={inutil || cargando}
           aria-label="Copiar link de pago"
-          title="Copiar link de pago"
           className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50 ${soloIcono ? 'h-7 w-7 justify-center p-0' : ''} ${className ?? ''}`}
         >
           {icono}{!soloIcono && <span className="hidden sm:inline">Link de pago</span>}
-        </button>
+        </button></Tooltip>
       )}
 
       <ConfirmDialog

@@ -35,6 +35,7 @@ export function ImageLightbox({ src, onClose }: { src: string; onClose: () => vo
       <button
         onClick={onClose}
         aria-label="Cerrar"
+        title="Cerrar"
         style={{
           position: 'fixed', top: 16, right: 16, width: 40, height: 40, borderRadius: '50%',
           border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 20, cursor: 'pointer',

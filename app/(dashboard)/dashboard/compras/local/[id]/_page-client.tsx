@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
@@ -108,14 +109,16 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
             </Link>
           )}
           {!anulada && compra.formaPago === 'credito' && compra.saldoCents > 0 && (
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Button asChild variant="outline" size="sm" className="gap-1.5" title="Lleva a cuentas por pagar para registrar el pago">
               <Link href="/contabilidad/cuentas-por-pagar"><Wallet className="h-4 w-4" /> Pagar</Link>
             </Button>
           )}
           {puedeAnular && (
-            <Button variant="outline" size="sm" onClick={() => { setMotivo(''); setAnulando(true); }} className="gap-1.5 text-red-600">
-              <Ban className="h-4 w-4" /> Anular
-            </Button>
+            <Tooltip text="Anula la compra; te pedirá el motivo">
+              <Button variant="outline" size="sm" onClick={() => { setMotivo(''); setAnulando(true); }} className="gap-1.5 text-red-600">
+                <Ban className="h-4 w-4" /> Anular
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>

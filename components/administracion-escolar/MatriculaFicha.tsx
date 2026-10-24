@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Receipt, HandCoins, AlertTriangle, Pencil, Trash2, History } from 'lucide-react';
 import { resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
@@ -155,16 +156,16 @@ export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar
          */}
         {puedeGestionar && (
           <div className="flex shrink-0 items-center gap-0.5">
-            <button type="button" aria-label="Editar matrícula" title="Editar matrícula"
+            <Tooltip text="Abre la matrícula para cambiar sus datos"><button type="button" aria-label="Editar matrícula"
               onClick={() => onEditar(m)}
               className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white hover:text-zero-600">
               <Pencil className="h-4 w-4" />
-            </button>
-            <button type="button" aria-label="Borrar matrícula" title="Borrar matrícula"
+            </button></Tooltip>
+            <Tooltip text="Borra esta matrícula del alumno"><button type="button" aria-label="Borrar matrícula"
               onClick={() => onBorrar(m)}
               className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white hover:text-red-600">
               <Trash2 className="h-4 w-4" />
-            </button>
+            </button></Tooltip>
           </div>
         )}
       </div>

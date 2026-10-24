@@ -33,6 +33,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import { useFactura } from '@/lib/factura/form';
 import { fmtMoneda, type TasaItbis, type TipoPago } from '@/lib/factura/core';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── ClienteSearch ────────────────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ export function ClienteSearch() {
               </InputAdornment>
             ) : query ? (
               <InputAdornment position="end">
+                <Tooltip text="Borra la búsqueda de cliente">
                 <IconButton
                   type="button"
                   size="small"
@@ -134,6 +136,7 @@ export function ClienteSearch() {
                 >
                   <X style={{ width: 16, height: 16 }} />
                 </IconButton>
+                </Tooltip>
               </InputAdornment>
             ) : null,
           },
@@ -302,6 +305,7 @@ export function FacturaItems() {
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>Item #{idx + 1}</Typography>
               {items.length > 1 && (
+                <Tooltip text="Quita este ítem de la factura">
                 <IconButton
                   type="button"
                   size="small"
@@ -311,6 +315,7 @@ export function FacturaItems() {
                 >
                   <Trash2 style={{ width: 16, height: 16 }} />
                 </IconButton>
+                </Tooltip>
               )}
             </Box>
 
@@ -443,6 +448,7 @@ export function FacturaItems() {
                 </TableCell>
                 <TableCell align="center" sx={{ px: 0.5 }}>
                   {items.length > 1 && (
+                    <Tooltip text="Quita este ítem de la factura">
                     <IconButton
                       type="button"
                       size="small"
@@ -452,6 +458,7 @@ export function FacturaItems() {
                     >
                       <Trash2 style={{ width: 16, height: 16 }} />
                     </IconButton>
+                    </Tooltip>
                   )}
                 </TableCell>
               </TableRow>
@@ -603,6 +610,7 @@ export function FacturaPreview() {
         }}
       >
         Pre-factura — Revisar antes de emitir
+        <Tooltip text="Cierra la vista previa">
         <IconButton
           type="button"
           size="small"
@@ -612,6 +620,7 @@ export function FacturaPreview() {
         >
           <X style={{ width: 20, height: 20 }} />
         </IconButton>
+        </Tooltip>
       </DialogTitle>
 
       {/* Contenido scrollable */}

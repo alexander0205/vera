@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP } from '@/lib/utils/format';
@@ -257,13 +258,14 @@ export function ConceptosPanel() {
     const cursoIds = seccionesDelObjetivo(objetivo, data.grados, data.secciones);
     const motivo = motivoParaNoCargar({ montoCentavos, cursoIds });
     return (
+      <Tooltip text={motivo ?? `${ETIQUETA_CARGAR}: «${concepto.nombre}» a los alumnos de ${grupoNombre}`}>
       <button type="button" disabled={motivo !== null}
         onClick={() => setCargaDe({ grupoNombre, montoCentavos: montoCentavos as number, cuotas: precio?.cuotas ?? null, cursoIds })}
-        title={motivo ?? `${ETIQUETA_CARGAR}: «${concepto.nombre}» a los alumnos de ${grupoNombre}`}
         aria-label={`${ETIQUETA_CARGAR}: «${concepto.nombre}» a los alumnos de ${grupoNombre}`}
         className="shrink-0 rounded-md border border-gray-200 px-1.5 py-0.5 text-gray-400 hover:border-zero-400 hover:text-zero-600 disabled:cursor-not-allowed disabled:border-gray-100 disabled:text-gray-200 disabled:hover:border-gray-100">
         <Users className="h-3.5 w-3.5" />
       </button>
+      </Tooltip>
     );
   };
 
@@ -330,9 +332,9 @@ export function ConceptosPanel() {
                   on ? 'border-zero-500 bg-zero-50 font-medium text-zero-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                 <button onClick={() => setConceptoSel(c.id)}>{c.nombre}</button>
                 {c.frecuencia !== 'unico' && <Repeat className="h-3 w-3 opacity-60" aria-label={ETIQUETA_FRECUENCIA[c.frecuencia]} />}
-                <button onClick={() => void pedirBorrado(c)} className="text-gray-300 hover:text-red-500" title="Eliminar concepto">
+                <Tooltip text="Elimina este concepto; te pedirá confirmar"><button aria-label="Eliminar concepto" onClick={() => void pedirBorrado(c)} className="text-gray-300 hover:text-red-500">
                   <X className="h-3 w-3" />
-                </button>
+                </button></Tooltip>
               </span>
             );
           })}
@@ -388,13 +390,13 @@ export function ConceptosPanel() {
                             <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pSv.montoCentavos)}</span>
                             {extrasPrecio(pSv)}
                             {botonCargar({ tipo: 'servicio', id: sv.id }, sv.tanda ? `${sv.nombre} - ${sv.tanda}` : sv.nombre, pSv)}
-                            <button onClick={() => void pedirQuitarPrecio(pSv)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
+                            <Tooltip text="Quita este precio del servicio"><button aria-label="Quitar precio" onClick={() => void pedirQuitarPrecio(pSv)} className="text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></Tooltip>
                           </span>
                         ) : (
-                          <button onClick={() => setModal({ tipo: 'servicio', id: sv.id, servicio: sv.nombre, tanda: sv.tanda })}
+                          <Tooltip text="Abre la ventana para poner el precio de este servicio"><button onClick={() => setModal({ tipo: 'servicio', id: sv.id, servicio: sv.nombre, tanda: sv.tanda })}
                             className="shrink-0 rounded-md border border-dashed border-amber-400 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100">
                             <AlertTriangle className="mr-1 inline h-3 w-3" />Falta el precio
-                          </button>
+                          </button></Tooltip>
                         )}
                       </Fila>
 
@@ -430,16 +432,16 @@ export function ConceptosPanel() {
                                       <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pG.montoCentavos)}</span>
                                       {extrasPrecio(pG)}
                                       {botonCargar({ tipo: 'grado', id: g.id }, `${g.nombre} de ${sv.nombre}`, pG)}
-                                      <button onClick={() => void pedirQuitarPrecio(pG)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
+                                      <Tooltip text="Quita esta excepción de precio"><button aria-label="Quitar excepción" onClick={() => void pedirQuitarPrecio(pG)} className="shrink-0 text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></Tooltip>
                                     </>
                                   ) : (
                                     <>
                                       {pSv && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(pSv.montoCentavos)}</span>}
                                       {pSv && botonCargar({ tipo: 'grado', id: g.id }, `${g.nombre} de ${sv.nombre}`, pSv)}
-                                      <button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
+                                      <Tooltip text="Fija un precio propio para este grado"><button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
                                         className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
                                         {pSv ? 'Excepción' : 'Precio'}
-                                      </button>
+                                      </button></Tooltip>
                                     </>
                                   )}
                                 </Fila>
@@ -459,16 +461,16 @@ export function ConceptosPanel() {
                                             <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pS.montoCentavos)}</span>
                                             {extrasPrecio(pS)}
                                             {botonCargar({ tipo: 'seccion', id: s.id }, `sección ${s.nombre} de ${g.nombre}`, pS)}
-                                            <button onClick={() => void pedirQuitarPrecio(pS)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
+                                            <Tooltip text="Quita esta excepción de precio"><button aria-label="Quitar excepción" onClick={() => void pedirQuitarPrecio(pS)} className="shrink-0 text-gray-300 hover:text-red-500"><X className="h-3.5 w-3.5" /></button></Tooltip>
                                           </>
                                         ) : (
                                           <>
                                             {heredaG && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(heredaG.montoCentavos)}</span>}
                                             {heredaG && botonCargar({ tipo: 'seccion', id: s.id }, `sección ${s.nombre} de ${g.nombre}`, heredaG)}
-                                            <button onClick={() => setModal({ tipo: 'seccion', id: s.id, seccion: s.nombre, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
+                                            <Tooltip text="Fija un precio propio para esta sección"><button onClick={() => setModal({ tipo: 'seccion', id: s.id, seccion: s.nombre, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
                                               className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-zero-400 hover:text-zero-600">
                                               {heredaG ? 'Excepción' : 'Precio'}
-                                            </button>
+                                            </button></Tooltip>
                                           </>
                                         )}
                                       </Fila>
@@ -739,9 +741,9 @@ function ModalTarifa({
               {lugar} · {periodo.nombre}{objetivo.tanda ? ` · ${objetivo.tanda}` : ''}
             </p>
           </div>
-          <button onClick={onCerrar} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Cerrar">
+          <Tooltip text="Cierra esta ventana"><button onClick={onCerrar} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Cerrar">
             <X className="h-5 w-5" />
-          </button>
+          </button></Tooltip>
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-7 py-6">

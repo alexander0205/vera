@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { fmtDOP } from '@/lib/utils/format';
 import type { LineaPanel, ResumenAvisos } from '@/lib/administracion-escolar/panel-avisos';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * El panel de recordatorios: si el colegio está avisando de verdad o solo lo
@@ -94,11 +95,13 @@ export default function PanelAvisosClient() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => mutate()} disabled={isValidating}>
-            {isValidating
-              ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Calculando…</>
-              : <><RefreshCw className="mr-1.5 h-4 w-4" />Ver qué sale hoy</>}
-          </Button>
+          <Tooltip text="Recalcula la lista de avisos de hoy">
+            <Button variant="outline" size="sm" onClick={() => mutate()} disabled={isValidating}>
+              {isValidating
+                ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Calculando…</>
+                : <><RefreshCw className="mr-1.5 h-4 w-4" />Ver qué sale hoy</>}
+            </Button>
+          </Tooltip>
           <Button asChild variant="outline" size="sm">
             <Link href="/escolar/configuracion/avisos">
               <Settings className="mr-1.5 h-4 w-4" />Configurar canales

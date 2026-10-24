@@ -12,6 +12,7 @@ import TableCell from '@mui/material/TableCell';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import { fmtMoneda, fmtFecha, type FacturaRow } from '@/lib/factura/core';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const ESTADO_STYLES: Record<string, { bgcolor: string; color: string; lineThrough?: boolean }> = {
   ACEPTADO:             { bgcolor: '#dcfce7', color: '#166534' },
@@ -138,17 +139,19 @@ export function FacturasList({ facturas }: { facturas: FacturaRow[] }) {
                   <EstadoBadge estado={f.estado} />
                 </TableCell>
                 <TableCell align="right" sx={TBODY_CELL}>
+                  <Tooltip text="Descarga el PDF de esta factura">
                   <IconButton
                     component="a"
                     href={`/api/pdf/factura/${f.id}`}
                     target="_blank"
                     nativeButton={false}
-                    title="Descargar PDF"
+                    aria-label="Descargar PDF"
                     size="small"
                     sx={{ color: '#ea580c', '&:hover': { color: '#c2410c', bgcolor: 'transparent' } }}
                   >
                     <Download style={{ width: 14, height: 14 }} />
                   </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
             ))}

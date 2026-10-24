@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, Send, XCircle,
@@ -89,12 +90,12 @@ export function SaludWhatsApp() {
               <p className="text-sm text-gray-500">{s.conexionDescripcion}</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={revisar} disabled={revisando}>
+          <Tooltip text="Vuelve a comprobar que el WhatsApp del colegio sigue conectado"><Button variant="outline" size="sm" onClick={revisar} disabled={revisando}>
             {revisando
               ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               : <RefreshCw className="mr-1.5 h-4 w-4" />}
             Revisar entregas
-          </Button>
+          </Button></Tooltip>
         </div>
 
         {/* Últimos 7 días. Lo que se mandó no es lo que llegó. */}

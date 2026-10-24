@@ -33,6 +33,7 @@ import { getTeamModules } from '@/lib/auth/modules';
 import { PLANS, getPlan } from '@/lib/config/plans';
 import { PlanSelect } from './_plan-select';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /** -1 en el catálogo significa «sin tope»; 0 en estudiantes, «no aplica». */
 function limiteTexto(n: number): string {
@@ -539,11 +540,13 @@ export default async function EmpresaDetailPage({
           {team.stripeCustomerId && team.subscriptionStatus !== 'admin' && (
             <form action={resincronizarStripe}>
               <input type="hidden" name="teamId" value={teamId} />
-              <Button type="submit" variant="outlined" size="small" disableElevation
-                startIcon={<RefreshCw style={{ width: 13, height: 13 }} />}
-                sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
-                Sincronizar con Stripe
-              </Button>
+              <Tooltip text="Reescribe el plan y el estado con lo que Stripe diga ahora">
+                <Button type="submit" variant="outlined" size="small" disableElevation
+                  startIcon={<RefreshCw style={{ width: 13, height: 13 }} />}
+                  sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
+                  Sincronizar con Stripe
+                </Button>
+              </Tooltip>
             </form>
           )}
         </Box>
@@ -599,27 +602,29 @@ export default async function EmpresaDetailPage({
                 <input type="hidden" name="teamId" value={teamId} />
                 <input type="hidden" name="modulo" value={mod} />
                 <input type="hidden" name="habilitar" value={activo ? '0' : '1'} />
-                <Button
-                  type="submit"
-                  variant="outlined"
-                  size="small"
-                  disableElevation
-                  startIcon={activo
-                    ? <ToggleRight style={{ width: 16, height: 16 }} />
-                    : <ToggleLeft  style={{ width: 16, height: 16 }} />}
-                  sx={{
-                    textTransform: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 500,
-                    fontSize: '0.8125rem',
-                    ...(activo
-                      ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
-                      : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
-                    ),
-                  }}
-                >
-                  {activo ? 'Habilitado' : 'Deshabilitado'}
-                </Button>
+                <Tooltip text={activo ? 'Quita este módulo a la empresa' : 'Da acceso a este módulo a la empresa'}>
+                  <Button
+                    type="submit"
+                    variant="outlined"
+                    size="small"
+                    disableElevation
+                    startIcon={activo
+                      ? <ToggleRight style={{ width: 16, height: 16 }} />
+                      : <ToggleLeft  style={{ width: 16, height: 16 }} />}
+                    sx={{
+                      textTransform: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 500,
+                      fontSize: '0.8125rem',
+                      ...(activo
+                        ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
+                        : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
+                      ),
+                    }}
+                  >
+                    {activo ? 'Habilitado' : 'Deshabilitado'}
+                  </Button>
+                </Tooltip>
               </form>
               )}
             </Box>
@@ -636,27 +641,31 @@ export default async function EmpresaDetailPage({
           <form action={toggleCajaHabilitada}>
             <input type="hidden" name="teamId"    value={teamId} />
             <input type="hidden" name="habilitar" value={team.cajaHabilitada ? '0' : '1'} />
-            <Button
-              type="submit"
-              variant="outlined"
-              size="small"
-              disableElevation
-              startIcon={team.cajaHabilitada
-                ? <ToggleRight style={{ width: 16, height: 16 }} />
-                : <ToggleLeft  style={{ width: 16, height: 16 }} />}
-              sx={{
-                textTransform: 'none',
-                borderRadius: '8px',
-                fontWeight: 500,
-                fontSize: '0.8125rem',
-                ...(team.cajaHabilitada
-                  ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
-                  : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
-                ),
-              }}
-            >
-              {team.cajaHabilitada ? 'Habilitada' : 'Deshabilitada'}
-            </Button>
+            <Tooltip text={team.cajaHabilitada
+              ? 'Quita el módulo de caja a esta empresa'
+              : 'Da acceso al módulo de apertura y cierre de caja'}>
+              <Button
+                type="submit"
+                variant="outlined"
+                size="small"
+                disableElevation
+                startIcon={team.cajaHabilitada
+                  ? <ToggleRight style={{ width: 16, height: 16 }} />
+                  : <ToggleLeft  style={{ width: 16, height: 16 }} />}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 500,
+                  fontSize: '0.8125rem',
+                  ...(team.cajaHabilitada
+                    ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
+                    : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
+                  ),
+                }}
+              >
+                {team.cajaHabilitada ? 'Habilitada' : 'Deshabilitada'}
+              </Button>
+            </Tooltip>
           </form>
         </Box>
 
@@ -768,14 +777,16 @@ export default async function EmpresaDetailPage({
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={{ borderBottom: '1px solid #f9fafb' }}>
-                      <ConfirmButton
-                        action={eliminarMiembro}
-                        message={`¿Eliminar a ${m.email} de esta empresa?`}
-                        fields={{ teamId, userId: m.id }}
-                        color="error"
-                      >
-                        Eliminar
-                      </ConfirmButton>
+                      <Tooltip text="Quita a esta persona de la empresa; no deja a la empresa sin nadie">
+                        <ConfirmButton
+                          action={eliminarMiembro}
+                          message={`¿Eliminar a ${m.email} de esta empresa?`}
+                          fields={{ teamId, userId: m.id }}
+                          color="error"
+                        >
+                          Eliminar
+                        </ConfirmButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ));
@@ -815,21 +826,25 @@ export default async function EmpresaDetailPage({
                 >
                   {inviteUrl(inv.token)}
                 </Typography>
-                <ConfirmButton
-                  action={reenviarInvitacion}
-                  message="¿Reenviar correo de invitación?"
-                  fields={{ invId: inv.id, teamId }}
-                >
-                  Reenviar
-                </ConfirmButton>
-                <ConfirmButton
-                  action={cancelarInvitacion}
-                  message="¿Cancelar esta invitación?"
-                  fields={{ invId: inv.id, teamId }}
-                  color="error"
-                >
-                  Cancelar
-                </ConfirmButton>
+                <Tooltip text="Vuelve a enviar el correo de invitación a esa persona">
+                  <ConfirmButton
+                    action={reenviarInvitacion}
+                    message="¿Reenviar correo de invitación?"
+                    fields={{ invId: inv.id, teamId }}
+                  >
+                    Reenviar
+                  </ConfirmButton>
+                </Tooltip>
+                <Tooltip text="Anula la invitación pendiente; queda como revocada">
+                  <ConfirmButton
+                    action={cancelarInvitacion}
+                    message="¿Cancelar esta invitación?"
+                    fields={{ invId: inv.id, teamId }}
+                    color="error"
+                  >
+                    Cancelar
+                  </ConfirmButton>
+                </Tooltip>
               </Box>
             ))}
           </Box>

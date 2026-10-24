@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -267,6 +268,7 @@ export default function FacturaRecurrenteDetallePage() {
               </Link>
             )}
             {canOperate && (
+              <Tooltip text="Genera ahora la factura de este cobro">
               <Button
                 variant="contained" disableElevation
                 onClick={() => handleGenerar()} disabled={generando}
@@ -275,6 +277,7 @@ export default function FacturaRecurrenteDetallePage() {
               >
                 {generando ? 'Generando…' : 'Generar ahora'}
               </Button>
+              </Tooltip>
             )}
           </Box>
         </Box>
@@ -300,6 +303,7 @@ export default function FacturaRecurrenteDetallePage() {
             {/* Adelantar varios meses de golpe (p.ej. un padre que paga el
                 semestre): genera las N borrador y luego se cobran juntas. */}
             {canOperate && pendientes.length > 1 && (
+              <Tooltip text="Genera de una vez las facturas de todos los cobros pendientes">
               <Button
                 variant="outlined"
                 size="small"
@@ -312,10 +316,13 @@ export default function FacturaRecurrenteDetallePage() {
               >
                 {generandoTodos ? 'Generando…' : `Generar pendientes (${pendientes.length})`}
               </Button>
+              </Tooltip>
             )}
-            <IconButton size="small" onClick={cargar} sx={{ color: '#6b7280' }}>
+            <Tooltip text="Vuelve a cargar los datos de esta factura recurrente">
+            <IconButton size="small" onClick={cargar} aria-label="Actualizar datos" sx={{ color: '#6b7280' }}>
               <RefreshCw size={16} />
             </IconButton>
+            </Tooltip>
           </Box>
         </Box>
         <Box sx={{ px: 3, py: 2.5 }}>
@@ -368,6 +375,7 @@ export default function FacturaRecurrenteDetallePage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
                         <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>{fmtDOP(p.montoEstimado)}</Typography>
                         {canOperate && (
+                          <Tooltip text="Genera la factura de este cobro">
                           <Button
                             size="small" variant="outlined"
                             disabled={rowGenerando}
@@ -377,6 +385,7 @@ export default function FacturaRecurrenteDetallePage() {
                           >
                             {rowGenerando ? 'Generando…' : 'Generar'}
                           </Button>
+                          </Tooltip>
                         )}
                       </Box>
                     )}

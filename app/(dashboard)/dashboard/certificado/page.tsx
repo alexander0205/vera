@@ -16,6 +16,7 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -166,11 +167,13 @@ function CertStatusPanel({ certInfo, loading, onReload, onDelete, deleting }: {
 
       <Box sx={{ px: 2.5, py: 1.5, borderTop: '1px solid #f3f4f6' }}>
         {!confirmDelete ? (
-          <MuiButton size="small" variant="text" startIcon={<Trash2 style={{ width: 13, height: 13 }} />}
-            onClick={() => setConfirmDelete(true)}
-            sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
-            Eliminar certificado
-          </MuiButton>
+          <Tooltip text="Borra el certificado guardado de la empresa">
+            <MuiButton size="small" variant="text" startIcon={<Trash2 style={{ width: 13, height: 13 }} />}
+              onClick={() => setConfirmDelete(true)}
+              sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+              Eliminar certificado
+            </MuiButton>
+          </Tooltip>
         ) : (
           <Alert severity="error" sx={{ borderRadius: '8px' }}
             action={
@@ -283,9 +286,12 @@ function UploadForm({ hasCert, onSuccess }: { hasCert: boolean; onSuccess: (info
               <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtSize(file.size)}</Typography>
             </Box>
-            <IconButton size="small" onClick={() => { setFile(null); setError(null); }} sx={{ flexShrink: 0, color: 'text.secondary' }}>
-              <X style={{ width: 14, height: 14 }} />
-            </IconButton>
+            <Tooltip text="Quita este archivo; no se sube nada">
+              <IconButton size="small" onClick={() => { setFile(null); setError(null); }}
+                aria-label="Quitar archivo" sx={{ flexShrink: 0, color: 'text.secondary' }}>
+                <X style={{ width: 14, height: 14 }} />
+              </IconButton>
+            </Tooltip>
           </Box>
         )}
 
@@ -309,7 +315,9 @@ function UploadForm({ hasCert, onSuccess }: { hasCert: boolean; onSuccess: (info
           slotProps={{
             input: {
               endAdornment: (
-                <IconButton size="small" onClick={() => setShowPassword(v => !v)} edge="end" sx={{ color: 'text.secondary' }}>
+                <IconButton size="small" onClick={() => setShowPassword(v => !v)} edge="end"
+                  title="Muestra u oculta la contraseña"
+                  aria-label="Mostrar u ocultar contraseña" sx={{ color: 'text.secondary' }}>
                   {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
                 </IconButton>
               ),

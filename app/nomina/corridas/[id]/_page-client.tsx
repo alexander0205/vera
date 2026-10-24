@@ -17,6 +17,7 @@ import { rangoLegible } from '@/lib/nomina/periodos';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { toast } from '@/lib/toast';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark, Trash2 } from 'lucide-react';
 
 interface Corrida {
@@ -357,12 +358,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
           )}
           {corrida.estado === 'borrador' && puedeCorrer && (
             <>
-              <Button variant="outline" onClick={() => setBorrar(true)} className="gap-1.5 text-red-600 hover:text-red-700">
-                <Trash2 className="h-4 w-4" /> Borrar borrador
-              </Button>
-              <Button onClick={() => setConfirmar(true)} className="gap-1.5">
-                <CheckCircle2 className="h-4 w-4" /> Aprobar corrida
-              </Button>
+              <Tooltip text="Borra esta corrida en borrador; todavía no afecta pagos ni contabilidad">
+                <Button variant="outline" onClick={() => setBorrar(true)} className="gap-1.5 text-red-600 hover:text-red-700">
+                  <Trash2 className="h-4 w-4" /> Borrar borrador
+                </Button>
+              </Tooltip>
+              <Tooltip text="Genera el asiento del devengo; después ya no se puede editar">
+                <Button onClick={() => setConfirmar(true)} className="gap-1.5">
+                  <CheckCircle2 className="h-4 w-4" /> Aprobar corrida
+                </Button>
+              </Tooltip>
             </>
           )}
           {corrida.estado !== 'borrador' && puedePagar && (
@@ -378,14 +383,18 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                   <option key={f.key} value={f.key}>{f.nombre}</option>
                 ))}
               </NativeSelect>
-              <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="shrink-0 gap-1.5 whitespace-nowrap">
-                {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Descargar dispersión
-              </Button>
-              <Button variant="outline" onClick={descargarTSS} disabled={descargandoTSS} className="shrink-0 gap-1.5 whitespace-nowrap" title="Autodeterminación de la TSS (CSV)">
-                {descargandoTSS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
-                Autodeterminación TSS
-              </Button>
+              <Tooltip text="Descarga el archivo de pago con el formato de tu banco">
+                <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="shrink-0 gap-1.5 whitespace-nowrap">
+                  {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Descargar dispersión
+                </Button>
+              </Tooltip>
+              <Tooltip text="Descarga el CSV de la autodeterminación para declarar en la TSS">
+                <Button variant="outline" onClick={descargarTSS} disabled={descargandoTSS} className="shrink-0 gap-1.5 whitespace-nowrap">
+                  {descargandoTSS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
+                  Autodeterminación TSS
+                </Button>
+              </Tooltip>
             </div>
           )}
         </div>
@@ -542,10 +551,12 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     )}
                   </div>
                   {puedePagar && !o.pagada && (
-                    <Button size="sm" onClick={() => pagarObligacion(o.id)} disabled={pagandoObl !== null || pagandoEmp} className="shrink-0 gap-1.5">
-                      {pagandoObl === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
-                      Registrar pago
-                    </Button>
+                    <Tooltip text="Marca esta obligación como pagada y la anota en contabilidad">
+                      <Button size="sm" onClick={() => pagarObligacion(o.id)} disabled={pagandoObl !== null || pagandoEmp} className="shrink-0 gap-1.5">
+                        {pagandoObl === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
+                        Registrar pago
+                      </Button>
+                    </Tooltip>
                   )}
                 </div>
               ))}
@@ -581,15 +592,19 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               </div>
             )}
             {sel.size > 0 && (
-              <Button variant="outline" size="sm" onClick={() => pagarEmpleados({ lineaIds: [...sel] })} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
-                {pagandoEmp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
-                Marcar pagados ({sel.size})
-              </Button>
+              <Tooltip text="Marca como pagados solo a los empleados seleccionados">
+                <Button variant="outline" size="sm" onClick={() => pagarEmpleados({ lineaIds: [...sel] })} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
+                  {pagandoEmp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
+                  Marcar pagados ({sel.size})
+                </Button>
+              </Tooltip>
             )}
             {seleccionables.length > 0 && (
-              <Button size="sm" onClick={() => pagarEmpleados({ todos: true })} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
-                <Banknote className="h-3.5 w-3.5" /> Marcar todos pagados
-              </Button>
+              <Tooltip text="Marca como pagados a todos los que todavía no cobran">
+                <Button size="sm" onClick={() => pagarEmpleados({ todos: true })} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
+                  <Banknote className="h-3.5 w-3.5" /> Marcar todos pagados
+                </Button>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -673,15 +688,17 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                       </td>
                     )}
                     <td className="px-3 py-2 text-right">
-                      <a
-                        href={`/api/nomina/corridas/${id}/volante/${l.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                        title="Abrir volante de pago (PDF)"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </a>
+                      <Tooltip text="Abre el volante de pago de este empleado (PDF)">
+                        <a
+                          href={`/api/nomina/corridas/${id}/volante/${l.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                          aria-label="Abrir volante de pago"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </a>
+                      </Tooltip>
                     </td>
                   </tr>
                 ))}

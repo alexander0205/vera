@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { fmtFechaHora } from '@/lib/utils/format';
 import { GuiaConexion } from '@/components/mcp/GuiaConexion';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface ApiKeyRow {
   id: number;
@@ -178,9 +179,11 @@ export default function ApiKeysPage() {
                       <td className="whitespace-nowrap px-3 py-2.5 text-gray-600">{fmtFechaHora(k.createdAt)}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-gray-600">{fmtFechaHora(k.ultimoUsoAt)}</td>
                       <td className="px-3 py-2.5 text-right">
-                        <Button variant="outline" size="sm" onClick={() => { setPorRevocar(k); setRevocarError(null); }}>
-                          Revocar
-                        </Button>
+                        <Tooltip text="Desactiva esta key; las integraciones que la usen dejan de funcionar">
+                          <Button variant="outline" size="sm" onClick={() => { setPorRevocar(k); setRevocarError(null); }}>
+                            Revocar
+                          </Button>
+                        </Tooltip>
                       </td>
                     </tr>
                   ))}
@@ -200,14 +203,16 @@ export default function ApiKeysPage() {
               <div className="space-y-4 px-6 py-4">
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                   <code className="flex-1 break-all font-mono text-xs">{rawKey}</code>
-                  <button
-                    type="button"
-                    onClick={copyRawKey}
-                    className={`shrink-0 ${copied ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                    aria-label="Copiar key"
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </button>
+                  <Tooltip text="Copia la key al portapapeles">
+                    <button
+                      type="button"
+                      onClick={copyRawKey}
+                      className={`shrink-0 ${copied ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                      aria-label="Copiar key"
+                    >
+                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
               <DialogFooter>

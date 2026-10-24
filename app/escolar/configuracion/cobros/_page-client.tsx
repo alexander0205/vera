@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import {
   AlertTriangle, CheckCircle2, Landmark, Loader2, Phone, Plus, Trash2,
 } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Cuenta {
   id: number | null;
@@ -222,11 +223,13 @@ export default function CobrosClient() {
                     <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                       {c.banco.trim() || `Banco ${i + 1}`}
                     </span>
-                    <button type="button" title="Quitar esta cuenta"
-                      onClick={() => setCuentas((p) => p.filter((_, j) => j !== i))}
-                      className="text-gray-400 transition hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <Tooltip text="Quita esta cuenta de la lista; el cambio se guarda con Guardar">
+                      <button type="button" aria-label="Quitar esta cuenta"
+                        onClick={() => setCuentas((p) => p.filter((_, j) => j !== i))}
+                        className="text-gray-400 transition hover:text-red-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </Tooltip>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">

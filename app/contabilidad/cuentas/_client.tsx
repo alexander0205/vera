@@ -23,6 +23,7 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import type { CuentaNodo, Cuenta } from '@/lib/contabilidad/cuentas';
 import type { ResultadoImportacion } from '@/lib/contabilidad/cuentas-importar';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
@@ -243,21 +244,25 @@ export function CatalogoClient({
           </Button>
         {puedeConfigurar && (
           <>
-            <Button
-              variant="outlined" color="inherit" size="small"
-              onClick={() => { setAviso(null); setImportando(true); }}
-              startIcon={<Upload style={{ width: 16, height: 16 }} />}
-              sx={{ color: '#374151', borderColor: '#d1d5db' }}
-            >
-              Importar desde Excel
-            </Button>
-            <Button
-              variant="outlined" color="inherit" size="small"
-              onClick={restaurarBase} disabled={guardando}
-              sx={{ color: '#374151', borderColor: '#d1d5db' }}
-            >
-              Restaurar cuentas base
-            </Button>
+            <Tooltip text="Carga cuentas desde un Excel; no borra ninguna de las que ya tienes">
+              <Button
+                variant="outlined" color="inherit" size="small"
+                onClick={() => { setAviso(null); setImportando(true); }}
+                startIcon={<Upload style={{ width: 16, height: 16 }} />}
+                sx={{ color: '#374151', borderColor: '#d1d5db' }}
+              >
+                Importar desde Excel
+              </Button>
+            </Tooltip>
+            <Tooltip text="Vuelve a agregar las cuentas base que falten; no cambia las que ya existen">
+              <Button
+                variant="outlined" color="inherit" size="small"
+                onClick={restaurarBase} disabled={guardando}
+                sx={{ color: '#374151', borderColor: '#d1d5db' }}
+              >
+                Restaurar cuentas base
+              </Button>
+            </Tooltip>
             <Button
               variant="contained" size="small"
               onClick={() => abrirNueva()}
@@ -372,16 +377,18 @@ const FilaCuenta = memo(function FilaCuenta({
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', pl: `${c.nivel * 20}px` }}>
           {c.hijas.length > 0 ? (
-            <IconButton
-              size="small"
-              onClick={() => onColapso(c.id)}
-              aria-label={colapsada ? 'Expandir' : 'Colapsar'}
-              sx={{ mr: 0.5, p: 0.25, color: '#9ca3af' }}
-            >
-              {colapsada
-                ? <ChevronRight style={{ width: 16, height: 16 }} />
-                : <ChevronDown style={{ width: 16, height: 16 }} />}
-            </IconButton>
+            <Tooltip text={colapsada ? 'Muestra las cuentas que están dentro de esta' : 'Oculta las cuentas que están dentro de esta'}>
+              <IconButton
+                size="small"
+                onClick={() => onColapso(c.id)}
+                aria-label={colapsada ? 'Expandir' : 'Colapsar'}
+                sx={{ mr: 0.5, p: 0.25, color: '#9ca3af' }}
+              >
+                {colapsada
+                  ? <ChevronRight style={{ width: 16, height: 16 }} />
+                  : <ChevronDown style={{ width: 16, height: 16 }} />}
+              </IconButton>
+            </Tooltip>
           ) : (
             <Box component="span" sx={{ mr: 0.5, width: 24 }} />
           )}
@@ -427,39 +434,47 @@ const FilaCuenta = memo(function FilaCuenta({
         <TableCell>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.25 }}>
             {!c.imputable && (
+              <Tooltip text="Crea una cuenta dentro de esta; esta pasa a solo agrupar">
+                <IconButton
+                  size="small" aria-label="Agregar cuenta hija"
+                  onClick={() => onNueva(c)}
+                  sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                >
+                  <Plus style={{ width: 16, height: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            <Tooltip text="Abre esta cuenta para cambiarla">
               <IconButton
-                size="small" title="Agregar cuenta hija"
-                onClick={() => onNueva(c)}
+                size="small" aria-label="Editar"
+                onClick={() => onEditar(c)}
                 sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
               >
-                <Plus style={{ width: 16, height: 16 }} />
+                <Pencil style={{ width: 16, height: 16 }} />
               </IconButton>
-            )}
-            <IconButton
-              size="small" title="Editar"
-              onClick={() => onEditar(c)}
-              sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
-            >
-              <Pencil style={{ width: 16, height: 16 }} />
-            </IconButton>
-            <IconButton
-              size="small" title={c.activa ? 'Desactivar' : 'Activar'}
-              onClick={() => onActiva(c)}
-              sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
-            >
-              <Power style={{ width: 16, height: 16 }} />
-            </IconButton>
+            </Tooltip>
+            <Tooltip text={c.activa ? 'Desactiva la cuenta; no la borra y puedes volver a activarla' : 'Vuelve a activar esta cuenta'}>
+              <IconButton
+                size="small" aria-label={c.activa ? 'Desactivar' : 'Activar'}
+                onClick={() => onActiva(c)}
+                sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+              >
+                <Power style={{ width: 16, height: 16 }} />
+              </IconButton>
+            </Tooltip>
             {/* Las cuentas del catálogo base son estructurales; se
                 desactivan, no se borran. Borrar queda para las que
                 creó el usuario. */}
             {!c.esBase && (
-              <IconButton
-                size="small" title="Eliminar"
-                onClick={() => onBorrar(c)}
-                sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
-              >
-                <Trash2 style={{ width: 16, height: 16 }} />
-              </IconButton>
+              <Tooltip text="Borra esta cuenta del catálogo">
+                <IconButton
+                  size="small" aria-label="Eliminar"
+                  onClick={() => onBorrar(c)}
+                  sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
+                >
+                  <Trash2 style={{ width: 16, height: 16 }} />
+                </IconButton>
+              </Tooltip>
             )}
           </Box>
         </TableCell>
@@ -852,12 +867,14 @@ function ImportarCatalogoDialog({
         >
           Cancelar
         </Button>
-        <Button
-          variant="contained" onClick={aplicar}
-          disabled={!hayCambios || hayErrores || trabajando !== null}
-        >
-          {trabajando === 'aplicando' ? 'Aplicando…' : 'Aplicar cambios'}
-        </Button>
+        <Tooltip text="Crea las cuentas nuevas y actualiza las que ya tienen ese código">
+          <Button
+            variant="contained" onClick={aplicar}
+            disabled={!hayCambios || hayErrores || trabajando !== null}
+          >
+            {trabajando === 'aplicando' ? 'Aplicando…' : 'Aplicar cambios'}
+          </Button>
+        </Tooltip>
       </DialogActions>
     </Dialog>
   );

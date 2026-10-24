@@ -10,6 +10,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Props {
   empresa: EmpresaPerfil | null;
@@ -150,6 +151,7 @@ export function CompactHeader({
             <Box component="span" sx={{ fontSize: '0.6875rem', color: '#92400e', bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', px: 1, py: '2px' }}>Sin disponibles</Box>
           )}
           {!sinNcfEfectivo && (
+            <Tooltip text="Edita la numeración de la secuencia de e-NCF">
             <Box
               component="button"
               type="button"
@@ -159,6 +161,7 @@ export function CompactHeader({
             >
               <Settings size={14} />
             </Box>
+            </Tooltip>
           )}
         </Box>
 

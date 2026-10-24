@@ -1,4 +1,5 @@
 'use client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 import Drawer from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
@@ -108,7 +109,7 @@ export function FacturaDrawer({
           mismo gesto en el sitio donde se busca al estar en un cajón. `zIndex`
           porque esa cabecera es pegajosa y si no, la tapa.
         */}
-        <IconButton
+        <Tooltip text="Cierra el detalle de la factura"><IconButton
           onClick={onCerrar}
           aria-label="Cerrar"
           size="small"
@@ -122,7 +123,7 @@ export function FacturaDrawer({
           }}
         >
           <CloseIcon fontSize="small" />
-        </IconButton>
+        </IconButton></Tooltip>
 
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <NuevaFacturaFormClient

@@ -8,6 +8,7 @@ import { ZeroLoader } from '@/components/zero-loader';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import { Tooltip } from '@/components/ui/tooltip';
 import TextField from '@mui/material/TextField';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
@@ -205,34 +206,40 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
               {/* Acciones */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
                 {BILLING_ENABLED && isOwner && !hasPlan && (
-                  <Button variant="outlined" size="small"
-                    startIcon={<CreditCard size={14} />}
-                    onClick={async () => {
-                      if (!isActive) await fetch('/api/empresa/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId: empresa.id }) });
-                      router.push('/dashboard/suscripcion');
-                    }}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#c7d2fc', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe', borderColor: '#3658e1' } }}>
-                    Elegir plan
-                  </Button>
+                  <Tooltip text="Abre los planes de esta empresa; si no está activa, la cambia primero">
+                    <Button variant="outlined" size="small"
+                      startIcon={<CreditCard size={14} />}
+                      onClick={async () => {
+                        if (!isActive) await fetch('/api/empresa/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId: empresa.id }) });
+                        router.push('/dashboard/suscripcion');
+                      }}
+                      sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#c7d2fc', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe', borderColor: '#3658e1' } }}>
+                      Elegir plan
+                    </Button>
+                  </Tooltip>
                 )}
                 {BILLING_ENABLED && isOwner && hasPlan && (
-                  <Button variant="text" size="small"
-                    startIcon={<CreditCard size={14} />}
-                    onClick={async () => {
-                      if (!isActive) await fetch('/api/empresa/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId: empresa.id }) });
-                      router.push('/dashboard/suscripcion');
-                    }}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f9fafb' } }}>
-                    Suscripción
-                  </Button>
+                  <Tooltip text="Abre la suscripción de esta empresa; si no está activa, la cambia primero">
+                    <Button variant="text" size="small"
+                      startIcon={<CreditCard size={14} />}
+                      onClick={async () => {
+                        if (!isActive) await fetch('/api/empresa/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId: empresa.id }) });
+                        router.push('/dashboard/suscripcion');
+                      }}
+                      sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f9fafb' } }}>
+                      Suscripción
+                    </Button>
+                  </Tooltip>
                 )}
                 {!isActive && (
-                  <Button variant="contained" disableElevation size="small"
-                    onClick={() => handleSwitch(empresa.id)} disabled={isLoading}
-                    endIcon={isLoading ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <ArrowRight size={14} />}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
-                    {isLoading ? '' : 'Cambiar'}
-                  </Button>
+                  <Tooltip text="Cambia a esta empresa para trabajar en ella">
+                    <Button variant="contained" disableElevation size="small"
+                      onClick={() => handleSwitch(empresa.id)} disabled={isLoading}
+                      endIcon={isLoading ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <ArrowRight size={14} />}
+                      sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+                      {isLoading ? '' : 'Cambiar'}
+                    </Button>
+                  </Tooltip>
                 )}
                 {isActive && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#3658e1', pr: 0.5 }}>

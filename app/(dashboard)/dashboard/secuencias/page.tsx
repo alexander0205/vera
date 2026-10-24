@@ -25,6 +25,7 @@ import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 import LinearProgress from '@mui/material/LinearProgress';
 import Switch from '@mui/material/Switch';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -257,10 +258,13 @@ export default function SecuenciasPage() {
           <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap' }}>
             <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, secuencias, 'Todas las numeraciones')}
               deshabilitado={loading || secuencias.length === 0} testId="exportar-secuencias" />
-            <IconButton size="small" onClick={cargar} disabled={loading}
-              sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', color: 'text.secondary' }}>
-              <RefreshCw style={{ width: 16, height: 16, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            </IconButton>
+            <Tooltip text="Vuelve a cargar la lista de numeraciones">
+              <IconButton size="small" onClick={cargar} disabled={loading}
+                aria-label="Actualizar lista"
+                sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', color: 'text.secondary' }}>
+                <RefreshCw style={{ width: 16, height: 16, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              </IconButton>
+            </Tooltip>
             <Link href="/dashboard/secuencias/nueva" style={{ textDecoration: 'none' }}>
               <MuiButton variant="contained" disableElevation
                 startIcon={<Plus style={{ width: 14, height: 14 }} />}
@@ -444,14 +448,18 @@ export default function SecuenciasPage() {
                         {/* Acciones */}
                         <TableCell align="right">
                           <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end' }}>
-                            <IconButton size="small" onClick={() => abrirEdicion(s)} title="Editar numeración"
-                              sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#eef2fe' }, borderRadius: '6px' }}>
-                              <Pencil style={{ width: 14, height: 14 }} />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => { setDeleteTarget(s); setOpError(null); }} title="Eliminar numeración"
-                              sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#fef2f2' }, borderRadius: '6px' }}>
-                              <Trash2 style={{ width: 14, height: 14 }} />
-                            </IconButton>
+                            <Tooltip text="Edita las opciones de esta numeración">
+                              <IconButton size="small" onClick={() => abrirEdicion(s)} aria-label="Editar numeración"
+                                sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#eef2fe' }, borderRadius: '6px' }}>
+                                <Pencil style={{ width: 14, height: 14 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip text="Elimina esta numeración">
+                              <IconButton size="small" onClick={() => { setDeleteTarget(s); setOpError(null); }} aria-label="Eliminar numeración"
+                                sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#fef2f2' }, borderRadius: '6px' }}>
+                                <Trash2 style={{ width: 14, height: 14 }} />
+                              </IconButton>
+                            </Tooltip>
                           </Box>
                         </TableCell>
                       </TableRow>

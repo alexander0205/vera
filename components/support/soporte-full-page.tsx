@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Paperclip, Camera, Send } from 'lucide-react';
 import { useTicketChat } from '@/lib/hooks/useTicketChat';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ImageLightbox } from '@/components/support/image-lightbox';
 import { CapturaOverlay } from '@/components/support/captura-overlay';
 import { MessageBubble } from '@/components/support/message-bubble';
@@ -187,21 +188,25 @@ export function SoportePaginaCompleta() {
 
       <div style={{ display: 'flex', borderTop: '1px solid #e2e8f0', alignItems: 'center', padding: '0 12px', flexShrink: 0 }}>
         <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf" onChange={chat.onFileSelected} style={{ display: 'none' }} />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          title={ADJUNTO_TITLE}
-          style={{ border: 'none', background: 'none', padding: '0 10px', cursor: 'pointer', display: 'flex', color: '#64748b' }}
-        >
-          <Paperclip size={20} />
-        </button>
-        <button
-          onClick={() => chat.captureScreenshot()}
-          title={CAPTURA_TITLE}
-          disabled={chat.loading}
-          style={{ border: 'none', background: 'none', padding: '0 10px', cursor: chat.loading ? 'default' : 'pointer', display: 'flex', color: '#64748b' }}
-        >
-          <Camera size={20} />
-        </button>
+        <Tooltip text={ADJUNTO_TITLE}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Adjuntar archivo"
+            style={{ border: 'none', background: 'none', padding: '0 10px', cursor: 'pointer', display: 'flex', color: '#64748b' }}
+          >
+            <Paperclip size={20} />
+          </button>
+        </Tooltip>
+        <Tooltip text={CAPTURA_TITLE}>
+          <button
+            onClick={() => chat.captureScreenshot()}
+            aria-label="Capturar pantalla"
+            disabled={chat.loading}
+            style={{ border: 'none', background: 'none', padding: '0 10px', cursor: chat.loading ? 'default' : 'pointer', display: 'flex', color: '#64748b' }}
+          >
+            <Camera size={20} />
+          </button>
+        </Tooltip>
         <input
           value={chat.input}
           onChange={(e) => chat.onInputChange(e.target.value)}

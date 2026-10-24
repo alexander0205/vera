@@ -27,6 +27,7 @@ import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
 import { partidasDeFamilia, resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
 import { textosResumenCobro } from '@/components/administracion-escolar/ResumenCobro';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * La ficha completa de una familia.
@@ -402,11 +403,12 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           </Typography>
           <Box sx={{ mt: 0.75, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
             {canales.map((x) => (
-              <Box component="span" key={x.label}
-                title={x.valor ? `${x.label}: ${x.valor}` : `Sin ${x.label}`}
-                sx={{ display: 'inline-flex', color: x.valor ? '#3658E1' : '#C3C8D4' }}>
-                <x.icon className="h-4 w-4" />
-              </Box>
+              <Tooltip key={x.label} text={x.valor ? `${x.label}: ${x.valor}` : `Sin ${x.label}`}>
+                <Box component="span"
+                  sx={{ display: 'inline-flex', color: x.valor ? '#3658E1' : '#C3C8D4' }}>
+                  <x.icon className="h-4 w-4" />
+                </Box>
+              </Tooltip>
             ))}
           </Box>
           <Box sx={{ mt: 1 }}>
@@ -424,15 +426,17 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             </Link>
           </Button>
           {puedeFacturar && (
-            <Button
-              variant="default"
-              size="sm"
-              // Explícito: «Nueva factura» abre vacía, no con lo que quedara
-              // de un «Adelantar». Lo que la familia debe se elige dentro.
-              onClick={() => abrirCajon('nueva')}
-            >
-              <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
-            </Button>
+            <Tooltip text="Abre una factura en blanco; lo que la familia debe se elige dentro">
+              <Button
+                variant="default"
+                size="sm"
+                // Explícito: «Nueva factura» abre vacía, no con lo que quedara
+                // de un «Adelantar». Lo que la familia debe se elige dentro.
+                onClick={() => abrirCajon('nueva')}
+              >
+                <Receipt className="mr-1.5 h-4 w-4" />Nueva factura
+              </Button>
+            </Tooltip>
           )}
         </Box>
       </Paper>
@@ -627,9 +631,11 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
               oculta. */}
           {vista !== 'cxc' && vista !== 'notas' && (
             <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
-              <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
-                <Download className="mr-1.5 h-4 w-4" />Exportar
-              </Button>
+              <Tooltip text="Descarga lo que hay en esta pestaña en un archivo">
+                <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
+                  <Download className="mr-1.5 h-4 w-4" />Exportar
+                </Button>
+              </Tooltip>
             </Box>
           )}
         </Box>

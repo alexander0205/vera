@@ -65,6 +65,7 @@ import { calcularTotales } from './utils/calculos';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
 import { datosComprador } from './utils/comprador';
 import { validate as validateEcf } from '@/lib/factura/validator';
+import { Tooltip } from '@/components/ui/tooltip';
 import type {
   BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Producto,
   ResultadoEmision, Retencion, VariantePick,
@@ -2232,6 +2233,7 @@ export default function NuevaFacturaForm({
                     sx={{ fontWeight: 500 }}
                   />
                   ) : (
+                  <Tooltip text="Vincula esta factura al cargo y vuelve al estudiante">
                   <Button
                     variant="contained"
                     disableElevation
@@ -2253,7 +2255,9 @@ export default function NuevaFacturaForm({
                         ? 'Vincular a los cargos y volver al estudiante'
                         : 'Vincular al cargo y volver al estudiante'}
                   </Button>
+                  </Tooltip>
                   )}
+                  <Tooltip text="Abre la factura sin vincularla al cargo">
                   <Button
                     variant="outlined"
                     disableElevation
@@ -2263,6 +2267,7 @@ export default function NuevaFacturaForm({
                   >
                     Ver factura sin vincular
                   </Button>
+                  </Tooltip>
                 </Box>
               </Box>
             )}
@@ -2286,6 +2291,7 @@ export default function NuevaFacturaForm({
                   guardada y emitirla después desde su detalle.
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Tooltip text="Envía la nota a la DGII ahora; solo si la factura original ya tiene e-CF">
                   <Button
                     variant="contained"
                     disableElevation
@@ -2301,6 +2307,8 @@ export default function NuevaFacturaForm({
                   >
                     Enviar a DGII ahora
                   </Button>
+                  </Tooltip>
+                  <Tooltip text="Guarda la nota sin enviarla; luego puedes emitirla desde su detalle">
                   <Button
                     variant="outlined"
                     disableElevation
@@ -2309,6 +2317,7 @@ export default function NuevaFacturaForm({
                   >
                     Dejar como borrador
                   </Button>
+                  </Tooltip>
                 </Box>
                 {padreNota && !padreNota.conEcfReal && !ncfModificadoValido && (
                   <Typography variant="caption" color="warning.dark" sx={{ display: 'block', mt: 1 }}>

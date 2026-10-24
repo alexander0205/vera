@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { toast } from '@/lib/toast';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   Loader2, Wallet, Landmark, FileText, Download, Upload, X, Trash2,
 } from 'lucide-react';
@@ -307,12 +308,16 @@ export function EmpleadoWizard({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium">Horario de la semana</div>
                 <div className="flex flex-wrap gap-1.5">
-                  <Button type="button" variant="outline" size="sm" onClick={() => cambiarHorario({ ...HORARIO_LUNES_A_SABADO })}>
-                    L a V 8 h + sábado 4 h
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => cambiarHorario({ ...HORARIO_LUNES_A_VIERNES })}>
-                    L a V 8 h
-                  </Button>
+                  <Tooltip text="Pone 8 h de lunes a viernes y 4 h el sábado; el domingo queda libre">
+                    <Button type="button" variant="outline" size="sm" onClick={() => cambiarHorario({ ...HORARIO_LUNES_A_SABADO })}>
+                      L a V 8 h + sábado 4 h
+                    </Button>
+                  </Tooltip>
+                  <Tooltip text="Pone 8 h de lunes a viernes; sábado y domingo quedan libres">
+                    <Button type="button" variant="outline" size="sm" onClick={() => cambiarHorario({ ...HORARIO_LUNES_A_VIERNES })}>
+                      L a V 8 h
+                    </Button>
+                  </Tooltip>
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
@@ -691,10 +696,12 @@ function DocumentosPaso({
               <span className="min-w-0 flex-1 truncate">{d.file.name}</span>
               <Badge variant="outline" className="shrink-0">{LABEL_TIPO_DOC[d.tipo] ?? d.tipo}</Badge>
               <span className="shrink-0 text-xs text-muted-foreground">{tam(d.file.size)}</span>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                onClick={() => setPendientes((p) => p.filter((_, j) => j !== i))} aria-label="Quitar">
-                <X className="h-4 w-4" />
-              </Button>
+              <Tooltip text="Quita este archivo de la lista; todavía no se ha subido">
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => setPendientes((p) => p.filter((_, j) => j !== i))} aria-label="Quitar">
+                  <X className="h-4 w-4" />
+                </Button>
+              </Tooltip>
             </div>
           ))}
         </div>
@@ -712,15 +719,19 @@ function DocumentosPaso({
                 <span className="min-w-0 flex-1 truncate">{d.archivoNombre ?? 'documento'}</span>
                 <Badge variant="outline" className="shrink-0">{LABEL_TIPO_DOC[d.tipo] ?? d.tipo}</Badge>
                 <span className="shrink-0 text-xs text-muted-foreground">{tam(d.tamanoBytes)}</span>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                  onClick={() => window.open(`/api/nomina/empleados/${empleado!.id}/documentos/${d.id}`, '_blank')}
-                  aria-label="Ver">
-                  <Download className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                  onClick={() => borrar(d.id)} aria-label="Borrar">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                <Tooltip text="Abre el documento en una pestaña nueva">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                    onClick={() => window.open(`/api/nomina/empleados/${empleado!.id}/documentos/${d.id}`, '_blank')}
+                    aria-label="Ver">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </Tooltip>
+                <Tooltip text="Borra este documento al instante, sin pedir confirmación">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                    onClick={() => borrar(d.id)} aria-label="Borrar">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </Tooltip>
               </div>
             ))}
           </div>

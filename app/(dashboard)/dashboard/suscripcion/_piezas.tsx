@@ -14,6 +14,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ChevronDown, CreditCard, TriangleAlert } from 'lucide-react';
 
 import { LazoZero } from '@/lib/marca/isotipo';
@@ -526,10 +527,12 @@ export function BloqueCobro({
               salida no retiene a nadie: solo hace que escriban a soporte,
               molestos, para preguntar cómo. */}
           <Box component="form" action={customerPortalAction} sx={{ mt: 1.25 }}>
-            <Button type="submit" variant="text"
-              sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 500, fontSize: '0.75rem', color: GRIS, textDecoration: 'underline', '&:hover': { bgcolor: 'transparent', color: TINTA } }}>
-              Cancelar la suscripción
-            </Button>
+            <Tooltip text="Te lleva al portal de Stripe, donde se cancela">
+              <Button type="submit" variant="text"
+                sx={{ p: 0, minWidth: 0, textTransform: 'none', fontWeight: 500, fontSize: '0.75rem', color: GRIS, textDecoration: 'underline', '&:hover': { bgcolor: 'transparent', color: TINTA } }}>
+                Cancelar la suscripción
+              </Button>
+            </Tooltip>
           </Box>
         </>
       ) : (

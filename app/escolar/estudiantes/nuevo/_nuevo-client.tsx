@@ -17,6 +17,7 @@ import { BuscarSigerdDialog } from '@/components/administracion-escolar/BuscarSi
 import { TutoresPanel, type TutorVinculo } from '@/components/administracion-escolar/TutoresPanel';
 import { ResponsablePagoDialog, type Contacto } from '@/components/administracion-escolar/ResponsablePagoDialog';
 import { rutaNuevaMatricula } from '@/lib/administracion-escolar/matricula-pantalla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 
 export default function NuevoEstudianteClient() {
@@ -182,9 +183,11 @@ export default function NuevoEstudianteClient() {
         {/* Antes que teclear: si el alumno está en el padrón del MINERD, sus
             datos vienen ya escritos como el ministerio los tiene. Una letra
             distinta aquí es un alumno que después no cruza con SIGERD. */}
-        <Button variant="outline" className="shrink-0" onClick={() => setBuscarSigerd(true)}>
-          <Search className="mr-1.5 h-4 w-4" />Buscar en SIGERD
-        </Button>
+        <Tooltip text="Busca al alumno en SIGERD y llena la ficha con sus datos">
+          <Button variant="outline" className="shrink-0" onClick={() => setBuscarSigerd(true)}>
+            <Search className="mr-1.5 h-4 w-4" />Buscar en SIGERD
+          </Button>
+        </Tooltip>
       </header>
 
       <BuscarSigerdDialog
@@ -295,16 +298,20 @@ export default function NuevoEstudianteClient() {
                     <p className="truncate text-sm font-medium text-gray-900">{responsable.nombre}</p>
                     <p className="text-xs text-gray-500">Recibirá las facturas de este alumno</p>
                   </div>
-                  <Button variant="outline" size="sm" className="shrink-0"
-                    onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
-                    Cambiar
-                  </Button>
+                  <Tooltip text="Elige otro responsable de pago para este alumno">
+                    <Button variant="outline" size="sm" className="shrink-0"
+                      onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                      Cambiar
+                    </Button>
+                  </Tooltip>
                 </div>
               ) : (
-                <Button variant="outline"
-                  onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
-                  <Wallet className="mr-1.5 h-4 w-4" />Asignar responsable de pago
-                </Button>
+                <Tooltip text="Elige quién paga las cuotas de este alumno">
+                  <Button variant="outline"
+                    onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                    <Wallet className="mr-1.5 h-4 w-4" />Asignar responsable de pago
+                  </Button>
+                </Tooltip>
               )}
             </div>
           </Categoria>

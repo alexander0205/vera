@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, Check, FileUp, Images, Loader2, RefreshCw, X } from 'lucide-react';
 import { comprimirImagen } from '@/lib/utils/comprimir-imagen';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Enviar una factura de proveedor con el teléfono.
@@ -260,18 +261,24 @@ export default function SubirFacturaClient({ token }: { token: string }) {
 
       {/* Disparador y las dos salidas de siempre */}
       <div className="flex shrink-0 items-center justify-center gap-8 py-3">
-        <button type="button" onClick={() => camaraRef.current?.click()} aria-label="Usar la cámara del teléfono"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white">
-          <Camera className="h-5 w-5" />
-        </button>
-        <button type="button" onClick={disparar} disabled={camara !== 'encendida' || lleno} aria-label="Tomar foto" data-testid="disparar"
-          className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 border-white/70 bg-white/10 disabled:opacity-40">
-          <span className="h-[54px] w-[54px] rounded-full bg-white" />
-        </button>
-        <button type="button" onClick={() => archivoRef.current?.click()} aria-label="Galería o PDF"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white">
-          <Images className="h-5 w-5" />
-        </button>
+        <Tooltip text="Toma una foto con la cámara del teléfono">
+          <button type="button" onClick={() => camaraRef.current?.click()} aria-label="Usar la cámara del teléfono"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white">
+            <Camera className="h-5 w-5" />
+          </button>
+        </Tooltip>
+        <Tooltip text="Toma una foto de la factura">
+          <button type="button" onClick={disparar} disabled={camara !== 'encendida' || lleno} aria-label="Tomar foto" data-testid="disparar"
+            className="flex h-[72px] w-[72px] items-center justify-center rounded-full border-4 border-white/70 bg-white/10 disabled:opacity-40">
+            <span className="h-[54px] w-[54px] rounded-full bg-white" />
+          </button>
+        </Tooltip>
+        <Tooltip text="Elige una imagen de la galería o un PDF">
+          <button type="button" onClick={() => archivoRef.current?.click()} aria-label="Galería o PDF"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white">
+            <Images className="h-5 w-5" />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Lo tomado y «Enviar»: siempre a la vista */}
@@ -293,10 +300,12 @@ export default function SubirFacturaClient({ token }: { token: string }) {
                     // eslint-disable-next-line @next/next/no-img-element -- vista previa local (blob:)
                     ? <img src={f.url} alt={`Foto ${i + 1}`} className="h-full w-full object-cover" />
                     : <div className="flex h-full items-center justify-center text-[10px] text-gray-600">PDF</div>}
-                  <button type="button" onClick={() => quitar(i)} aria-label={`Quitar foto ${i + 1}`}
-                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white">
-                    <X className="h-3 w-3" />
-                  </button>
+                  <Tooltip text="Quita esta foto de la lista">
+                    <button type="button" onClick={() => quitar(i)} aria-label={`Quitar foto ${i + 1}`}
+                      className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Tooltip>
                 </div>
               ))}
             </div>

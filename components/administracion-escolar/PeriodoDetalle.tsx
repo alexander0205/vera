@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { ChipEstado } from './ChipEstado';
 import { Input } from '@/components/ui/input';
@@ -595,15 +596,17 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
             de los demás. La recurrencia sigue existiendo, se gestiona fuera.
           */}
           {puedeGestionar && grupo.matriculaId && (
-            <Button size="sm" variant="outline" onClick={() => setTarifaAbierta(true)}>
-              <Wallet className="h-4 w-4 mr-1.5" />
-              Configuración mensual
-              {grupo.becaTipo && (
-                <span className="ml-1.5 rounded-full bg-zero-50 px-1.5 py-0.5 text-[10px] font-medium text-zero-700">
-                  personal
-                </span>
-              )}
-            </Button>
+            <Tooltip text="Fija un monto o descuento solo para este alumno; no cambia a los demás">
+              <Button size="sm" variant="outline" onClick={() => setTarifaAbierta(true)}>
+                <Wallet className="h-4 w-4 mr-1.5" />
+                Configuración mensual
+                {grupo.becaTipo && (
+                  <span className="ml-1.5 rounded-full bg-zero-50 px-1.5 py-0.5 text-[10px] font-medium text-zero-700">
+                    personal
+                  </span>
+                )}
+              </Button>
+            </Tooltip>
           )}
           {/*
             Facturar varios ya no es un botón: son las casillas de la tabla.
@@ -616,9 +619,11 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
             en varios meses de golpe.
           */}
           {puedeGestionar && grupo.matriculaId != null && (
-            <Button size="sm" variant="outline" onClick={() => setCrearVariosAbierto(true)}>
-              <Plus className="h-4 w-4 mr-1.5" />Agregar cargo a varios meses
-            </Button>
+            <Tooltip text="Crea el mismo cargo, con el mismo monto, en los meses que elijas a la vez">
+              <Button size="sm" variant="outline" onClick={() => setCrearVariosAbierto(true)}>
+                <Plus className="h-4 w-4 mr-1.5" />Agregar cargo a varios meses
+              </Button>
+            </Tooltip>
           )}
           {/* Antes esto era `window.print()` sobre la ficha entera: salían las
               pestañas y los botones, y no salía el detalle cargo por cargo ni
@@ -966,11 +971,13 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
           <Button size="sm" variant="ghost" onClick={() => setMarcados(new Set())}>
             Quitar marcas
           </Button>
-          <Button size="sm" className="bg-zero-600 hover:bg-zero-700"
-            onClick={() => { facturarCargos(resumenMarcados.ids); setMarcados(new Set()); }}>
-            <Receipt className="mr-1.5 h-4 w-4" />
-            {resumenMarcados.ids.length === 1 ? 'Facturar' : 'Facturar juntos'}
-          </Button>
+          <Tooltip text="Abre el cajón para facturar los cargos marcados en una sola operación">
+            <Button size="sm" className="bg-zero-600 hover:bg-zero-700"
+              onClick={() => { facturarCargos(resumenMarcados.ids); setMarcados(new Set()); }}>
+              <Receipt className="mr-1.5 h-4 w-4" />
+              {resumenMarcados.ids.length === 1 ? 'Facturar' : 'Facturar juntos'}
+            </Button>
+          </Tooltip>
         </div>
       )}
 
@@ -1428,15 +1435,16 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
                     concepto: junto al nombre los iconos se leían como parte de él. */}
                 <th className="px-3 py-2.5 font-medium">Avisos</th>
                 <th className="px-3 py-2.5 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setOrden((o) => (o === 'asc' ? 'desc' : 'asc'))}
-                    className="inline-flex items-center gap-1 hover:text-gray-700"
-                    title={orden === 'asc' ? 'Del más próximo al más lejano' : 'Del más lejano al más próximo'}
-                  >
-                    Vencimiento
-                    <ArrowUpDown className="h-3 w-3" />
-                  </button>
+                  <Tooltip text={orden === 'asc' ? 'Ordenado del más próximo al más lejano; clic para invertir' : 'Ordenado del más lejano al más próximo; clic para invertir'}>
+                    <button
+                      type="button"
+                      onClick={() => setOrden((o) => (o === 'asc' ? 'desc' : 'asc'))}
+                      className="inline-flex items-center gap-1 hover:text-gray-700"
+                    >
+                      Vencimiento
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </Tooltip>
                 </th>
                 <th className="px-3 py-2.5 font-medium">Estado</th>
                 <th className="px-3 py-2.5 font-medium text-right">Monto</th>
@@ -1505,25 +1513,29 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
               {[10, 25, 50].map((n) => <option key={n} value={n}>{n}</option>)}
             </NativeSelect>
             <span>por página</span>
-            <button
-              type="button"
-              onClick={() => setPagina((p) => Math.max(1, p - 1))}
-              disabled={actual === 1}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 disabled:opacity-40"
-              aria-label="Página anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
+            <Tooltip text="Ir a la página anterior">
+              <button
+                type="button"
+                onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                disabled={actual === 1}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 disabled:opacity-40"
+                aria-label="Página anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </Tooltip>
             <span className="min-w-6 text-center font-medium text-gray-700">{actual}</span>
-            <button
-              type="button"
-              onClick={() => setPagina((p) => Math.min(paginas, p + 1))}
-              disabled={actual === paginas}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 disabled:opacity-40"
-              aria-label="Página siguiente"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            <Tooltip text="Ir a la página siguiente">
+              <button
+                type="button"
+                onClick={() => setPagina((p) => Math.min(paginas, p + 1))}
+                disabled={actual === paginas}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 disabled:opacity-40"
+                aria-label="Página siguiente"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -1675,6 +1687,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button type="button"
+                        title="Más acciones de esta factura"
                         aria-label={`Acciones de ${f.encf || f.codigo || 'la factura'}`}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 data-[state=open]:bg-gray-100">
                         <MoreVertical className="h-4 w-4" />
@@ -1922,14 +1935,16 @@ function CasillaCargo({ marcado, onMarcar, etiqueta }: {
   etiqueta: string;
 }) {
   return (
-    <input
-      type="checkbox"
-      checked={marcado}
-      aria-label={etiqueta}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => { e.stopPropagation(); onMarcar(); }}
-      className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-gray-300 text-zero-600 focus:ring-zero-500"
-    />
+    <Tooltip text="Marca para facturar varios cargos juntos">
+      <input
+        type="checkbox"
+        checked={marcado}
+        aria-label={etiqueta}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { e.stopPropagation(); onMarcar(); }}
+        className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-gray-300 text-zero-600 focus:ring-zero-500"
+      />
+    </Tooltip>
   );
 }
 
@@ -2391,6 +2406,7 @@ function PrevistoActionsMenu({ previsto, onPrevisto, onDetalle, tutorClientId }:
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          title="Más acciones de esta cuota"
           aria-label={`Acciones de ${previsto.concepto} (previsto)`}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 data-[state=open]:bg-gray-100"
         >
@@ -2771,12 +2787,14 @@ function TarifaEstudianteDialog({
                     </p>
                   </div>
                   {b.facturaAnulable && b.ecfDocumentId != null && can('facturas:anular') && (
-                    <Button size="sm" variant="outline" className="shrink-0"
-                      disabled={anulandoFactura != null}
-                      onClick={() => void anularYPasar(b)}>
-                      {anulandoFactura === b.ecfDocumentId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                      Anular factura y pasar al precio nuevo
-                    </Button>
+                    <Tooltip text="Anula esa factura y deja ese mes con el precio nuevo, por facturar después">
+                      <Button size="sm" variant="outline" className="shrink-0"
+                        disabled={anulandoFactura != null}
+                        onClick={() => void anularYPasar(b)}>
+                        {anulandoFactura === b.ecfDocumentId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        Anular factura y pasar al precio nuevo
+                      </Button>
+                    </Tooltip>
                   )}
                 </div>
               ))}
@@ -3213,9 +3231,11 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
       return (
         <span className="inline-flex items-center justify-end gap-3">
           {chip}
-          <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
-            <Wallet className="h-3 w-3" />Registrar pago
-          </button>
+          <Tooltip text="Abre la factura para registrar aquí el cobro de este cargo">
+            <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
+              <Wallet className="h-3 w-3" />Registrar pago
+            </button>
+          </Tooltip>
         </span>
       );
     }
@@ -3224,16 +3244,20 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
   const acciones: React.ReactNode[] = [];
   if (puedeFacturar && facturable) {
     acciones.push(
-      <button key="fac" onClick={onFacturar} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
-        <Receipt className="h-3 w-3" />Facturar
-      </button>,
+      <Tooltip key="fac" text="Abre el cajón para crear la factura de este cargo">
+        <button onClick={onFacturar} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
+          <Receipt className="h-3 w-3" />Facturar
+        </button>
+      </Tooltip>,
     );
   }
   if (puedeGestionar) {
     acciones.push(
-      <button key="vin" onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-zero-600 transition-colors">
-        <Link2 className="h-3 w-3" />Vincular
-      </button>,
+      <Tooltip key="vin" text="Une una factura ya emitida a este cargo; no crea una factura nueva">
+        <button onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-zero-600 transition-colors">
+          <Link2 className="h-3 w-3" />Vincular
+        </button>
+      </Tooltip>,
     );
   }
   if (acciones.length === 0) return <span className="text-gray-300 text-xs">—</span>;
@@ -3387,10 +3411,10 @@ function AvisoSemaforo({ canales, titulo }: { canales?: Set<string>; titulo?: st
           ? `${CANAL_META[c].label}: ya se le avisó por aquí`
           : `${CANAL_META[c].label}: todavía no ha salido`;
         return (
-          <span key={c} title={texto} className="inline-flex">
+          <Tooltip key={c} text={texto}>
             <Icono className={`h-3.5 w-3.5 ${on ? 'text-zero-600' : 'text-gray-300'}`}
               aria-label={texto} />
-          </span>
+          </Tooltip>
         );
       })}
     </span>

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Persona {
   key: string;
@@ -326,9 +327,11 @@ export default function PersonalClient() {
                       <Button size="sm" variant="outline" onClick={() => abrirEdicion(sel)}>
                         <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                       </Button>
-                      <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setPorBorrar(sel)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <Tooltip text="Elimina a esta persona del personal; pide confirmación antes">
+                        <Button size="sm" variant="outline" aria-label="Eliminar" className="text-destructive hover:text-destructive" onClick={() => setPorBorrar(sel)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </Tooltip>
                     </div>
                   )}
                 </div>

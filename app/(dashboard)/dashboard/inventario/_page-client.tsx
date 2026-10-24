@@ -22,6 +22,7 @@ import { DataTable, type ExportTabla, type DataTableColumn } from '@/components/
 import { fmtFechaRD } from '@/lib/utils/format';
 import { Autocomplete } from '@/app/(dashboard)/dashboard/facturas/nueva/components/Autocomplete';
 import { renderProductoOption } from '@/components/productos/ProductoOption';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Movimiento {
   id:             number;
@@ -396,13 +397,15 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
           hint:  'Aquí se registran las entradas y salidas de stock. Solo se mueven los productos con «Controlar inventario» encendido: los servicios no llevan stock y nunca aparecen. Se activa en la ficha del producto.',
         }}
         headerActions={
-          <Button
-            variant="contained"
-            startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
-            onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); }}
-          >
-            Nuevo ajuste
-          </Button>
+          <Tooltip text="Registra a mano una entrada o salida de stock de un producto">
+            <Button
+              variant="contained"
+              startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
+              onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); }}
+            >
+              Nuevo ajuste
+            </Button>
+          </Tooltip>
         }
       />
 

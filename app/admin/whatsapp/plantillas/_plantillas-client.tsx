@@ -18,13 +18,14 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { FileText, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { CARD, Boton, type PlantillaVista } from './_comunes';
+import { Tooltip } from '@/components/ui/tooltip';
 import { TabPlantillas } from './_tab-plantillas';
 import { TabAvisos, type Hueco, type Asignacion, type Empresa } from './_tab-avisos';
 
 const PESTANAS = [
-  { clave: 'plantillas',      texto: 'Plantillas' },
-  { clave: 'automatizaciones', texto: 'Automatizaciones' },
-  { clave: 'negocio',          texto: 'Por negocio' },
+  { clave: 'plantillas',      texto: 'Plantillas',       ayuda: 'Escribe las plantillas y publícalas en Meta para que las apruebe' },
+  { clave: 'automatizaciones', texto: 'Automatizaciones', ayuda: 'Qué plantilla usa cada aviso, para todos los colegios' },
+  { clave: 'negocio',          texto: 'Por negocio',      ayuda: 'Lo mismo que Automatizaciones, pero solo para un colegio' },
 ] as const;
 
 export default function PlantillasClient() {
@@ -124,9 +125,11 @@ export default function PlantillasClient() {
           </Typography>
         </Box>
         <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
-          <Boton variante="suave" onClick={recargarTodo} disabled={cargando}>
-            <RefreshCw size={13} /> Actualizar
-          </Boton>
+          <Tooltip text="Vuelve a leer las plantillas y su estado desde Meta">
+            <Boton variante="suave" onClick={recargarTodo} disabled={cargando}>
+              <RefreshCw size={13} /> Actualizar
+            </Boton>
+          </Tooltip>
           <Box component="a" href="/admin/whatsapp"
             sx={{ display: 'flex', alignItems: 'center', fontSize: '0.8125rem', color: '#3658e1', textDecoration: 'none' }}>
             Estado de la conexión
@@ -136,16 +139,18 @@ export default function PlantillasClient() {
 
       <Box sx={{ display: 'flex', gap: 0.5, borderBottom: '1px solid #e5e7eb' }}>
         {PESTANAS.map((p) => (
-          <Box key={p.clave} component="button" onClick={() => setPestana(p.clave)}
-            sx={{
-              border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1,
-              fontSize: '0.875rem', fontWeight: pestana === p.clave ? 700 : 500,
-              color: pestana === p.clave ? '#3658e1' : '#6b7280',
-              borderBottom: '2px solid', borderColor: pestana === p.clave ? '#3658e1' : 'transparent',
-              mb: '-1px',
-            }}>
-            {p.texto}
-          </Box>
+          <Tooltip key={p.clave} text={p.ayuda}>
+            <Box component="button" onClick={() => setPestana(p.clave)}
+              sx={{
+                border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1,
+                fontSize: '0.875rem', fontWeight: pestana === p.clave ? 700 : 500,
+                color: pestana === p.clave ? '#3658e1' : '#6b7280',
+                borderBottom: '2px solid', borderColor: pestana === p.clave ? '#3658e1' : 'transparent',
+                mb: '-1px',
+              }}>
+              {p.texto}
+            </Box>
+          </Tooltip>
         ))}
       </Box>
 

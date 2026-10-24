@@ -190,6 +190,7 @@ export function ModuleHeader({
               onClick={onAbrirMenu}
               size="small"
               aria-label="Abrir menú"
+              title="Abrir menú"
               sx={{ display: { [breakpointMenu]: 'none' }, color: 'text.secondary' }}
             >
               <MenuIcon style={{ width: 20, height: 20 }} />

@@ -37,6 +37,7 @@ import ButtonBase from '@mui/material/ButtonBase';
 import { Lock, ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   MODULOS_PANTALLAS, agruparPantallas, pantallaDeRuta, primeraVisible, veLaPantalla,
   type ModuloId, type PantallaDef,
@@ -164,13 +165,15 @@ function Interruptor({ visible, disabled, etiqueta, onChange }: {
       <Typography sx={{ fontSize: '0.75rem', color: visible ? '#047857' : '#6b7280', fontWeight: 500, width: 50, textAlign: 'right' }}>
         {visible ? 'La ve' : 'Oculta'}
       </Typography>
-      <Switch
-        size="small"
-        checked={visible}
-        disabled={disabled}
-        onChange={(_, v) => onChange(v)}
-        slotProps={{ input: { 'aria-label': etiqueta } }}
-      />
+      <Tooltip text={visible ? 'Oculta esta pantalla para este rol' : 'Muestra esta pantalla a este rol'}>
+        <Switch
+          size="small"
+          checked={visible}
+          disabled={disabled}
+          onChange={(_, v) => onChange(v)}
+          slotProps={{ input: { 'aria-label': etiqueta } }}
+        />
+      </Tooltip>
     </Box>
   );
 }
@@ -277,14 +280,18 @@ function SeccionModulo({ moduloId, etiqueta, pantallas, rol, esOwner, guardando,
                   </Typography>
                   {!esOwner && (
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <ButtonBase disabled={ocupado} onClick={() => onFijar(g.items.map(p => p.id), true)} aria-label={`Mostrar todas las pantallas de ${g.nombre}`}
-                        sx={{ px: 0.75, borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }}>
-                        Todas
-                      </ButtonBase>
-                      <ButtonBase disabled={ocupado} onClick={() => onFijar(g.items.map(p => p.id), false)} aria-label={`Ocultar todas las pantallas de ${g.nombre}`}
-                        sx={{ px: 0.75, borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#475569', '&:hover': { bgcolor: '#f1f5f9' } }}>
-                        Ninguna
-                      </ButtonBase>
+                      <Tooltip text={`Muestra todas las pantallas de ${g.nombre}`}>
+                        <ButtonBase disabled={ocupado} onClick={() => onFijar(g.items.map(p => p.id), true)} aria-label={`Mostrar todas las pantallas de ${g.nombre}`}
+                          sx={{ px: 0.75, borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }}>
+                          Todas
+                        </ButtonBase>
+                      </Tooltip>
+                      <Tooltip text={`Oculta todas las pantallas de ${g.nombre}`}>
+                        <ButtonBase disabled={ocupado} onClick={() => onFijar(g.items.map(p => p.id), false)} aria-label={`Ocultar todas las pantallas de ${g.nombre}`}
+                          sx={{ px: 0.75, borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#475569', '&:hover': { bgcolor: '#f1f5f9' } }}>
+                          Ninguna
+                        </ButtonBase>
+                      </Tooltip>
                     </Box>
                   )}
                 </Box>
@@ -432,7 +439,9 @@ export function AtajoPantallaRoles({ inicio }: { inicio?: string } = {}) {
                       {esOwner && <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Siempre ve todo</Typography>}
                     </Box>
                     {esOwner ? (
-                      <Lock size={15} style={{ color: '#6b7280' }} aria-label="Siempre la ve" />
+                      <Tooltip text="El dueño siempre ve todas las pantallas; no se puede cambiar">
+                        <Lock size={15} style={{ color: '#6b7280' }} aria-label="Siempre la ve" />
+                      </Tooltip>
                     ) : (
                       <Interruptor
                         visible={veLaPantalla(rol, actual.id)}

@@ -25,6 +25,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2, Users, BookOpen } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ZeroLoader } from '@/components/zero-loader';
 import { anunciarCambioDeModulo } from '@/components/loader-llegada';
 import {
@@ -69,6 +70,7 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
           además el nombre del módulo en el que ya estás es la información menos
           útil de esa franja. El icono sigue abriendo la misma lista, con los
           nombres completos. */}
+      <Tooltip text="Cambia a otro módulo de Zero">
       <Button
         onClick={e => setAnchor(e.currentTarget)}
         size="small"
@@ -91,6 +93,7 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
           {current ? MODULE_LABELS[current] : 'Ir a…'}
         </Box>
       </Button>
+      </Tooltip>
       <Menu
         anchorEl={anchor}
         open={!!anchor}

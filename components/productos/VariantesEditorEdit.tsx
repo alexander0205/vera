@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Layers, Plus, X, RotateCcw } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -174,16 +175,20 @@ export function VariantesEditorEdit({ initial, basePrecioDOP, onChange }: {
               <div className="flex flex-wrap gap-1.5">
                 {eje.valores.map(v => (
                   <span key={v} className="inline-flex items-center gap-1 bg-zero-100 text-zero-800 text-xs font-medium pl-1 pr-1.5 py-0.5 rounded-full">
-                    <input
-                      className="bg-transparent outline-none w-[7ch] px-1 text-center"
-                      defaultValue={v}
-                      onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== v) renombrarValor(idx, v, e.target.value); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                      title="Editar valor"
-                    />
-                    <button type="button" onClick={() => quitarValor(idx, v)} className="hover:text-zero-950" title="Quitar valor (si no está en uso)">
-                      <X className="h-3 w-3" />
-                    </button>
+                    <Tooltip text="Toca para cambiar este valor; Enter lo guarda">
+                      <input
+                        aria-label="Nombre del valor"
+                        className="bg-transparent outline-none w-[7ch] px-1 text-center"
+                        defaultValue={v}
+                        onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== v) renombrarValor(idx, v, e.target.value); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      />
+                    </Tooltip>
+                    <Tooltip text="Quita este valor; solo si ninguna variante lo usa">
+                      <button type="button" aria-label="Quitar valor" onClick={() => quitarValor(idx, v)} className="hover:text-zero-950">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Tooltip>
                   </span>
                 ))}
               </div>
@@ -196,9 +201,11 @@ export function VariantesEditorEdit({ initial, basePrecioDOP, onChange }: {
                 onChange={(e) => setValorInput(prev => ({ ...prev, [idx]: e.target.value }))}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); agregarValor(idx); } }}
               />
-              <Button type="button" variant="outline" size="sm" onClick={() => agregarValor(idx)}>
-                <Plus className="h-4 w-4" />
-              </Button>
+              <Tooltip text="Agrega el valor escrito a este eje">
+                <Button type="button" variant="outline" size="sm" aria-label="Agregar valor" onClick={() => agregarValor(idx)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </Tooltip>
             </div>
           </div>
         ))}
@@ -240,14 +247,18 @@ export function VariantesEditorEdit({ initial, basePrecioDOP, onChange }: {
                 disabled={r.removed}
                 onChange={(e) => setRow(idx, { precio: e.target.value })}
               />
-              <button
-                type="button"
-                onClick={() => (r.id ? setRow(idx, { removed: !r.removed }) : setRows(prev => prev.filter((_, i) => i !== idx)))}
-                className={`p-1 rounded ${r.removed ? 'text-gray-500 hover:bg-gray-100' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
-                title={r.id ? (r.removed ? 'Restaurar' : 'Quitar variante') : 'Descartar'}
-              >
-                {r.removed ? <RotateCcw className="h-4 w-4" /> : <X className="h-4 w-4" />}
-              </button>
+              <Tooltip text={r.id
+                ? (r.removed ? 'Vuelve a incluir esta variante al guardar' : 'Quita esta variante del producto al guardar')
+                : 'Descarta esta variante nueva; todavía no se ha guardado'}>
+                <button
+                  type="button"
+                  aria-label={r.id ? (r.removed ? 'Restaurar variante' : 'Quitar variante') : 'Descartar variante'}
+                  onClick={() => (r.id ? setRow(idx, { removed: !r.removed }) : setRows(prev => prev.filter((_, i) => i !== idx)))}
+                  className={`p-1 rounded ${r.removed ? 'text-gray-500 hover:bg-gray-100' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                >
+                  {r.removed ? <RotateCcw className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                </button>
+              </Tooltip>
             </div>
           ))}
         </div>

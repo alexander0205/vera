@@ -41,6 +41,7 @@ import Typography from '@mui/material/Typography';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { cargoDeFila, mesesConFactura, mesYaFacturado, montoCorregible } from '@/lib/administracion-escolar/acciones-cargo';
@@ -664,11 +665,11 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                           */}
                           <Box sx={{ ...CELDA, py: 0.5, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.5 }}>
                             {puedePagos && f.ecfDocumentId != null && f.saldoCentavos > 0 && (
+                              <Tooltip text={`Registrar el pago de ${tituloFila(f)}`}>
                               <Box
                                 component="button"
                                 type="button"
                                 onClick={() => acciones.onRegistrarPago(f.ecfDocumentId!)}
-                                title={`Registrar el pago de ${tituloFila(f)}`}
                                 sx={{
                                   display: 'inline-flex', alignItems: 'center', gap: 0.5,
                                   px: 1, py: 0.375, cursor: 'pointer',
@@ -680,6 +681,7 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                               >
                                 <Wallet size={12} />Cobrar
                               </Box>
+                              </Tooltip>
                             )}
                             {c && (
                               <CargoActionsMenu
@@ -787,11 +789,13 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
                           {puedeFacturar && f.cuotaId != null && f.conceptoId != null ? (
                             // Adelantar un mes que aún no ha salido: el cargo se
                             // crea al confirmar la factura, no al pulsar aquí.
-                            <BotonAdelantar
-                              onClick={() => onFacturarPrevisto({
-                                matriculaId: p.matriculaId, cuotaId: f.cuotaId!, conceptoId: f.conceptoId!,
-                              })}
-                            />
+                            <Tooltip text="Factura ya este mes antes de su fecha; el cargo se crea al confirmar">
+                              <BotonAdelantar
+                                onClick={() => onFacturarPrevisto({
+                                  matriculaId: p.matriculaId, cuotaId: f.cuotaId!, conceptoId: f.conceptoId!,
+                                })}
+                              />
+                            </Tooltip>
                           ) : (
                             <Chip tono="gris">Previsto</Chip>
                           )}
@@ -834,10 +838,12 @@ export function PeriodosDeLaFamilia({ clientId, puedeFacturar, puedePagos = fals
           </Typography>
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
             <Button variant="ghost" size="sm" onClick={() => setMarcados(new Set())}>Quitar marcas</Button>
-            <Button size="sm" onClick={() => onFacturar(resumen.ids)}>
-              <Receipt className="mr-1.5 h-4 w-4" />
-              Facturar juntos
-            </Button>
+            <Tooltip text="Abre el cajón para facturar los cargos marcados juntos">
+              <Button size="sm" onClick={() => onFacturar(resumen.ids)}>
+                <Receipt className="mr-1.5 h-4 w-4" />
+                Facturar juntos
+              </Button>
+            </Tooltip>
           </Box>
         </Box>
       )}
@@ -1088,6 +1094,7 @@ function CabeceraHijo({ hijo, periodo, colapsado, onToggle }: {
       {/* Acordeón: pliega/despliega la tarjeta de este hijo. Es un botón aparte
           del nombre (que es un enlace a su ficha), para no pelearse con él. */}
       {onToggle && (
+        <Tooltip text={colapsado ? 'Despliega la tarjeta de este hijo' : 'Pliega la tarjeta de este hijo'}>
         <Box
           component="button"
           type="button"
@@ -1107,6 +1114,7 @@ function CabeceraHijo({ hijo, periodo, colapsado, onToggle }: {
             style={{ transform: colapsado ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}
           />
         </Box>
+        </Tooltip>
       )}
     </Box>
   );

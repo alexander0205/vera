@@ -11,6 +11,7 @@ import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, PackagePlus } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -80,16 +81,18 @@ function XmlSection({ title, xml }: { title: string; xml?: string | null }) {
           {xml ? (
             <>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 2, py: 1, borderBottom: '1px solid #f3f4f6', bgcolor: '#f9fafb' }}>
-                <Box
-                  component="button"
-                  onClick={handleCopy}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', color: '#4b5563', bgcolor: 'transparent', border: 'none', cursor: 'pointer', '&:hover': { color: '#111827' } }}
-                >
-                  {copied
-                    ? <><Check size={14} color="#16a34a" /> Copiado</>
-                    : <><Copy size={14} /> Copiar</>
-                  }
-                </Box>
+                <Tooltip text="Copia el XML completo al portapapeles">
+                  <Box
+                    component="button"
+                    onClick={handleCopy}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', color: '#4b5563', bgcolor: 'transparent', border: 'none', cursor: 'pointer', '&:hover': { color: '#111827' } }}
+                  >
+                    {copied
+                      ? <><Check size={14} color="#16a34a" /> Copiado</>
+                      : <><Copy size={14} /> Copiar</>
+                    }
+                  </Box>
+                </Tooltip>
               </Box>
               <Box component="pre" sx={{ p: 2, fontSize: '0.6875rem', fontFamily: 'monospace', color: '#374151', overflowX: 'auto', maxHeight: 320, bgcolor: '#f9fafb', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', m: 0 }}>
                 {xml}
@@ -182,16 +185,18 @@ export default function CompraDetallePage() {
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>{tipoLabel(data)}</Typography>
         </Box>
         {can('productos:gestionar') && (
-          <Button
-            size="small"
-            variant="outlined"
-            component={Link}
-            href={`/dashboard/compras/registrar?ecf=${id}`}
-            startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
-            sx={{ textTransform: 'none', borderRadius: '8px' }}
-          >
-            Registrar compra
-          </Button>
+          <Tooltip text="Abre el formulario de compra con los datos de este comprobante">
+            <Button
+              size="small"
+              variant="outlined"
+              component={Link}
+              href={`/dashboard/compras/registrar?ecf=${id}`}
+              startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
+              sx={{ textTransform: 'none', borderRadius: '8px' }}
+            >
+              Registrar compra
+            </Button>
+          </Tooltip>
         )}
       </Box>
 

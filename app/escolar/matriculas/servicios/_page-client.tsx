@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import { ArrowLeft, Download, Grid3x3, Loader2, Search, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cambioParaPaquete, conceptosTrasCambio } from '@/lib/administracion-escolar/servicios-alumnos';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * «Servicios por alumno»: una fila por matrícula activa, una columna por
@@ -186,9 +187,11 @@ export default function ServiciosPorAlumno() {
           </a>
           <input ref={archivo} type="file" accept=".xlsx" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void subirExcel(f); }} />
-          <Button variant="outline" onClick={() => archivo.current?.click()} disabled={subiendo}>
-            {subiendo ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}Subir Excel
-          </Button>
+          <Tooltip text="Carga un Excel; los cambios quedan pendientes hasta Guardar cambios">
+            <Button variant="outline" onClick={() => archivo.current?.click()} disabled={subiendo}>
+              {subiendo ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}Subir Excel
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -289,7 +292,7 @@ export default function ServiciosPorAlumno() {
                               onChange={() => cambiar((x) => poner(x, f, c.id, !marcado))}
                               className="h-4 w-4 cursor-pointer accent-zero-600" />
                           ) : (
-                            <span className="text-xs text-gray-300" title="Su sección no tiene precio para este concepto">—</span>
+                            <Tooltip text="Su sección no tiene precio para este concepto"><span className="text-xs text-gray-300">—</span></Tooltip>
                           )}
                         </td>
                       );

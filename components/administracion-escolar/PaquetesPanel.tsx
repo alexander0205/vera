@@ -4,6 +4,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { Loader2, Package, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 
 /**
@@ -164,10 +165,10 @@ export function PaquetesPanel() {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setEditando(p)}>Editar</Button>
-                      <button type="button" aria-label={`Quitar ${p.nombre}`} onClick={() => void borrar(p)}
+                      <Tooltip text="Borra este paquete de la lista"><button type="button" aria-label={`Quitar ${p.nombre}`} onClick={() => void borrar(p)}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600">
                         <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      </button></Tooltip>
                     </div>
                   </td>
                 </tr>

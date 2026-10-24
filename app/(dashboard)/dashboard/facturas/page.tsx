@@ -14,6 +14,7 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { guardarListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { estadoPagoFactura, filtroDesdeValores, filtroFacturasAParams } from '@/lib/facturas/filtro-listado';
 import { BotonesExportar } from '@/components/reportes/botones-exportar';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -441,10 +442,12 @@ export default function FacturasPage() {
         headerActions={
           <>
             {canCrear && (
+              <Tooltip text="Abre el importador para cargar facturas desde un archivo CSV">
               <button onClick={() => setShowImport(true)}
                 className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
                 <Upload className="h-4 w-4" /> Importar CSV
               </button>
+              </Tooltip>
             )}
             {canExportar && (
               <BotonesExportar ruta="/api/facturas/export" filtro={filtroQs}
@@ -452,10 +455,12 @@ export default function FacturasPage() {
                 deshabilitado={loading || total === 0} testId="exportar-facturas" />
             )}
             {canExportar && (
+              <Tooltip text="Descarga las facturas en un archivo CSV para abrirlo en Excel">
               <button onClick={exportCsv}
                 className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
                 <Download className="h-4 w-4" /> CSV
               </button>
+              </Tooltip>
             )}
             {canCrear && (
               <Link href="/dashboard/facturas/nueva"

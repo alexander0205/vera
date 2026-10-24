@@ -13,6 +13,7 @@ import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } fro
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ImportModal } from '@/components/import-modal';
 import { ProductoFormModal } from '@/components/productos/ProductoFormModal';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Producto {
   id:                   number;
@@ -291,10 +292,12 @@ export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
         }}
         headerActions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Importar CSV
-            </Button>
+            <Tooltip text="Carga productos desde un archivo CSV; los repetidos se omiten">
+              <Button variant="outline" onClick={() => setShowImport(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Importar CSV
+              </Button>
+            </Tooltip>
             <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNuevo}>
               <Plus className="h-4 w-4 mr-2" />
               Nuevo ítem

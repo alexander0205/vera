@@ -30,6 +30,7 @@ import Chip from '@mui/material/Chip';
 import { ArrowLeft, X, Plus, Lock, Trash2 } from 'lucide-react';
 import { montosRapidos } from '@/lib/pos/montos';
 import { estaAgotado } from '@/lib/pos/agotado';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const MONEY = { fontVariantNumeric: 'tabular-nums' } as const;
 const fmt = (c: number) => (c / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -248,6 +249,8 @@ export default function EditarReciboClient({ docId, terminal }: { docId: number;
                 const qty = qtyDe(p.id);
                 return (
                   <ButtonBase key={p.id} disabled={agotado} onClick={() => agregar(p)}
+                    title={agotado ? `${p.nombre}: agotado` : 'Agregar a la factura'}
+                    aria-label={agotado ? `${p.nombre}, agotado` : `Agregar ${p.nombre} a la factura`}
                     sx={{
                       position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', overflow: 'hidden',
                       borderRadius: '12px', border: '1px solid', bgcolor: '#fff', textAlign: 'left', opacity: agotado ? 0.5 : 1,
@@ -298,9 +301,13 @@ export default function EditarReciboClient({ docId, terminal }: { docId: number;
                     <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 0.5 }}>
                       <Box component="span" sx={{ fontSize: 14, color: '#6b7280', textDecoration: quitada ? 'line-through' : 'none', ...MONEY }}>{fmt(totalVieja(l))}</Box>
                       {quitada ? (
-                        <ButtonBase onClick={() => setQuitados((prev) => { const s = new Set(prev); s.delete(i); return s; })} sx={{ px: 0.75, py: 0.25, borderRadius: '6px', fontSize: 12, color: '#2a45c4', fontWeight: 500 }}>Deshacer</ButtonBase>
+                        <Tooltip text="Vuelve a incluir este ítem en la factura">
+                          <ButtonBase onClick={() => setQuitados((prev) => { const s = new Set(prev); s.delete(i); return s; })} sx={{ px: 0.75, py: 0.25, borderRadius: '6px', fontSize: 12, color: '#2a45c4', fontWeight: 500 }}>Deshacer</ButtonBase>
+                        </Tooltip>
                       ) : (
-                        <IconButton onClick={() => setConfirmarQuitar(i)} size="small" title="Quitar de la factura" sx={{ color: '#dc2626' }}><Trash2 style={{ width: 15, height: 15 }} /></IconButton>
+                        <Tooltip text="Lo quita al guardar; se devuelve lo pagado por este ítem">
+                          <IconButton onClick={() => setConfirmarQuitar(i)} size="small" aria-label="Quitar de la factura" sx={{ color: '#dc2626' }}><Trash2 style={{ width: 15, height: 15 }} /></IconButton>
+                        </Tooltip>
                       )}
                     </Box>
                   </Box>
@@ -318,9 +325,13 @@ export default function EditarReciboClient({ docId, terminal }: { docId: number;
                     <Box sx={{ mt: 0.25, fontSize: 14, color: '#9ca3af', ...MONEY }}>{fmt(n.precio)}</Box>
                   </Box>
                   <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1 }}>
-                    <ButtonBase onClick={() => cambiarQty(n.id, -1)} sx={{ display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 24, color: '#4b5563' }}>−</ButtonBase>
+                    <Tooltip text="Quita una unidad">
+                      <ButtonBase aria-label={`Quitar una unidad de ${n.nombre}`} onClick={() => cambiarQty(n.id, -1)} sx={{ display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 24, color: '#4b5563' }}>−</ButtonBase>
+                    </Tooltip>
                     <Box component="span" sx={{ width: 28, textAlign: 'center', fontSize: 18, fontWeight: 700, ...MONEY }}>{n.qty}</Box>
-                    <ButtonBase onClick={() => cambiarQty(n.id, 1)} sx={{ display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 24, color: '#4b5563' }}>+</ButtonBase>
+                    <Tooltip text="Agrega una unidad">
+                      <ButtonBase aria-label={`Agregar una unidad de ${n.nombre}`} onClick={() => cambiarQty(n.id, 1)} sx={{ display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 24, color: '#4b5563' }}>+</ButtonBase>
+                    </Tooltip>
                   </Box>
                 </Box>
               ))}
@@ -389,7 +400,7 @@ function DevolverModal({ total, guardando, onClose, onConfirm }: { total: number
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 700 }}>Devolver diferencia</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
         <Box sx={{ mb: 2, borderRadius: '8px', bgcolor: '#fffbeb', p: 1.5, textAlign: 'center' }}>
           <Box sx={{ fontSize: 12, color: '#92400e' }}>A devolver en efectivo</Box>
@@ -453,7 +464,7 @@ function CobroDiferenciaModal({ total, guardando, onClose, onConfirm }: {
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Cobrar diferencia</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
 
         <Box sx={{ mb: 1.5, borderRadius: '8px', bgcolor: '#f9fafb', p: 1.5, textAlign: 'center' }}>
@@ -506,7 +517,9 @@ function CobroDiferenciaModal({ total, guardando, onClose, onConfirm }: {
                   <TextField type="number" value={f.valor} onChange={(e) => setFilas((prev) => prev.map((x, idx) => idx === i ? { ...x, valor: e.target.value } : x))} placeholder="0.00" sx={{ flex: 1 }}
                     slotProps={{ input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af', '& .MuiTypography-root': { fontSize: 12 } }}>RD$</InputAdornment> }, htmlInput: { min: 0, step: 0.01 } }} />
                   {filas.length > 2 && (
-                    <Box component="button" onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 16, height: 16 }} /></Box>
+                    <Tooltip text="Quita este método de pago">
+                      <Box component="button" aria-label="Quitar método de pago" onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 16, height: 16 }} /></Box>
+                    </Tooltip>
                   )}
                 </Box>
               ))}

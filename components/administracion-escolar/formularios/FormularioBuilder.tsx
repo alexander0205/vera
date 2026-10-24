@@ -43,6 +43,7 @@ import {
   Switch, Tab as MuiTab, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
+import { Tooltip as Ayuda } from '@/components/ui/tooltip';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import LinkIcon from '@mui/icons-material/Link';
@@ -126,9 +127,9 @@ function ColorField({
           slotProps={{ htmlInput: { maxLength: 7, style: { fontFamily: 'monospace' } } }}
         />
         {onClear && value && (
-          <IconButton size="small" type="button" onClick={onClear} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+          <Ayuda text="Vuelve al color predeterminado"><IconButton aria-label="Quitar color" size="small" type="button" onClick={onClear} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
             <CloseIcon sx={{ fontSize: 16 }} />
-          </IconButton>
+          </IconButton></Ayuda>
         )}
       </Stack>
     </Box>
@@ -255,9 +256,9 @@ export default function FormularioBuilder({ formulario: initial }: FormularioBui
           bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
         }}
       >
-        <IconButton size="small" type="button" onClick={() => router.push('/escolar/documentos/formularios')}>
+        <Ayuda text="Vuelve a la lista de formularios"><IconButton aria-label="Volver a formularios" size="small" type="button" onClick={() => router.push('/escolar/documentos/formularios')}>
           <ArrowBackIcon fontSize="small" />
-        </IconButton>
+        </IconButton></Ayuda>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <TextField

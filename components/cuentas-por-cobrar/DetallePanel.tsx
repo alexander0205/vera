@@ -15,6 +15,7 @@ import { nombreDeCuenta, type Cuenta } from '@/components/cuentas-por-cobrar/Pag
 import type { DetalleCuenta, EventoCartera } from '@/lib/cobranza/detalle';
 import type { OrigenEscolarFactura } from '@/lib/administracion-escolar/origen-factura';
 import { GestionCobro } from '@/components/cuentas-por-cobrar/GestionCobro';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const MESES = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -93,9 +94,11 @@ export function DetallePanel({
             </Box>
           ) : <Typography sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>{actual.codigo ?? actual.encf}</Typography>}
         </Box>
-        <IconButton size="small" onClick={onClose} aria-label="Cerrar" sx={{ color: '#9ca3af', flexShrink: 0 }}>
-          <X style={{ width: 20, height: 20 }} />
-        </IconButton>
+        <Tooltip text="Cierra el detalle de la cuenta">
+          <IconButton size="small" onClick={onClose} aria-label="Cerrar" sx={{ color: '#9ca3af', flexShrink: 0 }}>
+            <X style={{ width: 20, height: 20 }} />
+          </IconButton>
+        </Tooltip>
       </Box>
 
       <Box sx={{ flex: 1, overflowY: 'auto' }}>

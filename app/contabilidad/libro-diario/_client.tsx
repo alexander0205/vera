@@ -10,6 +10,7 @@ import {
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import { Tooltip } from '@/components/ui/tooltip';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Alert from '@mui/material/Alert';
@@ -333,19 +334,21 @@ export function LibroDiarioClient({
         </Typography>
 
         {puedeGenerar && (
-          <Button
-            variant="contained" size="small"
-            onClick={generar} disabled={generando || !activa}
-            startIcon={
-              <RefreshCw
-                style={{ width: 16, height: 16 }}
-                className={generando ? 'animate-spin' : undefined}
-              />
-            }
-            sx={{ px: 2 }}
-          >
-            {generando ? 'Generando…' : 'Generar asientos pendientes'}
-          </Button>
+          <Tooltip text="Crea los asientos de las ventas y compras que aún no tienen uno">
+            <Button
+              variant="contained" size="small"
+              onClick={generar} disabled={generando || !activa}
+              startIcon={
+                <RefreshCw
+                  style={{ width: 16, height: 16 }}
+                  className={generando ? 'animate-spin' : undefined}
+                />
+              }
+              sx={{ px: 2 }}
+            >
+              {generando ? 'Generando…' : 'Generar asientos pendientes'}
+            </Button>
+          </Tooltip>
         )}
       </Box>
 

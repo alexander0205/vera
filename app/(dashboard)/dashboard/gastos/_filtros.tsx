@@ -14,6 +14,7 @@ import { Search, X, Filter } from 'lucide-react';
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
@@ -96,9 +97,11 @@ export function FiltrosGastos({ filtro, categorias, hoy }: { filtro: FiltroGasto
         <InputBase value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar proveedor, RNC o comprobante…"
           sx={{ flex: 1, fontSize: '0.875rem' }} inputProps={{ 'aria-label': 'Buscar gastos' }} />
         {q && (
-          <IconButton size="small" onClick={() => setQ('')} sx={{ p: 0.25 }} aria-label="Borrar búsqueda">
-            <X style={{ width: 12, height: 12 }} />
-          </IconButton>
+          <Tooltip text="Borra el texto de la búsqueda">
+            <IconButton size="small" onClick={() => setQ('')} sx={{ p: 0.25 }} aria-label="Borrar búsqueda">
+              <X style={{ width: 12, height: 12 }} />
+            </IconButton>
+          </Tooltip>
         )}
       </Box>
 

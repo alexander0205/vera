@@ -6,6 +6,7 @@ import { CheckCircle, Circle, X, ChevronDown, ChevronUp } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface ChecklistItem {
   id: string;
@@ -96,12 +97,16 @@ export function OnboardingChecklist() {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton onClick={() => setCollapsed(c => !c)} size="small" sx={{ color: '#3658e1', '&:hover': { color: '#253a9e', bgcolor: 'transparent' } }}>
-            {collapsed ? <ChevronDown style={{ width: 16, height: 16 }} /> : <ChevronUp style={{ width: 16, height: 16 }} />}
-          </IconButton>
-          <IconButton onClick={dismiss} size="small" sx={{ color: '#8193f5', '&:hover': { color: '#2a45c4', bgcolor: 'transparent' } }}>
-            <X style={{ width: 16, height: 16 }} />
-          </IconButton>
+          <Tooltip text={collapsed ? 'Muestra los pasos de la lista' : 'Oculta los pasos de la lista'}>
+            <IconButton onClick={() => setCollapsed(c => !c)} size="small" aria-label={collapsed ? 'Expandir' : 'Colapsar'} sx={{ color: '#3658e1', '&:hover': { color: '#253a9e', bgcolor: 'transparent' } }}>
+              {collapsed ? <ChevronDown style={{ width: 16, height: 16 }} /> : <ChevronUp style={{ width: 16, height: 16 }} />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip text="Cierra la lista de primeros pasos">
+            <IconButton onClick={dismiss} size="small" aria-label="Cerrar" sx={{ color: '#8193f5', '&:hover': { color: '#2a45c4', bgcolor: 'transparent' } }}>
+              <X style={{ width: 16, height: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
 

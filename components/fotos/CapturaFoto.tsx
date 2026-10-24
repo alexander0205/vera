@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Camera, Loader2, Upload, Trash2, Check, RefreshCw, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -300,14 +301,16 @@ function PanelQR({
             onFocus={(e) => e.currentTarget.select()}
             className="min-w-0 flex-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-600"
           />
-          <Button variant="outline" size="sm" className="shrink-0"
-            onClick={() => {
-              if (sesion?.url) void navigator.clipboard.writeText(sesion.url);
-              setCopiado(true);
-              setTimeout(() => setCopiado(false), 1800);
-            }}>
-            {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </Button>
+          <Tooltip text="Copia el enlace de esta sesión">
+            <Button variant="outline" size="sm" className="shrink-0" aria-label="Copiar enlace"
+              onClick={() => {
+                if (sesion?.url) void navigator.clipboard.writeText(sesion.url);
+                setCopiado(true);
+                setTimeout(() => setCopiado(false), 1800);
+              }}>
+              {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </Button>
+          </Tooltip>
         </div>
 
         <p className="flex items-center gap-1.5 text-xs text-gray-400">

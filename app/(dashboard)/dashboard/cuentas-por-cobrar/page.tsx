@@ -12,6 +12,7 @@ import { NotasMoraTable } from '@/components/notas-mora-table';
 import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 import ComprobantesUploader, { type AdjuntoSubido } from '@/components/pagos/ComprobantesUploader';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Cuenta {
   id:                   number;
@@ -353,14 +354,15 @@ export default function CuentasPorCobrarPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setHistoricaModal(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-zero-300 text-gray-700 hover:text-zero-700 text-sm font-medium rounded-lg transition-colors"
-            title="Importar factura previa al uso de Zero (no va a DGII)"
-          >
-            <Archive className="h-4 w-4" />
-            Agregar cuenta histórica
-          </button>
+          <Tooltip text="Registra una factura de antes de usar Zero; solo sirve para cobrar, no va a la DGII">
+            <button
+              onClick={() => setHistoricaModal(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-zero-300 text-gray-700 hover:text-zero-700 text-sm font-medium rounded-lg transition-colors"
+            >
+              <Archive className="h-4 w-4" />
+              Agregar cuenta histórica
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -662,12 +664,15 @@ function PagoModal({
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">{cuenta.codigo ?? `Factura #${cuenta.id}`}</p>
           </div>
-          <button
-            onClick={() => (resultado ? onSuccess() : onClose())}
-            className="p-1.5 rounded hover:bg-gray-100 text-gray-400"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <Tooltip text={resultado ? 'Cierra esta ventana; el pago ya quedó registrado' : 'Cierra sin registrar el pago'}>
+            <button
+              onClick={() => (resultado ? onSuccess() : onClose())}
+              aria-label="Cerrar"
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-400"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </Tooltip>
         </div>
 
         {resultado ? (
@@ -896,9 +901,11 @@ function HistoricaModal({
               Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X className="h-4 w-4" />
-          </button>
+          <Tooltip text="Cierra sin agregar la cuenta">
+            <button onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+              <X className="h-4 w-4" />
+            </button>
+          </Tooltip>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">

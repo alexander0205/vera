@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -298,10 +299,12 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
                     const isSelected = form.tipo === t.value;
                     if (t.disabled) {
                       return (
-                        <div key={t.value} title="Próximamente"
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium cursor-not-allowed opacity-40 bg-white border-gray-200 text-gray-400 select-none">
-                          {t.label}
-                        </div>
+                        <Tooltip key={t.value} text="Próximamente: todavía no se puede crear este tipo">
+                          <div
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium cursor-not-allowed opacity-40 bg-white border-gray-200 text-gray-400 select-none">
+                            {t.label}
+                          </div>
+                        </Tooltip>
                       );
                     }
                     return (
@@ -466,11 +469,13 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
                     <p className="text-sm font-medium text-gray-800">Controlar inventario</p>
                     <p className="text-xs text-gray-400 mt-0.5">El stock se descuenta automáticamente al guardar o emitir facturas</p>
                   </div>
-                  <button type="button"
-                    onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-zero-600' : 'bg-gray-200'}`}>
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.controlaInventario ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </button>
+                  <Tooltip text="Enciende para llevar stock de este producto y descontarlo con cada factura">
+                    <button type="button" aria-label="Controlar inventario"
+                      onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-zero-600' : 'bg-gray-200'}`}>
+                      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.controlaInventario ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                  </Tooltip>
                 </div>
 
                 {form.controlaInventario && (
@@ -493,11 +498,13 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPor
                         <p className="text-sm text-gray-700">Permitir venta sin stock</p>
                         <p className="text-xs text-gray-400 mt-0.5">Si está desactivado, se bloqueará la factura cuando el stock sea 0</p>
                       </div>
-                      <button type="button"
-                        onClick={() => setForm(f => ({ ...f, permiteVentaSinStock: !f.permiteVentaSinStock }))}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-zero-600' : 'bg-gray-200'}`}>
-                        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.permiteVentaSinStock ? 'translate-x-4' : 'translate-x-0'}`} />
-                      </button>
+                      <Tooltip text="Enciende para facturar aunque el stock esté en 0">
+                        <button type="button" aria-label="Permitir venta sin stock"
+                          onClick={() => setForm(f => ({ ...f, permiteVentaSinStock: !f.permiteVentaSinStock }))}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-zero-600' : 'bg-gray-200'}`}>
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.permiteVentaSinStock ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </>
                 )}
@@ -589,7 +596,8 @@ function ImagenProductoBox({ imagen, onChange }: { imagen: string; onChange: (v:
         {imagen ? (
           <>
             <img src={imagen} alt="Producto" className="h-full w-full rounded-lg object-cover" />
-            <button type="button" onClick={(e) => { e.preventDefault(); onChange(''); }}
+            <button type="button" title="Quita la imagen de este producto" aria-label="Quitar imagen"
+              onClick={(e) => { e.preventDefault(); onChange(''); }}
               className="absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1 text-gray-600 shadow hover:bg-white">
               <X className="h-3.5 w-3.5" />
             </button>

@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /** Comprobante que amerita revisión: anulado, o con saldo sin cobrar. */
 interface Excepcion {
@@ -149,17 +150,19 @@ export function DetalleTurno({ turnoId }: { turnoId: number }) {
                 {/* La lupa solo en efectivo: es el único método cuyo total hay
                     que poder desglosar cobro por cobro para explicar la gaveta. */}
                 {p.esEfectivo && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSoloEfectivo(true);
-                      document.getElementById(`cobros-${turnoId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }}
-                    title="Ver de dónde salió cada peso en efectivo"
-                    className="absolute right-2 top-2 rounded-md p-1 text-emerald-700 hover:bg-emerald-100"
-                  >
-                    <Search className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip text="Ve de dónde salió cada peso en efectivo">
+                    <button
+                      type="button"
+                      aria-label="Ver cobros en efectivo"
+                      onClick={() => {
+                        setSoloEfectivo(true);
+                        document.getElementById(`cobros-${turnoId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      }}
+                      className="absolute right-2 top-2 rounded-md p-1 text-emerald-700 hover:bg-emerald-100"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
                 )}
               </div>
             ))}

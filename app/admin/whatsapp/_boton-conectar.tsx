@@ -21,6 +21,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Link2, RefreshCw, Unlink } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const CONFIRMACION = 'DESCONECTAR';
 
@@ -122,29 +123,33 @@ export function BotonConectar({ yaVinculado, puedeEnviar, empresasQueDependen }:
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Box component="button" onClick={conectar} disabled={cargando}
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 0.75, border: 'none', cursor: 'pointer',
-            bgcolor: '#3658e1', color: '#fff', borderRadius: '8px', px: 2, py: 1,
-            fontSize: '0.8125rem', fontWeight: 600, '&:hover': { bgcolor: '#2a45c4' },
-            '&:disabled': { opacity: 0.6, cursor: 'default' },
-          }}>
-          {cargando
-            ? <CircularProgress size={14} sx={{ color: '#fff' }} />
-            : yaVinculado ? <RefreshCw size={14} /> : <Link2 size={14} />}
-          {!yaVinculado ? 'Conectar WhatsApp'
-            : puedeEnviar ? 'Reconectar' : 'Terminar de activar'}
-        </Box>
+        <Tooltip text="Abre el popup de Meta para vincular el número de Zero">
+          <Box component="button" onClick={conectar} disabled={cargando}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 0.75, border: 'none', cursor: 'pointer',
+              bgcolor: '#3658e1', color: '#fff', borderRadius: '8px', px: 2, py: 1,
+              fontSize: '0.8125rem', fontWeight: 600, '&:hover': { bgcolor: '#2a45c4' },
+              '&:disabled': { opacity: 0.6, cursor: 'default' },
+            }}>
+            {cargando
+              ? <CircularProgress size={14} sx={{ color: '#fff' }} />
+              : yaVinculado ? <RefreshCw size={14} /> : <Link2 size={14} />}
+            {!yaVinculado ? 'Conectar WhatsApp'
+              : puedeEnviar ? 'Reconectar' : 'Terminar de activar'}
+          </Box>
+        </Tooltip>
 
         {yaVinculado && (
-          <Box component="button" onClick={() => { setConfirmando(true); setError(null); setTexto(''); }}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer',
-              bgcolor: '#fff', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '8px',
-              px: 2, py: 1, fontSize: '0.8125rem', fontWeight: 600, '&:hover': { bgcolor: '#fef2f2' },
-            }}>
-            <Unlink size={14} /> Desconectar
-          </Box>
+          <Tooltip text="Quita el número de Zero; los avisos por WhatsApp no salen hasta conectar otro">
+            <Box component="button" onClick={() => { setConfirmando(true); setError(null); setTexto(''); }}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer',
+                bgcolor: '#fff', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '8px',
+                px: 2, py: 1, fontSize: '0.8125rem', fontWeight: 600, '&:hover': { bgcolor: '#fef2f2' },
+              }}>
+              <Unlink size={14} /> Desconectar
+            </Box>
+          </Tooltip>
         )}
       </Box>
 
@@ -154,10 +159,12 @@ export function BotonConectar({ yaVinculado, puedeEnviar, empresasQueDependen }:
           <Typography sx={{ fontSize: '0.75rem', color: '#24377d' }}>
             Esperando a que termines en Meta… esta pantalla se actualiza sola.
           </Typography>
-          <Box component="button" onClick={() => { dejarDeVigilar(); router.refresh(); }}
-            sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: '0.75rem', color: '#3658e1', textDecoration: 'underline', p: 0 }}>
-            Ya terminé
-          </Box>
+          <Tooltip text="Deja de esperar a Meta y refresca la pantalla con lo que haya quedado">
+            <Box component="button" onClick={() => { dejarDeVigilar(); router.refresh(); }}
+              sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: '0.75rem', color: '#3658e1', textDecoration: 'underline', p: 0 }}>
+              Ya terminé
+            </Box>
+          </Tooltip>
         </Box>
       )}
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import { Copy, Check } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export function Terminal() {
   const [terminalStep, setTerminalStep] = useState(0);
@@ -53,27 +54,29 @@ export function Terminal() {
             <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#eab308' }} />
             <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#22c55e' }} />
           </Box>
-          <Box
-            component="button"
-            onClick={copyToClipboard}
-            aria-label="Copy to clipboard"
-            sx={{
-              background: 'none',
-              border: 'none',
-              p: 0,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              color: '#9ca3af',
-              transition: 'color 0.15s',
-              '&:hover': { color: '#fff' },
-            }}
-          >
-            {copied ? (
-              <Check style={{ width: 20, height: 20 }} />
-            ) : (
-              <Copy style={{ width: 20, height: 20 }} />
-            )}
-          </Box>
+          <Tooltip text="Copia estos comandos para instalarlo">
+            <Box
+              component="button"
+              onClick={copyToClipboard}
+              aria-label="Copiar comandos"
+              sx={{
+                background: 'none',
+                border: 'none',
+                p: 0,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                color: '#9ca3af',
+                transition: 'color 0.15s',
+                '&:hover': { color: '#fff' },
+              }}
+            >
+              {copied ? (
+                <Check style={{ width: 20, height: 20 }} />
+              ) : (
+                <Copy style={{ width: 20, height: 20 }} />
+              )}
+            </Box>
+          </Tooltip>
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {terminalSteps.map((step, index) => (
