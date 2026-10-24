@@ -17,6 +17,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export interface ComprobanteVisible {
   id:          number;
@@ -99,47 +100,53 @@ export default function ComprobanteVisor({ adjuntos, indice, onClose, onIndice }
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            title="Abrir en pestaña nueva"
-            className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-          <a
-            href={url}
-            download={abierto.nombre}
-            title="Descargar"
-            className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white"
-          >
-            <Download className="h-4 w-4" />
-          </a>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            title="Cerrar (Esc)"
-            className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <Tooltip text="Abre el comprobante en otra pestaña">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Abrir en pestaña nueva"
+              className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </Tooltip>
+          <Tooltip text="Descarga el comprobante a tu computadora">
+            <a
+              href={url}
+              download={abierto.nombre}
+              aria-label="Descargar"
+              className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white"
+            >
+              <Download className="h-4 w-4" />
+            </a>
+          </Tooltip>
+          <Tooltip text="Cierra el comprobante (Esc)">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="p-2 rounded-lg hover:bg-white/10 text-white/80 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
       {/* Contenido */}
       <div className="flex-1 flex items-center justify-center px-4 pb-4 min-h-0">
         {adjuntos.length > 1 && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); anterior(); }}
-            aria-label="Anterior"
-            title="Anterior (←)"
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white shrink-0 mr-2"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
+          <Tooltip text="Muestra el comprobante anterior (←)">
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); anterior(); }}
+              aria-label="Anterior"
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white shrink-0 mr-2"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          </Tooltip>
         )}
 
         <div
@@ -157,15 +164,16 @@ export default function ComprobanteVisor({ adjuntos, indice, onClose, onIndice }
         </div>
 
         {adjuntos.length > 1 && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); siguiente(); }}
-            aria-label="Siguiente"
-            title="Siguiente (→)"
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white shrink-0 ml-2"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+          <Tooltip text="Muestra el comprobante siguiente (→)">
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); siguiente(); }}
+              aria-label="Siguiente"
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white shrink-0 ml-2"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>,

@@ -8,6 +8,7 @@ import MuiDialogContentText from '@mui/material/DialogContentText';
 import MuiDialogActions from '@mui/material/DialogActions';
 import IconButton from '@mui/material/IconButton';
 import { X } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // State context
 const DialogContext = React.createContext<{
@@ -75,9 +76,11 @@ function DialogClose({ children, asChild }: { children?: React.ReactNode; asChil
   return (
     <span onClick={() => setOpen(false)} style={{ cursor: 'pointer' }}>
       {children ?? (
-        <IconButton size="small">
-          <X className="h-4 w-4" />
-        </IconButton>
+        <Tooltip text="Cierra esta ventana">
+          <IconButton size="small" aria-label="Cerrar">
+            <X className="h-4 w-4" />
+          </IconButton>
+        </Tooltip>
       )}
     </span>
   );
@@ -265,6 +268,8 @@ function DialogContent({ children, className, style, maxWidth }: DialogContentPr
       <IconButton
         onClick={() => setOpen(false)}
         size="small"
+        aria-label="Cerrar"
+        title="Cerrar"
         sx={{
           position: 'absolute',
           right: 12,

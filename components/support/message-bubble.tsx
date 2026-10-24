@@ -6,6 +6,7 @@
  */
 
 import { Camera, Paperclip } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { TicketMessage } from '@/lib/hooks/useTicketChat';
 
 function formatearHora(iso: string) {
@@ -84,29 +85,31 @@ export function MessageBubble({
         {m.content}
         {isScreenshotRequest && !mine && (
           <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              onClick={onCapture}
-              disabled={loading}
-              title={capturaTitle}
-              style={{
-                background: '#f8fafc', color: colorMio, border: '1px solid #e2e8f0', borderRadius: 8,
-                padding: '6px 11px', fontSize: 12, cursor: loading ? 'default' : 'pointer', fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <Camera size={13} /> Capturar pantalla
-            </button>
-            <button
-              onClick={onAttach}
-              title={adjuntoTitle}
-              style={{
-                background: '#f8fafc', color: colorMio, border: '1px solid #e2e8f0', borderRadius: 8,
-                padding: '6px 11px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <Paperclip size={13} /> Adjuntar captura
-            </button>
+            <Tooltip text={capturaTitle}>
+              <button
+                onClick={onCapture}
+                disabled={loading}
+                style={{
+                  background: '#f8fafc', color: colorMio, border: '1px solid #e2e8f0', borderRadius: 8,
+                  padding: '6px 11px', fontSize: 12, cursor: loading ? 'default' : 'pointer', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                <Camera size={13} /> Capturar pantalla
+              </button>
+            </Tooltip>
+            <Tooltip text={adjuntoTitle}>
+              <button
+                onClick={onAttach}
+                style={{
+                  background: '#f8fafc', color: colorMio, border: '1px solid #e2e8f0', borderRadius: 8,
+                  padding: '6px 11px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                <Paperclip size={13} /> Adjuntar captura
+              </button>
+            </Tooltip>
           </div>
         )}
         {m.attachment && attachmentUrl && (

@@ -31,6 +31,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import Divider from '@mui/material/Divider';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, describirFiltrosTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip as Ayuda } from '@/components/ui/tooltip';
 
 export type { ExportTabla, ColumnaExport } from '@/lib/export/tabla';
 
@@ -350,12 +351,14 @@ export function DataTable<T>({
         {hasExpand && (
           <TableCell sx={{ width: 32, px: 0.5 }} onClick={e => e.stopPropagation()}>
             {puedeAbrir && (
-              <IconButton size="small" onClick={() => alternarFila(id)}
-                aria-label={abierta ? 'Colapsar' : 'Expandir'} aria-expanded={abierta}
-                sx={{ color: '#9ca3af' }}>
-                {abierta ? <ChevronDown style={{ width: 16, height: 16 }} />
-                         : <ChevronRight style={{ width: 16, height: 16 }} />}
-              </IconButton>
+              <Ayuda text={abierta ? 'Oculta el detalle de esta fila' : 'Muestra el detalle de esta fila'}>
+                <IconButton size="small" onClick={() => alternarFila(id)}
+                  aria-label={abierta ? 'Colapsar' : 'Expandir'} aria-expanded={abierta}
+                  sx={{ color: '#9ca3af' }}>
+                  {abierta ? <ChevronDown style={{ width: 16, height: 16 }} />
+                           : <ChevronRight style={{ width: 16, height: 16 }} />}
+                </IconButton>
+              </Ayuda>
             )}
           </TableCell>
         )}
@@ -508,9 +511,11 @@ export function DataTable<T>({
                       sx={{ flex: 1, fontSize: '0.875rem' }}
                     />
                     {filterValues[f.id] && (
-                      <IconButton size="small" onClick={() => updateFilter(f.id, '')} sx={{ p: 0.25 }}>
-                        <X style={{ width: 12, height: 12 }} />
-                      </IconButton>
+                      <Ayuda text="Borra lo que escribiste en este filtro">
+                        <IconButton size="small" onClick={() => updateFilter(f.id, '')} sx={{ p: 0.25 }} aria-label="Limpiar filtro">
+                          <X style={{ width: 12, height: 12 }} />
+                        </IconButton>
+                      </Ayuda>
                     )}
                   </Box>
                 );
@@ -569,13 +574,15 @@ export function DataTable<T>({
                       }}
                     />
                     {(desde || hasta) && (
-                      <IconButton
-                        size="small"
-                        onClick={() => { updateFilter(`${f.id}_desde`, ''); updateFilter(`${f.id}_hasta`, ''); }}
-                        title="Limpiar fechas"
-                      >
-                        <X style={{ width: 14, height: 14 }} />
-                      </IconButton>
+                      <Ayuda text="Quita las fechas de este filtro">
+                        <IconButton
+                          size="small"
+                          onClick={() => { updateFilter(`${f.id}_desde`, ''); updateFilter(`${f.id}_hasta`, ''); }}
+                          aria-label="Limpiar fechas"
+                        >
+                          <X style={{ width: 14, height: 14 }} />
+                        </IconButton>
+                      </Ayuda>
                     )}
                   </Box>
                 );
@@ -791,25 +798,31 @@ export function DataTable<T>({
 
             {!grouped && pageView.totalPages > 1 && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <IconButton
-                  size="small"
-                  onClick={() => pageView.onChange(Math.max(1, pageView.page - 1))}
-                  disabled={pageView.page === 1}
-                  sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '&:hover': { bgcolor: 'grey.50' } }}
-                >
-                  <ChevronLeft style={{ width: 16, height: 16 }} />
-                </IconButton>
+                <Ayuda text="Página anterior">
+                  <IconButton
+                    size="small"
+                    onClick={() => pageView.onChange(Math.max(1, pageView.page - 1))}
+                    disabled={pageView.page === 1}
+                    aria-label="Página anterior"
+                    sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '&:hover': { bgcolor: 'grey.50' } }}
+                  >
+                    <ChevronLeft style={{ width: 16, height: 16 }} />
+                  </IconButton>
+                </Ayuda>
                 <Typography variant="body2" color="text.secondary">
                   Pág. {pageView.page} de {pageView.totalPages}
                 </Typography>
-                <IconButton
-                  size="small"
-                  onClick={() => pageView.onChange(Math.min(pageView.totalPages, pageView.page + 1))}
-                  disabled={pageView.page === pageView.totalPages}
-                  sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '&:hover': { bgcolor: 'grey.50' } }}
-                >
-                  <ChevronRight style={{ width: 16, height: 16 }} />
-                </IconButton>
+                <Ayuda text="Página siguiente">
+                  <IconButton
+                    size="small"
+                    onClick={() => pageView.onChange(Math.min(pageView.totalPages, pageView.page + 1))}
+                    disabled={pageView.page === pageView.totalPages}
+                    aria-label="Página siguiente"
+                    sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '&:hover': { bgcolor: 'grey.50' } }}
+                  >
+                    <ChevronRight style={{ width: 16, height: 16 }} />
+                  </IconButton>
+                </Ayuda>
               </Box>
             )}
           </Box>
@@ -901,19 +914,20 @@ function RowActionsMenu({ actions }: { actions: RowAction[] }) {
 
   return (
     <>
-      <IconButton
-        size="small"
-        onClick={e => { e.stopPropagation(); setAnchorEl(e.currentTarget); }}
-        sx={{
-          color:     'text.secondary',
-          borderRadius: '6px',
-          '&:hover': { bgcolor: 'grey.100' },
-        }}
-        aria-label="Acciones"
-        title="Más acciones"
-      >
-        <MoreVertical style={{ width: 16, height: 16 }} />
-      </IconButton>
+      <Ayuda text="Abre más acciones para esta fila">
+        <IconButton
+          size="small"
+          onClick={e => { e.stopPropagation(); setAnchorEl(e.currentTarget); }}
+          sx={{
+            color:     'text.secondary',
+            borderRadius: '6px',
+            '&:hover': { bgcolor: 'grey.100' },
+          }}
+          aria-label="Acciones"
+        >
+          <MoreVertical style={{ width: 16, height: 16 }} />
+        </IconButton>
+      </Ayuda>
 
       <Menu
         anchorEl={anchorEl}

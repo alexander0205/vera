@@ -21,6 +21,7 @@ export function SiteHeaderClient({ navLinks, isLoggedIn }: Props) {
       <IconButton
         onClick={() => setOpen(!open)}
         aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
+        title={open ? 'Cerrar menú' : 'Abrir menú'}
         sx={{
           display: { md: 'none' },
           p: 1,

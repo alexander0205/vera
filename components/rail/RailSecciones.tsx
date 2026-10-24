@@ -23,6 +23,7 @@ import { useOrdenNav, registrarVisitaNav } from '@/lib/hooks/useOrdenNav';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { rutaOculta } from '@/lib/config/pantallas';
 import { CURVA_DESPLIEGUE, FUENTE_SECCION, TINTA } from './estilos';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useDesplegables } from './useDesplegables';
 import type { RailItem, RailSeccion } from './tipos';
 
@@ -294,12 +295,13 @@ export function RailSecciones({
                         {hijo.shared && <Compartido />}
                       </Box>
                       {hijo.plusHref && (puedeVer?.(hijo.plusHref) ?? true) && (
+                        <Tooltip text="Crea uno nuevo en esta sección">
                         <Box
                           component={Link}
                           href={hijo.plusHref}
                           onClick={onNavegar}
                           className="plus-btn"
-                          title="Nuevo"
+                          aria-label="Nuevo"
                           sx={{
                             opacity:      0,
                             p:            0.5,
@@ -312,6 +314,7 @@ export function RailSecciones({
                         >
                           <Plus style={{ width: 12, height: 12 }} />
                         </Box>
+                        </Tooltip>
                       )}
                     </Box>
                   );
