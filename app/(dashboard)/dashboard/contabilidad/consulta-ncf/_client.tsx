@@ -32,6 +32,7 @@ import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // El tipo de fila viaja por JSON desde la API; se declara aquí para no importar
 // la capa de datos (que arrastraría drizzle y el cliente de ecf-api al bundle).
@@ -303,12 +304,14 @@ export function ConsultaNcfClient() {
               >
                 Imprimir
               </Button>
-              <Button
-                size="small" onClick={exportarCsv} disabled={!visibles.length}
-                startIcon={<Download style={{ width: 16, height: 16 }} />}
-              >
-                Excel
-              </Button>
+              <Tooltip text="Descarga en Excel los comprobantes que ves en la lista">
+                <Button
+                  size="small" onClick={exportarCsv} disabled={!visibles.length}
+                  startIcon={<Download style={{ width: 16, height: 16 }} />}
+                >
+                  Excel
+                </Button>
+              </Tooltip>
             </Box>
           </Box>
 

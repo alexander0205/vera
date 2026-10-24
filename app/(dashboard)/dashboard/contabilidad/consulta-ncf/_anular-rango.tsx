@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ESTADO_NCF_META, type EstadoNcf } from '@/lib/contabilidad/estados';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // Tipos de comprobante que el XSD ANECF acepta.
 const TIPOS = [
@@ -149,6 +150,8 @@ export function AnularRangoPanel() {
     <div className="bg-white border border-gray-200 rounded-xl print:hidden">
       <button
         onClick={() => setAbierto(v => !v)}
+        title="Abre o cierra el formulario para anular números que no se usaron"
+        aria-label="Anular comprobantes no usados ante la DGII"
         className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 rounded-xl"
       >
         <span className="flex items-center gap-2">
@@ -210,13 +213,15 @@ export function AnularRangoPanel() {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full"
               />
             </label>
-            <button
-              type="submit" disabled={revisando || !rangoValido}
-              className="inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
-            >
-              {revisando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
-              Revisar tramo
-            </button>
+            <Tooltip text="Revisa qué números del tramo se pueden anular; todavía no anula nada">
+              <button
+                type="submit" disabled={revisando || !rangoValido}
+                className="inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
+              >
+                {revisando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+                Revisar tramo
+              </button>
+            </Tooltip>
           </form>
 
           {rangoValido && (
@@ -326,13 +331,15 @@ export function AnularRangoPanel() {
               )}
 
               {revision.ok && !confirmando && (
-                <button
-                  onClick={() => setConfirmando(true)}
-                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
-                >
-                  <Ban className="w-4 h-4" />
-                  Anular {revision.anulables.toLocaleString('es-DO')} número{revision.anulables === 1 ? '' : 's'} en la DGII
-                </button>
+                <Tooltip text="Te pide confirmar antes; la anulación en la DGII no se puede deshacer">
+                  <button
+                    onClick={() => setConfirmando(true)}
+                    className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                  >
+                    <Ban className="w-4 h-4" />
+                    Anular {revision.anulables.toLocaleString('es-DO')} número{revision.anulables === 1 ? '' : 's'} en la DGII
+                  </button>
+                </Tooltip>
               )}
 
               {revision.ok && confirmando && (

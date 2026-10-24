@@ -16,6 +16,7 @@ import { X } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export interface Periodo {
   desde?: string;
@@ -75,14 +76,16 @@ export function FiltrosPeriodo({
       />
 
       {hayPeriodo && (
-        <Button
-          type="button" color="inherit" disabled={pendiente}
-          onClick={() => navegar({ desde: undefined, hasta: undefined })}
-          startIcon={<X style={{ width: 16, height: 16 }} />}
-          sx={{ color: '#6b7280', '&:hover': { color: '#374151' }, pb: 1 }}
-        >
-          Todo el histórico
-        </Button>
+        <Tooltip text="Quita el filtro de fechas y muestra todo desde el inicio">
+          <Button
+            type="button" color="inherit" disabled={pendiente}
+            onClick={() => navegar({ desde: undefined, hasta: undefined })}
+            startIcon={<X style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#6b7280', '&:hover': { color: '#374151' }, pb: 1 }}
+          >
+            Todo el histórico
+          </Button>
+        </Tooltip>
       )}
     </Box>
   );

@@ -179,6 +179,7 @@ export function NuevoAsientoClient({ cuentas, hoy }: { cuentas: Cuenta[]; hoy: s
                   size="small" onClick={() => quitarLinea(i)}
                   disabled={lineas.length <= 2}
                   aria-label="Quitar línea"
+                  title="Quita esta línea; un asiento necesita al menos dos"
                   sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626' } }}
                 >
                   <Trash2 style={{ width: 16, height: 16 }} />

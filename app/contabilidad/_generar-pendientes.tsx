@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Corre el barrido desde el panorama (el mismo de «Generar asientos
@@ -42,10 +43,12 @@ export function GenerarPendientes({ habilitado, motivo }: { habilitado: boolean;
 
   return (
     <div className="space-y-1.5">
-      <Button size="sm" onClick={generar} disabled={!habilitado || generando} className="gap-1.5" title={!habilitado ? motivo : undefined}>
-        {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-        {generando ? 'Generando…' : 'Generar asientos pendientes'}
-      </Button>
+      <Tooltip text={!habilitado && motivo ? motivo : 'Crea los asientos de las ventas y compras que aún no tienen uno'}>
+        <Button size="sm" onClick={generar} disabled={!habilitado || generando} className="gap-1.5">
+          {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          {generando ? 'Generando…' : 'Generar asientos pendientes'}
+        </Button>
+      </Tooltip>
       {aviso && <p className={`text-xs ${aviso.error ? 'text-red-600' : 'text-muted-foreground'}`} role="status">{aviso.texto}</p>}
     </div>
   );
