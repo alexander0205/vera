@@ -9,6 +9,7 @@ import { DetalleTurno } from '@/components/caja/DetalleTurno';
 import { toast } from 'sonner';
 import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { METODO_PAGO_LABELS as METODO_LABELS, METODOS_PAGO, esEfectivo } from '@/lib/pagos/metodos';
+import { Tooltip } from '@/components/ui/tooltip';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -660,17 +661,21 @@ export default function CajaPage() {
 
       {/* Acciones */}
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-        <MuiButton variant="outlined" startIcon={<Plus style={{ width: 16, height: 16 }} />}
-          onClick={() => setShowMovimiento(true)}
-          sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
-          Movimiento
-        </MuiButton>
-        <MuiButton variant="contained" color="primary" disableElevation
-          startIcon={<CheckCircle style={{ width: 16, height: 16 }} />}
-          onClick={() => setShowCierre(true)}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-          Solicitar cierre
-        </MuiButton>
+        <Tooltip text="Registra una entrada, salida o retiro de dinero de la caja">
+          <MuiButton variant="outlined" startIcon={<Plus style={{ width: 16, height: 16 }} />}
+            onClick={() => setShowMovimiento(true)}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
+            Movimiento
+          </MuiButton>
+        </Tooltip>
+        <Tooltip text="Envía el cierre del turno al administrador para que lo apruebe">
+          <MuiButton variant="contained" color="primary" disableElevation
+            startIcon={<CheckCircle style={{ width: 16, height: 16 }} />}
+            onClick={() => setShowCierre(true)}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            Solicitar cierre
+          </MuiButton>
+        </Tooltip>
       </Box>
 
       {/* Ver detalle — de dónde salió cada peso del turno.

@@ -33,6 +33,7 @@ import type { VariantePick } from '@/app/(dashboard)/dashboard/facturas/nueva/ut
 import { estaAgotado } from '@/lib/pos/agotado';
 import { useFeedbackPos } from '@/lib/hooks/useFeedbackPos';
 import type { PrefsFeedback } from '@/lib/pos/feedback';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
 
@@ -1131,9 +1132,11 @@ function Venta({
       {mesaActiva && (
         <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #fde68a', bgcolor: '#fffbeb', px: { xs: 1.5, sm: 2 }, py: 0.75, fontSize: 14 }}>
           <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1 }}>
-            <ButtonBase onClick={guardarYVolver} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '8px', border: '1px solid #fcd34d', bgcolor: '#fff', px: 1.25, py: 0.75, fontSize: 12, fontWeight: 500, color: '#92400e', '&:hover': { bgcolor: '#fef3c7' } }}>
-              <ArrowLeft style={{ width: 14, height: 14 }} /> Mesas
-            </ButtonBase>
+            <Tooltip text="Guarda la comanda y vuelve al salón de mesas">
+              <ButtonBase onClick={guardarYVolver} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '8px', border: '1px solid #fcd34d', bgcolor: '#fff', px: 1.25, py: 0.75, fontSize: 12, fontWeight: 500, color: '#92400e', '&:hover': { bgcolor: '#fef3c7' } }}>
+                <ArrowLeft style={{ width: 14, height: 14 }} /> Mesas
+              </ButtonBase>
+            </Tooltip>
             <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: '#78350f' }}>{mesaActiva.nombre}</Box>
             {mesero && <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#b45309' }}>· {mesero.nombre}</Box>}
           </Box>
@@ -1156,12 +1159,14 @@ function Venta({
             nombre de la caja se lee en el menú «⋯». En tablet y escritorio sí
             hay sitio de sobra y se quedan donde estaban. */}
         <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexShrink: 1, minWidth: 0, alignItems: 'center', gap: { sm: 1, lg: 1.5 } }}>
-          <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={{ ...iconActionSx, flexShrink: 0 }}>
-            <ArrowLeft style={{ width: 18, height: 18 }} />
-            {/* La palabra se va antes que el nombre de la caja: la flecha sola
-                ya se entiende, y saber en qué terminal estás no. */}
-            <Box component="span" sx={{ display: { sm: 'none', lg: 'inline' }, fontSize: 14 }}>Panel</Box>
-          </Button>
+          <Tooltip text="Vuelve al panel; el turno sigue abierto">
+            <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" aria-label="Volver al panel" sx={{ ...iconActionSx, flexShrink: 0 }}>
+              <ArrowLeft style={{ width: 18, height: 18 }} />
+              {/* La palabra se va antes que el nombre de la caja: la flecha sola
+                  ya se entiende, y saber en qué terminal estás no. */}
+              <Box component="span" sx={{ display: { sm: 'none', lg: 'inline' }, fontSize: 14 }}>Panel</Box>
+            </Button>
+          </Tooltip>
           <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1, fontSize: 14, fontWeight: 500 }}>
             <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{terminal?.nombre ?? 'Punto de venta'}</Box>
             {/* El almacén es lo primero que sobra: casi siempre hay uno solo. */}
@@ -1207,27 +1212,30 @@ function Venta({
             Cerrar turno se usan una o dos veces por turno: al menú. Lo que gana
             el sitio que dejan es la búsqueda, que es por donde pasa casi todo. */}
         <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: { xs: 0.75, sm: 1 } }}>
-          <Button
-            onClick={aparcar}
-            disabled={carrito.length === 0}
-            variant="outlined"
-            title="Aparcar venta (F3)"
-            sx={{ ...iconActionSx, '&.Mui-disabled': { opacity: 0.4 } }}
-          >
-            <PauseCircle style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcar</Box>
-          </Button>
-          <Button
-            onClick={(e) => setMenuAcciones(e.currentTarget)}
-            variant="outlined"
-            title="Más acciones"
-            aria-label="Más acciones"
-            sx={{ ...iconActionSx, position: 'relative', minWidth: 48, px: 1.25 }}
-          >
-            <MoreHorizontal style={{ width: 20, height: 20 }} />
-            {aparcadas.length > 0 && (
-              <Box component="span" sx={{ position: 'absolute', right: -4, top: -4, display: 'flex', height: 20, minWidth: 20, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 0.5, fontSize: 11, fontWeight: 600, color: '#fff' }}>{aparcadas.length}</Box>
-            )}
-          </Button>
+          <Tooltip text="Guarda esta venta en espera (F3) para atender a otro cliente">
+            <Button
+              onClick={aparcar}
+              disabled={carrito.length === 0}
+              variant="outlined"
+              aria-label="Aparcar venta"
+              sx={{ ...iconActionSx, '&.Mui-disabled': { opacity: 0.4 } }}
+            >
+              <PauseCircle style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcar</Box>
+            </Button>
+          </Tooltip>
+          <Tooltip text="Más opciones: ventas aparcadas, reporte X, nuevo producto y cerrar turno">
+            <Button
+              onClick={(e) => setMenuAcciones(e.currentTarget)}
+              variant="outlined"
+              aria-label="Más acciones"
+              sx={{ ...iconActionSx, position: 'relative', minWidth: 48, px: 1.25 }}
+            >
+              <MoreHorizontal style={{ width: 20, height: 20 }} />
+              {aparcadas.length > 0 && (
+                <Box component="span" sx={{ position: 'absolute', right: -4, top: -4, display: 'flex', height: 20, minWidth: 20, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 0.5, fontSize: 11, fontWeight: 600, color: '#fff' }}>{aparcadas.length}</Box>
+              )}
+            </Button>
+          </Tooltip>
           <Menu
             anchorEl={menuAcciones}
             open={Boolean(menuAcciones)}
@@ -1317,18 +1325,20 @@ function Venta({
                     categorías configuradas, la única forma de llegar a un
                     producto era escribir su nombre. */}
                 {hayFavoritos && (
-                  <ButtonBase
-                    onClick={() => setSoloFavoritos((v) => !v)}
-                    sx={{
-                      flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, minHeight: 44, fontSize: 16, fontWeight: 500, gap: 0.75,
-                      borderColor: soloFavoritos ? '#f59e0b' : '#e5e7eb',
-                      bgcolor: soloFavoritos ? '#fffbeb' : 'transparent',
-                      color: soloFavoritos ? '#b45309' : '#4b5563',
-                    }}
-                  >
-                    <Star style={{ width: 16, height: 16, fill: soloFavoritos ? '#f59e0b' : 'none', color: soloFavoritos ? '#f59e0b' : 'currentColor' }} />
-                    Favoritos
-                  </ButtonBase>
+                  <Tooltip text="Muestra solo los productos que marcaste con la estrella">
+                    <ButtonBase
+                      onClick={() => setSoloFavoritos((v) => !v)}
+                      sx={{
+                        flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, minHeight: 44, fontSize: 16, fontWeight: 500, gap: 0.75,
+                        borderColor: soloFavoritos ? '#f59e0b' : '#e5e7eb',
+                        bgcolor: soloFavoritos ? '#fffbeb' : 'transparent',
+                        color: soloFavoritos ? '#b45309' : '#4b5563',
+                      }}
+                    >
+                      <Star style={{ width: 16, height: 16, fill: soloFavoritos ? '#f59e0b' : 'none', color: soloFavoritos ? '#f59e0b' : 'currentColor' }} />
+                      Favoritos
+                    </ButtonBase>
+                  </Tooltip>
                 )}
                 {categorias.length > 0 && (
                   <>
@@ -1421,6 +1431,7 @@ function Venta({
               {/* Venta simple: monto libre sin producto (patrón Alegra) */}
               <ButtonBase
                 onClick={() => setVentaSimpleAbierta(true)}
+                title="Cobra un monto libre que no sale del catálogo"
                 sx={densidad === 'lista'
                   ? { display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0, borderRadius: '12px', border: '2px dashed #d1d5db', bgcolor: '#fff', px: 1.5, py: 1.25, justifyContent: 'flex-start',
                       '&:hover': { borderColor: '#8193f5', bgcolor: '#eef2fe' }, '&:active': { transform: 'scale(0.99)' } }
@@ -1473,6 +1484,8 @@ function Venta({
                       key={p.id}
                       disabled={agotado}
                       onClick={() => agregar(p)}
+                      title={agotado ? `${p.nombre}: agotado` : 'Agregar al carrito'}
+                      aria-label={agotado ? `${p.nombre}, agotado` : `Agregar ${p.nombre} al carrito`}
                       sx={{
                         position: 'relative', display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.5,
                         borderRadius: '12px', border: '1px solid', px: 1.5, py: 1.25, textAlign: 'left',
@@ -1507,6 +1520,7 @@ function Venta({
                         component="span"
                         role="button"
                         title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
+                        aria-label={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
                         onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
                         sx={{ display: 'flex', height: 44, width: 44, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', cursor: 'pointer', '&:hover': { bgcolor: '#f3f4f6' } }}
                       >
@@ -1521,6 +1535,8 @@ function Venta({
                     key={p.id}
                     disabled={agotado}
                     onClick={() => agregar(p)}
+                    title={agotado ? `${p.nombre}: agotado` : 'Agregar al carrito'}
+                    aria-label={agotado ? `${p.nombre}, agotado` : `Agregar ${p.nombre} al carrito`}
                     sx={{
                       position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', overflow: 'hidden', borderRadius: '12px', border: '1px solid', textAlign: 'left',
                       '&:active': { transform: 'scale(0.97)' },
@@ -1556,6 +1572,7 @@ function Venta({
                         component="span"
                         role="button"
                         title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
+                        aria-label={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
                         onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
                         sx={{ position: 'absolute', right: 4, top: 4, display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
                       >
@@ -1645,13 +1662,15 @@ function Venta({
                   esquina superior de una hoja a pantalla completa — el objetivo
                   más difícil de acertar de toda la caja, y el que se toca con
                   prisa para volver a la rejilla. */}
-              <IconButton
-                onClick={() => setCarritoMovilAbierto(false)}
-                aria-label="Cerrar el carrito"
-                sx={{ height: 44, width: 44, color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
-              >
-                <X style={{ width: 24, height: 24 }} />
-              </IconButton>
+              <Tooltip text="Vuelve a la lista de productos">
+                <IconButton
+                  onClick={() => setCarritoMovilAbierto(false)}
+                  aria-label="Cerrar el carrito"
+                  sx={{ height: 44, width: 44, color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
+                >
+                  <X style={{ width: 24, height: 24 }} />
+                </IconButton>
+              </Tooltip>
             </Box>
             <CarritoPanel
               carrito={carrito}
@@ -1872,13 +1891,15 @@ function CarritoPanel({
           <Box component="span" sx={{ color: '#c7cedd' }}> · </Box>{listaNombre}
           <Box component="span" sx={{ color: '#c7cedd' }}> · </Box>{numeracionNombre}
         </Box>
-        <ButtonBase
-          onClick={() => setConfigAbierta((v) => !v)}
-          sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '8px', px: 1, minHeight: 36, fontSize: 13, fontWeight: 600, color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }}
-        >
-          {configAbierta ? <ChevronUp style={{ width: 15, height: 15 }} /> : <Pencil style={{ width: 14, height: 14 }} />}
-          {configAbierta ? 'Listo' : 'Cambiar'}
-        </ButtonBase>
+        <Tooltip text={configAbierta ? 'Cierra la configuración de la venta' : 'Cambia la lista de precio, la numeración o el cliente'}>
+          <ButtonBase
+            onClick={() => setConfigAbierta((v) => !v)}
+            sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '8px', px: 1, minHeight: 36, fontSize: 13, fontWeight: 600, color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }}
+          >
+            {configAbierta ? <ChevronUp style={{ width: 15, height: 15 }} /> : <Pencil style={{ width: 14, height: 14 }} />}
+            {configAbierta ? 'Listo' : 'Cambiar'}
+          </ButtonBase>
+        </Tooltip>
       </Box>
 
       <Box sx={{ mb: configAbierta ? 1.5 : 0, flexShrink: 0, display: configAbierta ? 'flex' : 'none', flexDirection: 'column', gap: 1 }}>
@@ -1954,14 +1975,15 @@ function CarritoPanel({
         <Box component="span" sx={{ fontSize: 12, fontWeight: 500, color: '#6b7280' }}>
           Carrito{carrito.length > 0 && ` · ${carrito.length} ${carrito.length === 1 ? 'línea' : 'líneas'} · ${unidadesTotales} u.`}
         </Box>
-        <ButtonBase
-          onClick={() => setPanelDescuento(true)}
-          disabled={carrito.length === 0 || bloquearPrecios}
-          title={bloquearPrecios ? 'Tu rol no puede aplicar descuentos' : 'Descuentos globales'}
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '9999px', border: '1px solid #e5e7eb', px: 1.25, py: 0.75, fontSize: 12, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' }, '&.Mui-disabled': { opacity: 0.4 } }}
-        >
-          <Percent style={{ width: 14, height: 14 }} /> Descuento
-        </ButtonBase>
+        <Tooltip text={bloquearPrecios ? 'Tu rol no puede aplicar descuentos' : 'Aplica un descuento a los productos que elijas'}>
+          <ButtonBase
+            onClick={() => setPanelDescuento(true)}
+            disabled={carrito.length === 0 || bloquearPrecios}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, borderRadius: '9999px', border: '1px solid #e5e7eb', px: 1.25, py: 0.75, fontSize: 12, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' }, '&.Mui-disabled': { opacity: 0.4 } }}
+          >
+            <Percent style={{ width: 14, height: 14 }} /> Descuento
+          </ButtonBase>
+        </Tooltip>
       </Box>
       {/* `minHeight: 0` no es cosmético: sin él un hijo flex se niega a
           encoger por debajo de su contenido, así que la lista empujaba al pie
@@ -2022,9 +2044,13 @@ function CarritoPanel({
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.25 }}>
-                  <ButtonBase onClick={() => cambiarQty(key, -1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
+                  <Tooltip text="Quita una unidad">
+                    <ButtonBase aria-label={`Quitar una unidad de ${c.nombre}`} onClick={() => cambiarQty(key, -1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
+                  </Tooltip>
                   <CantidadEditable qty={c.qty} nombre={c.nombre} onFijar={(n) => fijarQty(key, n)} />
-                  <ButtonBase onClick={() => cambiarQty(key, 1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
+                  <Tooltip text="Agrega una unidad">
+                    <ButtonBase aria-label={`Agregar una unidad de ${c.nombre}`} onClick={() => cambiarQty(key, 1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
+                  </Tooltip>
                 </Box>
               </Box>
               </LineaCarritoDeslizable>
@@ -2123,7 +2149,9 @@ function DescuentosPanel({ carrito, aplicado, onAplicar, onClose }: {
     <Box sx={{ display: 'flex', width: '100%', flexDirection: 'column', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 1.5 }}>
       <Box sx={{ mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Descuentos globales</Box>
-        <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        <Tooltip text="Cerrar">
+          <IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Tooltip>
       </Box>
       <Typography sx={{ mb: 1.5, fontSize: 12, color: '#6b7280' }}>Añade descuentos a los ítems de esta venta de forma rápida.</Typography>
 
@@ -2169,6 +2197,7 @@ function DescuentosPanel({ carrito, aplicado, onAplicar, onClose }: {
       <Button
         disabled={!puedeAplicar}
         onClick={() => onAplicar({ pct: pctNum, ids: seleccion })}
+        title="Aplica el porcentaje solo a los productos marcados"
         variant="contained" color="primary" fullWidth
         sx={{ mt: 1.5, py: 1.5, fontWeight: 500, '&.Mui-disabled': { opacity: 0.4 } }}
       >
@@ -2330,7 +2359,9 @@ function EstudiantePicker({ estudiante, onSelect }: {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#253a9e' }}>{estudiante.nombre}</Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component="button" onClick={() => setGestion(true)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4', textDecoration: 'underline' }}>saldo</Box>
+              <Tooltip text="Recarga el monedero o cambia su límite diario">
+                <Box component="button" onClick={() => setGestion(true)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4', textDecoration: 'underline' }}>saldo</Box>
+              </Tooltip>
               <Box component="button" onClick={() => onSelect(null)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4' }}>quitar</Box>
             </Box>
           </Box>
@@ -2539,7 +2570,9 @@ function CobroModal({
       <Box sx={{ flexShrink: 0, borderBottom: '1px solid #f3f4f6', px: { xs: 2, sm: 3 }, pt: { xs: 1.5, sm: 2.5 }, pb: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
           <Box component="span" sx={{ fontSize: 17, fontWeight: 700 }}>Cobrar venta</Box>
-          <IconButton onClick={onClose} sx={{ color: '#9ca3af', mr: -1 }}><X style={{ width: 22, height: 22 }} /></IconButton>
+          <Tooltip text="Cierra sin cobrar; la venta sigue en el carrito">
+            <IconButton onClick={onClose} aria-label="Cerrar" sx={{ color: '#9ca3af', mr: -1 }}><X style={{ width: 22, height: 22 }} /></IconButton>
+          </Tooltip>
         </Box>
         {/* El importe en UNA línea y sin partirse: a 34px el «RD$» se caía a un
             renglón propio en el teléfono y el total parecía otro número. */}
@@ -2586,6 +2619,7 @@ function CobroModal({
         <Box sx={{ mb: 2, display: 'flex', gap: 0.75 }}>
           <ButtonBase
             onClick={() => setPropinaAbierta((v) => !v)}
+            title="Agrega una propina a este cobro"
             sx={{
               flex: 1, minHeight: 44, gap: 0.75, borderRadius: '10px', border: '1px solid', fontSize: 14, fontWeight: 600,
               borderColor: propinaCentavos > 0 ? '#10b981' : '#e5e7eb',
@@ -2598,6 +2632,7 @@ function CobroModal({
           </ButtonBase>
           <ButtonBase
             onClick={() => setSplit((v) => !v)}
+            title="Cobra con más de un método, por ejemplo parte en efectivo y parte con tarjeta"
             sx={{
               flex: 1, minHeight: 44, gap: 0.75, borderRadius: '10px', border: '1px solid', fontSize: 14, fontWeight: 600,
               borderColor: split ? '#3658e1' : '#e5e7eb',
@@ -2748,6 +2783,7 @@ function CobroModal({
                       key={k}
                       onClick={() => teclear(k)}
                       aria-label={k === '⌫' ? 'Borrar' : k}
+                      title={k === '⌫' ? 'Borra el último dígito' : undefined}
                       sx={{
                         minHeight: 52, borderRadius: '10px', border: '1px solid #e5e7eb',
                         fontSize: k === '⌫' ? 18 : 20, fontWeight: 700,
@@ -2793,11 +2829,15 @@ function CobroModal({
                       htmlInput: { min: 0, step: 0.01 },
                     }}
                   />
-                  <ButtonBase onClick={() => autollenarResto(i)} title="Completar el resto"
-                    sx={{ flexShrink: 0, borderRadius: '10px', border: '1px solid #e5e7eb', minWidth: 56, height: 52, fontSize: 14, fontWeight: 600, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' } }}>resto</ButtonBase>
+                  <Tooltip text="Pone en esta línea lo que falta para cuadrar">
+                    <ButtonBase onClick={() => autollenarResto(i)}
+                      sx={{ flexShrink: 0, borderRadius: '10px', border: '1px solid #e5e7eb', minWidth: 56, height: 52, fontSize: 14, fontWeight: 600, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' } }}>resto</ButtonBase>
+                  </Tooltip>
                   {filas.length > 2 && (
-                    <Box component="button" onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))}
-                      sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 52, color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 20, height: 20 }} /></Box>
+                    <Tooltip text="Quita este método de pago">
+                      <Box component="button" aria-label="Quitar método de pago" onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))}
+                        sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 52, color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 20, height: 20 }} /></Box>
+                    </Tooltip>
                   )}
                 </Box>
               ))}
@@ -2888,26 +2928,27 @@ function AjustesCaja({
 
   return (
     <>
-      <ButtonBase
-        onClick={(e) => setAncla(e.currentTarget)}
-        title="Vista y avisos de la caja"
-        aria-label="Vista y avisos de la caja"
-        sx={{
-          position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5,
-          height: 44, px: 1.25, borderRadius: '10px', border: '1px solid #e5e7eb', color: '#4b5563',
-          '&:hover': { borderColor: '#8193f5', bgcolor: '#f5f7ff' },
-        }}
-      >
-        {densidad === 'grid'
-          ? <LayoutGrid style={{ width: 18, height: 18 }} />
-          : <Rows3 style={{ width: 18, height: 18 }} />}
-        <ChevronDown style={{ width: 14, height: 14, opacity: 0.6 }} />
-        {/* Punto rojo cuando el aviso está mudo: si no, apagarlo sin querer se
-            descubre media hora después, cuando ya se facturó de más. */}
-        {mudo && (
-          <Box component="span" sx={{ position: 'absolute', right: 6, top: 6, height: 6, width: 6, borderRadius: '9999px', bgcolor: '#ef4444' }} />
-        )}
-      </ButtonBase>
+      <Tooltip text="Cambia la vista de productos, su tamaño y el aviso al tocar">
+        <ButtonBase
+          onClick={(e) => setAncla(e.currentTarget)}
+          aria-label="Vista y avisos de la caja"
+          sx={{
+            position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5,
+            height: 44, px: 1.25, borderRadius: '10px', border: '1px solid #e5e7eb', color: '#4b5563',
+            '&:hover': { borderColor: '#8193f5', bgcolor: '#f5f7ff' },
+          }}
+        >
+          {densidad === 'grid'
+            ? <LayoutGrid style={{ width: 18, height: 18 }} />
+            : <Rows3 style={{ width: 18, height: 18 }} />}
+          <ChevronDown style={{ width: 14, height: 14, opacity: 0.6 }} />
+          {/* Punto rojo cuando el aviso está mudo: si no, apagarlo sin querer se
+              descubre media hora después, cuando ya se facturó de más. */}
+          {mudo && (
+            <Box component="span" sx={{ position: 'absolute', right: 6, top: 6, height: 6, width: 6, borderRadius: '9999px', bgcolor: '#ef4444' }} />
+          )}
+        </ButtonBase>
+      </Tooltip>
 
       <Menu
         anchorEl={ancla}
@@ -2965,34 +3006,37 @@ function AjustesCaja({
           <Box component="span" sx={{ flexShrink: 0, width: 44, textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#6b7280', ...MONEY }}>
             {Math.round(escala * 100)}%
           </Box>
-          <ButtonBase
-            onClick={() => onEscala(-1)}
-            disabled={escala <= escalas[0]}
-            title="Achicar productos"
-            aria-label="Achicar productos"
-            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
-          >−</ButtonBase>
-          <ButtonBase
-            onClick={() => onEscala(1)}
-            disabled={escala >= escalas[escalas.length - 1]}
-            title="Agrandar productos"
-            aria-label="Agrandar productos"
-            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
-          >+</ButtonBase>
+          <Tooltip text="Achica los productos para ver más a la vez">
+            <ButtonBase
+              onClick={() => onEscala(-1)}
+              disabled={escala <= escalas[0]}
+              aria-label="Achicar productos"
+              sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+            >−</ButtonBase>
+          </Tooltip>
+          <Tooltip text="Agranda los productos para verlos mejor">
+            <ButtonBase
+              onClick={() => onEscala(1)}
+              disabled={escala >= escalas[escalas.length - 1]}
+              aria-label="Agrandar productos"
+              sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+            >+</ButtonBase>
+          </Tooltip>
         </Box>
 
         <Divider sx={{ my: 0.75 }} />
 
         <Box sx={{ px: 1, pb: 0.75, fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: '#9ca3af' }}>AVISO AL TOCAR</Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, pb: 1 }}>
-          <ButtonBase
-            onClick={() => (mudo ? onPrefs({ sonido: true }) : onPrefs({ sonido: false }))}
-            title={mudo ? 'Activar sonido' : 'Silenciar'}
-            aria-label={mudo ? 'Activar sonido' : 'Silenciar'}
-            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', color: mudo ? '#9ca3af' : '#2a45c4', '&:hover': { bgcolor: '#f3f4f6' } }}
-          >
-            {mudo ? <VolumeX style={{ width: 20, height: 20 }} /> : <Volume2 style={{ width: 20, height: 20 }} />}
-          </ButtonBase>
+          <Tooltip text={mudo ? 'Activa el aviso de sonido al tocar' : 'Silencia el aviso de sonido al tocar'}>
+            <ButtonBase
+              onClick={() => (mudo ? onPrefs({ sonido: true }) : onPrefs({ sonido: false }))}
+              aria-label={mudo ? 'Activar sonido' : 'Silenciar'}
+              sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', color: mudo ? '#9ca3af' : '#2a45c4', '&:hover': { bgcolor: '#f3f4f6' } }}
+            >
+              {mudo ? <VolumeX style={{ width: 20, height: 20 }} /> : <Volume2 style={{ width: 20, height: 20 }} />}
+            </ButtonBase>
+          </Tooltip>
 
           {/* Barritas en vez de un número: se lee de un vistazo cuánto queda por
               subir, que es lo único que hace falta saber para decidir. */}
@@ -3009,20 +3053,22 @@ function AjustesCaja({
             ))}
           </Box>
 
-          <ButtonBase
-            onClick={() => onVolumen(-1)}
-            disabled={nivel === 0}
-            title="Bajar volumen"
-            aria-label="Bajar volumen"
-            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
-          >−</ButtonBase>
-          <ButtonBase
-            onClick={() => onVolumen(1)}
-            disabled={nivel === nivelMaximo}
-            title="Subir volumen"
-            aria-label="Subir volumen"
-            sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
-          >+</ButtonBase>
+          <Tooltip text="Baja el volumen del aviso">
+            <ButtonBase
+              onClick={() => onVolumen(-1)}
+              disabled={nivel === 0}
+              aria-label="Bajar volumen"
+              sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+            >−</ButtonBase>
+          </Tooltip>
+          <Tooltip text="Sube el volumen del aviso">
+            <ButtonBase
+              onClick={() => onVolumen(1)}
+              disabled={nivel === nivelMaximo}
+              aria-label="Subir volumen"
+              sx={{ flexShrink: 0, display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 20, color: '#4b5563', '&.Mui-disabled': { opacity: 0.35 } }}
+            >+</ButtonBase>
+          </Tooltip>
         </Box>
 
         {/* Solo donde el aparato puede vibrar: Safari (iPad, iPhone) no tiene la
@@ -3031,7 +3077,9 @@ function AjustesCaja({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.25, py: 0.5, minHeight: 44 }}>
             <Vibrate style={{ width: 18, height: 18, color: prefs.vibracion ? '#2a45c4' : '#9ca3af' }} />
             <Box component="span" sx={{ flex: 1, fontSize: 14, color: '#374151' }}>Vibración</Box>
-            <Switch checked={prefs.vibracion} size="small" onChange={() => onPrefs({ vibracion: !prefs.vibracion })} />
+            <Tooltip text="Vibra el aparato al tocar un producto">
+              <Switch checked={prefs.vibracion} size="small" onChange={() => onPrefs({ vibracion: !prefs.vibracion })} />
+            </Tooltip>
           </Box>
         )}
       </Menu>
@@ -3207,17 +3255,18 @@ function CantidadEditable({ qty, nombre, onFijar }: {
   }
 
   return (
-    <ButtonBase
-      onClick={() => { setValor(String(qty)); setEditando(true); }}
-      title="Tocar para escribir la cantidad"
-      aria-label={`Cantidad de ${nombre}: ${qty}. Tocar para escribirla.`}
-      sx={{
-        width: 56, height: 44, borderRadius: '8px', fontSize: 20, fontWeight: 700,
-        color: '#111827', '&:hover': { bgcolor: '#f3f4f6' }, ...MONEY,
-      }}
-    >
-      {qty}
-    </ButtonBase>
+    <Tooltip text="Escribe la cantidad exacta de este producto">
+      <ButtonBase
+        onClick={() => { setValor(String(qty)); setEditando(true); }}
+        aria-label={`Cantidad de ${nombre}: ${qty}. Tocar para escribirla.`}
+        sx={{
+          width: 56, height: 44, borderRadius: '8px', fontSize: 20, fontWeight: 700,
+          color: '#111827', '&:hover': { bgcolor: '#f3f4f6' }, ...MONEY,
+        }}
+      >
+        {qty}
+      </ButtonBase>
+    </Tooltip>
   );
 }
 
@@ -3263,9 +3312,11 @@ function PrecioEditable({ linea, onEditar, bloqueado = false }: {
   }
 
   return (
-    <Box component="button" onClick={abrir} title="Editar precio" sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2, color: editado ? '#3658e1' : '#9ca3af', ...MONEY }}>
-      {fmt(precioLinea(linea))} c/u{editado ? '*' : ''}
-    </Box>
+    <Tooltip text={bloqueado ? 'Tu rol no puede cambiar precios' : 'Cambia el precio solo en esta venta'}>
+      <Box component="button" onClick={abrir} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2, color: editado ? '#3658e1' : '#9ca3af', ...MONEY }}>
+        {fmt(precioLinea(linea))} c/u{editado ? '*' : ''}
+      </Box>
+    </Tooltip>
   );
 }
 
@@ -3282,7 +3333,7 @@ function AparcadasModal({ aparcadas, onRetomar, onDescartar, onClose }: {
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Ventas aparcadas ({aparcadas.length})</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
         {aparcadas.length === 0 ? (
           <Typography sx={{ py: 4, textAlign: 'center', fontSize: 14, color: '#9ca3af' }}>No hay ventas aparcadas.</Typography>
@@ -3300,7 +3351,9 @@ function AparcadasModal({ aparcadas, onRetomar, onDescartar, onClose }: {
                   </Box>
                   <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1 }}>
                     <Button onClick={() => onRetomar(a)} variant="contained" color="primary" disableElevation sx={{ borderRadius: '8px', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500 }}>Retomar</Button>
-                    <Box component="button" onClick={() => onDescartar(a.id)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 16, height: 16 }} /></Box>
+                    <Tooltip text="Quita esta venta de la lista de aparcadas">
+                      <Box component="button" aria-label="Descartar venta aparcada" onClick={() => onDescartar(a.id)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 16, height: 16 }} /></Box>
+                    </Tooltip>
                   </Box>
                 </Box>
               );
@@ -3355,7 +3408,7 @@ function CierreModal({ turnoId, onClose, onCerrado }: {
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Cerrar turno (corte Z)</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
 
         {cargando ? (
@@ -3402,6 +3455,7 @@ function CierreModal({ turnoId, onClose, onCerrado }: {
             <Button
               disabled={enviando || estado.contado === ''}
               onClick={enviar}
+              title="Envía el cierre; queda pendiente de aprobación del administrador"
               variant="contained"
               fullWidth
               disableElevation
@@ -3460,7 +3514,7 @@ function MonederoModal({ estudiante, onClose, onUpdated }: {
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Saldo de {estudiante.nombre}</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
 
         <Box sx={{ mb: 2, borderRadius: '8px', bgcolor: '#f9fafb', p: 1.5, textAlign: 'center' }}>
@@ -3512,9 +3566,11 @@ function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, 
     <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column', overflow: 'hidden' }}>
       <Box component="header" sx={{ zIndex: 20, display: 'flex', flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #e5e7eb', bgcolor: '#fff', px: { xs: 1.5, sm: 2 }, py: 1 }}>
         <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1 }}>
-          <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={iconActionSx}>
-            <ArrowLeft style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, fontSize: 14 }}>Panel</Box>
-          </Button>
+          <Tooltip text="Vuelve al panel; el turno sigue abierto">
+            <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" aria-label="Volver al panel" sx={iconActionSx}>
+              <ArrowLeft style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, fontSize: 14 }}>Panel</Box>
+            </Button>
+          </Tooltip>
           <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 500 }}>{terminalNombre}</Box>
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, color: '#9ca3af' }}>· Salón</Box>
         </Box>
@@ -3555,7 +3611,9 @@ function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, 
               >
                 <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Box component="span" sx={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>{m.nombre}</Box>
-                  <Box component="span" sx={{ height: 10, width: 10, borderRadius: '9999px', bgcolor: m.ocupada ? '#f59e0b' : '#34d399' }} />
+                  <Tooltip text={m.ocupada ? 'Mesa ocupada: tiene una comanda abierta' : 'Mesa libre'}>
+                    <Box component="span" sx={{ height: 10, width: 10, borderRadius: '9999px', bgcolor: m.ocupada ? '#f59e0b' : '#34d399' }} />
+                  </Tooltip>
                 </Box>
                 {m.ocupada ? (
                   <Box sx={{ width: '100%', lineHeight: 1.2 }}>
@@ -3603,7 +3661,7 @@ function PinMeseroModal({ onClose, onOk }: { onClose: () => void; onOk: (m: Mese
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Identifícate</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
         <Typography sx={{ mb: 1.5, fontSize: 12, color: '#6b7280' }}>Ingresa tu PIN de mesero.</Typography>
         <TextField
@@ -3659,7 +3717,7 @@ function NuevoMeseroModal({ onClose, onCreated }: { onClose: () => void; onCreat
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Nuevo mesero</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
         <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Nombre</Typography>
         <TextField value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus fullWidth sx={{ mb: 1.5 }} />
@@ -3697,7 +3755,7 @@ function NuevaMesaModal({ terminalId, onClose, onCreated }: { terminalId: number
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Nueva mesa</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
         <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Nombre / número</Typography>
         <TextField value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Mesa 1" fullWidth sx={{ mb: 1.5 }} />
@@ -3735,7 +3793,7 @@ function VentaSimpleModal({ onClose, onAgregar }: {
       <Box sx={{ p: 2.5 }}>
         <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Venta simple</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar"><IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton></Tooltip>
         </Box>
 
         <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Monto (DOP)</Typography>

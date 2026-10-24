@@ -26,6 +26,7 @@ import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -270,24 +271,29 @@ export default function ImpresorasPage() {
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
                     {!imp.esDefault && (
-                      <MuiButton
-                        variant="outlined"
-                        size="small"
-                        startIcon={<Star style={{ width: 12, height: 12 }} />}
-                        onClick={() => handleMarcarDefault(imp)}
-                        sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'divider', color: 'text.secondary', py: '3px' }}
-                      >
-                        Predeterminar
-                      </MuiButton>
+                      <Tooltip text="La usa al imprimir desde una factura, sin elegir otra">
+                        <MuiButton
+                          variant="outlined"
+                          size="small"
+                          startIcon={<Star style={{ width: 12, height: 12 }} />}
+                          onClick={() => handleMarcarDefault(imp)}
+                          sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'divider', color: 'text.secondary', py: '3px' }}
+                        >
+                          Predeterminar
+                        </MuiButton>
+                      </Tooltip>
                     )}
-                    <MuiButton
-                      variant="text"
-                      size="small"
-                      onClick={() => setDeleteTarget(imp)}
-                      sx={{ minWidth: 32, width: 32, height: 32, p: 0, color: 'error.light', '&:hover': { color: 'error.main', bgcolor: 'error.lighter' } }}
-                    >
-                      <Trash2 style={{ width: 14, height: 14 }} />
-                    </MuiButton>
+                    <Tooltip text="Elimina esta impresora">
+                      <MuiButton
+                        variant="text"
+                        size="small"
+                        aria-label="Eliminar impresora"
+                        onClick={() => setDeleteTarget(imp)}
+                        sx={{ minWidth: 32, width: 32, height: 32, p: 0, color: 'error.light', '&:hover': { color: 'error.main', bgcolor: 'error.lighter' } }}
+                      >
+                        <Trash2 style={{ width: 14, height: 14 }} />
+                      </MuiButton>
+                    </Tooltip>
                   </Box>
                 </Box>
               </Box>

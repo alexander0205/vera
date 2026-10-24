@@ -24,6 +24,7 @@ import { ReceiptText, X, Printer, Undo2, Trash2, RefreshCw, Pencil } from 'lucid
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const fmt = (c: number) => (c / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -344,7 +345,9 @@ function ReciboDrawer({ venta, puedeAnular, puedeQuitarPin, onClose, onAnulada }
           <Typography sx={{ fontSize: 16, fontWeight: 700 }}>
             {venta.codigo ?? 'Recibo'}
           </Typography>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          <Tooltip text="Cerrar">
+            <IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+          </Tooltip>
         </Box>
 
         {error ? (
@@ -369,9 +372,11 @@ function ReciboDrawer({ venta, puedeAnular, puedeQuitarPin, onClose, onAnulada }
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(Math.round(l.precioUnitarioItem * l.cantidadItem * 100))}</span>
                     {cajeroQuita && t.lineas.length > 1 && (
-                      <IconButton onClick={() => setQuitarLinea(i)} size="small" title="Quitar ítem (requiere PIN)" sx={{ color: '#dc2626', p: 0.25 }}>
-                        <Trash2 style={{ width: 15, height: 15 }} />
-                      </IconButton>
+                      <Tooltip text="Quita este ítem del recibo; pide el PIN de un supervisor">
+                        <IconButton onClick={() => setQuitarLinea(i)} size="small" aria-label="Quitar ítem" sx={{ color: '#dc2626', p: 0.25 }}>
+                          <Trash2 style={{ width: 15, height: 15 }} />
+                        </IconButton>
+                      </Tooltip>
                     )}
                   </Box>
                 </Box>
@@ -446,6 +451,7 @@ function ReciboDrawer({ venta, puedeAnular, puedeQuitarPin, onClose, onAnulada }
                   </Box>
                   <Button fullWidth variant="outlined" startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
                     onClick={() => setConfirmar('eliminar')}
+                    title="Emite una Nota de Crédito (tipo 34); el comprobante fiscal no se borra"
                     sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
                     Eliminar
                   </Button>
@@ -463,12 +469,14 @@ function ReciboDrawer({ venta, puedeAnular, puedeQuitarPin, onClose, onAnulada }
                     {tienePago && (
                       <Button fullWidth variant="outlined" startIcon={<Undo2 style={{ width: 15, height: 15 }} />}
                         onClick={() => setConfirmar('unsettle')}
+                        title="Revierte el cobro; la venta y su inventario se conservan"
                         sx={{ textTransform: 'none', color: '#b45309', borderColor: '#fcd34d' }}>
                         Marcar no pagado
                       </Button>
                     )}
                     <Button fullWidth variant="outlined" startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
                       onClick={() => setConfirmar('eliminar')}
+                      title="Anula el recibo: revierte el cobro y restaura el inventario"
                       sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
                       Eliminar
                     </Button>

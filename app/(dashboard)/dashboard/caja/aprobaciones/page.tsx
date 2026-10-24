@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, CheckCircle2, XCircle, Clock, Loader2, AlertTriangle, Printer, ChevronDown } from 'lucide-react';
 import { DetalleTurno } from '@/components/caja/DetalleTurno';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { fmtDOP } from '@/lib/utils/format';
 import Box from '@mui/material/Box';
@@ -249,13 +250,15 @@ export default function AprobacionesPage() {
                       sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
                       Imprimir
                     </MuiButton>
-                    <MuiButton variant="outlined" size="small" color="error"
-                      startIcon={<XCircle style={{ width: 14, height: 14 }} />}
-                      disabled={procesando === p.id}
-                      onClick={() => setModal({ id: p.id, tipo: 'rechazar' })}
-                      sx={{ borderRadius: '8px', textTransform: 'none' }}>
-                      Rechazar
-                    </MuiButton>
+                    <Tooltip text="Rechaza el cierre; hay que escribir el motivo">
+                      <MuiButton variant="outlined" size="small" color="error"
+                        startIcon={<XCircle style={{ width: 14, height: 14 }} />}
+                        disabled={procesando === p.id}
+                        onClick={() => setModal({ id: p.id, tipo: 'rechazar' })}
+                        sx={{ borderRadius: '8px', textTransform: 'none' }}>
+                        Rechazar
+                      </MuiButton>
+                    </Tooltip>
                     <MuiButton variant="contained" size="small" color="success" disableElevation
                       startIcon={procesando === p.id ? <CircularProgress size={14} color="inherit" /> : <CheckCircle style={{ width: 14, height: 14 }} />}
                       disabled={procesando === p.id}
