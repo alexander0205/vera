@@ -402,13 +402,13 @@ describe('asuntoDeAviso', () => {
   it('un cobro: el de siempre', () => {
     expect(asuntoDeAviso('al-vencer', 1)).toBe('Tu factura venció hoy');
     expect(asuntoDeAviso('al-emitir', 1)).toBe('Tienes una factura nueva');
-    expect(asuntoDeAviso('antes-mora', 1)).toBe('Tu factura está próxima a vencer');
+    expect(asuntoDeAviso('antes-mora', 1)).toBe('Evita el recargo de tu factura');
   });
 
   it('varios: en plural', () => {
     expect(asuntoDeAviso('al-vencer', 3)).toBe('Tus cobros vencieron hoy');
     expect(asuntoDeAviso('al-emitir', 3)).toBe('Tienes 3 cobros nuevos');
-    expect(asuntoDeAviso('antes-mora', 3)).toBe('Tus cobros están próximos a vencer');
+    expect(asuntoDeAviso('antes-mora', 3)).toBe('Evita el recargo de tus cobros');
   });
 });
 

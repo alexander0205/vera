@@ -307,7 +307,8 @@ export function asuntoDeAviso(aviso: Aviso, cobros: number): string {
   const varios = cobros > 1;
   if (aviso === 'al-vencer') return varios ? 'Tus cobros vencieron hoy' : 'Tu factura venció hoy';
   if (aviso === 'al-emitir') return varios ? `Tienes ${cobros} cobros nuevos` : 'Tienes una factura nueva';
-  return varios ? 'Tus cobros están próximos a vencer' : 'Tu factura está próxima a vencer';
+  // Antes del recargo ya están VENCIDOS: decir «próximos a vencer» contradice el cuerpo.
+  return varios ? 'Evita el recargo de tus cobros' : 'Evita el recargo de tu factura';
 }
 
 // ─── Las variables de la plantilla de WhatsApp ───────────────────────────────
