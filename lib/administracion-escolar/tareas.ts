@@ -11,9 +11,13 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
-  adminEscolarEstudiantes, adminEscolarTareaMensajes, adminEscolarTareas, ecfDocuments, teamMembers, users,
+  adminEscolarEstudiantes, adminEscolarTareaMensajes, adminEscolarTareas, clients, ecfDocuments, teamMembers, teams, users,
 } from '@/lib/db/schema';
-import { etiquetaAsignada, textoEvento, type NuevaTarea } from './tareas-reglas';
+import { SOPORTE } from '@/lib/config/soporte';
+import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
+import {
+  aQuienAvisar, etiquetaAsignada, textoEvento, type AutorTarea, type AvisoTarea, type NuevaTarea,
+} from './tareas-reglas';
 
 export interface FamiliaDeAlumno {
   estudianteId: number;
@@ -143,8 +147,8 @@ export async function listarTareas(
 }
 
 export async function crearTarea(
-  teamId: number, fam: FamiliaDeAlumno, autor: { userId: number; nombre: string }, t: NuevaTarea,
-  personaNombre: string | null,
+  teamId: number, fam: FamiliaDeAlumno, autor: AutorTarea, t: NuevaTarea,
+  personaNombre: string | null, ia?: { origenClave: string; cargoId: number | null },
 ) {
   return db.transaction(async (tx) => {
     const [fila] = await tx.insert(adminEscolarTareas).values({
@@ -158,12 +162,19 @@ export async function crearTarea(
       ecfDocumentId: t.ecfDocumentId,
       venceEl: t.venceEl,
       creadaPorUserId: autor.userId,
-    }).returning({ id: adminEscolarTareas.id });
+      creadaPorIa: ia != null,
+      origenClave: ia?.origenClave ?? null,
+      cargoId: ia?.cargoId ?? null,
+    }).onConflictDoNothing().returning({ id: adminEscolarTareas.id });
+    // Zero AI ya había abierto esta misma tarea: no se repite.
+    if (!fila) return null;
     const linea = [
       { teamId, tareaId: fila.id, tipo: 'evento', userId: autor.userId, autor: autor.nombre,
         texto: textoEvento.creada(autor.nombre, etiquetaAsignada(t.asignadaA, personaNombre)) },
     ];
-    if (t.descripcion) linea.push({ teamId, tareaId: fila.id, tipo: 'mensaje', userId: autor.userId, autor: autor.nombre, texto: t.descripcion });
+    if (t.descripcion) {
+      linea.push({ teamId, tareaId: fila.id, tipo: ia ? 'ia' : 'mensaje', userId: autor.userId, autor: autor.nombre, texto: t.descripcion });
+    }
     await tx.insert(adminEscolarTareaMensajes).values(linea);
     return fila.id;
   });
@@ -173,9 +184,14 @@ export async function crearTarea(
 export async function leerTarea(teamId: number, id: number) {
   const persona = sql<string | null>`(SELECT coalesce(nullif(trim(u.name), ''), u.email) FROM users u WHERE u.id = ${adminEscolarTareas.asignadaUserId})`;
   const alumno = sql<string | null>`(SELECT trim(e.nombres || ' ' || e.apellidos) FROM admin_escolar_estudiantes e WHERE e.id = ${adminEscolarTareas.estudianteId})`;
+  // La ficha a la que lleva: la del alumno o, si es de la familia, la de uno de sus hijos.
+  const fichaId = sql<number | null>`coalesce(${adminEscolarTareas.estudianteId}, (
+    SELECT e.id FROM admin_escolar_estudiantes e
+    WHERE e.team_id = ${adminEscolarTareas.teamId} AND e.facturar_a_client_id = ${adminEscolarTareas.clientId}
+    ORDER BY (e.estado = 'activo') DESC, e.id LIMIT 1))`;
   const [t] = await db.select({
     id: adminEscolarTareas.id, titulo: adminEscolarTareas.titulo, descripcion: adminEscolarTareas.descripcion,
-    estado: adminEscolarTareas.estado, estudianteId: adminEscolarTareas.estudianteId, alumno,
+    estado: adminEscolarTareas.estado, estudianteId: adminEscolarTareas.estudianteId, alumno, fichaId,
     asignadaA: adminEscolarTareas.asignadaA, persona, documento: ecfDocuments.codigo,
     ecfDocumentId: adminEscolarTareas.ecfDocumentId, creadaPorIa: adminEscolarTareas.creadaPorIa,
     venceEl: adminEscolarTareas.venceEl,
@@ -195,6 +211,7 @@ export async function leerTarea(teamId: number, id: number) {
   return {
     id: t.id, titulo: t.titulo, descripcion: t.descripcion, estado: t.estado,
     de: t.estudianteId == null ? 'Toda la familia' : (t.alumno ?? 'Alumno'),
+    fichaId: t.fichaId,
     asignada: etiquetaAsignada(t.asignadaA, t.persona),
     documento: t.documento ?? null, ecfDocumentId: t.ecfDocumentId,
     creadaPorIa: t.creadaPorIa, venceEl: t.venceEl ? String(t.venceEl) : null,
@@ -202,7 +219,7 @@ export async function leerTarea(teamId: number, id: number) {
   };
 }
 
-export async function agregarMensaje(teamId: number, id: number, autor: { userId: number; nombre: string }, texto: string) {
+export async function agregarMensaje(teamId: number, id: number, autor: AutorTarea, texto: string) {
   return db.transaction(async (tx) => {
     const [t] = await tx.select({ id: adminEscolarTareas.id }).from(adminEscolarTareas)
       .where(and(eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId))).limit(1);
@@ -215,7 +232,7 @@ export async function agregarMensaje(teamId: number, id: number, autor: { userId
 
 /** Completar o volver a abrir. Deja su línea en la conversación. `null` si no existe o ya estaba así. */
 export async function cambiarEstadoTarea(
-  teamId: number, id: number, autor: { userId: number; nombre: string }, accion: 'completar' | 'reabrir',
+  teamId: number, id: number, autor: AutorTarea, accion: 'completar' | 'reabrir',
 ) {
   return db.transaction(async (tx) => {
     const completar = accion === 'completar';
@@ -248,4 +265,273 @@ export async function personasDelColegio(teamId: number) {
     .filter((u) => u.platformRole !== 'admin')
     .map((u) => ({ id: u.id, nombre: u.name?.trim() || u.email }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+/**
+ * Los correos salen solo desde producción. Una copia de la base trae los
+ * correos reales del personal del colegio: una prueba en local o en un preview
+ * no puede escribirles. Fuera de producción el aviso queda en el log.
+ */
+const correosDeVerdad = () => process.env.VERCEL_ENV === 'production';
+
+/**
+ * Avisa por correo del cambio a quien le toca (ver `aQuienAvisar`). Nunca
+ * lanza: la tarea ya quedó guardada, y un correo que no sale no la deshace.
+ * Se llama con `after()` desde la ruta, para no hacer esperar a quien escribe.
+ */
+export async function avisarDeTarea(
+  teamId: number, tareaId: number, aviso: AvisoTarea, autor: AutorTarea, texto: string | null,
+): Promise<void> {
+  try {
+    const t = await leerTarea(teamId, tareaId);
+    if (!t) return;
+    const [fila] = await db.select({
+      asignadaA: adminEscolarTareas.asignadaA, asignadaUserId: adminEscolarTareas.asignadaUserId,
+      creadaPorUserId: adminEscolarTareas.creadaPorUserId, colegio: teams.name,
+    })
+      .from(adminEscolarTareas)
+      .innerJoin(teams, eq(teams.id, adminEscolarTareas.teamId))
+      .where(eq(adminEscolarTareas.id, tareaId))
+      .limit(1);
+    if (!fila) return;
+    const participantes = [...new Set(t.mensajes
+      .filter((m) => m.tipo === 'mensaje' && m.userId != null).map((m) => m.userId as number))];
+    const { usuarios, soporte } = aQuienAvisar(fila, participantes, aviso, autor);
+
+    const correos = new Set<string>();
+    if (soporte) correos.add(SOPORTE.correo);
+    if (usuarios.length > 0) {
+      const filas = await db.select({ email: users.email }).from(users)
+        .where(and(inArray(users.id, usuarios), isNull(users.deletedAt)));
+      for (const f of filas) if (f.email) correos.add(f.email.trim().toLowerCase());
+    }
+    if (correos.size === 0) return;
+
+    const correo = armarCorreoTarea({
+      aviso, colegio: fila.colegio, tareaId, titulo: t.titulo, de: t.de, asignada: t.asignada,
+      autor: autor.nombre, texto, documento: t.documento,
+    });
+    await mandar([...correos], correo, `${tareaId}:${aviso}`);
+  } catch (err) {
+    console.error('[tareas] no se pudo avisar', tareaId, aviso, err instanceof Error ? err.message : err);
+  }
+}
+
+// ── Todas las del colegio: la pantalla «Por revisar» y la campana ────────────
+
+/** Quien mira la lista: su usuario, y si es del equipo de Zero (le toca Soporte IT). */
+export interface QuienMira { userId: number; esSoporte: boolean }
+
+export const quienMira = (user: { id: number; platformRole?: string | null }): QuienMira =>
+  ({ userId: user.id, esSoporte: user.platformRole === 'admin' });
+
+/** Las que le tocan: las suyas con nombre y, al equipo de Zero, las de Soporte IT. */
+const sonMias = (yo: QuienMira) => or(
+  and(eq(adminEscolarTareas.asignadaA, 'persona'), eq(adminEscolarTareas.asignadaUserId, yo.userId)),
+  yo.esSoporte ? eq(adminEscolarTareas.asignadaA, 'soporte') : sql`false`,
+)!;
+
+/** El número de la campana: las abiertas que le tocan a quien mira. */
+export async function conteoMias(teamId: number, yo: QuienMira): Promise<number> {
+  const [r] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(adminEscolarTareas)
+    .where(and(eq(adminEscolarTareas.teamId, teamId), eq(adminEscolarTareas.estado, 'abierta'), sonMias(yo)));
+  return r?.n ?? 0;
+}
+
+export interface FiltroColegio {
+  vista: 'mias' | 'todas' | 'hechas';
+  origen: 'todas' | 'ia' | 'personas';
+  /** `soporte`, `persona` o vacío para cualquiera. */
+  asignada: string;
+}
+
+export interface TareaDelColegio {
+  id: number;
+  titulo: string;
+  descripcion: string | null;
+  estado: 'abierta' | 'completada';
+  de: string;
+  asignadaA: string;
+  asignada: string;
+  documento: string | null;
+  creadaPorIa: boolean;
+  creadoEn: string;
+  actualizadoEn: string;
+}
+
+export interface FamiliaConTareas {
+  clave: string;
+  /** El responsable de pago, o el alumno si no tiene. */
+  nombre: string;
+  alumnos: string;
+  /** A qué ficha lleva «Ir a la ficha». */
+  estudianteId: number | null;
+  abiertas: number;
+  tareas: TareaDelColegio[];
+}
+
+const nombreCorto = (nombres: string) => {
+  const p = nombres.trim().split(/\s+/)[0] ?? '';
+  return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+};
+const enLista = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`);
+
+export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroColegio) {
+  const t = adminEscolarTareas;
+  const mias = sonMias(yo);
+  const [c] = await db.select({
+    abiertas: sql<number>`count(*) filter (where ${t.estado} = 'abierta')::int`,
+    mias: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${mias})::int`,
+    hechas: sql<number>`count(*) filter (where ${t.estado} = 'completada')::int`,
+    ia: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.creadaPorIa})::int`,
+    viejas: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.creadoEn} < now() - interval '7 days')::int`,
+    familias: sql<number>`count(distinct coalesce(${t.clientId}::text, 'e' || ${t.estudianteId}::text)) filter (where ${t.estado} = 'abierta')::int`,
+  }).from(t).where(eq(t.teamId, teamId));
+
+  const condiciones = [eq(t.teamId, teamId)];
+  if (f.vista === 'hechas') condiciones.push(eq(t.estado, 'completada'));
+  else condiciones.push(eq(t.estado, 'abierta'));
+  if (f.vista === 'mias') condiciones.push(mias);
+  if (f.origen === 'ia') condiciones.push(eq(t.creadaPorIa, true));
+  if (f.origen === 'personas') condiciones.push(eq(t.creadaPorIa, false));
+  if (f.asignada) condiciones.push(eq(t.asignadaA, f.asignada));
+
+  const persona = sql<string | null>`(SELECT coalesce(nullif(trim(u.name), ''), u.email) FROM users u WHERE u.id = ${t.asignadaUserId})`;
+  const filas = await db.select({
+    id: t.id, titulo: t.titulo, descripcion: t.descripcion, estado: t.estado,
+    estudianteId: t.estudianteId, clientId: t.clientId,
+    nombres: adminEscolarEstudiantes.nombres, apellidos: adminEscolarEstudiantes.apellidos,
+    responsable: clients.razonSocial,
+    asignadaA: t.asignadaA, persona, documento: ecfDocuments.codigo, creadaPorIa: t.creadaPorIa,
+    creadoEn: t.creadoEn, actualizadoEn: t.actualizadoEn,
+  })
+    .from(t)
+    .leftJoin(adminEscolarEstudiantes, eq(adminEscolarEstudiantes.id, t.estudianteId))
+    .leftJoin(clients, eq(clients.id, t.clientId))
+    .leftJoin(ecfDocuments, eq(ecfDocuments.id, t.ecfDocumentId))
+    .where(and(...condiciones))
+    .orderBy(desc(t.actualizadoEn))
+    .limit(300);
+
+  // Los hermanos de cada familia, para decir de quién se habla y llevar a una ficha.
+  const clientIds = [...new Set(filas.map((x) => x.clientId).filter((x): x is number => x != null))];
+  const hermanos = clientIds.length === 0 ? [] : await db.select({
+    id: adminEscolarEstudiantes.id, nombres: adminEscolarEstudiantes.nombres,
+    clientId: adminEscolarEstudiantes.facturarAClientId, estado: adminEscolarEstudiantes.estado,
+  })
+    .from(adminEscolarEstudiantes)
+    .where(and(eq(adminEscolarEstudiantes.teamId, teamId), inArray(adminEscolarEstudiantes.facturarAClientId, clientIds)))
+    .orderBy(asc(adminEscolarEstudiantes.nombres));
+  const porFamilia = new Map<number, { id: number; nombre: string }[]>();
+  for (const h of hermanos) {
+    if (h.clientId == null || h.estado !== 'activo') continue;
+    porFamilia.set(h.clientId, [...(porFamilia.get(h.clientId) ?? []), { id: h.id, nombre: nombreCorto(h.nombres) }]);
+  }
+
+  // Abiertas por familia, aunque la vista enseñe otra cosa: es el número del grupo.
+  const abiertasPor = new Map<string, number>();
+  const claves = clientIds.length === 0 ? [] : await db.select({ clientId: t.clientId, n: sql<number>`count(*)::int` })
+    .from(t)
+    .where(and(eq(t.teamId, teamId), eq(t.estado, 'abierta'), inArray(t.clientId, clientIds)))
+    .groupBy(t.clientId);
+  for (const k of claves) abiertasPor.set(`c${k.clientId}`, k.n);
+
+  const familias = new Map<string, FamiliaConTareas>();
+  for (const x of filas) {
+    const clave = x.clientId != null ? `c${x.clientId}` : `e${x.estudianteId}`;
+    const alumno = x.nombres ? nombreCorto(x.nombres) : null;
+    let fam = familias.get(clave);
+    if (!fam) {
+      const hs = x.clientId != null ? (porFamilia.get(x.clientId) ?? []) : [];
+      fam = {
+        clave,
+        nombre: x.responsable ?? (x.nombres ? `${x.nombres} ${x.apellidos ?? ''}`.trim() : 'Sin responsable'),
+        alumnos: enLista(hs.length ? hs.map((h) => h.nombre) : (alumno ? [alumno] : [])),
+        estudianteId: x.estudianteId ?? hs[0]?.id ?? null,
+        abiertas: abiertasPor.get(clave) ?? 0,
+        tareas: [],
+      };
+      familias.set(clave, fam);
+    }
+    if (x.clientId == null && x.estado === 'abierta') fam.abiertas += 1;
+    fam.tareas.push({
+      id: x.id, titulo: x.titulo, descripcion: x.descripcion, estado: x.estado as TareaDelColegio['estado'],
+      de: x.estudianteId == null ? 'Toda la familia' : (alumno ?? 'Alumno'),
+      asignadaA: x.asignadaA, asignada: etiquetaAsignada(x.asignadaA, x.persona),
+      documento: x.documento ?? null, creadaPorIa: x.creadaPorIa,
+      creadoEn: x.creadoEn.toISOString(), actualizadoEn: x.actualizadoEn.toISOString(),
+    });
+  }
+
+  return {
+    cuentas: { mias: c?.mias ?? 0, todas: c?.abiertas ?? 0, hechas: c?.hechas ?? 0 },
+    kpis: { abiertas: c?.abiertas ?? 0, familias: c?.familias ?? 0, mias: c?.mias ?? 0, ia: c?.ia ?? 0, viejas: c?.viejas ?? 0 },
+    familias: [...familias.values()],
+  };
+}
+
+// ── La factura relacionada ───────────────────────────────────────────────────
+
+/** Las facturas y notas de la familia (o del alumno sin responsable), para elegir la relacionada. */
+export async function documentosDeLaFamilia(teamId: number, fam: FamiliaDeAlumno) {
+  if (fam.clientId == null) return [];
+  const filas = await db.select({
+    id: ecfDocuments.id, codigo: ecfDocuments.codigo, encf: ecfDocuments.encf,
+    tipoEcf: ecfDocuments.tipoEcf, fecha: ecfDocuments.fechaEmision,
+    montoTotal: ecfDocuments.montoTotal, estado: ecfDocuments.estado,
+  })
+    .from(ecfDocuments)
+    .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.clientId, fam.clientId)))
+    .orderBy(desc(ecfDocuments.fechaEmision), desc(ecfDocuments.id))
+    .limit(60);
+  return filas.map((f) => ({
+    id: f.id,
+    codigo: f.codigo ?? f.encf,
+    tipoEcf: f.tipoEcf,
+    fecha: f.fecha ? new Date(f.fecha).toISOString().slice(0, 10) : null,
+    montoTotal: f.montoTotal,
+    anulado: f.estado === 'ANULADO',
+  }));
+}
+
+/** Que la factura que se quiere relacionar sea de este colegio. */
+export async function documentoDelColegio(teamId: number, id: number): Promise<boolean> {
+  const [f] = await db.select({ id: ecfDocuments.id }).from(ecfDocuments)
+    .where(and(eq(ecfDocuments.id, id), eq(ecfDocuments.teamId, teamId))).limit(1);
+  return !!f;
+}
+
+/** Manda el correo a cada uno, o lo deja en el log fuera de producción. Nunca lanza. */
+async function mandar(correos: string[], correo: CorreoTarea, contexto: string) {
+  if (correos.length === 0) return;
+  if (!correosDeVerdad()) {
+    console.info('[tareas] correo sin enviar (fuera de producción)', { contexto, a: correos.length, asunto: correo.asunto });
+    return;
+  }
+  for (const email of correos) {
+    await enviarAvisoTarea(email, correo).catch((err: unknown) => {
+      console.error('[tareas] no salió el correo', contexto, err instanceof Error ? err.message : err);
+    });
+  }
+}
+
+/**
+ * Un solo correo con lo que Zero AI abrió en una revisión, a quien se le
+ * asignó (o a Soporte IT si el colegio no tiene Propietario). Nunca lanza.
+ */
+export async function avisarResumenIa(teamId: number, userId: number | null, tareas: { id: number; titulo: string }[]) {
+  try {
+    const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
+    let destino: string | null = SOPORTE.correo;
+    if (userId) {
+      const [u] = await db.select({ email: users.email }).from(users)
+        .where(and(eq(users.id, userId), isNull(users.deletedAt))).limit(1);
+      destino = u?.email?.trim().toLowerCase() || null;
+    }
+    if (!destino) return;
+    await mandar([destino], armarCorreoResumenIa({ colegio: team?.nombre ?? 'el colegio', tareas }), `ia:${teamId}`);
+  } catch (err) {
+    console.error('[tareas] no se pudo avisar lo de Zero AI', teamId, err instanceof Error ? err.message : err);
+  }
 }

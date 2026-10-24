@@ -77,6 +77,8 @@ export type AuditAction =
   | 'ESCOLAR_TAREA_CREADA'
   | 'ESCOLAR_TAREA_COMPLETADA'
   | 'ESCOLAR_TAREA_REABIERTA'
+  // Una revisión de Zero AI que puede abrir varias tareas de golpe.
+  | 'ESCOLAR_TAREAS_ZERO_AI'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se

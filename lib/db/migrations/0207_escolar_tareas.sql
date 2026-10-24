@@ -4,8 +4,8 @@
 -- que no cuadra con sus cargos, un mes que se cobró a medias— la decisión
 -- quedaba en un chat o en la memoria de alguien, y el arreglo terminaba por SQL
 -- de soporte. Esto le da un lugar en el sistema: una tarea con lo que hay que
--- decidir, a quién le toca (Dirección, Administración, Soporte IT de Zero o
--- una persona del colegio), de qué alumno o familia es, y su conversación
+-- decidir, a quién le toca (Soporte IT de Zero o una persona del colegio con
+-- nombre), de qué alumno o familia es, y su conversación
 -- hasta que alguien la marca como completada.
 --
 -- Una tarea es de un alumno (`estudiante_id`) o de toda su familia
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS admin_escolar_tareas (
   client_id             integer      REFERENCES clients(id) ON DELETE SET NULL,
   titulo                varchar(160) NOT NULL,
   descripcion           text,
-  -- direccion | administracion | soporte | persona
-  asignada_a            varchar(16)  NOT NULL CHECK (asignada_a IN ('direccion', 'administracion', 'soporte', 'persona')),
+  -- soporte | persona
+  asignada_a            varchar(16)  NOT NULL CHECK (asignada_a IN ('soporte', 'persona')),
   asignada_user_id      integer      REFERENCES users(id) ON DELETE SET NULL,
   -- La factura o el cargo de los que trata, si los hay.
   ecf_document_id       integer      REFERENCES ecf_documents(id) ON DELETE SET NULL,
@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS admin_escolar_tareas (
   -- Quién la abrió: una persona, o Zero AI (creada_por_ia) sin persona.
   creada_por_user_id    integer      REFERENCES users(id) ON DELETE SET NULL,
   creada_por_ia         boolean      NOT NULL DEFAULT false,
+  -- El hallazgo de Zero AI que la abrió («pago-de-mas:8734»…). Con él la misma
+  -- revisión no abre dos veces la misma tarea, ni la reabre si ya se completó.
+  origen_clave          varchar(120),
   completada_por_user_id integer     REFERENCES users(id) ON DELETE SET NULL,
   completada_en         timestamp,
   creado_en             timestamp    NOT NULL DEFAULT now(),
@@ -45,6 +48,7 @@ CREATE TABLE IF NOT EXISTS admin_escolar_tareas (
 CREATE INDEX IF NOT EXISTS admin_escolar_tareas_estudiante_idx ON admin_escolar_tareas (team_id, estudiante_id, estado);
 CREATE INDEX IF NOT EXISTS admin_escolar_tareas_familia_idx    ON admin_escolar_tareas (team_id, client_id, estado);
 CREATE INDEX IF NOT EXISTS admin_escolar_tareas_abiertas_idx   ON admin_escolar_tareas (team_id, estado, asignada_a);
+CREATE UNIQUE INDEX IF NOT EXISTS admin_escolar_tareas_origen_uq ON admin_escolar_tareas (team_id, origen_clave) WHERE origen_clave IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS admin_escolar_tarea_mensajes (
   id           serial PRIMARY KEY,

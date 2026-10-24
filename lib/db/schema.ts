@@ -2685,7 +2685,7 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   clientId:            integer('client_id').references(() => clients.id, { onDelete: 'set null' }),
   titulo:              varchar('titulo', { length: 160 }).notNull(),
   descripcion:         text('descripcion'),
-  /** direccion | administracion | soporte | persona */
+  /** soporte | persona */
   asignadaA:           varchar('asignada_a', { length: 16 }).notNull(),
   asignadaUserId:      integer('asignada_user_id').references(() => users.id, { onDelete: 'set null' }),
   ecfDocumentId:       integer('ecf_document_id').references(() => ecfDocuments.id, { onDelete: 'set null' }),
@@ -2695,6 +2695,8 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   estado:              varchar('estado', { length: 12 }).notNull().default('abierta'),
   creadaPorUserId:     integer('creada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   creadaPorIa:         boolean('creada_por_ia').notNull().default(false),
+  /** El hallazgo de Zero AI que la abrió; único por colegio (ver tareas-ia.ts). */
+  origenClave:         varchar('origen_clave', { length: 120 }),
   completadaPorUserId: integer('completada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   completadaEn:        timestamp('completada_en'),
   creadoEn:            timestamp('creado_en').notNull().defaultNow(),

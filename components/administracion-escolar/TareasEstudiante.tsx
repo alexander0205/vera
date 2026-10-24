@@ -1,11 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
-import { ArrowLeft, Bell, Check, Loader2, Plus, Sparkles, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, ExternalLink, Loader2, Plus, Sparkles, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { ETIQUETA_ASIGNACION, type Asignacion } from '@/lib/administracion-escolar/tareas-reglas';
+import type { Asignacion } from '@/lib/administracion-escolar/tareas-reglas';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { refrescarCampana } from './CampanaTareas';
 
 /**
  * Las tareas por revisar de un alumno y de su familia, desde su ficha.
@@ -24,22 +27,23 @@ interface TareaEnLista {
   ultimo: { autor: string; texto: string; tipo: string; creadoEn: string } | null;
   mensajes: number; actualizadoEn: string;
 }
+interface DocumentoFamilia { id: number; codigo: string; tipoEcf: string; fecha: string | null; montoTotal: number; anulado: boolean }
 interface Mensaje { id: number; tipo: 'mensaje' | 'evento' | 'ia'; userId: number | null; autor: string; texto: string; creadoEn: string }
-interface TareaCompleta {
-  id: number; titulo: string; estado: 'abierta' | 'completada'; de: string; asignada: string;
+export interface TareaCompleta {
+  id: number; titulo: string; estado: 'abierta' | 'completada'; de: string; fichaId: number | null; asignada: string;
   documento: string | null; ecfDocumentId: number | null; creadaPorIa: boolean; venceEl: string | null; mensajes: Mensaje[];
 }
 
 type Vista = { tipo: 'lista' } | { tipo: 'hilo'; id: number } | { tipo: 'nueva' };
 
-const traer = (url: string) => fetch(url).then(async (r) => {
+export const traer = (url: string) => fetch(url).then(async (r) => {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error ?? 'No se pudo cargar');
   return d;
 });
 
 /** «hoy 9:40», «ayer 16:20» o «12 oct». */
-function cuando(iso: string) {
+export function cuando(iso: string) {
   const f = new Date(iso);
   const hoy = new Date();
   const hora = f.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Santo_Domingo' });
@@ -57,7 +61,7 @@ const iniciales = (nombre: string) => {
   return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase() || '·';
 };
 
-const Segmento = <T extends string>({ opciones, valor, onCambio, etiqueta }: {
+export const Segmento = <T extends string>({ opciones, valor, onCambio, etiqueta }: {
   opciones: { id: T; texto: string }[]; valor: T; onCambio: (v: T) => void; etiqueta: string;
 }) => (
   <div role="group" aria-label={etiqueta} className="inline-flex gap-0.5 rounded-lg bg-gray-100 p-0.5">
@@ -98,7 +102,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
   const abrir = (a: 'alumno' | 'familia') => {
     setAlcance(a); setEstado('abierta'); setVista({ tipo: 'lista' }); setAbierto(true);
   };
-  const refrescar = () => { void mutarConteo(); void mutarLista(); void mutarHilo(); };
+  const refrescar = () => { void mutarConteo(); void mutarLista(); void mutarHilo(); refrescarCampana(); };
 
   const titulo = vista.tipo === 'hilo' ? (dataHilo?.tarea.titulo ?? 'Tarea')
     : vista.tipo === 'nueva' ? 'Nueva tarea' : 'Tareas por revisar';
@@ -218,7 +222,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
   );
 }
 
-function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
+export function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
   return (
     <div className="flex flex-wrap gap-1.5 text-xs">
       <span className={`rounded-md px-2 py-0.5 font-semibold ${tarea.estado === 'completada' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
@@ -236,7 +240,7 @@ function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
   );
 }
 
-function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
+export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
   tarea: TareaCompleta; yo: number; puedeGestionar: boolean; onCambio: () => void;
 }) {
   const [texto, setTexto] = useState('');
@@ -338,18 +342,20 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [alcance, setAlcance] = useState<'alumno' | 'familia'>('alumno');
-  const [asignadaA, setAsignadaA] = useState<Asignacion>('direccion');
+  const [asignadaA, setAsignadaA] = useState<Asignacion>('persona');
   const [persona, setPersona] = useState('');
+  const [documento, setDocumento] = useState('');
   const [venceEl, setVenceEl] = useState('');
   const [guardando, setGuardando] = useState(false);
   const { data: dataPersonas } = useSWR<{ personas: { id: number; nombre: string }[] }>(
     asignadaA === 'persona' ? '/api/administracion-escolar/tareas/personas' : null, traer);
+  const { data: dataDocs } = useSWR<{ documentos: DocumentoFamilia[] }>(
+    `/api/administracion-escolar/tareas/facturas?estudianteId=${estudianteId}`, traer);
+  const documentos = dataDocs?.documentos ?? [];
 
   const opciones: { id: Asignacion; texto: string; detalle: string }[] = [
-    { id: 'direccion', texto: ETIQUETA_ASIGNACION.direccion, detalle: 'La directora' },
-    { id: 'administracion', texto: ETIQUETA_ASIGNACION.administracion, detalle: 'Cobros y caja' },
-    { id: 'soporte', texto: 'Soporte IT', detalle: 'El equipo de Zero' },
-    { id: 'persona', texto: 'Una persona', detalle: 'Del colegio' },
+    { id: 'soporte', texto: 'Soporte IT · Zero', detalle: 'El equipo de Zero lo revisa' },
+    { id: 'persona', texto: 'Una persona', detalle: 'Alguien del colegio, con nombre' },
   ];
 
   async function crear() {
@@ -360,6 +366,7 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
         body: JSON.stringify({
           estudianteId, alcance, titulo, descripcion, asignadaA,
           asignadaUserId: asignadaA === 'persona' ? Number(persona) || null : null,
+          ecfDocumentId: Number(documento) || null,
           venceEl: venceEl || null,
         }),
       });
@@ -414,6 +421,21 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
             </select>
           )}
         </div>
+        {documentos.length > 0 && (
+          <label className="block space-y-1.5 text-sm">
+            <span className="font-medium text-gray-700">Factura relacionada</span>
+            <select value={documento} onChange={(e) => setDocumento(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm focus:border-zero-500 focus:outline-none">
+              <option value="">Ninguna</option>
+              {documentos.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.codigo} · {fmtFechaCorta(d.fecha)} · {fmtDOP(d.montoTotal)}{d.anulado ? ' · anulada' : ''}
+                </option>
+              ))}
+            </select>
+            <span className="block text-xs text-gray-500">Las de la familia, la más reciente primero. Queda como enlace en la tarea.</span>
+          </label>
+        )}
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium text-gray-700">Para cuándo</span>
           <input type="date" value={venceEl} onChange={(e) => setVenceEl(e.target.value)}
@@ -428,5 +450,49 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
         </button>
       </div>
     </>
+  );
+}
+
+/**
+ * Una tarea sola en el panel de la derecha, con su conversación. La abre la
+ * pantalla «Por revisar» y el enlace del correo (`?tarea=N`).
+ */
+export function PanelTarea({ tareaId, puedeGestionar, onCerrar, onCambio }: {
+  tareaId: number | null; puedeGestionar: boolean; onCerrar: () => void; onCambio: () => void;
+}) {
+  const { data, error, mutate } = useSWR<{ tarea: TareaCompleta; yo: number }>(
+    tareaId ? `/api/administracion-escolar/tareas/${tareaId}` : null, traer);
+  const refrescar = () => { void mutate(); onCambio(); refrescarCampana(); };
+
+  return (
+    <Drawer anchor="right" open={tareaId != null} onClose={onCerrar}
+      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 520 } } } }}>
+      <div className="flex h-full flex-col">
+        <div className="space-y-3 border-b border-gray-100 px-5 py-4">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold text-gray-900">{data?.tarea.titulo ?? 'Tarea'}</h2>
+              <p className="text-xs text-gray-500">La conversación de esta tarea</p>
+            </div>
+            {data?.tarea.fichaId && (
+              <Link href={`/escolar/estudiantes/${data.tarea.fichaId}`}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-zero-700 hover:bg-zero-50">
+                Ficha<ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            )}
+            <button type="button" onClick={onCerrar} aria-label="Cerrar"
+              className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+          </div>
+          {data && <CabeceraHilo tarea={data.tarea} />}
+        </div>
+        {error ? (
+          <p className="px-5 py-10 text-center text-sm text-gray-500">No se encontró esta tarea en el colegio.</p>
+        ) : data ? (
+          <Hilo tarea={data.tarea} yo={data.yo} puedeGestionar={puedeGestionar} onCambio={refrescar} />
+        ) : (
+          <div className="flex flex-1 justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
+        )}
+      </div>
+    </Drawer>
   );
 }

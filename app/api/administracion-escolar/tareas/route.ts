@@ -8,10 +8,12 @@
  *
  * Ver lib/administracion-escolar/tareas.ts.
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { conteoDeTareas, crearTarea, familiaDe, listarTareas, personasDelColegio } from '@/lib/administracion-escolar/tareas';
-import { autorDe, validarNuevaTarea } from '@/lib/administracion-escolar/tareas-reglas';
+import {
+  avisarDeTarea, conteoDeTareas, crearTarea, documentoDelColegio, familiaDe, listarTareas, personasDelColegio,
+} from '@/lib/administracion-escolar/tareas';
+import { autorTarea, validarNuevaTarea } from '@/lib/administracion-escolar/tareas-reglas';
 import { logAudit } from '@/lib/audit';
 
 const idDe = (v: unknown) => {
@@ -62,8 +64,15 @@ export async function POST(req: NextRequest) {
     personaNombre = persona.nombre;
   }
 
-  const autor = { userId: auth.user.id, nombre: autorDe(auth.user) };
+  // La factura relacionada tiene que ser de este colegio.
+  if (v.tarea.ecfDocumentId && !(await documentoDelColegio(auth.teamId, v.tarea.ecfDocumentId))) {
+    return NextResponse.json({ error: 'Esa factura no es de este colegio.' }, { status: 400 });
+  }
+
+  const autor = autorTarea(auth.user);
   const id = await crearTarea(auth.teamId, fam, autor, v.tarea, personaNombre);
+  if (!id) return NextResponse.json({ error: 'No se pudo crear la tarea.' }, { status: 409 });
+  after(() => avisarDeTarea(auth.teamId, id, 'creada', autor, v.tarea.descripcion));
   logAudit({
     teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email, action: 'ESCOLAR_TAREA_CREADA',
     resource: `tarea:${id}`, meta: { estudianteId, alcance: v.tarea.alcance, asignadaA: v.tarea.asignadaA },

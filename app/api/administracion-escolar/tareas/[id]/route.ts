@@ -4,10 +4,10 @@
  *   GET                                  → la tarea y sus mensajes
  *   PATCH { accion: 'completar' | 'reabrir' } → la marca; deja su línea en la conversación
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { cambiarEstadoTarea, leerTarea } from '@/lib/administracion-escolar/tareas';
-import { autorDe } from '@/lib/administracion-escolar/tareas-reglas';
+import { avisarDeTarea, cambiarEstadoTarea, leerTarea } from '@/lib/administracion-escolar/tareas';
+import { autorTarea } from '@/lib/administracion-escolar/tareas-reglas';
 import { logAudit } from '@/lib/audit';
 
 const idDe = (v: string) => {
@@ -33,11 +33,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body?.accion !== 'completar' && body?.accion !== 'reabrir') {
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
   }
-  const hecho = await cambiarEstadoTarea(auth.teamId, id, { userId: auth.user.id, nombre: autorDe(auth.user) }, body.accion);
+  const autor = autorTarea(auth.user);
+  const accion = body.accion;
+  const hecho = await cambiarEstadoTarea(auth.teamId, id, autor, accion);
   if (!hecho) return NextResponse.json({ error: 'La tarea no existe o ya estaba así.' }, { status: 409 });
+  after(() => avisarDeTarea(auth.teamId, id, accion === 'completar' ? 'completada' : 'reabierta', autor, null));
   logAudit({
     teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email,
-    action: body.accion === 'completar' ? 'ESCOLAR_TAREA_COMPLETADA' : 'ESCOLAR_TAREA_REABIERTA',
+    action: accion === 'completar' ? 'ESCOLAR_TAREA_COMPLETADA' : 'ESCOLAR_TAREA_REABIERTA',
     resource: `tarea:${id}`,
   });
   return NextResponse.json({ ok: true });
