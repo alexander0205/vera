@@ -845,15 +845,27 @@ export async function POST(request: NextRequest) {
     // ── Cliente: ninguna factura de venta sin dueño ──────────────────────────
     // Elegido en el formulario → ese. Nota de crédito/débito → el de su
     // factura. De alumnos → null aquí: su dueño es el responsable de pago y lo
-    // pone `vincularCargosEscolares`. Lo demás → por cédula/RNC, por nombre
+    // pone `vincularCargosEscolares` (aquí ya se adelanta). Lo demás → por cédula/RNC, por nombre
     // exacto o «CONSUMIDOR FINAL» (ver lib/clientes/cliente-de-factura.ts).
     // Va DESPUÉS de validar beneficiarios: un cliente encontrado por la cédula
     // no puede exigir beneficiarios que el formulario nunca pidió.
-    const deAlumnos = cargosDeLasLineas(data.items).length > 0 || estudiantesDeLasLineas(data.items).length > 0;
+    const cargosLinea = cargosDeLasLineas(data.items);
+    const alumnosLinea = estudiantesDeLasLineas(data.items);
+    // De alumnos: el responsable de pago se pone YA al guardar, no después de
+    // insertar. Así la factura nunca existe sin cliente —ni un instante—, que
+    // es lo que permite la regla de la base (migración 0206).
+    const responsableAlumnos = data.clientId || padreDoc?.clientId
+      ? null
+      : cargosLinea.length > 0
+        ? await responsableDeLosCargos(db as never, { teamId, cargoIds: cargosLinea })
+        : alumnosLinea.length > 0
+          ? await responsableDeLosEstudiantes(db as never, { teamId, estudianteIds: alumnosLinea })
+          : null;
     const clienteFinal: number | null = data.clientId
       ?? padreDoc?.clientId
+      ?? responsableAlumnos
       // Compras y gastos (41/43/47): el RNC es del suplidor, no de un cliente.
-      ?? (deAlumnos || esSalidaDinero ? null : await clienteDeLaFactura(db as never, {
+      ?? (esSalidaDinero ? null : await clienteDeLaFactura(db as never, {
         teamId, rnc: data.rncComprador, razonSocial: data.razonSocialComprador, userId: user.id,
       }));
 
