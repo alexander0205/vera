@@ -16,6 +16,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, fmtFechaHora } from '@/lib/utils/format';
@@ -669,9 +670,11 @@ function EliminarPagoModal({ pago, onClose, onSuccess }: {
     >
       <DialogTitle sx={{ px: 2.5, py: 2, borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
         Eliminar pago
-        <IconButton onClick={onClose} sx={{ p: 0.75, borderRadius: '6px', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6' } }}>
-          <X style={{ width: 16, height: 16 }} />
-        </IconButton>
+        <Tooltip text="Cierra sin eliminar el pago">
+          <IconButton aria-label="Cerrar" onClick={onClose} sx={{ p: 0.75, borderRadius: '6px', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6' } }}>
+            <X style={{ width: 16, height: 16 }} />
+          </IconButton>
+        </Tooltip>
       </DialogTitle>
       <DialogContent sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 1.5, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', mt: 1 }}>

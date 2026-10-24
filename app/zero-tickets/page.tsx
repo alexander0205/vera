@@ -9,6 +9,7 @@ import { PulsoLlamada } from '@/components/support/pulso-llamada';
 import { useLlamada } from '@/lib/webrtc/useLlamada';
 import { useLlamadaFinalizadaReciente } from '@/lib/webrtc/useLlamadaFinalizadaReciente';
 import { iniciarLlamada, type LlamadaDTO } from '@/lib/webrtc/senalizacion';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface TicketRow {
   id: number;
@@ -414,12 +415,14 @@ export default function ZeroTicketsPage() {
             <div className="text-sm font-medium text-gray-900">Mi estado</div>
             <div className="text-xs text-gray-500">{onlineAgents} agente(s) disponible(s)</div>
           </div>
-          <button
-            onClick={toggleAvailable}
-            className={`text-xs px-3 py-1.5 rounded ${available ? 'bg-[#3658e1] text-white' : 'bg-gray-200 text-gray-700'}`}
-          >
-            {available ? 'Disponible' : 'No disponible'}
-          </button>
+          <Tooltip text="Activa o pausa si estás listo para recibir tickets nuevos">
+            <button
+              onClick={toggleAvailable}
+              className={`text-xs px-3 py-1.5 rounded ${available ? 'bg-[#3658e1] text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              {available ? 'Disponible' : 'No disponible'}
+            </button>
+          </Tooltip>
         </div>
 
         <div className="flex-1 border rounded-lg bg-white overflow-y-auto">
@@ -502,46 +505,56 @@ export default function ZeroTicketsPage() {
               </div>
               <div className="flex gap-2 flex-wrap shrink-0">
                 {!selected.assignedAgentId && (
-                  <button onClick={() => claim(selected.id)} className="text-xs px-3 py-1.5 rounded bg-[#3658e1] text-white hover:bg-[#2c46b4]">
-                    Tomar ticket
-                  </button>
+                  <Tooltip text="Te asigna este ticket para atenderlo tú">
+                    <button onClick={() => claim(selected.id)} className="text-xs px-3 py-1.5 rounded bg-[#3658e1] text-white hover:bg-[#2c46b4]">
+                      Tomar ticket
+                    </button>
+                  </Tooltip>
                 )}
-                <button onClick={() => requestScreenshot(selected.id)} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
-                  Pedir captura
-                </button>
-                <button
-                  onClick={() => startCall(selected.id)}
-                  disabled={llamando || call?.status === 'pendiente' || call?.status === 'activa'}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {llamando || call?.status === 'pendiente' ? (
-                    <PulsoLlamada icono={PhoneCall} diametro={16} iconoTamano={10} />
-                  ) : call?.status === 'activa' ? (
-                    <PhoneOff size={14} />
-                  ) : (
-                    <Phone size={14} />
-                  )}
-                  {llamando || call?.status === 'pendiente' ? 'Llamando…' : call?.status === 'activa' ? 'En llamada' : 'Llamar'}
-                </button>
+                <Tooltip text="Pide al cliente que envíe una captura de su pantalla">
+                  <button onClick={() => requestScreenshot(selected.id)} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                    Pedir captura
+                  </button>
+                </Tooltip>
+                <Tooltip text="Llama al cliente desde esta misma ventana">
+                  <button
+                    onClick={() => startCall(selected.id)}
+                    disabled={llamando || call?.status === 'pendiente' || call?.status === 'activa'}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {llamando || call?.status === 'pendiente' ? (
+                      <PulsoLlamada icono={PhoneCall} diametro={16} iconoTamano={10} />
+                    ) : call?.status === 'activa' ? (
+                      <PhoneOff size={14} />
+                    ) : (
+                      <Phone size={14} />
+                    )}
+                    {llamando || call?.status === 'pendiente' ? 'Llamando…' : call?.status === 'activa' ? 'En llamada' : 'Llamar'}
+                  </button>
+                </Tooltip>
                 {errorLlamada && (
                   <span className="text-xs text-red-600 self-center">{errorLlamada}</span>
                 )}
-                <button
-                  onClick={() => toggleHold(selected.id, selected.onHold)}
-                  className={`text-xs px-3 py-1.5 rounded border ${
-                    selected.onHold ? 'border-sky-600 text-sky-700 hover:bg-sky-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {selected.onHold ? 'Quitar espera' : 'En espera'}
-                </button>
-                <button
-                  onClick={() => toggleStatus(selected.id, selected.status)}
-                  className={`text-xs px-3 py-1.5 rounded border ${
-                    selected.status === 'cerrado' ? 'border-[#3658e1] text-[#3658e1] hover:bg-[#eef1fd]' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {selected.status === 'cerrado' ? 'Reabrir' : 'Cerrar'}
-                </button>
+                <Tooltip text={selected.onHold ? 'Saca el ticket de espera y vuelve a mostrarlo normal' : 'Pone el ticket en espera sin cerrarlo'}>
+                  <button
+                    onClick={() => toggleHold(selected.id, selected.onHold)}
+                    className={`text-xs px-3 py-1.5 rounded border ${
+                      selected.onHold ? 'border-sky-600 text-sky-700 hover:bg-sky-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {selected.onHold ? 'Quitar espera' : 'En espera'}
+                  </button>
+                </Tooltip>
+                <Tooltip text={selected.status === 'cerrado' ? 'Vuelve a abrir este ticket' : 'Marca este ticket como resuelto'}>
+                  <button
+                    onClick={() => toggleStatus(selected.id, selected.status)}
+                    className={`text-xs px-3 py-1.5 rounded border ${
+                      selected.status === 'cerrado' ? 'border-[#3658e1] text-[#3658e1] hover:bg-[#eef1fd]' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {selected.status === 'cerrado' ? 'Reabrir' : 'Cerrar'}
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
@@ -587,22 +600,26 @@ export default function ZeroTicketsPage() {
 
             <div className="border-t p-3">
               <div className="flex items-center gap-2 mb-2 relative">
-                <button
-                  onClick={() => setShowCannedDropdown((v) => !v)}
-                  className="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
-                >
-                  Respuestas ▾
-                </button>
-                <button
-                  onClick={() => {
-                    resetCannedForm();
-                    setShowManageModal(true);
-                    setShowCannedDropdown(false);
-                  }}
-                  className="text-xs px-2.5 py-1 rounded text-gray-500 hover:underline"
-                >
-                  Gestionar
-                </button>
+                <Tooltip text="Inserta una respuesta predeterminada en el mensaje">
+                  <button
+                    onClick={() => setShowCannedDropdown((v) => !v)}
+                    className="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                  >
+                    Respuestas ▾
+                  </button>
+                </Tooltip>
+                <Tooltip text="Crea, edita o borra las respuestas predeterminadas">
+                  <button
+                    onClick={() => {
+                      resetCannedForm();
+                      setShowManageModal(true);
+                      setShowCannedDropdown(false);
+                    }}
+                    className="text-xs px-2.5 py-1 rounded text-gray-500 hover:underline"
+                  >
+                    Gestionar
+                  </button>
+                </Tooltip>
                 {showCannedDropdown && (
                   <div className="absolute bottom-full left-0 mb-1 w-80 max-h-72 overflow-y-auto border rounded-lg bg-white shadow-lg z-10">
                     {cannedResponses.length === 0 && (

@@ -7,6 +7,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Tooltip } from '@/components/ui/tooltip';
 import { toast } from '@/lib/toast';
 import { fmtFechaCorta } from '@/lib/utils/format';
 
@@ -70,10 +71,12 @@ export function EnlaceFotos() {
 
   return (
     <>
-      <button type="button" onClick={() => setAbierto(true)} data-testid="boton-enlace-fotos"
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
-        <Camera className="h-4 w-4" /> Enlace para fotos
-      </button>
+      <Tooltip text="Abre el enlace para que quien compra mande fotos de facturas">
+        <button type="button" onClick={() => setAbierto(true)} data-testid="boton-enlace-fotos"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <Camera className="h-4 w-4" /> Enlace para fotos
+        </button>
+      </Tooltip>
 
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogContent className="max-w-md">
@@ -99,10 +102,12 @@ export function EnlaceFotos() {
                     <div className="flex gap-2">
                       <input readOnly value={enlace.url} onFocus={(e) => e.currentTarget.select()} data-testid="url-enlace"
                         className="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 font-mono text-xs" />
-                      <button type="button" onClick={() => copiar(enlace.url!)} aria-label="Copiar enlace"
-                        className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50">
-                        <Copy className="h-4 w-4" />
-                      </button>
+                      <Tooltip text="Copia el enlace al portapapeles">
+                        <button type="button" onClick={() => copiar(enlace.url!)} aria-label="Copiar enlace"
+                          className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50">
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </Tooltip>
                     </div>
                     <a href={`https://wa.me/?text=${encodeURIComponent(mensaje(enlace.url))}`} target="_blank" rel="noreferrer"
                       className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] text-sm font-semibold text-white">
@@ -127,10 +132,12 @@ export function EnlaceFotos() {
                 </p>
                 <div className="flex gap-2 border-t pt-3">
                   <button type="button" onClick={() => setConfirmar('cambiar')} disabled={ocupado} data-testid="cambiar-enlace"
+                    title="El enlace actual deja de funcionar; tendrás que mandar el nuevo"
                     className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">
                     <RefreshCw className="h-4 w-4" /> Cambiar enlace
                   </button>
                   <button type="button" onClick={() => setConfirmar('desactivar')} disabled={ocupado}
+                    title="Nadie podrá enviar facturas hasta que crees un enlace nuevo"
                     className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-300 text-sm text-red-700 hover:bg-red-50">
                     <Power className="h-4 w-4" /> Desactivar
                   </button>

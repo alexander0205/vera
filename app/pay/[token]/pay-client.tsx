@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { fmtMoneda } from '@/lib/factura/core';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface LineaPago { nombre: string; cantidad: number; totalCentavos: number }
 
@@ -140,9 +141,11 @@ export function PayClient(props: Props) {
             <button style={{ ...styles.btn, ...styles.btnOk }} disabled={loading} onClick={() => simular(true)}>
               {loading ? 'Procesando…' : 'Aprobar pago (simular)'}
             </button>
-            <button style={{ ...styles.btn, ...styles.btnGhost }} disabled={loading} onClick={() => simular(false)}>
-              Rechazar
-            </button>
+            <Tooltip text="Simula un pago rechazado; no cobra dinero real">
+              <button style={{ ...styles.btn, ...styles.btnGhost }} disabled={loading} onClick={() => simular(false)}>
+                Rechazar
+              </button>
+            </Tooltip>
           </div>
         ) : (
           <button style={{ ...styles.btn, ...styles.btnPay }} disabled={loading} onClick={iniciar}>

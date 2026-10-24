@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import useSWR, { mutate as mutarSWR } from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -630,7 +631,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                         <Input aria-label={`Descripción de la línea ${i + 1}`} value={x.l.descripcion} onChange={(e) => setLinea(x.l.key, { descripcion: e.target.value })}
                           placeholder="Qué se compró" title={x.l.descripcion} style={campoTabla} />
                       )}
-                      <Button variant="ghost" size="icon" aria-label={`Quitar la línea ${i + 1}`} disabled={lineas.length === 1} className="@min-[768px]:order-last"
+                      <Button variant="ghost" size="icon" aria-label={`Quitar la línea ${i + 1}`} title="Quitar esta línea" disabled={lineas.length === 1} className="@min-[768px]:order-last"
                         onClick={() => setLineas((ls) => ls.filter((l) => l.key !== x.l.key))}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -797,9 +798,13 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </div>
                   {retencionManual ? (
                     // Sin NCF no hay sugerida que usar: volver atrás es quitarlas.
-                    <Button variant="outline" size="sm" onClick={() => setRetencionManual(false)}>{reglas.gastoSinNcf ? 'Quitar las retenciones' : 'Usar la sugerida'}</Button>
+                    <Tooltip text={reglas.gastoSinNcf ? 'Quita las retenciones de este gasto' : 'Vuelve a usar la retención que calcula el sistema'}>
+                      <Button variant="outline" size="sm" onClick={() => setRetencionManual(false)}>{reglas.gastoSinNcf ? 'Quitar las retenciones' : 'Usar la sugerida'}</Button>
+                    </Tooltip>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={pasarRetencionAManual}>Editar retenciones</Button>
+                    <Tooltip text="Cambia la retención a mano en vez de usar la sugerida">
+                      <Button variant="ghost" size="sm" onClick={pasarRetencionAManual}>Editar retenciones</Button>
+                    </Tooltip>
                   )}
                 </div>
                 {!retencionManual ? (

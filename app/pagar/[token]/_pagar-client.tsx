@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { VistaLinkPago } from '@/lib/administracion-escolar/link-pago';
 import { ZonaArchivo } from '@/components/shared/ZonaArchivo';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const AZUL = '#1d4ed8';
 const BORDE = '#d8dae0';
@@ -54,27 +55,29 @@ function etiquetaDocumento(doc: string): string {
 function Copiable({ valor }: { valor: string }) {
   const [copiado, setCopiado] = useState(false);
   return (
-    <button
-      type="button"
-      aria-label={`Copiar ${valor}`}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(valor);
-          setCopiado(true);
-          setTimeout(() => setCopiado(false), 1400);
-        } catch {
-          // Sin permiso de portapapeles (http, o un navegador viejo): el valor
-          // está a la vista y se puede seleccionar a mano.
-        }
-      }}
-      style={{
-        border: 'none', background: 'transparent', cursor: 'pointer', padding: 4,
-        color: copiado ? '#059669' : '#9ca3af', fontSize: 12, lineHeight: 1,
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-      }}
-    >
-      {copiado ? '✓' : '⧉'}
-    </button>
+    <Tooltip text="Copia este dato al portapapeles">
+      <button
+        type="button"
+        aria-label={`Copiar ${valor}`}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(valor);
+            setCopiado(true);
+            setTimeout(() => setCopiado(false), 1400);
+          } catch {
+            // Sin permiso de portapapeles (http, o un navegador viejo): el valor
+            // está a la vista y se puede seleccionar a mano.
+          }
+        }}
+        style={{
+          border: 'none', background: 'transparent', cursor: 'pointer', padding: 4,
+          color: copiado ? '#059669' : '#9ca3af', fontSize: 12, lineHeight: 1,
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+        }}
+      >
+        {copiado ? '✓' : '⧉'}
+      </button>
+    </Tooltip>
   );
 }
 

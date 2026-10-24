@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, Check, Loader2, RefreshCw, SwitchCamera, AlertTriangle } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Pantalla de captura en el teléfono.
@@ -273,22 +274,26 @@ export function CapturaMovilClient({ token }: { token: string }) {
         {fase === 'listo' && camara === 'encendida' && (
           <>
             <div className="flex items-center justify-center gap-8">
-              <button
-                type="button"
-                onClick={() => setFrontal((f) => !f)}
-                className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center"
-                aria-label="Cambiar de cámara"
-              >
-                <SwitchCamera className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={disparar}
-                className="h-20 w-20 rounded-full bg-white disabled:bg-white/30 flex items-center justify-center ring-4 ring-white/30"
-                aria-label="Tomar foto"
-              >
-                <Camera className="h-8 w-8 text-gray-900" />
-              </button>
+              <Tooltip text="Cambia entre la cámara de atrás y la de frente">
+                <button
+                  type="button"
+                  onClick={() => setFrontal((f) => !f)}
+                  className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center"
+                  aria-label="Cambiar de cámara"
+                >
+                  <SwitchCamera className="h-5 w-5" />
+                </button>
+              </Tooltip>
+              <Tooltip text="Toma la foto de la factura">
+                <button
+                  type="button"
+                  onClick={disparar}
+                  className="h-20 w-20 rounded-full bg-white disabled:bg-white/30 flex items-center justify-center ring-4 ring-white/30"
+                  aria-label="Tomar foto"
+                >
+                  <Camera className="h-8 w-8 text-gray-900" />
+                </button>
+              </Tooltip>
               <span className="h-12 w-12" />
             </div>
           </>
@@ -312,6 +317,7 @@ export function CapturaMovilClient({ token }: { token: string }) {
             <button
               type="button"
               onClick={repetir}
+              title="Descarta esta foto y toma otra"
               disabled={fase === 'subiendo'}
               className="flex-1 h-14 rounded-xl bg-white/10 font-medium flex items-center justify-center gap-2 disabled:opacity-40"
             >
@@ -320,6 +326,7 @@ export function CapturaMovilClient({ token }: { token: string }) {
             <button
               type="button"
               onClick={confirmar}
+              title="Envía esta foto"
               disabled={fase === 'subiendo'}
               className="flex-1 h-14 rounded-xl bg-zero-600 font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
             >

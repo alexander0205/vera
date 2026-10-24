@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface AgentRow {
   id: number;
@@ -128,16 +129,18 @@ export default function ZeroTicketsAgentesPage() {
                   Agregado por {a.addedByName ?? '—'}
                 </div>
               </div>
-              <button
-                onClick={() => toggleActive(a)}
-                className={`text-xs px-3 py-1.5 rounded border shrink-0 ${
-                  a.active
-                    ? 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                    : 'border-teal-600 text-teal-700 hover:bg-teal-50'
-                }`}
-              >
-                {a.active ? 'Desactivar' : 'Reactivar'}
-              </button>
+              <Tooltip text={a.active ? 'Deja de asignarle tickets nuevos; luego podrás reactivarlo' : 'Vuelve a asignarle tickets nuevos'}>
+                <button
+                  onClick={() => toggleActive(a)}
+                  className={`text-xs px-3 py-1.5 rounded border shrink-0 ${
+                    a.active
+                      ? 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                      : 'border-teal-600 text-teal-700 hover:bg-teal-50'
+                  }`}
+                >
+                  {a.active ? 'Desactivar' : 'Reactivar'}
+                </button>
+              </Tooltip>
             </div>
           ))
         )}

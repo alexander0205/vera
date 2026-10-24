@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * La primera pantalla del enlace público: qué es esto y un botón para empezar.
@@ -94,14 +95,16 @@ export function PantallaInicio({ slug, nombre, descripcion, color, pasos }: {
         </Button>
 
         {tokenGuardado && (
-          <Button
-            variant="outlined"
-            color="inherit"
-            onClick={() => router.push(`/f/${slug}/r/${tokenGuardado}`)}
-            sx={{ height: 48, px: 3 }}
-          >
-            Seguir donde lo dejé
-          </Button>
+          <Tooltip text="Retoma el formulario donde lo dejaste, con lo que ya llenaste">
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={() => router.push(`/f/${slug}/r/${tokenGuardado}`)}
+              sx={{ height: 48, px: 3 }}
+            >
+              Seguir donde lo dejé
+            </Button>
+          </Tooltip>
         )}
       </Stack>
     </Box>

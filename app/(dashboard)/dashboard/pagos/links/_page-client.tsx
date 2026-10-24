@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { fmtMoneda } from '@/lib/factura/core';
 import { Link2, Copy, Check, ExternalLink } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
@@ -91,12 +92,16 @@ export default function LinksClient() {
                 <td className="px-3 py-2 text-xs text-slate-500">{l.providerRef ?? '—'}</td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
-                    <button onClick={() => copiar(l.url)} title="Copiar link" className="p-1 hover:bg-slate-200 rounded">
-                      {copied === l.url ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-slate-500" />}
-                    </button>
-                    <a href={l.url} target="_blank" rel="noreferrer" title="Abrir" className="p-1 hover:bg-slate-200 rounded">
-                      <ExternalLink className="h-4 w-4 text-slate-500" />
-                    </a>
+                    <Tooltip text="Copia el link de pago al portapapeles">
+                      <button onClick={() => copiar(l.url)} aria-label="Copiar link" className="p-1 hover:bg-slate-200 rounded">
+                        {copied === l.url ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-slate-500" />}
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Abre el link de pago en otra pestaña">
+                      <a href={l.url} target="_blank" rel="noreferrer" aria-label="Abrir link de pago" className="p-1 hover:bg-slate-200 rounded">
+                        <ExternalLink className="h-4 w-4 text-slate-500" />
+                      </a>
+                    </Tooltip>
                   </div>
                 </td>
               </tr>
