@@ -80,6 +80,7 @@ export const PANTALLAS: PantallaDef[] = [
   esc({ id: 'escolar-responsables',  label: 'Responsables', href: '/escolar/responsables', rutas: ['/escolar/cobrar-grupo'], descripcion: 'Las familias que pagan y lo que deben' }),
   esc({ id: 'escolar-pagos',         label: 'Pagos', href: '/escolar/pagos', descripcion: 'Pagos aplicados y comprobantes por aprobar' }),
   esc({ id: 'escolar-avisos',        label: 'Avisos', href: '/escolar/avisos', descripcion: 'Recordatorios de cobro que se enviaron' }),
+  esc({ id: 'escolar-por-revisar',   label: 'Por revisar', href: '/escolar/por-revisar', descripcion: 'Tareas de los alumnos y las familias que alguien tiene que revisar' }),
   esc({ id: 'escolar-configuracion', label: 'Configuración', href: '/escolar/configuracion', rutas: ['/escolar/sigerd', '/escolar/personal'], descripcion: 'Períodos, cursos, tarifas y conceptos' }),
 
   // ── Facturación ──

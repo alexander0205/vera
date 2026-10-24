@@ -7,9 +7,11 @@ import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, Receipt, Smartphone, UserMinus, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, Loader2, Wallet, Pencil, Plus, ChevronRight, Mail, MessageCircle, MoreHorizontal, Receipt, Smartphone, UserMinus, UserPlus, Users } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { BajaReingresoDialog } from '@/components/administracion-escolar/BajaReingresoDialog';
 import { MovimientosEstudiante, claveMovimientosEstudiante } from '@/components/administracion-escolar/MovimientosEstudiante';
+import { TareasEstudiante } from '@/components/administracion-escolar/TareasEstudiante';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
@@ -320,157 +322,187 @@ export default function PerfilEstudianteClient({ id, perfilEmpresa }: {
         />
       )}
 
-      {/* Tarjeta horizontal del estudiante (sin encabezado duplicado) */}
+      {/* Tarjeta horizontal del estudiante (sin encabezado duplicado).
+
+          El nombre va entero: con los tres botones pegados en su misma fila se
+          cortaba a media palabra («LUIS ENRIQUE GON…») y era lo único que de
+          verdad había que leer. Las acciones del alumno van juntas a su
+          derecha y bajan de línea si no caben; las del responsable, dentro de
+          su bloque. */}
       <div className="border border-gray-200 rounded-xl bg-white p-4">
-              <div className="flex flex-col md:flex-row md:items-center gap-4">
-                {/* Identidad + chips */}
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  {/* La foto se toma con el teléfono desde aquí (QR): quien la
-                      hace está delante del alumno, no delante del ordenador. */}
-                  <CapturaFoto
-                    entidad="estudiante"
-                    entidadId={estudiante.id}
-                    nombre={`${estudiante.nombres} ${estudiante.apellidos}`}
-                    editable={puedeGestionar}
-                    tamano={56}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-lg font-bold text-gray-900 truncate">{estudiante.nombres} {estudiante.apellidos}</p>
-                      {estudiante.estado !== 'activo' && (
-                        <Badge variant="outline" className="capitalize text-gray-500 shrink-0">{estudiante.estado}</Badge>
-                      )}
-                      {/* Editar al ALUMNO: su nombre, su fecha de nacimiento,
-                          su acta, su RNE.
-
-                          Estaba, pero como un texto gris en la esquina de
-                          «Datos adicionales» —una sección plegada, que además
-                          desaparece entera cuando el alumno viene de SIGERD sin
-                          un solo campo lleno—. Quien entraba a corregirle el
-                          nombre a un niño concluía que no se podía.
-
-                          Va pegado al nombre y no al lado de «Editar
-                          responsable»: ahí ya hubo un botón así y se leía como
-                          si editara al padre, que es el bloque que tiene al
-                          lado. */}
-                      {puedeGestionar && (
-                        <Button asChild variant="outline" size="sm" className="shrink-0">
-                          <Link href={`/escolar/estudiantes/${estudiante.id}/editar`}>
-                            <Pencil className="h-4 w-4 mr-1.5" />Editar estudiante
-                          </Link>
-                        </Button>
-                      )}
-                      {/* Se va y a veces vuelve. No es editar un campo: arrastra
-                          su matrícula, su mensualidad y sus cuotas, así que va
-                          por un diálogo que enseña qué se toca antes de hacerlo. */}
-                      {puedeGestionar && (
-                        estudiante.estado === 'activo' ? (
-                          <Button variant="ghost" size="sm" className="shrink-0 text-gray-500"
-                            onClick={() => setCambioEstado('baja')}>
-                            <UserMinus className="h-4 w-4 mr-1.5" />Dar de baja
-                          </Button>
-                        ) : (
-                          <Button variant="outline" size="sm" className="shrink-0"
-                            onClick={() => setCambioEstado('reingreso')}>
-                            <UserPlus className="h-4 w-4 mr-1.5" />Reactivar
-                          </Button>
-                        )
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                      <InfoChip k="Código" v={estudiante.codigo ?? '—'} />
-                      {matriculaActiva?.curso && <InfoChip k="Curso" v={matriculaActiva.curso} />}
-                      {matriculaActiva?.periodo && <InfoChip k="Período" v={matriculaActiva.periodo} />}
-                      <InfoChip k="Sexo · edad" v={`${labelSexo(estudiante.sexo)}${calcularEdad(estudiante.fechaNacimiento) != null ? ` · ${calcularEdad(estudiante.fechaNacimiento)} años` : ''}`} />
-                      {/* Deuda = cargos + facturas sin cargo. Contando solo los
-                          cargos, el alumno traído de Contactos con una factura
-                          sin pagar salía «Al día» con la deuda delante. */}
-                      <span className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border ${
-                        estudiante.deudaCentavos + deudaFacturas > 0
-                          ? 'bg-red-50 text-red-600 border-red-200'
-                          : 'bg-zero-50 text-zero-700 border-zero-200'}`}>
-                        <span className="text-[11px] opacity-70">Pendiente</span>
-                        <b className="font-semibold">
-                          {estudiante.deudaCentavos + deudaFacturas > 0
-                            ? fmtDOP(estudiante.deudaCentavos + deudaFacturas)
-                            : 'Al día'}
-                        </b>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                {/* Responsable de pago: el contacto al que se le factura. */}
-                <div className="md:border-l md:border-gray-100 md:pl-4 md:min-w-[200px] shrink-0">
-                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Responsable de pago</p>
-                  {responsable ? (
-                    <div className="mt-0.5">
-                      <p className="font-semibold text-sm text-gray-900 truncate">{responsable.razonSocial}</p>
-                      <p className="text-xs text-gray-500 truncate">{responsable.rnc ?? 'sin RNC'}</p>
-                      {/* Por dónde se le PUEDE escribir. Lo que falta se ve en
-                          gris y se arregla pulsándolo: sin esto, que a una
-                          familia no le llegue nada solo se descubría cuando el
-                          aviso fallaba —y el fallo vive en otra pantalla. */}
-                      <ContactoResponsable
-                        responsable={responsable}
-                        onArreglar={puedeGestionar
-                          ? () => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('editar'); setResponsableAbierto(true); }
-                          : undefined}
-                      />
-                      {/* A su ficha, no a su enlace de pago.
-                          Aquí el enlace se leía como «el enlace de ESTA
-                          factura» —lo primero que preguntó quien lo vio fue a
-                          qué factura llevaba— y no lo es: hay uno por familia y
-                          abre todo lo que deben, también lo de los otros hijos.
-                          Vive en la ficha del responsable, que es donde ese
-                          alcance se ve, y desde aquí se llega en un clic. */}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        {/* Copiarlo desde aquí, sin dar el rodeo por la ficha de
-                            la familia. El enlace SIGUE siendo de la familia —lo
-                            dice el título del botón— pero quien está mirando a
-                            un alumno y quiere mandárselo al padre no debería
-                            tener que cambiar de pantalla para eso. */}
-                        <CopiarLinkPago
-                          clientId={responsable.clientId}
-                          nombre={responsable.razonSocial}
-                          como="boton"
-                          className="text-[11px]"
-                        />
-                        <Link href={`/escolar/responsables/${responsable.clientId}`}
-                          className="inline-flex items-center gap-1 text-[11px] text-zero-600 hover:text-zero-800">
-                          <Users className="h-3 w-3" />
-                          Ver la familia
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="mt-0.5 text-sm text-red-600">Falta asignarlo</p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          {/* Identidad + chips */}
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            {/* La foto se toma con el teléfono desde aquí (QR): quien la
+                hace está delante del alumno, no delante del ordenador. */}
+            <CapturaFoto
+              entidad="estudiante"
+              entidadId={estudiante.id}
+              nombre={`${estudiante.nombres} ${estudiante.apellidos}`}
+              editable={puedeGestionar}
+              tamano={56}
+            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                <div className="flex min-w-[12rem] flex-1 flex-wrap items-center gap-2">
+                  <h1 className="break-words text-lg font-bold leading-snug text-gray-900 [text-wrap:balance]">
+                    {estudiante.nombres} {estudiante.apellidos}
+                  </h1>
+                  {estudiante.estado !== 'activo' && (
+                    <Badge variant="outline" className="capitalize text-gray-500 shrink-0">{estudiante.estado}</Badge>
                   )}
                 </div>
-                {/* Edita al RESPONSABLE, que es lo que tiene al lado.
-                    Antes llevaba a editar la ficha del alumno, y pegado al
-                    bloque del responsable se leía como si editara a este —
-                    quien quería corregirle el teléfono al padre acababa en el
-                    formulario del hijo. La ficha se edita desde «Datos
-                    adicionales», que es donde está.
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {/* Lo pendiente de decidir de este alumno y de su familia:
+                      su número a la vista y la conversación en un panel. */}
+                  <TareasEstudiante estudianteId={estudiante.id}
+                    nombre={nombreCorto(estudiante.nombres)}
+                    puedeGestionar={puedeGestionar} />
+                  {/* Editar al ALUMNO: su nombre, su fecha de nacimiento,
+                      su acta, su RNE.
 
-                    En un diálogo y no en /dashboard/clientes: corregir un
-                    teléfono es cosa de diez segundos y llevaba a otra pantalla
-                    del sistema, de la que se volvía perdiendo el período y la
-                    pestaña que se estaban mirando. */}
+                      Estaba, pero como un texto gris en la esquina de
+                      «Datos adicionales» —una sección plegada, que además
+                      desaparece entera cuando el alumno viene de SIGERD sin
+                      un solo campo lleno—. Quien entraba a corregirle el
+                      nombre a un niño concluía que no se podía.
+
+                      Va con el alumno y no al lado de «Editar responsable»:
+                      ahí ya hubo un botón así y se leía como si editara al
+                      padre, que es el bloque que tiene al lado. */}
+                  {puedeGestionar && (
+                    <Button asChild variant="outline" size="sm" className="shrink-0">
+                      <Link href={`/escolar/estudiantes/${estudiante.id}/editar`}>
+                        <Pencil className="h-4 w-4 mr-1.5" />Editar estudiante
+                      </Link>
+                    </Button>
+                  )}
+                  {/* Se va y a veces vuelve. No es editar un campo: arrastra
+                      su matrícula, su mensualidad y sus cuotas, así que va
+                      por un diálogo que enseña qué se toca antes de hacerlo.
+                      Darlo de baja es raro y va en «⋯»; reactivarlo es lo
+                      primero que se busca en un alumno de baja, y se ve. */}
+                  {puedeGestionar && (
+                    estudiante.estado === 'activo' ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="shrink-0 px-2 text-gray-500" aria-label="Más acciones del alumno">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onSelect={() => setCambioEstado('baja')}>
+                            <UserMinus className="h-4 w-4" />
+                            <span className="flex-1">Dar de baja</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <Button variant="outline" size="sm" className="shrink-0"
+                        onClick={() => setCambioEstado('reingreso')}>
+                        <UserPlus className="h-4 w-4 mr-1.5" />Reactivar
+                      </Button>
+                    )
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <InfoChip k="Código" v={estudiante.codigo ?? '—'} />
+                {matriculaActiva?.curso && <InfoChip k="Curso" v={matriculaActiva.curso} />}
+                {matriculaActiva?.periodo && <InfoChip k="Período" v={matriculaActiva.periodo} />}
+                <InfoChip k="Sexo · edad" v={`${labelSexo(estudiante.sexo)}${calcularEdad(estudiante.fechaNacimiento) != null ? ` · ${calcularEdad(estudiante.fechaNacimiento)} años` : ''}`} />
+                {/* Deuda = cargos + facturas sin cargo. Contando solo los
+                    cargos, el alumno traído de Contactos con una factura
+                    sin pagar salía «Al día» con la deuda delante. */}
+                <span className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border ${
+                  estudiante.deudaCentavos + deudaFacturas > 0
+                    ? 'bg-red-50 text-red-600 border-red-200'
+                    : 'bg-zero-50 text-zero-700 border-zero-200'}`}>
+                  <span className="text-[11px] opacity-70">Pendiente</span>
+                  <b className="font-semibold">
+                    {estudiante.deudaCentavos + deudaFacturas > 0
+                      ? fmtDOP(estudiante.deudaCentavos + deudaFacturas)
+                      : 'Al día'}
+                  </b>
+                </span>
+              </div>
+            </div>
+          </div>
+          {/* Responsable de pago: el contacto al que se le factura. */}
+          <div className="border-t border-gray-100 pt-3 lg:w-72 lg:shrink-0 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Responsable de pago</p>
+              {/* Edita al RESPONSABLE, y por eso vive dentro de su bloque.
+                  Antes llevaba a editar la ficha del alumno, y pegado al
+                  bloque del responsable se leía como si editara a este —
+                  quien quería corregirle el teléfono al padre acababa en el
+                  formulario del hijo.
+
+                  En un diálogo y no en /dashboard/clientes: corregir un
+                  teléfono es cosa de diez segundos y llevaba a otra pantalla
+                  del sistema, de la que se volvía perdiendo el período y la
+                  pestaña que se estaban mirando. */}
+              {puedeGestionar && responsable && (
+                <button type="button"
+                  onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('editar'); setResponsableAbierto(true); }}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-zero-600 hover:bg-zero-50 hover:text-zero-800">
+                  <Pencil className="h-3 w-3" />Editar
+                </button>
+              )}
+            </div>
+            {responsable ? (
+              <div className="mt-0.5">
+                <p className="font-semibold text-sm text-gray-900 break-words">{responsable.razonSocial}</p>
+                <p className="text-xs text-gray-500 truncate">{responsable.rnc ?? 'sin RNC'}</p>
+                {/* Por dónde se le PUEDE escribir. Lo que falta se ve en
+                    gris y se arregla pulsándolo: sin esto, que a una
+                    familia no le llegue nada solo se descubría cuando el
+                    aviso fallaba —y el fallo vive en otra pantalla. */}
+                <ContactoResponsable
+                  responsable={responsable}
+                  onArreglar={puedeGestionar
+                    ? () => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('editar'); setResponsableAbierto(true); }
+                    : undefined}
+                />
+                {/* A su ficha, no a su enlace de pago.
+                    Aquí el enlace se leía como «el enlace de ESTA
+                    factura» —lo primero que preguntó quien lo vio fue a
+                    qué factura llevaba— y no lo es: hay uno por familia y
+                    abre todo lo que deben, también lo de los otros hijos.
+                    Vive en la ficha del responsable, que es donde ese
+                    alcance se ve, y desde aquí se llega en un clic. */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {/* Copiarlo desde aquí, sin dar el rodeo por la ficha de
+                      la familia. El enlace SIGUE siendo de la familia —lo
+                      dice el título del botón— pero quien está mirando a
+                      un alumno y quiere mandárselo al padre no debería
+                      tener que cambiar de pantalla para eso. */}
+                  <CopiarLinkPago
+                    clientId={responsable.clientId}
+                    nombre={responsable.razonSocial}
+                    como="boton"
+                    className="text-[11px]"
+                  />
+                  <Link href={`/escolar/responsables/${responsable.clientId}`}
+                    className="inline-flex items-center gap-1 text-[11px] text-zero-600 hover:text-zero-800">
+                    <Users className="h-3 w-3" />
+                    Ver la familia
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-0.5 space-y-2">
+                <p className="text-sm text-red-600">Falta asignarlo</p>
                 {puedeGestionar && (
-                  responsable ? (
-                    <Button variant="outline" size="sm" className="shrink-0 self-start md:self-center"
-                      onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('editar'); setResponsableAbierto(true); }}>
-                      <Pencil className="h-4 w-4 mr-1.5" />Editar responsable
-                    </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" className="shrink-0 self-start md:self-center"
-                      onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
-                      <Wallet className="h-4 w-4 mr-1.5" />Asignar responsable
-                    </Button>
-                  )
+                  <Button variant="outline" size="sm"
+                    onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                    <Wallet className="h-4 w-4 mr-1.5" />Asignar responsable
+                  </Button>
                 )}
               </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Lo que la familia debe en Facturación por facturas que no son de este
@@ -1059,4 +1091,10 @@ function Historial({ matriculas, pagos }: { matriculas: Matricula[]; pagos: Pago
       ))}
     </div>
   );
+}
+
+/** «LUIS ENRIQUE» → «Luis»: el primer nombre, como se le dice, para los botones de tareas. */
+function nombreCorto(nombres: string) {
+  const primero = nombres.trim().split(/\s+/)[0] ?? '';
+  return primero ? primero[0].toLocaleUpperCase('es-DO') + primero.slice(1).toLocaleLowerCase('es-DO') : nombres;
 }
