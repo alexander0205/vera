@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { PanelTarea, Segmento, traer } from '@/components/administracion-escolar/TareasEstudiante';
 import { refrescarCampana } from '@/components/administracion-escolar/CampanaTareas';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
 import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-escolar/tareas';
 
 /**
@@ -120,7 +121,7 @@ export default function PorRevisarClient() {
         {/* Zero AI mira los cargos y las facturas y abre una tarea por cada
             cosa que alguien tiene que decidir: un pago de más guardado, un mes
             cobrado dos veces, una factura que no cubre su cargo. */}
-        {puedeGestionar && (
+        {ZERO_AI_TAREAS && puedeGestionar && (
           <button type="button" onClick={() => void revisarConIa()} disabled={revisando}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60">
             {revisando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -129,10 +130,10 @@ export default function PorRevisarClient() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white lg:grid-cols-4">
+      <div className={`grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white ${ZERO_AI_TAREAS ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         <Kpi titulo="Abiertas" valor={k?.abiertas} nota={k ? `en ${k.familias} ${k.familias === 1 ? 'familia' : 'familias'}` : ''} resalte={!!k?.abiertas} />
         <Kpi titulo="Asignadas a ti" valor={k?.mias} nota="con tu nombre" />
-        <Kpi titulo="Sugeridas por Zero AI" valor={k?.ia} nota="las encontró al revisar facturas" />
+        {ZERO_AI_TAREAS && <Kpi titulo="Sugeridas por Zero AI" valor={k?.ia} nota="las encontró al revisar facturas" />}
         <Kpi titulo="Más de una semana" valor={k?.viejas} nota={k?.viejas ? 'conviene moverlas' : 'nada atrasado'} alerta={!!k?.viejas} />
       </div>
 
@@ -142,9 +143,11 @@ export default function PorRevisarClient() {
           { id: 'todas', texto: `Todo el colegio${cuentas ? ` · ${cuentas.todas}` : ''}` },
           { id: 'hechas', texto: `Completadas${cuentas ? ` · ${cuentas.hechas}` : ''}` },
         ]} />
-        <Segmento etiqueta="Quién la creó" valor={origen} onCambio={setOrigen} opciones={[
-          { id: 'todas', texto: 'Todas' }, { id: 'ia', texto: 'Zero AI' }, { id: 'personas', texto: 'Personas' },
-        ]} />
+        {ZERO_AI_TAREAS && (
+          <Segmento etiqueta="Quién la creó" valor={origen} onCambio={setOrigen} opciones={[
+            { id: 'todas', texto: 'Todas' }, { id: 'ia', texto: 'Zero AI' }, { id: 'personas', texto: 'Personas' },
+          ]} />
+        )}
         <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
           Asignada a
           <select value={asignada} onChange={(e) => setAsignada(e.target.value)}
@@ -205,9 +208,9 @@ export default function PorRevisarClient() {
                           </span>
                           {t.asignada}
                         </span>
-                        {t.creadaPorIa
-                          ? <span className="inline-flex items-center gap-1 rounded bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-700"><Sparkles className="h-3 w-3" />Zero AI</span>
-                          : <span className="rounded bg-gray-100 px-1.5 py-0.5">Persona</span>}
+                        {t.creadaPorIa && (
+                          <span className="inline-flex items-center gap-1 rounded bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-700"><Sparkles className="h-3 w-3" />Zero AI</span>
+                        )}
                         {t.documento && <span className="font-mono text-zero-700">{t.documento}</span>}
                       </span>
                     </button>

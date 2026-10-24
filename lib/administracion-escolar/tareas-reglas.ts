@@ -131,6 +131,14 @@ export function aQuienAvisar(
 
 // ── Zero AI: lo que encuentra al revisar cargos y facturas ──────────────────
 
+/**
+ * Zero AI está apagado: el usuario pidió no subirlo todavía (24-10-2026).
+ * Encenderlo es poner `true`: aparecen el botón «Revisar con Zero AI», el
+ * número de «Sugeridas por Zero AI» y el filtro por origen en «Por revisar», y
+ * la ruta `/api/administracion-escolar/tareas/zero-ai` deja de dar 404.
+ */
+export const ZERO_AI_TAREAS = false;
+
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
   'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const rd = (centavos: number) =>
