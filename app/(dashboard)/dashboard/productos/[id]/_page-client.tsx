@@ -16,6 +16,7 @@ import { useVolver } from '@/lib/hooks/useVolver';
 import MuiButton from '@mui/material/Button';
 import { ProductoFormModal } from '@/components/productos/ProductoFormModal';
 import AlmacenesPosSection from './_almacenes-pos';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Producto {
   id:                   number;
@@ -341,21 +342,23 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
       </MuiLink>
 
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-        <Box component="label" title={producto?.imagen ? 'Cambiar imagen' : 'Agregar imagen'}
-          sx={{
-            position: 'relative', height: 56, width: 56, flexShrink: 0, cursor: 'pointer',
-            overflow: 'hidden', borderRadius: '12px', bgcolor: '#eef2fe',
-            '&:hover [data-overlay]': { bgcolor: 'rgba(0,0,0,0.4)', opacity: 1 },
-          }}>
-          <input type="file" accept="image/*" disabled={subiendoImagen} style={{ display: 'none' }}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagenFile(f); e.target.value = ''; }} />
-          {producto?.imagen
-            ? <Box component="img" src={producto.imagen} alt={producto.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
-            : <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center' }}><Package style={{ width: 24, height: 24, color: '#3658e1' }} /></Box>}
-          <Box data-overlay sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0)', color: '#fff', opacity: 0, transition: 'all 0.2s' }}>
-            {subiendoImagen ? <Box component="span" sx={{ fontSize: '10px' }}>…</Box> : <Camera style={{ width: 16, height: 16 }} />}
+        <Tooltip text={producto?.imagen ? 'Cambia la foto de este producto' : 'Sube una foto para identificar este producto'}>
+          <Box component="label" aria-label={producto?.imagen ? 'Cambiar imagen' : 'Agregar imagen'}
+            sx={{
+              position: 'relative', height: 56, width: 56, flexShrink: 0, cursor: 'pointer',
+              overflow: 'hidden', borderRadius: '12px', bgcolor: '#eef2fe',
+              '&:hover [data-overlay]': { bgcolor: 'rgba(0,0,0,0.4)', opacity: 1 },
+            }}>
+            <input type="file" accept="image/*" disabled={subiendoImagen} style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagenFile(f); e.target.value = ''; }} />
+            {producto?.imagen
+              ? <Box component="img" src={producto.imagen} alt={producto.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
+              : <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center' }}><Package style={{ width: 24, height: 24, color: '#3658e1' }} /></Box>}
+            <Box data-overlay sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0)', color: '#fff', opacity: 0, transition: 'all 0.2s' }}>
+              {subiendoImagen ? <Box component="span" sx={{ fontSize: '10px' }}>…</Box> : <Camera style={{ width: 16, height: 16 }} />}
+            </Box>
           </Box>
-        </Box>
+        </Tooltip>
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>{producto?.nombre ?? '—'}</Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>{producto?.referencia ? `Ref. ${producto.referencia}` : 'Sin referencia'}</Typography>

@@ -27,6 +27,7 @@ import IconButton from '@mui/material/IconButton';
 import { Tag, Plus, Pencil, Trash2, Eye } from 'lucide-react';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface ListaPrecio {
   id: number;
@@ -267,15 +268,21 @@ export default function ListasPreciosPage() {
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                        <IconButton size="small" title="Ver items" onClick={() => abrirItems(lista)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
-                          <Eye size={16} />
-                        </IconButton>
-                        <IconButton size="small" title="Editar" onClick={() => abrirEdicion(lista)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
-                          <Pencil size={16} />
-                        </IconButton>
-                        <IconButton size="small" title="Eliminar" onClick={() => { setDeleteTarget(lista); setDeleteError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
-                          <Trash2 size={16} />
-                        </IconButton>
+                        <Tooltip text="Muestra los productos y precios que tiene esta lista">
+                          <IconButton size="small" aria-label="Ver items" onClick={() => abrirItems(lista)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                            <Eye size={16} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip text="Cambia el nombre, el tipo o el ajuste de esta lista">
+                          <IconButton size="small" aria-label="Editar" onClick={() => abrirEdicion(lista)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                            <Pencil size={16} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip text="Borra esta lista de precios; pide confirmar antes">
+                          <IconButton size="small" aria-label="Eliminar lista" onClick={() => { setDeleteTarget(lista); setDeleteError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                            <Trash2 size={16} />
+                          </IconButton>
+                        </Tooltip>
                       </Box>
                     </TableCell>
                   </TableRow>

@@ -20,6 +20,7 @@ import IconButton from '@mui/material/IconButton';
 import { FolderOpen, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface Categoria {
   id: number;
@@ -163,12 +164,16 @@ export default function CategoriasPage() {
                   <TableCell><Typography variant="body2" sx={{ color: '#6b7280' }}>{new Date(c.createdAt).toLocaleDateString('es-DO')}</Typography></TableCell>
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <IconButton size="small" onClick={() => abrirEdicion(c)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
-                        <Pencil size={16} />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => { setDeleteTarget(c); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
-                        <Trash2 size={16} />
-                      </IconButton>
+                      <Tooltip text="Cambia el nombre o la descripción de esta categoría">
+                        <IconButton size="small" aria-label="Editar" onClick={() => abrirEdicion(c)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                          <Pencil size={16} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip text="Borra la categoría; los productos asignados no se tocan">
+                        <IconButton size="small" aria-label="Borrar categoría" onClick={() => { setDeleteTarget(c); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>
