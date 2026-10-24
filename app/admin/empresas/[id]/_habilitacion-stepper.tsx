@@ -16,6 +16,7 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import { keyframes } from '@mui/material/styles';
 import { firmarXml, descargarBase64 } from '@/lib/habilitacion/client';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // Animación de giro para loaders (reemplaza el `animate-spin` de Tailwind)
 const spin = keyframes`
@@ -351,15 +352,16 @@ export function HabilitacionStepper({
             </Typography>
           </Box>
           {completedCount > 0 && (
-            <Button
-              size="small"
-              onClick={() => { if (confirm('¿Reiniciar todo el progreso de habilitación de este team?')) reset(); }}
-              title="Reiniciar progreso local"
-              sx={{ fontSize: '0.6875rem', color: 'text.disabled', textTransform: 'none', minWidth: 0, px: 1, py: 0.5, borderRadius: '6px', '&:hover': { color: 'error.main', bgcolor: '#fef2f2' } }}
-              startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
-            >
-              Reiniciar
-            </Button>
+            <Tooltip text="Borra el avance de los pasos guardado en este navegador; no toca la DGII">
+              <Button
+                size="small"
+                onClick={() => { if (confirm('¿Reiniciar todo el progreso de habilitación de este team?')) reset(); }}
+                sx={{ fontSize: '0.6875rem', color: 'text.disabled', textTransform: 'none', minWidth: 0, px: 1, py: 0.5, borderRadius: '6px', '&:hover': { color: 'error.main', bgcolor: '#fef2f2' } }}
+                startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
+              >
+                Reiniciar
+              </Button>
+            </Tooltip>
           )}
           <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
             <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#2a45c4', fontVariantNumeric: 'tabular-nums' }}>{pctComplete.toFixed(0)}%</Typography>
@@ -546,17 +548,19 @@ function StepNavFooter({ stepId, status, isCurrent, onMarkDone }: {
           ? 'Cuando termines aquí, marca completado para avanzar al siguiente paso.'
           : 'Este paso no es el actual. Puedes revisarlo pero marcarlo no salta el orden.'}
       </Typography>
-      <Button
-        type="button"
-        variant="contained"
-        size="small"
-        onClick={onMarkDone}
-        endIcon={!isLast ? <ArrowRight style={{ width: 14, height: 14 }} /> : undefined}
-        disableElevation
-        sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', flexShrink: 0, '&:hover': { bgcolor: '#2a45c4' } }}
-      >
-        {isLast ? 'Finalizar habilitación' : 'Marcar completado y continuar'}
-      </Button>
+      <Tooltip text="Marca este paso como hecho y abre el siguiente; no comprueba nada en la DGII">
+        <Button
+          type="button"
+          variant="contained"
+          size="small"
+          onClick={onMarkDone}
+          endIcon={!isLast ? <ArrowRight style={{ width: 14, height: 14 }} /> : undefined}
+          disableElevation
+          sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', flexShrink: 0, '&:hover': { bgcolor: '#2a45c4' } }}
+        >
+          {isLast ? 'Finalizar habilitación' : 'Marcar completado y continuar'}
+        </Button>
+      </Tooltip>
     </Box>
   );
 }
@@ -776,9 +780,11 @@ function FirmarPostulacionPanel({
               <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', px: 1, py: 0.75 }}>
                 <Upload style={{ width: 12, height: 12, flexShrink: 0, color: '#9ca3af' }} />
                 <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{displayFileName}</Typography>
-                <IconButton size="small" onClick={handleReset} title="Quitar archivo" sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
-                  <X style={{ width: 12, height: 12 }} />
-                </IconButton>
+                <Tooltip text="Quita este archivo y elige otro">
+                  <IconButton size="small" onClick={handleReset} aria-label="Quitar archivo" sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
+                    <X style={{ width: 12, height: 12 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
             )}
           </Box>
@@ -848,6 +854,8 @@ function FirmarPostulacionPanel({
         <Button
           type="button"
           onClick={handleReset}
+          title="Quita la firma de este paso para firmar otro archivo"
+          aria-label="Firmar otro XML"
           sx={{ mt: 1.5, fontSize: '0.6875rem', color: 'text.secondary', textTransform: 'none', textDecoration: 'underline', alignSelf: 'center', '&:hover': { color: 'text.primary' } }}
         >
           Firmar otro XML
@@ -891,14 +899,16 @@ function DgiiCopyField({ label, value, isUrl = false, required = true, colSpan }
         <Typography component="span" sx={{ flex: 1, px: 1.5, py: 0.75, fontSize: '0.75rem', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, fontFamily: 'monospace' }}>
           {isUrl ? value.replace(/^https?:\/\//, '') : value}
         </Typography>
-        <IconButton
-          size="small"
-          onClick={handleCopy}
-          title="Copiar"
-          sx={{ flexShrink: 0, borderRadius: 0, px: 1.25, py: 0.75, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#eef2fe', color: '#3658e1' } }}
-        >
-          {copied ? <Check style={{ width: 14, height: 14, color: '#3658e1' }} /> : <Copy style={{ width: 14, height: 14 }} />}
-        </IconButton>
+        <Tooltip text="Copia este valor al portapapeles">
+          <IconButton
+            size="small"
+            onClick={handleCopy}
+            aria-label="Copiar"
+            sx={{ flexShrink: 0, borderRadius: 0, px: 1.25, py: 0.75, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#eef2fe', color: '#3658e1' } }}
+          >
+            {copied ? <Check style={{ width: 14, height: 14, color: '#3658e1' }} /> : <Copy style={{ width: 14, height: 14 }} />}
+          </IconButton>
+        </Tooltip>
       </Box>
     </Box>
   );
@@ -1156,9 +1166,11 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', px: 1, py: 0.75 }}>
                 <Upload style={{ width: 12, height: 12, flexShrink: 0, color: '#9ca3af' }} />
                 <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.name}</Typography>
-                <IconButton size="small" onClick={() => setFile(null)} sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
-                  <X style={{ width: 12, height: 12 }} />
-                </IconButton>
+                <Tooltip text="Quita este archivo y elige otro">
+                  <IconButton size="small" onClick={() => setFile(null)} aria-label="Quitar archivo" sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
+                    <X style={{ width: 12, height: 12 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
             )}
             {/* e-NCFs a excluir (re-correr solo los que fallaron) */}
@@ -1210,6 +1222,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                 onClick={handleReemitirDuplicado}
                 disabled={reemitting}
                 title="Re-emite todos los casos de esta corrida sin borrarla"
+                aria-label="Re-emitir"
                 startIcon={reemitting
                   ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
                   : <RotateCcw style={{ width: 12, height: 12 }} />}
@@ -1221,6 +1234,8 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                 type="button"
                 variant="outlined"
                 fullWidth
+                title="Quita esta corrida de la pantalla; no la borra en ecf-api"
+                aria-label="Olvidar corrida"
                 onClick={handleForgetRun}
                 startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
                 sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: 'text.secondary', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f9fafb' } }}
@@ -1251,6 +1266,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
               <Button
                 type="button"
                 onClick={() => runId && fetchRun(runId)}
+                title="Vuelve a leer el estado desde el servidor"
                 startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
                 sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#3658e1', textTransform: 'none', '&:hover': { color: '#2a45c4' } }}
               >
@@ -1285,19 +1301,20 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                   <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#b91c1c' }}>
                     {failedCases.length} caso{failedCases.length === 1 ? '' : 's'} fallido{failedCases.length === 1 ? '' : 's'}
                   </Typography>
-                  <Button
-                    type="button"
-                    size="small"
-                    onClick={() => {
-                      setSkipEncfs(failedEncfs.join(','));
-                      handleForgetRun();
-                    }}
-                    title="Copia los e-NCF fallidos al campo Excluir y limpia la corrida para re-subir"
-                    startIcon={<RotateCcw style={{ width: 10, height: 10 }} />}
-                    sx={{ fontSize: '0.625rem', bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, textTransform: 'none', borderRadius: '4px', '&:hover': { bgcolor: '#fde68a' } }}
-                  >
-                    Excluir fallidos y re-subir
-                  </Button>
+                  <Tooltip text="Copia los e-NCF fallidos al campo Excluir y limpia la corrida para re-subir">
+                    <Button
+                      type="button"
+                      size="small"
+                      onClick={() => {
+                        setSkipEncfs(failedEncfs.join(','));
+                        handleForgetRun();
+                      }}
+                      startIcon={<RotateCcw style={{ width: 10, height: 10 }} />}
+                      sx={{ fontSize: '0.625rem', bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, textTransform: 'none', borderRadius: '4px', '&:hover': { bgcolor: '#fde68a' } }}
+                    >
+                      Excluir fallidos y re-subir
+                    </Button>
+                  </Tooltip>
                 </Box>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 192, overflowY: 'auto' }}>
                   {failedCases.map((c, i) => (
@@ -1359,33 +1376,36 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
             <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c' }}>{error}</Typography>
             {dupRunId && (
               <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                <Button
-                  type="button"
-                  variant="contained"
-                  size="small"
-                  onClick={handleReemitirDuplicado}
-                  disabled={reemitting}
-                  disableElevation
-                  title="Reusa la corrida previa y re-emite sus casos sin borrarla ni re-subir el Excel"
-                  startIcon={reemitting
-                    ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
-                    : <RotateCcw style={{ width: 12, height: 12 }} />}
-                  sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
-                >
-                  {reemitting ? 'Re-emitiendo…' : 'Re-emitir sin borrar'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="contained"
-                  size="small"
-                  onClick={handleDeleteDuplicate}
-                  disabled={reemitting}
-                  disableElevation
-                  startIcon={<X style={{ width: 12, height: 12 }} />}
-                  sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: 'error.main', '&:hover': { bgcolor: 'error.dark' } }}
-                >
-                  Borrar corrida previa y reintentar
-                </Button>
+                <Tooltip text="Reusa la corrida previa y re-emite sus casos sin borrarla ni re-subir el Excel">
+                  <Button
+                    type="button"
+                    variant="contained"
+                    size="small"
+                    onClick={handleReemitirDuplicado}
+                    disabled={reemitting}
+                    disableElevation
+                    startIcon={reemitting
+                      ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
+                      : <RotateCcw style={{ width: 12, height: 12 }} />}
+                    sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+                  >
+                    {reemitting ? 'Re-emitiendo…' : 'Re-emitir sin borrar'}
+                  </Button>
+                </Tooltip>
+                <Tooltip text="Borra en ecf-api la corrida anterior con sus emisiones, para volver a subir el Excel">
+                  <Button
+                    type="button"
+                    variant="contained"
+                    size="small"
+                    onClick={handleDeleteDuplicate}
+                    disabled={reemitting}
+                    disableElevation
+                    startIcon={<X style={{ width: 12, height: 12 }} />}
+                    sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: 'error.main', '&:hover': { bgcolor: 'error.dark' } }}
+                  >
+                    Borrar corrida previa y reintentar
+                  </Button>
+                </Tooltip>
               </Box>
             )}
           </Box>
@@ -1488,9 +1508,11 @@ function Step3Body({ ctx, persisted, persistUpdate }: {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', px: 1, py: 0.75 }}>
               <Upload style={{ width: 12, height: 12, flexShrink: 0, color: '#9ca3af' }} />
               <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.name}</Typography>
-              <IconButton size="small" onClick={() => setFile(null)} sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
-                <X style={{ width: 12, height: 12 }} />
-              </IconButton>
+              <Tooltip text="Quita este archivo y elige otro">
+                <IconButton size="small" onClick={() => setFile(null)} aria-label="Quitar archivo" sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
+                  <X style={{ width: 12, height: 12 }} />
+                </IconButton>
+              </Tooltip>
             </Box>
           )}
           <Box>
@@ -1536,6 +1558,7 @@ function Step3Body({ ctx, persisted, persistUpdate }: {
               <Button
                 type="button"
                 onClick={handleClear}
+                title="Borra el resultado guardado aquí; no cambia nada en la DGII"
                 startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
                 sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'none', '&:hover': { color: 'error.main' } }}
               >
@@ -1559,16 +1582,17 @@ function Step3Body({ ctx, persisted, persistUpdate }: {
                     {failedRows.length} fallida{failedRows.length === 1 ? '' : 's'}
                   </Typography>
                   {failedEncfs.length > 0 && (
-                    <Button
-                      type="button"
-                      size="small"
-                      onClick={() => setShift(failedEncfs.join(','))}
-                      title="Copia los e-NCF fallidos al campo de shift selectivo"
-                      startIcon={<RotateCcw style={{ width: 10, height: 10 }} />}
-                      sx={{ fontSize: '0.625rem', bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, textTransform: 'none', borderRadius: '4px', '&:hover': { bgcolor: '#fde68a' } }}
-                    >
-                      Copiar fallidos a shift
-                    </Button>
+                    <Tooltip text="Copia los e-NCF fallidos al campo de shift selectivo">
+                      <Button
+                        type="button"
+                        size="small"
+                        onClick={() => setShift(failedEncfs.join(','))}
+                        startIcon={<RotateCcw style={{ width: 10, height: 10 }} />}
+                        sx={{ fontSize: '0.625rem', bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, textTransform: 'none', borderRadius: '4px', '&:hover': { bgcolor: '#fde68a' } }}
+                      >
+                        Copiar fallidos a shift
+                      </Button>
+                    </Tooltip>
                   )}
                 </Box>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 192, overflowY: 'auto' }}>
@@ -1830,6 +1854,8 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
                 fullWidth
                 onClick={handleRestart}
                 disabled={starting}
+                title="Re-emite los 29 casos con números de factura nuevos (+100)"
+                aria-label="Re-iniciar simulación"
                 startIcon={starting ? <Spinner size={12} /> : <RotateCcw style={{ width: 12, height: 12 }} />}
                 sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#2a45c4', borderColor: '#a7f3d0', '&:hover': { bgcolor: '#eef2fe' }, '&:disabled': { opacity: 0.5 } }}
               >
@@ -1840,6 +1866,8 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
                 variant="outlined"
                 fullWidth
                 onClick={handleForget}
+                title="Quita esta simulación de la pantalla; no la borra en ecf-api"
+                aria-label="Olvidar simulación"
                 startIcon={<X style={{ width: 12, height: 12 }} />}
                 sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: 'text.secondary', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f9fafb' } }}
               >
@@ -1859,6 +1887,7 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
               <Button
                 type="button"
                 onClick={() => runId && fetchRun(runId)}
+                title="Vuelve a leer el estado desde el servidor"
                 startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
                 sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#3658e1', textTransform: 'none', '&:hover': { color: '#2a45c4' } }}
               >

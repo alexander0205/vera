@@ -20,6 +20,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Unlink } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export function BotonDesvincular({ teamId, nombre }: { teamId: number; nombre: string }) {
   const router = useRouter();
@@ -45,11 +46,13 @@ export function BotonDesvincular({ teamId, nombre }: { teamId: number; nombre: s
 
   return (
     <>
-      <Box component="button" onClick={() => { setAbierto(true); setError(null); setTexto(''); }}
-        title="Desvincular su número"
-        sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'flex', p: 0.5, flexShrink: 0, '&:hover': { color: '#dc2626' } }}>
-        <Unlink size={14} />
-      </Box>
+      <Tooltip text="Suelta su número propio; sus avisos volverán a salir por el de Zero">
+        <Box component="button" onClick={() => { setAbierto(true); setError(null); setTexto(''); }}
+          aria-label="Desvincular su número"
+          sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'flex', p: 0.5, flexShrink: 0, '&:hover': { color: '#dc2626' } }}>
+          <Unlink size={14} />
+        </Box>
+      </Tooltip>
 
       <Dialog open={abierto} onClose={() => !yendo && setAbierto(false)} maxWidth="xs" fullWidth
         slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>

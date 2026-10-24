@@ -14,6 +14,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { MessageSquare, RefreshCw, AlertTriangle, Clock, ArrowLeft, Check, CheckCheck, XCircle } from 'lucide-react';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /**
  * Los cuatro estados que reporta Meta por webhook.
@@ -110,6 +111,7 @@ export default function ChatsClient() {
         <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827' }}>Conversaciones</Typography>
         <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>del número de Zero</Typography>
         <Box component="button" onClick={cargar} disabled={cargando}
+          title="Vuelve a traer los mensajes más recientes del número de Zero"
           sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, border: '1px solid #e5e7eb', bgcolor: '#fff', borderRadius: '8px', px: 1.5, py: 0.75, cursor: 'pointer', fontSize: '0.8125rem', color: '#4b5563', '&:hover': { bgcolor: '#f9fafb' } }}>
           <RefreshCw size={13} /> Actualizar
         </Box>
@@ -185,10 +187,12 @@ export default function ChatsClient() {
             ) : (
               <>
                 <Box sx={{ borderBottom: '1px solid #f3f4f6', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box component="button" onClick={() => setSel(null)}
-                    sx={{ display: { xs: 'flex', md: 'none' }, border: 'none', bgcolor: 'transparent', cursor: 'pointer', p: 0, color: '#6b7280' }}>
-                    <ArrowLeft size={16} />
-                  </Box>
+                  <Tooltip text="Vuelve a la lista de conversaciones">
+                    <Box component="button" onClick={() => setSel(null)} aria-label="Volver a la lista"
+                      sx={{ display: { xs: 'flex', md: 'none' }, border: 'none', bgcolor: 'transparent', cursor: 'pointer', p: 0, color: '#6b7280' }}>
+                      <ArrowLeft size={16} />
+                    </Box>
+                  </Tooltip>
                   <Box>
                     <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>{sel.name || sel.phone}</Typography>
                     <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af', fontFamily: 'monospace' }}>{sel.phone}</Typography>

@@ -52,6 +52,7 @@ import {
   TableContainer,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
 const TEAL = '#3658e1';
@@ -257,15 +258,17 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
           action={
             <Box component="form" action={refrescarTokenDgii}>
               <input type="hidden" name="teamId" value={teamId} />
-              <Button
-                type="submit"
-                size="small"
-                startIcon={<RefreshCw size={12} />}
-                disableElevation
-                sx={{ fontSize: 11, textTransform: 'none', color: TEAL, p: 0, minWidth: 0, '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } }}
-              >
-                Refrescar
-              </Button>
+              <Tooltip text="Pide a la DGII un token nuevo para esta empresa">
+                <Button
+                  type="submit"
+                  size="small"
+                  startIcon={<RefreshCw size={12} />}
+                  disableElevation
+                  sx={{ fontSize: 11, textTransform: 'none', color: TEAL, p: 0, minWidth: 0, '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } }}
+                >
+                  Refrescar
+                </Button>
+              </Tooltip>
             </Box>
           }
         />
@@ -309,19 +312,21 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
               <MenuItem value="Produccion">Producción</MenuItem>
             </Select>
           </FormControl>
-          <Button
-            type="submit"
-            variant="contained"
-            size="small"
-            disableElevation
-            sx={{
-              bgcolor: '#111827', '&:hover': { bgcolor: '#1f2937' },
-              textTransform: 'none', fontWeight: 500, fontSize: 12, borderRadius: '8px',
-              px: 2, py: 1,
-            }}
-          >
-            Aplicar
-          </Button>
+          <Tooltip text="Cambia el ambiente DGII de la empresa; las facturas nuevas salen por el elegido">
+            <Button
+              type="submit"
+              variant="contained"
+              size="small"
+              disableElevation
+              sx={{
+                bgcolor: '#111827', '&:hover': { bgcolor: '#1f2937' },
+                textTransform: 'none', fontWeight: 500, fontSize: 12, borderRadius: '8px',
+                px: 2, py: 1,
+              }}
+            >
+              Aplicar
+            </Button>
+          </Tooltip>
         </Box>
       </Grid>
 
@@ -393,14 +398,16 @@ function CertificadosTab({ teamId, certs }: { teamId: number; certs: Certificate
                 </Typography>
               </Box>
               {c.activo && (
-                <ConfirmButton
-                  action={revocarCertificado}
-                  message="¿Revocar este certificado?"
-                  color="error"
-                  fields={{ teamId, certId: c.id }}
-                >
-                  Revocar
-                </ConfirmButton>
+                <Tooltip text="Marca este certificado como revocado; ya no sirve para firmar">
+                  <ConfirmButton
+                    action={revocarCertificado}
+                    message="¿Revocar este certificado?"
+                    color="error"
+                    fields={{ teamId, certId: c.id }}
+                  >
+                    Revocar
+                  </ConfirmButton>
+                </Tooltip>
               )}
             </Box>
           ))}
@@ -491,14 +498,16 @@ function RangosTab({ teamId, rangos }: { teamId: number; rangos: NcfRangoRespons
                         {r.desde.toLocaleString()}–{r.hasta.toLocaleString()} · Vence {new Date(r.fechaVencimiento).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
                       </Typography>
                     </Box>
-                    <ConfirmButton
-                      action={eliminarRango}
-                      message={`¿Desactivar rango e${r.tipoComprobante} ${r.desde}-${r.hasta}?`}
-                      color="error"
-                      fields={{ teamId, rangoId: r.id }}
-                    >
-                      Desactivar
-                    </ConfirmButton>
+                    <Tooltip text="Desactiva este rango de comprobantes; ya no se usará para emitir">
+                      <ConfirmButton
+                        action={eliminarRango}
+                        message={`¿Desactivar rango e${r.tipoComprobante} ${r.desde}-${r.hasta}?`}
+                        color="error"
+                        fields={{ teamId, rangoId: r.id }}
+                      >
+                        Desactivar
+                      </ConfirmButton>
+                    </Tooltip>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
                     <Typography variant="caption" sx={{ color: '#4b5563' }}>
@@ -663,6 +672,7 @@ function EmisionesTab({ emisiones, ambiente }: { emisiones: EmisionResponseDto[]
           {hasFilters && (
             <Button
               onClick={resetFiltros}
+              title="Quita los filtros y vuelve a mostrar todas las emisiones"
               size="small"
               disableElevation
               sx={{ ml: 'auto', fontSize: 12, textTransform: 'none', color: TEAL, p: 0, minWidth: 0, '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } }}
@@ -827,9 +837,11 @@ function EmisionDetailModal({ emision, onClose }: { emision: EmisionResponseDto;
             e{e.tipoComprobante} · {e.formato} · RNC {e.rnc}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af', '&:hover': { color: '#111827' } }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
+        <Tooltip text="Cierra el detalle de esta emisión">
+          <IconButton onClick={onClose} aria-label="Cerrar" size="small" sx={{ color: '#9ca3af', '&:hover': { color: '#111827' } }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </DialogTitle>
 
       <DialogContent sx={{ p: 3 }}>
@@ -930,22 +942,24 @@ function EmisionDetailModal({ emision, onClose }: { emision: EmisionResponseDto;
                   </Button>
                 )}
                 {e.urlEstadoDgii && (
-                  <Button
-                    component="a"
-                    href={e.urlEstadoDgii}
-                    target="_blank"
-                    rel="noreferrer"
-                    size="small"
-                    startIcon={<RefreshCw size={13} />}
-                    disableElevation
-                    sx={{
-                      fontSize: 12, textTransform: 'none', borderRadius: '8px',
-                      bgcolor: '#faf5ff', color: '#7c3aed', border: '1px solid #e9d5ff',
-                      '&:hover': { bgcolor: '#f3e8ff' },
-                    }}
-                  >
-                    Estado DGII (JSON)
-                  </Button>
+                  <Tooltip text="Abre en otra pestaña lo que la DGII respondió para esta factura">
+                    <Button
+                      component="a"
+                      href={e.urlEstadoDgii}
+                      target="_blank"
+                      rel="noreferrer"
+                      size="small"
+                      startIcon={<RefreshCw size={13} />}
+                      disableElevation
+                      sx={{
+                        fontSize: 12, textTransform: 'none', borderRadius: '8px',
+                        bgcolor: '#faf5ff', color: '#7c3aed', border: '1px solid #e9d5ff',
+                        '&:hover': { bgcolor: '#f3e8ff' },
+                      }}
+                    >
+                      Estado DGII (JSON)
+                    </Button>
+                  </Tooltip>
                 )}
               </Box>
             </Box>
@@ -1165,20 +1179,22 @@ export function EcfApiNoLink({ teamId, rnc }: { teamId: number; rnc: string }) {
       </Typography>
       <Box component="form" action={vincularContribuyente}>
         <input type="hidden" name="teamId" value={teamId} />
-        <Button
-          type="submit"
-          variant="contained"
-          size="small"
-          endIcon={<ChevronRight size={16} />}
-          disableElevation
-          sx={{
-            bgcolor: TEAL, '&:hover': { bgcolor: TEAL_HOVER },
-            textTransform: 'none', fontWeight: 500, fontSize: 14, borderRadius: '8px',
-            px: 2.5, py: 1,
-          }}
-        >
-          Registrar en ecf-api
-        </Button>
+        <Tooltip text="Da de alta este RNC en el servicio de facturación electrónica para poder emitir">
+          <Button
+            type="submit"
+            variant="contained"
+            size="small"
+            endIcon={<ChevronRight size={16} />}
+            disableElevation
+            sx={{
+              bgcolor: TEAL, '&:hover': { bgcolor: TEAL_HOVER },
+              textTransform: 'none', fontWeight: 500, fontSize: 14, borderRadius: '8px',
+              px: 2.5, py: 1,
+            }}
+          >
+            Registrar en ecf-api
+          </Button>
+        </Tooltip>
       </Box>
     </Box>
   );

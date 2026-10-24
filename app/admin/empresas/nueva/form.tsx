@@ -13,6 +13,7 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import InputLabel from '@mui/material/InputLabel';
 import CircularProgress from '@mui/material/CircularProgress';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface RncResult {
   rnc:             string;
@@ -144,14 +145,17 @@ export function NuevaEmpresaForm({ provincias }: Props) {
                 RNC {rnc}
               </Typography>
             </Box>
-            <Box
-              component="button"
-              type="button"
-              onClick={limpiarBusqueda}
-              sx={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3658e1', '&:hover': { color: '#2a45c4' }, flexShrink: 0, p: 0, display: 'flex' }}
-            >
-              <X style={{ width: 16, height: 16 }} />
-            </Box>
+            <Tooltip text="Quita la empresa elegida para buscar otra; no toca nada en Zero">
+              <Box
+                component="button"
+                type="button"
+                onClick={limpiarBusqueda}
+                aria-label="Quitar empresa elegida"
+                sx={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3658e1', '&:hover': { color: '#2a45c4' }, flexShrink: 0, p: 0, display: 'flex' }}
+              >
+                <X style={{ width: 16, height: 16 }} />
+              </Box>
+            </Tooltip>
           </Box>
         ) : (
           <Box ref={wrapperRef} sx={{ position: 'relative' }}>

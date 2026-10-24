@@ -84,12 +84,14 @@ export function Etiqueta({ texto, color, fondo }: { texto: string; color: string
   );
 }
 
-export function Boton({ children, onClick, disabled, variante = 'primario', title }: {
+export function Boton({ children, onClick, disabled, variante = 'primario', title, ariaLabel }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   variante?: 'primario' | 'suave' | 'peligro';
   title?: string;
+  /** Para los que solo tienen ícono: sin texto, el lector de pantalla no sabe qué es. */
+  ariaLabel?: string;
 }) {
   const estilos = {
     primario: { bgcolor: '#3658e1', color: '#fff', border: 'none', '&:hover': { bgcolor: '#2a45c4' } },
@@ -98,7 +100,7 @@ export function Boton({ children, onClick, disabled, variante = 'primario', titl
   }[variante];
 
   return (
-    <Box component="button" type="button" onClick={onClick} disabled={disabled} title={title}
+    <Box component="button" type="button" onClick={onClick} disabled={disabled} title={title} aria-label={ariaLabel}
       sx={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.75,
         borderRadius: '8px', px: 1.75, py: 0.875, cursor: 'pointer',
