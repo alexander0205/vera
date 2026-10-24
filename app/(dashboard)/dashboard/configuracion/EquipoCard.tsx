@@ -14,6 +14,7 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Users, UserPlus, CheckCircle, ExternalLink } from 'lucide-react';
 import { INVITABLE_ROLES } from '@/lib/config/roles';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export function EquipoCard() {
   const [email, setEmail]     = useState('');
@@ -74,16 +75,18 @@ export function EquipoCard() {
               ))}
             </Select>
           </FormControl>
-          <Button
-            variant="contained"
-            disableElevation
-            onClick={handleInvite}
-            disabled={loading}
-            startIcon={loading ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <UserPlus size={16} />}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, height: 40, whiteSpace: 'nowrap' }}
-          >
-            {loading ? 'Enviando…' : 'Invitar'}
-          </Button>
+          <Tooltip text="Envía la invitación por correo con el rol elegido">
+            <Button
+              variant="contained"
+              disableElevation
+              onClick={handleInvite}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <UserPlus size={16} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, height: 40, whiteSpace: 'nowrap' }}
+            >
+              {loading ? 'Enviando…' : 'Invitar'}
+            </Button>
+          </Tooltip>
         </Box>
 
         {success && (

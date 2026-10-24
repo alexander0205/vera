@@ -10,6 +10,7 @@ import MuiTextField from '@mui/material/TextField';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
+import { Tooltip } from '@/components/ui/tooltip';
 
 export default function SecurityPage() {
   const [user, setUser] = useState<{ twoFactorEnabled: boolean; emailVerified: boolean; email: string } | null>(null);
@@ -119,10 +120,12 @@ export default function SecurityPage() {
                 sx={{ bgcolor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', height: 24, fontSize: '0.6875rem', fontWeight: 600 }}
               />
             ) : (
-              <MuiButton variant="outlined" size="small" onClick={sendVerification}
-                sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
-                Enviar verificación
-              </MuiButton>
+              <Tooltip text="Envía un correo para confirmar tu dirección">
+                <MuiButton variant="outlined" size="small" onClick={sendVerification}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
+                  Enviar verificación
+                </MuiButton>
+              </Tooltip>
             )}
           </Box>
         </CardContent>
@@ -148,15 +151,19 @@ export default function SecurityPage() {
               </Box>
             </Box>
             {user?.twoFactorEnabled ? (
-              <MuiButton variant="outlined" size="small" color="error" onClick={() => setDisableMode(true)}
-                sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem' }}>
-                Desactivar
-              </MuiButton>
+              <Tooltip text="Te pedirá un código de tu app para quitar el 2FA">
+                <MuiButton variant="outlined" size="small" color="error" onClick={() => setDisableMode(true)}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem' }}>
+                  Desactivar
+                </MuiButton>
+              </Tooltip>
             ) : (
-              <MuiButton variant="outlined" size="small" onClick={startSetup}
-                sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
-                Activar 2FA
-              </MuiButton>
+              <Tooltip text="Muestra un código para vincular tu app de autenticación">
+                <MuiButton variant="outlined" size="small" onClick={startSetup}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
+                  Activar 2FA
+                </MuiButton>
+              </Tooltip>
             )}
           </Box>
 
@@ -186,9 +193,12 @@ export default function SecurityPage() {
                     <Box component="code" sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 1, py: 0.5, fontFamily: 'monospace', fontSize: '0.75rem', wordBreak: 'break-all' }}>
                       {secret}
                     </Box>
-                    <IconButton size="small" onClick={copySecret} sx={{ color: copied ? 'success.main' : 'text.secondary' }}>
-                      {copied ? <Check style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
-                    </IconButton>
+                    <Tooltip text="Copia la clave secreta">
+                      <IconButton size="small" onClick={copySecret}
+                        aria-label="Copiar clave secreta" sx={{ color: copied ? 'success.main' : 'text.secondary' }}>
+                        {copied ? <Check style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 </Box>
               </Box>

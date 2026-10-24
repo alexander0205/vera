@@ -25,6 +25,7 @@ import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import { Tooltip } from '@/components/ui/tooltip';
 import Alert from '@mui/material/Alert';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -285,11 +286,13 @@ export function ChangePlan({
               Hasta entonces conservas todo lo de tu plan actual.
             </Typography>
           </Box>
-          <Button size="small" variant="outlined" onClick={cancelarBajadaProgramada} disabled={ocupado}
-            startIcon={cancelando ? <CircularProgress size={12} /> : <X size={12} />}
-            sx={{ borderRadius: '9px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#f5e6c8', color: AMBAR, flexShrink: 0, '&:hover': { borderColor: AMBAR, bgcolor: '#fffaf0' } }}>
-            {cancelando ? '' : 'Cancelar'}
-          </Button>
+          <Tooltip text="Anula la bajada programada; tu plan actual sigue igual">
+            <Button size="small" variant="outlined" onClick={cancelarBajadaProgramada} disabled={ocupado}
+              startIcon={cancelando ? <CircularProgress size={12} /> : <X size={12} />}
+              sx={{ borderRadius: '9px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#f5e6c8', color: AMBAR, flexShrink: 0, '&:hover': { borderColor: AMBAR, bgcolor: '#fffaf0' } }}>
+              {cancelando ? '' : 'Cancelar'}
+            </Button>
+          </Tooltip>
         </Box>
       )}
 
@@ -793,24 +796,28 @@ function DialogoCambio({
 
         {!bloqueado && (
           tieneSuscripcion ? (
-            <Button variant="contained" disableElevation disabled={!puedeSeguir}
-              onClick={() => onConfirmar(plan, tipo)}
-              startIcon={ocupado ? <CircularProgress size={13} color="inherit" /> : undefined}
-              sx={{ height: 38, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', bgcolor: NAVY, '&:hover': { bgcolor: '#0c2059' } }}>
-              {sube ? `Cambiar a ${plan.name}` : 'Programar el cambio'}
-            </Button>
+            <Tooltip text={sube ? `Cambia a ${plan.name} de inmediato` : 'Programa el cambio; tu plan actual sigue hasta entonces'}>
+              <Button variant="contained" disableElevation disabled={!puedeSeguir}
+                onClick={() => onConfirmar(plan, tipo)}
+                startIcon={ocupado ? <CircularProgress size={13} color="inherit" /> : undefined}
+                sx={{ height: 38, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', bgcolor: NAVY, '&:hover': { bgcolor: '#0c2059' } }}>
+                {sube ? `Cambiar a ${plan.name}` : 'Programar el cambio'}
+              </Button>
+            </Tooltip>
           ) : (
             // El checkout termina en una redirección fuera del sistema, así que
             // va por Server Action y no por el fetch de arriba.
             <Box component="form" action={checkoutAction}>
               <input type="hidden" name="priceId" value={priceId} />
               <input type="hidden" name="addons" value={adicionales.join(',')} />
-              <Button type="submit" variant="contained" disableElevation disabled={!puedeSeguir || !priceId}
-                sx={{ height: 38, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', bgcolor: NAVY, '&:hover': { bgcolor: '#0c2059' } }}>
-                {diasDePrueba
-                  ? `Empezar ${diasDePrueba} días gratis`
-                  : cuanto ? `Contratar ${cuanto}/mes` : `Contratar ${plan.name}`}
-              </Button>
+              <Tooltip text="Te lleva a Stripe para completar el pago">
+                <Button type="submit" variant="contained" disableElevation disabled={!puedeSeguir || !priceId}
+                  sx={{ height: 38, borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem', bgcolor: NAVY, '&:hover': { bgcolor: '#0c2059' } }}>
+                  {diasDePrueba
+                    ? `Empezar ${diasDePrueba} días gratis`
+                    : cuanto ? `Contratar ${cuanto}/mes` : `Contratar ${plan.name}`}
+                </Button>
+              </Tooltip>
             </Box>
           )
         )}

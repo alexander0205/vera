@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { TEST_CONTRIBUYENTE } from '@/lib/config/test-data';
 
@@ -131,12 +132,15 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         <p className="text-xs text-gray-400">{label}</p>
         <p className="text-sm font-medium text-gray-900 truncate">{value}</p>
       </div>
-      <button
-        onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-        className="ml-3 shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-zero-600 transition-colors"
-      >
-        {copied ? <Check className="h-3.5 w-3.5 text-zero-500" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
+      <Tooltip text="Copia el valor al portapapeles">
+        <button
+          onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
+          aria-label="Copiar valor"
+          className="ml-3 shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-zero-600 transition-colors"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-zero-500" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -167,13 +171,15 @@ function DgiiField({ label, value, span, required = true, isUrl = false, disable
           </span>
         )}
         <span className={`flex-1 px-3 py-2 text-sm truncate min-w-0 ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>{value}</span>
-        <button
-          onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-          className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-zero-50 text-gray-400 hover:text-zero-600 transition-colors"
-          title="Copiar"
-        >
-          {copied ? <Check className="h-4 w-4 text-zero-500" /> : <Copy className="h-4 w-4" />}
-        </button>
+        <Tooltip text="Copia el valor al portapapeles">
+          <button
+            onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
+            className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-zero-50 text-gray-400 hover:text-zero-600 transition-colors"
+            aria-label="Copiar valor"
+          >
+            {copied ? <Check className="h-4 w-4 text-zero-500" /> : <Copy className="h-4 w-4" />}
+          </button>
+        </Tooltip>
       </div>
     </div>
   );
@@ -244,14 +250,16 @@ function HelpPopover({ content, link, linkText }: {
 
   return (
     <div ref={ref} className="relative inline-flex items-center shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        aria-label="Más información"
-        className="h-5 w-5 rounded-full border border-gray-300 bg-white text-gray-400 hover:border-zero-400 hover:text-zero-600 flex items-center justify-center text-[11px] font-bold leading-none transition-colors"
-      >
-        ?
-      </button>
+      <Tooltip text="Muestra u oculta la ayuda de este campo">
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          aria-label="Más información"
+          className="h-5 w-5 rounded-full border border-gray-300 bg-white text-gray-400 hover:border-zero-400 hover:text-zero-600 flex items-center justify-center text-[11px] font-bold leading-none transition-colors"
+        >
+          ?
+        </button>
+      </Tooltip>
       {open && (
         <div className="absolute z-[70] w-64 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 space-y-2.5
           left-7 top-1/2 -translate-y-1/2
@@ -330,12 +338,15 @@ function DgiiScreenshot({
                 </div>
                 <p className="text-sm font-semibold text-gray-800">Portal DGII</p>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <Tooltip text="Cierra la imagen">
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Cerrar"
+                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </Tooltip>
             </div>
             <div className="overflow-y-auto">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -460,12 +471,14 @@ function WaitForDgii({
       </div>
 
       {allowSkip && (
-        <button
-          onClick={() => { setProgress(100); setDone(true); }}
-          className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
-        >
-          [Demo] Saltar espera
-        </button>
+        <Tooltip text="Solo para demo: salta la espera y pasa a la siguiente fase">
+          <button
+            onClick={() => { setProgress(100); setDone(true); }}
+            className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+          >
+            [Demo] Saltar espera
+          </button>
+        </Tooltip>
       )}
     </div>
   );
@@ -776,10 +789,12 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                 {certInfo?.vencimiento && (
                   <p className="text-xs text-zero-600">Vence: {certInfo.vencimiento}</p>
                 )}
-                <button className="text-xs text-zero-600 underline underline-offset-2"
-                  onClick={() => setCertInfo({ tieneCertificado: false })}>
-                  Reemplazar certificado
-                </button>
+                <Tooltip text="Abre el formulario para subir otro certificado">
+                  <button className="text-xs text-zero-600 underline underline-offset-2"
+                    onClick={() => setCertInfo({ tieneCertificado: false })}>
+                    Reemplazar certificado
+                  </button>
+                </Tooltip>
               </div>
             ) : (
               <>
@@ -808,10 +823,13 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                       <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
                       <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
                     </div>
-                    <button onClick={() => { setFile(null); setCertError(null); }}
-                      className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    <Tooltip text="Quita este archivo">
+                      <button onClick={() => { setFile(null); setCertError(null); }}
+                        aria-label="Quitar archivo"
+                        className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
                   </div>
                 )}
 
@@ -825,6 +843,8 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                       value={password} onChange={e => { setPassword(e.target.value); setCertError(null); }}
                       className="pr-10" />
                     <button type="button" onClick={() => setShowPass(v => !v)}
+                      title="Muestra u oculta la clave"
+                      aria-label="Mostrar u ocultar clave"
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                       {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -1090,10 +1110,13 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
                   <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
                 </div>
                 {!signed && (
-                  <button onClick={() => setXmlFile(null)}
-                    className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <Tooltip text="Quita este archivo">
+                    <button onClick={() => setXmlFile(null)}
+                      aria-label="Quitar archivo"
+                      className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
                 )}
               </div>
             )}
@@ -1496,10 +1519,13 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
                 <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
                 <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
               </div>
-              <button onClick={() => setFile(null)}
-                className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <Tooltip text="Quita este archivo">
+                <button onClick={() => setFile(null)}
+                  aria-label="Quitar archivo"
+                  className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
             </div>
           )}
           <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden"
@@ -1551,6 +1577,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
                     : <><RefreshCw className="h-3.5 w-3.5" />Continuar esa corrida</>}
                 </Button>
                 <Button onClick={handleDeleteDuplicate} disabled={reemitting || deleting}
+                  title="Borra la corrida anterior con sus emisiones para volver a subir el Excel"
                   variant="outline" className="flex-1 gap-2" size="sm">
                   {deleting
                     ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Borrando…</>
@@ -1619,11 +1646,13 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               </a>
             </p>
           </div>
-          <Button onClick={handleReiniciar} disabled={deleting} variant="outline" className="gap-2">
-            {deleting
-              ? <><Loader2 className="h-4 w-4 animate-spin" />Reiniciando…</>
-              : <><RefreshCw className="h-4 w-4" />Intentar de nuevo</>}
-          </Button>
+          <Tooltip text="Quita esta corrida y empieza de nuevo con el Excel">
+            <Button onClick={handleReiniciar} disabled={deleting} variant="outline" className="gap-2">
+              {deleting
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Reiniciando…</>
+                : <><RefreshCw className="h-4 w-4" />Intentar de nuevo</>}
+            </Button>
+          </Tooltip>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
 
@@ -1676,9 +1705,11 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
         </label>
       </div>
 
-      <button onClick={handleReiniciar} disabled={deleting} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 disabled:opacity-50">
-        {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Reiniciar pruebas
-      </button>
+      <Tooltip text="Quita esta corrida de pruebas y vuelve a empezar">
+        <button onClick={handleReiniciar} disabled={deleting} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 disabled:opacity-50">
+          {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Reiniciar pruebas
+        </button>
+      </Tooltip>
       {error && <p className="text-xs text-red-600">{error}</p>}
 
       <NavFooter onBack={onBack} onNext={onComplete} nextDisabled={!confirmedUpload} nextLabel="Continuar" />
@@ -1791,9 +1822,11 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
               </a>
             </p>
           </div>
-          <Button onClick={handleReiniciar} variant="outline" className="gap-2">
-            <RefreshCw className="h-4 w-4" /> Intentar de nuevo
-          </Button>
+          <Tooltip text="Limpia el resultado y vuelve a intentar">
+            <Button onClick={handleReiniciar} variant="outline" className="gap-2">
+              <RefreshCw className="h-4 w-4" /> Intentar de nuevo
+            </Button>
+          </Tooltip>
         </div>
 
         <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
@@ -1817,9 +1850,11 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
           </div>
         </div>
 
-        <button onClick={handleReiniciar} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
-          <RefreshCw className="h-3 w-3" /> Reiniciar pruebas
-        </button>
+        <Tooltip text="Limpia el resultado y vuelve a empezar">
+          <button onClick={handleReiniciar} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+            <RefreshCw className="h-3 w-3" /> Reiniciar pruebas
+          </button>
+        </Tooltip>
 
         <NavFooter onBack={onBack} onNext={onComplete} nextLabel="Continuar" />
       </div>
@@ -1865,10 +1900,13 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
               <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
               <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
             </div>
-            <button onClick={() => setFile(null)}
-              className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <Tooltip text="Quita este archivo">
+              <button onClick={() => setFile(null)}
+                  aria-label="Quitar archivo"
+                className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
           </div>
         )}
         <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden"
@@ -2094,11 +2132,13 @@ function PhaseSimulacion({ onComplete, onBack }: { onComplete: () => void; onBac
               </a>
             </p>
           </div>
-          <Button onClick={handleReiniciar} disabled={starting} variant="outline" className="gap-2">
-            {starting
-              ? <><Loader2 className="h-4 w-4 animate-spin" />Reiniciando…</>
-              : <><RefreshCw className="h-4 w-4" />Intentar de nuevo</>}
-          </Button>
+          <Tooltip text="Empieza otra simulación con números de e-NCF nuevos">
+            <Button onClick={handleReiniciar} disabled={starting} variant="outline" className="gap-2">
+              {starting
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Reiniciando…</>
+                : <><RefreshCw className="h-4 w-4" />Intentar de nuevo</>}
+            </Button>
+          </Tooltip>
         </div>
 
         <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
@@ -2131,9 +2171,11 @@ function PhaseSimulacion({ onComplete, onBack }: { onComplete: () => void; onBac
           </p>
         </div>
 
-        <button onClick={handleReiniciar} disabled={starting} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
-          <RefreshCw className="h-3 w-3" /> Reiniciar pruebas
-        </button>
+        <Tooltip text="Empieza otra simulación con números de e-NCF nuevos">
+          <button onClick={handleReiniciar} disabled={starting} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+            <RefreshCw className="h-3 w-3" /> Reiniciar pruebas
+          </button>
+        </Tooltip>
 
         <NavFooter onBack={onBack} onNext={onComplete} nextLabel="Continuar" />
       </div>
@@ -2657,10 +2699,13 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
                   <p className="text-sm font-medium text-gray-900 truncate">{xmlFile.name}</p>
                   <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
                 </div>
-                <button onClick={() => { setXmlFile(null); setSigned(false); setXmlFirmado(null); }}
-                  className="p-1 rounded-full hover:bg-gray-200 text-gray-400">
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                <Tooltip text="Quita este archivo">
+                  <button onClick={() => { setXmlFile(null); setSigned(false); setXmlFirmado(null); }}
+                    aria-label="Quitar archivo"
+                    className="p-1 rounded-full hover:bg-gray-200 text-gray-400">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
               </div>
             )}
             <input ref={fileInputRef} type="file" accept=".xml" className="hidden"
@@ -2688,9 +2733,11 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
                   <CheckCircle className="h-4 w-4" />
                   <p className="text-sm font-medium">Firmado · RSA-SHA256</p>
                 </div>
-                <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={handleDescargar} disabled={!xmlFirmado}>
-                  <Download className="h-3.5 w-3.5" /> Descargar
-                </Button>
+                <Tooltip text="Descarga el formulario firmado para subirlo al portal de la DGII">
+                  <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={handleDescargar} disabled={!xmlFirmado}>
+                    <Download className="h-3.5 w-3.5" /> Descargar
+                  </Button>
+                </Tooltip>
               </div>
             )}
             {signError && (
@@ -3131,6 +3178,8 @@ function StageCredencial({
               autoFocus
             />
             <button type="button" onClick={() => setShowPass(v => !v)}
+              title="Muestra u oculta la clave"
+              aria-label="Mostrar u ocultar clave"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -3344,12 +3393,14 @@ export default function HabilitacionPage() {
               {/* Botón cancelar — solo visible en el wizard con progreso y sin completar */}
               {stage === 'wizard' && !isDone && (
                 <div className="relative">
-                  <button
-                    onClick={() => setShowCancelConfirm(v => !v)}
-                    className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors"
-                  >
-                    Cancelar proceso
-                  </button>
+                  <Tooltip text="Borra todo el avance de la habilitación; pide confirmación">
+                    <button
+                      onClick={() => setShowCancelConfirm(v => !v)}
+                      className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors"
+                    >
+                      Cancelar proceso
+                    </button>
+                  </Tooltip>
 
                   {showCancelConfirm && (
                     <>

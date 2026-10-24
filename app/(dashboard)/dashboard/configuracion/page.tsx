@@ -18,6 +18,7 @@ import { EquipoCard } from './EquipoCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { roleHasPermission } from '@/lib/config/roles';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
+import { Tooltip } from '@/components/ui/tooltip';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -177,13 +178,16 @@ function UploadImagen({
         {value ? (
           <div className="flex items-center justify-center p-4 gap-4">
             <img src={value} alt={label} className="max-h-20 max-w-[180px] object-contain rounded" />
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onChange(''); }}
-              className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <Tooltip text="Quita la imagen del logo">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onChange(''); }}
+                aria-label="Quitar logo"
+                  className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </Tooltip>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-gray-400">
@@ -525,19 +529,20 @@ export default function ConfiguracionPage() {
           {/* Paleta rápida */}
           <div className={`flex flex-wrap gap-2 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
             {COLORES.map(c => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColorPrimario(c.value)}
-                title={c.label}
-                disabled={!canManage}
-                className={`w-9 h-9 rounded-full border-2 transition-all ${
-                  colorPrimario === c.value
-                    ? 'border-gray-900 scale-110 shadow-md'
-                    : 'border-transparent hover:scale-105'
-                }`}
-                style={{ backgroundColor: c.value }}
-              />
+              <Tooltip key={c.value} text={`Usar el color ${c.label}`}>
+                <button
+                  type="button"
+                  onClick={() => setColorPrimario(c.value)}
+                  aria-label={`Color ${c.label}`}
+                  disabled={!canManage}
+                  className={`w-9 h-9 rounded-full border-2 transition-all ${
+                    colorPrimario === c.value
+                      ? 'border-gray-900 scale-110 shadow-md'
+                      : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: c.value }}
+                />
+              </Tooltip>
             ))}
           </div>
 
@@ -692,26 +697,28 @@ export default function ConfiguracionPage() {
                   className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"
                 >
                   <p className="text-sm font-medium text-gray-800">{m.label}</p>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={activo}
-                    aria-label={`Obligar DGII para ${m.label}`}
-                    onClick={() => setMetodosObligaDgii(prev =>
-                      prev.includes(m.value)
-                        ? prev.filter(v => v !== m.value)
-                        : [...prev, m.value],
-                    )}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                      activo ? 'bg-zero-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                        activo ? 'translate-x-6' : 'translate-x-1'
+                  <Tooltip text={`Si lo activas, cobrar con ${m.label} obliga a emitir a la DGII`}>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={activo}
+                      aria-label={`Obligar DGII para ${m.label}`}
+                      onClick={() => setMetodosObligaDgii(prev =>
+                        prev.includes(m.value)
+                          ? prev.filter(v => v !== m.value)
+                          : [...prev, m.value],
+                      )}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                        activo ? 'bg-zero-600' : 'bg-gray-200'
                       }`}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          activo ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -752,26 +759,28 @@ export default function ConfiguracionPage() {
                   className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"
                 >
                   <p className="text-sm font-medium text-gray-800">{m.label}</p>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={activo}
-                    aria-label={`Exigir comprobante para ${m.label}`}
-                    onClick={() => setMetodosExigeComprobante(prev =>
-                      prev.includes(m.value)
-                        ? prev.filter(v => v !== m.value)
-                        : [...prev, m.value],
-                    )}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                      activo ? 'bg-zero-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                        activo ? 'translate-x-6' : 'translate-x-1'
+                  <Tooltip text={`Si lo activas, cobrar con ${m.label} pide adjuntar el comprobante`}>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={activo}
+                      aria-label={`Exigir comprobante para ${m.label}`}
+                      onClick={() => setMetodosExigeComprobante(prev =>
+                        prev.includes(m.value)
+                          ? prev.filter(v => v !== m.value)
+                          : [...prev, m.value],
+                      )}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                        activo ? 'bg-zero-600' : 'bg-gray-200'
                       }`}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          activo ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </Tooltip>
                 </div>
               );
             })}
@@ -803,19 +812,22 @@ export default function ConfiguracionPage() {
             recargoActivo ? 'border-zero-200 bg-zero-50/60' : 'border-gray-200'
           }`}>
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={recargoActivo}
-                onClick={() => setRecargoActivo(v => !v)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                  recargoActivo ? 'bg-zero-600' : 'bg-gray-200'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  recargoActivo ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
+              <Tooltip text="Aplica recargos automáticos a las facturas a crédito vencidas">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={recargoActivo}
+                  aria-label="Activar recargos por atraso"
+                  onClick={() => setRecargoActivo(v => !v)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                    recargoActivo ? 'bg-zero-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    recargoActivo ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </Tooltip>
               <div>
                 <p className={`text-sm font-semibold ${recargoActivo ? 'text-zero-700' : 'text-gray-500'}`}>
                   {recargoActivo ? 'Activado' : 'Desactivado'}
@@ -1115,21 +1127,24 @@ export default function ConfiguracionPage() {
                 Aparecerá el menú "Caja" en el panel y se requerirá turno abierto para facturar.
               </p>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={cajaHabilitada}
-              onClick={() => setCajaHabilitada(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                cajaHabilitada ? 'bg-zero-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  cajaHabilitada ? 'translate-x-6' : 'translate-x-1'
+            <Tooltip text="Al activarlo, pide turno de caja abierto para facturar">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={cajaHabilitada}
+                aria-label="Activar cuadre de caja"
+                onClick={() => setCajaHabilitada(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                  cajaHabilitada ? 'bg-zero-600' : 'bg-gray-200'
                 }`}
-              />
-            </button>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    cajaHabilitada ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </Tooltip>
           </div>
 
           {cajaHabilitada && (
@@ -1255,15 +1270,18 @@ export default function ConfiguracionPage() {
                 Aparece una alerta al cobrar para revisar el método antes de crear la factura.
               </p>
             </div>
-            <button
-              type="button" role="switch" aria-checked={alertaMetodoPagoActivo}
-              onClick={() => setAlertaMetodoPagoActivo(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                alertaMetodoPagoActivo ? 'bg-zero-600' : 'bg-gray-200'
-              }`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${alertaMetodoPagoActivo ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+            <Tooltip text="Al cobrar, muestra una alerta para revisar el método antes de facturar">
+              <button
+                type="button" role="switch" aria-checked={alertaMetodoPagoActivo}
+                aria-label="Pedir confirmación del método de pago"
+                onClick={() => setAlertaMetodoPagoActivo(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                  alertaMetodoPagoActivo ? 'bg-zero-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${alertaMetodoPagoActivo ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </Tooltip>
           </div>
         </CardContent>
       </Card>
@@ -1286,15 +1304,18 @@ export default function ConfiguracionPage() {
                 Habilita el acceso a <code>/pos</code> y la gestión de terminales.
               </p>
             </div>
-            <button
-              type="button" role="switch" aria-checked={posHabilitado}
-              onClick={() => setPosHabilitado(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                posHabilitado ? 'bg-zero-600' : 'bg-gray-200'
-              }`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+            <Tooltip text="Activa la venta rápida del punto de venta y sus terminales">
+              <button
+                type="button" role="switch" aria-checked={posHabilitado}
+                aria-label="Activar punto de venta"
+                onClick={() => setPosHabilitado(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                  posHabilitado ? 'bg-zero-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </Tooltip>
           </div>
 
           {posHabilitado && (
@@ -1305,15 +1326,18 @@ export default function ConfiguracionPage() {
                   Solo para colegios: saldo prepago por estudiante con cargo al acudiente.
                 </p>
               </div>
-              <button
-                type="button" role="switch" aria-checked={posEscolarHabilitado}
-                onClick={() => setPosEscolarHabilitado(v => !v)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
-                  posEscolarHabilitado ? 'bg-zero-600' : 'bg-gray-200'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posEscolarHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
+              <Tooltip text="Activa un saldo prepago por estudiante que paga su responsable">
+                <button
+                  type="button" role="switch" aria-checked={posEscolarHabilitado}
+                  aria-label="Capa escolar (monedero del estudiante)"
+                  onClick={() => setPosEscolarHabilitado(v => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                    posEscolarHabilitado ? 'bg-zero-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posEscolarHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </Tooltip>
             </div>
           )}
         </CardContent>

@@ -25,6 +25,7 @@ import {
   AlertTriangle, Eye, UserCog,
 } from 'lucide-react';
 import { ROLES as ROLE_DEFS } from '@/lib/config/roles';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /** Módulos que otorga un rol de sistema (según sus permisos modulo:*). Para
  *  roles custom sin catálogo estático devuelve null (no se muestra el hint). */
@@ -434,23 +435,24 @@ export default function EquipoPage() {
         </Box>
         {canManage && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
-            <Button
-              variant="contained"
-              onClick={() => !atLimit && setShowInvitar(true)}
-              disabled={atLimit}
-              title={atLimit ? `Tu plan solo permite ${userLimit} usuario(s)` : undefined}
-              startIcon={<UserPlus style={{ width: 16, height: 16 }} />}
-              sx={{
-                textTransform: 'none',
-                bgcolor: '#3658e1',
-                color: '#fff',
-                boxShadow: 'none',
-                '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
-                '&.Mui-disabled': { bgcolor: '#3658e1', color: '#fff', opacity: 0.5 },
-              }}
-            >
-              Invitar usuario
-            </Button>
+            <Tooltip text={atLimit ? `Tu plan solo permite ${userLimit} usuario(s)` : ''}>
+              <Button
+                variant="contained"
+                onClick={() => !atLimit && setShowInvitar(true)}
+                disabled={atLimit}
+                              startIcon={<UserPlus style={{ width: 16, height: 16 }} />}
+                sx={{
+                  textTransform: 'none',
+                  bgcolor: '#3658e1',
+                  color: '#fff',
+                  boxShadow: 'none',
+                  '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
+                  '&.Mui-disabled': { bgcolor: '#3658e1', color: '#fff', opacity: 0.5 },
+                }}
+              >
+                Invitar usuario
+              </Button>
+            </Tooltip>
             {atLimit && BILLING_ENABLED && (
               <Typography component="p" sx={{ fontSize: '0.75rem', color: '#dc2626' }}>
                 Límite alcanzado —{' '}
@@ -636,19 +638,21 @@ export default function EquipoPage() {
                   )}
 
                   {(canEditThis || (isSelf && !isOwner)) && (
-                    <IconButton
-                      size="small"
-                      onClick={() => { setRemoveError(null); setMemberToRemove(m); }}
-                      title={isSelf ? 'Salir del equipo' : 'Eliminar miembro'}
-                      sx={{
-                        height: 32,
-                        width: 32,
-                        color: '#ef4444',
-                        '&:hover': { color: '#b91c1c', bgcolor: '#fef2f2' },
-                      }}
-                    >
-                      <Trash2 style={{ width: 14, height: 14 }} />
-                    </IconButton>
+                    <Tooltip text={isSelf ? 'Te quita del equipo de esta empresa' : 'Quita a esta persona del equipo'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => { setRemoveError(null); setMemberToRemove(m); }}
+                        aria-label={isSelf ? 'Salir del equipo' : 'Eliminar miembro'}
+                        sx={{
+                          height: 32,
+                          width: 32,
+                          color: '#ef4444',
+                          '&:hover': { color: '#b91c1c', bgcolor: '#fef2f2' },
+                        }}
+                      >
+                        <Trash2 style={{ width: 14, height: 14 }} />
+                      </IconButton>
+                    </Tooltip>
                   )}
                 </Box>
               </Box>
@@ -735,19 +739,21 @@ export default function EquipoPage() {
                   </Box>
                 </Box>
                 {canManage && (
-                  <IconButton
-                    size="small"
-                    onClick={() => setInvToCancel(inv)}
-                    title="Cancelar invitación"
-                    sx={{
-                      height: 32,
-                      width: 32,
-                      color: '#ef4444',
-                      '&:hover': { color: '#b91c1c', bgcolor: '#fef2f2' },
-                    }}
-                  >
-                    <Trash2 style={{ width: 14, height: 14 }} />
-                  </IconButton>
+                  <Tooltip text="Anula esta invitación pendiente">
+                    <IconButton
+                      size="small"
+                      onClick={() => setInvToCancel(inv)}
+                      aria-label="Cancelar invitación"
+                      sx={{
+                        height: 32,
+                        width: 32,
+                        color: '#ef4444',
+                        '&:hover': { color: '#b91c1c', bgcolor: '#fef2f2' },
+                      }}
+                    >
+                      <Trash2 style={{ width: 14, height: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </Box>
             ))}
@@ -802,6 +808,8 @@ export default function EquipoPage() {
                 variant="outlined"
                 size="small"
                 onClick={copyInviteUrl}
+                title="Copia el enlace para enviarlo tú mismo"
+                aria-label="Copiar enlace"
                 sx={{
                   minWidth: 40,
                   textTransform: 'none',
