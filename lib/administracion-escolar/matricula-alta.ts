@@ -32,6 +32,13 @@ export interface AltaMatriculaParams {
    * admite null pero el cálculo de cuotas necesita siempre una fecha.
    */
   inscripcionEfectiva: string;
+  /**
+   * Hasta qué fecha se crean ya los cargos. Por defecto la de inscripción.
+   * «Matricular desde SIGERD» inscribe con el inicio del año (esos alumnos
+   * están desde agosto) y corta en HOY: las cuotas que ya pasaron nacen como
+   * cargo en ese momento en vez de quedar omitidas.
+   */
+  corteCargos?: string;
   estado: string;
   notas: string | null;
   becaTipo: 'porcentaje' | 'monto' | null;
@@ -87,7 +94,7 @@ export async function crearMatriculaConCargos(
     // la crea el devengo cuando llegue su día. El corte vive en
     // `cuotasAlMatricular` para que el formulario y la revisión del lote
     // enseñen exactamente lo que se crea aquí.
-    const { ahora } = cuotasAlMatricular(plan, params.conceptos, params.inscripcionEfectiva);
+    const { ahora } = cuotasAlMatricular(plan, params.conceptos, params.corteCargos ?? params.inscripcionEfectiva);
     const filas = ahora.map(({ linea, cuota }) => ({
       teamId:        params.teamId,
       estudianteId:  params.estudianteId,

@@ -49,6 +49,11 @@ export class SyncOcupadoError extends Error {
 
 export interface EstadoObtencion {
   estado: 'pendiente' | 'corriendo' | 'error' | 'completado' | 'ninguno';
+  /**
+   * Hay una descarga buena guardada, aunque el último intento de actualizarla
+   * esté corriendo o haya fallado (el volcado anterior se conserva).
+   */
+  conDescarga: boolean;
   mensaje: string | null;
   anoAcademico: number | null;
   nEstudiantes: number | null;
@@ -64,6 +69,7 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
   const [row] = await db
     .select({
       estado: sigerdImportaciones.estado,
+      conDescarga: sql<boolean>`${sigerdImportaciones.dump} IS NOT NULL`,
       mensaje: sigerdImportaciones.mensaje,
       anoAcademico: sigerdImportaciones.anoAcademico,
       nEstudiantes: sigerdImportaciones.nEstudiantes,
@@ -77,10 +83,11 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
     .limit(1);
 
   if (!row) {
-    return { estado: 'ninguno', mensaje: null, anoAcademico: null, nEstudiantes: null, nSecciones: null, nEmpleados: null, completadoEn: null };
+    return { estado: 'ninguno', conDescarga: false, mensaje: null, anoAcademico: null, nEstudiantes: null, nSecciones: null, nEmpleados: null, completadoEn: null };
   }
   return {
     estado: row.estado as EstadoObtencion['estado'],
+    conDescarga: row.conDescarga === true,
     mensaje: row.mensaje,
     anoAcademico: row.anoAcademico,
     nEstudiantes: row.nEstudiantes,

@@ -55,8 +55,9 @@ export async function matricularLote(params: {
   cursoId: unknown;
   estudianteIds: number[];
   /**
-   * Conceptos que se cobran. `'todos'` = todos los que tienen tarifa en la
-   * sección, que es lo que el selector de plan deja marcado por defecto.
+   * Conceptos que se cobran. `'todos'` = los obligatorios con tarifa en la
+   * sección (los opcionales no), que es lo que el selector de plan deja
+   * marcado por defecto.
    */
   conceptos: number[] | 'todos';
   fechaInscripcion?: string | null;
@@ -68,6 +69,11 @@ export async function matricularLote(params: {
    * va con lo del grupo.
    */
   porEstudiante?: Map<number, { conceptos: number[] }>;
+  /**
+   * Hasta qué fecha se crean ya los cargos (ver `corteCargos` en
+   * matricula-alta.ts). Nunca antes de la inscripción.
+   */
+  corteCargos?: string | null;
   dryRun: boolean;
 }): Promise<RespuestaLote> {
   const { teamId, estudianteIds: ids, fechaInscripcion, documentoListaId, notas, dryRun } = params;
@@ -82,6 +88,7 @@ export async function matricularLote(params: {
   const cursoIdOk   = refs.ids.curso!;
 
   const inscripcion = fechaInscripcion || new Date().toISOString().slice(0, 10);
+  const corte = params.corteCargos && params.corteCargos > inscripcion ? params.corteCargos : inscripcion;
   const todos = params.conceptos === 'todos';
   const pedidosCrudos = todos ? [] : (params.conceptos as number[]);
 
@@ -91,13 +98,14 @@ export async function matricularLote(params: {
     ? await contextoDeSeccion(teamId, periodoIdOk, cursoIdOk)
     : null;
   const plan = ctx ? await armarPlanDeCobro(teamId, ctx, inscripcion) : [];
-  const pedidos = todos ? [...new Set(plan.map((l) => l.conceptoId))] : pedidosCrudos;
+  // «Todos» es lo que el selector deja marcado por defecto: los obligatorios.
+  const pedidos = todos ? [...new Set(plan.filter((l) => !l.opcional).map((l) => l.conceptoId))] : pedidosCrudos;
 
   // Lo que va a deber cada alumno del grupo: el mismo total para todos, porque
   // comparten sección y fecha. Se enseña en la revisión, y sale de la misma
   // regla con la que `crearMatriculaConCargos` crea los cargos: lo que se
   // confirma es lo que queda.
-  const { ahora } = cuotasAlMatricular(plan, pedidos, inscripcion);
+  const { ahora } = cuotasAlMatricular(plan, pedidos, corte);
   const cargoTotalCentavos = sumaCentavos(ahora);
   const cargoCount = ahora.length;
 
@@ -187,6 +195,7 @@ export async function matricularLote(params: {
         codigoMatricula: null,
         fechaInscripcion: fechaInscripcion || null,
         inscripcionEfectiva: inscripcion,
+        corteCargos: corte,
         estado: 'activa',
         notas: notas?.trim() || null,
         becaTipo: null,

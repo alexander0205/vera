@@ -130,7 +130,8 @@ export function CuentasPorCobrarPanel({
   const puedeAbrirFactura = modules.includes('facturacion');
   const puedeGestionarCobro = can('facturas:crear');
   const { data, error, isLoading, mutate } = useSWR(
-    puedeVer ? `/api/cuentas-por-cobrar?clientId=${clientId}` : null,
+    // `familia=1`: también lo de sus hijos a nombre del otro padre o sin cliente.
+    puedeVer ? `/api/cuentas-por-cobrar?clientId=${clientId}&familia=1` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
   );

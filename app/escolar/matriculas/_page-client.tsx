@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { MatriculaLoteDialog } from '@/components/administracion-escolar/MatriculaLoteDialog';
-import { MatricularSigerdAviso } from '@/components/administracion-escolar/MatricularSigerdAviso';
+import { BotonMatricular } from '@/components/administracion-escolar/BotonMatricular';
 import { MatriculaFicha, EstadoMatriculaBadge } from '@/components/administracion-escolar/MatriculaFicha';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { CalendarDays, ClipboardList, GraduationCap, Loader2, Plus, Search, Users } from 'lucide-react';
@@ -331,21 +331,14 @@ export default function MatriculasClient() {
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <ExportarListado armar={armarExport} deshabilitado={loading || paginaInfo.total === 0} testId="exportar-matriculas" />
+        {/* Una sola entrada para matricular: «Nueva matrícula» y, en su flecha,
+            en lote, desde SIGERD (con cuántos faltan) y servicios por alumno. */}
         {puedeGestionar && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowLote(true)} disabled={loading || sinCatalogos}>
-              <Users className="h-4 w-4 mr-2" />Matricular en lote
-            </Button>
-            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNueva} disabled={loading || sinCatalogos}>
-              <Plus className="h-4 w-4 mr-2" />Nueva matrícula
-            </Button>
-          </div>
+          <BotonMatricular onNueva={abrirNueva} onLote={() => setShowLote(true)}
+            deshabilitado={loading || sinCatalogos} />
         )}
         </div>
       </div>
-
-      {/* «Tienes X alumnos de SIGERD sin matricular». Solo sale si hay alguno. */}
-      {puedeGestionar && <MatricularSigerdAviso />}
 
       {/* Contadores del team, no de la página: los cuenta el servidor sobre
           todo lo filtrado. */}

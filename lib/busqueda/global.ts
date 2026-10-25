@@ -44,6 +44,7 @@ import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
 import { coincideDocumento, fmtDocumento } from '@/lib/busqueda/documento';
+import { codigoVisible } from '@/lib/administracion-escolar/estudiante-utils';
 import { resolverFamilias, type VinculoFamilia } from '@/lib/busqueda/familias';
 import {
   TIPOS_RESULTADO,
@@ -312,6 +313,9 @@ async function buscarEstudiantes({ teamId, p, q }: Contexto): Promise<ResultadoB
     .select({
       id: adminEscolarEstudiantes.id,
       codigo: adminEscolarEstudiantes.codigo,
+      // Para el sublabel cuando no hay código: ver `codigoVisible`.
+      codigoRne: adminEscolarEstudiantes.codigoRne,
+      sigerdId: adminEscolarEstudiantes.sigerdId,
       nombres: adminEscolarEstudiantes.nombres,
       apellidos: adminEscolarEstudiantes.apellidos,
       estado: adminEscolarEstudiantes.estado,
@@ -333,6 +337,9 @@ async function buscarEstudiantes({ teamId, p, q }: Contexto): Promise<ResultadoB
         ilike(adminEscolarEstudiantes.codigo, p),
         ilike(adminEscolarEstudiantes.codigoRne, p),
         coincideDocumento(adminEscolarEstudiantes.codigoRne, q) ?? undefined,
+        // Por el id de SIGERD, que es lo que la lista enseña como código cuando
+        // el alumno no tiene otro.
+        ilike(sql`${adminEscolarEstudiantes.sigerdId}::text`, p),
       ),
     ))
     // Los activos primero. Con cinco huecos, la ficha repetida y ya retirada
@@ -347,7 +354,7 @@ async function buscarEstudiantes({ teamId, p, q }: Contexto): Promise<ResultadoB
     id: e.id,
     label: `${e.nombres} ${e.apellidos}`,
     sublabel: [
-      e.codigo,
+      codigoVisible(e),
       e.responsable,
       e.estado !== 'activo' ? e.estado : null,
     ].filter(Boolean).join(' · ') || 'Estudiante',

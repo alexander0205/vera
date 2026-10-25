@@ -8,6 +8,7 @@ import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
 import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { codigoVisible } from '@/lib/administracion-escolar/estudiante-utils';
 
 /** Espejo de `EstudianteEnriquecido` de lib/administracion-escolar/queries.ts
  *  (aquel es `server-only` y no se puede importar desde el cliente). */
@@ -18,6 +19,8 @@ export interface EstudianteEnriquecido {
   id: number;
   dependienteId: number | null;
   codigo: string | null;
+  codigoRne: string | null;
+  sigerdId: number | null;
   nombres: string;
   apellidos: string;
   estado: string | null;
@@ -104,7 +107,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-gray-900 truncate">{e.nombres} {e.apellidos}</p>
           <p className="text-xs text-gray-500">
-            {e.codigo ?? 'Sin código'} · <span className="capitalize">{e.estado ?? '—'}</span>
+            {codigoVisible(e) ?? 'Sin código'} · <span className="capitalize">{e.estado ?? '—'}</span>
           </p>
         </div>
         {puedeGestionar && (

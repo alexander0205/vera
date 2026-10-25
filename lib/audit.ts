@@ -11,6 +11,7 @@
  *   ECF_VOID              — anulación enviada a la DGII
  *   DGII_AUTH             — autenticación exitosa contra la DGII
  *   DGII_AUTH_FAIL        — autenticación fallida contra la DGII
+ *   ESCOLAR_MATRICULA_MOVIDA_SIGERD — matrícula movida a la sección que dice SIGERD
  *
  * Uso:
  *   logAudit({ teamId, userId, actor: user.email, action: 'CERT_UPLOAD' });
@@ -73,6 +74,20 @@ export type AuditAction =
   // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
   // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
   | 'ESCOLAR_AVISO_CORRIDA'
+  // «Servicios por alumno»: conceptos agregados o quitados por lote a una
+  // matrícula. `resource` = `matricula:<id>`; meta con lo agregado, lo quitado
+  // y cuántos cargos sin facturar se anularon.
+  | 'ESCOLAR_CONCEPTOS_LOTE'
+  // «Facturar por lote»: una tanda de facturas en borrador creada a mano. El
+  // cron no deja rastro de quién; esto sí, porque aquí hay una persona que
+  // eligió alumnos, conceptos y corte. El `meta` lleva cuántas y por cuánto.
+  | 'ESCOLAR_FACTURAS_LOTE'
+  // Tareas por revisar de un alumno o su familia: quién las abre y quién las cierra.
+  | 'ESCOLAR_TAREA_CREADA'
+  | 'ESCOLAR_TAREA_COMPLETADA'
+  | 'ESCOLAR_TAREA_REABIERTA'
+  // Una revisión de Zero AI que puede abrir varias tareas de golpe.
+  | 'ESCOLAR_TAREAS_ZERO_AI'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Asistente de IA: acción que la persona confirmó en el panel (crear, modificar, eliminar).
@@ -88,7 +103,12 @@ export type AuditAction =
   | 'SUSCRIPCION_AVISO'
   // El administrador de Zero cambió el modelo de IA de alguna parte (/admin/ia).
   // Es de la plataforma, no de una empresa: va con team_id vacío.
-  | 'IA_MODELOS_CAMBIADOS';
+  | 'IA_MODELOS_CAMBIADOS'
+  // «Mover a la sección de SIGERD»: la matrícula de un alumno pasó de un curso
+  // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
+  // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
+  // `resource` es `matricula:<id>` y el meta lleva curso de origen y de destino.
+  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD';
 
 export interface AuditParams {
   teamId:    number;

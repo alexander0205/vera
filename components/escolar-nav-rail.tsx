@@ -15,14 +15,20 @@ import { RailSecciones } from '@/components/rail/RailSecciones';
 import { FUENTE_SECCION } from '@/components/rail/estilos';
 import type { RailSeccion } from '@/components/rail/tipos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import type { Permission } from '@/lib/config/roles';
 import Box from '@mui/material/Box';
 import Link from 'next/link';
 import {
   Users, ClipboardList, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
-  LayoutDashboard, Plus,
+  LayoutDashboard, ListChecks, Plus, FilePlus2,
 } from 'lucide-react';
 
-type SeccionEscolar = RailSeccion & { oculto?: boolean };
+/**
+ * `permiso`: la entrada solo sale a quien lo tiene. El menú de Gobernanza no
+ * filtra por permiso (lo hace cada pantalla al abrirse), pero una acción que
+ * crea documentos no debe ofrecerse a quien la pantalla va a rechazar.
+ */
+type SeccionEscolar = RailSeccion & { oculto?: boolean; permiso?: Permission };
 
 // El orden es FIJO en Gobernanza: este es el que se ve siempre (el rail va con
 // `ordenFijo`, ver EscolarNavRail). No se reordena por uso como los otros
@@ -65,16 +71,26 @@ const SECCIONES: SeccionEscolar[] = [
   // orden: primero quién debe, después qué entró.
   { tipo: 'item', id: 'escolar-responsables', href: '/escolar/responsables', label: 'Responsables',   icon: Contact },
   { tipo: 'item', id: 'escolar-pagos',       href: '/escolar/pagos',         label: 'Pagos',          icon: Wallet },
+  // Crear las facturas de muchos alumnos de una vez. Va pegada a Pagos porque
+  // son las dos mitades de cobrar: se factura y después entra el dinero. Se
+  // ofrece con el permiso de gestionar y no con el de «Nueva Factura»
+  // (`facturas:crear`): la secretaria, que es quien lo pidió, no lo tiene a
+  // propósito. Ver `personal-escolar` en lib/config/roles.ts.
+  { tipo: 'item', id: 'escolar-facturar',    href: '/escolar/facturar',      label: 'Facturar por lote', icon: FilePlus2, permiso: 'administracion-escolar:gestionar' },
   // Los recordatorios de cobro se mandan solos, y eso es justo el problema:
   // sin una pantalla que lo enseñe, nadie se entera de que a tres familias no
   // les llegó nada. Va junto a Pagos porque es la otra mitad de cobrar.
   { tipo: 'item', id: 'escolar-avisos',      href: '/escolar/avisos',        label: 'Avisos',         icon: BellRing },
+  // Lo que alguien tiene que decidir o arreglar, de todas las familias. Antes
+  // eso vivía en un chat o en la memoria de alguien y terminaba en un arreglo
+  // por SQL de soporte. La campana de arriba lleva aquí con su número.
+  { tipo: 'item', id: 'escolar-por-revisar', href: '/escolar/por-revisar',  label: 'Por revisar',    icon: ListChecks },
   // SIGERD se fue a Configuración: se usa al montar el colegio y una vez al
   // año, y aquí ocupaba el sitio de algo que se abre a diario.
   { tipo: 'item', id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', icon: Settings },
 ];
 
-const VISIBLES: RailSeccion[] = SECCIONES.filter(s => !s.oculto);
+const VISIBLES: SeccionEscolar[] = SECCIONES.filter(s => !s.oculto);
 
 /**
  * `variant`:
@@ -90,7 +106,8 @@ export function EscolarNavRail({ variant = 'rail', ocultas = [] }: {
   ocultas?: string[];
 } = {}) {
   const { can } = usePermissions();
-  const secciones = ocultas.length ? VISIBLES.filter(s => !ocultas.includes(s.id)) : VISIBLES;
+  const secciones: RailSeccion[] = VISIBLES.filter(s =>
+    !ocultas.includes(s.id) && (!s.permiso || can(s.permiso)));
   // «Nueva Factura» abre su cajón sobre el Panorama: a quien tiene el Panorama
   // oculto lo mandaría al aviso de pantalla fuera de su menú.
   const puedeFacturar = can('administracion-escolar:pagos') && can('facturas:crear')

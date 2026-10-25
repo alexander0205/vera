@@ -36,6 +36,7 @@ import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
 import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
+import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
 
 const schema = z.object({
   encf:                 z.string().max(40).optional(),
@@ -89,7 +90,8 @@ export async function POST(req: NextRequest) {
 
     const [saved] = await db.insert(ecfDocuments).values({
       teamId,
-      clientId:             d.clientId ?? null,
+      // Nunca sin cliente: una deuda vieja sin dueño no sale en la ficha de nadie.
+      clientId:             d.clientId ?? await clienteDeLaFactura(db as never, { teamId, rnc: d.rncComprador, razonSocial: d.razonSocialComprador }),
       encf,
       tipoEcf:              '00',           // marker: no es comprobante DGII
       estado:               'HISTORICA',

@@ -25,7 +25,7 @@
 
 import { sumarDias } from './calendario';
 import { cargosQueFacturaElCalendario } from './facturar-emision';
-import { montosPorCuota } from './repartir';
+import { cuotasDeLaTarifa, montosPorCuota } from './repartir';
 import {
   resolverTarifasEnMemoria,
   type PrecioConfigurado,
@@ -129,6 +129,8 @@ export interface ConceptoCorrida {
   /** inscripcion | mensualidad | uniforme | actividad | otro */
   tipo: string;
   admiteBeca: boolean;
+  /** El precio es por cuota o el total que se reparte (`precioEsPorCuota`). null = por el tipo. */
+  precioPorCuota?: boolean | null;
   /** Producto de reserva: el de la tarifa manda, este solo si la tarifa no fija ninguno. */
   productId: number | null;
   activo: boolean;
@@ -389,9 +391,14 @@ export function lineasDeLaCorrida(ctx: ContextoColegio, fecha: string): Resultad
           continue;
         }
 
+        // Las cuotas que cobra ESTA tarifa: si su grado paga 10 de 11, la
+        // undécima no le toca y no se anuncia.
+        const deLaTarifa = cuotasDeLaTarifa(suyas, tarifa.cuotas);
+        const indice = deLaTarifa.findIndex((c) => c.id === q.id);
+        if (indice < 0) continue;
         const montos = montosPorCuota(
-          concepto.tipo, tarifa.montoCentavos, suyas.map((c) => c.porcentajeMilesimas));
-        const monto = montos[suyas.findIndex((c) => c.id === q.id)] ?? 0;
+          concepto.tipo, tarifa.montoCentavos, deLaTarifa.map((c) => c.porcentajeMilesimas), concepto.precioPorCuota);
+        const monto = montos[indice] ?? 0;
 
         lineas.push({
           matriculaId: m.id,

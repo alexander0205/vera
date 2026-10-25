@@ -1,6 +1,8 @@
 /**
- * GET  /api/administracion-escolar/canales  → { correo, whatsapp, sms }
- * PUT  /api/administracion-escolar/canales  { correo?, whatsapp?, sms? }
+ * GET  /api/administracion-escolar/canales  → { correo, whatsapp, sms, whatsappVia }
+ * PUT  /api/administracion-escolar/canales  { correo?, whatsapp?, sms?, whatsappVia? }
+ *
+ * `whatsappVia`: 'zero' (número de Zero), 'propio' (el del colegio) o null.
  *
  * El interruptor maestro de cada canal de aviso del colegio. Lo que no venga en
  * el PUT se queda como estaba: la pantalla manda un canal a la vez.
@@ -35,10 +37,16 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  if (body.whatsappVia !== undefined && body.whatsappVia !== null
+    && body.whatsappVia !== 'zero' && body.whatsappVia !== 'propio') {
+    return NextResponse.json({ error: '«whatsappVia» debe ser zero, propio o null' }, { status: 400 });
+  }
+
   const nuevos = {
     correo:   body.correo   ?? actuales.correo,
     whatsapp: body.whatsapp ?? actuales.whatsapp,
     sms:      body.sms      ?? actuales.sms,
+    whatsappVia: body.whatsappVia !== undefined ? body.whatsappVia : actuales.whatsappVia,
   };
 
   await guardarCanales(auth.teamId, nuevos);

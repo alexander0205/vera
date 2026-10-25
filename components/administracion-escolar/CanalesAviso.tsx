@@ -24,6 +24,12 @@ interface EstadoWhatsApp {
   configurado: boolean;
   conectado: boolean;
   numeroWhatsapp: string | null;
+  /** Lo que eligió el colegio: 'zero', 'propio' o null (el suyo si lo conectó). */
+  via?: 'zero' | 'propio' | null;
+  /** Por dónde saldría hoy un mensaje; null = por ninguno. */
+  efectivo?: 'zero' | 'propio' | null;
+  listo?: boolean;
+  zeroDisponible?: boolean;
 }
 
 // Misma clave y misma forma que en ConceptoDetalle a propósito: al enlazar
@@ -88,6 +94,17 @@ const traerCanales = (u: string): Promise<CanalesActivos> =>
  * No marca nada como avisado: el recordatorio que le tocaba a cada cargo sigue
  * pendiente después de probar.
  */
+/** Lo que significa un fallo de WhatsApp, dicho para quien está probando. */
+function motivoFalloWhatsApp(error: string | null | undefined): string {
+  const e = error ?? '';
+  if (e.includes('131047')) {
+    return 'No llegó: WhatsApp solo deja mandar texto libre a quien le escribió al número del colegio en las últimas 24 horas. Escríbele primero desde ese teléfono y vuelve a probar.';
+  }
+  if (e.includes('131026')) return 'No llegó: ese número no tiene WhatsApp o está mal escrito.';
+  if (e.includes('132001')) return 'No llegó: la plantilla todavía no está aprobada en Meta para este número.';
+  return `No llegó${e ? `: ${e}` : '.'}`;
+}
+
 function ProbarCanal({ canal, etiqueta, placeholder, disponible, motivo }: {
   canal: 'correo' | 'whatsapp' | 'sms';
   etiqueta: string;
@@ -118,7 +135,28 @@ function ProbarCanal({ canal, etiqueta, placeholder, disponible, motivo }: {
       // única pantalla donde ese número se puede ver antes de mandarle a un
       // colegio entero.
       const partes = json.partes ? ` · ${json.partes} parte(s), ${json.codificacion}` : '';
-      setResultado({ ok: true, texto: `Enviado a ${json.telefono ?? json.destino}${partes}` });
+      const a = `${json.telefono ?? json.destino}`;
+      setResultado({ ok: true, texto: `Enviado a ${a}${partes}` });
+      // WhatsApp: «enviado» solo quiere decir que Meta lo aceptó. Se espera la
+      // entrega de verdad y se dice si llegó o por qué no.
+      if (canal === 'whatsapp' && json.messageId && json.conversationId) {
+        const como = json.via === 'plantilla' ? `con la plantilla «${json.plantilla}»` : 'como texto libre';
+        setResultado({ ok: true, texto: `Enviado a ${a} ${como}. Esperando que WhatsApp confirme la entrega…` });
+        for (let i = 0; i < 10; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const q = new URLSearchParams({ mensaje: json.messageId, conversacion: json.conversationId });
+          const e = await fetch(`/api/administracion-escolar/avisos/probar?${q}`).then((r) => r.json()).catch(() => ({}));
+          if (e.estado === 'entregado' || e.estado === 'leido') {
+            setResultado({ ok: true, texto: `Llegó a ${a}${e.estado === 'leido' ? ' y ya lo leyeron' : ''} ✓` });
+            return;
+          }
+          if (e.estado === 'fallido') {
+            setResultado({ ok: false, texto: motivoFalloWhatsApp(e.error) });
+            return;
+          }
+        }
+        setResultado({ ok: true, texto: `Enviado a ${a}. WhatsApp todavía no confirma la entrega: revisa el teléfono.` });
+      }
     } catch {
       setResultado({ ok: false, texto: 'Error de conexión' });
     } finally {
@@ -207,6 +245,44 @@ export function CanalesAviso() {
 
   const correoActivo = canales?.correo !== false;
   const whatsappActivo = canales?.whatsapp !== false;
+
+  /**
+   * Por dónde salen los WhatsApp: apagado, el número de Zero o el del colegio.
+   * Antes era un interruptor y el remitente lo decidía solo el sistema (el del
+   * colegio si lo había conectado, si no el de Zero), y la pantalla no dejaba
+   * encenderlo sin número propio aunque el de Zero funcionara.
+   */
+  const viaGuardada = canales?.whatsappVia ?? null;
+  const opcionWhatsapp: 'apagado' | 'zero' | 'propio' = !whatsappActivo ? 'apagado'
+    : viaGuardada ?? (data?.conectado ? 'propio' : 'zero');
+
+  async function cambiarWhatsapp(opcion: 'apagado' | 'zero' | 'propio') {
+    if (!canales) return;
+    setGuardandoCanal('whatsapp');
+    setErrorCanal(null);
+    const cuerpo = opcion === 'apagado' ? { whatsapp: false } : { whatsapp: true, whatsappVia: opcion };
+    try {
+      await mutarCanales(
+        async () => {
+          const res = await fetch('/api/administracion-escolar/canales', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json.error ?? 'No se pudo guardar');
+          return json as CanalesActivos;
+        },
+        { optimisticData: { ...canales, ...cuerpo }, revalidate: false, rollbackOnError: true },
+      );
+      // El estado dice por dónde sale de verdad; los conceptos lo leen de ahí.
+      await mutate();
+    } catch (e: unknown) {
+      setErrorCanal(e instanceof Error ? e.message : 'No se pudo guardar');
+    } finally {
+      setGuardandoCanal(null);
+    }
+  }
   const smsEncendido = canales?.sms !== false;
 
   const [ocupado, setOcupado] = useState(false);
@@ -348,26 +424,53 @@ export function CanalesAviso() {
         <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5">
           <MessageCircle className={`h-4 w-4 ${whatsappActivo ? 'text-zero-600' : 'text-gray-400'}`} />
           <span className="flex-1 text-sm font-medium text-gray-900">WhatsApp</span>
-          {conectado && (
+          {opcionWhatsapp === 'propio' && conectado && (
             <span className="flex items-center gap-1 text-xs font-medium text-green-700">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Conectado{data?.numeroWhatsapp ? ` · ${data.numeroWhatsapp}` : ''}
             </span>
           )}
-          <Interruptor
-            activo={whatsappActivo}
-            disabled={guardandoCanal === 'whatsapp'}
-            etiqueta="Enviar avisos por WhatsApp"
-            onCambiar={(v) => void cambiarCanal('whatsapp', v)}
-          />
         </div>
 
         <div className="space-y-3 px-4 py-4">
-          <p className="text-sm text-gray-500">
-            {whatsappActivo
-              ? 'Los recordatorios de cobro le llegan al tutor por WhatsApp, desde el número del colegio. Enlazar la cuenta abre una ventana de Meta donde se confirma el número.'
-              : 'Apagado: no sale ningún aviso por WhatsApp. La cuenta enlazada se queda como está.'}
-          </p>
+          <div role="radiogroup" aria-label="Por dónde salen los WhatsApp" className="grid gap-2 sm:grid-cols-3">
+            {([
+              { valor: 'apagado', titulo: 'Apagado', detalle: 'No sale ningún aviso por WhatsApp.' },
+              { valor: 'zero', titulo: 'WhatsApp de Zero', detalle: 'Sale del número de Zero, con el nombre del colegio en el mensaje. No hay que conectar nada.' },
+              { valor: 'propio', titulo: 'Mi WhatsApp', detalle: 'Sale del número del colegio, y las respuestas le llegan al colegio. Hay que conectarlo.' },
+            ] as const).map((o) => (
+              <button key={o.valor} type="button" role="radio" aria-checked={opcionWhatsapp === o.valor}
+                disabled={guardandoCanal === 'whatsapp' || (o.valor === 'zero' && data?.zeroDisponible === false && opcionWhatsapp !== 'zero')}
+                onClick={() => { if (opcionWhatsapp !== o.valor) void cambiarWhatsapp(o.valor); }}
+                className={`rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  opcionWhatsapp === o.valor ? 'border-zero-500 bg-zero-50 ring-1 ring-zero-500' : 'border-gray-200 hover:border-gray-300'}`}>
+                <span className="block text-sm font-medium text-gray-900">{o.titulo}</span>
+                <span className="block text-xs text-gray-500">{o.detalle}</span>
+              </button>
+            ))}
+          </div>
+
+          {opcionWhatsapp === 'zero' && (data?.zeroDisponible === false ? (
+            <p className="text-sm text-amber-700">
+              El WhatsApp de Zero no está disponible ahora mismo, así que no sale ningún WhatsApp. Conecta «Mi WhatsApp»
+              o escríbenos.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500">
+              Los recordatorios de cobro le llegan al tutor desde el WhatsApp de Zero. Lo que respondan los padres
+              no le llega al colegio: para eso, conecta «Mi WhatsApp».
+            </p>
+          ))}
+          {opcionWhatsapp === 'apagado' && (
+            <p className="text-sm text-gray-500">Apagado: no sale ningún aviso por WhatsApp. La cuenta enlazada, si hay, se queda como está.</p>
+          )}
+          {opcionWhatsapp === 'propio' && (
+            <p className="text-sm text-gray-500">
+              {conectado
+                ? 'Los recordatorios salen desde el número del colegio.'
+                : 'Mientras el número del colegio no esté conectado, no sale ningún WhatsApp. Enlazar la cuenta abre una ventana de Meta donde se confirma el número.'}
+            </p>
+          )}
 
           {error && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -383,7 +486,7 @@ export function CanalesAviso() {
             </p>
           )}
 
-          {isLoading ? (
+          {opcionWhatsapp !== 'propio' ? null : isLoading ? (
             <p className="flex items-center gap-2 text-sm text-gray-500">
               <Loader2 className="h-4 w-4 animate-spin" />
               Cargando…
@@ -460,10 +563,10 @@ export function CanalesAviso() {
           <ProbarCanal
             canal="whatsapp" etiqueta="tu WhatsApp"
             placeholder="(809) 000-0000"
-            disponible={whatsappActivo && conectado}
-            motivo={!conectado
-              ? 'Enlaza la cuenta de WhatsApp para poder probarla.'
-              : 'Enciende el canal para poder probarlo.'}
+            disponible={whatsappActivo && data?.listo === true}
+            motivo={!whatsappActivo
+              ? 'Elige WhatsApp de Zero o Mi WhatsApp para poder probarlo.'
+              : 'Conecta el número del colegio para poder probarlo.'}
           />
 
           {/* Si el navegador bloqueó la ventana, este es el único sitio donde

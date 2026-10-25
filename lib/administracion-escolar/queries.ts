@@ -41,6 +41,10 @@ export interface EstudianteEnriquecido {
   id: number;
   dependienteId: number | null;
   codigo: string | null;
+  /** RNE del alumno (lo trae SIGERD). null en los beneficiarios. */
+  codigoRne: string | null;
+  /** Id del alumno en SIGERD. null en los creados a mano y en los beneficiarios. */
+  sigerdId: number | null;
   nombres: string;
   apellidos: string;
   /** null en los beneficiarios: el estado escolar es del alumno, no del beneficiario. */
@@ -145,6 +149,9 @@ export async function listarEstudiantesEnriquecidos(
       // sus hijos sin saber cómo está escrito el nombre.
       ilike(adminEscolarEstudiantes.codigoRne, p),
       coincideDocumento(adminEscolarEstudiantes.codigoRne, q) ?? undefined,
+      // Y por el id de SIGERD: es lo que la lista enseña bajo el nombre
+      // («SIGERD 1234») cuando el alumno aún no tiene código ni RNE.
+      ilike(sql`${adminEscolarEstudiantes.sigerdId}::text`, p),
       // Buscar por el nombre de CUALQUIER tutor del alumno, no solo del que
       // tuviera marcada la casilla `responsable_pago` —que ya nadie marca, así
       // que buscar «Scarlet» no encontraba a su hijo—. Y también por el
@@ -242,6 +249,8 @@ export async function listarEstudiantesEnriquecidos(
              dependientes.id,
              dependientes.id,
              NULL,
+             NULL,
+             NULL,
              dependientes.nombre,
              dependientes.apellido,
              NULL,
@@ -258,6 +267,8 @@ export async function listarEstudiantesEnriquecidos(
              admin_escolar_estudiantes.id               AS id,
              admin_escolar_estudiantes.dependiente_id   AS dependiente_id,
              admin_escolar_estudiantes.codigo           AS codigo,
+             admin_escolar_estudiantes.codigo_rne       AS codigo_rne,
+             admin_escolar_estudiantes.sigerd_id        AS sigerd_id,
              admin_escolar_estudiantes.nombres          AS nombres,
              admin_escolar_estudiantes.apellidos        AS apellidos,
              admin_escolar_estudiantes.estado           AS estado,
@@ -308,6 +319,8 @@ export async function listarEstudiantesEnriquecidos(
       id,
       dependienteId: f.dependiente_id == null ? null : Number(f.dependiente_id),
       codigo: f.codigo,
+      codigoRne: f.codigo_rne,
+      sigerdId: f.sigerd_id == null ? null : Number(f.sigerd_id),
       nombres: f.nombres,
       apellidos: f.apellidos,
       estado: f.estado,
@@ -336,6 +349,8 @@ interface FilaListado {
   id: number | string;
   dependiente_id: number | string | null;
   codigo: string | null;
+  codigo_rne: string | null;
+  sigerd_id: number | string | null;
   nombres: string;
   apellidos: string;
   estado: string | null;

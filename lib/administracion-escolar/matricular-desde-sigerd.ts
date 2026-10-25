@@ -16,18 +16,20 @@
  * El resto se cuenta y se explica, no se fuerza.
  */
 import 'server-only';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarConceptoPrecios, adminEscolarConceptosPago, adminEscolarCursos,
   adminEscolarEstudiantes, adminEscolarGrados, adminEscolarMatriculas,
-  adminEscolarPeriodos, adminEscolarServicios, sigerdImportaciones,
+  adminEscolarPeriodos, adminEscolarServicios,
 } from '@/lib/db/schema';
 import { invalidarEstructura } from '@/lib/cache/escolar';
 import { LoteError, matricularLote, type ResultadoLote } from './matricula-lote';
 import { contextoDeSeccion } from './tarifas';
 import { armarPlanDeCobro } from './plan-cobro';
+import { hoyRD } from '@/lib/utils/format';
 import type { ArbolCentro } from '@/lib/sigerd/sync';
+import { ultimoDumpSigerd } from '@/lib/sigerd/ultimo-dump';
 
 export interface GrupoSigerd {
   cursoId: number;
@@ -49,6 +51,13 @@ export interface GrupoSigerd {
      * salta y los avisos no tienen a quién llegar. Se avisa antes de matricular.
      */
     sinResponsable: boolean;
+    /**
+     * Ya tiene matrícula activa este año (solo con `conMatriculados`): sale
+     * para cambiarle lo que lleva, no para matricularlo otra vez.
+     */
+    matriculaId?: number;
+    /** Lo que su matrícula cobra hoy, si ya la tiene. */
+    conceptos?: number[];
   }>;
 }
 
@@ -63,14 +72,21 @@ export interface PendientesSigerd {
   /** Falso si no hay descarga de SIGERD o no hay año escolar activo. */
   disponible: boolean;
   motivo?: string;
-  periodo: { id: number; nombre: string } | null;
+  /**
+   * El año activo. `fechaInicio` es la inscripción por defecto: quien viene de
+   * SIGERD está en el colegio desde que empezó el año, así que le tocan todas
+   * las cuotas del calendario, no solo las que faltan desde hoy.
+   */
+  periodo: { id: number; nombre: string; fechaInicio: string | null } | null;
   anoAcademico: number | null;
   /** Cuándo se bajó de SIGERD lo que se está enseñando: lo de después no está. */
   descargadaEl: string | null;
   /** Por sección: lo que el botón va a matricular. */
   grupos: GrupoSigerd[];
-  /** Cuántos se matricularían (suma de los grupos). */
+  /** Cuántos se matricularían (los de los grupos que no tienen matrícula). */
   porMatricular: number;
+  /** Con `conMatriculados`: cuántos de los grupos ya tienen matrícula activa. */
+  enMatricula?: number;
   /** Ya tienen matrícula activa en el período: se dejan como están. */
   yaMatriculados: number;
   /** Están en SIGERD pero no como estudiantes activos: sin cruzar, o dados de baja. */
@@ -84,22 +100,24 @@ const vacio = (motivo: string): PendientesSigerd => ({
   grupos: [], porMatricular: 0, yaMatriculados: 0, sinEstudiante: [], sinSeccion: [],
 });
 
-export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesSigerd> {
+/**
+ * Quién falta por matricular, por sección. Con `conMatriculados` trae además,
+ * en su sección, a los que ya tienen matrícula activa este año con lo que
+ * llevan: la pantalla los enseña para cambiarles los conceptos. El aviso y el
+ * contador del menú no lo piden y no pagan esa consulta.
+ */
+export async function pendientesDesdeSigerd(
+  teamId: number, opciones: { conMatriculados?: boolean } = {},
+): Promise<PendientesSigerd> {
   // La descarga más reciente: es la que dice dónde está cada alumno este año.
-  const [imp] = await db.select({
-    dump: sigerdImportaciones.dump,
-    ano: sigerdImportaciones.anoAcademico,
-    actualizada: sigerdImportaciones.updatedAt,
-  })
-    .from(sigerdImportaciones)
-    .where(and(eq(sigerdImportaciones.teamId, teamId), eq(sigerdImportaciones.estado, 'completado')))
-    .orderBy(desc(sigerdImportaciones.anoAcademico))
-    .limit(1);
-  const dump = (imp?.dump ?? null) as Record<string, unknown> | null;
+  // Misma regla que «Revisar cambios» y el asistente (`ultimoDumpSigerd`): si
+  // no, una pantalla diría «no hay descarga» mientras otra enseña datos.
+  const imp = await ultimoDumpSigerd(teamId);
+  const dump = imp?.dump ?? null;
   const arbol = dump?.estructura as ArbolCentro | undefined;
   if (!arbol) return vacio('No hay descarga de SIGERD todavía.');
 
-  const [periodo] = await db.select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre })
+  const [periodo] = await db.select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre, fechaInicio: adminEscolarPeriodos.fechaInicio })
     .from(adminEscolarPeriodos)
     .where(and(eq(adminEscolarPeriodos.teamId, teamId), eq(adminEscolarPeriodos.activo, true)))
     .limit(1);
@@ -191,19 +209,7 @@ export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesS
   }
 
   const grupos = new Map<number, GrupoSigerd & { orden: number[] }>();
-  let yaMatriculados = 0;
-  const sinSeccion: OmitidoSigerd[] = [];
-
-  for (const { est, sitios } of lugares.values()) {
-    const nombre = `${est.nombres} ${est.apellidos}`.trim();
-    if (conMatricula.has(est.id)) { yaMatriculados++; continue; }
-    if (sitios.length > 1) {
-      sinSeccion.push({ nombre, ubicacion: `SIGERD lo tiene en ${sitios.length} secciones: ${sitios.map((x) => x.ubicacion).join(' y ')}` });
-      continue;
-    }
-    const { curso, ubicacion } = sitios[0];
-    if (!curso) { sinSeccion.push({ nombre, ubicacion }); continue; }
-
+  const grupoDe = (curso: Curso) => {
     let grupo = grupos.get(curso.id);
     if (!grupo) {
       const partes = [curso.grado, curso.nombre].filter(Boolean).join(' — ');
@@ -219,7 +225,56 @@ export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesS
       };
       grupos.set(curso.id, grupo);
     }
-    grupo.estudiantes.push({ id: est.id, nombre, sinResponsable: est.facturarA == null });
+    return grupo;
+  };
+  let yaMatriculados = 0;
+  const sinSeccion: OmitidoSigerd[] = [];
+
+  for (const { est, sitios } of lugares.values()) {
+    const nombre = `${est.nombres} ${est.apellidos}`.trim();
+    if (conMatricula.has(est.id)) { yaMatriculados++; continue; }
+    if (sitios.length > 1) {
+      sinSeccion.push({ nombre, ubicacion: `SIGERD lo tiene en ${sitios.length} secciones: ${sitios.map((x) => x.ubicacion).join(' y ')}` });
+      continue;
+    }
+    const { curso, ubicacion } = sitios[0];
+    if (!curso) { sinSeccion.push({ nombre, ubicacion }); continue; }
+    grupoDe(curso).estudiantes.push({ id: est.id, nombre, sinResponsable: est.facturarA == null });
+  }
+
+  // Los ya matriculados, en su sección y con lo que lleva su matrícula.
+  let enMatricula = 0;
+  if (opciones.conMatriculados) {
+    const activas = await db.select({
+      matriculaId: adminEscolarMatriculas.id,
+      estudianteId: adminEscolarMatriculas.estudianteId,
+      cursoId: adminEscolarMatriculas.cursoId,
+      conceptosIds: adminEscolarMatriculas.conceptosIds,
+      nombres: adminEscolarEstudiantes.nombres,
+      apellidos: adminEscolarEstudiantes.apellidos,
+      facturarA: adminEscolarEstudiantes.facturarAClientId,
+    })
+      .from(adminEscolarMatriculas)
+      .innerJoin(adminEscolarEstudiantes, eq(adminEscolarEstudiantes.id, adminEscolarMatriculas.estudianteId))
+      .where(and(
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.periodoId, periodo.id),
+        eq(adminEscolarMatriculas.estado, 'activa'),
+      ));
+    const cursoPorId = new Map(cursos.map((c) => [c.id, c]));
+    for (const m of activas) {
+      // Una sección apagada no sale en esta pantalla; su matrícula se ve en Matriculación.
+      const curso = cursoPorId.get(m.cursoId);
+      if (!curso) continue;
+      grupoDe(curso).estudiantes.push({
+        id: m.estudianteId,
+        nombre: `${m.nombres} ${m.apellidos}`.trim(),
+        sinResponsable: m.facturarA == null,
+        matriculaId: m.matriculaId,
+        conceptos: (m.conceptosIds ?? []).map(Number),
+      });
+      enMatricula++;
+    }
   }
 
   const porOrden = (a: number[], b: number[]) => a.findIndex((x, i) => x !== b[i]);
@@ -235,10 +290,11 @@ export async function pendientesDesdeSigerd(teamId: number): Promise<PendientesS
   return {
     disponible: true,
     periodo,
-    anoAcademico: (dump?.anoAcademico as number | undefined) ?? imp?.ano ?? null,
-    descargadaEl: imp?.actualizada ? new Date(imp.actualizada).toISOString() : null,
+    anoAcademico: (dump?.anoAcademico as number | undefined) ?? imp?.anoAcademico ?? null,
+    descargadaEl: imp?.bajadoEn ? imp.bajadoEn.toISOString() : null,
     grupos: lista,
-    porMatricular: lista.reduce((n, g) => n + g.estudiantes.length, 0),
+    porMatricular: lista.reduce((n, g) => n + g.estudiantes.filter((e) => e.matriculaId == null).length, 0),
+    ...(opciones.conMatriculados ? { enMatricula } : {}),
     yaMatriculados, sinEstudiante, sinSeccion,
   };
 }
@@ -317,6 +373,9 @@ export async function matricularSeccionDesdeSigerd(teamId: number, entrada: {
       conceptos: 'todos',
       porEstudiante: new Map(alumnos.map((a) => [a.estudianteId, { conceptos: a.conceptos }])),
       fechaInscripcion: fecha,
+      // Con la inscripción al inicio del año, lo ya vencido (agosto, septiembre…)
+      // se carga ahora como pendiente; lo que viene lo crea el devengo.
+      corteCargos: hoyRD(),
       dryRun: false,
     });
   } catch (err) {

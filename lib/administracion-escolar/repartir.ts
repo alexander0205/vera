@@ -30,16 +30,50 @@ export function repartir(
 }
 
 /**
- * Lo que sale en cada cuota según qué es el cobro. Es la regla de
- * `armarPlanDeCobro`: la colegiatura cobra la tarifa entera en cada cuota; lo
- * demás toma la tarifa como el total del año y la reparte.
+ * Lo que se cobra en partes: el número de Tarifas es el TOTAL y se reparte entre
+ * las cuotas («inscripción 3,500 en dos pagos», la evaluación trimestral).
+ */
+const SE_REPARTE = new Set(['inscripcion', 'actividad', 'uniforme']);
+
+/**
+ * Si el número de Tarifas es lo de CADA cuota (true) o el total que se reparte
+ * entre ellas (false).
+ *
+ * Lo que se repite —colegiatura, almuerzo, transporte, horario extendido, las
+ * categorías propias del colegio— cobra el precio en cada cuota: así lo piensa
+ * el colegio («el almuerzo son 5,000 al mes»). Antes solo la colegiatura lo
+ * hacía, y un almuerzo de 5,000 en 11 cuotas salía a 455. Inscripción,
+ * actividades y uniformes siguen repartiendo el total.
+ *
+ * `precioPorCuota` del concepto, si alguien lo fijó, manda sobre la regla. No
+ * tiene pantalla: la elección confundía más de lo que ayudaba.
+ */
+export function precioEsPorCuota(concepto: { tipo: string; precioPorCuota?: boolean | null }): boolean {
+  return concepto.precioPorCuota ?? !SE_REPARTE.has(concepto.tipo);
+}
+
+/**
+ * Las cuotas del calendario que cobra una tarifa: las primeras `n`, o todas.
+ * Maternal e Infantes pagan 11 meses y los demás grados 10 con el mismo
+ * concepto: el calendario tiene 11 y la tarifa de esos grados dice 10.
+ */
+export function cuotasDeLaTarifa<T>(cuotas: T[], n: number | null | undefined): T[] {
+  return n != null && n > 0 && n < cuotas.length ? cuotas.slice(0, n) : cuotas;
+}
+
+/**
+ * Lo que sale en cada cuota. Es la regla de `armarPlanDeCobro`: si el precio es
+ * por cuota, se cobra entero en cada una; si es el total del año, se reparte.
+ * `precioPorCuota` es lo que dijo el colegio en el concepto; sin él, decide el
+ * tipo (`precioEsPorCuota`).
  */
 export function montosPorCuota(
   tipoDeConcepto: string,
   montoCentavos: number,
   pesos: number[],
+  precioPorCuota?: boolean | null,
 ): number[] {
-  return tipoDeConcepto === 'mensualidad'
+  return precioEsPorCuota({ tipo: tipoDeConcepto, precioPorCuota })
     ? pesos.map(() => montoCentavos)
     : repartir(montoCentavos, pesos);
 }

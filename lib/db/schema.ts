@@ -2379,6 +2379,24 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
    */
   aplicaPorDefecto: boolean('aplica_por_defecto').notNull().default(false),
   /**
+   * Opcional: llega DESMARCADO al matricular y se marca solo a quien lo usa
+   * (uniforme, transporte, almuerzo). Los obligatorios llegan marcados. Por
+   * defecto false para que nada cambie hasta que el colegio lo diga
+   * (`aplicaPorDefecto` quedó sin pantalla y casi todos en false).
+   */
+  opcional: boolean('opcional').notNull().default(false),
+  /**
+   * El precio de Tarifas es lo de cada cuota (true) o el total del año que se
+   * reparte (false). null = por el tipo: la colegiatura por cuota, lo demás
+   * repartido (`precioEsPorCuota`).
+   */
+  precioPorCuota: boolean('precio_por_cuota'),
+  /**
+   * Categoría propia del colegio («Servicios», «Transporte»…). Solo clasifica:
+   * cómo se cobra lo dicen el tipo, `precioPorCuota`, la beca y la mora.
+   */
+  categoria: varchar('categoria', { length: 60 }),
+  /**
    * Si la beca lo descuenta. La beca escolar es sobre lo que se paga cada mes,
    * y la inscripción, los uniformes y los materiales se cobran completos. No
    * se pregunta en pantalla —se derivaba en una casilla que nadie sabía para
@@ -2478,6 +2496,23 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
  * Secundario vs Primario, o por grado/sección. `objetivoTipo` + `objetivoId`
  * apuntan a servicios / grados / cursos(=sección).
  */
+/**
+ * Paquetes de conceptos: una lista de conceptos con nombre («Horario regular»,
+ * «Horario extendido», «Registro SIGERD») que se asigna a un niño o a muchos
+ * de una vez. No guarda precios: cada concepto cobra su tarifa.
+ */
+export const adminEscolarPaquetes = pgTable('admin_escolar_paquetes', {
+  id:           serial('id').primaryKey(),
+  teamId:       integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  nombre:       varchar('nombre', { length: 80 }).notNull(),
+  descripcion:  varchar('descripcion', { length: 200 }),
+  conceptosIds: integer('conceptos_ids').array().notNull().default(sql`'{}'::integer[]`),
+  orden:        integer('orden').notNull().default(0),
+  activo:       boolean('activo').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [index('admin_escolar_paquetes_team_idx').on(t.teamId)]);
+
 export const adminEscolarConceptoPrecios = pgTable('admin_escolar_concepto_precios', {
   id:            serial('id').primaryKey(),
   teamId:        integer('team_id').notNull().references(() => teams.id),
@@ -2499,6 +2534,8 @@ export const adminEscolarConceptoPrecios = pgTable('admin_escolar_concepto_preci
    * hereda el precio del servicio hereda también su producto.
    */
   productId:     integer('product_id').references(() => products.id),
+  /** Cuántas cuotas del calendario cobra esta tarifa: las primeras N. null = todas. */
+  cuotas:        smallint('cuotas'),
   activo:        boolean('activo').notNull().default(true),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -2579,6 +2616,12 @@ export const adminEscolarCanales = pgTable('admin_escolar_canales', {
   correoActivo:   boolean('correo_activo').notNull().default(true),
   whatsappActivo: boolean('whatsapp_activo').notNull().default(true),
   smsActivo:      boolean('sms_activo').notNull().default(true),
+  /**
+   * Por dónde salen los WhatsApp: 'zero' (número de Zero), 'propio' (el del
+   * colegio, y si no está conectado no sale) o null = el del colegio si lo
+   * conectó y si no el de Zero, como siempre. Ver `elegirRemitente`.
+   */
+  whatsappVia:    varchar('whatsapp_via', { length: 8 }).$type<'zero' | 'propio'>(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -2598,6 +2641,17 @@ export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados
   destino: varchar('destino', { length: 200 }),
   /** Qué se mandó, en palabras: «Acta de nacimiento», «Ficha de datos». */
   detalle: varchar('detalle', { length: 200 }),
+  /**
+   * Qué MENSAJE fue, cuando varios cobros de una familia viajaron juntos
+   * (migración 0202). Todas las filas de ese mensaje —una por cargo, porque el
+   * índice único, la reconciliación y los paneles trabajan por cargo— llevan el
+   * mismo valor. NULL = el mensaje fue de un solo cobro (todo lo anterior).
+   *
+   * Existe para contar bien: la cuota mensual y el presupuesto de la corrida
+   * miden mensajes, y el SMS y el correo no devuelven un id que los distinga.
+   * Se cuenta con `count(distinct coalesce(grupo, id::text))`.
+   */
+  grupo: varchar('grupo', { length: 40 }),
   /**
    * El id del mensaje en el CRM. Sin esto no se puede volver a preguntar si
    * LLEGÓ: el 201 del envío solo dice que Meta aceptó la petición, y un aviso
@@ -2681,6 +2735,57 @@ export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   index('admin_escolar_cargos_estudiante_idx').on(t.estudianteId),
   index('admin_escolar_cargos_matricula_idx').on(t.matriculaId),
   index('admin_escolar_cargos_periodo_idx').on(t.periodoId),
+]);
+
+/**
+ * Tareas por revisar de un alumno o de su familia (0207): lo que alguien tiene
+ * que decidir o arreglar, a quién le toca y su conversación hasta completarla.
+ * Ver lib/administracion-escolar/tareas.ts.
+ */
+export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
+  id:                  serial('id').primaryKey(),
+  teamId:              integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  /** De un alumno; NULL si es de toda la familia (entonces `clientId`). */
+  estudianteId:        integer('estudiante_id').references(() => adminEscolarEstudiantes.id, { onDelete: 'cascade' }),
+  clientId:            integer('client_id').references(() => clients.id, { onDelete: 'set null' }),
+  titulo:              varchar('titulo', { length: 160 }).notNull(),
+  descripcion:         text('descripcion'),
+  /** soporte | persona */
+  asignadaA:           varchar('asignada_a', { length: 16 }).notNull(),
+  asignadaUserId:      integer('asignada_user_id').references(() => users.id, { onDelete: 'set null' }),
+  ecfDocumentId:       integer('ecf_document_id').references(() => ecfDocuments.id, { onDelete: 'set null' }),
+  cargoId:             integer('cargo_id').references(() => adminEscolarCargos.id, { onDelete: 'set null' }),
+  venceEl:             date('vence_el'),
+  /** abierta | completada */
+  estado:              varchar('estado', { length: 12 }).notNull().default('abierta'),
+  creadaPorUserId:     integer('creada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
+  creadaPorIa:         boolean('creada_por_ia').notNull().default(false),
+  /** El hallazgo de Zero AI que la abrió; único por colegio (ver tareas-ia.ts). */
+  origenClave:         varchar('origen_clave', { length: 120 }),
+  completadaPorUserId: integer('completada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
+  completadaEn:        timestamp('completada_en'),
+  creadoEn:            timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn:       timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_tareas_estudiante_idx').on(t.teamId, t.estudianteId, t.estado),
+  index('admin_escolar_tareas_familia_idx').on(t.teamId, t.clientId, t.estado),
+  index('admin_escolar_tareas_abiertas_idx').on(t.teamId, t.estado, t.asignadaA),
+]);
+
+/** La conversación de una tarea: mensajes, eventos (creada, completada…) y lo que propone Zero AI. */
+export const adminEscolarTareaMensajes = pgTable('admin_escolar_tarea_mensajes', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  tareaId:   integer('tarea_id').notNull().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
+  /** mensaje | evento | ia */
+  tipo:      varchar('tipo', { length: 10 }).notNull(),
+  userId:    integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  /** Quién lo dijo, como se enseña: el nombre de la persona, «Soporte IT · Zero» o «Zero AI». */
+  autor:     varchar('autor', { length: 100 }).notNull(),
+  texto:     text('texto').notNull(),
+  creadoEn:  timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_tarea_mensajes_tarea_idx').on(t.tareaId, t.creadoEn),
 ]);
 
 /** Pago escolar aplicado a un cargo. Enlace OPCIONAL a factura/pago_recibido,
