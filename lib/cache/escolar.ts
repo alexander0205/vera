@@ -27,6 +27,8 @@ export const tagSigerd = (teamId: number) => `escolar:sigerd:${teamId}`;
  * módulo y solo cambia cuando alguien la toca.
  */
 export const tagPantallas = (teamId: number) => `pantallas:${teamId}`;
+/** Modelos de IA que escogió el administrador de Zero (lib/ia/modelo-servidor.ts). Uno para toda la plataforma. */
+export const tagPlataformaIa = 'plataforma:ia';
 
 /**
  * Envuelve una lectura para que se sirva de caché hasta que alguien invalide su
@@ -86,4 +88,9 @@ export function invalidarSigerd(teamId: number): void {
  */
 export function invalidarPantallas(teamId: number): void {
   invalidar(tagPantallas(teamId), { expire: 0 });
+}
+
+/** Tras cambiar en /admin/ia el modelo de alguna parte: el siguiente mensaje ya usa el nuevo. */
+export function invalidarPlataformaIa(): void {
+  invalidar(tagPlataformaIa, { expire: 0 });
 }

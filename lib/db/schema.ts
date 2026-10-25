@@ -306,6 +306,17 @@ export const teamRolePantallasOcultas = pgTable('team_role_pantallas_ocultas', {
   rolePantallaUnique: uniqueIndex('team_role_pantalla_idx').on(t.teamRoleId, t.pantalla),
 }));
 
+/**
+ * Ajustes de la plataforma, no de una empresa: lo que decide el administrador
+ * de Zero para todos (hoy, el modelo de IA de cada parte: `ia.modelos`).
+ */
+export const plataformaAjustes = pgTable('plataforma_ajustes', {
+  clave: varchar('clave', { length: 80 }).primaryKey(),
+  valor: jsonb('valor').notNull(),
+  actualizadoPor: integer('actualizado_por').references(() => users.id, { onDelete: 'set null' }),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+});
+
 export const activityLogs = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')

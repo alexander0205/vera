@@ -85,7 +85,10 @@ export type AuditAction =
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
-  | 'SUSCRIPCION_AVISO';
+  | 'SUSCRIPCION_AVISO'
+  // El administrador de Zero cambió el modelo de IA de alguna parte (/admin/ia).
+  // Es de la plataforma, no de una empresa: va con team_id vacío.
+  | 'IA_MODELOS_CAMBIADOS';
 
 export interface AuditParams {
   teamId:    number;

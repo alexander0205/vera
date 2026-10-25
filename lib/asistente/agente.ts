@@ -1,6 +1,5 @@
 import 'server-only';
 import { generateText, stepCountIs, type LanguageModel } from 'ai';
-import { google } from '@ai-sdk/google';
 import type { ContextoAsistente } from './contexto';
 import { crearHerramientas, type ConsultaHecha } from './herramientas';
 import { responderLocal } from './local';
@@ -10,17 +9,18 @@ import { filtrarFormulariosDeIa } from './formulario';
 import { depurarSalida, crearDetectorFuga, clasificarSolicitud, pareceDescripcionDeReglas } from './politicas';
 import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import type { Propuesta } from './acciones';
+import { comoModelo, hayCaminoIa, modelosDe } from '@/lib/ia/modelo-servidor';
 
 export { hoyRd };
 
 /**
- * El asistente de Zero: Gemini por el AI Gateway, igual que el de plantillas,
- * pero SOLO LECTURA. No tiene ninguna herramienta que escriba: lo peor que
- * puede hacer es consultar los reportes del propio colegio.
+ * El asistente de Zero, por el AI Gateway igual que el de plantillas, pero
+ * SOLO LECTURA. No tiene ninguna herramienta que escriba: lo peor que puede
+ * hacer es consultar los reportes del propio colegio.
+ *
+ * El modelo (Gemini, Claude…) y su respaldo los escoge el administrador de
+ * Zero en /admin/ia: ver lib/ia/modelos.ts.
  */
-
-const MODELO = process.env.ASISTENTE_IA_MODELO || 'google/gemini-2.5-flash';
-const RESPALDO = process.env.ASISTENTE_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash-lite';
 
 /**
  * En desarrollo, sin llave del gateway, se usa un modelo simulado para poder
@@ -29,17 +29,7 @@ const RESPALDO = process.env.ASISTENTE_IA_MODELO_RESPALDO || 'google/gemini-2.5-
 const simulado = () =>
   process.env.NODE_ENV !== 'production' && process.env.ASISTENTE_IA_SIMULADA === '1';
 
-const porGateway = () => Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
-
-/** Sin gateway se llama a Google directo con su llave (mismo id de modelo). */
-function comoModelo(id: string): LanguageModel | null {
-  if (porGateway()) return id;
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY && id.startsWith('google/')) return google(id.slice('google/'.length));
-  return null;
-}
-
-export const asistenteIaDisponible = () =>
-  simulado() || comoModelo(MODELO) != null;
+export const asistenteIaDisponible = () => simulado() || hayCaminoIa();
 
 export interface MensajeChat { role: 'user' | 'assistant'; content: string }
 
@@ -230,6 +220,7 @@ export async function conversar(
       const { modeloSimulado } = await import('./modelo-simulado');
       texto = await correr(modeloPrueba ?? modeloSimulado(), 'simulado', 30_000);
     } else {
+      const { principal: MODELO, respaldo: RESPALDO } = await modelosDe('asistente');
       let cuota = false;
       try {
         const principal = comoModelo(MODELO);
