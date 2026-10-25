@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import {
-  avisosDeHoy, candidatos, despachar, equiposConAvisos, mensajesEnviados,
+  avisosDeHoy, candidatos, canalesSinWhatsApp, despachar, equiposConAvisos, mensajesEnviados,
   type AvisoPendiente, type EnvioHecho,
 } from '@/lib/administracion-escolar/avisos';
 import { asuntoDeAviso, datosWhatsAppDeGrupo, sufijoDeBoton } from '@/lib/administracion-escolar/agrupar-avisos';
@@ -134,9 +134,10 @@ export async function GET(req: NextRequest) {
     const crudos: AvisoPendiente[] = filas.flatMap((f) => avisosDeHoy(f, hoy, canales));
 
     // Un cobro sin plantilla de WhatsApp que se pueda mandar no va por WhatsApp
-    // (ver `plantillaParaEnviar`). Se le quita el canal ANTES de despachar: así
-    // no se reserva, no cuenta como fallo y no se reintenta cada cuarto de
-    // hora. El correo y el SMS del mismo cobro siguen su camino.
+    // (ver `plantillaParaEnviar`): va por SMS en su lugar, si el colegio y el
+    // concepto lo tienen encendido (`canalesSinWhatsApp`). Se decide ANTES de
+    // despachar: así el WhatsApp no se reserva, no cuenta como fallo y no se
+    // reintenta cada cuarto de hora. El correo del mismo cobro sigue igual.
     const plantillasDelColegio = await getPlantillasDeTeam(teamId);
     let whatsappSinPlantilla = 0;
     const pendientes: AvisoPendiente[] = crudos.map((p) => {
@@ -146,10 +147,10 @@ export async function GET(req: NextRequest) {
       const hayEnlace = p.fila.clientId != null && p.fila.ecfDocumentId != null;
       if (plantillaParaEnviar(asignada, hayEnlace, CRM_SOPORTA_BOTONES)) return p;
       whatsappSinPlantilla++;
-      return { ...p, canales: p.canales.filter((c) => c !== 'whatsapp') };
+      return { ...p, canales: canalesSinWhatsApp(p.canales, p.fila, canales) };
     }).filter((p) => p.canales.length > 0);
     if (whatsappSinPlantilla > 0) {
-      console.warn(`[avisos] team ${teamId}: ${whatsappSinPlantilla} cobro(s) sin plantilla de WhatsApp; no se mandan por WhatsApp.`);
+      console.warn(`[avisos] team ${teamId}: ${whatsappSinPlantilla} cobro(s) sin plantilla de WhatsApp; no van por WhatsApp (van por SMS si está encendido).`);
     }
     const colegio = nombres.get(teamId) ?? 'Tu colegio';
 
@@ -295,8 +296,8 @@ export async function GET(req: NextRequest) {
     lote: { limite, pausaMs, agotado: !dryRun && presupuesto <= 0 },
     equipos: equipos.length,
     avisos: resumen.reduce((n, r) => n + r.pendientes, 0),
-    // Cobros que hoy no salieron por WhatsApp por no tener plantilla: el
-    // colegio tiene que asignarla (y Meta aprobarla) para que salgan.
+    // Cobros que hoy no salieron por WhatsApp por no tener plantilla (fueron por
+    // SMS si el colegio lo tiene): hay que asignarla, y Meta aprobarla.
     whatsappSinPlantilla: resumen.reduce((n, r) => n + r.whatsappSinPlantilla, 0),
     enviados,
     // Cuántos cargos cubrieron esos mensajes. Igual a `enviados` cuando nadie
