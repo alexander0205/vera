@@ -189,6 +189,27 @@ export function canalesVivosDe(
   return vivos;
 }
 
+/**
+ * Los canales de un aviso cuyo WhatsApp no se puede mandar (no hay plantilla
+ * aprobada y asignada): se le quita el WhatsApp y, si el colegio y el concepto
+ * tienen el SMS encendido, sale por SMS en su lugar.
+ *
+ * Es la regla del negocio: el padre que iba a enterarse por WhatsApp se entera
+ * por SMS, aunque ese momento no lleve SMS de ordinario (el día de la factura
+ * va por correo y WhatsApp). Si el SMS ya estaba entre sus canales no se
+ * duplica: sale un SMS, no dos.
+ */
+export function canalesSinWhatsApp(
+  canales: readonly Canal[],
+  fila: Pick<FilaAviso, 'avisoSms'>,
+  canalesDelColegio: CanalesActivos = CANALES_TODOS_ACTIVOS,
+): Canal[] {
+  const sin = canales.filter((c) => c !== 'whatsapp');
+  if (!canales.includes('whatsapp')) return sin;
+  const smsPermitido = fila.avisoSms && canalesDelColegio.sms;
+  return smsPermitido && !sin.includes('sms') ? [...sin, 'sms'] : sin;
+}
+
 export function avisosDeHoy(
   fila: FilaAviso,
   hoy: string,
