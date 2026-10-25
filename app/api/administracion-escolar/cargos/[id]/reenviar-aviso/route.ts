@@ -27,8 +27,8 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
-import { enviarWhatsApp, enviarWhatsAppPlantilla, WhatsAppNoConectadoError } from '@/lib/whatsapp/enviar';
-import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/plantillas';
+import { enviarWhatsAppPlantilla, WhatsAppNoConectadoError } from '@/lib/whatsapp/enviar';
+import { resolverPlantilla, parametrosDeAviso, huecoDe, plantillaParaEnviar } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
@@ -44,8 +44,8 @@ interface AvisoListo {
   responsable: string;
   texto: string;
   enlace: string;
-  /** null = va como texto libre. */
-  nombrePlantilla: string | null;
+  /** La plantilla aprobada con que sale: nunca va en texto libre. */
+  nombrePlantilla: string;
   idioma: string;
   parametros: string[];
   botonUrl: string | null;
@@ -173,37 +173,38 @@ async function armarAviso(
   const plantilla = await resolverPlantilla(teamId, 'al-vencer', fila.cobraMora, fila.moraDiasGracia);
 
   // Con factura hay enlace, así que va la versión con botón si está puesta.
-  const usarConLink = plantilla?.nombreConLink != null;
-  const nombre = usarConLink ? plantilla!.nombreConLink! : plantilla?.nombre;
-  const necesitaBoton = usarConLink ? plantilla!.conLinkTieneBoton : plantilla?.conBoton === true;
-  const porPlantilla = plantilla != null && nombre != null && !(necesitaBoton && !CRM_SOPORTA_BOTONES);
+  // Sin plantilla que se pueda mandar no hay reenvío: un cobro por WhatsApp
+  // nunca va en texto libre (ver `plantillaParaEnviar`).
+  const usable = plantillaParaEnviar(plantilla, true, CRM_SOPORTA_BOTONES);
+  if (!usable) {
+    return {
+      error: 'Todavía no hay una plantilla de WhatsApp aprobada para este aviso, y los cobros '
+        + 'no se mandan en texto libre. Escríbele a soporte de Zero para activarla.',
+      status: 409,
+    };
+  }
 
-  const parametros = plantilla
-    ? parametrosDeAviso(hueco, {
-        colegio: fila.colegio,
-        concepto: fila.concepto,
-        estudiante,
-        monto: pesos(fila.saldoCentavos),
-        telefonoColegio: fila.telefonoColegio ?? '',
-        diasGracia: fila.moraDiasGracia,
-        fechaRecargo: fila.fechaVencimiento ? enLetra(String(fila.fechaVencimiento)) : null,
-      })
-    : [];
-
-  const textoLibre = `Hoy venció el cobro de ${fila.concepto} de ${estudiante}: ${pesos(fila.saldoCentavos)}.`
-    + `\n\nPaga o sube tu comprobante aquí: ${enlace}`;
+  const parametros = parametrosDeAviso(hueco, {
+    colegio: fila.colegio,
+    concepto: fila.concepto,
+    estudiante,
+    monto: pesos(fila.saldoCentavos),
+    telefonoColegio: fila.telefonoColegio ?? '',
+    diasGracia: fila.moraDiasGracia,
+    fechaRecargo: fila.fechaVencimiento ? enLetra(String(fila.fechaVencimiento)) : null,
+  });
 
   return {
     destino,
     responsable: fila.responsable ?? '',
-    // Lo que se enseña en la previa es lo que va a leer el padre: si sale por
-    // plantilla, el texto se arma con sus valores reales, no el libre.
-    texto: porPlantilla ? textoDePlantilla(parametros, hueco) : textoLibre,
+    // Lo que se enseña en la previa es lo que va a leer el padre: la
+    // plantilla con sus valores reales.
+    texto: textoDePlantilla(parametros, hueco),
     enlace,
-    nombrePlantilla: porPlantilla ? nombre! : null,
-    idioma: plantilla?.idioma ?? 'es',
+    nombrePlantilla: usable.nombre,
+    idioma: usable.idioma,
     parametros,
-    botonUrl: necesitaBoton ? sufijoDeBoton(enlace) : null,
+    botonUrl: usable.conBoton ? sufijoDeBoton(enlace) : null,
     esperaHoras: await esperaRestante(teamId, cargoId),
   };
 }
@@ -267,14 +268,12 @@ export async function POST(
   }
 
   try {
-    const r = aviso.nombrePlantilla
-      ? await enviarWhatsAppPlantilla(auth.teamId, aviso.destino, {
-          nombre: aviso.nombrePlantilla,
-          idioma: aviso.idioma,
-          botonUrl: aviso.botonUrl,
-          parametros: aviso.parametros,
-        })
-      : await enviarWhatsApp(auth.teamId, aviso.destino, aviso.texto);
+    const r = await enviarWhatsAppPlantilla(auth.teamId, aviso.destino, {
+      nombre: aviso.nombrePlantilla,
+      idioma: aviso.idioma,
+      botonUrl: aviso.botonUrl,
+      parametros: aviso.parametros,
+    });
 
     /**
      * Se anota como un aviso más, con su `mensaje_id`, para que la
