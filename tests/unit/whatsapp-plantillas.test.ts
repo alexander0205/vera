@@ -8,7 +8,7 @@
 
 import { test, describe } from 'vitest';
 import assert from 'node:assert/strict';
-import { huecoDe, AVISOS_PLANTILLA } from '@/lib/whatsapp/plantillas';
+import { huecoDe, AVISOS_PLANTILLA, plantillaParaEnviar, type PlantillaAsignada } from '@/lib/whatsapp/plantillas';
 
 describe('huecoDe', () => {
   test('al-emitir no depende de la mora', () => {
@@ -62,60 +62,59 @@ describe('huecoDe', () => {
  * padre a transferir y subir su comprobante para que el colegio no pueda
  * aplicarlo. Le queda el pago en el aire.
  */
-describe('elegir versión con o sin enlace', () => {
-  /** La misma decisión que toma el cron, aislada para poder probarla. */
-  function elegir(
-    p: { nombre: string; nombreConLink: string | null; conBoton: boolean; conLinkTieneBoton: boolean } | null,
-    enlace: string | null,
-  ) {
-    const usarConLink = enlace != null && p?.nombreConLink != null;
-    return {
-      nombre: usarConLink ? p!.nombreConLink! : p?.nombre,
-      necesitaBoton: usarConLink ? p!.conLinkTieneBoton : p?.conBoton === true,
-    };
-  }
-
-  const CONFIG = {
+describe('plantillaParaEnviar: versión con o sin enlace, y nunca texto libre', () => {
+  const CONFIG: PlantillaAsignada = {
+    aviso: 'al-emitir',
     nombre: 'factura_lista',
+    idioma: 'es',
+    propia: false,
     nombreConLink: 'factura_lista_con_boton',
     conBoton: false,
     conLinkTieneBoton: true,
   };
 
   test('con factura emitida manda la del botón', () => {
-    const r = elegir(CONFIG, 'https://zero/pagar/abc');
-    assert.equal(r.nombre, 'factura_lista_con_boton');
-    assert.equal(r.necesitaBoton, true);
+    const r = plantillaParaEnviar(CONFIG, true, true);
+    assert.equal(r?.nombre, 'factura_lista_con_boton');
+    assert.equal(r?.conBoton, true);
   });
 
   test('sin factura manda la de siempre, sin botón', () => {
-    const r = elegir(CONFIG, null);
-    assert.equal(r.nombre, 'factura_lista');
-    assert.equal(r.necesitaBoton, false);
+    const r = plantillaParaEnviar(CONFIG, false, true);
+    assert.equal(r?.nombre, 'factura_lista');
+    assert.equal(r?.conBoton, false);
   });
 
   /** El colegio que no configuró la segunda usa la misma para los dos casos. */
   test('sin versión con enlace configurada usa la de siempre aunque haya factura', () => {
-    const r = elegir({ ...CONFIG, nombreConLink: null }, 'https://zero/pagar/abc');
-    assert.equal(r.nombre, 'factura_lista');
-    assert.equal(r.necesitaBoton, false);
+    const r = plantillaParaEnviar({ ...CONFIG, nombreConLink: null }, true, true);
+    assert.equal(r?.nombre, 'factura_lista');
+    assert.equal(r?.conBoton, false);
   });
 
   /**
-   * El caso que rompe el envío: pedir el botón sin tener enlace que ponerle.
-   * Meta rechaza la plantilla por parámetros y el aviso no sale.
+   * El 25-10-2026 Mi Casita no tenía plantilla asignada y los avisos salieron
+   * en texto libre: Meta rechazó casi todos (131047, fuera de las 24 h).
+   * Sin plantilla no sale WhatsApp; el correo y el SMS sí.
    */
-  test('nunca pide botón cuando no hay enlace', () => {
-    for (const p of [CONFIG, { ...CONFIG, conBoton: true, nombreConLink: null }]) {
-      const r = elegir(p, null);
-      if (r.necesitaBoton) {
-        assert.equal(p.conBoton, true, 'solo si la de siempre YA tenía botón propio');
-      }
-    }
-    assert.equal(elegir(CONFIG, null).necesitaBoton, false);
+  test('sin plantilla asignada no se manda nada (nunca texto libre)', () => {
+    assert.equal(plantillaParaEnviar(null, true, true), null);
+    assert.equal(plantillaParaEnviar(null, false, true), null);
   });
 
-  test('sin plantilla asignada no manda nada por plantilla', () => {
-    assert.equal(elegir(null, 'https://zero/pagar/abc').nombre, undefined);
+  /**
+   * Pedir el botón sin enlace que ponerle: Meta rechaza la plantilla por
+   * parámetros. Antes caía al texto libre; ahora no sale.
+   */
+  test('una plantilla con botón sin enlace no se manda', () => {
+    const conBotonPropio = { ...CONFIG, conBoton: true, nombreConLink: null };
+    assert.equal(plantillaParaEnviar(conBotonPropio, false, true), null);
+    assert.equal(plantillaParaEnviar(conBotonPropio, true, true)?.nombre, 'factura_lista');
+  });
+
+  test('con botón y un CRM que no rellena botones no se manda', () => {
+    assert.equal(plantillaParaEnviar(CONFIG, true, false), null);
+    // La de siempre, sin botón, sí sale aunque el CRM no soporte botones.
+    assert.equal(plantillaParaEnviar(CONFIG, false, false)?.nombre, 'factura_lista');
   });
 });
