@@ -15,6 +15,7 @@ import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import {
   reflejarFacturaRecurrenteEnCargo, mesYaFacturadoAMano, tarifaMensualidadActual,
 } from '@/lib/administracion-escolar/facturacion-recurrente';
+import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
 
 export interface GenerarFacturaResult {
   ok: true;
@@ -230,7 +231,8 @@ export async function generarFacturaDeRecurrente(
     .insert(ecfDocuments)
     .values({
       teamId: fr.teamId,
-      clientId: fr.clientId,
+      // Sin contacto en el plan: «CONSUMIDOR FINAL», no NULL (ver cliente-de-factura).
+      clientId: fr.clientId ?? await clienteDeLaFactura(db as never, { teamId: fr.teamId }),
       razonSocialComprador,
       rncComprador,
       encf,

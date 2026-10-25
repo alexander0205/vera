@@ -20,7 +20,7 @@ import Box from '@mui/material/Box';
 import Link from 'next/link';
 import {
   Users, ClipboardList, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
-  LayoutDashboard, Plus, FilePlus2,
+  LayoutDashboard, ListChecks, Plus, FilePlus2,
 } from 'lucide-react';
 
 /**
@@ -81,6 +81,10 @@ const SECCIONES: SeccionEscolar[] = [
   // sin una pantalla que lo enseñe, nadie se entera de que a tres familias no
   // les llegó nada. Va junto a Pagos porque es la otra mitad de cobrar.
   { tipo: 'item', id: 'escolar-avisos',      href: '/escolar/avisos',        label: 'Avisos',         icon: BellRing },
+  // Lo que alguien tiene que decidir o arreglar, de todas las familias. Antes
+  // eso vivía en un chat o en la memoria de alguien y terminaba en un arreglo
+  // por SQL de soporte. La campana de arriba lleva aquí con su número.
+  { tipo: 'item', id: 'escolar-por-revisar', href: '/escolar/por-revisar',  label: 'Por revisar',    icon: ListChecks },
   // SIGERD se fue a Configuración: se usa al montar el colegio y una vez al
   // año, y aquí ocupaba el sitio de algo que se abre a diario.
   { tipo: 'item', id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', icon: Settings },

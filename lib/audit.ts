@@ -82,6 +82,12 @@ export type AuditAction =
   // cron no deja rastro de quién; esto sí, porque aquí hay una persona que
   // eligió alumnos, conceptos y corte. El `meta` lleva cuántas y por cuánto.
   | 'ESCOLAR_FACTURAS_LOTE'
+  // Tareas por revisar de un alumno o su familia: quién las abre y quién las cierra.
+  | 'ESCOLAR_TAREA_CREADA'
+  | 'ESCOLAR_TAREA_COMPLETADA'
+  | 'ESCOLAR_TAREA_REABIERTA'
+  // Una revisión de Zero AI que puede abrir varias tareas de golpe.
+  | 'ESCOLAR_TAREAS_ZERO_AI'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se

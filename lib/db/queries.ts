@@ -697,6 +697,14 @@ const CUBETA_SQL: Record<CubetaAntiguedad, string> = {
 
 export interface CuentasPorCobrarOpts {
   clientId?:     number;
+  /**
+   * Con `clientId`: la cartera de la FAMILIA de ese responsable, no solo lo que
+   * está a su nombre. Entran también las facturas de sus hijos hechas a nombre
+   * del otro padre o sin cliente —se reconocen por el cargo escolar atado o por
+   * el alumno en la línea—. Es lo que ve Gobernanza en la ficha de la familia:
+   * un pago parcial de la mamá tiene que salir donde el colegio cobra.
+   */
+  familia?:      boolean;
   soloVencidas?: boolean;
   docId?:        number;
   limit?:        number;
@@ -741,8 +749,24 @@ export async function getCuentasPorCobrar(
   // ── CTE compartido entre la página de resultados y los totales ──────────────
   // Se arma una sola vez y se reusa en las dos consultas para que no puedan
   // divergir (que los totales midan algo distinto de lo que lista la tabla).
+  // Los hijos de la familia (con `familia`): los alumnos de los que es
+  // responsable, y sus registros duplicados retirados —uno por cada padre, que
+  // la conciliación dejó retirados— por nombre y apellido iguales.
+  const hijosCte = opts.clientId && opts.familia ? sql`
+    hijos_de_la_familia AS (
+      SELECT e.id, e.dependiente_id FROM admin_escolar_estudiantes e
+      WHERE e.team_id = ${teamId} AND (
+        e.facturar_a_client_id = ${opts.clientId}
+        OR (e.estado <> 'activo' AND EXISTS (
+          SELECT 1 FROM admin_escolar_estudiantes a
+          WHERE a.team_id = ${teamId} AND a.estado = 'activo' AND a.facturar_a_client_id = ${opts.clientId}
+            AND lower(trim(a.nombres)) = lower(trim(e.nombres)) AND lower(trim(a.apellidos)) = lower(trim(e.apellidos))
+        ))
+      )
+    ),` : sql``;
+
   const cte = sql`
-    WITH base AS (
+    WITH ${hijosCte} base AS (
       SELECT
         d.id, d.encf, d.codigo, d.tipo_ecf, d.fecha_limite_pago,
         -- db.execute crudo NO parsea timestamp a Date: devuelve el string de pg
@@ -836,7 +860,19 @@ export async function getCuentasPorCobrar(
         -- Compras/gastos (41/43/47) no son ventas ni cuentas por cobrar: son
         -- dinero que sale, no que se espera cobrar.
         AND d.tipo_ecf NOT IN ('41', '43', '47')
-        ${opts.clientId ? sql`AND d.client_id = ${opts.clientId}` : sql``}
+        ${opts.clientId && opts.familia ? sql`AND (
+            d.client_id = ${opts.clientId}
+            OR d.id IN (
+              SELECT g.ecf_document_id FROM admin_escolar_cargos g
+              WHERE g.team_id = ${teamId} AND g.ecf_document_id IS NOT NULL
+                AND g.estudiante_id IN (SELECT h.id FROM hijos_de_la_familia h)
+            )
+            OR EXISTS (
+              SELECT 1 FROM jsonb_array_elements(CASE WHEN d.lineas_json IS NULL OR d.lineas_json = '' THEN '[]'::jsonb ELSE d.lineas_json::jsonb END) l
+              WHERE (l->>'dependienteId') ~ '^[0-9]+$'
+                AND (l->>'dependienteId')::int IN (SELECT h.dependiente_id FROM hijos_de_la_familia h WHERE h.dependiente_id IS NOT NULL)
+            )
+          )` : opts.clientId ? sql`AND d.client_id = ${opts.clientId}` : sql``}
         ${opts.docId ? sql`AND d.id = ${opts.docId}` : sql``}
         ${opts.search?.trim()
           ? sql`AND (

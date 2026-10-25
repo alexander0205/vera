@@ -84,6 +84,7 @@ export const PANTALLAS: PantallaDef[] = [
   // familias.
   esc({ id: 'escolar-facturar',      label: 'Facturar por lote', href: '/escolar/facturar', descripcion: 'Crear en borrador las facturas de muchos alumnos de una vez' }),
   esc({ id: 'escolar-avisos',        label: 'Avisos', href: '/escolar/avisos', descripcion: 'Recordatorios de cobro que se enviaron' }),
+  esc({ id: 'escolar-por-revisar',   label: 'Por revisar', href: '/escolar/por-revisar', descripcion: 'Tareas de los alumnos y las familias que alguien tiene que revisar' }),
   esc({ id: 'escolar-configuracion', label: 'Configuración', href: '/escolar/configuracion', rutas: ['/escolar/sigerd', '/escolar/personal'], descripcion: 'Períodos, cursos, tarifas y conceptos' }),
 
   // ── Facturación ──
