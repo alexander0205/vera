@@ -12,14 +12,17 @@ export const maxDuration = 300;
  * «Tienes X alumnos de SIGERD sin matricular»: el aviso y la pantalla
  * «Matricular desde SIGERD» (`/escolar/matriculas/desde-sigerd`).
  *
- * GET cuenta y agrupa por sección. POST matricula UNA sección con lo que la
+ * GET cuenta y agrupa por sección (con `?matriculados=1`, también los que ya
+ * tienen matrícula, para cambiarles lo que llevan). POST matricula UNA sección con lo que la
  * pantalla dejó para cada alumno: la pantalla llama una vez por sección. Ver
  * `matricular-desde-sigerd.ts` para qué entra y qué se deja fuera.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
-  return NextResponse.json(await pendientesDesdeSigerd(auth.teamId));
+  // `?matriculados=1`: la pantalla trae también a los ya matriculados para editarlos.
+  const conMatriculados = new URL(req.url).searchParams.get('matriculados') === '1';
+  return NextResponse.json(await pendientesDesdeSigerd(auth.teamId, { conMatriculados }));
 }
 
 export async function POST(req: NextRequest) {

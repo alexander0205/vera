@@ -41,3 +41,23 @@ export function calcularEdad(fechaNacimiento: string | null | undefined): number
   if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
   return edad >= 0 ? edad : null;
 }
+
+/**
+ * El código que se le enseña al usuario bajo el nombre del alumno.
+ *
+ * El `codigo` interno (matrícula/expediente) lo ponen a mano o lo genera el
+ * alta; los alumnos que llegan de SIGERD no lo traen, y la lista enseñaba «—»
+ * aunque tuvieran RNE o, al menos, un id del portal. Se cae en cascada a lo
+ * mejor que haya: código → RNE → «SIGERD <id>». `null` solo si no hay nada.
+ */
+export function codigoVisible(e: {
+  codigo?: string | null;
+  codigoRne?: string | null;
+  sigerdId?: number | null;
+}): string | null {
+  const codigo = e.codigo?.trim();
+  if (codigo) return codigo;
+  const rne = e.codigoRne?.trim();
+  if (rne) return rne;
+  return e.sigerdId != null ? `SIGERD ${e.sigerdId}` : null;
+}

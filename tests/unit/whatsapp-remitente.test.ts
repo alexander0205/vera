@@ -44,4 +44,27 @@ describe('elegirRemitente', () => {
     const r = elegirRemitente(config(true), undefined);
     assert.deepEqual(r, { apiKey: 'sk_live_colegio', propio: true });
   });
+
+  describe('lo que eligió el colegio', () => {
+    test('«WhatsApp de Zero» sale por Zero aunque tenga su número conectado', () => {
+      const r = elegirRemitente(config(true), LLAVE_ZERO, 'zero');
+      assert.deepEqual(r, { apiKey: LLAVE_ZERO, propio: false });
+    });
+
+    test('«WhatsApp de Zero» sin llave de Zero no sale por el del colegio', () => {
+      assert.equal(elegirRemitente(config(true), undefined, 'zero'), null);
+    });
+
+    test('«Mi WhatsApp» conectado sale por el del colegio', () => {
+      const r = elegirRemitente(config(true), LLAVE_ZERO, 'propio');
+      assert.deepEqual(r, { apiKey: 'sk_live_colegio', propio: true });
+    });
+
+    test('«Mi WhatsApp» sin conectar no cae al de Zero: no sale', () => {
+      // Eligió su número a propósito; mandar desde otro sería mandar en su
+      // nombre por un canal que no escogió.
+      assert.equal(elegirRemitente(config(false), LLAVE_ZERO, 'propio'), null);
+      assert.equal(elegirRemitente(null, LLAVE_ZERO, 'propio'), null);
+    });
+  });
 });

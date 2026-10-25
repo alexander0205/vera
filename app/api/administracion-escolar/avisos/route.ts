@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { resumenDeAvisos } from '@/lib/administracion-escolar/panel-avisos';
 import { motivoDeshabilitado as motivoSms } from '@/lib/sms/config';
-import { getWhatsAppConfig } from '@/lib/whatsapp/config';
+import { getWhatsAppConfig, resolverRemitente } from '@/lib/whatsapp/config';
 
 /**
  * El estado de los recordatorios del colegio: qué sale hoy, qué salió y a
@@ -23,10 +23,11 @@ export async function GET(_req: NextRequest) {
   // noche de RD ya es "mañana" y el panel enseñaría el plan del día siguiente.
   const hoy = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [resumen, sms, wa] = await Promise.all([
+  const [resumen, sms, wa, remitente] = await Promise.all([
     resumenDeAvisos(teamId, hoy),
     motivoSms(teamId),
     getWhatsAppConfig(teamId),
+    resolverRemitente(teamId),
   ]);
 
   return NextResponse.json({
@@ -37,7 +38,9 @@ export async function GET(_req: NextRequest) {
     // que el colegio pueda enlazar ni romper.
     credenciales: {
       sms: sms === null ? null : 'sin-credenciales',
-      whatsapp: !wa ? 'sin-enlazar' : wa.conectado ? null : 'sin-conectar',
+      // Con remitente sale (el número del colegio o el de Zero, según lo
+      // elegido); sin él, falta enlazar o conectar el del colegio.
+      whatsapp: remitente ? null : !wa ? 'sin-enlazar' : 'sin-conectar',
     },
   });
 }

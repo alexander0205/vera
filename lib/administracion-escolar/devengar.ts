@@ -45,6 +45,12 @@ export interface ResultadoDevengo {
    *  no salió (plan #5): estructura incompleta, o cuota emitida antes de que el
    *  alumno entrara. */
   diagnostico: DiagnosticoDevengo[];
+  /**
+   * Solo con `simular`: los cargos que se CREARÍAN, sin crearlos, con la
+   * emisión de su cuota. Es la vista previa de «Facturar por lote» cuando se
+   * adelantan cuotas: enseña lo mismo que después se crea, sin escribir nada.
+   */
+  porCrear?: { fila: typeof adminEscolarCargos.$inferInsert; fechaEmision: string; concepto: string }[];
 }
 
 /**
@@ -129,6 +135,8 @@ export async function devengarPeriodo(
    * eligió y el índice único, así que es idempotente: reintentarlo no duplica.
    */
   filtro?: { soloMatriculas?: number[]; soloConceptos?: number[] },
+  /** `simular`: calcula lo que crearía y no escribe nada (ver `porCrear`). */
+  modo?: { simular?: boolean },
 ): Promise<ResultadoDevengo> {
   // Un filtro vacío (array sin elementos) significaría "ninguna": se trata como
   // "sin filtro" solo cuando el campo no viene.
@@ -200,6 +208,7 @@ export async function devengarPeriodo(
     .map((c) => `${c.matriculaId}:${c.conceptoId}:${c.anio}:${c.mes}`));
 
   const filas: (typeof adminEscolarCargos.$inferInsert)[] = [];
+  const porCrear: NonNullable<ResultadoDevengo['porCrear']> = [];
   const diagnostico: DiagnosticoDevengo[] = [];
 
   for (const m of matriculas) {
@@ -275,6 +284,7 @@ export async function devengarPeriodo(
         fechaVencimiento: cuota.fechaVencimiento,
         estado: 'pendiente',
       });
+      if (modo?.simular) porCrear.push({ fila: filas[filas.length - 1], fechaEmision: cuota.fechaEmision, concepto: linea.nombre });
     }
   }
 
@@ -284,6 +294,7 @@ export async function devengarPeriodo(
     console.warn(`[devengo] team ${teamId} período ${periodoId}: ${diagnostico.length} cuota(s) no generadas`, diagnostico);
   }
 
+  if (modo?.simular) return { matriculas: matriculas.length, cargosCreados: 0, diagnostico, porCrear };
   if (filas.length === 0) return { matriculas: matriculas.length, cargosCreados: 0, diagnostico };
 
   const creados = await tx.insert(adminEscolarCargos)

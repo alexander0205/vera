@@ -694,11 +694,13 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
 
       <div>
         <div className="flex gap-6 border-b border-gray-200 overflow-x-auto">
+          {/* «Otros cargos» va pegado a «Mensualidades»: entre los dos está
+              todo lo que se le cobra al alumno, y se miran juntos. */}
           {[
             ['mensualidades', 'Mensualidades'],
+            ['otros', 'Otros cargos'],
             ['cuentas', 'Cuentas por cobrar'],
             ['notas', 'Notas de débito'],
-            ['otros', 'Otros cargos'],
             ['facturas', 'Facturas'],
             ['pagos', 'Pagos'],
           ].map(([value, label]) => (

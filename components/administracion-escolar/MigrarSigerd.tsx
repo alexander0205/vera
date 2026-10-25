@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  AlertTriangle, Check, ChevronDown, ChevronRight, Database, GraduationCap,
+  AlertTriangle, Check, ChevronDown, ChevronRight, Database, GitCompareArrows, GraduationCap,
   KeyRound, Loader2, Lock, Trash2, Users, UsersRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { EstadoFila, PlanMigracion } from '@/lib/sigerd/plan-migracion';
 import { ObtenerSigerd } from '@/components/administracion-escolar/ObtenerSigerd';
+import { CompletarDatosSigerd } from '@/components/administracion-escolar/CompletarDatosSigerd';
+import type { ResultadoCompletar } from '@/lib/administracion-escolar/completar-datos-sigerd';
 
 /**
  * Asistente para traer a nuestro sistema lo que SIGERD ya nos dio.
@@ -157,7 +160,12 @@ export function MigrarSigerd() {
         <SinDatos cred={cred} onConectar={() => setPaso('conectar')} onCompletado={() => void recargarPlan()} />
       )}
 
-      {plan && paso === 'plan' && <PasoPlan plan={plan} onSeguir={() => setPaso('estructura')} />}
+      {plan && paso === 'plan' && (
+        <PasoPlan plan={plan} cred={cred}
+          onSeguir={() => setPaso('estructura')}
+          onConectar={() => setPaso('conectar')}
+          onRecargar={() => void recargarPlan()} />
+      )}
       {plan && paso === 'estructura' && <PasoEstructura plan={plan} onSeguir={() => setPaso('estudiantes')} />}
       {plan && paso === 'estudiantes' && (
         <PasoEstudiantes plan={plan}
@@ -372,7 +380,14 @@ function SinDatos({ cred, onConectar, onCompletado }: {
 
 // ── 2 · Plan ────────────────────────────────────────────────────────────────
 
-function PasoPlan({ plan, onSeguir }: { plan: PlanMigracion; onSeguir: () => void }) {
+function PasoPlan({ plan, cred, onSeguir, onConectar, onRecargar }: {
+  plan: PlanMigracion;
+  cred: EstadoCredenciales | undefined;
+  onSeguir: () => void;
+  onConectar: () => void;
+  /** Tras bajar de nuevo o completar datos: el plan se vuelve a leer. */
+  onRecargar: () => void;
+}) {
   const t = plan.totales;
   const faltanFichas = t.estudiantes - t.estudiantesConFicha;
 
@@ -402,12 +417,41 @@ function PasoPlan({ plan, onSeguir }: { plan: PlanMigracion; onSeguir: () => voi
             <p className="mt-0.5 text-amber-800">
               La descarga trajo la estructura completa, pero no los expedientes. Sin ellos no
               hay RNE, ni fecha de nacimiento, ni dirección. Puedes cruzar lo que hay ahora,
-              traer los expedientes después, o llenar esos datos a mano en la ficha de cada
-              estudiante.
+              volver a bajar de SIGERD para traer los expedientes, o llenar esos datos a mano
+              en la ficha de cada estudiante.
             </p>
           </div>
         </div>
       )}
+
+      {/* Los estudiantes que ya están en Zero con la ficha de la descarga a mano. */}
+      <div className="space-y-2 rounded-lg border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold text-gray-900">Completar datos de los estudiantes</h3>
+        <CompletarDatosSigerd onCompletado={onRecargar} />
+      </div>
+
+      {/* SIGERD cambia durante el año; lo de arriba es la foto de la última descarga. */}
+      <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold text-gray-900">¿Cambió algo en SIGERD?</h3>
+        <p className="text-sm text-gray-500">
+          Lo que ves es lo que había en SIGERD
+          {plan.bajadoEn ? ` el ${new Date(plan.bajadoEn).toLocaleDateString('es-DO')}` : ' cuando se bajó'}.
+          Para ver lo de hoy, vuelve a bajar; después revisa qué cambió: alumnos nuevos,
+          retirados, cambios de sección.
+        </p>
+        {cred?.configurado ? (
+          <ObtenerSigerd onCompletado={onRecargar} />
+        ) : (
+          <Button variant="outline" size="sm" onClick={onConectar}>
+            <KeyRound className="mr-1.5 h-4 w-4" /> Guardar credenciales para volver a bajar
+          </Button>
+        )}
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/escolar/configuracion/sigerd/cambios">
+            <GitCompareArrows className="mr-1.5 h-4 w-4" /> Revisar cambios de SIGERD
+          </Link>
+        </Button>
+      </div>
 
       <div className="flex justify-end">
         <Button onClick={onSeguir} className="bg-zero-600 hover:bg-zero-700">Empezar</Button>
@@ -430,6 +474,8 @@ interface Resultado {
   creados: number; omitidos: number;
   fallos: Array<{ que: string; motivo: string }>;
   avisos: Array<{ que: string; motivo: string }>;
+  /** Solo al cruzar estudiantes: lo que se completó desde sus fichas. */
+  datos?: ResultadoCompletar;
 }
 
 /**
@@ -497,6 +543,15 @@ function Cabecera({ titulo, ayuda, nuevos, marcados, paso, excluir, onSeguir, et
             <b>{res.creados}</b> creados · <b>{res.omitidos}</b> ya estaban
             {res.fallos.length > 0 && <> · <b>{res.fallos.length}</b> fallaron</>}
           </p>
+          {/* Al cruzar estudiantes también se completan RNE, sexo y fecha. */}
+          {res.datos && !res.datos.sinDescarga && (res.datos.completados > 0 || res.datos.rneRepetido > 0) && (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+              Con las fichas de la descarga se completó el RNE, el sexo y la fecha de nacimiento de{' '}
+              <b>{res.datos.completados}</b> estudiantes.
+              {res.datos.rneRepetido > 0 && <> <b>{res.datos.rneRepetido}</b> traían un RNE que ya usa otro estudiante y no se escribió.</>}
+              {res.datos.sinFicha > 0 && <> <b>{res.datos.sinFicha}</b> no tienen ficha en la descarga.</>}
+            </p>
+          )}
           {/* Los fallos primero y sin recortar: son los que exigen actuar. */}
           {res.fallos.length > 0 && (
             <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">

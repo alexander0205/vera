@@ -8,8 +8,10 @@ import { ConfiguracionNav } from './_nav';
  */
 export default async function ConfiguracionLayout({ children }: { children: React.ReactNode }) {
   await requirePermission('administracion-escolar:configurar');
+  // Ancho: los conceptos y las tarifas son tablas de muchas columnas, y a
+  // 1024 px se apretaban con media pantalla vacía a cada lado.
   return (
-    <section className="mx-auto max-w-5xl space-y-5 p-6">
+    <section className="mx-auto max-w-[1600px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
       <ConfiguracionNav />
       {children}
     </section>

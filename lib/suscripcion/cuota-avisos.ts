@@ -32,6 +32,11 @@ function inicioDelMes(ahora = new Date()): Date {
 /**
  * Avisos ya enviados este mes, por canal, en una sola consulta.
  *
+ * Cuenta MENSAJES, no filas. Una familia con tres hijos recibe un solo SMS que
+ * deja tres filas (una por cargo) con el mismo `grupo`; el proveedor nos
+ * factura uno. Las filas sin `grupo` —todo lo de antes de agrupar, y los
+ * mensajes de un solo cobro— cuentan una cada una.
+ *
  * Se apoya en el índice `admin_escolar_avisos_team_fecha (team_id, enviado_at)`
  * que ya existe. Un canal sin filas no aparece en el resultado — de ahí el 0
  * por defecto al leer.
@@ -43,7 +48,7 @@ export async function avisosDelMes(
   const filas = await db
     .select({
       canal: adminEscolarAvisosEnviados.canal,
-      n: sql<number>`count(*)::int`,
+      n: sql<number>`count(distinct coalesce(${adminEscolarAvisosEnviados.grupo}, ${adminEscolarAvisosEnviados.id}::text))::int`,
     })
     .from(adminEscolarAvisosEnviados)
     .where(and(

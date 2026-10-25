@@ -1,4 +1,5 @@
-import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
+import { and, asc, eq, gt, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { getOCrearLink, urlDelLink } from './link-pago';
 import {
@@ -6,10 +7,18 @@ import {
   adminEscolarConceptosPago, adminEscolarEstudiantes, clients,
 } from '@/lib/db/schema';
 import { aGsm7 } from '@/lib/sms/mensaje';
+import {
+  agruparPendientes, redactarGrupo, enlaceDeFactura, facturaDelMensaje, type GrupoAviso, type MensajeAviso,
+} from './agrupar-avisos';
 import { sumarDias } from './calendario';
 import { CANALES_TODOS_ACTIVOS, type CanalesActivos } from './canales';
 import { CANALES_DEL_AVISO, type Aviso, type Canal } from './ciclo-cobro';
 import { destinoDeContacto } from './destino-canal';
+
+// El texto de un aviso suelto vive en `avisos-texto.ts` para que el de varios
+// cobros pueda construirse encima sin un import circular. Se exporta de nuevo
+// aquí: es de donde lo ha importado siempre todo el mundo.
+export { enLetra, pesos, redactar } from './avisos-texto';
 
 /**
  * A quién hay que escribirle hoy, y por dónde.
@@ -25,6 +34,12 @@ import { destinoDeContacto } from './destino-canal';
  * ANTES de mandar, y si el envío falla se borra la anotación — al revés, un
  * fallo a mitad de tanda dejaría mensajes enviados sin registrar y el padre
  * recibiría todo otra vez mañana.
+ *
+ * Calcular es por CARGO; mandar es por FAMILIA. Los cargos de un mismo
+ * responsable que caen el mismo día, en el mismo momento y por el mismo canal
+ * viajan en un solo mensaje (`agrupar-avisos.ts`), pero en la tabla sigue
+ * habiendo una fila por cargo: la idempotencia, la reconciliación de entregas
+ * y los paneles no se enteran. Lo que une las filas de un mensaje es `grupo`.
  */
 
 /** Una fila candidata: el cargo con lo que su concepto dice sobre avisos. */
@@ -103,6 +118,12 @@ export interface AvisoPendiente {
   aviso: Aviso;
   /** Días de antelación configurados. Va al índice único. */
   offsetDias: number;
+  /**
+   * El día en que cae este aviso (`hoy` cuando sale). Dos avisos de días
+   * distintos no son el mismo recado aunque lo parezcan, y `agruparPendientes`
+   * no los junta.
+   */
+  fecha: string;
   canales: Canal[];
 }
 
@@ -186,6 +207,7 @@ export function avisosDeHoy(
       fila,
       aviso: s.aviso,
       offsetDias: s.offsetDias,
+      fecha: s.fecha,
       // El ruteo es fijo; lo que el colegio enciende es el canal. La
       // intersección es lo que de verdad sale.
       canales: CANALES_DEL_AVISO[s.aviso].filter((c) => canalesVivos.includes(c)),
@@ -249,7 +271,14 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
       gt(adminEscolarCargos.saldoCentavos, 0),
       ne(adminEscolarCargos.estado, 'anulado'),
       ne(adminEscolarCargos.estado, 'pagado'),
-    ));
+    ))
+    // Siempre en el mismo orden: colegio, responsable, cargo. Sin ORDER BY
+    // Postgres devuelve las filas como le da la gana, y los hermanos de una
+    // familia podían caer en puntos distintos de la cola. Ya no importa para
+    // agrupar —`agruparPendientes` ordena por su cuenta— pero sí para que dos
+    // corridas del mismo día lean la misma lista y retomen donde la anterior
+    // se quedó. Los alumnos sin responsable (NULL) quedan al final.
+    .orderBy(asc(adminEscolarCargos.teamId), asc(clients.id), asc(adminEscolarCargos.id));
 
   return filas.map((f) => ({
     ...f,
@@ -259,96 +288,79 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
   }));
 }
 
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-
-export function enLetra(iso: string): string {
-  const [, m, d] = iso.split('-').map(Number);
-  return `${d} de ${MESES[m - 1]}`;
-}
-
-export const pesos = (c: number) => `RD$${(c / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
-/**
- * El texto de cada aviso.
- *
- * `corto` es para SMS: 160 caracteres cuentan, y llega desde un número que el
- * tutor no tiene agendado, así que tiene que decir de qué colegio es o no se
- * entiende quién escribe. `largo` va por correo y WhatsApp, que no cobran por
- * carácter.
- */
-export function redactar(p: AvisoPendiente, colegio: string): { largo: string; corto: string } {
-  const { fila } = p;
-  const alumno = fila.estudiante;
-  const monto = pesos(fila.saldoCentavos);
-
-  if (p.aviso === 'al-emitir') {
-    const vence = fila.fechaVencimiento ? ` Tienes hasta el ${enLetra(fila.fechaVencimiento)} para pagarla.` : '';
-    return {
-      largo: `Ya está lista la factura de ${fila.concepto} de ${alumno}: ${monto}.${vence}`,
-      corto: `${colegio}: factura de ${alumno} lista, ${monto}.${vence}`,
-    };
-  }
-  const cuando = fila.fechaVencimiento ? enLetra(fila.fechaVencimiento) : 'pronto';
-
-  // al-vencer: se escribe en pasado. Decir "está por vencer" el día en que ya
-  // venció hace creer al padre que todavía llega a tiempo.
-  if (p.aviso === 'al-vencer') {
-    const cola = fila.cobraMora
-      ? (fila.moraDiasGracia > 0
-          ? ` Tienes ${fila.moraDiasGracia} día(s) antes de que se le aplique el recargo.`
-          : ' Ya se le aplicó el recargo por mora.')
-      : ' Págala para ponerte al día.';
-    return {
-      largo: `Hoy venció la factura de ${fila.concepto} de ${alumno}: ${monto}.${cola}`,
-      corto: `${colegio}: hoy venció la factura de ${alumno}, ${monto}.${cola}`,
-    };
-  }
-
-  // antes-mora: el que le ahorra dinero al padre, y por eso sale por SMS. La
-  // fecha que se le da es la del RECARGO, no la del vencimiento: decirle que
-  // pague "antes del 3" cuando el recargo entra el 8 le quita días que tiene.
-  const fechaMora = fila.fechaVencimiento
-    ? enLetra(sumarDias(fila.fechaVencimiento, Math.max(0, fila.moraDiasGracia)))
-    : cuando;
-  return {
-    largo: `La factura de ${fila.concepto} de ${alumno} está vencida. Paga ${monto} antes del ${fechaMora} y evita el recargo por mora.`,
-    corto: `${colegio}: paga ${monto} de ${alumno} antes del ${fechaMora} y evita el recargo.`,
-  };
-}
-
 export interface EnvioHecho {
   cargoId: number; aviso: Aviso; canal: Canal; destino: string | null;
   ok: boolean; error?: string;
+  /**
+   * El mensaje al que pertenece (`GrupoAviso.clave`). Los cargos de una misma
+   * familia que viajaron juntos comparten esta clave: hay un `EnvioHecho` por
+   * cargo —para que el reporte siga diciendo a quién le falta el correo— pero
+   * un solo mensaje, y quien cuenta mensajes tiene que contar claves, no filas.
+   */
+  grupo?: string;
 }
 
 /**
- * Reserva el envío en la tabla de idempotencia.
+ * Cuántos mensajes DISTINTOS salieron (o saldrían, en un simulacro).
  *
- * Devuelve `false` si ya estaba: el índice único rebota el insert y eso es la
- * señal de que este aviso ya salió. Preguntar antes con un SELECT dejaría una
- * carrera abierta entre dos corridas del cron.
+ * Es lo que gasta el presupuesto de la corrida: tres hermanos en un correo son
+ * un correo, no tres. Sin esto la tanda se creería llena a los 20 mensajes y
+ * dejaría familias sin avisar.
  */
-async function reservar(
-  teamId: number, cargoId: number, aviso: Aviso, offsetDias: number,
-  canal: Canal, destino: string | null,
-): Promise<number | null> {
-  const filas = await db.insert(adminEscolarAvisosEnviados)
-    .values({ teamId, cargoId, tipo: aviso, offsetDias, canal, destino })
-    .onConflictDoNothing()
-    .returning({ id: adminEscolarAvisosEnviados.id });
-  // Devuelve el id, no un booleano: hace falta para colgarle después el
-  // `mensajeId` y poder preguntar si el aviso llegó de verdad.
-  return filas[0]?.id ?? null;
+export function mensajesEnviados(hechos: readonly EnvioHecho[]): number {
+  return new Set(
+    hechos.filter((h) => h.ok).map((h) => h.grupo ?? `${h.cargoId}:${h.aviso}:${h.canal}`),
+  ).size;
 }
 
-async function liberar(cargoId: number, aviso: Aviso, offsetDias: number, canal: Canal) {
-  await db.delete(adminEscolarAvisosEnviados).where(and(
-    eq(adminEscolarAvisosEnviados.cargoId, cargoId),
-    eq(adminEscolarAvisosEnviados.tipo, aviso),
-    eq(adminEscolarAvisosEnviados.offsetDias, offsetDias),
-    eq(adminEscolarAvisosEnviados.canal, canal),
-  ));
+/**
+ * Reserva el envío de TODO un mensaje en la tabla de idempotencia.
+ *
+ * Devuelve los cargos que se reservaron, cada uno con el id de su fila. Los que
+ * ya estaban —el índice único rebota el insert y esa es la señal de que ese
+ * aviso ya salió— se quedan fuera, y el mensaje se arma solo con los que faltan.
+ * Preguntar antes con un SELECT dejaría una carrera abierta entre dos corridas
+ * del cron.
+ *
+ * Una fila por CARGO aunque el mensaje sea uno: el índice único, la
+ * reconciliación de entregas y los paneles del alumno trabajan por cargo, y
+ * siguen sin enterarse de que se agrupó. Lo único que las une es `grupo`, que
+ * es lo que deja contar la cuota por mensaje y no por fila.
+ */
+async function reservarGrupo(
+  g: GrupoAviso, destino: string, grupo: string | null,
+): Promise<{ id: number; miembro: AvisoPendiente }[]> {
+  const filas = await db.insert(adminEscolarAvisosEnviados)
+    .values(g.miembros.map((m) => ({
+      teamId: m.fila.teamId,
+      cargoId: m.fila.cargoId,
+      tipo: g.aviso,
+      offsetDias: g.offsetDias,
+      canal: g.canal,
+      destino,
+      grupo,
+    })))
+    .onConflictDoNothing()
+    .returning({ id: adminEscolarAvisosEnviados.id, cargoId: adminEscolarAvisosEnviados.cargoId });
+
+  // En el orden del mensaje, no en el que devuelva Postgres.
+  const idPorCargo = new Map(filas.map((f) => [f.cargoId, f.id]));
+  return g.miembros.flatMap((m) => {
+    const id = idPorCargo.get(m.fila.cargoId);
+    return id == null ? [] : [{ id, miembro: m }];
+  });
+}
+
+/**
+ * Suelta la reserva de TODO el mensaje.
+ *
+ * Todas o ninguna: si se soltara solo la fila de un cargo, la corrida siguiente
+ * mandaría ese cargo suelto y a la familia le llegaría el mismo aviso otra vez
+ * con los demás hermanos ya dentro del primero.
+ */
+async function liberarReservas(ids: number[]) {
+  if (ids.length === 0) return;
+  await db.delete(adminEscolarAvisosEnviados).where(inArray(adminEscolarAvisosEnviados.id, ids));
 }
 
 export interface OpcionesDespacho {
@@ -356,7 +368,7 @@ export interface OpcionesDespacho {
   dryRun: boolean;
   colegio: string;
   /**
-   * Cuántos mensajes como mucho salen en esta corrida.
+   * Cuántos MENSAJES como mucho salen en esta corrida.
    *
    * Un colegio de 465 alumnos con tres canales encendidos son más de mil
    * mensajes de golpe a las 8 de la mañana: WhatsApp lo lee como ráfaga y
@@ -364,6 +376,9 @@ export interface OpcionesDespacho {
    * no entra en esta tanda NO se pierde — sigue pendiente y sale en la
    * siguiente corrida del día, porque el plan es el mismo mientras sea el
    * mismo día y la tabla de idempotencia ya sabe lo que salió.
+   *
+   * Se cuentan mensajes, no cargos: una familia con tres hijos es un correo, un
+   * WhatsApp y un SMS, y la tanda no la parte a la mitad.
    */
   limite?: number;
   /** Espera entre mensaje y mensaje. Es lo que reparte la tanda en el tiempo. */
@@ -381,17 +396,23 @@ export interface OpcionesDespacho {
    */
   restantePorCanal?: Partial<Record<Canal, number>>;
   enviar: {
-    correo: (destino: string, texto: string, p: AvisoPendiente) => Promise<void>;
-    // Lleva el aviso entero, no solo el texto: fuera de la ventana de 24 h
-    // WhatsApp solo admite plantillas, y para elegir la plantilla y rellenar
-    // sus variables hace falta saber de qué aviso se trata.
-    whatsapp: (destino: string, texto: string, p: AvisoPendiente, enlace: string | null) => Promise<string | null>;
+    // Reciben el MENSAJE (los cargos que van juntos), no un cargo: el asunto del
+    // correo y las variables de la plantilla cambian cuando son varios.
+    correo: (destino: string, texto: string, m: MensajeAviso) => Promise<void>;
+    // Fuera de la ventana de 24 h WhatsApp solo admite plantillas, y para elegir
+    // la plantilla y rellenar sus variables hace falta saber de qué aviso se
+    // trata y qué cobros lleva.
+    whatsapp: (destino: string, texto: string, m: MensajeAviso, enlace: string | null) => Promise<string | null>;
     sms: (destino: string, texto: string) => Promise<void>;
   };
 }
 
 /**
  * Manda lo que toca y anota lo que salió.
+ *
+ * Los cargos de una misma familia que caen el mismo día, en el mismo momento y
+ * por el mismo canal viajan en UN mensaje (ver `agruparPendientes`). Por cada
+ * cargo sigue habiendo una fila en la tabla de idempotencia y un `EnvioHecho`.
  *
  * Los envíos van de uno en uno a propósito. En paralelo, un colegio de 465
  * alumnos dispara cientos de llamadas simultáneas a Resend y a SNS, y el
@@ -433,120 +454,153 @@ export async function despachar(
   /** clientId → URL de su enlace de pago, dentro de esta tanda. */
   const enlaces = new Map<number, string>();
 
-  for (const p of pendientes) {
+  let familiaActual: string | null = null;
+  for (const g of agruparPendientes(pendientes)) {
     // Se corta la tanda, no se marca nada: lo que queda sigue pendiente para
-    // la corrida siguiente. Cortar aquí y no dentro del canal evita partir un
-    // mismo aviso entre dos tandas.
-    if (salidos >= limite) break;
-    const { largo, corto } = redactar(p, opts.colegio);
-
-    // El enlace de pago va pegado al aviso: sin él el padre sabe que debe pero
-    // no tiene a dónde ir, y termina llamando al colegio. Solo en `largo`
-    // —correo y WhatsApp—; en SMS los 60 caracteres de la URL se comen la mitad
-    // del mensaje y lo parten en dos, que se cobran como dos.
-    //
-    // Se memoriza por responsable dentro de la tanda: una familia con tres
-    // hijos genera tres avisos y el enlace es el mismo, así que sin la caché
-    // serían tres consultas para devolver la misma fila.
-    let conEnlace = largo;
-    let enlace: string | null = null;
-    // Sin factura no hay nada que cobrar todavía: el aviso sale igual —la deuda
-    // existe— pero sin enlace, porque el enlace promete algo que no se puede
-    // cumplir.
-    if (!opts.dryRun && p.fila.clientId != null && p.fila.ecfDocumentId != null) {
-      try {
-        let link = enlaces.get(p.fila.clientId);
-        if (!link) {
-          link = urlDelLink((await getOCrearLink(p.fila.teamId, p.fila.clientId)).token);
-          enlaces.set(p.fila.clientId, link);
-        }
-        enlace = link;
-        conEnlace = `${largo}\n\nPaga o sube tu comprobante aquí: ${link}`;
-      } catch (err) {
-        // Que no se pueda crear el enlace no puede impedir el aviso: el padre
-        // prefiere enterarse de que debe, aunque sea sin botón.
-        console.error('[avisos] no se pudo crear el enlace de pago:', err);
-      }
+    // la corrida siguiente. Se corta ENTRE familias y no entre sus canales ni
+    // entre sus hijos: a un mismo responsable no se le parte el recado en dos
+    // tandas de quince minutos.
+    if (g.claveFamilia !== familiaActual) {
+      if (salidos >= limite) break;
+      familiaActual = g.claveFamilia;
     }
 
-    for (const canal of p.canales) {
-      // Cuota del mes agotada en este canal: se salta el canal, NO el aviso.
-      // El mismo recordatorio sigue saliendo por los canales que le queden —
-      // normalmente el correo, que no lleva tope. Se anota como fallo a
-      // propósito: un tope que corta callado se lee después como «no había
-      // nada que mandar», y nadie se entera de que el colegio necesita
-      // más cupo.
-      const quedan = restante[canal];
-      if (quedan !== undefined && quedan <= 0) {
-        hechos.push({
-          cargoId: p.fila.cargoId, aviso: p.aviso, canal,
-          destino: destinoDelCanal(p.fila, canal),
-          ok: false, error: `Cuota mensual de ${canal} agotada`,
-        });
-        continue;
-      }
+    const { canal } = g;
+    // Mismo responsable → mismo correo, WhatsApp y celular para todo el grupo.
+    const destino = destinoDelCanal(g.miembros[0].fila, canal);
+    const hecho = (m: AvisoPendiente, ok: boolean, error?: string): EnvioHecho => ({
+      cargoId: m.fila.cargoId, aviso: g.aviso, canal, destino: destino ?? null,
+      ok, ...(error ? { error } : {}), grupo: g.clave,
+    });
 
-      const destino = destinoDelCanal(p.fila, canal);
-      // Sin dato de contacto no hay nada que intentar, y anotarlo como
-      // enviado escondería para siempre a un responsable sin correo.
-      if (!destino) {
-        hechos.push({
-          cargoId: p.fila.cargoId, aviso: p.aviso, canal, destino: null,
-          ok: false, error: FALTA[canal],
-        });
-        continue;
-      }
+    // Cuota del mes agotada en este canal: se salta el canal, NO el aviso.
+    // El mismo recordatorio sigue saliendo por los canales que le queden —
+    // normalmente el correo, que no lleva tope. Se anota como fallo a
+    // propósito: un tope que corta callado se lee después como «no había
+    // nada que mandar», y nadie se entera de que el colegio necesita
+    // más cupo.
+    const quedan = restante[canal];
+    if (quedan !== undefined && quedan <= 0) {
+      for (const m of g.miembros) hechos.push(hecho(m, false, `Cuota mensual de ${canal} agotada`));
+      continue;
+    }
 
-      if (opts.dryRun) {
-        if (!yaSalio.has(`${p.fila.cargoId}:${p.aviso}:${p.offsetDias}:${canal}`)) {
-          hechos.push({ cargoId: p.fila.cargoId, aviso: p.aviso, canal, destino, ok: true });
+    // Sin dato de contacto no hay nada que intentar, y anotarlo como
+    // enviado escondería para siempre a un responsable sin correo.
+    if (!destino) {
+      for (const m of g.miembros) hechos.push(hecho(m, false, FALTA[canal]));
+      continue;
+    }
+
+    if (opts.dryRun) {
+      for (const m of g.miembros) {
+        if (!yaSalio.has(`${m.fila.cargoId}:${g.aviso}:${g.offsetDias}:${canal}`)) {
+          hechos.push(hecho(m, true));
         }
-        continue;
       }
+      continue;
+    }
 
-      const reservaId = await reservar(p.fila.teamId, p.fila.cargoId, p.aviso, p.offsetDias, canal, destino);
-      if (reservaId == null) continue;  // ya había salido
+    // Un identificador por mensaje, solo si hay varios cargos: es lo que deja
+    // contar la cuota por mensaje en el SMS y el correo, que no devuelven id.
+    const grupo = g.miembros.length > 1 ? randomUUID() : null;
+    const reservados = await reservarGrupo(g, destino, grupo);
+    if (reservados.length === 0) continue;  // ya había salido
+    const ids = reservados.map((r) => r.id);
+    const miembros = reservados.map((r) => r.miembro);
 
-      // La pausa va ANTES del envío y no después: así el último mensaje de la
-      // tanda no deja la función esperando por nada.
-      if (salidos > 0 && pausaMs > 0) await new Promise((r) => setTimeout(r, pausaMs));
-      salidos++;
+    // La pausa va ANTES del envío y no después: así el último mensaje de la
+    // tanda no deja la función esperando por nada.
+    if (salidos > 0 && pausaMs > 0) await new Promise((r) => setTimeout(r, pausaMs));
+    salidos++;
 
-      try {
-        if (canal === 'correo') await opts.enviar.correo(destino, conEnlace, p);
-        else if (canal === 'whatsapp') {
-          // Se guarda el id que devuelve el CRM. El 201 solo dice que Meta
-          // aceptó la petición; con este id se puede volver a preguntar más
-          // tarde si el mensaje LLEGÓ, y soltar la reserva si no.
-          const mensajeId = await opts.enviar.whatsapp(destino, conEnlace, p, enlace);
-          if (mensajeId) {
-            await db.update(adminEscolarAvisosEnviados)
-              .set({ mensajeId })
-              .where(eq(adminEscolarAvisosEnviados.id, reservaId));
+    let mensajeId: string | null = null;
+    try {
+      // El enlace de pago va pegado al aviso: sin él el padre sabe que debe pero
+      // no tiene a dónde ir, y termina llamando al colegio. En el texto largo
+      // —correo y WhatsApp— siempre; en el SMS de UN cobro no, porque los 60
+      // caracteres de la URL se comen la mitad del mensaje y lo parten en dos,
+      // que se cobran como dos. El de varios cobros sí lo lleva (ver
+      // `redactarGrupo`): sin él el padre no sabe cuáles.
+      //
+      // Es UN enlace por responsable, no por hijo, y se memoriza dentro de la
+      // tanda: la familia lo recibe por tres canales y la consulta es la misma.
+      //
+      // Sin factura no hay nada que cobrar todavía: el aviso sale igual —la
+      // deuda existe— pero sin enlace, porque el enlace promete algo que no se
+      // puede cumplir. Basta con que UNO de los cobros del mensaje esté
+      // facturado: la página del enlace enseña lo que ya se puede pagar.
+      let enlace: string | null = null;
+      if (g.clientId != null && miembros.some((m) => m.fila.ecfDocumentId != null)) {
+        try {
+          let link = enlaces.get(g.clientId);
+          if (!link) {
+            link = urlDelLink((await getOCrearLink(g.teamId, g.clientId)).token);
+            enlaces.set(g.clientId, link);
           }
+          // El de la familia se memoriza; lo que cambia por mensaje es la
+          // factura: el aviso lleva a ESA factura, no a toda la deuda.
+          enlace = enlaceDeFactura(link, facturaDelMensaje(miembros));
+        } catch (err) {
+          // Que no se pueda crear el enlace no puede impedir el aviso: el padre
+          // prefiere enterarse de que debe, aunque sea sin botón.
+          console.error('[avisos] no se pudo crear el enlace de pago:', err);
         }
-        // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
-        // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
-        // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.
-        // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
-        // texto va con su ortografía.
-        else await opts.enviar.sms(destino, aGsm7(corto));
-        // Solo se descuenta lo que de verdad salió: un envío que reventó se
-        // libera arriba para reintentarse, y cobrarle el cupo además sería
-        // castigarlo dos veces por el mismo teléfono mal escrito.
-        if (restante[canal] !== undefined) restante[canal]! -= 1;
-        hechos.push({ cargoId: p.fila.cargoId, aviso: p.aviso, canal, destino, ok: true });
+      }
+
+      const { largo, corto } = redactarGrupo(miembros, opts.colegio, enlace);
+      const conEnlace = enlace ? `${largo}\n\nPaga o sube tu comprobante aquí: ${enlace}` : largo;
+      const mensaje: MensajeAviso = { aviso: g.aviso, hueco: g.hueco, canal, miembros };
+
+      if (canal === 'correo') await opts.enviar.correo(destino, conEnlace, mensaje);
+      else if (canal === 'whatsapp') {
+        // Se guarda el id que devuelve el CRM. El 201 solo dice que Meta
+        // aceptó la petición; con este id se puede volver a preguntar más
+        // tarde si el mensaje LLEGÓ, y soltar la reserva si no.
+        mensajeId = await opts.enviar.whatsapp(destino, conEnlace, mensaje, enlace);
+      }
+      // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
+      // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
+      // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.
+      // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
+      // texto va con su ortografía.
+      else await opts.enviar.sms(destino, aGsm7(corto));
+    } catch (err) {
+      // Se suelta la reserva de TODO el mensaje para que se pueda reintentar.
+      // El fallo más común es un teléfono que no normaliza, y ese no se
+      // arregla reintentando — pero tampoco se arregla escondiéndolo.
+      await liberarReservas(ids);
+      const error = err instanceof Error ? err.message : String(err);
+      for (const m of miembros) hechos.push(hecho(m, false, error));
+      continue;
+    }
+
+    // El mensaje YA salió. Anotarle el id y la constancia de que viajó junto
+    // con otros no puede deshacerlo: va aparte del try de arriba, porque si
+    // fallara ahí se soltaría la reserva de algo que sí se mandó y mañana la
+    // familia lo recibiría otra vez.
+    const conjunto = miembros.length > 1
+      ? `Enviado en un solo mensaje con ${miembros.length - 1} cobro(s) más`
+      : null;
+    if (mensajeId || conjunto) {
+      try {
+        await db.update(adminEscolarAvisosEnviados)
+          .set({
+            ...(mensajeId ? { mensajeId } : {}),
+            ...(conjunto ? { detalle: conjunto } : {}),
+          })
+          .where(inArray(adminEscolarAvisosEnviados.id, ids));
       } catch (err) {
-        // Se suelta la reserva para que mañana se pueda reintentar. El fallo
-        // más común es un teléfono que no normaliza, y ese no se arregla
-        // reintentando — pero tampoco se arregla escondiéndolo.
-        await liberar(p.fila.cargoId, p.aviso, p.offsetDias, canal);
-        hechos.push({
-          cargoId: p.fila.cargoId, aviso: p.aviso, canal, destino,
-          ok: false, error: err instanceof Error ? err.message : String(err),
-        });
+        console.error('[avisos] el mensaje salió pero no se pudo anotar su id:', err);
       }
     }
+
+    // Solo se descuenta lo que de verdad salió: un envío que reventó se
+    // libera arriba para reintentarse, y cobrarle el cupo además sería
+    // castigarlo dos veces por el mismo teléfono mal escrito. Un mensaje es un
+    // mensaje, lleve uno o cinco cobros: eso es lo que factura el proveedor.
+    if (restante[canal] !== undefined) restante[canal]! -= 1;
+    for (const m of miembros) hechos.push(hecho(m, true));
   }
 
   return hechos;

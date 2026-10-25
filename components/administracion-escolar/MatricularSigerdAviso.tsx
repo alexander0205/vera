@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { DownloadCloud, GraduationCap } from 'lucide-react';
+import { DownloadCloud, GitCompareArrows, GraduationCap } from 'lucide-react';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 /**
  * «Tienes X alumnos de SIGERD sin matricular. ¿Matricularlos a todos?»
@@ -23,6 +24,7 @@ interface Pendientes {
 
 export function MatricularSigerdAviso() {
   const [datos, setDatos] = useState<Pendientes | null>(null);
+  const { can } = usePermissions();
 
   useEffect(() => {
     let vigente = true;
@@ -56,11 +58,21 @@ export function MatricularSigerdAviso() {
           </p>
         </div>
       </div>
-      <Button className="shrink-0 bg-zero-600 hover:bg-zero-700" asChild>
-        <Link href="/escolar/matriculas/desde-sigerd">
-          <GraduationCap className="mr-2 h-4 w-4" />Revisar y matricular
-        </Link>
-      </Button>
+      <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+        <Button className="bg-zero-600 hover:bg-zero-700" asChild>
+          <Link href="/escolar/matriculas/desde-sigerd">
+            <GraduationCap className="mr-2 h-4 w-4" />Revisar y matricular
+          </Link>
+        </Button>
+        {/* Los que ya están matriculados no salen aquí aunque SIGERD los haya
+            cambiado de sección: eso se ve en la revisión de cambios. */}
+        {can('administracion-escolar:configurar') && (
+          <Link href="/escolar/configuracion/sigerd/cambios"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:underline">
+            <GitCompareArrows className="h-3.5 w-3.5" />Revisar cambios de SIGERD
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

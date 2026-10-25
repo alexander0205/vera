@@ -169,6 +169,7 @@ export async function getSaludCanal(teamId: number): Promise<SaludCanal> {
       .select({
         estado: adminEscolarAvisosEnviados.estadoEntrega,
         error:  adminEscolarAvisosEnviados.errorEntrega,
+        mensajeId: adminEscolarAvisosEnviados.mensajeId,
       })
       .from(adminEscolarAvisosEnviados)
       .where(and(
@@ -180,7 +181,17 @@ export async function getSaludCanal(teamId: number): Promise<SaludCanal> {
 
   const errores = new Map<string, number>();
   let entregados = 0, fallidos = 0, sinAcuse = 0;
-  for (const f of filas) {
+  // Hay una fila por CARGO, pero tres hermanos reciben un solo WhatsApp: todas
+  // sus filas comparten `mensaje_id` y el mismo acuse. Contarlas todas haría
+  // que un único mensaje fallido se leyera como tres fallos.
+  const vistos = new Set<string>();
+  const mensajes = filas.filter((f) => {
+    if (!f.mensajeId) return true;
+    if (vistos.has(f.mensajeId)) return false;
+    vistos.add(f.mensajeId);
+    return true;
+  });
+  for (const f of mensajes) {
     if (f.estado === 'entregado' || f.estado === 'leido') entregados++;
     else if (f.estado === 'fallido') {
       fallidos++;
@@ -197,7 +208,7 @@ export async function getSaludCanal(teamId: number): Promise<SaludCanal> {
     conexion: conexion.estado ?? 'sin_llave',
     conexionDescripcion: conexion.descripcion ?? conexion.error ?? 'No se pudo consultar el CRM',
     puedeEnviar: conexion.puedeEnviar === true,
-    enviados: filas.length,
+    enviados: mensajes.length,
     entregados, fallidos, sinAcuse,
     errores: ordenados,
     // El motivo más frecuente es el que hay que atender primero.

@@ -74,7 +74,33 @@ export interface DiagnosticoFacturacion {
   motivo: 'sin-responsable' | 'sin-saldo' | 'prefill-rechazado' | 'sin-lineas' | 'error';
   detalle: string;
   cargoIds: number[];
+  /**
+   * El grupo no se facturó porque OTRA corrida —el cron, otro clic— se llevó
+   * alguno de sus cargos entre leerlos y enlazarlos. No es un fallo: es el
+   * candado funcionando, y quien mira debe poder distinguirlo de un error.
+   */
+  yaFacturados?: boolean;
 }
+
+/**
+ * Un grupo de cargos que se factura junto, en UN documento.
+ *
+ * `clienteId` es el responsable de pago: sale en el candado y es a quien se le
+ * emite. Cómo se juntan los cargos —por responsable, como el cron, o uno por
+ * alumno, como «Facturar por lote»— lo decide quien arma los grupos.
+ */
+export interface GrupoAFacturar {
+  clienteId: number;
+  cargos: { id: number; saldoCentavos: number; fechaVencimiento: string | null }[];
+}
+
+export interface OpcionesFacturar {
+  /** Quién lo pidió, para el código y para `created_by`. El cron no tiene usuario. */
+  userId?: number | null;
+}
+
+/** Entre leer los cargos y enlazarlos, otra corrida facturó alguno. */
+class CargosYaFacturadosError extends Error {}
 
 export interface ResultadoFacturacion {
   facturas: FacturaGenerada[];
@@ -140,7 +166,8 @@ function lineasParaGuardar(lineas: LineaPrefill[]): string {
       productoId: l.productoId,
       variantId: null,
       nombreItem: l.nombreItem,
-      descripcionItem: '',
+      // El mes de la cuota: con dos meses del mismo concepto, es lo que los distingue.
+      descripcionItem: l.descripcionItem ?? '',
       cantidadItem: l.cantidadItem,
       precioUnitarioItem: l.precioUnitarioItem,
       descuentoMonto: 0,
@@ -277,27 +304,11 @@ export async function facturarCuotasEmitidas(
     });
   }
 
-  const facturas: FacturaGenerada[] = [];
-
-  for (const [clienteId, grupo] of porResponsable) {
-    const ids = grupo.map((c) => c.id);
-    try {
-      const factura = await facturarGrupo(teamId, clienteId, ids, grupo);
-      if ('error' in factura) {
-        diagnostico.push({ motivo: factura.motivo, detalle: factura.error, cargoIds: ids });
-        continue;
-      }
-      facturas.push(factura);
-    } catch (e: unknown) {
-      // Una familia con la ficha a medias no puede dejar sin facturar a las
-      // demás. Mismo criterio que el devengo: se anota y se sigue.
-      diagnostico.push({
-        motivo: 'error',
-        detalle: e instanceof Error ? e.message : 'error desconocido',
-        cargoIds: ids,
-      });
-    }
-  }
+  const { facturas, diagnostico: sinFactura } = await facturarGrupos(
+    teamId,
+    [...porResponsable].map(([clienteId, cargos]) => ({ clienteId, cargos })),
+  );
+  diagnostico.push(...sinFactura);
 
   if (diagnostico.length) {
     console.warn(`[factura-emision] team ${teamId} período ${periodoId}: ${diagnostico.length} grupo(s) sin facturar`, diagnostico);
@@ -311,12 +322,55 @@ export async function facturarCuotasEmitidas(
   };
 }
 
+/**
+ * Crea una factura por cada grupo, uno tras otro.
+ *
+ * Es el constructor de facturas que usan los DOS caminos: el cron (grupos por
+ * responsable) y «Facturar por lote» (grupos del plan que la persona vio).
+ * Quien llama decide cómo se juntan los cargos; esto solo los factura.
+ *
+ * Cada grupo es su propia transacción y uno que falla no tumba a los demás:
+ * una familia con la ficha a medias no puede dejar sin factura a las otras.
+ */
+export async function facturarGrupos(
+  teamId: number,
+  grupos: GrupoAFacturar[],
+  opciones: OpcionesFacturar = {},
+): Promise<{ facturas: FacturaGenerada[]; diagnostico: DiagnosticoFacturacion[] }> {
+  const facturas: FacturaGenerada[] = [];
+  const diagnostico: DiagnosticoFacturacion[] = [];
+
+  for (const { clienteId, cargos } of grupos) {
+    const ids = cargos.map((c) => c.id);
+    try {
+      const factura = await facturarGrupo(teamId, clienteId, ids, cargos, opciones.userId ?? null);
+      if ('error' in factura) {
+        diagnostico.push({ motivo: factura.motivo, detalle: factura.error, cargoIds: ids });
+        continue;
+      }
+      facturas.push(factura);
+    } catch (e: unknown) {
+      // Una familia con la ficha a medias no puede dejar sin facturar a las
+      // demás. Mismo criterio que el devengo: se anota y se sigue.
+      diagnostico.push({
+        motivo: 'error',
+        detalle: e instanceof Error ? e.message : 'error desconocido',
+        cargoIds: ids,
+        ...(e instanceof CargosYaFacturadosError ? { yaFacturados: true } : {}),
+      });
+    }
+  }
+
+  return { facturas, diagnostico };
+}
+
 /** Una familia, una factura. */
 async function facturarGrupo(
   teamId: number,
   clienteId: number,
   cargoIds: number[],
   grupo: { id: number; saldoCentavos: number; fechaVencimiento: string | null }[],
+  userId: number | null = null,
 ): Promise<FacturaGenerada | { error: string; motivo: DiagnosticoFacturacion['motivo'] }> {
   // El prefill es el mismo del flujo manual: resuelve el comprador, el producto
   // por la cadena de la tarifa, el ITBIS y el beneficiario de cada línea. Usarlo
@@ -370,7 +424,7 @@ async function facturarGrupo(
 
   // Fuera de la transacción, como todas las demás llamadas: el contador de
   // códigos lleva su propio candado y no necesita el de aquí.
-  const codigo = await generarCodigoFactura(db, { teamId, userId: null, tipoEcf: TIPO_ECF });
+  const codigo = await generarCodigoFactura(db, { teamId, userId, tipoEcf: TIPO_ECF });
 
   return db.transaction(async (tx) => {
     // Un solo facturador a la vez por familia. Sin esto, el cron y un clic en
@@ -399,7 +453,7 @@ async function facturarGrupo(
       montoTotal,
       totalItbis,
       lineasJson: lineasParaGuardar(lineas),
-      createdBy: null,
+      createdBy: userId,
       fechaEmision: new Date(),
     }).returning({ id: ecfDocuments.id });
 
@@ -417,7 +471,7 @@ async function facturarGrupo(
       .returning({ id: adminEscolarCargos.id });
 
     if (enlazados.length !== cargoIds.length) {
-      throw new Error(
+      throw new CargosYaFacturadosError(
         `Se iban a facturar ${cargoIds.length} cargo(s) y solo ${enlazados.length} seguían sin factura; no se crea el documento.`,
       );
     }
