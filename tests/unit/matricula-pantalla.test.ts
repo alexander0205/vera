@@ -626,8 +626,10 @@ describe('los sitios que abrían el diálogo ahora navegan', () => {
     expect(listado).toContain("const volverAqui = qs ? `/escolar/matriculas?${qs}` : '/escolar/matriculas';");
     expect(listado).toContain('router.push(rutaNuevaMatricula({ volver: volverAqui }));');
     expect(listado).toContain('router.push(rutaEditarMatricula(m.id, volverAqui));');
-    // Los dos botones de «Nueva matrícula» y el lápiz siguen colgando de lo mismo.
-    expect(listado.split('onClick={abrirNueva}').length - 1).toBe(2);
+    // Los dos «Nueva matrícula» (el de arriba, con sus otras formas en la
+    // flecha, y el de la lista vacía) y el lápiz siguen colgando de lo mismo.
+    expect(listado.split('onClick={abrirNueva}').length - 1).toBe(1);
+    expect(listado).toContain('<BotonMatricular onNueva={abrirNueva}');
     expect(listado).toContain('onEditar={abrirEdicion}');
   });
 

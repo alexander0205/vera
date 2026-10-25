@@ -108,7 +108,7 @@ export function tarifaDesdeEscrito(l: LineaPlan, centavos: number): number {
 }
 
 /** Lo que se enseña en el campo al abrirlo: la cuota o el total, según `modoPrecio`. */
-function escritoDesdeTarifa(l: LineaPlan, tarifa: number): number {
+export function escritoDesdeTarifa(l: LineaPlan, tarifa: number): number {
   return porCuota(l) || modoPrecio(l) === 'total'
     ? tarifa : Math.round(tarifa / Math.max(1, l.cuotas.length));
 }
