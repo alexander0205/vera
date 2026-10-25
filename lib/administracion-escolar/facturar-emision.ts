@@ -166,7 +166,8 @@ function lineasParaGuardar(lineas: LineaPrefill[]): string {
       productoId: l.productoId,
       variantId: null,
       nombreItem: l.nombreItem,
-      descripcionItem: '',
+      // El mes de la cuota: con dos meses del mismo concepto, es lo que los distingue.
+      descripcionItem: l.descripcionItem ?? '',
       cantidadItem: l.cantidadItem,
       precioUnitarioItem: l.precioUnitarioItem,
       descuentoMonto: 0,

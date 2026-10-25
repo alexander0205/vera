@@ -13,6 +13,15 @@ import {
   filtrarAlumnos,
   leerPeticionLote,
   marcarVarios,
+  conceptosDelMes,
+  describirCalendario,
+  finDeMes,
+  hastaParaMeses,
+  listaDeMeses,
+  mesDeCuota,
+  mesDelCargo,
+  mesesParaElegir,
+  resumenPorMes,
   opcionesDeGrado,
   opcionesDeSeccion,
   periodoDeLinea,
@@ -202,6 +211,110 @@ describe('«cuotas emitidas hasta»', () => {
   });
 });
 
+describe('los meses que se eligen: facturar solo algunos', () => {
+  const ago = () => cargo(1, { mes: 8, fechaEmision: '2026-08-01' });
+  const sep = () => cargo(1, { mes: 9, fechaEmision: '2026-09-01' });
+  const oct = () => cargo(1, { mes: 10, fechaEmision: '2026-10-01' });
+  const nov = () => cargo(1, { mes: 11, fechaEmision: '2026-11-01' });
+
+  it('sin meses entra todo lo pendiente, también lo atrasado (como siempre)', () => {
+    const plan = planearFacturasPorLote([ago(), sep(), oct(), nov()], opciones({ alumnos: [ana], hasta: '2026-11-30' }));
+    expect(plan.facturas[0].lineas.map((l) => l.mes)).toEqual([8, 9, 10, 11]);
+  });
+
+  it('octubre y noviembre: una factura con los dos; agosto y septiembre esperan', () => {
+    const plan = planearFacturasPorLote([ago(), sep(), oct(), nov()],
+      opciones({ alumnos: [ana], hasta: '2026-11-30', meses: ['2026-10', '2026-11'] }));
+    expect(plan.facturas).toHaveLength(1);
+    expect(plan.facturas[0].lineas.map((l) => l.mes)).toEqual([10, 11]);
+    expect(plan.omitidos).toHaveLength(0);
+  });
+
+  it('meses sueltos también: solo septiembre', () => {
+    const plan = planearFacturasPorLote([ago(), sep(), oct()], opciones({ alumnos: [ana], meses: ['2026-09'] }));
+    expect(plan.facturas[0].lineas.map((l) => l.mes)).toEqual([9]);
+  });
+
+  it('la cuota cuenta por SU mes, no por el día en que se emite', () => {
+    // La de octubre de un colegio que la emite el 25 de septiembre sigue siendo «octubre».
+    const octTemprana = cargo(1, { mes: 10, fechaEmision: '2026-09-25' });
+    const plan = planearFacturasPorLote([octTemprana], opciones({ alumnos: [ana], meses: ['2026-10'] }));
+    expect(plan.facturas[0].cargoIds).toEqual([octTemprana.id]);
+  });
+
+  it('un cargo sin mes cuenta por el mes en que se emitió', () => {
+    expect(mesDelCargo({ mes: null, anio: 2026, fechaEmision: '2026-09-14' })).toBe('2026-09');
+    expect(mesDelCargo({ mes: 1, anio: 2027, fechaEmision: '2026-12-25' })).toBe('2027-01');
+    const inscripcion = cargo(1, { mes: null, fechaEmision: '2026-08-10' });
+    const plan = planearFacturasPorLote([inscripcion, oct()], opciones({ alumnos: [ana], meses: ['2026-10'] }));
+    expect(plan.facturas[0].lineas.map((l) => l.mes)).toEqual([10]);
+  });
+
+  it('si todo lo que debe es de otros meses, se dice cuáles', () => {
+    const plan = planearFacturasPorLote([ago(), sep()], opciones({ alumnos: [ana], meses: ['2026-10'] }));
+    expect(plan.facturas).toHaveLength(0);
+    expect(plan.omitidos[0]).toMatchObject({ motivo: 'otros-meses' });
+    expect(plan.omitidos[0].detalle).toContain('agosto y septiembre 2026');
+  });
+
+  it('los meses que se ofrecen son los del año escolar', () => {
+    const meses = mesesParaElegir({ fechaInicio: '2026-08-01', fechaFin: '2027-06-30' }, '2026-10-24');
+    expect(meses[0]).toEqual({ valor: '2026-08', texto: 'agosto 2026' });
+    expect(meses.at(-1)).toEqual({ valor: '2027-06', texto: 'junio 2027' });
+    expect(meses).toHaveLength(11);
+    const sinFechas = mesesParaElegir({}, '2026-10-24');
+    expect(sinFechas).toHaveLength(12);
+    expect(sinFechas.at(-1)?.valor).toBe('2027-01');
+  });
+
+  it('los meses en una frase, el corte que les toca y lo pendiente de cada mes', () => {
+    expect(listaDeMeses(['2026-11', '2026-10'])).toBe('octubre y noviembre 2026');
+    expect(listaDeMeses(['2026-12', '2027-01'])).toBe('diciembre 2026 y enero 2027');
+    expect(listaDeMeses(['2026-08', '2026-09', '2026-10'])).toBe('agosto, septiembre y octubre 2026');
+    expect(finDeMes('2026-11')).toBe('2026-11-30');
+    expect(finDeMes('2028-02')).toBe('2028-02-29');
+    // Noviembre por adelantado: el corte es su último día. Solo meses pasados: el corte es hoy.
+    expect(hastaParaMeses(['2026-10', '2026-11'], '2026-10-24')).toBe('2026-11-30');
+    expect(hastaParaMeses(['2026-08'], '2026-10-24')).toBe('2026-10-24');
+    const pend = [
+      { e: 1, c: 1, m: '2026-10', n: 2, centavos: 600000 },
+      { e: 2, c: 1, m: '2026-10', n: 1, centavos: 300000 },
+      { e: 1, c: 2, m: '2026-10', n: 1, centavos: 100000 },
+    ];
+    expect(resumenPorMes(pend, new Set([1]), new Set([1])).get('2026-10')).toEqual({ cargos: 2, centavos: 600000 });
+    expect(resumenPorMes(pend, new Set([1, 2]), new Set([1, 2])).get('2026-10')).toEqual({ cargos: 4, centavos: 1000000 });
+  });
+});
+
+describe('el calendario de cada concepto', () => {
+  it('la cuota de enero que se emite en diciembre es del año siguiente', () => {
+    expect(mesDeCuota(1, '2026-12-25')).toBe('2027-01');
+    expect(mesDeCuota(10, '2026-09-25')).toBe('2026-10');
+    expect(mesDeCuota(12, '2026-12-01')).toBe('2026-12');
+    // Un cargo con su año bien puesto lo conserva.
+    expect(mesDeCuota(9, '2027-03-10', 2026)).toBe('2026-09');
+  });
+
+  it('dice cómo cobra cada concepto', () => {
+    const q = (m: string) => ({ c: 1, m, etiqueta: m });
+    expect(describirCalendario(['2026-08', '2026-09', '2026-10', '2026-11'].map(q))).toBe('4 cuotas · agosto 2026 a noviembre 2026');
+    expect(describirCalendario(['2026-11', '2027-05'].map(q))).toBe('2 cuotas · noviembre 2026 y mayo 2027');
+    expect(describirCalendario([q('2026-10')])).toBe('Pago único · octubre 2026');
+    expect(describirCalendario([])).toBe('Sin calendario: se cobra cuando se crea el cargo');
+  });
+
+  it('en un mes, lo de cada concepto marcado: sus cargos pendientes o la cuota de su calendario', () => {
+    const pend = [{ e: 1, c: 1, m: '2026-10', n: 1, centavos: 500000 }, { e: 2, c: 1, m: '2026-10', n: 1, centavos: 500000 }];
+    const cal = [{ c: 1, m: '2026-10', etiqueta: 'Oct' }, { c: 2, m: '2026-11', etiqueta: 'Brazalete 1' }];
+    expect(conceptosDelMes('2026-10', pend, cal, new Set([1]), new Set([1, 2])))
+      .toEqual([{ conceptoId: 1, cargos: 1, centavos: 500000, cuota: true }]);
+    expect(conceptosDelMes('2026-11', pend, cal, new Set([1]), new Set([1, 2])))
+      .toEqual([{ conceptoId: 2, cargos: 0, centavos: 0, cuota: true }]);
+    // Un concepto no marcado no cuenta.
+    expect(conceptosDelMes('2026-11', pend, cal, new Set([1]), new Set([1]))).toEqual([]);
+  });
+});
+
 describe('a quién se deja fuera, y por qué', () => {
   it('sin responsable de pago: no hay a quién facturarle, y lo dice con el conteo', () => {
     const sinPadre = alumno(4, 'Zoe Sola', null, null);
@@ -309,9 +422,19 @@ describe('leerPeticionLote', () => {
       ok: true,
       datos: {
         periodoId: null, estudianteIds: [1, 2], conceptoIds: [3],
-        hasta: hoy, juntarHermanos: false, confirmar: false,
+        hasta: hoy, meses: null, juntarHermanos: false, confirmar: false,
       },
     });
+  });
+
+  it('los meses son AAAA-MM, sin repetir, y ninguno después del corte', () => {
+    expect(leerPeticionLote({ ...buena, meses: null }, hoy)).toMatchObject({ ok: true, datos: { meses: null } });
+    expect(leerPeticionLote({ ...buena, meses: ['2026-10', '2026-09', '2026-10'] }, hoy))
+      .toMatchObject({ ok: true, datos: { meses: ['2026-09', '2026-10'] } });
+    expect(leerPeticionLote({ ...buena, meses: ['2026-13'] }, hoy)).toEqual({ ok: false, error: 'Los meses deben venir como AAAA-MM.' });
+    expect(leerPeticionLote({ ...buena, meses: [] }, hoy)).toEqual({ ok: false, error: 'Elige al menos un mes.' });
+    expect(leerPeticionLote({ ...buena, meses: ['2026-12'] }, hoy))
+      .toEqual({ ok: false, error: 'Hay un mes elegido después de la fecha de corte.' });
   });
 
   it('solo `true` de verdad confirma o junta: un texto «true» no', () => {

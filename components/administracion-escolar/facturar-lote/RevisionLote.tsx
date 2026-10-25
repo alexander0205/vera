@@ -84,7 +84,7 @@ export function RevisionLote({ plan, juntar, periodo }: {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-sm font-medium text-amber-900">No hay ninguna factura que crear con esta selección.</p>
           <p className="mt-0.5 text-sm text-amber-800">
-            Abajo está el motivo de cada alumno. Cambia la selección, los conceptos o la fecha de corte y vuelve a revisar.
+            Abajo está el motivo de cada alumno. Cambia los alumnos, los conceptos o los meses y vuelve a revisar.
           </p>
         </div>
       ) : (

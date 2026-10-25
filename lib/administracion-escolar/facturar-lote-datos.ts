@@ -29,8 +29,9 @@ import { fechaRD } from '@/lib/utils/format';
 import { facturarGrupos, type GrupoAFacturar } from './facturar-emision';
 import { devengarPeriodo } from './devengar';
 import type {
-  AlumnoCatalogo, AlumnoLote, CargoLote, ConceptoCatalogo, FacturaCreada, FacturaFallida, FacturaPlan,
+  AlumnoCatalogo, AlumnoLote, CargoLote, ConceptoCatalogo, CuotaCalendario, FacturaCreada, FacturaFallida, FacturaPlan, PendienteMes,
 } from './facturar-lote';
+import { mesDeCuota } from './facturar-lote';
 
 /** Estados que se pueden cobrar. Mismo criterio que el cron y el prefill. */
 const COBRABLES = ['pendiente', 'parcial', 'vencido'];
@@ -54,7 +55,10 @@ export async function periodosDelColegio(teamId: number) {
  */
 export async function periodoDelLote(teamId: number, periodoId: number | null) {
   const [periodo] = await db
-    .select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre })
+    .select({
+      id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre,
+      fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin,
+    })
     .from(adminEscolarPeriodos)
     .where(periodoId
       ? and(eq(adminEscolarPeriodos.id, periodoId), eq(adminEscolarPeriodos.teamId, teamId))
@@ -62,6 +66,23 @@ export async function periodoDelLote(teamId: number, periodoId: number | null) {
     .limit(1);
   return periodo ?? null;
 }
+
+/**
+ * El mes de un cargo como 'YYYY-MM', igual que `mesDelCargo`: el de su cuota si
+ * es de un mes (con el año corregido como en `mesDeCuota`); si no, el día en
+ * que se emitió (su cuota, o el día en que se creó, en hora de República
+ * Dominicana).
+ */
+const emisionSql = sql`coalesce(${adminEscolarConceptoCuotas.fechaEmision},
+  (${adminEscolarCargos.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santo_Domingo')::date)`;
+const mesDelCargoSql = sql<string>`CASE
+  WHEN ${adminEscolarCargos.mes} BETWEEN 1 AND 12
+    THEN (${adminEscolarCargos.anio} + CASE
+            WHEN ${adminEscolarCargos.mes} < extract(month FROM ${emisionSql}) - 6
+             AND ${adminEscolarCargos.anio} = extract(year FROM ${emisionSql}) THEN 1 ELSE 0 END
+         )::text || '-' || lpad(${adminEscolarCargos.mes}::text, 2, '0')
+  ELSE to_char(${emisionSql}, 'YYYY-MM')
+END`;
 
 /**
  * Lo que la pantalla necesita para dejar elegir: los alumnos matriculados
@@ -119,11 +140,16 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
       .select({
         estudianteId: adminEscolarCargos.estudianteId,
         conceptoId: adminEscolarCargos.conceptoId,
+        mes: mesDelCargoSql,
         n: sql<number>`count(*)::int`,
         // float8 y no bigint: el controlador devuelve el bigint como texto.
         centavos: sql<number>`coalesce(sum(${adminEscolarCargos.saldoCentavos}), 0)::float8`,
       })
       .from(adminEscolarCargos)
+      .leftJoin(adminEscolarConceptoCuotas, and(
+        eq(adminEscolarCargos.cuotaId, adminEscolarConceptoCuotas.id),
+        eq(adminEscolarConceptoCuotas.teamId, teamId),
+      ))
       .where(and(
         eq(adminEscolarCargos.teamId, teamId),
         eq(adminEscolarCargos.periodoId, periodoId),
@@ -131,7 +157,7 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
         isNull(adminEscolarCargos.ecfDocumentId),
         gt(adminEscolarCargos.saldoCentavos, 0),
       ))
-      .groupBy(adminEscolarCargos.estudianteId, adminEscolarCargos.conceptoId),
+      .groupBy(adminEscolarCargos.estudianteId, adminEscolarCargos.conceptoId, mesDelCargoSql),
   ]);
 
   // Una matrícula activa por alumno y año; el `Map` por si el dato dijera otra cosa.
@@ -160,15 +186,39 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
   // con deuda no sale en la lista, y sumarle sus cargos a los conceptos haría
   // decir «40 cargos» donde marcando a todos solo se alcanzan 38.
   const porConcepto = new Map<number, { n: number; centavos: number }>();
+  /** Lo pendiente por alumno, concepto y mes: con esto la pantalla dice cuánto hay en cada mes. */
+  const porMes: PendienteMes[] = [];
   for (const p of pendientes) {
     const alumno = alumnos.get(p.estudianteId);
     if (!alumno) continue;
+    porMes.push({ e: p.estudianteId, c: p.conceptoId, m: p.mes, n: Number(p.n), centavos: Number(p.centavos) });
     alumno.sinFactura += Number(p.n);
     alumno.sinFacturaCentavos += Number(p.centavos);
     const c = porConcepto.get(p.conceptoId) ?? { n: 0, centavos: 0 };
     c.n += Number(p.n); c.centavos += Number(p.centavos);
     porConcepto.set(p.conceptoId, c);
   }
+
+  // El calendario de cada concepto en este año: con qué meses cobra. Con esto
+  // la pantalla dice, mes por mes, qué concepto se factura (y cómo cobra cada uno).
+  const cuotas = await db
+    .select({
+      conceptoId: adminEscolarConceptoCuotas.conceptoId,
+      mes: adminEscolarConceptoCuotas.mes,
+      fechaEmision: adminEscolarConceptoCuotas.fechaEmision,
+      etiqueta: adminEscolarConceptoCuotas.etiqueta,
+    })
+    .from(adminEscolarConceptoCuotas)
+    .where(and(
+      eq(adminEscolarConceptoCuotas.teamId, teamId),
+      eq(adminEscolarConceptoCuotas.periodoId, periodoId),
+      eq(adminEscolarConceptoCuotas.activo, true),
+    ))
+    .orderBy(asc(adminEscolarConceptoCuotas.fechaEmision));
+  const calendario: CuotaCalendario[] = cuotas.map((q) => {
+    const emision = String(q.fechaEmision).slice(0, 10);
+    return { c: q.conceptoId, m: q.mes ? mesDeCuota(q.mes, emision) : emision.slice(0, 7), etiqueta: q.etiqueta };
+  });
 
   // TODOS los conceptos activos, no solo los que ya tienen un cargo sin
   // facturar: lo pidió Alex («déjalo abierto, que puedas seleccionar cualquier
@@ -192,7 +242,7 @@ export async function catalogoDelLote(teamId: number, periodoId: number) {
     }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
-  return { alumnos: [...alumnos.values()], conceptos };
+  return { alumnos: [...alumnos.values()], conceptos, pendientes: porMes, calendario };
 }
 
 /**

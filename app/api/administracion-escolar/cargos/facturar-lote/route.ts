@@ -6,6 +6,7 @@ import {
   MAX_FACTURAS_POR_PETICION,
   facturasEnLetras,
   leerPeticionLote,
+  mesesParaElegir,
   planearFacturasPorLote,
   type RespuestaLote,
 } from '@/lib/administracion-escolar/facturar-lote';
@@ -70,10 +71,13 @@ export async function GET(req: NextRequest) {
     catalogoDelLote(teamId, periodo.id),
   ]);
 
+  const hoy = hoyRD();
   return NextResponse.json({
     periodo,
     periodos,
-    hoy: hoyRD(),
+    hoy,
+    // Lo que se ofrece en «Desde el mes»: los meses del año escolar.
+    meses: mesesParaElegir(periodo, hoy),
     maxPorPeticion: MAX_FACTURAS_POR_PETICION,
     ...catalogo,
   });
@@ -111,6 +115,7 @@ export async function POST(req: NextRequest) {
     alumnos,
     conceptoIds: p.conceptoIds,
     hasta: p.hasta,
+    meses: p.meses,
     juntarHermanos: p.juntarHermanos,
   });
 
@@ -118,6 +123,7 @@ export async function POST(req: NextRequest) {
     confirmar,
     periodo: periodo.nombre,
     hasta: p.hasta,
+    meses: p.meses,
     juntarHermanos: p.juntarHermanos,
     plan,
   };
@@ -157,6 +163,7 @@ export async function POST(req: NextRequest) {
         alumnos: p.estudianteIds.length,
         conceptoIds: p.conceptoIds,
         hasta: p.hasta,
+        meses: p.meses,
         juntarHermanos: p.juntarHermanos,
       },
     });

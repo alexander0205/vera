@@ -22,12 +22,14 @@ import { fmtDOP } from '@/lib/utils/format';
  * a la DGII. Es lo que más tranquiliza a quien va a crear cien documentos.
  */
 export function ConfirmarFacturasDialog({
-  abierto, facturas, cargos, totalCentavos, juntar, creando, progreso, deteniendo, error,
+  abierto, facturas, cargos, totalCentavos, juntar, meses, creando, progreso, deteniendo, error,
   onCerrar, onConfirmar, onDetener,
 }: {
   abierto: boolean;
   facturas: number;
   cargos: number;
+  /** Qué meses se facturan, en una frase: «octubre y noviembre 2026». */
+  meses: string;
   /** La suma de los cargos (ver la nota de ITBIS en la revisión). */
   totalCentavos: number;
   juntar: boolean;
@@ -53,6 +55,10 @@ export function ConfirmarFacturasDialog({
             <span className="block text-sm font-normal text-gray-600">
               {juntar ? 'Una por responsable de pago' : 'Una por alumno'} · {cargos} {cargos === 1 ? 'cargo' : 'cargos'}
             </span>
+          </p>
+
+          <p className="rounded-lg border border-zero-200 bg-zero-50 px-4 py-2.5 text-sm text-zero-900">
+            Meses que se facturan: <strong className="font-semibold">{meses}</strong>
           </p>
 
           <div className="flex items-baseline justify-between gap-3 rounded-lg bg-gray-50 px-4 py-3">

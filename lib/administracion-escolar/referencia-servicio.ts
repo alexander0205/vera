@@ -79,3 +79,19 @@ export function descripcionItem(p: { concepto: string; grado?: string | null; se
   const lugar = [p.grado, p.servicio].filter(Boolean).join(' de ');
   return [lugar, p.periodo].filter(Boolean).join(' · ');
 }
+
+const MESES_LINEA = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
+  'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+/**
+ * El mes de una cuota tal como va en la descripción de su línea: «Agosto 2026».
+ *
+ * Sin él, una factura con dos o más meses del mismo concepto (facturar octubre
+ * y noviembre juntos, o ponerse al día con tres atrasados) trae líneas iguales
+ * —«Mensualidad», «Mensualidad»…— y el padre no sabe qué mes paga cada una.
+ * Un cargo sin mes (inscripción, uniforme) no lleva descripción.
+ */
+export function descripcionDelMes(mes: number | null | undefined, anio: number): string {
+  if (!mes || mes < 1 || mes > 12) return '';
+  return `${MESES_LINEA[mes - 1]} ${anio}`;
+}

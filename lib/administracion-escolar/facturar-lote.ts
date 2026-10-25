@@ -96,6 +96,12 @@ export interface OpcionesLote {
   conceptoIds: number[];
   /** «Cuotas emitidas hasta»: 'YYYY-MM-DD', inclusive. */
   hasta: string;
+  /**
+   * Los meses que se facturan ('YYYY-MM'), o null para todo lo pendiente.
+   * Es para facturar solo algunos meses —octubre y noviembre— aunque el alumno
+   * deba otros: esos se quedan para otra factura. Ver `mesDelCargo`.
+   */
+  meses?: string[] | null;
   /** false = una factura por alumno · true = una por responsable, como el cron. */
   juntarHermanos: boolean;
 }
@@ -137,6 +143,7 @@ export type MotivoOmitido =
   | 'sin-cargos'
   | 'ya-facturado'
   | 'despues-del-corte'
+  | 'otros-meses'
   | 'sin-saldo';
 
 /** Un alumno marcado que se queda sin factura, y por qué. */
@@ -162,12 +169,170 @@ export interface PlanLote {
 
 const alfabetico = (a: string, b: string) => a.localeCompare(b, 'es');
 
+const MESES_LOTE = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+  'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** 'YYYY-MM' → «octubre 2026». */
+export function mesEnTexto(aaaamm: string): string {
+  const [a, m] = aaaamm.split('-').map(Number);
+  return `${MESES_LOTE[m - 1] ?? aaaamm} ${a}`;
+}
+
+/**
+ * El mes de un cargo, como 'YYYY-MM', para compararlo con los meses elegidos.
+ *
+ * Una cuota es de SU mes, no del día en que se emite: la de octubre de un
+ * colegio que emite el 25 de septiembre sigue siendo «octubre», y es lo que
+ * la persona tiene en la cabeza al decir «factura octubre». Un cargo sin mes
+ * (inscripción, uniforme) cuenta por el mes en que se emitió.
+ */
+export function mesDelCargo(c: Pick<CargoLote, 'mes' | 'anio' | 'fechaEmision'>): string {
+  if (c.mes != null && c.mes >= 1 && c.mes <= 12) return mesDeCuota(c.mes, c.fechaEmision, c.anio);
+  return c.fechaEmision.slice(0, 7);
+}
+
+/**
+ * El mes de una cuota del calendario —o de un cargo— como 'YYYY-MM'.
+ *
+ * El año guardado es el de la emisión, así que la cuota de ENERO que se emite
+ * el 25 de diciembre diría «enero» del año que se acaba. Si el mes queda más
+ * de medio año antes que el de la emisión, es del año siguiente.
+ */
+export function mesDeCuota(mes: number, fechaEmision: string, anio?: number): string {
+  const anioEmision = Number(fechaEmision.slice(0, 4));
+  const mesEmision = Number(fechaEmision.slice(5, 7));
+  let a = anio ?? anioEmision;
+  if (a === anioEmision && mes < mesEmision - 6) a += 1;
+  return `${a}-${String(mes).padStart(2, '0')}`;
+}
+
+/** Una cuota del calendario de un concepto: de qué concepto y de qué mes. */
+export interface CuotaCalendario { c: number; m: string; etiqueta: string }
+
+/**
+ * Cómo cobra un concepto, en pocas palabras, sacado de su calendario:
+ * «10 cuotas · agosto 2026 a mayo 2027», «2 cuotas · noviembre 2026 y mayo
+ * 2027», «Pago único · octubre 2026». Sin calendario, se cobra cuando alguien
+ * crea el cargo (un paseo, un uniforme).
+ */
+export function describirCalendario(cuotas: CuotaCalendario[]): string {
+  const meses = [...new Set(cuotas.map((q) => q.m))].sort();
+  if (meses.length === 0) return 'Sin calendario: se cobra cuando se crea el cargo';
+  if (meses.length === 1) return `Pago único · ${mesEnTexto(meses[0])}`;
+  const clave = (m: string) => { const [a, mm] = m.split('-').map(Number); return a * 12 + mm; };
+  const seguidos = meses.every((m, i) => i === 0 || clave(m) - clave(meses[i - 1]) === 1);
+  if (seguidos && meses.length >= 3) {
+    return `${meses.length} cuotas · ${mesEnTexto(meses[0])} a ${mesEnTexto(meses[meses.length - 1])}`;
+  }
+  return `${meses.length} cuotas · ${listaDeMeses(meses)}`;
+}
+
+/**
+ * Lo que cada concepto marcado tiene en un mes: sus cargos pendientes (de los
+ * alumnos marcados) y si su calendario tiene una cuota ese mes. Es lo que la
+ * tarjeta del mes enseña, concepto por concepto.
+ */
+export function conceptosDelMes(
+  mes: string,
+  pendientes: PendienteMes[],
+  calendario: CuotaCalendario[],
+  alumnos: Set<number>,
+  conceptos: Set<number>,
+): { conceptoId: number; cargos: number; centavos: number; cuota: boolean }[] {
+  const porConcepto = new Map<number, { conceptoId: number; cargos: number; centavos: number; cuota: boolean }>();
+  const de = (c: number) => porConcepto.get(c) ?? { conceptoId: c, cargos: 0, centavos: 0, cuota: false };
+  for (const p of pendientes) {
+    if (p.m !== mes || !alumnos.has(p.e) || !conceptos.has(p.c)) continue;
+    const x = de(p.c); x.cargos += p.n; x.centavos += p.centavos; porConcepto.set(p.c, x);
+  }
+  for (const q of calendario) {
+    if (q.m !== mes || !conceptos.has(q.c)) continue;
+    const x = de(q.c); x.cuota = true; porConcepto.set(q.c, x);
+  }
+  return [...porConcepto.values()];
+}
+
+/**
+ * Los meses que se ofrecen en «Desde el mes»: los del año escolar, de su
+ * primer a su último mes. Sin fechas en el período, los doce meses que
+ * terminan tres meses después de hoy.
+ */
+export function mesesParaElegir(
+  periodo: { fechaInicio?: string | null; fechaFin?: string | null }, hoy: string,
+): { valor: string; texto: string }[] {
+  const aClave = (f: string) => { const [a, m] = f.split('-').map(Number); return a * 12 + (m - 1); };
+  let ini: number; let fin: number;
+  if (periodo.fechaInicio && periodo.fechaFin && periodo.fechaInicio <= periodo.fechaFin) {
+    ini = aClave(periodo.fechaInicio); fin = aClave(periodo.fechaFin);
+  } else {
+    fin = aClave(hoy) + 3; ini = fin - 11;
+  }
+  const meses: { valor: string; texto: string }[] = [];
+  for (let k = ini; k <= fin && meses.length < 24; k++) {
+    const valor = `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, '0')}`;
+    meses.push({ valor, texto: mesEnTexto(valor) });
+  }
+  return meses;
+}
+
 /** Mes ausente al final, como en el prefill: «Inscripción» después de «Octubre». */
 function porFecha(a: CargoLote, b: CargoLote): number {
   if (a.anio !== b.anio) return a.anio - b.anio;
   if ((a.mes == null) !== (b.mes == null)) return a.mes == null ? 1 : -1;
   if ((a.mes ?? 0) !== (b.mes ?? 0)) return (a.mes ?? 0) - (b.mes ?? 0);
   return a.id - b.id;
+}
+
+/**
+ * Los meses elegidos en una frase: «octubre y noviembre 2026»,
+ * «diciembre 2026 y enero 2027». En orden, con el año una vez por grupo.
+ */
+export function listaDeMeses(meses: string[]): string {
+  const orden = [...new Set(meses)].sort();
+  const porAnio = new Map<string, string[]>();
+  for (const m of orden) {
+    const [a, mm] = m.split('-');
+    porAnio.set(a, [...(porAnio.get(a) ?? []), MESES_LOTE[Number(mm) - 1] ?? mm]);
+  }
+  const trozos = [...porAnio].map(([a, ms]) => `${enLista(ms)} ${a}`);
+  return enLista(trozos);
+}
+
+const enLista = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`);
+
+/** 'YYYY-MM' → su último día, 'YYYY-MM-DD'. */
+export function finDeMes(aaaamm: string): string {
+  const [a, m] = aaaamm.split('-').map(Number);
+  const d = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  return `${aaaamm}-${String(d).padStart(2, '0')}`;
+}
+
+/**
+ * El corte que corresponde a los meses elegidos: el último día del mes más
+ * tardío, o hoy si es más tarde. Así entra la cuota de un mes por adelantado
+ * (se crea al facturar) y nunca se deja fuera algo ya emitido de un mes elegido.
+ */
+export function hastaParaMeses(meses: string[], hoy: string): string {
+  if (meses.length === 0) return hoy;
+  const ultimo = finDeMes([...meses].sort().at(-1)!);
+  return ultimo > hoy ? ultimo : hoy;
+}
+
+/** Lo pendiente de un alumno, de un concepto, en un mes: lo que manda el catálogo. */
+export interface PendienteMes { e: number; c: number; m: string; n: number; centavos: number }
+
+/** Por mes, lo pendiente de los alumnos y conceptos marcados: los números de cada mes en la pantalla. */
+export function resumenPorMes(
+  pendientes: PendienteMes[], alumnos: Set<number>, conceptos: Set<number>,
+): Map<string, { cargos: number; centavos: number }> {
+  const porMes = new Map<string, { cargos: number; centavos: number }>();
+  for (const p of pendientes) {
+    if (!alumnos.has(p.e) || !conceptos.has(p.c)) continue;
+    const x = porMes.get(p.m) ?? { cargos: 0, centavos: 0 };
+    x.cargos += p.n; x.centavos += p.centavos;
+    porMes.set(p.m, x);
+  }
+  return porMes;
 }
 
 /**
@@ -179,15 +344,21 @@ function porFecha(a: CargoLote, b: CargoLote): number {
  */
 function razonSinNada(
   alumno: AlumnoLote,
-  cuenta: { despues: number; proxima: string | null; sinSaldo: number; hechos: number },
+  cuenta: { despues: number; proxima: string | null; fuera: Set<string>; sinSaldo: number; hechos: number },
 ): OmitidoPlan {
   const base = { estudianteId: alumno.id, nombre: alumno.nombre, cargoIds: [] as number[] };
+  if (cuenta.fuera.size > 0 && cuenta.despues === 0) {
+    return {
+      ...base, motivo: 'otros-meses',
+      detalle: `Lo que tiene pendiente es de ${listaDeMeses([...cuenta.fuera])}: queda para otra factura.`,
+    };
+  }
   if (cuenta.despues > 0) {
     return {
       ...base, motivo: 'despues-del-corte',
       detalle: cuenta.proxima
-        ? `Sus cuotas pendientes se emiten después del corte (la próxima, el ${fmtFechaCorta(cuenta.proxima)}).`
-        : 'Sus cuotas pendientes se emiten después del corte.',
+        ? `Sus cuotas se emiten más adelante (la próxima, el ${fmtFechaCorta(cuenta.proxima)}). Para facturarlas ya, elige ese mes.`
+        : 'Sus cuotas se emiten más adelante. Para facturarlas ya, elige ese mes.',
     };
   }
   if (cuenta.sinSaldo > 0) {
@@ -196,7 +367,7 @@ function razonSinNada(
   if (cuenta.hechos > 0) {
     return { ...base, motivo: 'ya-facturado', detalle: 'Lo de estos conceptos ya está facturado o pagado.' };
   }
-  return { ...base, motivo: 'sin-cargos', detalle: 'No tiene esos conceptos en su plan, o sus cuotas se emiten después del corte. Para agregárselos, usa «Servicios por alumno».' };
+  return { ...base, motivo: 'sin-cargos', detalle: 'No tiene esos conceptos en su plan, o sus cuotas se emiten más adelante. Para agregárselos, usa «Servicios por alumno».' };
 }
 
 /**
@@ -205,6 +376,7 @@ function razonSinNada(
  * De cada cargo de los conceptos elegidos mira, en este orden:
  *   - anulado → no existe, ni se cuenta;
  *   - ya tiene factura, o ya está pagado → «ya hecho» (nunca se factura dos veces);
+ *   - es de un mes que no se eligió → queda para otra factura;
  *   - se emite después del corte → todavía no toca;
  *   - sin saldo → una beca total deja constancia pero no hay nada que cobrar, y
  *     una factura de RD$0 o una línea de cero en la de la familia es ruido;
@@ -216,6 +388,7 @@ function razonSinNada(
  */
 export function planearFacturasPorLote(cargos: CargoLote[], opciones: OpcionesLote): PlanLote {
   const conceptos = new Set(opciones.conceptoIds);
+  const meses = opciones.meses && opciones.meses.length > 0 ? new Set(opciones.meses) : null;
 
   const porAlumno = new Map<number, CargoLote[]>();
   for (const c of cargos) {
@@ -236,10 +409,12 @@ export function planearFacturasPorLote(cargos: CargoLote[], opciones: OpcionesLo
     vistos.add(alumno.id);
 
     const entran: CargoLote[] = [];
-    const cuenta = { despues: 0, proxima: null as string | null, sinSaldo: 0, hechos: 0 };
+    const cuenta = { despues: 0, proxima: null as string | null, fuera: new Set<string>(), sinSaldo: 0, hechos: 0 };
 
     for (const c of porAlumno.get(alumno.id) ?? []) {
       if (c.ecfDocumentId != null || !COBRABLES.includes(c.estado)) { cuenta.hechos += 1; continue; }
+      // De un mes que no se eligió: se deja para otra factura, no se borra.
+      if (meses && !meses.has(mesDelCargo(c))) { if (c.saldoCentavos > 0) cuenta.fuera.add(mesDelCargo(c)); continue; }
       if (c.fechaEmision > opciones.hasta) {
         cuenta.despues += 1;
         if (cuenta.proxima === null || c.fechaEmision < cuenta.proxima) cuenta.proxima = c.fechaEmision;
@@ -325,6 +500,8 @@ export interface PeticionLote {
   estudianteIds: number[];
   conceptoIds: number[];
   hasta: string;
+  /** Los meses elegidos ('YYYY-MM'), o null: todo lo pendiente. Ver `OpcionesLote.meses`. */
+  meses: string[] | null;
   juntarHermanos: boolean;
   /** false = vista previa (no escribe) · true = crear de verdad. */
   confirmar: boolean;
@@ -375,6 +552,20 @@ export function leerPeticionLote(
   const hasta = c.hasta === undefined || c.hasta === null ? hoy : c.hasta;
   if (!esFecha(hasta)) return { ok: false, error: 'La fecha de corte debe ser YYYY-MM-DD.' };
 
+  // Sin meses entra todo lo pendiente hasta el corte, también lo atrasado (como siempre).
+  let meses: string[] | null = null;
+  if (c.meses !== undefined && c.meses !== null) {
+    if (!Array.isArray(c.meses) || c.meses.some((m) => typeof m !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(m))) {
+      return { ok: false, error: 'Los meses deben venir como AAAA-MM.' };
+    }
+    meses = [...new Set(c.meses as string[])].sort();
+    if (meses.length === 0) return { ok: false, error: 'Elige al menos un mes.' };
+    if (meses.length > 24) return { ok: false, error: 'Son demasiados meses de una vez (máximo 24).' };
+    if (meses.some((m) => m > hasta.slice(0, 7))) {
+      return { ok: false, error: 'Hay un mes elegido después de la fecha de corte.' };
+    }
+  }
+
   const periodoId = c.periodoId === undefined || c.periodoId === null ? null : Number(c.periodoId);
   if (periodoId !== null && (!Number.isInteger(periodoId) || periodoId <= 0)) {
     return { ok: false, error: 'El año escolar no es válido.' };
@@ -387,6 +578,7 @@ export function leerPeticionLote(
       estudianteIds,
       conceptoIds,
       hasta,
+      meses,
       juntarHermanos: c.juntarHermanos === true,
       confirmar: c.confirmar === true,
     },
@@ -424,6 +616,7 @@ export interface RespuestaLote {
   confirmar: boolean;
   periodo: string;
   hasta: string;
+  meses: string[] | null;
   juntarHermanos: boolean;
   plan: PlanLote;
   /** Solo al crear. */
@@ -545,10 +738,11 @@ export function estadoDeLaCasilla(visibles: { estudianteId: number }[], marcados
  */
 export function agruparOmitidos(omitidos: OmitidoPlan[]): { motivo: MotivoOmitido; titulo: string; alumnos: OmitidoPlan[] }[] {
   // El orden es el de importancia: primero lo que se arregla en una ficha.
-  const orden: MotivoOmitido[] = ['sin-responsable', 'despues-del-corte', 'sin-saldo', 'ya-facturado', 'sin-cargos'];
+  const orden: MotivoOmitido[] = ['sin-responsable', 'otros-meses', 'despues-del-corte', 'sin-saldo', 'ya-facturado', 'sin-cargos'];
   const titulos: Record<MotivoOmitido, string> = {
     'sin-responsable': 'Sin responsable de pago (hay que asignárselo en su ficha)',
-    'despues-del-corte': 'Sus cuotas se emiten después de la fecha de corte',
+    'otros-meses': 'Lo que deben es de otros meses (queda para otra factura)',
+    'despues-del-corte': 'Sus cuotas se emiten más adelante (elige ese mes para facturarlas ya)',
     'sin-saldo': 'Sin saldo que cobrar (beca total)',
     'ya-facturado': 'Ya está todo facturado o pagado',
     'sin-cargos': 'Sin cargos de estos conceptos',

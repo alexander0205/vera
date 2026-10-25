@@ -58,27 +58,68 @@ describe('PasoConceptosLote', () => {
     { id: 2, nombre: 'Uniforme', tipo: 'uniforme', sinFactura: 1, sinFacturaCentavos: 250000 },
   ];
   const props = {
-    conceptos, seleccionados: new Set([1]), onConceptos: sinOp, hasta: '2026-10-22', onHasta: sinOp,
+    conceptos, seleccionados: new Set([1]), onConceptos: sinOp,
+    alumnos: new Set([7]),
+    pendientes: [
+      { e: 7, c: 1, m: '2026-09', n: 1, centavos: 500000 },
+      { e: 7, c: 1, m: '2026-10', n: 1, centavos: 500000 },
+    ],
+    calendario: [
+      { c: 1, m: '2026-09', etiqueta: 'Septiembre' },
+      { c: 1, m: '2026-10', etiqueta: 'Octubre' },
+      { c: 1, m: '2026-11', etiqueta: 'Noviembre' },
+    ],
+    meses: [
+      { valor: '2026-09', texto: 'septiembre 2026' }, { valor: '2026-10', texto: 'octubre 2026' },
+      { valor: '2026-11', texto: 'noviembre 2026' }, { valor: '2026-12', texto: 'diciembre 2026' },
+    ],
+    hoy: '2026-10-22', mesesSel: 'todo' as const, onMeses: sinOp,
     juntar: false, onJuntar: sinOp,
   };
 
-  it('ofrece los conceptos con sus cargos, el corte en letras y «juntar hermanos» apagado', () => {
+  it('ofrece los conceptos con sus cargos, los meses y «juntar hermanos» apagado', () => {
     const h = html(createElement(PasoConceptosLote, props));
+    expect(h).toContain('¿Qué conceptos?');
     expect(h).toContain('Colegiatura');
     expect(h).toContain('40 cargos');
     expect(h).toContain('1 cargo ·');
-    expect(h).toContain('Cuotas emitidas hasta');
-    expect(h).toContain('jueves 22 de octubre de 2026');
+    expect(h).toContain('¿Qué meses?');
     expect(h).toContain('Juntar hermanos en una sola factura');
     expect(h).toContain('una factura por cada alumno');
   });
 
-  it('con «juntar» encendido explica que sale una por responsable', () => {
-    expect(html(createElement(PasoConceptosLote, { ...props, juntar: true }))).toContain('Una factura por responsable de pago');
+  it('cada concepto dice cómo cobra, según su calendario', () => {
+    expect(html(createElement(PasoConceptosLote, props))).toContain('3 cuotas · septiembre 2026 a noviembre 2026');
   });
 
-  it('una fecha inválida no se presenta como buena', () => {
-    expect(html(createElement(PasoConceptosLote, { ...props, hasta: '' }))).toContain('Escribe una fecha válida');
+  it('cada mes dice QUÉ concepto entra y si está atrasado, es este mes o va por adelantado', () => {
+    const h = html(createElement(PasoConceptosLote, props));
+    expect(h).toContain('Atrasado');
+    expect(h).toContain('Este mes');
+    expect(h).toContain('Por adelantado');
+    expect(h).toContain('Septiembre 2026. Atrasado. Colegiatura: 1 cargo');
+    // Noviembre: el calendario tiene cuota y todavía no hay cargo.
+    expect(h).toContain('Noviembre 2026. Por adelantado. Colegiatura: se crea al facturar');
+  });
+
+  it('un mes en que ningún concepto marcado cobra dice «Nada que facturar» y no se puede marcar', () => {
+    const h = html(createElement(PasoConceptosLote, props));
+    expect(h).toContain('Diciembre 2026. Nada que facturar');
+    expect(h).toMatch(/disabled=""[^>]*aria-label="Diciembre 2026/);
+  });
+
+  it('la frase dice qué se factura y qué se queda fuera', () => {
+    expect(html(createElement(PasoConceptosLote, props))).toContain('todo lo pendiente hasta hoy');
+    const h = html(createElement(PasoConceptosLote, { ...props, mesesSel: new Set(['2026-10', '2026-11']) }));
+    expect(h).toContain('octubre y noviembre 2026');
+    expect(h).toMatch(/Colegiatura<\/span>: octubre y noviembre 2026/);
+    expect(h).toContain('Noviembre 2026 va por adelantado');
+    expect(h).toContain('Se quedan sin facturar septiembre 2026');
+    expect(html(createElement(PasoConceptosLote, { ...props, mesesSel: new Set<string>() }))).toContain('Marca al menos un mes');
+  });
+
+  it('con «juntar» encendido explica que sale una por responsable', () => {
+    expect(html(createElement(PasoConceptosLote, { ...props, juntar: true }))).toContain('Una factura por responsable de pago');
   });
 
   it('sin conceptos pendientes, lo dice', () => {

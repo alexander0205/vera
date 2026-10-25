@@ -9,15 +9,14 @@ import { NativeSelect } from '@/components/ui/native-select';
 import Link from 'next/link';
 import { PasoLote } from '@/components/administracion-escolar/cargo-lote/PasoLote';
 import { PasoAlumnosLote } from '@/components/administracion-escolar/facturar-lote/PasoAlumnosLote';
-import { PasoConceptosLote } from '@/components/administracion-escolar/facturar-lote/PasoConceptosLote';
+import { PasoConceptosLote, type SeleccionMeses } from '@/components/administracion-escolar/facturar-lote/PasoConceptosLote';
 import { RevisionLote } from '@/components/administracion-escolar/facturar-lote/RevisionLote';
 import { ConfirmarFacturasDialog } from '@/components/administracion-escolar/facturar-lote/ConfirmarFacturasDialog';
 import { ResultadoFacturasLote } from '@/components/administracion-escolar/facturar-lote/ResultadoFacturasLote';
-import { esFechaValida, fechaEnLetras } from '@/lib/administracion-escolar/cargo-lote';
 import {
-  crearPorTandas, facturasEnLetras, textoCrear,
+  crearPorTandas, facturasEnLetras, hastaParaMeses, listaDeMeses, textoCrear,
   type AlumnoCatalogo, type ConceptoCatalogo, type FacturaCreada, type FacturaFallida,
-  type OmitidoPlan, type PlanLote,
+  type CuotaCalendario, type OmitidoPlan, type PendienteMes, type PlanLote,
 } from '@/lib/administracion-escolar/facturar-lote';
 import { fmtDOP } from '@/lib/utils/format';
 
@@ -40,7 +39,7 @@ const API = '/api/administracion-escolar/cargos/facturar-lote';
  * (la misma forma de «Cobrar a un grupo», que es la otra mitad de cobrar):
  *
  *   1. A quiénes — los alumnos, con filtros y «seleccionar todos los filtrados».
- *   2. Qué — los conceptos, el corte «cuotas emitidas hasta» y si se juntan hermanos.
+ *   2. Qué — los conceptos, los meses y si se juntan hermanos.
  *   3. Revisa y crea — una fila por factura futura, y aparte los que se quedan
  *      sin factura con su razón. Hasta aquí no se ha escrito NADA.
  *
@@ -65,6 +64,12 @@ interface Catalogo {
   periodo: { id: number; nombre: string };
   periodos: { id: number; nombre: string; activo: boolean }[];
   hoy: string;
+  /** Los meses del año escolar, para «¿Qué meses?». */
+  meses: { valor: string; texto: string }[];
+  /** Lo pendiente por alumno, concepto y mes: los números de cada mes. */
+  pendientes: PendienteMes[];
+  /** El calendario de cada concepto en el año: qué meses cobra. */
+  calendario: CuotaCalendario[];
   maxPorPeticion: number;
   alumnos: AlumnoCatalogo[];
   conceptos: ConceptoCatalogo[];
@@ -75,6 +80,8 @@ interface Pedido {
   periodoId: number;
   conceptoIds: number[];
   hasta: string;
+  /** Los meses elegidos ('YYYY-MM'), o null: todo lo pendiente hasta hoy. */
+  meses: string[] | null;
   juntarHermanos: boolean;
 }
 
@@ -99,7 +106,8 @@ export default function FacturarLoteClient() {
   const [paso, setPaso] = useState<1 | 2 | 3>(1);
   const [alumnosSel, setAlumnosSel] = useState<Set<number>>(new Set());
   const [conceptosSel, setConceptosSel] = useState<Set<number>>(new Set());
-  const [hasta, setHasta] = useState('');
+  /** Por defecto, todo lo pendiente hasta hoy (lo de siempre). */
+  const [mesesSel, setMesesSel] = useState<SeleccionMeses>('todo');
   const [juntar, setJuntar] = useState(false);
 
   const [vista, setVista] = useState<Vista | null>(null);
@@ -138,7 +146,7 @@ export default function FacturarLoteClient() {
       if (reiniciar) {
         setAlumnosSel(new Set());
         setConceptosSel(new Set());
-        setHasta(nuevo.hoy);
+        setMesesSel('todo');
         setPaso(1);
       }
     } catch (e) {
@@ -160,16 +168,20 @@ export default function FacturarLoteClient() {
 
   const cambiarAlumnos = useCallback((s: Set<number>) => { setAlumnosSel(s); limpiarVista(); }, [limpiarVista]);
   const cambiarConceptos = useCallback((s: Set<number>) => { setConceptosSel(s); limpiarVista(); }, [limpiarVista]);
-  const cambiarHasta = useCallback((f: string) => { setHasta(f); limpiarVista(); }, [limpiarVista]);
+  const cambiarMeses = useCallback((m: SeleccionMeses) => { setMesesSel(m); limpiarVista(); }, [limpiarVista]);
   const cambiarJuntar = useCallback((j: boolean) => { setJuntar(j); limpiarVista(); }, [limpiarVista]);
 
   /** Pide el plan al servidor. No escribe nada. */
-  const revisar = useCallback(async (sobre?: { alumnos: number[]; conceptos: number[]; hasta: string }) => {
+  const revisar = useCallback(async (sobre?: { alumnos: number[]; conceptos: number[]; meses: SeleccionMeses }) => {
     if (!catalogo) return;
+    // El corte sale de los meses: el último día del mes más tardío (o hoy).
+    const sel = sobre?.meses ?? mesesSel;
+    const meses = sel === 'todo' ? null : [...sel].sort();
     const pedido: Pedido = {
       periodoId: catalogo.periodo.id,
       conceptoIds: sobre?.conceptos ?? [...conceptosSel],
-      hasta: sobre?.hasta ?? hasta,
+      hasta: meses ? hastaParaMeses(meses, catalogo.hoy) : catalogo.hoy,
+      meses,
       juntarHermanos: juntar,
     };
     const estudianteIds = sobre?.alumnos ?? [...alumnosSel];
@@ -195,7 +207,7 @@ export default function FacturarLoteClient() {
     } finally {
       if (mio === peticion.current) setRevisando(false);
     }
-  }, [catalogo, conceptosSel, hasta, juntar, alumnosSel]);
+  }, [catalogo, conceptosSel, mesesSel, juntar, alumnosSel]);
 
   /** «Todo lo pendiente»: todos los alumnos, todos los conceptos, corte hoy. */
   const todoLoPendiente = () => {
@@ -204,8 +216,8 @@ export default function FacturarLoteClient() {
     const conceptos = catalogo.conceptos.map((c) => c.id);
     setAlumnosSel(new Set(alumnos));
     setConceptosSel(new Set(conceptos));
-    setHasta(catalogo.hoy);
-    void revisar({ alumnos, conceptos, hasta: catalogo.hoy });
+    setMesesSel('todo');
+    void revisar({ alumnos, conceptos, meses: 'todo' });
   };
 
   /** Crea las facturas del plan que se vio, de tanda en tanda. */
@@ -282,13 +294,14 @@ export default function FacturarLoteClient() {
 
   const alumnosMarcados = alumnosSel.size;
   const conceptosMarcados = conceptosSel.size;
-  const fechaOk = esFechaValida(hasta);
+  const mesesOk = mesesSel === 'todo' || mesesSel.size > 0;
+  const textoMeses = mesesSel === 'todo' ? 'todo lo pendiente hasta hoy' : listaDeMeses([...mesesSel]);
 
   const resumen1 = alumnosMarcados === 1 ? '1 alumno' : `${alumnosMarcados} alumnos`;
   const resumen2 = useMemo(() => {
     const nConceptos = conceptosMarcados === 1 ? '1 concepto' : `${conceptosMarcados} conceptos`;
-    return `${nConceptos} · hasta el ${fechaEnLetras(hasta) || hasta} · ${juntar ? 'una factura por responsable' : 'una factura por alumno'}`;
-  }, [conceptosMarcados, hasta, juntar]);
+    return `${nConceptos} · ${textoMeses} · ${juntar ? 'una factura por responsable' : 'una factura por alumno'}`;
+  }, [conceptosMarcados, textoMeses, juntar]);
 
   const totalPendiente = useMemo(() => {
     if (!catalogo) return { cargos: 0, centavos: 0, alumnos: 0 };
@@ -360,7 +373,7 @@ export default function FacturarLoteClient() {
               <p className="text-xs text-zero-800">
                 {totalPendiente.cargos === 0
                   ? 'Ahora mismo no hay ningún cargo sin factura.'
-                  : `Hay ${totalPendiente.cargos} ${totalPendiente.cargos === 1 ? 'cargo' : 'cargos'} sin factura (${fmtDOP(totalPendiente.centavos)}) de ${totalPendiente.alumnos} ${totalPendiente.alumnos === 1 ? 'alumno' : 'alumnos'}. Marca a todos los alumnos y todos los conceptos, con corte hoy, y te muestra la vista previa.`}
+                  : `Hay ${totalPendiente.cargos} ${totalPendiente.cargos === 1 ? 'cargo' : 'cargos'} sin factura (${fmtDOP(totalPendiente.centavos)}) de ${totalPendiente.alumnos} ${totalPendiente.alumnos === 1 ? 'alumno' : 'alumnos'}. Marca a todos los alumnos y todos los conceptos, con todo lo pendiente hasta hoy, y te muestra la vista previa.`}
               </p>
             </div>
             <Button variant="outline" className="bg-white" onClick={todoLoPendiente}
@@ -396,11 +409,14 @@ export default function FacturarLoteClient() {
             <PasoLote numero={2} titulo="¿Qué se factura?" estado="abierto">
               <PasoConceptosLote
                 conceptos={catalogo.conceptos} seleccionados={conceptosSel} onConceptos={cambiarConceptos}
-                hasta={hasta} onHasta={cambiarHasta} juntar={juntar} onJuntar={cambiarJuntar} />
+                alumnos={alumnosSel} pendientes={catalogo.pendientes ?? []} calendario={catalogo.calendario ?? []}
+                meses={catalogo.meses ?? []}
+                hoy={catalogo.hoy} mesesSel={mesesSel} onMeses={cambiarMeses}
+                juntar={juntar} onJuntar={cambiarJuntar} />
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
                 <Button variant="outline" onClick={() => setPaso(1)}>Atrás</Button>
                 <Button className="bg-zero-600 hover:bg-zero-700"
-                  disabled={conceptosMarcados === 0 || !fechaOk || revisando}
+                  disabled={conceptosMarcados === 0 || !mesesOk || revisando}
                   onClick={() => void revisar()}>
                   {revisando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />}
                   {conceptosMarcados === 0 ? 'Marca al menos un concepto' : 'Revisar las facturas'}
@@ -458,6 +474,7 @@ export default function FacturarLoteClient() {
         cargos={vista?.plan.totalCargos ?? 0}
         totalCentavos={vista?.plan.totalCentavos ?? 0}
         juntar={vista?.pedido.juntarHermanos ?? false}
+        meses={vista?.pedido.meses ? listaDeMeses(vista.pedido.meses) : 'todo lo pendiente hasta hoy'}
         creando={creando}
         progreso={progreso}
         deteniendo={deteniendo}
