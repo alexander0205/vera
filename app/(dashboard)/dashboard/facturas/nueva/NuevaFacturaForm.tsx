@@ -1274,6 +1274,23 @@ export default function NuevaFacturaForm({
     if (depId) setError(null); // limpiar el banner de "falta beneficiario" al elegir uno
   }
 
+  // Con un solo hijo no hay a quién más facturarle: se pone de beneficiario
+  // solo, también en las líneas que se añaden después. Así el buscador ofrece
+  // los meses del alumno nada más abrirlo, sin el paso de elegirlo —que es lo
+  // que hacía parecer que los conceptos del alumno habían «desaparecido»—. Con
+  // varios hijos no se adivina cuál: ahí sí hay que elegir.
+  useEffect(() => {
+    if (dependientesCliente.length !== 1) return;
+    const unico = dependientesCliente[0];
+    const nombre = `${unico.nombre} ${unico.apellido}`.trim();
+    for (const it of items) {
+      if (it.dependienteId == null) {
+        dispatchItems({ type: 'UPDATE_BENEFICIARIO', id: it.id, dependienteId: unico.id, dependienteNombre: nombre });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dependientesCliente, items]);
+
   // ─── Búsqueda productos ───────────────────────────────────────────────────
   /**
    * Cuotas del plan de un alumno, en forma de producto, para que el buscador
