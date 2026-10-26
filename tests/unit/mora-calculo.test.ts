@@ -80,6 +80,34 @@ describe('modo porcentaje vs fijo', () => {
   });
 });
 
+describe('modo fijo por estudiante (factura N:1 de varios hijos)', () => {
+  it('multiplica el monto fijo por el nº de estudiantes', () => {
+    const r = calcularMora(entrada({ unidadesFijo: 3 }, { modo: 'fijo', montoCents: RD(500) }));
+    expect(r).toMatchObject({ aplica: true, montoCents: RD(1500) });
+  });
+
+  it('un solo estudiante, o sin especificar, cobra el monto una vez (histórico)', () => {
+    const uno = calcularMora(entrada({ unidadesFijo: 1 }, { modo: 'fijo', montoCents: RD(500) }));
+    const sin = calcularMora(entrada({}, { modo: 'fijo', montoCents: RD(500) }));
+    expect(uno).toMatchObject({ aplica: true, montoCents: RD(500) });
+    expect(sin).toMatchObject({ aplica: true, montoCents: RD(500) });
+  });
+
+  it('el modo porcentaje ignora las unidades (el % ya escala con el saldo)', () => {
+    const r = calcularMora(entrada({ unidadesFijo: 3 })); // 2% de RD$1,000
+    expect(r).toMatchObject({ aplica: true, montoCents: RD(20) });
+  });
+
+  it('el tope se aplica DESPUÉS de multiplicar por estudiantes', () => {
+    // fijo RD$500 × 3 = RD$1,500, pero tope 25% de RD$1,000 = RD$250 → recorta
+    const r = calcularMora(entrada(
+      { unidadesFijo: 3 },
+      { modo: 'fijo', montoCents: RD(500), topeBps: 2500 },
+    ));
+    expect(r).toMatchObject({ aplica: true, montoCents: RD(250) });
+  });
+});
+
 describe('elegibilidad', () => {
   it('no aplica si aún no vence', () => {
     expect(calcularMora(entrada({ diasVencido: -3 }))).toMatchObject({ aplica: false, razon: 'no_vencida' });

@@ -42,6 +42,14 @@ export interface EntradaMora {
   moraCobradaAcumCents: number;
   /** Cuántas notas de mora existen ya para esta factura. */
   periodosCobrados: number;
+  /**
+   * Solo para modo FIJO: cuántas veces se cobra el monto fijo. La factura
+   * escolar agrupa cargos de varios hijos en un solo documento (N:1), y la mora
+   * fija debe cobrarse por cada estudiante que aún debe, no una vez por factura.
+   * Default 1 (venta normal o un solo estudiante). El modo porcentaje lo ignora:
+   * el % ya escala con el saldo total de la factura.
+   */
+  unidadesFijo?: number;
   /** Días transcurridos desde fechaLimitePago. Negativo = aún no vence. */
   diasVencido: number;
 }
@@ -103,8 +111,12 @@ export function calcularMora(entrada: EntradaMora): ResultadoMora {
     ? entrada.saldoFacturaCents + Math.max(0, entrada.moraImpagaCents)
     : entrada.saldoFacturaCents;
 
+  // Modo fijo: el monto se cobra una vez por cada unidad (estudiante con cargo
+  // que cobra mora). Una factura de 3 hijos con mora fija RD$500 cobra RD$1,500.
+  // Modo porcentaje: el % ya escala con el saldo total, así que no se multiplica.
+  const unidadesFijo = Math.max(1, Math.trunc(entrada.unidadesFijo ?? 1));
   let montoCents = config.modo === 'fijo'
-    ? Math.max(0, Math.trunc(config.montoCents))
+    ? Math.max(0, Math.trunc(config.montoCents)) * unidadesFijo
     : Math.round((baseCents * config.porcentajeBps) / 10_000);
 
   // Tope sobre la mora ACUMULADA, no sobre el cargo del período: lo que importa
