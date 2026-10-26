@@ -3,14 +3,14 @@ import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import {
-  avisosDeHoy, candidatos, despachar, equiposConAvisos, mensajesEnviados,
+  avisosDeHoy, candidatos, canalesSinWhatsApp, despachar, equiposConAvisos, mensajesEnviados,
   type AvisoPendiente, type EnvioHecho,
 } from '@/lib/administracion-escolar/avisos';
 import { asuntoDeAviso, datosWhatsAppDeGrupo, sufijoDeBoton } from '@/lib/administracion-escolar/agrupar-avisos';
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
-import { enviarWhatsApp, enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
-import { resolverPlantilla, parametrosDeAviso } from '@/lib/whatsapp/plantillas';
+import { enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
+import { getPlantillasDeTeam, huecoDe, parametrosDeAviso, plantillaParaEnviar } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
 
   const resumen: {
     teamId: number; colegio: string; candidatos: number;
-    pendientes: number; envios: EnvioHecho[];
+    pendientes: number; whatsappSinPlantilla: number; envios: EnvioHecho[];
   }[] = [];
 
   // El presupuesto de la tanda es de la CORRIDA, no de cada colegio: si el
@@ -132,7 +132,27 @@ export async function GET(req: NextRequest) {
     // cargo: es la misma respuesta para los cientos de filas de abajo.
     const canales = await canalesDelColegio(teamId);
     const filas = await candidatos(teamId);
-    const pendientes: AvisoPendiente[] = filas.flatMap((f) => avisosDeHoy(f, hoy, canales));
+    const crudos: AvisoPendiente[] = filas.flatMap((f) => avisosDeHoy(f, hoy, canales));
+
+    // Un cobro sin plantilla de WhatsApp que se pueda mandar no va por WhatsApp
+    // (ver `plantillaParaEnviar`): va por SMS en su lugar, si el colegio y el
+    // concepto lo tienen encendido (`canalesSinWhatsApp`). Se decide ANTES de
+    // despachar: así el WhatsApp no se reserva, no cuenta como fallo y no se
+    // reintenta cada cuarto de hora. El correo del mismo cobro sigue igual.
+    const plantillasDelColegio = await getPlantillasDeTeam(teamId);
+    let whatsappSinPlantilla = 0;
+    const pendientes: AvisoPendiente[] = crudos.map((p) => {
+      if (!p.canales.includes('whatsapp')) return p;
+      const hueco = huecoDe(p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia);
+      const asignada = plantillasDelColegio.find((x) => x.aviso === hueco) ?? null;
+      const hayEnlace = p.fila.clientId != null && p.fila.ecfDocumentId != null;
+      if (plantillaParaEnviar(asignada, hayEnlace, CRM_SOPORTA_BOTONES)) return p;
+      whatsappSinPlantilla++;
+      return { ...p, canales: canalesSinWhatsApp(p.canales, p.fila, canales) };
+    }).filter((p) => p.canales.length > 0);
+    if (whatsappSinPlantilla > 0) {
+      console.warn(`[avisos] team ${teamId}: ${whatsappSinPlantilla} cobro(s) sin plantilla de WhatsApp; no van por WhatsApp (van por SMS si está encendido).`);
+    }
     const colegio = nombres.get(teamId) ?? 'Tu colegio';
 
     // Lo que le queda al colegio de su cuota MENSUAL de WhatsApp y SMS. Es un
@@ -157,75 +177,36 @@ export async function GET(req: NextRequest) {
           multilinea: m.miembros.length > 1,
         }),
         /**
-         * WhatsApp va por PLANTILLA, no por texto libre.
+         * WhatsApp va SOLO por plantilla aprobada y asignada, nunca en texto
+         * libre (ver `plantillaParaEnviar`).
          *
-         * El texto libre solo pasa dentro de las 24 h siguientes al último
-         * mensaje del contacto, y un padre al que hay que recordarle una
-         * mensualidad lleva semanas sin escribirnos: fuera de esa ventana el
-         * `{to, text}` devuelve 422 y el aviso no sale. La plantilla es la
-         * única forma de llegarle.
+         * Los cobros sin plantilla ya llegan aquí sin el canal WhatsApp: se lo
+         * quita el filtro de arriba. Esto es la última red por si el mensaje
+         * agrupado acaba distinto de lo que se previó (p. ej. sin enlace de
+         * pago para el botón): se lanza y el aviso cuenta como fallido.
          *
-         * Si el colegio no tiene plantilla asignada para este hueco se cae al
-         * texto libre a propósito: dentro de la ventana sí llega, y es mejor
-         * que no mandar nada mientras se configura.
+         * Con factura emitida va la versión del botón «Ver y pagar»; sin
+         * factura, la de siempre. `enlace` ya viene en null cuando el cargo no
+         * tiene factura —lo decide `despachar`— así que basta con mirarlo.
          */
-        whatsapp: async (destino, texto, m, enlace) => {
+        whatsapp: async (destino, _texto, m, enlace) => {
           // Al CRM siempre con código de país: `8293596602` y `18293596602`
           // le abren DOS conversaciones del mismo padre.
           const numero = aE164(destino) ?? destino;
 
-          // Todos los cobros de un mensaje comparten hueco (así se agrupan), y
-          // con él la mora que decide la plantilla: basta mirar el primero.
-          const { fila: base } = m.miembros[0];
-          const plantilla = await resolverPlantilla(
-            teamId, m.aviso, base.cobraMora, base.moraDiasGracia,
-          );
-          /**
-           * Sin plantilla asignada, o con una que lleva botón, se manda texto
-           * libre.
-           *
-           * Lo del botón no es un capricho: su URL lleva variable y rellenarla
-           * necesita un parámetro de tipo `button` que el CRM todavía no
-           * expone, así que el envío fallaría entero. Mejor el texto libre
-           * —que al menos llega dentro de la ventana de 24 h— y un aviso en el
-           * log que decir que salió cuando no salió.
-           */
-          /**
-           * Cuál de las dos versiones del aviso sale.
-           *
-           * Con factura emitida va la del botón «Ver factura»; sin factura, la
-           * de siempre. No es estético: un cargo sin factura no se puede
-           * cobrar, así que el enlace llevaría al padre a transferir y subir su
-           * comprobante para que el colegio no pueda aplicarlo.
-           *
-           * `enlace` ya viene en null cuando el cargo no tiene factura —lo
-           * decide `despachar`— así que basta con mirarlo.
-           */
-          const usarConLink = enlace != null && plantilla?.nombreConLink != null;
-          const nombre = usarConLink ? plantilla!.nombreConLink! : plantilla?.nombre;
-          const necesitaBoton = usarConLink ? plantilla!.conLinkTieneBoton : plantilla?.conBoton === true;
-
-          // El botón lleva variable en la URL y rellenarla necesita un
-          // parámetro que el CRM todavía no expone: la plantilla se manda y
-          // Meta la rechaza por parámetros. Mejor texto libre —que dentro de la
-          // ventana de 24 h sí llega— que decir que salió cuando no salió.
-          const botonInservible = necesitaBoton && !CRM_SOPORTA_BOTONES;
-          if (!plantilla || !nombre || botonInservible) {
-            if (botonInservible) {
-              console.warn(
-                `[avisos] "${nombre}" tiene botón y el CRM aún no puede rellenarlo; va como texto libre.`,
-              );
-            }
-            const libre = await enviarWhatsApp(teamId, numero, texto);
-            return libre.messageId ?? null;
+          // Todos los cobros de un mensaje comparten hueco (así se agrupan).
+          const asignada = plantillasDelColegio.find((x) => x.aviso === m.hueco) ?? null;
+          const plantilla = plantillaParaEnviar(asignada, enlace != null, CRM_SOPORTA_BOTONES);
+          if (!plantilla) {
+            throw new Error('Sin plantilla de WhatsApp que se pueda mandar: no se envía texto libre.');
           }
 
           const r = await enviarWhatsAppPlantilla(teamId, numero, {
-            nombre,
+            nombre: plantilla.nombre,
             idioma: plantilla.idioma,
             // La {{1}} del botón es el FINAL de la URL (`…/pagar/{{1}}`): el
             // token y la factura, no la URL entera.
-            botonUrl: necesitaBoton && enlace ? sufijoDeBoton(enlace) : null,
+            botonUrl: plantilla.conBoton && enlace ? sufijoDeBoton(enlace) : null,
             // La MISMA plantilla aprobada con las variables combinadas cuando
             // son varios cobros (alumno «Ana y Pedro», concepto «Colegiatura
             // (2)», monto el total). Con uno solo, los valores de siempre.
@@ -270,7 +251,7 @@ export async function GET(req: NextRequest) {
         console.error('[avisos] no se pudieron revisar los acuses:', e);
       }
     }
-    resumen.push({ teamId, colegio, candidatos: filas.length, pendientes: pendientes.length, envios });
+    resumen.push({ teamId, colegio, candidatos: filas.length, pendientes: pendientes.length, whatsappSinPlantilla, envios });
   }
 
   // Los cortados por cuota se cuentan aparte de los fallos de contacto. Son
@@ -316,6 +297,9 @@ export async function GET(req: NextRequest) {
     lote: { limite, pausaMs, agotado: !dryRun && presupuesto <= 0 },
     equipos: equipos.length,
     avisos: resumen.reduce((n, r) => n + r.pendientes, 0),
+    // Cobros que hoy no salieron por WhatsApp por no tener plantilla (fueron por
+    // SMS si el colegio lo tiene): hay que asignarla, y Meta aprobarla.
+    whatsappSinPlantilla: resumen.reduce((n, r) => n + r.whatsappSinPlantilla, 0),
     enviados,
     // Cuántos cargos cubrieron esos mensajes. Igual a `enviados` cuando nadie
     // tiene hermanos; mayor cuando una familia recibió un solo mensaje por varios.

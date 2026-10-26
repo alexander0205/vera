@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avisosDeHoy, destinoDelCanal, redactar, type FilaAviso } from '@/lib/administracion-escolar/avisos';
+import { avisosDeHoy, canalesSinWhatsApp, destinoDelCanal, redactar, type FilaAviso } from '@/lib/administracion-escolar/avisos';
 
 /**
  * Lo que se prueba aquí es el día exacto en que sale cada aviso.
@@ -254,5 +254,31 @@ describe('una sola regla de canales para el motor y las pantallas', () => {
       expect(fuente, a).toContain('destinoDeContacto(');
       expect(fuente, a).not.toMatch(/whatsapp\??\.?(trim\(\))?\s*(\?\?|\|\|)\s*[a-zA-Z_.]*celular/);
     }
+  });
+});
+
+/**
+ * Sin plantilla de WhatsApp el aviso no va por WhatsApp, y el padre se entera
+ * por SMS (regla del negocio, 25-10-2026): el día de la factura, que de
+ * ordinario no lleva SMS, también.
+ */
+describe('canalesSinWhatsApp: respaldo por SMS', () => {
+  const todos = { correo: true, whatsapp: true, sms: true };
+
+  it('el día de la factura (correo + WhatsApp) pasa a correo + SMS', () => {
+    expect(canalesSinWhatsApp(['correo', 'whatsapp'], { avisoSms: true }, todos)).toEqual(['correo', 'sms']);
+  });
+
+  it('si el SMS ya iba, no se duplica', () => {
+    expect(canalesSinWhatsApp(['correo', 'whatsapp', 'sms'], { avisoSms: true }, todos)).toEqual(['correo', 'sms']);
+  });
+
+  it('con el SMS apagado en el concepto o en el colegio, solo se quita el WhatsApp', () => {
+    expect(canalesSinWhatsApp(['correo', 'whatsapp'], { avisoSms: false }, todos)).toEqual(['correo']);
+    expect(canalesSinWhatsApp(['correo', 'whatsapp'], { avisoSms: true }, { ...todos, sms: false })).toEqual(['correo']);
+  });
+
+  it('un aviso que no iba por WhatsApp no gana un SMS', () => {
+    expect(canalesSinWhatsApp(['correo'], { avisoSms: true }, todos)).toEqual(['correo']);
   });
 });
