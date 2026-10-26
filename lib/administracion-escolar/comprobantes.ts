@@ -27,6 +27,7 @@ import {
 import { registrarPago } from '@/lib/db/queries';
 import { sincronizarSaldosDesdeFacturas } from './queries';
 import { leerComprobante } from '@/lib/storage/comprobantes';
+import { hoyRD } from '@/lib/utils/format';
 import type { CargoDelComprobante, MoraDelComprobante } from '@/lib/db/schema';
 
 export interface ComprobanteFila {
@@ -406,7 +407,7 @@ export async function aprobarComprobante(
 
     const plan = await planDeAplicacion(teamId, c.cargos, c.moras, monto);
 
-    const fecha = ajustes.fechaPago?.trim() || new Date().toISOString().slice(0, 10);
+    const fecha = ajustes.fechaPago?.trim() || hoyRD();
     const metodo = ajustes.metodo?.trim() || 'transferencia';
     const referencia = ajustes.referencia?.trim() || c.referencia;
 
