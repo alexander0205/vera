@@ -26,6 +26,7 @@ import {
   type ConfigMora, type ModoMora,
 } from '@/lib/cobranza/mora-calculo';
 import { graciaParaMora } from '@/lib/cobranza/elegibilidad-mora-escolar';
+import { hoyRD } from '@/lib/utils/format';
 
 /**
  * Días de gracia que aplican a UNA factura.
@@ -407,7 +408,7 @@ export async function generarNotaDebitoMora(
   // (mora_origen_id, mora_periodo).
   const periodoClave = padre.fechaLimitePago
     ? fechaPeriodo(padre.fechaLimitePago, calculo.periodo, config)
-    : new Date().toISOString().slice(0, 10);
+    : hoyRD();
 
   // ── Servicio "Interés por mora" del catálogo (find-or-create, reutilizable) ─
   // La línea de la ND referencia este producto en vez de texto suelto. El % de
