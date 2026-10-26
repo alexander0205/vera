@@ -97,6 +97,18 @@ export type AuditAction =
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
   | 'SUSCRIPCION_AVISO'
+  // Matrículas: quién las crea, les cambia el estado o las borra. Cada alta
+  // crea la deuda del año, así que tiene que quedar quién la hizo (CEMM,
+  // 26-10: entraron 59 matrículas con un clic y nadie sabía de quién).
+  //  - ESCOLAR_MATRICULA_CREADA: una, desde «Nueva matrícula»; `resource` matricula:<id>.
+  //  - ESCOLAR_MATRICULAS_LOTE: varias de una vez, con `meta.origen` «lote» o
+  //    «sigerd»; `resource` curso:<id> y en el meta las matrículas creadas.
+  //  - ESCOLAR_MATRICULA_ESTADO: activa → retirada, anulada…; meta de y a.
+  //  - ESCOLAR_MATRICULA_BORRADA: `resource` matricula:<id>, meta con el alumno.
+  | 'ESCOLAR_MATRICULA_CREADA'
+  | 'ESCOLAR_MATRICULAS_LOTE'
+  | 'ESCOLAR_MATRICULA_ESTADO'
+  | 'ESCOLAR_MATRICULA_BORRADA'
   // «Mover a la sección de SIGERD»: la matrícula de un alumno pasó de un curso
   // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
   // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
