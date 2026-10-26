@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * final, no por cuántos joins pasaron.
  */
 let cargosDevueltos: unknown[] = [];
+/** Matrículas del año con plan recurrente (la consulta que acaba en `limit`). */
+let planesDevueltos: unknown[] = [];
 let insertados: Record<string, unknown>[] = [];
 /** Cuántos cargos deja enlazar el UPDATE. -1 = todos los pedidos. */
 let enlazaSolo = -1;
@@ -19,7 +21,7 @@ vi.mock('@/lib/db/drizzle', () => {
   cadena.leftJoin = () => cadena;
   cadena.where = () => cadena;
   cadena.orderBy = () => Promise.resolve(cargosDevueltos);
-  cadena.limit = () => Promise.resolve(cargosDevueltos);
+  cadena.limit = () => Promise.resolve(planesDevueltos);
 
   const tx = {
     execute: () => Promise.resolve([]),
@@ -77,20 +79,23 @@ vi.mock('@/lib/facturas/codigo', () => ({
   generarCodigoFactura: vi.fn(async () => 'FA-2026-TEST-000001'),
 }));
 
-const { facturarCuotasEmitidas } = await import('@/lib/administracion-escolar/facturar-emision');
+const { facturarCuotasEmitidas, facturarGrupos, cargosQueFacturaElCalendario } = await import('@/lib/administracion-escolar/facturar-emision');
 const { prefillDeCargos } = await import('@/lib/administracion-escolar/prefill-factura');
+const { generarCodigoFactura } = await import('@/lib/facturas/codigo');
 
-const cargo = (id: number, clienteId: number | null, vence = '2026-09-05') => ({
-  id, estudianteId: id, saldoCentavos: 1000000, fechaVencimiento: vence,
+const cargo = (id: number, clienteId: number | null, vence = '2026-09-05', conceptoTipo = 'mensualidad') => ({
+  id, conceptoTipo, estudianteId: id, saldoCentavos: 1000000, fechaVencimiento: vence,
   fechaEmision: '2026-09-01', clienteId,
 });
 
 beforeEach(() => {
   cargosDevueltos = [];
+  planesDevueltos = [];
   insertados = [];
   ultimoPedido = [];
   enlazaSolo = -1;
   vi.mocked(prefillDeCargos).mockClear();
+  vi.mocked(generarCodigoFactura).mockClear();
 });
 
 describe('facturarCuotasEmitidas', () => {
@@ -220,5 +225,117 @@ describe('facturarCuotasEmitidas', () => {
     const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-01', hasta: '2026-09-01' });
     expect(r.facturas).toHaveLength(1);
     expect(r.diagnostico[0]).toMatchObject({ motivo: 'prefill-rechazado', cargoIds: [1] });
+  });
+});
+
+/**
+ * Un colegio que factura la colegiatura con planes recurrentes (Mi Casita, el
+ * 25) y tiene además una evaluación con calendario que ningún plan cubre.
+ */
+describe('colegiatura con recurrentes, lo demás por calendario', () => {
+  it('con planes recurrentes, el calendario factura la evaluación y deja la colegiatura', async () => {
+    planesDevueltos = [{ id: 1 }];
+    cargosDevueltos = [cargo(1, 55, '2026-10-18', 'actividad'), cargo(2, 55, '2026-10-30', 'mensualidad')];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-10-13', hasta: '2026-10-25' });
+
+    expect(r.facturas).toHaveLength(1);
+    expect(r.facturas[0].cargoIds).toEqual([1]);
+  });
+
+  it('con planes recurrentes y solo colegiaturas emitidas, no crea nada', async () => {
+    planesDevueltos = [{ id: 1 }];
+    cargosDevueltos = [cargo(1, 55), cargo(2, 77)];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-09-25', hasta: '2026-09-25' });
+
+    expect(r.facturas).toHaveLength(0);
+    expect(insertados).toHaveLength(0);
+    expect(prefillDeCargos).not.toHaveBeenCalled();
+  });
+
+  it('un colegio sin recurrentes sigue facturando todo por calendario', async () => {
+    cargosDevueltos = [cargo(1, 55, '2026-10-18', 'actividad'), cargo(2, 55, '2026-10-30', 'mensualidad')];
+    const r = await facturarCuotasEmitidas(1, 1, { desde: '2026-10-13', hasta: '2026-10-25' });
+
+    expect(r.facturas[0].cargoIds).toEqual([1, 2]);
+  });
+
+  it('la regla sola: solo quita la colegiatura, y solo si hay planes', () => {
+    const cargos = [{ conceptoTipo: 'mensualidad' }, { conceptoTipo: 'actividad' }, { conceptoTipo: 'inscripcion' }];
+    expect(cargosQueFacturaElCalendario(cargos, true).map((c) => c.conceptoTipo)).toEqual(['actividad', 'inscripcion']);
+    expect(cargosQueFacturaElCalendario(cargos, false)).toHaveLength(3);
+  });
+});
+
+/**
+ * El constructor de facturas es el mismo para el cron y para «Facturar por
+ * lote». Estas pruebas fijan lo que el segundo necesita de él: que los grupos
+ * los arme quien llama (uno por alumno), que la factura quede a nombre de quien
+ * la pidió, y que perder la carrera contra otra corrida se distinga de un fallo.
+ */
+describe('facturarGrupos (el constructor compartido con «Facturar por lote»)', () => {
+  const c = (id: number) => ({ id, saldoCentavos: 1000000, fechaVencimiento: '2026-09-05' });
+
+  it('una factura por grupo tal como vienen: dos hermanos del mismo responsable, dos facturas', async () => {
+    const r = await facturarGrupos(1, [
+      { clienteId: 55, cargos: [c(1)] },
+      { clienteId: 55, cargos: [c(2)] },
+    ]);
+
+    expect(r.facturas.map((f) => f.cargoIds)).toEqual([[1], [2]]);
+    expect(insertados).toHaveLength(2);
+    // El candado y el comprador siguen siendo el responsable, aunque sea una factura por alumno.
+    expect(r.facturas.every((f) => f.clienteId === 55)).toBe(true);
+    expect(r.diagnostico).toEqual([]);
+  });
+
+  it('sigue naciendo BORRADOR sin-ncf y sin e-NCF: nada va a la DGII', async () => {
+    await facturarGrupos(1, [{ clienteId: 55, cargos: [c(1)] }], { userId: 7 });
+
+    expect(insertados[0]).toMatchObject({ estado: 'BORRADOR', tipoEcf: 'sin-ncf', encf: '' });
+  });
+
+  it('sin usuario (el cron) la factura no tiene autor; con usuario, queda a su nombre', async () => {
+    await facturarGrupos(1, [{ clienteId: 55, cargos: [c(1)] }]);
+    expect(insertados[0].createdBy).toBeNull();
+    expect(generarCodigoFactura).toHaveBeenLastCalledWith(expect.anything(), { teamId: 1, userId: null, tipoEcf: 'sin-ncf' });
+
+    await facturarGrupos(1, [{ clienteId: 55, cargos: [c(2)] }], { userId: 7 });
+    expect(insertados[1].createdBy).toBe(7);
+    expect(generarCodigoFactura).toHaveBeenLastCalledWith(expect.anything(), { teamId: 1, userId: 7, tipoEcf: 'sin-ncf' });
+  });
+
+  it('perder la carrera contra otra corrida se marca como `yaFacturados`, no como un fallo cualquiera', async () => {
+    enlazaSolo = 0;
+    const r = await facturarGrupos(1, [{ clienteId: 55, cargos: [c(1), c(2)] }]);
+
+    expect(r.facturas).toHaveLength(0);
+    expect(r.diagnostico[0]).toMatchObject({ motivo: 'error', cargoIds: [1, 2], yaFacturados: true });
+  });
+
+  it('un error cualquiera NO lleva `yaFacturados`', async () => {
+    vi.mocked(prefillDeCargos).mockImplementationOnce(async () => { throw new Error('boom'); });
+    const r = await facturarGrupos(1, [{ clienteId: 55, cargos: [c(1)] }]);
+
+    expect(r.diagnostico[0]).toMatchObject({ motivo: 'error', detalle: 'boom' });
+    expect(r.diagnostico[0].yaFacturados).toBeUndefined();
+  });
+
+  it('un grupo que falla no tumba a los demás', async () => {
+    vi.mocked(prefillDeCargos).mockImplementationOnce(async () => ({
+      ok: false as const, status: 400, error: 'El estudiante no tiene responsable de pago asignado',
+    }));
+    const r = await facturarGrupos(1, [
+      { clienteId: 55, cargos: [c(1)] },
+      { clienteId: 77, cargos: [c(2)] },
+    ]);
+
+    expect(r.facturas.map((f) => f.cargoIds)).toEqual([[2]]);
+    expect(r.diagnostico).toEqual([expect.objectContaining({ motivo: 'prefill-rechazado', cargoIds: [1] })]);
+  });
+
+  it('el cron sigue sin enterarse: sus facturas no tienen autor', async () => {
+    cargosDevueltos = [cargo(1, 55)];
+    await facturarCuotasEmitidas(1, 1, { desde: '2026-09-01', hasta: '2026-09-01' });
+    expect(insertados[0].createdBy).toBeNull();
   });
 });

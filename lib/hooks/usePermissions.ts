@@ -33,6 +33,7 @@ interface UserPermissionsResponse {
   teamRole?: string | null;
   permissions?: Permission[];
   modules?: ModuleKey[];
+  pantallasOcultas?: string[];
 }
 
 // Fetch siempre /api/user, pero bajo una SWR key PROPIA (array) que NO coincide
@@ -49,6 +50,8 @@ export interface UsePermissionsResult {
   permissions: Permission[];
   /** Módulos del producto accesibles para el usuario (empresa ∩ rol). */
   modules: ModuleKey[];
+  /** Pantallas apagadas para su rol (lib/config/pantallas.ts). */
+  pantallasOcultas: string[];
   /** Rol del usuario en el team activo (null si no aplica). */
   teamRole: string | null;
   /** true mientras la primera carga está en curso. */
@@ -68,12 +71,14 @@ export function usePermissions(): UsePermissionsResult {
 
   const permissions = data?.permissions ?? [];
   const modules = data?.modules ?? [];
+  const pantallasOcultas = data?.pantallasOcultas ?? [];
   const teamRole = data?.teamRole ?? null;
 
   return {
     can: (permission: Permission) => permissions.includes(permission),
     permissions,
     modules,
+    pantallasOcultas,
     teamRole,
     isLoading,
   };

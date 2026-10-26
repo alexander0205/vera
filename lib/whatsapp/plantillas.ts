@@ -164,6 +164,37 @@ export async function resolverPlantilla(
 }
 
 /**
+ * La plantilla con que de verdad sale un aviso de cobro, o null si no hay
+ * ninguna que se pueda mandar — y entonces NO se manda WhatsApp.
+ *
+ * Un cobro por WhatsApp nunca va en texto libre. Fuera de las 24 h desde el
+ * último mensaje del padre, Meta lo rechaza (131047), y un padre al que se le
+ * recuerda una mensualidad casi nunca nos ha escrito ese día: el 25-10 en Mi
+ * Casita, sin plantilla asignada, salieron en texto libre y llegaron 2 de más
+ * de 20. Los que sí llegan, llegan sin formato ni botón. Mejor no mandar nada
+ * por WhatsApp —el correo y el SMS siguen saliendo— hasta que el colegio tenga
+ * su plantilla aprobada y asignada.
+ *
+ * Con factura (`hayEnlace`) va la versión con enlace si el colegio la tiene.
+ * Una plantilla con botón necesita rellenar la URL: sin enlace que poner, o con
+ * un CRM que aún no acepta el parámetro del botón, Meta la rechazaría entera,
+ * así que tampoco sale.
+ */
+export function plantillaParaEnviar(
+  plantilla: PlantillaAsignada | null,
+  hayEnlace: boolean,
+  crmSoportaBotones: boolean,
+): { nombre: string; idioma: string; conBoton: boolean } | null {
+  if (!plantilla) return null;
+  const usarConLink = hayEnlace && plantilla.nombreConLink != null;
+  const nombre = usarConLink ? plantilla.nombreConLink! : plantilla.nombre;
+  const conBoton = usarConLink ? plantilla.conLinkTieneBoton : plantilla.conBoton;
+  if (!nombre) return null;
+  if (conBoton && (!crmSoportaBotones || !hayEnlace)) return null;
+  return { nombre, idioma: plantilla.idioma, conBoton };
+}
+
+/**
  * Guarda las asignaciones de un colegio (o los defaults, con teamId null).
  * Un nombre vacío BORRA la asignación: es como se vuelve al default.
  */

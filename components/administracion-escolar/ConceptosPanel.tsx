@@ -6,13 +6,20 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP } from '@/lib/utils/format';
 import { referenciaServicio } from '@/lib/administracion-escolar/referencia-servicio';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { CargarConceptoDialog } from './CargarConceptoDialog';
+import {
+  ETIQUETA_CARGAR, motivoParaNoCargar, seccionesDelObjetivo,
+  type ObjetivoDeTarifa,
+} from '@/lib/administracion-escolar/cargo-desde-tarifa';
 import {
   Loader2, Plus, X, Layers, Tag, Repeat, CalendarDays,
-  FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check,
+  FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check, Users,
 } from 'lucide-react';
 import { Fila, Nombre, Plegador, Resumen, Tanda, plural, porOrden } from './arbol';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ETIQUETA_FRECUENCIA, type Frecuencia } from '@/lib/administracion-escolar/calendario';
+import { precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
 
 /**
  * Segunda línea de una fila: con qué producto del catálogo se factura.
@@ -47,11 +54,19 @@ interface Periodo { id: number; nombre: string; activo: boolean }
 interface Servicio { id: number; nombre: string; tanda: string | null; orden: number }
 interface Grado { id: number; servicioId: number; nombre: string; orden: number }
 interface Seccion { id: number; gradoId: number; nombre: string; orden: number }
-interface Concepto { id: number; nombre: string; tipo: string; frecuencia: Frecuencia; orden: number }
+interface Concepto {
+  id: number; nombre: string; tipo: string; frecuencia: Frecuencia; orden: number;
+  /** El precio es por cuota (true) o el total que se reparte (false). null = por el tipo. */
+  precioPorCuota?: boolean | null;
+  /** Cuántas cuotas tiene su calendario en este año. */
+  cuotasCalendario?: number;
+}
 interface Producto { id: number; nombre: string; referencia: string | null; precio: number }
 interface Precio {
   id: number; conceptoId: number; objetivoTipo: string; objetivoId: number;
   montoCentavos: number; productId: number | null;
+  /** Cuántas cuotas del calendario cobra (las primeras N). null = todas. */
+  cuotas?: number | null;
 }
 interface Data {
   periodos: Periodo[]; periodo: Periodo | null;
@@ -115,6 +130,13 @@ export function ConceptosPanel() {
   const [impactoPrecio, setImpactoPrecio] = useState<ImpactoPrecio | null>(null);
   const [quitando, setQuitando] = useState(false);
   const [errorPrecio, setErrorPrecio] = useState<string | null>(null);
+  /** La fila a la que se le está cargando el concepto. `null` = el diálogo está cerrado. */
+  const [cargaDe, setCargaDe] = useState<{ grupoNombre: string; montoCentavos: number; cuotas: number | null; cursoIds: number[] } | null>(null);
+
+  // Poner precio y cobrar no son el mismo permiso: configurar tarifas lo hace
+  // quien lleva el colegio, y crear deuda a las familias va con el de gestión.
+  const { permissions } = usePermissions();
+  const puedeCobrar = permissions.includes('administracion-escolar:gestionar');
 
   const cargar = useCallback(async (pid?: number | null) => {
     setLoading(true);
@@ -216,6 +238,65 @@ export function ConceptosPanel() {
     return <div className="flex items-center gap-2 p-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>;
   }
 
+  /**
+   * «Asignar a estudiantes» en la fila: incorpora ESTE concepto al plan de los
+   * alumnos de ESA fila. Las cuotas se devengan en sus fechas configuradas.
+   *
+   * Va en cada fila y no una sola vez arriba porque el curso es la mitad de la
+   * pregunta: «Evaluación Inicial» se le cobra a Inicial, y la fila es el único
+   * sitio donde eso ya está dicho. El precio es el efectivo —el propio o el que
+   * hereda—, que es el que de verdad paga ese curso.
+   *
+   * Cuando no se puede, el botón se queda a la vista pero apagado y dice por
+   * qué: un botón que desaparece deja a la persona buscándolo en la fila de al
+   * lado.
+   */
+  const botonCargar = (objetivo: ObjetivoDeTarifa, grupoNombre: string, precio: Precio | null) => {
+    if (!concepto || !data.periodo || !puedeCobrar) return null;
+    const montoCentavos = precio?.montoCentavos ?? null;
+    const cursoIds = seccionesDelObjetivo(objetivo, data.grados, data.secciones);
+    const motivo = motivoParaNoCargar({ montoCentavos, cursoIds });
+    return (
+      <button type="button" disabled={motivo !== null}
+        onClick={() => setCargaDe({ grupoNombre, montoCentavos: montoCentavos as number, cuotas: precio?.cuotas ?? null, cursoIds })}
+        title={motivo ?? `${ETIQUETA_CARGAR}: «${concepto.nombre}» a los alumnos de ${grupoNombre}`}
+        aria-label={`${ETIQUETA_CARGAR}: «${concepto.nombre}» a los alumnos de ${grupoNombre}`}
+        className="shrink-0 rounded-md border border-gray-200 px-1.5 py-0.5 text-gray-400 hover:border-zero-400 hover:text-zero-600 disabled:cursor-not-allowed disabled:border-gray-100 disabled:text-gray-200 disabled:hover:border-gray-100">
+        <Users className="h-3.5 w-3.5" />
+      </button>
+    );
+  };
+
+  /**
+   * Junto al precio: si es por cuota o el total del año, y cuántas cuotas del
+   * calendario paga ESE grado. Maternal e Infantes pagan las 11 y los demás 10
+   * con el mismo concepto: sin esto había que duplicar el concepto.
+   */
+  const extrasPrecio = (p: Precio) => {
+    if (!concepto) return null;
+    const total = concepto.cuotasCalendario ?? 0;
+    if (total <= 1) return null;
+    const porCuota = precioEsPorCuota(concepto);
+    return (
+      <span className="flex shrink-0 items-center gap-1.5 text-xs text-gray-500">
+        <span>{porCuota ? 'por cuota' : 'en el año'}</span>
+        <NativeSelect className="h-7 min-w-0 py-0 pl-2 pr-7 text-xs" value={p.cuotas ?? ''}
+          aria-label="Cuántas cuotas paga"
+          onChange={async (e) => {
+            const cuotas = e.target.value === '' ? null : Number(e.target.value);
+            const r = await jsonReq('/api/administracion-escolar/concepto-precios', 'PATCH', { id: p.id, cuotas });
+            if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo guardar.'); return; }
+            setData((d) => d && ({ ...d, precios: d.precios.map((x) => (x.id === p.id ? { ...x, cuotas } : x)) }));
+          }}>
+          <option value="">{total} cuotas (todas)</option>
+          {Array.from({ length: total - 1 }, (_, i) => total - 1 - i).map((n) => (
+            <option key={n} value={n}>{n} de {total} cuotas</option>
+          ))}
+        </NativeSelect>
+      </span>
+    );
+  };
+
   /** Mismas claves que el árbol de Estructura: `s:5` servicio, `g:27` grado. */
   const esta = (clave: string) => abiertos.has(clave);
   const alternar = (clave: string) => setAbiertos((s) => {
@@ -305,6 +386,8 @@ export function ConceptosPanel() {
                         {pSv ? (
                           <span className="flex shrink-0 items-center gap-1.5">
                             <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pSv.montoCentavos)}</span>
+                            {extrasPrecio(pSv)}
+                            {botonCargar({ tipo: 'servicio', id: sv.id }, sv.tanda ? `${sv.nombre} - ${sv.tanda}` : sv.nombre, pSv)}
                             <button onClick={() => void pedirQuitarPrecio(pSv)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
                           </span>
                         ) : (
@@ -345,11 +428,14 @@ export function ConceptosPanel() {
                                   {pG ? (
                                     <>
                                       <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pG.montoCentavos)}</span>
+                                      {extrasPrecio(pG)}
+                                      {botonCargar({ tipo: 'grado', id: g.id }, `${g.nombre} de ${sv.nombre}`, pG)}
                                       <button onClick={() => void pedirQuitarPrecio(pG)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                     </>
                                   ) : (
                                     <>
                                       {pSv && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(pSv.montoCentavos)}</span>}
+                                      {pSv && botonCargar({ tipo: 'grado', id: g.id }, `${g.nombre} de ${sv.nombre}`, pSv)}
                                       <button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
                                         className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
                                         {pSv ? 'Excepción' : 'Precio'}
@@ -371,11 +457,14 @@ export function ConceptosPanel() {
                                         {pS ? (
                                           <>
                                             <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pS.montoCentavos)}</span>
+                                            {extrasPrecio(pS)}
+                                            {botonCargar({ tipo: 'seccion', id: s.id }, `sección ${s.nombre} de ${g.nombre}`, pS)}
                                             <button onClick={() => void pedirQuitarPrecio(pS)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                           </>
                                         ) : (
                                           <>
                                             {heredaG && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(heredaG.montoCentavos)}</span>}
+                                            {heredaG && botonCargar({ tipo: 'seccion', id: s.id }, `sección ${s.nombre} de ${g.nombre}`, heredaG)}
                                             <button onClick={() => setModal({ tipo: 'seccion', id: s.id, seccion: s.nombre, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
                                               className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-zero-400 hover:text-zero-600">
                                               {heredaG ? 'Excepción' : 'Precio'}
@@ -413,7 +502,7 @@ export function ConceptosPanel() {
              entera: la recarga volvía a pedir período, estructura, conceptos y
              tarifas para una fila que ya se sabe cómo quedó, y de paso reabría
              todas las ramas del árbol y perdía dónde estabas mirando. */
-          onGuardado={(precio) => {
+          onGuardado={(precio, producto) => {
             setModal(null);
             setData((d) => d && ({
               ...d,
@@ -428,8 +517,27 @@ export function ConceptosPanel() {
                 )),
                 precio,
               ],
+              // El servicio recién creado entra YA al catálogo en memoria: sin
+              // esto la fila «Se factura como …» no encontraba el producto y la
+              // referencia solo aparecía al recargar, y el mismo servicio no se
+              // podía reusar en otro grado hasta recargar (lo que Alex pedía).
+              productos: producto && !d.productos.some((p) => p.id === producto.id)
+                ? [...d.productos, producto].sort((a, b) => a.nombre.localeCompare(b.nombre))
+                : d.productos,
             }));
           }}
+        />
+      )}
+
+      {cargaDe && concepto && data.periodo && (
+        <CargarConceptoDialog
+          concepto={{ id: concepto.id, nombre: concepto.nombre, tipo: concepto.tipo, precioPorCuota: concepto.precioPorCuota }}
+          grupoNombre={cargaDe.grupoNombre}
+          montoCentavos={cargaDe.montoCentavos}
+          cuotasTarifa={cargaDe.cuotas}
+          cursoIds={cargaDe.cursoIds}
+          periodo={data.periodo}
+          onCerrar={() => setCargaDe(null)}
         />
       )}
 
@@ -546,7 +654,7 @@ function ModalTarifa({
   productos: Producto[];
   usados: number[];
   onCerrar: () => void;
-  onGuardado: (precio: Precio) => void;
+  onGuardado: (precio: Precio, producto?: Producto | null) => void;
 }) {
   const [busca, setBusca] = useState('');
   const [elegido, setElegido] = useState<Producto | null>(null);
@@ -612,8 +720,8 @@ function ModalTarifa({
       if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo guardar.'); return; }
       // `guardado` y no `precio`: aquí `precio` ya es el importe que se teclea
       // en el formulario, y reusar el nombre lo tapaba.
-      const { precio: guardado } = await r.json();
-      onGuardado(guardado as Precio);
+      const { precio: guardado, producto } = await r.json();
+      onGuardado(guardado as Precio, (producto ?? null) as Producto | null);
     } finally { setOcupado(false); }
   }
 

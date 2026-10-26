@@ -61,7 +61,8 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
 
     let ia: DatosCaptura | null = null;
     let error: string | null = null;
-    if (iaDisponible() && archivos.length) {
+    const conIa = archivos.length > 0 && await iaDisponible();
+    if (conIa) {
       try {
         ia = datosDesdeIa(await leerFacturaConIa(archivos, { empresa: team?.nombre || team?.razon || team?.name }), hoyRD());
       } catch (e) {
@@ -108,7 +109,7 @@ export async function procesarCaptura(teamId: number, capturaId: number): Promis
 
     const metodo = qr ? 'qr' : ia ? 'ia' : 'manual';
     if (metodo === 'manual') {
-      datos.avisos.unshift(iaDisponible()
+      datos.avisos.unshift(conIa
         ? 'No se pudo leer la factura: complétala mirando el comprobante.'
         : 'El comprobante no trae el QR de un e-CF y la lectura con IA no está activada: complétalo a mano mirándolo.');
     }

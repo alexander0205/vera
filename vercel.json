@@ -29,6 +29,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/asistente-retencion",
+      "schedule": "0 8 * * 0"
+    },
+    {
       "path": "/api/cron/zero-tickets-auto-close",
       "schedule": "*/10 11-23 * * *"
     },
@@ -39,6 +43,10 @@
     {
       "path": "/api/cron/escolar-avisos",
       "schedule": "0,15,30,45 12-15 * * *"
+    },
+    {
+      "path": "/api/cron/escolar-corrida-avisos",
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/cron/suscripciones",

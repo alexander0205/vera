@@ -18,11 +18,12 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 export async function POST(req: NextRequest) {
   // Auth: CRON_SECRET (mismo usado por crons en vercel.json)
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

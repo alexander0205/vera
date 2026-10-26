@@ -1,5 +1,6 @@
 /**
- * GET /api/contabilidad/libro-diario/export — libro diario a Excel (.xlsx)
+ * GET /api/contabilidad/libro-diario/export — libro diario a Excel, CSV o,
+ * con `formato=pdf` (`inline=1` para imprimir), a PDF con un bloque por asiento.
  *
  * Acepta los MISMOS filtros que la pantalla (origenTipo, desde, hasta,
  * cuentaId), así que el archivo contiene exactamente lo que se está viendo.
@@ -12,12 +13,21 @@ import { requirePermission } from '@/lib/auth/api-guard';
 import {
   asientosParaExportar, ORIGENES, type OrigenTipo,
 } from '@/lib/contabilidad/libro-diario';
-import { fechaValidaISO } from '@/lib/utils/format';
+import { fechaValidaISO, fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { empresaParaPdf, respuestaListadoPdf } from '@/lib/pdf/listado-respuesta';
 import {
-  DOP, ORIGEN_LABEL, nuevaHoja, estilarEncabezado, respuestaXlsx,
+  DOP, ORIGEN_LABEL, nuevaHoja, estilarEncabezado, respuestaXlsx, respuestaCsv,
 } from '@/lib/contabilidad/export-xlsx';
 
 export const maxDuration = 60;
+
+/**
+ * Lo más que entra en el PDF. react-pdf tarda unos 3 s por cada 1,600 filas y
+ * la pantalla no trae fechas por defecto: sin tope, «Imprimir» sobre el libro
+ * entero de una empresa grande se pasa de `maxDuration` y el usuario ve un 504.
+ * Excel y CSV no tienen ese costo y siguen llevando todo.
+ */
+const TOPE_PDF = 4000;
 
 export async function GET(req: NextRequest) {
   const auth = await requirePermission('contabilidad:ver');
@@ -33,6 +43,62 @@ export async function GET(req: NextRequest) {
     hasta: fechaValidaISO(sp.get('hasta') ?? undefined),
     cuentaId: Number.isInteger(cuentaNum) && cuentaNum > 0 ? cuentaNum : undefined,
   });
+
+  if (sp.get('formato') === 'pdf') {
+    const desde = fechaValidaISO(sp.get('desde') ?? undefined);
+    const hasta = fechaValidaISO(sp.get('hasta') ?? undefined);
+    // Un grupo por asiento, en el orden de la consulta (más nuevo primero).
+    const grupos: { titulo: string; resumen: string; filas: { celdas: string[] }[] }[] = [];
+    let actual: number | null = null;
+    let debe = 0, haber = 0;
+    // Los totales cuentan todo lo filtrado; las filas paran en el tope, y nunca
+    // a mitad de un asiento (uno partido no cuadra y confunde).
+    let mostradas = 0;
+    let lleno = false;
+    const asientos = new Set<number>();
+    for (const f of filas) {
+      debe += f.debeCents; haber += f.haberCents;
+      asientos.add(f.asientoId);
+      if (f.asientoId !== actual) {
+        actual = f.asientoId;
+        if (mostradas >= TOPE_PDF) lleno = true;
+        if (!lleno) grupos.push({ titulo: `${fmtFechaCorta(f.fecha)} · ${f.concepto}`, resumen: ORIGEN_LABEL[f.origenTipo] ?? f.origenTipo, filas: [] });
+      }
+      if (lleno) continue;
+      mostradas++;
+      grupos[grupos.length - 1].filas.push({ celdas: [
+        `${f.cuentaCodigo} ${f.cuentaNombre}`, f.descripcion ?? '',
+        f.debeCents > 0 ? fmtDOP(f.debeCents) : '', f.haberCents > 0 ? fmtDOP(f.haberCents) : '',
+      ] });
+    }
+    const { empresa, rnc } = await empresaParaPdf(auth.teamId);
+    const nota = lleno
+      ? `El PDF trae los ${grupos.length.toLocaleString('es-DO')} asientos más recientes de ${asientos.size.toLocaleString('es-DO')}; los totales son de todo el filtro. Para el libro completo, acota las fechas o descarga Excel.`
+      : undefined;
+    return respuestaListadoPdf({
+      empresa, rnc, nota,
+      titulo: 'Libro diario',
+      generado: fmtFechaCorta(hoyRD()),
+      filtroTexto: [
+        desde && hasta ? `Del ${fmtFechaCorta(desde)} al ${fmtFechaCorta(hasta)}` : desde ? `Desde el ${fmtFechaCorta(desde)}` : hasta ? `Hasta el ${fmtFechaCorta(hasta)}` : 'Todas las fechas',
+        origenRaw && ORIGENES.includes(origenRaw as OrigenTipo) ? `Origen: ${ORIGEN_LABEL[origenRaw] ?? origenRaw}` : null,
+      ].filter(Boolean).join(' · '),
+      kpis: [
+        { label: 'Asientos', valor: String(asientos.size) },
+        { label: 'Debe', valor: fmtDOP(debe) },
+        { label: 'Haber', valor: fmtDOP(haber) },
+        { label: debe === haber ? 'Cuadra' : 'Diferencia', valor: fmtDOP(Math.abs(debe - haber)) },
+      ],
+      columnas: [
+        { titulo: 'Cuenta', ancho: '38%' },
+        { titulo: 'Detalle', ancho: '32%' },
+        { titulo: 'Debe', ancho: '15%', alinear: 'right' },
+        { titulo: 'Haber', ancho: '15%', alinear: 'right' },
+      ],
+      grupos,
+      totales: { etiqueta: 'Totales', valores: { 2: fmtDOP(debe), 3: fmtDOP(haber) } },
+    }, `libro-diario_${hoyRD()}.pdf`, sp.get('inline') === '1');
+  }
 
   const { wb, ws } = nuevaHoja('Libro diario');
   ws.columns = [
@@ -65,5 +131,7 @@ export async function GET(req: NextRequest) {
   fin.font = { bold: true };
 
   estilarEncabezado(ws);
-  return respuestaXlsx(wb, 'libro-diario.xlsx');
+  return sp.get('formato') === 'csv'
+    ? respuestaCsv(wb, 'libro-diario.csv')
+    : respuestaXlsx(wb, 'libro-diario.xlsx');
 }

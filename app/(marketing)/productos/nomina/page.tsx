@@ -1,14 +1,16 @@
 /**
  * Nómina — la página del módulo que paga al personal.
  *
- * De la maqueta de esta landing quedaron fuera tres promesas que el sistema no
- * cumple hoy: el archivo de pago masivo para el banco, las liquidaciones de
- * prestaciones y el envío del volante por correo o WhatsApp —el volante existe,
- * pero se descarga en PDF (`lib/pdf/VolanteNominaPDF.tsx`)—. Lo que sí está,
- * comprobado en el código: el cálculo de AFP, SFS, ISR e INFOTEP
- * (`lib/nomina/calculo.ts`), el archivo de la TSS
- * (`app/api/nomina/corridas/[id]/tss`), las horas, los contratos y el asiento
- * contable al cerrar la corrida.
+ * De la maqueta de esta landing quedaron fuera las promesas que el sistema no
+ * cumple hoy: las liquidaciones de prestaciones, los préstamos, los bonos y
+ * descuentos fijos por regla, y el envío del volante por correo o WhatsApp —el
+ * volante existe, pero se descarga en PDF (`lib/pdf/VolanteNominaPDF.tsx`)—. Lo
+ * que sí está, comprobado en el código: el cálculo de AFP, SFS, ISR e INFOTEP
+ * (`lib/nomina/calculo.ts`), el SFS de los dependientes adicionales, el archivo
+ * de la TSS (`app/api/nomina/corridas/[id]/tss`), el archivo de pago para el
+ * banco (`lib/nomina/formatos-banco.ts`), las horas extra, los contratos y el
+ * asiento contable al cerrar la corrida. La corrida se prepara sola como
+ * borrador y alguien la aprueba: no «se cierra sola».
  */
 
 import type { Metadata } from 'next';
@@ -33,7 +35,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: urlDelSitio('/productos/nomina'),
     title: 'Nómina dominicana: TSS, ISR, regalía y vacaciones',
-    description: 'La quincena se cierra sola y el asiento contable entra sin volver a digitar.',
+    description: 'La quincena se prepara sola, tú la apruebas y el asiento contable entra sin volver a digitar.',
   },
 };
 
@@ -44,7 +46,7 @@ const CORRIDA: PuntoDeProducto[] = [
   { titulo: 'Cálculo con la ley de aquí', detalle: 'AFP, SFS, ISR e INFOTEP aplicados al sueldo de cada quien, en cada corrida, con los topes del año.', icono: Iconos.engranaje },
   { titulo: 'El archivo de la TSS', detalle: 'Sale de la corrida listo, con lo que cotiza cada empleado. Nadie lo arma a mano.', icono: Iconos.papel },
   { titulo: 'Volante de pago', detalle: 'Cada empleado tiene el suyo en PDF, con el desglose de lo que se le pagó y lo que se le descontó.', icono: Iconos.hoja },
-  { titulo: 'Horas, bonos y descuentos', detalle: 'Extras, incentivos y préstamos aplicados por regla, no por memoria.', icono: Iconos.reloj },
+  { titulo: 'Horas extra por regla', detalle: 'Extras al 35 % y al 100 %, nocturnidad y feriados calculados por regla, no por memoria.', icono: Iconos.reloj },
   { titulo: 'Regalía y vacaciones', detalle: 'Las provisiones se acumulan mes a mes, así diciembre no es una sorpresa de caja.', icono: Iconos.dinero },
   { titulo: 'El asiento, solo', detalle: 'Al cerrar la corrida, la nómina y sus retenciones entran al diario sin volver a digitar.', icono: Iconos.contabilidad },
 ];
@@ -52,7 +54,7 @@ const CORRIDA: PuntoDeProducto[] = [
 const PERSONAL: PuntoDeProducto[] = [
   { titulo: 'Expediente del empleado', detalle: 'Cargo, salario, documentos y el historial de lo que ha cambiado, en un solo sitio.', icono: Iconos.usuarios },
   { titulo: 'Contratos', detalle: 'Se arman desde el sistema y salen en PDF para firmar.', icono: Iconos.papel },
-  { titulo: 'Seguros y descuentos fijos', detalle: 'Lo que se le retiene todos los meses queda configurado una vez.', icono: Iconos.escudo },
+  { titulo: 'Dependientes del seguro', detalle: 'El costo del SFS por cada dependiente adicional se calcula solo, en cada corrida.', icono: Iconos.escudo },
   { titulo: 'Quién ve los sueldos', detalle: 'Permisos aparte: se puede registrar asistencia sin poder ver lo que gana nadie.', icono: Iconos.base },
 ];
 
@@ -84,7 +86,7 @@ export default function NominaPage() {
     <>
       <HeroProducto
         antetitulo="Nómina"
-        titulo="La quincena se cierra sola."
+        titulo="La quincena se prepara sola."
         bajada="Sueldos, AFP, SFS, ISR, regalía y vacaciones calculados con la ley dominicana, y asentados en tu contabilidad sin volver a digitar."
         pie={PRECIO_NOMINA !== null
           ? `+US$${PRECIO_NOMINA} al mes sobre cualquier plan · Incluida en los planes de colegio`
@@ -142,6 +144,7 @@ export default function NominaPage() {
           'El gasto de sueldos, las retenciones y el neto a pagar, cada uno en su cuenta',
           'Las provisiones de regalía y vacaciones se asientan cuando se acumulan',
           'Las cuentas las configuras una vez y se respetan en cada corrida',
+          'El archivo de pago para el banco sale de la misma corrida, para subirlo a tu banca en línea',
           'Queda el registro de quién corrió la nómina y cuándo',
         ]}
       />
@@ -160,7 +163,7 @@ export default function NominaPage() {
       <CierreProducto
         antetitulo="Nómina"
         titulo="Que la próxima quincena te tome una hora."
-        detalle="Cuéntanos cómo pagas hoy y te dejamos cargados los empleados, sus sueldos y sus descuentos fijos."
+        detalle="Cuéntanos cómo pagas hoy y te dejamos cargados los empleados, sus sueldos y sus cuentas de banco."
         nota={{
           titulo: 'Lo que hace falta de tu lado',
           detalle: 'La lista de tu personal con sus sueldos, y quién va a correr la nómina cada quincena.',
@@ -169,14 +172,15 @@ export default function NominaPage() {
 
       <DatosDeProducto
         nombre="Zero Nómina"
-        descripcion="Nómina dominicana con AFP, SFS, ISR e INFOTEP calculados por la ley, archivo de la TSS, volantes de pago, provisiones de regalía y vacaciones, y asiento contable automático."
+        descripcion="Nómina dominicana con AFP, SFS, ISR e INFOTEP calculados por la ley, archivo de la TSS, archivo de pago para el banco, volantes de pago, provisiones de regalía y vacaciones, y asiento contable automático."
         ruta="/productos/nomina"
         precioDesde={PRECIO_NOMINA}
         funciones={[
           'Cálculo de AFP, SFS, ISR e INFOTEP con los topes del año',
           'Archivo de la TSS listo para subir',
+          'Archivo de pago para el banco, en varios formatos',
           'Volante de pago en PDF por empleado',
-          'Horas extra, bonos y descuentos por regla',
+          'Horas extra por regla',
           'Provisiones de regalía y vacaciones',
           'Asiento contable al cerrar la corrida',
           'Expediente y contratos del personal',

@@ -42,6 +42,8 @@ const COLUMNAS = [
       { texto: 'Zero CRM', href: '/productos/crm' },
       { texto: 'Colegios', href: '/colegios' },
       { texto: 'Guías', href: '/guias' },
+      { texto: 'Todas las funciones', href: '/funciones' },
+      { texto: 'Para agentes de IA', href: '/agentes' },
     ],
   },
 ] as const;

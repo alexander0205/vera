@@ -18,6 +18,7 @@ import Script from 'next/script';
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { GA_ID, GA_ID_INVALIDO, caminoMedible, rutaMedible } from '@/lib/config/analytics';
+import { MedirClics } from './medir-clics';
 
 type Ventana = Window & {
   dataLayer?: unknown[];
@@ -50,19 +51,27 @@ export function GoogleAnalytics() {
       };
     }
 
+    const ruta = rutaMedible(camino, window.location.search);
+    const ubicacion = `${window.location.origin}${ruta}`;
+
     if (!configurada) {
       configurada = true;
       w.gtag('js', new Date());
-      // `send_page_view: false` porque la vista la mandamos nosotros: con la
-      // navegación del App Router la página no se recarga, así que la cuenta
-      // automática se quedaría en la primera pantalla de toda la sesión.
-      w.gtag('config', GA_ID, { send_page_view: false });
     }
+    // `send_page_view: false` porque la vista la mandamos nosotros: con la
+    // navegación del App Router la página no se recarga, así que la cuenta
+    // automática se quedaría en la primera pantalla de toda la sesión.
+    //
+    // Y `page_location` limpia en CADA página, no solo en la vista: los
+    // eventos automáticos de GA (desplazamiento, clics de salida, formularios,
+    // tiempo en la página) usan la URL de la configuración, y sin esto se
+    // llevaban la dirección completa —con el `?token=` de recuperar la
+    // contraseña incluido—.
+    w.gtag('config', GA_ID, { send_page_view: false, page_location: ubicacion, page_path: ruta });
 
-    const ruta = rutaMedible(camino, window.location.search);
     w.gtag('event', 'page_view', {
       page_path: ruta,
-      page_location: `${window.location.origin}${ruta}`,
+      page_location: ubicacion,
       page_title: document.title,
     });
   }, [camino]);
@@ -78,9 +87,12 @@ export function GoogleAnalytics() {
   if (!GA_ID) return null;
 
   return (
-    <Script
-      src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
-      strategy="afterInteractive"
-    />
+    <>
+      <Script
+        src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+        strategy="afterInteractive"
+      />
+      <MedirClics />
+    </>
   );
 }

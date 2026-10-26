@@ -119,6 +119,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           encf: c.facturaEncf,
           codigo: c.facturaCodigo,
           facturaEstado: c.facturaEstado,
+          moraCentavos: c.moraCentavos,
+          moraSaldoCentavos: c.moraSaldoCentavos,
+          moraNotaId: c.moraNotaId,
+          moraNotaCount: c.moraNotaCount,
         })),
         ...previstos.map((p) => ({
           key: `p${m.id}-${p.key}`,
@@ -138,6 +142,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           encf: null,
           codigo: null,
           facturaEstado: null,
+          moraCentavos: 0,
+          moraSaldoCentavos: 0,
+          moraNotaId: null,
+          moraNotaCount: 0,
         })),
       ].sort((a, b) => (a.anio - b.anio) || ((a.mes ?? 0) - (b.mes ?? 0)) || a.concepto.localeCompare(b.concepto));
 

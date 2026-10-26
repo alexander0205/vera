@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarServicios, adminEscolarGrados, adminEscolarCursos, adminEscolarPeriodos,
@@ -38,7 +38,9 @@ export async function GET(req: NextRequest) {
   // escritura de estructura o tarifas lo invalida.
   const datos = await cachearPorTag(
     () => leer(t, pedidoUrl),
-    ['escolar', 'concepto-precios', String(t), String(pedidoUrl)],
+    // `v2`: la respuesta trae ahora el precio por cuota y las cuotas de cada
+    // concepto; con la clave de antes se serviría la forma vieja hasta caducar.
+    ['escolar', 'concepto-precios', 'v3', String(t), String(pedidoUrl)],
     [tagEstructura(t)],
   )();
   return NextResponse.json(datos);
@@ -74,7 +76,17 @@ async function leer(t: number, pedido: number) {
     // Por `orden` y no por nombre: es el que el colegio arregló a mano en la
     // pestaña Conceptos, y verlos en otro sitio en otro orden obliga a buscar
     // dos veces el mismo concepto.
-    db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre, tipo: adminEscolarConceptosPago.tipo, frecuencia: adminEscolarConceptosPago.frecuencia, orden: adminEscolarConceptosPago.orden })
+    db.select({
+        id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre,
+        tipo: adminEscolarConceptosPago.tipo, frecuencia: adminEscolarConceptosPago.frecuencia,
+        orden: adminEscolarConceptosPago.orden, precioPorCuota: adminEscolarConceptosPago.precioPorCuota,
+        // Cuántas cuotas tiene su calendario este año: con eso Tarifas ofrece
+        // «10 de 11 cuotas» para el grado que no paga la undécima.
+        // Con el nombre de la tabla escrito: dentro de la subconsulta, un «id»
+        // suelto sería el de la cuota y el conteo daría 0.
+        cuotasCalendario: sql<number>`(select count(*)::int from admin_escolar_concepto_cuotas q
+          where q.concepto_id = admin_escolar_conceptos_pago.id and q.periodo_id = ${periodo.id} and q.activo)`,
+      })
       .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t))
       .orderBy(asc(adminEscolarConceptosPago.orden), asc(adminEscolarConceptosPago.nombre)),
     db.select().from(adminEscolarConceptoPrecios)
@@ -141,16 +153,22 @@ export async function POST(req: NextRequest) {
   // del servicio recién creado, o el del servicio existente que se eligió.
   let montoCentavos = monto != null ? Math.round(Number(monto) * 100) : null;
   let prodId: number | null = null;
+  // El servicio recién creado, para devolvérselo a la pantalla: así la fila
+  // «Se factura como …» y la referencia aparecen al instante y el servicio se
+  // puede reusar en otros grados sin recargar (lo que Alex pedía arreglar).
+  let productoCreado: { id: number; nombre: string; referencia: string | null; precio: number } | null = null;
 
   if (nuevoProducto?.nombre?.trim()) {
     const precioNuevo = Math.round(Number(nuevoProducto.precio) * 100);
     if (!Number.isFinite(precioNuevo) || precioNuevo < 0) {
       return NextResponse.json({ error: 'Precio inválido' }, { status: 400 });
     }
+    const nombreLimpio = String(nuevoProducto.nombre).trim();
+    const refLimpia = nuevoProducto.referencia ? String(nuevoProducto.referencia).trim().slice(0, 100) : null;
     const [creado] = await db.insert(products).values({
       teamId: t,
-      nombre: String(nuevoProducto.nombre).trim(),
-      referencia: nuevoProducto.referencia ? String(nuevoProducto.referencia).trim().slice(0, 100) : null,
+      nombre: nombreLimpio,
+      referencia: refLimpia,
       precio: precioNuevo,
       // La enseñanza es servicio exento de itbis; el POS no la vende en mostrador.
       tasaItbis: 'exento',
@@ -160,6 +178,7 @@ export async function POST(req: NextRequest) {
     }).returning({ id: products.id, precio: products.precio });
     prodId = creado.id;
     montoCentavos ??= creado.precio;
+    productoCreado = { id: creado.id, nombre: nombreLimpio, referencia: refLimpia, precio: creado.precio };
   } else if (productId != null) {
     const [p] = await db.select({ id: products.id, precio: products.precio }).from(products)
       .where(and(eq(products.id, Number(productId)), eq(products.teamId, t))).limit(1);
@@ -241,7 +260,32 @@ export async function POST(req: NextRequest) {
     console.error('[concepto-precios] devengo al alta de tarifa falló:', e);
   }
 
-  return NextResponse.json({ precio: row, cargosCreados });
+  return NextResponse.json({ precio: row, cargosCreados, producto: productoCreado });
+}
+
+/**
+ * PATCH { id, cuotas } — cuántas cuotas del calendario cobra esta tarifa (las
+ * primeras N; null = todas). Maternal e Infantes pagan 11 meses y los demás
+ * grados 10 con el mismo concepto. Lo ya cobrado no se toca: cuenta para lo que
+ * se genere desde ahora.
+ */
+export async function PATCH(req: NextRequest) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar', { escritura: true });
+  if (!auth.ok) return auth.response;
+  const body = await req.json().catch(() => null);
+  const id = Number(body?.id);
+  const cuotas = body?.cuotas == null ? null : Number(body.cuotas);
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: 'Falta id' }, { status: 400 });
+  if (cuotas !== null && (!Number.isInteger(cuotas) || cuotas < 1 || cuotas > 60)) {
+    return NextResponse.json({ error: 'Número de cuotas inválido' }, { status: 400 });
+  }
+  const [row] = await db.update(adminEscolarConceptoPrecios)
+    .set({ cuotas, updatedAt: new Date() })
+    .where(and(eq(adminEscolarConceptoPrecios.id, id), eq(adminEscolarConceptoPrecios.teamId, auth.teamId)))
+    .returning({ id: adminEscolarConceptoPrecios.id, cuotas: adminEscolarConceptoPrecios.cuotas });
+  if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(auth.teamId);
+  return NextResponse.json({ precio: row });
 }
 
 /**

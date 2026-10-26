@@ -197,6 +197,8 @@ export function MatriculaFormulario({
    * no trae «conceptosIds» y sin ellos no se sabe qué se le está cobrando.
    */
   const [conceptosMatricula, setConceptosMatricula] = useState<number[]>([]);
+  /** La generación (colegiatura) de la matrícula: su precio se cambia como en «Configuración mensual». */
+  const [generacionId, setGeneracionId] = useState<number | null>(null);
   /**
    * Cómo va la petición de la lista de arriba. Una lista vacía porque todavía
    * no ha vuelto, o porque falló, no es lo mismo que una matrícula sin cobros
@@ -355,6 +357,7 @@ export function MatriculaFormulario({
       if (!vigente) return;
       const tenia = ((m.matricula?.conceptosIds ?? []) as unknown[]).map(Number);
       setConceptosMatricula(tenia);
+      setGeneracionId(m.matricula?.conceptoMensualidadId != null ? Number(m.matricula.conceptoMensualidadId) : null);
       setConceptosCatalogo(c?.conceptos ?? []);
       setConceptosCarga(m.matricula != null && c != null ? 'lista' : 'fallo');
     });
@@ -674,6 +677,7 @@ export function MatriculaFormulario({
               cargosIncompletos={cargosIncompletos}
               editable={puedeGestionar}
               onAutomaticos={setConceptosMatricula}
+              generacionId={generacionId}
               recargarCargos={recargarCargos}
               onCambio={() => {
                 // Ya está guardado, se pulse «Guardar cambios» o no.

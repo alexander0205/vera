@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
+import { pantallaOcultaPara } from '@/lib/auth/pantallas-proxy';
 import {
   moduleForHost, esHostApp, esRutaDeCuenta, MODULE_HOME,
 } from '@/lib/config/modules';
@@ -102,6 +103,26 @@ export async function proxy(request: NextRequest) {
     destino.host = appHost;
     destino.protocol = 'https:';
     return NextResponse.redirect(destino);
+  }
+
+  // ── Pantallas que el dueño le quitó al rol ───────────────────────────────
+  //
+  // Ocultar una pantalla impide abrirla: en vez de la pantalla se sirve el
+  // aviso de su módulo (`<módulo>/pantalla-oculta`), así la página pedida no se
+  // ejecuta y sus datos no salen del servidor. Va aquí porque el proxy corre en
+  // cada carga y en cada navegación interna (RSC), antes que cualquier página,
+  // y sobre la ruta que de verdad se va a servir (`rutaServida`, que ya resolvió
+  // la portada de los subdominios). Solo consulta la base para rutas del
+  // catálogo, y con memoria de unos segundos: ver lib/auth/pantallas-proxy.ts.
+  if (sesion?.user?.id && isProtectedRoute && (request.method === 'GET' || request.method === 'HEAD')) {
+    const oculta = await pantallaOcultaPara(sesion.user.id, sesion.activeTeamId, rutaServida);
+    if (oculta) {
+      const destino = new URL(`/${rutaServida.split('/')[1]}/pantalla-oculta`, request.url);
+      destino.searchParams.set('pantalla', oculta.id);
+      const cabeceras = new Headers(request.headers);
+      cabeceras.set('x-pathname', pathname);
+      return NextResponse.rewrite(destino, { request: { headers: cabeceras } });
+    }
   }
 
   // ── NO se fuerza el salto de ruta de módulo a su subdominio ──────────────

@@ -14,11 +14,13 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { CuentasPorCobrarPanel } from '@/components/administracion-escolar/CuentasPorCobrarPanel';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ChipEstado } from './ChipEstado';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -28,6 +30,9 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ArrowUpDown, ExternalLink, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, Repeat, ChevronLeft, ChevronRight, Ban, Printer, Mail, Info, MessageCircle, Smartphone } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
+import { estadoMes } from '@/lib/administracion-escolar/estado-mes-ficha';
+import { nombreMes } from '@/lib/administracion-escolar/sincronizar-mensualidad';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { previstosDelPlan } from '@/lib/administracion-escolar/previstos';
@@ -93,6 +98,7 @@ export interface Cargo {
   conceptoTipo: string | null;
   /** Cuota del calendario de la que salió, si vino del devengo. */
   cuotaId: number | null;
+  cuotaEtiqueta?: string;
   matriculaId: number;
   periodoId: number;
   mes: number | null;
@@ -108,6 +114,12 @@ export interface Cargo {
   facturaEstadoPago: string | null;
   /** Estado ante la DGII (BORRADOR, EN_PROCESO, ACEPTADO…), no el de cobro. */
   facturaEstado: string | null;
+  /** Mora (notas de débito) de la factura de este cargo. 0 sin factura o sin mora. */
+  moraCentavos: number;
+  moraSaldoCentavos: number;
+  /** Enlace a la mora: a la nota si es una sola, a la factura padre si hay varias. */
+  moraNotaId: number | null;
+  moraNotaCount: number;
 }
 export interface Pago {
   id: number;
@@ -165,6 +177,7 @@ interface Previsto {
   cuotaId: number;
   conceptoId: number;
   concepto: string;
+  etiqueta: string;
   tipo: string;
   /** null en un concepto que se cobra de una vez y no cae en ningún mes. */
   mes: number | null;
@@ -229,6 +242,8 @@ export interface FacturaSuelta {
   montoTotal: number;
   /** Lo abonado, sumado de sus pagos: un abono parcial también cuenta. */
   pagadoCentavos: number;
+  /** Lo que se debe de ella, con la regla de Cuentas por cobrar. */
+  saldoCentavos: number;
   estado: string;
   estadoPago: string;
   /** Lo que la factura le cobra a ESTE alumno, línea por línea. */
@@ -237,7 +252,7 @@ export interface FacturaSuelta {
 
 // Lanza en 404/500 para que SWR lo trate como error y no cachee un cuerpo vacío
 // como si fuera la ficha.
-const VISTAS = ['mensualidades', 'otros', 'facturas', 'pagos'] as const;
+const VISTAS = ['mensualidades', 'cuentas', 'notas', 'otros', 'facturas', 'pagos'] as const;
 
 // ─── Página ────────────────────────────────────────────────────────────────
 
@@ -401,6 +416,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
    * se quedaba sin previstos hasta que volviera.
    */
   const plan = (matriculaId && planes?.[matriculaId]?.lineas) || [];
+  const etiquetasCuota = new Map(plan.flatMap((linea) =>
+    linea.cuotas.map((cuota) => [cuota.cuotaId, cuota.etiqueta] as const)));
   const planDevenga = !!(matriculaId && planes?.[matriculaId]?.devenga);
 
   /**
@@ -677,9 +694,13 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
 
       <div>
         <div className="flex gap-6 border-b border-gray-200 overflow-x-auto">
+          {/* «Otros cargos» va pegado a «Mensualidades»: entre los dos está
+              todo lo que se le cobra al alumno, y se miran juntos. */}
           {[
             ['mensualidades', 'Mensualidades'],
             ['otros', 'Otros cargos'],
+            ['cuentas', 'Cuentas por cobrar'],
+            ['notas', 'Notas de débito'],
             ['facturas', 'Facturas'],
             ['pagos', 'Pagos'],
           ].map(([value, label]) => (
@@ -716,8 +737,10 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                 reenviandoCargoId={reenviandoCargoId}
                 diaFacturaAuto={grupo.diaFacturaAuto}
                 tutorClientId={tutorClientId}
-                cargos={mensualidades}
-                previstos={previstosMensualidad}
+                cargos={cargosPeriodo.filter((c) => c.mes != null).map((c) => ({
+                  ...c, cuotaEtiqueta: c.cuotaId != null ? etiquetasCuota.get(c.cuotaId) : undefined,
+                }))}
+                previstos={previstos.filter((p) => p.mes != null)}
                 enviadosPorCargo={enviadosPorCargo}
                 pagos={pagos}
                 mesesAcademicos={mesesAcademicos}
@@ -742,6 +765,43 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
               />
           </>
         )}
+
+            {/* Cuentas por cobrar — la cartera de Facturación del responsable,
+                al lado de «Mensualidades» (lo pidió Alex). Es la deuda
+                documentada (facturas e-CF con saldo) y la mora en su sección
+                aparte; va a nombre del RESPONSABLE, no filtrada por período:
+                una factura al padre no es deuda individual de cada hijo. */}
+            {vista === 'cuentas' && (
+              tutorClientId != null
+                ? (
+                  <div className="pt-1">
+                    <CuentasPorCobrarPanel
+                      clientId={tutorClientId}
+                      puedePagos={puedePagos}
+                      onCambio={onCargoCreado}
+                      seccion="cuentas"
+                    />
+                  </div>
+                )
+                : <EmptyBox text="Falta asignar el responsable de pago: sin él no hay a quién facturarle ni cuentas que cobrar." />
+            )}
+
+            {/* Notas de débito — la mora del responsable, en su sección propia
+                al lado de «Cuentas por cobrar» (Alex la quiere separada). */}
+            {vista === 'notas' && (
+              tutorClientId != null
+                ? (
+                  <div className="pt-1">
+                    <CuentasPorCobrarPanel
+                      clientId={tutorClientId}
+                      puedePagos={puedePagos}
+                      onCambio={onCargoCreado}
+                      seccion="notas"
+                    />
+                  </div>
+                )
+                : <EmptyBox text="Falta asignar el responsable de pago: sin él no hay notas de débito que cobrar." />
+            )}
 
             {/* Agregar un cargo suelto desde la misma pestaña donde se ven:
                 antes aquí solo se podía mirar. */}
@@ -809,7 +869,8 @@ export function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSue
                         {f.encf || f.codigo || `Factura #${f.id}`}
                       </Link>,
                       fmtDOP(f.montoTotal),
-                      f.montoTotal - f.pagadoCentavos <= 0 ? 'PAGADO'
+                      f.estado === 'ANULADO' ? 'ANULADA'
+                        : f.saldoCentavos <= 0 ? 'PAGADO'
                         : f.pagadoCentavos > 0 ? 'PARCIAL' : 'PENDIENTE',
                     ]),
                   ]} />
@@ -1283,11 +1344,20 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
       .filter((p) => p.mes === mes && p.anio === anio)
       .sort((a, b) => a.fechaEmision.localeCompare(b.fechaEmision));
     const total = cargosMes.reduce((s, c) => s + c.montoCentavos, 0);
-    const saldo = cargosMes
+    const facturadosMes = cargosMes.filter((c) => c.ecfDocumentId != null);
+    const saldo = facturadosMes
       .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
       .reduce((s, c) => s + c.saldoCentavos, 0);
-    const pagado = Math.max(0, total - saldo);
+    const pagado = Math.max(0, facturadosMes.reduce((s, c) => s + c.montoCentavos, 0) - saldo);
+    // Pagado y Pendiente salen de la factura, pero un cargo vivo sin factura
+    // también se debe. Sin esto, con la colegiatura pagada y la evaluación del
+    // mes sin facturar, la fila decía «Pendiente RD$0» en verde.
+    const sinFacturar = cargosMes
+      .filter((c) => c.ecfDocumentId == null && ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+      .reduce((s, c) => s + c.saldoCentavos, 0);
     const totalPrevisto = previstosMes.reduce((s, p) => s + p.montoCentavos, 0);
+    const moraCentavos = cargosMes.reduce((s, c) => s + (c.moraCentavos ?? 0), 0);
+    const moraSaldoCentavos = cargosMes.reduce((s, c) => s + (c.moraSaldoCentavos ?? 0), 0);
     const factura = cargosMes.find((c) => c.ecfDocumentId != null) ?? null;
     // Historial de pagos del mes: los abonos hechos a las facturas de sus cargos.
     // Una factura, varios pagos (abonos parciales) → subfilas al desplegar.
@@ -1298,7 +1368,7 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
     const estado: EstadoMes = cargosMes.length === 0 && previstosMes.length > 0
       ? 'previsto'
       : estadoMes(cargosMes);
-    return { mes, anio, cargosMes, previstosMes, total, saldo, pagado, totalPrevisto, factura, pagosMes, estado };
+    return { mes, anio, cargosMes, previstosMes, total, saldo, pagado, totalPrevisto, sinFacturar, moraCentavos, moraSaldoCentavos, factura, pagosMes, estado };
   });
 
   if (mesesAcademicos.length === 0) {
@@ -1374,6 +1444,7 @@ function MensualidadesTabla({ onMontoCambiado, diaFacturaAuto, tutorClientId, ca
                 <th className="px-3 py-2.5 font-medium text-right">Monto</th>
                 <th className="px-3 py-2.5 font-medium text-right">Pagado</th>
                 <th className="px-3 py-2.5 font-medium text-right">Pendiente</th>
+                <th className="px-3 py-2.5 font-medium text-right">Mora</th>
                 {/* Pegada a la derecha: la tabla es más ancha que la pantalla
                     en un portátil y los tres puntos quedaban fuera de la vista. */}
                 <th className="sticky right-0 bg-gray-50 px-3 py-2.5 font-medium text-right">Acción</th>
@@ -1550,6 +1621,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
             <th className="px-3 py-2 font-medium text-right">Monto</th>
             <th className="px-3 py-2 font-medium text-right">Pagado</th>
             <th className="px-3 py-2 font-medium text-right">Pendiente</th>
+            <th className="px-3 py-2 font-medium text-right">Mora</th>
             <th className="px-3 py-2 font-medium text-right">Acción</th>
           </tr>
         </thead>
@@ -1561,7 +1633,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
               reales y los conceptos dicen por qué se le cobró. */}
           {facturasSueltas.flatMap((f) => {
             const anulada = f.estado === 'ANULADO';
-            const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
+            const saldo = f.saldoCentavos;
             const filas = [(
               <tr key={`fs-${f.id}`} className="border-t border-gray-100 hover:bg-gray-50/60">
                 {/* La columna de las casillas. Vacía aquí: no es un cargo
@@ -1594,6 +1666,9 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                     {fmtDOP(saldo)}
                   </span>
                 </td>
+                {/* Una factura suelta no es un cargo escolar: su mora, si la
+                    tiene, se ve en Facturación, no en esta columna. */}
+                <td className="px-3 py-2.5 text-right text-gray-300">—</td>
                 {/* Las mismas acciones que cualquier otra fila. Antes solo
                     tenía el sobre: desde aquí no se podía ni ver la factura ni
                     su PDF, y esta es la única tabla donde aparecen las facturas
@@ -1649,6 +1724,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2" />
+                  <td className="px-3 py-2" />
                 </tr>,
               );
             }
@@ -1672,6 +1748,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                 )}
                 <td className={`px-3 py-2.5 font-medium ${anulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {c.concepto ?? 'Sin concepto'}
+                  {c.mes && <span className="block text-xs font-normal text-gray-500">{MESES[c.mes]} {c.anio}</span>}
                 </td>
                 <td className="px-3 py-2.5">
                   <AvisoSemaforo canales={enviadosPorCargo?.get(c.id)} />
@@ -1700,6 +1777,15 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
                     <span className={clsSaldo(c.saldoCentavos, true)}>
                       {fmtDOP(c.saldoCentavos)}
                     </span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {anulado ? <span className="text-gray-300">—</span> : (
+                    <MoraCelda
+                      moraCentavos={c.moraCentavos} moraSaldoCentavos={c.moraSaldoCentavos}
+                      moraNotaId={c.moraNotaId} moraNotaCount={c.moraNotaCount}
+                      facturaId={c.ecfDocumentId}
+                    />
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-right">
@@ -1736,7 +1822,10 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
             <tr key={`p-${p.key}`} className="border-t border-dashed border-gray-200 bg-gray-50/30 hover:bg-gray-50/60">
               {/* Un previsto todavía no es deuda: no hay cargo que marcar. */}
               {puedeFacturar && <td className="px-3 py-2.5" />}
-              <td className="px-3 py-2.5 text-gray-500">{p.concepto}</td>
+              <td className="px-3 py-2.5 text-gray-500">
+                {p.concepto}
+                {p.mes && <span className="block text-xs">{MESES[p.mes]} {p.anio}</span>}
+              </td>
               {/* Faltaba: la fila tenía siete celdas contra las ocho de la
                   cabecera, así que el vencimiento caía bajo «Avisos» y todo lo
                   demás iba corrido una columna hasta el final. */}
@@ -1748,6 +1837,7 @@ function OtrosCargosTabla({ onMontoCambiado, cargos, previstos, facturasSueltas 
               </td>
               <td className="px-3 py-2.5"><EstadoMesBadge estado="previsto" /></td>
               <td className="px-3 py-2.5 text-right text-gray-500">{fmtDOP(p.montoCentavos)}</td>
+              <td className="px-3 py-2.5 text-right text-gray-300">—</td>
               <td className="px-3 py-2.5 text-right text-gray-300">—</td>
               <td className="px-3 py-2.5 text-right text-gray-300">—</td>
               <td className="px-3 py-2.5 text-right">
@@ -1811,6 +1901,7 @@ const MINIMOS_CUENTAS = [
   140, // Monto: la cifra y, a su lado, el lápiz para corregirla
   116, // Pagado
   116, // Pendiente
+  104, // Mora: la nota de débito de la factura, enlazada
   76,  // Acción
 ];
 const ANCHO_MINIMO_CUENTAS = MINIMOS_CUENTAS.reduce((s, w) => s + w, 0);
@@ -1853,6 +1944,10 @@ type EstadoMes = ReturnType<typeof estadoMes> | 'previsto';
 type MesRow = {
   mes: number; anio: number; cargosMes: Cargo[]; previstosMes: Previsto[];
   total: number; saldo: number; pagado: number; totalPrevisto: number;
+  /** Lo que se debe del mes y todavía no tiene factura (p. ej. una evaluación). */
+  sinFacturar: number;
+  /** Mora de las facturas del mes: lo recargado y lo que de eso sigue impago. */
+  moraCentavos: number; moraSaldoCentavos: number;
   factura: Cargo | null; pagosMes: Pago[];
   estado: EstadoMes;
 };
@@ -1919,12 +2014,17 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
    * mensualidad, uniforme y material son tres cargos, y marcarlos uno por uno
    * al desplegar es justo lo que el diálogo de antes ya obligaba a hacer.
    */
-  const facturablesDelMes = r.cargosMes.filter(cargoMarcable).map((c) => c.id);
+  // La evaluación lleva factura aparte de la colegiatura: la casilla del mes
+  // solo selecciona mensualidades; cada otro cargo tiene su propia acción.
+  const facturablesDelMes = r.cargosMes.filter((c) => c.conceptoTipo === 'mensualidad' && cargoMarcable(c)).map((c) => c.id);
   const mesMarcado = facturablesDelMes.length > 0 && facturablesDelMes.every((id) => marcados.has(id));
 
   const cuantos = r.cargosMes.length + r.previstosMes.length;
   // Un solo concepto: la fila del mes ES el concepto, abierta o cerrada.
-  const unico = cuantos === 1;
+  // Una evaluación solitaria también se abre: dentro se ve P1/P2/P3, su
+  // estado y los pagos. La colegiatura sola conserva la fila compacta.
+  const unico = cuantos === 1
+    && (r.cargosMes[0]?.conceptoTipo ?? r.previstosMes[0]?.tipo) === 'mensualidad';
   const cargoUnico = unico ? r.cargosMes[0] ?? null : null;
   const previstoUnico = unico ? r.previstosMes[0] ?? null : null;
   const soloPrevistos = r.cargosMes.length === 0;
@@ -1950,7 +2050,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
   const sinFacturaAun = !r.factura;
   // Solo se despliega lo que tiene algo que enseñar debajo. Un mes de un solo
   // concepto sin pagos no esconde nada, así que ni flecha ni click.
-  const desplegable = cuantos > 1 || r.pagosMes.length > 0;
+  const desplegable = (cuantos > 0 && !unico) || r.pagosMes.length > 0;
   const desplegado = abierto && desplegable;
 
   // El cargo sobre el que actúa el menú del mes: el primero que aún debe algo,
@@ -1962,7 +2062,13 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
     ...r.previstosMes.map((p) => p.fechaVencimiento),
   ].filter((f): f is string => !!f).sort()[0] ?? null;
 
-  const montoMes = r.total > 0 ? r.total : r.totalPrevisto;
+  const montoMes = r.total + r.totalPrevisto;
+
+  // Para enlazar la mora del mes: si un solo cargo la trae, se abre su nota (o
+  // su factura si tiene varias); si son varios los que la traen, se manda a la
+  // factura del mes, que es donde se ven todas juntas.
+  const cargosConMora = r.cargosMes.filter((c) => (c.moraCentavos ?? 0) > 0);
+  const moraUnica = cargosConMora.length === 1 ? cargosConMora[0] : null;
 
   return (
     <>
@@ -1994,7 +2100,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           )}
           {/* Que no haya factura todavía no significa que haya que hacerla a
               mano: si la matrícula tiene mensualidad configurada, sale sola. */}
-          {diaFacturaAuto && soloPrevistos && (
+          {diaFacturaAuto && soloPrevistos && r.previstosMes.some((p) => p.tipo === 'mensualidad') && (
             <span className="ml-9 mt-0.5 flex items-center gap-1 text-xs text-zero-700">
               <Repeat className="h-3 w-3" />
               Se factura sola el {diaFacturaAuto}/{String(r.mes).padStart(2, '0')}
@@ -2008,9 +2114,11 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           ) : unico ? (
             <span className={cargoUnico?.estado === 'anulado' ? 'text-gray-400 line-through' : 'text-gray-800'}>
               {cargoUnico?.concepto ?? previstoUnico?.concepto ?? 'Sin concepto'}
+              {(cargoUnico?.cuotaEtiqueta ?? previstoUnico?.etiqueta) &&
+                <span className="block text-xs text-gray-500">{cargoUnico?.cuotaEtiqueta ?? previstoUnico?.etiqueta}</span>}
             </span>
           ) : (
-            <span className="text-gray-500">Total del período</span>
+            <span className="text-gray-500">Total del mes</span>
           )}
         </td>
 
@@ -2048,9 +2156,25 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           {soloPrevistos || sinFacturaAun ? (
             <span className="text-gray-300">—</span>
           ) : (
-            <span className={clsSaldo(r.saldo, !!r.factura)}>
+            <span className={r.saldo <= 0 && r.sinFacturar > 0 ? 'font-medium text-gray-700' : clsSaldo(r.saldo, !!r.factura)}>
               {fmtDOP(r.saldo)}
             </span>
+          )}
+          {/* Solo cuando el mes YA tiene factura: un mes entero sin facturar
+              sigue en «—» como antes, y su estado ya lo dice la columna de la
+              factura. Lo que se tapaba era lo de AL LADO de una factura. */}
+          {!soloPrevistos && !sinFacturaAun && r.sinFacturar > 0 && (
+            <span className="block text-xs text-amber-700">+ {fmtDOP(r.sinFacturar)} sin facturar</span>
+          )}
+        </td>
+        <td className="px-3 py-3 align-top text-right">
+          {soloPrevistos ? <span className="text-gray-300">—</span> : (
+            <MoraCelda
+              moraCentavos={r.moraCentavos} moraSaldoCentavos={r.moraSaldoCentavos}
+              moraNotaId={moraUnica?.moraNotaId ?? null}
+              moraNotaCount={moraUnica ? moraUnica.moraNotaCount : cargosConMora.length}
+              facturaId={(moraUnica ?? r.factura)?.ecfDocumentId ?? null}
+            />
           )}
         </td>
         <td className="sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,17,24,0.18)] px-3 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
@@ -2077,7 +2201,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
               puedePagos={puedePagos}
               puedeFacturar={puedeFacturar}
               puedeGestionar={puedeGestionar}
-              mesTieneFactura={!!r.factura}
+              mesTieneFactura={accion.conceptoTipo === 'mensualidad' && r.cargosMes.some((c) => c.conceptoTipo === 'mensualidad' && c.ecfDocumentId != null)}
               onRegistrarPago={onRegistrarPago}
               onAplicarMora={onAplicarMora}
               onCrearFactura={onCrearFactura}
@@ -2121,6 +2245,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
               <span className={anulado ? 'text-gray-400 line-through' : 'text-gray-800'}>
                 {c.concepto ?? 'Sin concepto'}
               </span>
+              {c.cuotaEtiqueta && <span className="block text-xs text-gray-500">{c.cuotaEtiqueta}</span>}
             </td>
             <td className="px-3 py-3">
               <AvisoSemaforo canales={enviadosPorCargo?.get(c.id)} />
@@ -2146,6 +2271,15 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
                 </span>
               )}
             </td>
+            <td className="px-3 py-3 text-right">
+              {anulado ? <span className="text-gray-300">—</span> : (
+                <MoraCelda
+                  moraCentavos={c.moraCentavos} moraSaldoCentavos={c.moraSaldoCentavos}
+                  moraNotaId={c.moraNotaId} moraNotaCount={c.moraNotaCount}
+                  facturaId={c.ecfDocumentId}
+                />
+              )}
+            </td>
             <td className="sticky right-0 bg-white shadow-[-8px_0_8px_-8px_rgba(15,17,24,0.18)] px-3 py-3 text-right">
               <span className="inline-flex items-center justify-end gap-2">
                 {/* Enlace de pago de la factura, visible: se copia y se manda al
@@ -2158,7 +2292,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
                   puedePagos={puedePagos}
                   puedeFacturar={puedeFacturar}
                   puedeGestionar={puedeGestionar}
-                  mesTieneFactura={!!r.factura}
+                  mesTieneFactura={c.conceptoTipo === 'mensualidad' && r.cargosMes.some((otro) => otro.conceptoTipo === 'mensualidad' && otro.ecfDocumentId != null)}
                   onRegistrarPago={onRegistrarPago}
                   onAplicarMora={onAplicarMora}
                   onCrearFactura={onCrearFactura}
@@ -2182,6 +2316,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           <td className="px-3 py-3" />
           <td className="px-3 py-3">
             <span className="text-gray-800">{p.concepto}</span>
+            <span className="block text-xs text-gray-500">{p.etiqueta}</span>
             <span className="block text-xs text-gray-400">Se emite el {fmtFechaCorta(p.fechaEmision)}</span>
           </td>
           {/* Un previsto todavía no es deuda: los tres van apagados, y el
@@ -2194,6 +2329,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           </td>
           <td className="px-3 py-3"><EstadoMesBadge estado="previsto" /></td>
           <td className="px-3 py-3 text-right text-gray-800">{fmtDOP(p.montoCentavos)}</td>
+          <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right text-gray-300">—</td>
           <td className="px-3 py-3 text-right">
@@ -2218,7 +2354,7 @@ function MesFila({ r, onMontoCambiado, diaFacturaAuto, tutorClientId, abierto, o
           <td className="px-3 py-2.5" />
           <td className="px-3 py-2.5 whitespace-nowrap text-gray-700">{fmtFechaCorta(p.fechaPago)}</td>
           <td className="px-3 py-2.5 truncate text-gray-500" colSpan={2}>{p.referencia ?? '—'}</td>
-          <td className="px-3 py-2.5 text-right font-medium text-gray-900" colSpan={2}>{fmtDOP(p.montoCentavos)}</td>
+          <td className="px-3 py-2.5 text-right font-medium text-gray-900" colSpan={3}>{fmtDOP(p.montoCentavos)}</td>
           <td className="px-3 py-2.5" />
         </tr>
       ))}
@@ -2303,6 +2439,17 @@ function PrevistoActionsMenu({ previsto, onPrevisto, onDetalle, tutorClientId }:
  * lo que la facturación y la vista financiera ya resuelven por encima de la
  * tarifa del grado. El motivo deja escrito el porqué (histórico, hermano…).
  */
+/** Lo que devuelve `generar-mensualidades` de un mes que se quedó como estaba. */
+interface MesBloqueadoUI {
+  mes: number;
+  anio: number;
+  motivo: 'facturado' | 'con-pagos';
+  ecfDocumentId: number | null;
+  facturaCodigo: string | null;
+  facturaAnulable: boolean;
+  noAnulablePor: 'con-pagos' | 'enviada-dgii' | null;
+}
+
 function TarifaEstudianteDialog({
   open, onOpenChange, matriculaId, estudianteId, periodoId, becaTipo, becaValor, becaMotivo, conceptoMensualidadId, onGuardado,
 }: {
@@ -2329,6 +2476,52 @@ function TarifaEstudianteDialog({
   const [generacionSel, setGeneracionSel] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Los meses que siguen con la mensualidad de antes porque ya tenían factura
+   * (o cobros). Tras guardar, el diálogo no se cierra: los enseña y, si la
+   * factura no tiene pagos, ofrece anularla para pasar ese mes al precio nuevo
+   * (revisión del PR #126, caso Keiry). `anterior` es la generación de antes
+   * del guardado: el refresco ya trae la nueva.
+   */
+  const [bloqueados, setBloqueados] = useState<{ anterior: number | null; meses: MesBloqueadoUI[] } | null>(null);
+  const [anulandoFactura, setAnulandoFactura] = useState<number | null>(null);
+  const { can } = usePermissions();
+
+  async function sincronizar(anterior: number | null) {
+    const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conceptoAnteriorId: anterior }),
+    });
+    const gj = await g.json().catch(() => ({}));
+    if (!g.ok) throw new Error(gj.error ?? 'No se pudieron poner al día las mensualidades.');
+    return gj as {
+      cargosCreados?: number; mesesBloqueados?: MesBloqueadoUI[];
+      recurrente?: string; precioRecurrenteAnterior?: number | null; monto?: number;
+    };
+  }
+
+  async function anularYPasar(b: MesBloqueadoUI) {
+    if (!b.ecfDocumentId || !bloqueados) return;
+    setAnulandoFactura(b.ecfDocumentId);
+    try {
+      const res = await fetch(`/api/facturas/${b.ecfDocumentId}/anular`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: `Cambio de mensualidad: ${nombreMes(b.mes, b.anio)} pasa al precio nuevo` }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.mensaje ?? data.error ?? 'No se pudo anular la factura');
+      const gj = await sincronizar(bloqueados.anterior);
+      setBloqueados({ ...bloqueados, meses: gj.mesesBloqueados ?? [] });
+      onGuardado();
+      toast.success(`Factura ${b.facturaCodigo ?? ''} anulada. ${nombreMes(b.mes, b.anio)} queda con el precio nuevo, por facturar.`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anular la factura');
+    } finally {
+      setAnulandoFactura(null);
+    }
+  }
 
   // ── Sección «otro concepto»: precio personal de un concepto que no es la
   //    mensualidad (un uniforme, una actividad…), con su propio guardado.
@@ -2508,21 +2701,37 @@ function TarifaEstudianteDialog({
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setError(json.error ?? 'No se pudo guardar.'); return; }
 
-      // Poblar Cuentas por cobrar al instante: crea las cuotas del año alineadas
-      // al recurrente, al monto recién guardado. Silencioso si no hay recurrente
-      // (nada a lo que alinear) — el precio igual quedó guardado.
+      // Poner Cuentas por cobrar al día: crea las cuotas del año (atadas al
+      // calendario), cambia las de la generación vieja que nadie ha tocado y
+      // sube el plan recurrente al precio nuevo. Silencioso si no hay
+      // recurrente (nada a lo que alinear) — el precio igual quedó guardado.
       let generadas = 0;
+      const avisos: string[] = [];
+      // La generación de antes: sus meses sin tocar se pasan a la nueva y los
+      // ya facturados no se duplican.
+      const anterior = conceptoMensualidadId ?? null;
+      let meses: MesBloqueadoUI[] = [];
       try {
-        const g = await fetch(`/api/administracion-escolar/matriculas/${matriculaId}/generar-mensualidades`, { method: 'POST' });
-        const gj = await g.json().catch(() => ({}));
-        if (g.ok) generadas = gj.cargosCreados ?? 0;
-      } catch { /* no bloquea el guardado del precio */ }
+        const gj = await sincronizar(anterior);
+        generadas = gj.cargosCreados ?? 0;
+        meses = gj.mesesBloqueados ?? [];
+        if (gj.recurrente === 'actualizado' && gj.precioRecurrenteAnterior != null && gj.monto != null) {
+          avisos.push(`La facturación automática pasa de ${fmtDOP(gj.precioRecurrenteAnterior)} a ${fmtDOP(gj.monto)} al mes.`);
+        } else if (gj.recurrente === 'varias-lineas') {
+          avisos.push('La facturación automática tiene varias líneas y no se cambió: revisa su precio en Facturas recurrentes.');
+        }
+      } catch (e: unknown) {
+        // El precio ya quedó guardado; lo que falló es ponerlo en la cuenta.
+        avisos.push(e instanceof Error ? e.message : 'No se pudieron poner al día las mensualidades.');
+      }
 
-      onOpenChange(false);
+      if (meses.length > 0) setBloqueados({ anterior, meses });
+      else onOpenChange(false);
       onGuardado();
       toast.success(generadas > 0
         ? `Guardado. ${generadas} mensualidad${generadas === 1 ? '' : 'es'} en «Mensualidades».`
         : (modo === 'normal' ? 'Vuelve a la tarifa de su generación.' : 'Tarifa personal guardada.'));
+      for (const a of avisos) toast.warning(a, { duration: 12_000 });
     } catch {
       setError('No se pudo guardar.');
     } finally {
@@ -2537,8 +2746,52 @@ function TarifaEstudianteDialog({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) setBloqueados(null); onOpenChange(v); }}>
       <DialogContent className="max-w-md">
+        {bloqueados ? (
+          <>
+            <ModalHeader
+              title="Meses con la mensualidad anterior"
+              subtitle="Se guardó. Estos meses ya estaban facturados o cobrados y no se cambiaron." />
+            <div className="space-y-2 px-6 pb-2">
+              {bloqueados.meses.length === 0 ? (
+                <p className="rounded-md border border-emerald-200 bg-emerald-50 p-2.5 text-sm text-emerald-800">
+                  Todos los meses quedaron con la mensualidad nueva.
+                </p>
+              ) : bloqueados.meses.map((b) => (
+                <div key={`${b.anio}-${b.mes}`} className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
+                  <div className="text-amber-900">
+                    <p className="font-medium capitalize">{nombreMes(b.mes, b.anio)}</p>
+                    <p className="text-xs">
+                      {b.motivo === 'facturado'
+                        ? <>Factura {b.facturaCodigo ?? ''}{b.facturaAnulable
+                            ? ', sin pagos.'
+                            : b.noAnulablePor === 'enviada-dgii'
+                              ? ': ya se envió a la DGII, se corrige con una nota de crédito.'
+                              : ', con pagos: no se puede anular desde aquí.'}</>
+                        : 'Tiene pagos aplicados: se queda como está.'}
+                    </p>
+                  </div>
+                  {b.facturaAnulable && b.ecfDocumentId != null && can('facturas:anular') && (
+                    <Button size="sm" variant="outline" className="shrink-0"
+                      disabled={anulandoFactura != null}
+                      onClick={() => void anularYPasar(b)}>
+                      {anulandoFactura === b.ecfDocumentId && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                      Anular factura y pasar al precio nuevo
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <p className="text-xs text-gray-500">
+                Si no anulas la factura, ese mes se cobra con la mensualidad de antes y no se le crea otro cargo.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button className="bg-zero-600 hover:bg-zero-700" disabled={anulandoFactura != null}
+                onClick={() => { setBloqueados(null); onOpenChange(false); }}>Listo</Button>
+            </DialogFooter>
+          </>
+        ) : (<>
         <ModalHeader
           title="Configuración mensual"
           subtitle="La mensualidad de este estudiante. No cambia la de los demás." />
@@ -2681,6 +2934,7 @@ function TarifaEstudianteDialog({
             Guardar mensualidad
           </Button>
         </DialogFooter>
+        </>)}
       </DialogContent>
     </Dialog>
   );
@@ -2829,63 +3083,6 @@ function MesAcademico({ mes, cargos, pagos }: { mes: number; cargos: Cargo[]; pa
 }
 
 /**
- * Las cuotas del plan que todavía no son cargo.
- *
- * El descarte va por `cuotaId`, que es la misma llave con la que el devengo
- * evita cobrar dos veces (índice único `matricula_id, cuota_id`). Por eso entran
- * también los cargos ANULADOS: su cuota está gastada y el devengo no la va a
- * volver a crear, así que anunciarla como prevista sería prometer una factura
- * que no va a salir.
- *
- * Los conceptos sin calendario devengan con `cuota_id` nulo, y ahí la llave es
- * el concepto: si ya tiene un cargo en esta matrícula, no se anuncia otro.
- */
-/**
- * Las cuotas del plan que todavía no son cargo.
- *
- * El descarte va por `cuotaId`, que es la misma llave con la que el devengo
- * evita cobrar dos veces (índice único `matricula_id, cuota_id`). Por eso entran
- * también los cargos ANULADOS: su cuota está gastada y el devengo no la va a
- * volver a crear, así que anunciarla como prevista sería prometer una factura
- * que no va a salir.
- *
- * Los conceptos sin calendario devengan con `cuota_id` nulo, y ahí la llave es
- * el concepto: si ya tiene un cargo en esta matrícula, no se anuncia otro.
- */
-function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pendiente' | 'parcial' | 'sin-facturar' | 'sin-cargo' {
-  if (cargos.length === 0) return 'sin-cargo';
-  const hoyIso = new Date().toISOString().slice(0, 10);
-  const vivos = cargos.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado));
-  if (vivos.length === 0) {
-    const futura = cargos.some((c) => c.fechaVencimiento && c.fechaVencimiento >= hoyIso);
-    return futura ? 'adelantado' : 'pagado';
-  }
-  if (vivos.some((c) => c.estado === 'vencido' || (c.fechaVencimiento && c.fechaVencimiento < hoyIso))) return 'vencido';
-  if (vivos.some((c) => c.estado === 'parcial')) return 'parcial';
-  // Se debe, pero todavía no se ha emitido nada: al padre no le ha llegado
-  // ningún documento por esto. Es lo que hay que hacer con él, y decirlo
-  // "pendiente" lo confundía con lo que ya está facturado y sin cobrar.
-  if (vivos.every((c) => c.ecfDocumentId == null)) return 'sin-facturar';
-  return 'pendiente';
-}
-
-/**
- * El estado de UN cargo, no el del mes entero.
- *
- * Va aparte de `EstadoMesBadge` porque los valores no son los mismos: un mes
- * puede estar "adelantado" o "sin cargo", que son conclusiones sacadas de mirar
- * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
- * de mes no significa nada.
- */
-/**
- * El estado de UN cargo, no el del mes entero.
- *
- * Va aparte de `EstadoMesBadge` porque los valores no son los mismos: un mes
- * puede estar "adelantado" o "sin cargo", que son conclusiones sacadas de mirar
- * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
- * de mes no significa nada.
- */
-/**
  * Color del saldo pendiente de un cargo o mes.
  *
  * Rojo = deuda por cobrar: hay una factura emitida y su saldo sigue abierto. Un
@@ -2898,9 +3095,46 @@ function clsSaldo(saldo: number, tieneFactura: boolean): string {
   return tieneFactura ? 'font-medium text-red-600' : 'font-medium text-gray-700';
 }
 
+/**
+ * La mora de un cargo: las notas de débito (tipo 33) atadas a su factura.
+ *
+ * El colegio la pedía a la vista en la ficha —hasta ahora solo salía en
+ * Facturación o en la pestaña de Notas de débito—. Se enseña lo que sigue
+ * IMPAGO (`moraSaldo`), que es lo que de verdad hay que cobrar; si ya se pagó,
+ * queda en gris con lo recargado para dejar constancia. Enlaza a la nota cuando
+ * es una sola y a la factura padre si hay varias, para abrir el documento sin
+ * salir a buscarlo. Sin mora, un guion, igual que las demás columnas de importe.
+ */
+function MoraCelda({ moraCentavos, moraSaldoCentavos, moraNotaId, moraNotaCount, facturaId }: {
+  moraCentavos: number;
+  moraSaldoCentavos: number;
+  moraNotaId: number | null;
+  moraNotaCount: number;
+  facturaId: number | null;
+}) {
+  if (!moraCentavos || moraCentavos <= 0) return <span className="text-gray-300">—</span>;
+  const saldada = moraSaldoCentavos <= 0;
+  const href = moraNotaCount === 1 && moraNotaId != null
+    ? `/dashboard/facturas/${moraNotaId}`
+    : facturaId != null ? `/dashboard/facturas/${facturaId}` : null;
+  const contenido = (
+    <span className={saldada ? 'text-gray-500' : 'font-medium text-red-600'}>
+      {fmtDOP(saldada ? moraCentavos : moraSaldoCentavos)}
+      {saldada
+        ? <span className="block text-[11px] font-normal text-gray-400">pagada</span>
+        : moraSaldoCentavos !== moraCentavos
+          ? <span className="block text-[11px] font-normal text-gray-400">de {fmtDOP(moraCentavos)}</span>
+          : null}
+    </span>
+  );
+  return href
+    ? <Link href={href} className="hover:underline" title="Ver la nota de débito por mora">{contenido}</Link>
+    : contenido;
+}
+
 function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?: boolean }) {
   if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
-  if (estado === 'pagado')  return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
+  if (estado === 'pagado')  return <ChipEstado tono="verde">Pagado</ChipEstado>;
   // El cargo nace al matricular, no al facturar: la inscripción y el uniforme se
   // deben desde el primer día, mucho antes de que salga ningún comprobante.
   // «Sin facturar» gana a «Vencido»: sin factura emitida no hay documento que
@@ -2909,16 +3143,16 @@ function EstadoCargoBadge({ estado, sinFactura }: { estado: string; sinFactura?:
   // saldo abierto. Sigue contando como deuda; lo único que cambia es que lo dice
   // en vez de pintarlo en rojo.
   if (sinFactura) return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
-  if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
-  if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
-  return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Pendiente</Badge>;
+  if (estado === 'vencido') return <ChipEstado tono="rojo">Vencido</ChipEstado>;
+  if (estado === 'parcial') return <ChipEstado tono="ambar">Parcial</ChipEstado>;
+  return <ChipEstado tono="gris">Pendiente</ChipEstado>;
 }
 
 function EstadoMesBadge({ estado }: { estado: EstadoMes }) {
-  if (estado === 'pagado') return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
-  if (estado === 'adelantado') return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Adelantado</Badge>;
-  if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
-  if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
+  if (estado === 'pagado') return <ChipEstado tono="verde">Pagado</ChipEstado>;
+  if (estado === 'adelantado') return <ChipEstado tono="azul">Adelantado</ChipEstado>;
+  if (estado === 'vencido') return <ChipEstado tono="rojo">Vencido</ChipEstado>;
+  if (estado === 'parcial') return <ChipEstado tono="ambar">Parcial</ChipEstado>;
   // Previsto no es un estado del cargo: es la ausencia de cargo con una promesa
   // de calendario detrás. Borde discontinuo para que no se confunda de un
   // vistazo con "pendiente", que sí hay que cobrar.
@@ -2927,7 +3161,7 @@ function EstadoMesBadge({ estado }: { estado: EstadoMes }) {
   // debe— y distinto de "por vencer", que da por hecho que ya hay factura.
   if (estado === 'sin-facturar') return <Badge variant="outline" className="border-gray-300 text-gray-600">Sin facturar</Badge>;
   if (estado === 'sin-cargo') return <Badge variant="outline" className="text-gray-500">Sin cargo</Badge>;
-  return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Por vencer</Badge>;
+  return <ChipEstado tono="gris">Por vencer</ChipEstado>;
 }
 
 function facturaLink(cargo: Cargo) {
@@ -3019,9 +3253,11 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
  */
 export function FacturasSueltas({ facturas }: { facturas: FacturaSuelta[] }) {
   if (facturas.length === 0) return null;
-  const total = facturas.reduce((s, f) => s + f.montoTotal, 0);
-  const pagado = facturas.reduce((s, f) => s + f.pagadoCentavos, 0);
-  const pendiente = Math.max(0, total - pagado);
+  // Las anuladas se listan tachadas pero no suman: no se facturaron.
+  const vivas = facturas.filter((f) => f.estado !== 'ANULADO');
+  const total = vivas.reduce((s, f) => s + f.montoTotal, 0);
+  const pagado = vivas.reduce((s, f) => s + f.pagadoCentavos, 0);
+  const pendiente = facturas.reduce((s, f) => s + f.saldoCentavos, 0);
 
   return (
     <div className="space-y-2">
@@ -3057,7 +3293,7 @@ export function FacturasSueltas({ facturas }: { facturas: FacturaSuelta[] }) {
           </thead>
           <tbody>
             {facturas.map((f) => {
-              const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
+              const saldo = f.saldoCentavos;
               const anulada = f.estado === 'ANULADO';
               return (
                 <tr key={f.id} className="border-t border-gray-100 hover:bg-gray-50/60">
@@ -3111,12 +3347,12 @@ function EstadoFacturaBadge({ anulada, saldo, pagado }: {
 }) {
   if (anulada) return <Badge variant="outline" className="text-gray-500">Anulada</Badge>;
   if (saldo === 0) {
-    return <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">Pagada</Badge>;
+    return <ChipEstado tono="verde">Pagada</ChipEstado>;
   }
   if (pagado > 0) {
-    return <Badge className="border-amber-200 bg-amber-50 text-amber-700">Parcial</Badge>;
+    return <ChipEstado tono="ambar">Parcial</ChipEstado>;
   }
-  return <Badge className="border-red-200 bg-red-50 text-red-700">Pendiente</Badge>;
+  return <ChipEstado tono="rojo">Pendiente</ChipEstado>;
 }
 
 /**

@@ -644,11 +644,11 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     // dos van juntas a propósito — con una publicando y la otra no, el precio
     // del adicional salía por resta de todos modos.
     precioBajoCotizacion: false,
-    gancho: 'Lo que se vende, se descuenta del inventario y se factura en el mismo acto.',
+    gancho: 'Lo que se vende en el mostrador se cobra, baja del inventario y queda listo para facturar.',
     vende: [
       'Cobras en mostrador con caja, turnos y cuadre al cerrar',
-      'El inventario baja solo con cada venta, por almacén',
-      'La factura con su comprobante fiscal sale al cobrar, sin un segundo paso',
+      'El inventario baja con cada ticket y con cada factura emitida, por almacén',
+      'La venta con comprobante fiscal queda guardada y se emite desde Facturación, sin volver a escribirla',
       'Y detrás, el ERP completo: contabilidad, compras y cuentas por cobrar',
     ],
   },
@@ -670,9 +670,9 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     gancho: 'Un colegio no pierde el dinero de golpe: se le va en cuotas que nadie reclamó y en moras que nunca se aplicaron.',
     vende: [
       'La mora se aplica sola el día que vence, en vez de perderse por no acordarse de cobrarla',
-      'Nadie deja de pagar por olvido: el aviso sale por WhatsApp, SMS y correo antes de vencer, el día del vencimiento y antes del recargo',
+      'Nadie deja de pagar por olvido: el aviso sale por WhatsApp, SMS y correo cuando llega la mensualidad, el día que vence y antes del recargo',
       'Sabes en todo momento quién debe, cuánto y desde cuándo, sin armar la hoja aparte',
-      'Cada mensualidad se factura sola, con su comprobante fiscal ante la DGII',
+      'La mensualidad aparece sola en la cuenta de cada estudiante, lista para emitir con su comprobante fiscal',
     ],
   },
 ];

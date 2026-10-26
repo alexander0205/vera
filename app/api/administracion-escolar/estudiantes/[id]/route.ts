@@ -33,6 +33,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const extra = limpiarCamposSigerd(body, { soloPresentes: true });
 
   /**
+   * El estado no se cambia aquí. Cambiarlo solo como etiqueta dejaba la
+   * matrícula activa y la mensualidad facturando a un alumno que ya no estaba;
+   * dar de baja y reactivar viven en /estudiantes/[id]/estado, que arrastra lo
+   * que hace falta. Mandar el mismo estado que ya tiene sí vale.
+   */
+  if (estado !== undefined) {
+    const [actual] = await db.select({ estado: adminEscolarEstudiantes.estado })
+      .from(adminEscolarEstudiantes)
+      .where(and(eq(adminEscolarEstudiantes.id, parseInt(id)), eq(adminEscolarEstudiantes.teamId, teamId)))
+      .limit(1);
+    if (actual && actual.estado !== estado) {
+      return NextResponse.json(
+        { error: 'El estado se cambia con «Dar de baja» o «Reactivar» en la ficha del alumno.' },
+        { status: 409 },
+      );
+    }
+  }
+
+  /**
    * El id del alumno en el padrón del MINERD, cuando la ficha se cruza con
    * SIGERD desde la pantalla de edición.
    *

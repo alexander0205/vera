@@ -16,10 +16,24 @@
  */
 
 import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries';
 
 export async function exigirAdmin() {
   const user = await getUser();
   if (!user || user.platformRole !== 'admin') redirect('/dashboard');
   return user;
+}
+
+/**
+ * Lo mismo para una ruta /api/admin/*: en vez de redirigir, contesta 401/403.
+ * Devuelve el usuario para dejar rastro de quién hizo el cambio.
+ */
+export async function requirePlatformAdmin() {
+  const user = await getUser();
+  if (!user) return { ok: false as const, response: NextResponse.json({ error: 'No autenticado' }, { status: 401 }) };
+  if (user.platformRole !== 'admin') {
+    return { ok: false as const, response: NextResponse.json({ error: 'Acceso restringido a administradores' }, { status: 403 }) };
+  }
+  return { ok: true as const, user };
 }

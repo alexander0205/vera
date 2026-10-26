@@ -5,8 +5,9 @@
  * cumple: vender sin internet («sigue trabajando y sincroniza cuando vuelve»)
  * y la gestión de varias sucursales —`sucursal` es un texto que se le pone a
  * una secuencia y sale impreso en la factura, nada más—. Lo demás está
- * comprobado: la venta descuenta inventario (`lib/inventario/descuento.ts`),
- * abre turno, emite su e-CF y puede quedar a crédito en la cartera.
+ * comprobado: el ticket descuenta inventario (`lib/inventario/descuento.ts`),
+ * abre turno y puede quedar a crédito en la cartera. La venta con comprobante
+ * fiscal NO sale a la DGII desde la caja: se guarda y se emite en Facturación.
  */
 
 import type { Metadata } from 'next';
@@ -25,7 +26,7 @@ import { PRUEBA } from '@/lib/config/suscripcion';
 export const metadata: Metadata = {
   title: 'Punto de venta con facturación e-CF — caja para colmados, tiendas y restaurantes',
   description:
-    'Una caja que cobra, descuenta del inventario y emite la factura con e-CF en el mismo movimiento. Con turnos de cajero, cuadre, mesas y comandas, venta a crédito y ticket por WhatsApp.',
+    'Una caja que cobra, descuenta del inventario e imprime el ticket en la térmica, y deja la venta fiscal lista para emitir su e-CF. Con turnos de cajero, cuadre, mesas y comandas y venta a crédito.',
   keywords: ['punto de venta República Dominicana', 'POS con facturación electrónica', 'caja registradora con e-CF', 'software para restaurantes', 'sistema para colmados'],
   alternates: { canonical: '/productos/punto-de-venta' },
   openGraph: {
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
     url: urlDelSitio('/productos/punto-de-venta'),
     images: [{ url: '/home/capturas/demo-pos.png', width: 1440, height: 900, alt: 'Caja de Zero' }],
     title: 'Punto de venta con facturación e-CF',
-    description: 'Cobra, descuenta del inventario y factura ante la DGII en el mismo tiro.',
+    description: 'Cobra, descuenta del inventario y deja la venta fiscal lista para la DGII.',
   },
 };
 
@@ -43,11 +44,11 @@ const PRECIO_POS = POS && !addonBajoCotizacion('pos', 'ecf') ? POS.price : null;
 
 const CAJA: PuntoDeProducto[] = [
   { titulo: 'Vende en segundos', detalle: 'Busca por nombre o código, cobra en efectivo, tarjeta o transferencia y entrega el comprobante.', icono: Iconos.pos },
-  { titulo: 'La factura fiscal, en el acto', detalle: 'La venta sale con su e-CF válido ante la DGII sin pasar por otro sistema ni por otra pantalla.', icono: Iconos.factura },
-  { titulo: 'El inventario baja solo', detalle: 'Cada venta descuenta del stock, y la devolución lo devuelve. Sabes qué se está acabando antes de que se acabe.', icono: Iconos.cuadros },
+  { titulo: 'La venta fiscal, sin copiarla', detalle: 'La venta con comprobante queda guardada y se emite ante la DGII desde Facturación, sin volver a escribirla.', icono: Iconos.factura },
+  { titulo: 'El inventario baja solo', detalle: 'El ticket descuenta del stock al cobrar y la venta con comprobante, al emitirse. Sabes qué se está acabando antes de que se acabe.', icono: Iconos.cuadros },
   { titulo: 'Turnos y cuadre', detalle: 'Apertura, ventas, retiros y diferencia por turno y por cajero, con su corte imprimible.', icono: Iconos.reloj },
-  { titulo: 'Ticket impreso o por WhatsApp', detalle: 'Imprime en la térmica o mándaselo al cliente, como prefiera.', icono: Iconos.correo },
-  { titulo: 'Devoluciones como manda la DGII', detalle: 'Se corrige la venta y sale su nota de crédito, con el inventario devuelto.', icono: Iconos.escudo },
+  { titulo: 'Ticket en la térmica', detalle: 'Sale impreso en la térmica de 80 o 58 mm, directo desde el navegador.', icono: Iconos.papel },
+  { titulo: 'Devoluciones como manda la DGII', detalle: 'Si la DGII ya aceptó la venta, se corrige con su nota de crédito desde Facturación. El ticket se anula y el inventario vuelve.', icono: Iconos.escudo },
 ];
 
 const MOSTRADOR: PuntoDeProducto[] = [
@@ -60,7 +61,7 @@ const MOSTRADOR: PuntoDeProducto[] = [
 const PREGUNTAS = [
   {
     pregunta: '¿La venta del punto de venta sale con factura fiscal?',
-    respuesta: 'Sí. Al cobrar se emite el comprobante fiscal electrónico válido ante la DGII, en el mismo acto y sin pasar por otro sistema. También puede salir como ticket sin valor fiscal si la venta no lo necesita.',
+    respuesta: 'Sí. Al cobrar, la venta con comprobante queda guardada y se emite ante la DGII desde Facturación, sin volver a escribirla ni pasar por otro sistema. Si la venta no lo necesita, sale como ticket sin valor fiscal.',
   },
   {
     pregunta: '¿El punto de venta funciona sin internet?',
@@ -68,7 +69,7 @@ const PREGUNTAS = [
   },
   {
     pregunta: '¿La venta descuenta del inventario?',
-    respuesta: 'Sí, artículo por artículo, y la devolución lo devuelve. Las existencias son las mismas que ve facturación: no hay dos conteos.',
+    respuesta: 'Sí, artículo por artículo: el ticket al cobrar y la venta con comprobante al emitirse. Anular un ticket lo devuelve. Las existencias son las mismas que ve facturación: no hay dos conteos.',
   },
   {
     pregunta: '¿Cuánto cuesta el punto de venta?',
@@ -86,7 +87,7 @@ export default function PuntoDeVentaPage() {
       <HeroProducto
         antetitulo="Punto de venta"
         titulo="Cobra rápido. Cuadra sin discusión."
-        bajada="Una caja que vende, descuenta del inventario y emite la factura con su comprobante fiscal en el mismo tiro. Funciona en tableta, laptop o computadora."
+        bajada="Una caja que vende, descuenta del inventario e imprime el ticket, y deja la venta fiscal lista para emitir. Funciona en tableta, laptop o computadora."
         pie={PRECIO_POS !== null
           ? `+US$${PRECIO_POS} al mes sobre cualquier plan · Incluido en los planes de colegio`
           : 'Se suma a cualquier plan · Incluido en los planes de colegio'}
@@ -96,9 +97,10 @@ export default function PuntoDeVentaPage() {
 
       {/* ── La caja, tocándola ────────────────────────────────────────────── */}
       {/* El argumento de esta página no es la pantalla bonita: es que cobrar,
-          facturar ante la DGII y descontar del almacén son el MISMO acto. Eso
-          no se explica, se enseña: se toca un producto, se cobra y salen los
-          cuatro efectos. */}
+          registrar la venta y descontar del almacén son el MISMO acto. Eso no
+          se explica, se enseña: se toca un producto, se cobra y salen los
+          cuatro efectos. La venta con comprobante fiscal se emite después, en
+          Facturación: la caja no la manda a la DGII. */}
       <section id="pruebala" className="scroll-mt-20">
         <Contenedor className="pt-16 sm:pt-[82px]">
           <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.62fr)_minmax(0,1.6fr)] lg:gap-12">
@@ -107,7 +109,7 @@ export default function PuntoDeVentaPage() {
               <Titulo className="mt-3.5">Toca, cobra y mira qué pasó.</Titulo>
               <p className="m-0 mt-3.5 text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
                 Arma una venta como la armaría tu cajero. Al cobrar no sale un «gracias»: sale lo que
-                el sistema hace en ese mismo segundo —el comprobante fiscal, el inventario que baja,
+                el sistema hace en ese mismo segundo —la venta registrada, el inventario que baja,
                 el asiento contable y el ticket—.
               </p>
               <p className="m-0 mt-3.5 text-pretty text-[13px] leading-[1.55] text-[#666d80]">
@@ -123,7 +125,7 @@ export default function PuntoDeVentaPage() {
         id="caja"
         antetitulo="En la caja"
         titulo="Lo que pasa entre que el cliente llega y se va."
-        detalle="Una sola pantalla: cobrar, facturar y descontar del almacén no son tres pasos, son el mismo."
+        detalle="Una sola pantalla: cobrar, imprimir el ticket y descontar del almacén no son tres pasos, son el mismo."
         puntos={CAJA}
       />
 
@@ -171,17 +173,17 @@ export default function PuntoDeVentaPage() {
 
       <DatosDeProducto
         nombre="Zero Punto de Venta"
-        descripcion="Caja que cobra en efectivo, tarjeta o transferencia, descuenta del inventario y emite la factura con comprobante fiscal electrónico ante la DGII, con turnos de cajero, cuadre, mesas y venta a crédito."
+        descripcion="Caja que cobra en efectivo, tarjeta o transferencia, descuenta del inventario, imprime el ticket en la térmica y deja la venta fiscal lista para emitir su comprobante electrónico desde Facturación, con turnos de cajero, cuadre, mesas y venta a crédito."
         ruta="/productos/punto-de-venta"
         precioDesde={PRECIO_POS}
         funciones={[
           'Cobro en efectivo, tarjeta o transferencia',
-          'Factura con e-CF en el momento de cobrar',
-          'Descuento de inventario en cada venta',
+          'Venta fiscal que se emite con su e-CF desde Facturación',
+          'Inventario que baja con cada ticket y con cada factura emitida',
           'Turnos de cajero con cuadre y corte imprimible',
           'Mesas y comandas para restaurantes',
           'Venta a crédito que entra a cuentas por cobrar',
-          'Ticket impreso o por WhatsApp',
+          'Ticket impreso en la térmica de 80 o 58 mm',
         ]}
       />
     </>

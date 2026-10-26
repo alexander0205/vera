@@ -4,8 +4,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Loader2, Receipt, HandCoins, AlertTriangle } from 'lucide-react';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { codigoVisible } from '@/lib/administracion-escolar/estudiante-utils';
 
 /** Espejo de `EstudianteEnriquecido` de lib/administracion-escolar/queries.ts
  *  (aquel es `server-only` y no se puede importar desde el cliente). */
@@ -16,6 +19,8 @@ export interface EstudianteEnriquecido {
   id: number;
   dependienteId: number | null;
   codigo: string | null;
+  codigoRne: string | null;
+  sigerdId: number | null;
   nombres: string;
   apellidos: string;
   estado: string | null;
@@ -39,6 +44,8 @@ interface CargoRow {
   montoCentavos: number;
   saldoCentavos: number;
   estado: string;
+  fechaVencimiento: string | null;
+  ecfDocumentId: number | null;
 }
 
 interface TutorVinculo {
@@ -80,13 +87,15 @@ export function EstudianteFicha({ estudiante: e }: Props) {
     return () => { cancel = true; };
   }, [e.id]);
 
-  // Totales generales del estudiante (los cargos anulados no cuentan).
-  const totales = useMemo(() => {
-    const vivos = cargos.filter((c) => c.estado !== 'anulado');
-    const deuda = vivos.reduce((s, c) => s + c.montoCentavos, 0);
-    const pendiente = vivos.reduce((s, c) => s + c.saldoCentavos, 0);
-    return { deuda, pendiente, pagado: deuda - pendiente };
-  }, [cargos]);
+  // Vencido / próximo pago / falta del año / pagado, con la regla de todas las
+  // fichas (resumen-cobro.ts). Los cargos anulados no cuentan.
+  const resumen = useMemo(() => resumirCobro(
+    cargos.filter((c) => c.estado !== 'anulado').map((c) => ({
+      saldoCentavos: c.saldoCentavos, montoCentavos: c.montoCentavos,
+      vence: c.fechaVencimiento, facturada: c.ecfDocumentId != null,
+    })),
+    hoyRD(),
+  ), [cargos]);
 
   return (
     <div className="border border-gray-200 rounded-xl bg-white p-5 space-y-4 sticky top-4">
@@ -98,7 +107,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-gray-900 truncate">{e.nombres} {e.apellidos}</p>
           <p className="text-xs text-gray-500">
-            {e.codigo ?? 'Sin código'} · <span className="capitalize">{e.estado ?? '—'}</span>
+            {codigoVisible(e) ?? 'Sin código'} · <span className="capitalize">{e.estado ?? '—'}</span>
           </p>
         </div>
         {puedeGestionar && (
@@ -130,12 +139,8 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         {loading ? (
           <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
         ) : (
-          <div className="space-y-2">
-            <TotalRow icon={Receipt} tone="gray" label="Deuda total" value={fmtDOP(totales.deuda)} />
-            <TotalRow icon={HandCoins} tone="verde" label="Pago total" value={fmtDOP(totales.pagado)} />
-            <TotalRow icon={AlertTriangle} tone="red" label="Pendiente total" value={fmtDOP(totales.pendiente)}
-              muted={totales.pendiente === 0} />
-          </div>
+          <ResumenCobroFilas resumen={resumen}
+            pagoNota={e.ultimoPagoFecha ? `Último pago el ${fmtFechaCorta(e.ultimoPagoFecha)}` : null} />
         )}
       </div>
 

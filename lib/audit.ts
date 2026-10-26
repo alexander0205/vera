@@ -11,6 +11,7 @@
  *   ECF_VOID              — anulación enviada a la DGII
  *   DGII_AUTH             — autenticación exitosa contra la DGII
  *   DGII_AUTH_FAIL        — autenticación fallida contra la DGII
+ *   ESCOLAR_MATRICULA_MOVIDA_SIGERD — matrícula movida a la sección que dice SIGERD
  *
  * Uso:
  *   logAudit({ teamId, userId, actor: user.email, action: 'CERT_UPLOAD' });
@@ -32,6 +33,8 @@ export type AuditAction =
   | 'ECF_RESET'
   | 'ECF_VOID'
   | 'FACTURA_TRAZA'
+  // Medición: de dónde vino una empresa nueva (ver lib/analytics/origen-servidor.ts)
+  | 'REGISTRO_ORIGEN'
   | 'DGII_AUTH'
   | 'DGII_AUTH_FAIL'
   | 'HABILITACION_SIGN'
@@ -68,11 +71,44 @@ export type AuditAction =
   // El mensaje de prueba de los canales de aviso. También sale hacia afuera y
   // cuesta dinero (el SMS), así que se traza igual que un envío de verdad.
   | 'ESCOLAR_AVISO_PRUEBA'
+  // Los tres avisos de la corrida de facturación (5 días, 2 días y resultado).
+  // El recurso es `tipo:fecha` y es lo que impide mandarlos dos veces.
+  | 'ESCOLAR_AVISO_CORRIDA'
+  // «Servicios por alumno»: conceptos agregados o quitados por lote a una
+  // matrícula. `resource` = `matricula:<id>`; meta con lo agregado, lo quitado
+  // y cuántos cargos sin facturar se anularon.
+  | 'ESCOLAR_CONCEPTOS_LOTE'
+  // «Facturar por lote»: una tanda de facturas en borrador creada a mano. El
+  // cron no deja rastro de quién; esto sí, porque aquí hay una persona que
+  // eligió alumnos, conceptos y corte. El `meta` lleva cuántas y por cuánto.
+  | 'ESCOLAR_FACTURAS_LOTE'
+  // Tareas por revisar de un alumno o su familia: quién las abre y quién las cierra.
+  | 'ESCOLAR_TAREA_CREADA'
+  | 'ESCOLAR_TAREA_COMPLETADA'
+  | 'ESCOLAR_TAREA_REABIERTA'
+  // Una revisión de Zero AI que puede abrir varias tareas de golpe.
+  | 'ESCOLAR_TAREAS_ZERO_AI'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
+  // Asistente de IA: acción que la persona confirmó en el panel (crear, modificar, eliminar).
+  | 'ASISTENTE_ACCION_CONFIRMADA'
+  // Asistente de IA: intento de extracción masiva o ráfaga de consultas.
+  | 'ASISTENTE_ABUSO'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
-  | 'CONTABILIDAD_CATALOGO_IMPORTADO';
+  | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
+  // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
+  // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
+  | 'SUSCRIPCION_AVISO'
+  // El administrador de Zero cambió el modelo de IA de alguna parte (/admin/ia).
+  // Es de la plataforma, no de una empresa: va con team_id vacío.
+  | 'IA_MODELOS_CAMBIADOS'
+  // «Mover a la sección de SIGERD»: la matrícula de un alumno pasó de un curso
+  // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
+  // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
+  // `resource` es `matricula:<id>` y el meta lleva curso de origen y de destino.
+  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD';
 
 export interface AuditParams {
   teamId:    number;

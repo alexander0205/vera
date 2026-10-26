@@ -22,6 +22,8 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import { Warehouse, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 
 interface Almacen {
   id: number;
@@ -37,6 +39,20 @@ interface Almacen {
 const EMPTY_FORM = { nombre: '', direccion: '', observacion: '', esDefault: false, soloPos: false };
 
 const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
+
+
+/** Imprimir / PDF / Excel de los almacenes. Catálogo: sin filtro de fecha. */
+const EXPORTAR: ExportTabla<Almacen> = {
+  titulo: 'Almacenes',
+  archivo: 'almacenes',
+  columnas: [
+    { titulo: 'Nombre', valor: a => a.nombre, ancho: 1.6 },
+    { titulo: 'Dirección', valor: a => a.direccion, ancho: 2 },
+    { titulo: 'Observación', valor: a => a.observacion, ancho: 1.6 },
+    { titulo: 'Principal', valor: a => (a.esDefault === 'true' ? 'Sí' : null), ancho: 0.6 },
+    { titulo: 'Solo POS', valor: a => (a.soloPos ? 'Sí' : null), ancho: 0.6 },
+  ],
+};
 
 export default function AlmacenesPage() {
   const [almacenes, setAlmacenes]       = useState<Almacen[]>([]);
@@ -136,7 +152,9 @@ export default function AlmacenesPage() {
             Gestiona los almacenes donde guardas tu inventario
           </Typography>
         </Box>
-        <Button
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ExportarListado armar={() => armarEnvioTabla(EXPORTAR, almacenes, 'Todos los registros')} deshabilitado={almacenes.length === 0} testId="exportar-almacenes" />
+          <Button
           variant="contained"
           disableElevation
           startIcon={<Plus size={18} />}
@@ -145,6 +163,7 @@ export default function AlmacenesPage() {
         >
           Nuevo Almacén
         </Button>
+        </Box>
       </Box>
 
       {/* Table card */}

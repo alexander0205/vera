@@ -45,6 +45,12 @@ export interface ResultadoDevengo {
    *  no salió (plan #5): estructura incompleta, o cuota emitida antes de que el
    *  alumno entrara. */
   diagnostico: DiagnosticoDevengo[];
+  /**
+   * Solo con `simular`: los cargos que se CREARÍAN, sin crearlos, con la
+   * emisión de su cuota. Es la vista previa de «Facturar por lote» cuando se
+   * adelantan cuotas: enseña lo mismo que después se crea, sin escribir nada.
+   */
+  porCrear?: { fila: typeof adminEscolarCargos.$inferInsert; fechaEmision: string; concepto: string }[];
 }
 
 /**
@@ -129,6 +135,8 @@ export async function devengarPeriodo(
    * eligió y el índice único, así que es idempotente: reintentarlo no duplica.
    */
   filtro?: { soloMatriculas?: number[]; soloConceptos?: number[] },
+  /** `simular`: calcula lo que crearía y no escribe nada (ver `porCrear`). */
+  modo?: { simular?: boolean },
 ): Promise<ResultadoDevengo> {
   // Un filtro vacío (array sin elementos) significaría "ninguna": se trata como
   // "sin filtro" solo cuando el campo no viene.
@@ -145,6 +153,7 @@ export async function devengarPeriodo(
       becaTipo: adminEscolarMatriculas.becaTipo,
       becaValor: adminEscolarMatriculas.becaValor,
       conceptosIds: adminEscolarMatriculas.conceptosIds,
+      conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
     })
     .from(adminEscolarMatriculas)
     .where(and(
@@ -183,6 +192,8 @@ export async function devengarPeriodo(
       matriculaId: adminEscolarCargos.matriculaId,
       cuotaId: adminEscolarCargos.cuotaId,
       conceptoId: adminEscolarCargos.conceptoId,
+      mes: adminEscolarCargos.mes,
+      anio: adminEscolarCargos.anio,
     })
     .from(adminEscolarCargos)
     .where(and(
@@ -190,14 +201,20 @@ export async function devengarPeriodo(
       inArray(adminEscolarCargos.matriculaId, matriculas.map((m) => m.id)),
     ));
   const existentes = new Set(yaHechos.map(claveHecho));
+  // Los cargos manuales anteriores al enlace por cuota no deben duplicarse
+  // cuando se asigne ahora el calendario completo del mismo concepto.
+  const manualesPorMes = new Set(yaHechos
+    .filter((c) => c.cuotaId == null && c.mes != null)
+    .map((c) => `${c.matriculaId}:${c.conceptoId}:${c.anio}:${c.mes}`));
 
   const filas: (typeof adminEscolarCargos.$inferInsert)[] = [];
+  const porCrear: NonNullable<ResultadoDevengo['porCrear']> = [];
   const diagnostico: DiagnosticoDevengo[] = [];
 
   for (const m of matriculas) {
     const ctx = await contextoDeSeccion(teamId, periodoId, m.cursoId, {
       tipo: m.becaTipo, valor: m.becaValor,
-    }, m.estudianteId);
+    }, m.estudianteId, m.conceptoMensualidadId);
     if (!ctx) {
       // La sección de la matrícula no resuelve grado/servicio: sin eso no hay
       // tarifa que aplicar. Se anota para que no sea un pendiente mudo.
@@ -241,7 +258,12 @@ export async function devengarPeriodo(
 
     for (const { linea, cuota } of cuotasVigentes(plan, conceptosVivos, hasta)) {
       const clave = claveHecho({ matriculaId: m.id, cuotaId: cuota.cuotaId || null, conceptoId: linea.conceptoId });
-      if (existentes.has(clave)) continue;
+      const manualMismoMes = `${m.id}:${linea.conceptoId}:${cuota.fechaEmision.slice(0, 4)}:${cuota.mes}`;
+      if (existentes.has(clave) || (cuota.cuotaId > 0 && (
+        cuota.mes == null
+          ? existentes.has(`c:${m.id}:${linea.conceptoId}`)
+          : manualesPorMes.has(manualMismoMes)
+      ))) continue;
       // Se apunta ya: dentro de la misma corrida, dos conceptos sin calendario
       // de la misma matrícula generarían la misma clave.
       existentes.add(clave);
@@ -262,6 +284,7 @@ export async function devengarPeriodo(
         fechaVencimiento: cuota.fechaVencimiento,
         estado: 'pendiente',
       });
+      if (modo?.simular) porCrear.push({ fila: filas[filas.length - 1], fechaEmision: cuota.fechaEmision, concepto: linea.nombre });
     }
   }
 
@@ -271,6 +294,7 @@ export async function devengarPeriodo(
     console.warn(`[devengo] team ${teamId} período ${periodoId}: ${diagnostico.length} cuota(s) no generadas`, diagnostico);
   }
 
+  if (modo?.simular) return { matriculas: matriculas.length, cargosCreados: 0, diagnostico, porCrear };
   if (filas.length === 0) return { matriculas: matriculas.length, cargosCreados: 0, diagnostico };
 
   const creados = await tx.insert(adminEscolarCargos)

@@ -29,6 +29,10 @@ import Tooltip from '@mui/material/Tooltip';
 import Menu from '@mui/material/Menu';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Divider from '@mui/material/Divider';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, describirFiltrosTabla, type ExportTabla } from '@/lib/export/tabla';
+
+export type { ExportTabla, ColumnaExport } from '@/lib/export/tabla';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -134,6 +138,16 @@ export interface DataTableProps<T> {
   /** Ids en el orden que el usuario ve (filtrado + ordenado). Lo usa el
    *  detalle para recorrer la lista con flechas. */
   onVisibleRowsChange?: (ids: (string | number)[]) => void;
+  /**
+   * Botones Imprimir / PDF / Excel / CSV en el header. Exportan TODAS las filas que
+   * la tabla tiene (filtradas y ordenadas como se ven, agrupadas si hay
+   * `groupBy`), no solo la página. Regla: toda pantalla con listado lo lleva.
+   * Para tablas paginadas en el servidor no sirve (solo tienen una página):
+   * esas usan su propia ruta de export.
+   */
+  exportar?:      ExportTabla<T>;
+  /** Ocultar el CSV genérico cuando la pantalla conserva uno especializado. */
+  mostrarCsv?:    boolean;
 }
 
 // ─── Breakpoint helpers ───────────────────────────────────────────────────────
@@ -179,6 +193,8 @@ export function DataTable<T>({
   groupBy,
   renderGroupHeader,
   onVisibleRowsChange,
+  exportar,
+  mostrarCsv = true,
 }: DataTableProps<T>) {
   const router = useRouter();
   // Filter state
@@ -410,7 +426,7 @@ export function DataTable<T>({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {/* Header */}
-      {(title || description || headerActions) && (
+      {(title || description || headerActions || exportar) && (
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: 'space-between', gap: 1.5 }}>
           {(title || description) && (
             <Box>
@@ -426,8 +442,20 @@ export function DataTable<T>({
               )}
             </Box>
           )}
-          {headerActions && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {(headerActions || exportar) && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', ml: { sm: 'auto' } }}>
+              {exportar && (
+                <ExportarListado
+                  deshabilitado={loading || sortedData.length === 0}
+                  mostrarCsv={mostrarCsv}
+                  testId="exportar-tabla"
+                  armar={() => armarEnvioTabla(
+                    exportar, sortedData,
+                    describirFiltrosTabla(filters, filterValues, exportar.filtroExtra),
+                    groupBy,
+                  )}
+                />
+              )}
               {headerActions}
             </Box>
           )}
@@ -515,6 +543,8 @@ export function DataTable<T>({
                 return (
                   <Box key={f.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Filter style={{ width: 14, height: 14, color: '#9ca3af' }} />
+                    {/* Qué fecha filtra, cuando no es la obvia (p. ej. «Próxima emisión»). */}
+                    {f.label && <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>{f.label}</Box>}
                     <Box
                       component="input"
                       type="date"

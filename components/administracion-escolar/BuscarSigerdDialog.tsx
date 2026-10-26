@@ -10,7 +10,7 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { Search, Loader2, AlertTriangle, UserCheck } from 'lucide-react';
 import { aFechaISO } from '@/lib/sigerd/fechas';
 import {
-  avisoSinResultados, esDeOtroAlumno, seEligeSolo, NADIE_CON_ESOS_DATOS,
+  avisoSinResultados, esDeOtroAlumno, NADIE_CON_ESOS_DATOS,
   type BusquedaDeFicha, type CriteriosSigerd,
 } from '@/lib/administracion-escolar/estudiante-sigerd-busqueda';
 
@@ -22,7 +22,10 @@ import {
  * cruza con el MINERD—, se busca en el portal y se copia lo que ya está bien.
  *
  * Desde la edición abre ya buscando al alumno de la ficha (`buscarAlAbrir`):
- * ahí no hay nada que teclear, el sistema ya sabe a quién se busca.
+ * ahí no hay nada que teclear, el sistema ya sabe a quién se busca. Enseña su
+ * nombre en los campos y la lista de lo que encontró, y NADA MÁS: traer la
+ * ficha lo decide quien mira, con «Usar este». Antes, si volvía un solo
+ * resultado, se elegía solo y se traía la ficha sin que nadie pulsara.
  *
  * Dos avisos que la pantalla tiene que dar, y por qué:
  *
@@ -139,8 +142,8 @@ export function BuscarSigerdDialog({ open, onClose, onElegir, buscarAlAbrir, est
    *
    * Es para la edición: el alumno ya está en pantalla, y hacer teclear otra vez
    * su nombre para encontrarlo era pedir lo que el sistema ya sabe. Con esto el
-   * diálogo abre con los criterios puestos y la búsqueda en marcha; si fue por
-   * un identificador y vuelve él solo, se elige sin preguntar.
+   * diálogo abre con su nombre en los campos y la búsqueda en marcha. No elige:
+   * el resultado queda en la lista para que la persona pulse «Usar este».
    *
    * Sin esta prop —el alta— abre como estaba y no busca nada.
    */
@@ -193,10 +196,9 @@ export function BuscarSigerdDialog({ open, onClose, onElegir, buscarAlAbrir, est
   /**
    * La búsqueda automática de ESTA apertura, mientras pueda actuar.
    *
-   * La automática hace algo que la manual no: elegir sola. Por eso tiene que
-   * poder caducar —al cerrar, o en cuanto el usuario teclea, busca o elige por
-   * su cuenta—: una respuesta del portal que llega tarde no puede traerse una
-   * ficha que ya nadie está esperando.
+   * Tiene que poder caducar —al cerrar, o en cuanto el usuario teclea, busca o
+   * elige por su cuenta—: una respuesta del portal que llega tarde no puede
+   * pisar la lista de una búsqueda que la persona ya cambió.
    */
   const autoRef = useRef<BusquedaDeFicha | null>(null);
   /** Cuántas búsquedas se han lanzado: dice si hay otra más nueva en camino. */
@@ -244,9 +246,6 @@ export function BuscarSigerdDialog({ open, onClose, onElegir, buscarAlAbrir, est
       // ¿Cuáles ya están? Se pregunta después de tener los resultados para no
       // retrasar lo que el usuario espera ver.
       const ids = rows.map((r) => r.IdEstudiante).filter((n): n is number => typeof n === 'number');
-      // Lo mismo que `yaEstan`, pero solo si de verdad se pudo preguntar: para
-      // pintar, una respuesta fallida vale como «ninguno»; para elegir sola, no.
-      let comprobado: Map<number, number> | null = new Map();
       if (ids.length > 0) {
         const r2 = await fetch(`/api/administracion-escolar/estudiantes/por-sigerd?ids=${ids.join(',')}`);
         const j2 = await r2.json().catch(() => ({}));
@@ -254,23 +253,8 @@ export function BuscarSigerdDialog({ open, onClose, onElegir, buscarAlAbrir, est
         const mapa = new Map<number, number>();
         for (const e of j2.existentes ?? []) if (e.sigerdId) mapa.set(e.sigerdId, e.id);
         setYaEstan(mapa);
-        comprobado = r2.ok && Array.isArray(j2.existentes) ? mapa : null;
       } else {
         setYaEstan(new Map());
-      }
-
-      // «Que lo abra y lo cargue»: si se buscó por un identificador y volvió
-      // él solo, se elige igual que si el usuario hubiera pulsado su fila.
-      //
-      // Menos si al abrir todavía se estaba trayendo una ficha de la apertura
-      // anterior (`trayendoFicha` es aquí el de ese momento). Quien cierra
-      // creyendo que se colgó y vuelve a pulsar lanzaría la misma ronda al
-      // portal a la vez que la primera, y dos altas simultáneas de un tutor
-      // sin cédula lo dejan duplicado. La fila queda a la vista y «Usar este»
-      // se habilita cuando la primera termina.
-      if (auto && trayendoFicha == null
-        && seEligeSolo({ busqueda: auto, filas: rows, yaEstan: comprobado, estudianteId })) {
-        void elegir(rows[0], auto);
       }
     } catch (e: unknown) {
       if (!caduco()) setError(e instanceof Error ? e.message : 'No se pudo consultar SIGERD.');
@@ -387,7 +371,8 @@ export function BuscarSigerdDialog({ open, onClose, onElegir, buscarAlAbrir, est
     // apertura anterior que aún no ha vuelto no se confunde con esta.
     const mia: BusquedaDeFicha = { ...buscarAlAbrir };
     autoRef.current = mia;
-    setCriterios(mia.criterios);
+    // En los campos, su nombre; la búsqueda, por lo más preciso que tenga.
+    setCriterios(mia.aLaVista ?? mia.criterios);
     void buscar(mia.criterios, mia);
     // Al cerrar caduca: lo que el portal conteste después ya no elige nada.
     return () => { if (autoRef.current === mia) autoRef.current = null; };

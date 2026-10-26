@@ -12,14 +12,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { and, eq } from 'drizzle-orm';
 import { generarFacturaDeRecurrente } from '@/lib/cobranza/recurrente';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  // Generar una factura exige poder crear facturas: estar en la empresa no basta.
+  const auth = await requirePermission('facturas:crear');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const { id } = await params;
   const numId = parseInt(id);

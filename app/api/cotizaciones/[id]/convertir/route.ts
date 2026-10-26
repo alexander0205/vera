@@ -13,6 +13,7 @@ import { and, eq, desc } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getAmbienteTenant } from '@/lib/ecf-api/ambiente';
+import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -94,7 +95,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
     .insert(ecfDocuments)
     .values({
       teamId,
-      clientId:             cot.clientId ?? null,
+      clientId:             cot.clientId ?? await clienteDeLaFactura(db as never, { teamId, rnc: cot.rncComprador, razonSocial: cot.razonSocialComprador }),
       encf,
       codigo,
       tipoEcf:              tipoDestino,

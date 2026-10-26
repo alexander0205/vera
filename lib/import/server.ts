@@ -12,6 +12,8 @@ import { type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import type { ImportMode } from './csv';
 
+export const MAX_BYTES_IMPORTACION = 5 * 1024 * 1024;
+
 export class ImportError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -45,6 +47,8 @@ export async function readUpload(req: NextRequest): Promise<{ buf: Buffer; mode:
   const file = form.get('file');
   const mode: ImportMode = form.get('mode') === 'commit' ? 'commit' : 'preview';
   if (!(file instanceof File)) throw new ImportError(400, 'Archivo requerido');
+  // Un CSV de importación sensato pesa unos KB; sin tope, un archivo enorme se leía entero en memoria.
+  if (file.size > MAX_BYTES_IMPORTACION) throw new ImportError(413, 'El archivo pesa más de 5 MB. Divídelo en partes.');
   const buf = Buffer.from(await file.arrayBuffer());
   return { buf, mode, filename: file.name };
 }

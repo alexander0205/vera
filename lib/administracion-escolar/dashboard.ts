@@ -15,7 +15,7 @@ export type { PuntoMensual };
  * por entrar.
  *
  * Todo se agrega en Postgres. Un colegio de 465 alumnos genera unos 5.100
- * cargos al año, y las mismas cifras se sacaban hoy abriendo /escolar/cargos y
+ * cargos al año, y las mismas cifras se sacaban abriendo la lista de cargos y
  * sumando con la vista: traerse esas filas para sumarlas en JS convierte una
  * pantalla de resumen en la consulta más cara del módulo.
  *
@@ -574,7 +574,7 @@ export async function dashboardDelPeriodo(
     db.execute(sql`
       WITH mat AS (
         SELECT m.id, m.estudiante_id, m.curso_id AS seccion_id, cu.grado_id, g.servicio_id,
-               m.beca_tipo, m.beca_valor, m.conceptos_ids,
+               m.beca_tipo, m.beca_valor, m.conceptos_ids, m.concepto_mensualidad_id,
                COALESCE(m.fecha_inscripcion::text, ${periodo.fecha_inicio ?? '0001-01-01'}) AS desde
         FROM admin_escolar_matriculas m
         JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
@@ -585,7 +585,10 @@ export async function dashboardDelPeriodo(
       tarifa AS (
         SELECT mat.id AS matricula_id, mat.desde, co.id AS concepto_id, co.tipo,
                CASE
-                 WHEN co.admite_beca AND mat.beca_tipo = 'monto'      THEN mat.beca_valor
+                 -- El monto fijo es la mensualidad pactada: solo a la generación,
+                 -- si se conoce (como becaAplica en lib/.../tarifas.ts).
+                 WHEN co.admite_beca AND mat.beca_tipo = 'monto'
+                      AND (mat.concepto_mensualidad_id IS NULL OR co.id = mat.concepto_mensualidad_id) THEN mat.beca_valor
                  WHEN co.admite_beca AND mat.beca_tipo = 'porcentaje' THEN
                    round(base.monto * (100 - mat.beca_valor) / 100.0)
                  ELSE base.monto

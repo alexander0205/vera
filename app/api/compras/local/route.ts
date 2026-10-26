@@ -14,6 +14,7 @@ import { listarCompras } from '@/lib/compras/consultas';
 import { analizarNcf, METODOS_PAGO_COMPRA, TASAS_ITBIS, TIPOS_PROVEEDOR } from '@/lib/compras/fiscal';
 import { esFechaYMD } from '@/lib/nomina/periodos';
 import { estadoCaptura, marcarRegistrada } from '@/lib/compras/captura/consultas';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 const centavos = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 
@@ -77,6 +78,20 @@ export async function POST(req: NextRequest) {
   const auth = await autorizar(parsed.data.clase, true);
   if (!auth.ok) return auth.response;
 
+  // Almacén y productos de la compra (y de cada línea) tienen que ser de esta empresa.
+  const lineasDeCompra = Array.isArray(parsed.data.lineas) ? parsed.data.lineas : [];
+  const errRefs = await validarReferenciasDeEmpresa(auth.teamId, {
+    almacenId: parsed.data.almacenId ?? null,
+    productoIds: lineasDeCompra.map((l) => l.productoId),
+  });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
+  for (const l of lineasDeCompra) {
+    if (l.almacenId) {
+      const e = await validarReferenciasDeEmpresa(auth.teamId, { almacenId: l.almacenId });
+      if (e) return NextResponse.json({ error: e }, { status: 422 });
+    }
+  }
+
   try {
     const { capturaId, ...datos } = parsed.data;
     // Con NCF, registrar dos veces la misma factura fotografiada lo frena el
@@ -121,10 +136,14 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const desde = sp.get('desde');
   const hasta = sp.get('hasta');
+  // Sin `limit` la consulta corta en 200 y «Todos los meses» perdía compras en
+  // silencio; la pantalla pide hasta 2000 (la consulta topa en 5000).
+  const limit = Number(sp.get('limit')) || undefined;
   const compras = await listarCompras(auth.teamId, {
     clase,
     desde: esFechaYMD(desde) ? desde : undefined,
     hasta: esFechaYMD(hasta) ? hasta : undefined,
+    limit,
   });
   return NextResponse.json({ compras });
 }

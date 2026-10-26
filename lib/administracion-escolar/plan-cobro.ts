@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarConceptoCuotas, adminEscolarConceptosPago } from '@/lib/db/schema';
 import { vencimientoDe } from './calendario';
+import { cuotasDeLaTarifa, montosPorCuota, precioEsPorCuota, repartir } from './repartir';
 import { resolverTarifas, type ContextoTarifa, type OrigenTarifa } from './tarifas';
 
 /**
@@ -29,6 +30,11 @@ export interface CuotaPlan {
   fechaVencimiento: string | null;
   montoCentavos: number;
   /**
+   * El peso de la cuota en el reparto (100000 = 100 %). Viaja para que el
+   * navegador reparta un precio propio igual que aquí (`montosPorCuota`).
+   */
+  porcentajeMilesimas?: number;
+  /**
    * Si se emitió antes de que el alumno entrara. Al que se matricula en enero
    * no se le cobra la factura de agosto, aunque su plazo de pago siga abierto:
    * lo que decide es cuándo salió el documento, no hasta cuándo se podía pagar.
@@ -41,6 +47,13 @@ export interface LineaPlan {
   nombre: string;
   tipo: string;
   admiteBeca: boolean;
+  /** Llega desmarcado al matricular: se marca solo a quien lo usa. Sin dato = obligatorio. */
+  opcional?: boolean;
+  /**
+   * Si `montoCentavos` es lo de cada cuota (true) o el total que se reparte
+   * (false). Ya resuelto con `precioEsPorCuota`: la pantalla no adivina por el tipo.
+   */
+  precioPorCuota?: boolean;
   /**
    * La tarifa tal como la escribió el colegio. En una mensualidad es lo de CADA
    * cuota; en los demás conceptos es el total que se reparte entre ellas.
@@ -83,21 +96,9 @@ export interface ReglasCobro {
   avisoSms: boolean;
 }
 
-/** Reparte un monto entre cuotas sin perder ni un centavo por redondeo. */
-function repartir(
-  montoCentavos: number,
-  pesos: number[],
-): number[] {
-  const suma = pesos.reduce((a, b) => a + b, 0);
-  if (suma <= 0) return pesos.map(() => 0);
-  const partes = pesos.map((p) => Math.floor((montoCentavos * p) / suma));
-  // Lo que se perdió al truncar se le da a la primera cuota, en vez de dejar
-  // que el total de las cuotas no cuadre con la tarifa. Un colegio que cobra
-  // 45.000 en tres partes tiene que ver 15.000 tres veces, no 14.999.
-  const resto = montoCentavos - partes.reduce((a, b) => a + b, 0);
-  if (partes.length > 0) partes[0] += resto;
-  return partes;
-}
+// El reparto vive en un módulo sin base de datos para que el navegador use el
+// mismo cálculo; se reexporta para no mover a quien ya lo importa de aquí.
+export { repartir };
 
 /**
  * Arma el plan de cobro de un estudiante.
@@ -117,6 +118,8 @@ export async function armarPlanDeCobro(
       nombre:     adminEscolarConceptosPago.nombre,
       tipo:       adminEscolarConceptosPago.tipo,
       admiteBeca: adminEscolarConceptosPago.admiteBeca,
+      opcional:   adminEscolarConceptosPago.opcional,
+      precioPorCuota: adminEscolarConceptosPago.precioPorCuota,
       // Hace falta para derivar el vencimiento: la cuota solo guarda la fecha
       // de emisión, y el plazo es del concepto, no de cada cuota.
       diasParaPago: adminEscolarConceptosPago.diasParaPago,
@@ -164,7 +167,9 @@ export async function armarPlanDeCobro(
     // lo paga. Enseñarlo en cero solo confunde.
     if (!tarifa) continue;
 
-    const suyas = cuotas.filter((c) => c.conceptoId === concepto.id);
+    // Las cuotas que cobra ESTA tarifa: un grado puede pagar 10 de las 11 del
+    // calendario (Maternal e Infantes pagan las 11).
+    const suyas = cuotasDeLaTarifa(cuotas.filter((c) => c.conceptoId === concepto.id), tarifa.cuotas);
     // Un concepto sin calendario se cobra de una sola vez el día de la
     // inscripción. Es el comportamiento de antes de que existieran las cuotas,
     // y evita que un concepto recién creado desaparezca de la pantalla.
@@ -186,12 +191,16 @@ export async function armarPlanDeCobro(
      *
      * En los demás conceptos es el TOTAL a repartir: "inscripción 3.500 en dos
      * pagos" son 1.750 y 1.750, no 3.500 dos veces.
+     *
+     * Salvo que el colegio diga otra cosa en el concepto (`precioPorCuota`): un
+     * almuerzo de 5,000 al mes no es colegiatura, y repartido salía a 455.
+     *
+     * La regla vive en `montosPorCuota` para que el diálogo de Tarifas diga
+     * los mismos números que luego se cobran.
      */
-    const porCuota = concepto.tipo === 'mensualidad';
-
-    const montos = porCuota
-      ? plantilla.map(() => tarifa.montoCentavos)
-      : repartir(tarifa.montoCentavos, plantilla.map((c) => c.porcentajeMilesimas));
+    const porCuota = precioEsPorCuota(concepto);
+    const montos = montosPorCuota(
+      concepto.tipo, tarifa.montoCentavos, plantilla.map((c) => c.porcentajeMilesimas), porCuota);
 
     const detalle: CuotaPlan[] = plantilla.map((c, i) => {
       const fechaEmision = String(c.fechaEmision);
@@ -199,10 +208,14 @@ export async function armarPlanDeCobro(
         cuotaId: c.id,
         numero: c.numero,
         etiqueta: c.etiqueta,
-        mes: c.mes,
+        // Una fecha de emisión puede editarse después de generar el calendario.
+        // La ficha y el devengo deben poner esa cuota en el mismo mes.
+        mes: c.mes == null && suyas.length <= 1
+          ? null : Number(fechaEmision.slice(5, 7)),
         fechaEmision,
         fechaVencimiento: vencimientoDe(fechaEmision, concepto.diasParaPago),
         montoCentavos: montos[i],
+        porcentajeMilesimas: c.porcentajeMilesimas,
         omitida: fechaEmision < desde,
       };
     });
@@ -214,6 +227,8 @@ export async function armarPlanDeCobro(
       nombre: concepto.nombre,
       tipo: concepto.tipo,
       admiteBeca: concepto.admiteBeca,
+      opcional: concepto.opcional,
+      precioPorCuota: porCuota,
       montoCentavos: tarifa.montoCentavos,
       origen: tarifa.origen,
       productId: tarifa.productId,

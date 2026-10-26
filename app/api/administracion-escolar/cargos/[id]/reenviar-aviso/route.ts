@@ -27,12 +27,14 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
-import { enviarWhatsApp, enviarWhatsAppPlantilla, WhatsAppNoConectadoError } from '@/lib/whatsapp/enviar';
-import { resolverPlantilla, parametrosDeAviso, huecoDe } from '@/lib/whatsapp/plantillas';
+import { enviarWhatsAppPlantilla, WhatsAppNoConectadoError } from '@/lib/whatsapp/enviar';
+import { resolverPlantilla, parametrosDeAviso, huecoDe, plantillaParaEnviar } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { getOCrearLink, urlDelLink } from '@/lib/administracion-escolar/link-pago';
+import { enlaceDeFactura, sufijoDeBoton } from '@/lib/administracion-escolar/agrupar-avisos';
 import { pesos, enLetra } from '@/lib/administracion-escolar/avisos';
+import { registrarReenvioAviso } from '@/lib/administracion-escolar/reenvio-aviso';
 
 /** Uno por cargo cada 24 horas. Ver `esperaRestante`. */
 const HORAS_ENTRE_AVISOS = 24;
@@ -42,8 +44,8 @@ interface AvisoListo {
   responsable: string;
   texto: string;
   enlace: string;
-  /** null = va como texto libre. */
-  nombrePlantilla: string | null;
+  /** La plantilla aprobada con que sale: nunca va en texto libre. */
+  nombrePlantilla: string;
   idioma: string;
   parametros: string[];
   botonUrl: string | null;
@@ -157,7 +159,8 @@ async function armarAviso(
   }
 
   const estudiante = `${fila.nombres} ${fila.apellidos ?? ''}`.trim();
-  const enlace = urlDelLink((await getOCrearLink(teamId, fila.clientId)).token);
+  // A ESA factura, no a toda la deuda de la familia.
+  const enlace = enlaceDeFactura(urlDelLink((await getOCrearLink(teamId, fila.clientId)).token), fila.ecfDocumentId);
 
   /**
    * Se manda el aviso de VENCIMIENTO, no el de «ya está lista».
@@ -170,37 +173,38 @@ async function armarAviso(
   const plantilla = await resolverPlantilla(teamId, 'al-vencer', fila.cobraMora, fila.moraDiasGracia);
 
   // Con factura hay enlace, así que va la versión con botón si está puesta.
-  const usarConLink = plantilla?.nombreConLink != null;
-  const nombre = usarConLink ? plantilla!.nombreConLink! : plantilla?.nombre;
-  const necesitaBoton = usarConLink ? plantilla!.conLinkTieneBoton : plantilla?.conBoton === true;
-  const porPlantilla = plantilla != null && nombre != null && !(necesitaBoton && !CRM_SOPORTA_BOTONES);
+  // Sin plantilla que se pueda mandar no hay reenvío: un cobro por WhatsApp
+  // nunca va en texto libre (ver `plantillaParaEnviar`).
+  const usable = plantillaParaEnviar(plantilla, true, CRM_SOPORTA_BOTONES);
+  if (!usable) {
+    return {
+      error: 'Todavía no hay una plantilla de WhatsApp aprobada para este aviso, y los cobros '
+        + 'no se mandan en texto libre. Escríbele a soporte de Zero para activarla.',
+      status: 409,
+    };
+  }
 
-  const parametros = plantilla
-    ? parametrosDeAviso(hueco, {
-        colegio: fila.colegio,
-        concepto: fila.concepto,
-        estudiante,
-        monto: pesos(fila.saldoCentavos),
-        telefonoColegio: fila.telefonoColegio ?? '',
-        diasGracia: fila.moraDiasGracia,
-        fechaRecargo: fila.fechaVencimiento ? enLetra(String(fila.fechaVencimiento)) : null,
-      })
-    : [];
-
-  const textoLibre = `Hoy venció el cobro de ${fila.concepto} de ${estudiante}: ${pesos(fila.saldoCentavos)}.`
-    + `\n\nPaga o sube tu comprobante aquí: ${enlace}`;
+  const parametros = parametrosDeAviso(hueco, {
+    colegio: fila.colegio,
+    concepto: fila.concepto,
+    estudiante,
+    monto: pesos(fila.saldoCentavos),
+    telefonoColegio: fila.telefonoColegio ?? '',
+    diasGracia: fila.moraDiasGracia,
+    fechaRecargo: fila.fechaVencimiento ? enLetra(String(fila.fechaVencimiento)) : null,
+  });
 
   return {
     destino,
     responsable: fila.responsable ?? '',
-    // Lo que se enseña en la previa es lo que va a leer el padre: si sale por
-    // plantilla, el texto se arma con sus valores reales, no el libre.
-    texto: porPlantilla ? textoDePlantilla(parametros, hueco) : textoLibre,
+    // Lo que se enseña en la previa es lo que va a leer el padre: la
+    // plantilla con sus valores reales.
+    texto: textoDePlantilla(parametros, hueco),
     enlace,
-    nombrePlantilla: porPlantilla ? nombre! : null,
-    idioma: plantilla?.idioma ?? 'es',
+    nombrePlantilla: usable.nombre,
+    idioma: usable.idioma,
     parametros,
-    botonUrl: necesitaBoton ? enlace : null,
+    botonUrl: usable.conBoton ? sufijoDeBoton(enlace) : null,
     esperaHoras: await esperaRestante(teamId, cargoId),
   };
 }
@@ -264,14 +268,12 @@ export async function POST(
   }
 
   try {
-    const r = aviso.nombrePlantilla
-      ? await enviarWhatsAppPlantilla(auth.teamId, aviso.destino, {
-          nombre: aviso.nombrePlantilla,
-          idioma: aviso.idioma,
-          botonUrl: aviso.botonUrl,
-          parametros: aviso.parametros,
-        })
-      : await enviarWhatsApp(auth.teamId, aviso.destino, aviso.texto);
+    const r = await enviarWhatsAppPlantilla(auth.teamId, aviso.destino, {
+      nombre: aviso.nombrePlantilla,
+      idioma: aviso.idioma,
+      botonUrl: aviso.botonUrl,
+      parametros: aviso.parametros,
+    });
 
     /**
      * Se anota como un aviso más, con su `mensaje_id`, para que la
@@ -279,18 +281,17 @@ export async function POST(
      * reenvío a mano que falla en silencio es exactamente el problema que este
      * botón viene a resolver.
      *
-     * `offsetDias: -1` lo distingue de los del cron sin chocar con su índice
-     * único. El tope de 24 h de arriba es lo que impide repetirlo, no el índice.
+     * Cada reenvío lleva su propio offset negativo (-1, -2, …) para no chocar
+     * con el índice único ni con los del cron. Antes todos usaban -1 y solo el
+     * primero quedaba anotado: los siguientes no contaban para la cuota mensual
+     * ni para el tope de 24 h de arriba, que se lee de esta tabla.
      */
-    await db.insert(adminEscolarAvisosEnviados).values({
+    await registrarReenvioAviso({
       teamId: auth.teamId,
       cargoId,
-      tipo: 'al-vencer',
-      offsetDias: -1,
-      canal: 'whatsapp',
       destino: aviso.destino,
       mensajeId: r.messageId ?? null,
-    }).onConflictDoNothing();
+    });
 
     return NextResponse.json({ ok: true, destino: aviso.destino, messageId: r.messageId });
   } catch (e) {

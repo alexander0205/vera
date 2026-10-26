@@ -59,6 +59,16 @@ describe('cuotasAlMatricular', () => {
     expect(ids(despues)).toEqual([87]);
   });
 
+  it('desde SIGERD: inscrito al inicio del año y cortando en hoy, no se omite ninguna y lo vencido se carga ya', () => {
+    // El alumno está en el colegio desde agosto; se pasa a Zero el 22 de
+    // octubre. Antes se inscribía con la fecha de hoy y agosto y septiembre
+    // salían «omitidas»: de diez cuotas se cobraban ocho.
+    const { ahora, despues } = cuotasAlMatricular(plan('2026-08-01'), [MENSUALIDAD], '2026-10-22');
+
+    expect(ids(ahora)).toEqual([85, 86, 87]);
+    expect(despues).toEqual([]);
+  });
+
   it('un concepto desmarcado no entra, y acepta el Set de marcados del formulario', () => {
     const { ahora, despues } = cuotasAlMatricular(plan('2026-09-02'), new Set([MENSUALIDAD]), '2026-09-02');
 

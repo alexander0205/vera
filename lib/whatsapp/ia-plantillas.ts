@@ -8,6 +8,7 @@ import { resolverRemitente } from './config';
 import { listarPlantillas, type PlantillaCrm } from './client';
 import { getPlantillasDeTeam } from './plantillas';
 import { casosDeUso } from './plantillas-colegio';
+import { comoModelo, modelosDe } from '@/lib/ia/modelo-servidor';
 import {
   crearBorrador, editarBorrador, publicarBorrador, asignarAviso, aplicarPendientes,
 } from './plantillas-servicio';
@@ -22,8 +23,7 @@ import {
  * la pantalla: la IA no puede saltarse ninguna regla.
  */
 
-const MODELO = process.env.PLANTILLAS_IA_MODELO || 'google/gemini-2.5-flash';
-const RESPALDO = process.env.PLANTILLAS_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash-lite';
+// El modelo y su respaldo los escoge el administrador en /admin/ia (lib/ia/modelos.ts).
 
 export const iaPlantillasDisponible = () =>
   Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
@@ -227,15 +227,16 @@ export async function conversarPlantilla(
     return text;
   };
 
+  const { principal: MODELO, respaldo: RESPALDO } = await modelosDe('plantillas');
   let texto: string;
   try {
-    texto = await correr(modeloPrueba ?? MODELO);
+    texto = await correr(modeloPrueba ?? comoModelo(MODELO) ?? MODELO);
   } catch (e) {
     // Si el principal falló a medias, ya pudo haber hecho cosas: no se reintenta
     // para no duplicarlas. Solo se reintenta si no hizo nada.
     if (acciones.length > 0 || RESPALDO === MODELO) throw e;
     console.warn(`[plantillas-ia] ${MODELO} falló; se reintenta con ${RESPALDO}`, e);
-    texto = await correr(RESPALDO);
+    texto = await correr(comoModelo(RESPALDO) ?? RESPALDO);
   }
 
   return {

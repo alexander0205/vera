@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { puedeEnEmpresa } from '@/lib/seguridad/permisos';
 import { logAudit, getIp } from '@/lib/audit';
 import { rateLimitDb } from '@/lib/rate-limit';
 import { certificados, EcfApiError } from '@/lib/ecf-api/client';
@@ -93,6 +94,10 @@ export async function POST(request: NextRequest) {
 
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+    // El certificado firma los comprobantes de la empresa: solo quien administra la configuración lo sube.
+    if (!(await puedeEnEmpresa(user, teamId, 'configuracion:gestionar'))) {
+      return NextResponse.json({ error: 'Solo quien administra la empresa puede cambiar el certificado' }, { status: 403 });
+    }
 
     const rl = await rateLimitDb(`cert_upload:${teamId}`, 10, 60 * 60_000);
     if (!rl.allowed) {
@@ -177,6 +182,10 @@ export async function DELETE(request: NextRequest) {
 
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+    // Revocar el certificado deja a la empresa sin poder emitir: solo quien administra la configuración.
+    if (!(await puedeEnEmpresa(user, teamId, 'configuracion:gestionar'))) {
+      return NextResponse.json({ error: 'Solo quien administra la empresa puede revocar el certificado' }, { status: 403 });
+    }
 
     let codigoPublico: string;
     try {

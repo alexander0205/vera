@@ -41,7 +41,7 @@ const INDUSTRIAS: Industria[] = [
     titulo: 'Restaurantes y cafeterías',
     corto: 'Restaurantes',
     dolor: 'La comanda va en papel y la factura se hace después.',
-    usa: ['Mesas y comandas, con su mesero', 'Caja con turnos y cuadre al cierre', 'El comprobante sale al cobrar la mesa'],
+    usa: ['Mesas y comandas, con su mesero', 'Caja con turnos y cuadre al cierre', 'Se cobra la mesa y el ticket sale en la térmica'],
     href: '/productos/punto-de-venta',
     enlace: 'Ver el punto de venta',
     imagen: { src: '/home/fotos/11-cafeteria.png', ancho: 2172, alto: 724, posicion: '36% 50%' },
@@ -71,7 +71,7 @@ const INDUSTRIAS: Industria[] = [
     titulo: 'Servicios y agencias',
     corto: 'Servicios',
     dolor: 'Igualas mensuales que se facturan a mano y cobros que se olvidan.',
-    usa: ['Facturas recurrentes que salen solas cada mes', 'Cotización que se vuelve factura en un clic', 'Link de pago para cobrar con tarjeta'],
+    usa: ['Facturas recurrentes que se preparan solas cada mes', 'Cotización que se vuelve factura en un clic', 'Recordatorio de pago por correo al que se atrasa'],
     href: '/productos/erp#facturacion',
     enlace: 'Ver facturación',
     imagen: { src: '/home/fotos/33-agencia.png', ancho: 1254, alto: 1254, posicion: '50% 40%' },
@@ -94,7 +94,7 @@ const INDUSTRIAS: Industria[] = [
     // El tramo de colegio trae TODOS los módulos (lib/config/plans.ts): se dice
     // aquí con nombre, no con un «y más».
     usa: [
-      'Mensualidades, mora y un link de pago para cada familia',
+      'Mensualidades, mora y un enlace para que cada familia vea lo que debe',
       'Punto de venta para la cafetería',
       'Facturación e-CF de cada cobro ante la DGII',
       'Contabilidad y nómina del personal, incluidas',

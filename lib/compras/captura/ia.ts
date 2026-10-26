@@ -1,7 +1,6 @@
 import 'server-only';
 import { generateText, Output, type LanguageModel } from 'ai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { google } from '@ai-sdk/google';
+import { comoModelo, hayCaminoIa, modelosDe } from '@/lib/ia/modelo-servidor';
 import { CATEGORIAS_COMPRA } from '../categorias';
 import { esquemaLecturaIa, type LecturaIa } from './datos';
 
@@ -36,24 +35,9 @@ import { esquemaLecturaIa, type LecturaIa } from './datos';
  * modelos de Anthropic: devuelven 403 y el reintento moría igual. Con créditos
  * pagados, Haiku vuelve poniendo `CAPTURA_IA_MODELO_RESPALDO`.
  *
- * Los dos se cambian sin tocar código con `CAPTURA_IA_MODELO` y
- * `CAPTURA_IA_MODELO_RESPALDO`.
+ * Los dos los escoge el administrador en /admin/ia (lib/ia/modelos.ts); los
+ * de fábrica salen de `CAPTURA_IA_MODELO` y `CAPTURA_IA_MODELO_RESPALDO`.
  */
-const MODELO = process.env.CAPTURA_IA_MODELO || 'google/gemini-2.5-flash-lite';
-const RESPALDO = process.env.CAPTURA_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash';
-
-const porGateway = () => Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
-
-function comoModelo(id: string): LanguageModel | null {
-  if (!id) return null;
-  if (porGateway()) return id;
-  // Sin gateway se llama al proveedor directamente, con su llave. El id lleva
-  // delante quién lo sirve —`google/gemini-2.5-flash-lite`— y es el mismo que
-  // usa el gateway, así que cambiar de camino no obliga a tocar la config.
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY && id.startsWith('google/')) return google(id.slice('google/'.length));
-  if (process.env.ANTHROPIC_API_KEY && id.startsWith('anthropic/')) return anthropic(id.slice('anthropic/'.length));
-  return null;
-}
 
 /**
  * El modelo con el que leer, o null si no hay forma de llamarlo. Cuando la
@@ -61,9 +45,13 @@ function comoModelo(id: string): LanguageModel | null {
  * modelo de Google delante— entra el respaldo, y por eso basta con poner una
  * sola llave para que esto funcione.
  */
-export const modeloCaptura = (): LanguageModel | null => comoModelo(MODELO) ?? comoModelo(RESPALDO);
+export async function modeloCaptura(): Promise<LanguageModel | null> {
+  if (!hayCaminoIa()) return null;
+  const { principal, respaldo } = await modelosDe('captura');
+  return comoModelo(principal) ?? comoModelo(respaldo);
+}
 
-export const iaDisponible = (): boolean => modeloCaptura() !== null;
+export const iaDisponible = async (): Promise<boolean> => (await modeloCaptura()) !== null;
 
 const CATALOGO = CATEGORIAS_COMPRA.map((c) => `  ${c.clave}: ${c.label} — ${c.ejemplo}`).join('\n');
 
@@ -93,7 +81,8 @@ ${CATALOGO}
 export interface ContextoLectura { empresa?: string | null }
 
 export async function leerFacturaConIa(archivos: { buffer: Buffer; mime: string }[], ctx: ContextoLectura = {}): Promise<LecturaIa> {
-  const modelo = modeloCaptura();
+  const { principal: MODELO, respaldo: RESPALDO } = await modelosDe('captura');
+  const modelo = await modeloCaptura();
   if (!modelo) throw new Error('La lectura con IA no está configurada');
   try {
     return await leerCon(modelo, archivos, ctx);

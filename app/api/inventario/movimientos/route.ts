@@ -3,7 +3,8 @@
  * Lista movimientos de inventario del equipo con filtros opcionales.
  * ?productoId=N  — filtrar por producto
  * ?tipo=VENTA    — filtrar por tipo de movimiento
- * ?limit=50      — paginación simple (default 50, max 200)
+ * ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD — por fecha del movimiento (día RD)
+ * ?limit=50      — paginación simple (default 50, max 2000)
  * ?offset=0
  */
 
@@ -11,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { inventoryMovements, products, users, teamMembers } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
 
 export async function GET(req: NextRequest) {
@@ -33,7 +34,11 @@ export async function GET(req: NextRequest) {
   const productoId = params.get('productoId') ? parseInt(params.get('productoId')!) : null;
   const tipo       = params.get('tipo');
   const almacenId  = params.get('almacenId') ? parseInt(params.get('almacenId')!) : null;
-  const limit      = Math.min(parseInt(params.get('limit') ?? '50'), 200);
+  const desde      = params.get('desde');
+  const hasta      = params.get('hasta');
+  // El tope era 200 y la pantalla pedía 50: nunca se veía más que lo último.
+  // Con el filtro por fecha la pantalla pide el rango entero.
+  const limit      = Math.min(parseInt(params.get('limit') ?? '50') || 50, 2000);
   const offset     = parseInt(params.get('offset') ?? '0');
 
   const conditions = [eq(inventoryMovements.teamId, teamId)];
@@ -43,6 +48,11 @@ export async function GET(req: NextRequest) {
   // anteriores a la migración 0094 tienen almacen_id NULL y quedan fuera: ese
   // dato nunca se registró, no se puede adivinar a cuál pertenecían.
   if (almacenId) conditions.push(eq(inventoryMovements.almacenId, almacenId));
+  // Por el día en República Dominicana, no en UTC: un movimiento de las 9 p. m.
+  // es de ese día, no del siguiente.
+  const fechaRD = sql`(${inventoryMovements.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santo_Domingo')::date`;
+  if (desde && /^\d{4}-\d{2}-\d{2}$/.test(desde)) conditions.push(sql`${fechaRD} >= ${desde}`);
+  if (hasta && /^\d{4}-\d{2}-\d{2}$/.test(hasta)) conditions.push(sql`${fechaRD} <= ${hasta}`);
 
   const rows = await db
     .select({

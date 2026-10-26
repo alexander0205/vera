@@ -441,7 +441,9 @@ export default function CertificadoPage() {
           <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
             {hasCert ? 'Reemplazar certificado' : 'Subir certificado'}
           </Typography>
-          <UploadForm hasCert={hasCert} onSuccess={setCertInfo} />
+          <Box data-tour="certificado-subir">
+            <UploadForm hasCert={hasCert} onSuccess={setCertInfo} />
+          </Box>
         </Box>
       </Box>
     </Box>

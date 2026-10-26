@@ -15,6 +15,7 @@ import { LibroDiarioClient } from './_client';
 import { ChevronRight } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { BotonesExportar } from '@/components/reportes/botones-exportar';
 import Alert from '@mui/material/Alert';
 
 export const dynamic = 'force-dynamic';
@@ -115,20 +116,14 @@ export default async function LibroDiarioPage({
           </Typography>
         </Box>
         {total > 0 && (
-          <Box component="a"
-            href={`/api/contabilidad/libro-diario/export?${new URLSearchParams({
+          // Imprimir / PDF / Excel de TODO lo filtrado: la pantalla pagina.
+          <BotonesExportar ruta="/api/contabilidad/libro-diario/export" testId="exportar-libro"
+            filtro={new URLSearchParams({
               ...(origenTipo ? { origenTipo } : {}),
               ...(desde ? { desde } : {}),
               ...(hasta ? { hasta } : {}),
               ...(cuentaId ? { cuentaId: String(cuentaId) } : {}),
-            })}`}
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
-              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
-              '&:hover': { bgcolor: '#e0e7fd' } }}
-          >
-            Exportar a Excel
-          </Box>
+            }).toString()} />
         )}
       </Box>
 

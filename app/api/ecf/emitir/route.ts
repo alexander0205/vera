@@ -39,6 +39,8 @@ import { labelMetodo } from '@/lib/pagos/metodos';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
 import { cargosDeLasLineas, estudiantesDeLasLineas, vincularCargosDeFactura, responsableDeLosCargos, responsableDeLosEstudiantes, ponerResponsableSiFalta } from '@/lib/administracion-escolar/vincular-por-clave';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
+import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -558,6 +560,13 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data;
 
+    // Toda referencia del cuerpo (cliente, almacén, vendedor, lista, productos) debe ser de ESTA empresa.
+    const errRefs = await validarReferenciasDeEmpresa(teamId, {
+      clientId: data.clientId, almacenId: data.almacenId, vendedorId: data.vendedorId, listaPreciosId: data.listaPreciosId,
+      productoIds: data.items.map((i) => i.productoId),
+    });
+    if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
+
     // Gasto (e43 menores / e47 pagos al exterior): dinero que SALE. Su efectivo
     // no entra a la caja como ingreso — se trata como salida (ver helpers arriba).
     const esGasto = data.tipoEcf === '43' || data.tipoEcf === '47';
@@ -651,7 +660,7 @@ export async function POST(request: NextRequest) {
     // e-NCF tipeado (ncfModificado). El vínculo por id se persiste siempre.
     let padreDoc: {
       id: number; encf: string; tipoEcf: string; estado: string;
-      montoTotal: number; fechaEmision: Date;
+      montoTotal: number; fechaEmision: Date; clientId: number | null;
     } | null = null;
 
     if (data.origenDocumentoId) {
@@ -659,7 +668,7 @@ export async function POST(request: NextRequest) {
         .select({
           id: ecfDocuments.id, encf: ecfDocuments.encf, tipoEcf: ecfDocuments.tipoEcf,
           estado: ecfDocuments.estado, montoTotal: ecfDocuments.montoTotal,
-          fechaEmision: ecfDocuments.fechaEmision,
+          fechaEmision: ecfDocuments.fechaEmision, clientId: ecfDocuments.clientId,
         })
         .from(ecfDocuments)
         .where(and(eq(ecfDocuments.id, data.origenDocumentoId), eq(ecfDocuments.teamId, teamId)))
@@ -673,7 +682,7 @@ export async function POST(request: NextRequest) {
         .select({
           id: ecfDocuments.id, encf: ecfDocuments.encf, tipoEcf: ecfDocuments.tipoEcf,
           estado: ecfDocuments.estado, montoTotal: ecfDocuments.montoTotal,
-          fechaEmision: ecfDocuments.fechaEmision,
+          fechaEmision: ecfDocuments.fechaEmision, clientId: ecfDocuments.clientId,
         })
         .from(ecfDocuments)
         .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, data.ncfModificado)))
@@ -841,6 +850,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Cliente: ninguna factura de venta sin dueño ──────────────────────────
+    // Elegido en el formulario → ese. Nota de crédito/débito → el de su
+    // factura. De alumnos → null aquí: su dueño es el responsable de pago y lo
+    // pone `vincularCargosEscolares` (aquí ya se adelanta). Lo demás → por cédula/RNC, por nombre
+    // exacto o «CONSUMIDOR FINAL» (ver lib/clientes/cliente-de-factura.ts).
+    // Va DESPUÉS de validar beneficiarios: un cliente encontrado por la cédula
+    // no puede exigir beneficiarios que el formulario nunca pidió.
+    const cargosLinea = cargosDeLasLineas(data.items);
+    const alumnosLinea = estudiantesDeLasLineas(data.items);
+    // De alumnos: el responsable de pago se pone YA al guardar, no después de
+    // insertar. Así la factura nunca existe sin cliente —ni un instante—, que
+    // es lo que permite la regla de la base (migración 0206).
+    const responsableAlumnos = data.clientId || padreDoc?.clientId
+      ? null
+      : cargosLinea.length > 0
+        ? await responsableDeLosCargos(db as never, { teamId, cargoIds: cargosLinea })
+        : alumnosLinea.length > 0
+          ? await responsableDeLosEstudiantes(db as never, { teamId, estudianteIds: alumnosLinea })
+          : null;
+    const clienteFinal: number | null = data.clientId
+      ?? padreDoc?.clientId
+      ?? responsableAlumnos
+      // Compras y gastos (41/43/47): el RNC es del suplidor, no de un cliente.
+      ?? (esSalidaDinero ? null : await clienteDeLaFactura(db as never, {
+        teamId, rnc: data.rncComprador, razonSocial: data.razonSocialComprador, userId: user.id,
+      }));
+
     const extraFields = {
       almacenId:      data.almacenId      ?? null,
       vendedorId:     data.vendedorId     ?? null,
@@ -961,7 +997,7 @@ export async function POST(request: NextRequest) {
 
         const [saved] = await withRequestAuditContext(
           (tx) => tx.update(ecfDocuments).set({
-            clientId:             data.clientId ?? null,
+            clientId:             clienteFinal,
             tipoEcf:              data.tipoEcf,
             estadoPago,
             rncComprador:         data.rncComprador ?? null,
@@ -1092,8 +1128,8 @@ export async function POST(request: NextRequest) {
         eq(ecfDocuments.estado,     'BORRADOR'),
         eq(ecfDocuments.montoTotal, montoCts),
         gte(ecfDocuments.createdAt, dupDesde),
-        data.clientId
-          ? eq(ecfDocuments.clientId, data.clientId)
+        clienteFinal
+          ? eq(ecfDocuments.clientId, clienteFinal)
           : isNull(ecfDocuments.clientId),
       ];
       if (data.razonSocialComprador) {
@@ -1134,7 +1170,7 @@ export async function POST(request: NextRequest) {
       // duplicado + el insert sean atómicos. El 2do request concurrente espera
       // aquí hasta el commit del 1ro, y entonces su SELECT lo deduplica (cierra
       // el race check-then-insert que un SELECT suelto no puede evitar).
-      const dupLockKey = `borr:${teamId}:${data.tipoEcf}:${montoCts}:${data.razonSocialComprador ?? ''}:${data.clientId ?? ''}`;
+      const dupLockKey = `borr:${teamId}:${data.tipoEcf}:${montoCts}:${data.razonSocialComprador ?? ''}:${clienteFinal ?? ''}`;
 
       const outcome = await withRequestAuditContext(
         async (tx) => {
@@ -1152,7 +1188,7 @@ export async function POST(request: NextRequest) {
 
           const [inserted] = await tx.insert(ecfDocuments).values({
             teamId,
-            clientId:             data.clientId ?? null,
+            clientId:             clienteFinal,
             encf:                 encfBorrador,
             codigo,
             tipoEcf:              data.tipoEcf,
@@ -1468,6 +1504,9 @@ export async function POST(request: NextRequest) {
             rncComprador:         data.rncComprador,
             razonSocialComprador: data.razonSocialComprador,
             emailComprador:       data.emailComprador,
+            // Antes este modo guardaba la factura sin cliente aunque se hubiera
+            // elegido: 623 e-CF aceptados quedaron sin dueño en la cartera.
+            clientId:             clienteFinal,
             montoTotal:           montoCts,
             totalItbis:           Math.round(totales.totalItbis * 100),
             ncfModificado:        data.ncfModificado,
@@ -1596,6 +1635,7 @@ export async function POST(request: NextRequest) {
         rncComprador:         data.rncComprador,
         razonSocialComprador: data.razonSocialComprador,
         emailComprador:       data.emailComprador,
+        clientId:             clienteFinal,
         montoTotal:           Math.round(totales.montoTotal * 100),
         totalItbis:           Math.round(totales.totalItbis * 100),
         ncfModificado:        data.ncfModificado,

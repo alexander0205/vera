@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { referenciaServicio } from '@/lib/administracion-escolar/referencia-servicio';
+import { descripcionDelMes, referenciaServicio } from '@/lib/administracion-escolar/referencia-servicio';
 
 /**
  * La referencia identifica el servicio de facturación con el que se cobra una
@@ -86,5 +86,18 @@ describe('referenciaServicio', () => {
       concepto: 'Colegiatura', servicio: 'Primario', tanda: 'Vespertina', periodo: '2026-2027',
     });
     expect(matutina).not.toBe(vespertina);
+  });
+});
+
+describe('el mes en la línea de la factura', () => {
+  it('dice el mes de la cuota, para que dos meses del mismo concepto no se lean iguales', () => {
+    expect(descripcionDelMes(8, 2026)).toBe('Agosto 2026');
+    expect(descripcionDelMes(11, 2026)).toBe('Noviembre 2026');
+    expect(descripcionDelMes(1, 2027)).toBe('Enero 2027');
+  });
+  it('un cargo sin mes (inscripción, uniforme) no lleva descripción', () => {
+    expect(descripcionDelMes(null, 2026)).toBe('');
+    expect(descripcionDelMes(0, 2026)).toBe('');
+    expect(descripcionDelMes(13, 2026)).toBe('');
   });
 });

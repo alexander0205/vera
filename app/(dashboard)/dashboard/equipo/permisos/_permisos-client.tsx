@@ -26,6 +26,7 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import ButtonBase from '@mui/material/ButtonBase';
+import { PantallasDelRol } from '@/components/gobernanza/Gobernanza';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface PermDef { key: string; label: string }
@@ -516,6 +517,9 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
           <AlertTriangle style={{ width: 16, height: 16 }} /> {error}
         </Box>
       )}
+
+      {/* Mostrar/ocultar las pantallas de cada módulo para este rol. */}
+      <PantallasDelRol roleId={role.id} />
 
       <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
         {catalog.map((group, gi) => (

@@ -7,8 +7,14 @@
  * activa— no puede empezar a facturar.
  */
 import { exigirOnboarding } from '@/lib/onboarding/muro';
+import { TourGuiado } from '@/components/tour/TourGuiado';
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   await exigirOnboarding();
-  return children;
+  return (
+    <>
+      {children}
+      <TourGuiado />
+    </>
+  );
 }

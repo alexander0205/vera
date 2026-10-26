@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { getWhatsAppConfig, actualizarEstadoConexion } from '@/lib/whatsapp/config';
+import { puedeEnEmpresa } from '@/lib/seguridad/permisos';
+import { getWhatsAppConfig, actualizarEstadoConexion, elegirRemitente, viaDelTeam } from '@/lib/whatsapp/config';
 import { generarConnectUrl, WhatsAppApiError } from '@/lib/whatsapp/client';
 
 /**
@@ -20,13 +21,21 @@ export async function GET() {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
 
-  const config = await getWhatsAppConfig(teamId);
+  const [config, via] = await Promise.all([getWhatsAppConfig(teamId), viaDelTeam(teamId)]);
+  // Por dónde saldría HOY un mensaje, con lo que eligió el colegio. `listo` es
+  // lo que las pantallas miran para ofrecer el canal: con el WhatsApp de Zero
+  // no hace falta tener número propio.
+  const remitente = elegirRemitente(config, process.env.CRM_ZERO_API_KEY, via);
   return NextResponse.json({
     configurado: !!config,
     conectado: config?.conectado ?? false,
     numeroWhatsapp: config?.numeroWhatsapp
       ? `••• ${config.numeroWhatsapp.slice(-4)}`
       : null,
+    via,
+    efectivo: remitente ? (remitente.propio ? 'propio' : 'zero') : null,
+    listo: remitente != null,
+    zeroDisponible: !!process.env.CRM_ZERO_API_KEY,
   });
 }
 
@@ -37,6 +46,10 @@ export async function POST(_request: NextRequest) {
 
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+    // Conectar o cambiar el canal de WhatsApp de la empresa: solo quien administra la configuración.
+    if (!(await puedeEnEmpresa(user, teamId, 'configuracion:gestionar'))) {
+      return NextResponse.json({ error: 'Solo quien administra la empresa puede gestionar WhatsApp' }, { status: 403 });
+    }
 
     const config = await getWhatsAppConfig(teamId);
     if (!config) {

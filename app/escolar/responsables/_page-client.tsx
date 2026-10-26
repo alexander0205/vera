@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  AlertTriangle, FileText, Loader2, Mail, MessageCircle, Receipt, Search,
+  AlertTriangle, CalendarClock, FileText, Loader2, Mail, MessageCircle, Receipt, Search,
   Smartphone, Users, Wallet, X,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,10 +12,17 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Paginador } from '@/components/ui/paginador';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { NativeSelect } from '@/components/ui/native-select';
+import { usePermissions } from '@/lib/hooks/usePermissions';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { partidasDeFamilia, resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import type { FilaResponsable } from '@/lib/administracion-escolar/responsables';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { notaDeCorte } from '@/lib/export/paginas';
 
 /**
  * Las familias que pagan.
@@ -39,7 +46,8 @@ interface Resp {
   retiradas: number;
   stats: {
     familias: number; conDeuda: number;
-    deudaTotalCentavos: number; incontactables: number;
+    deudaTotalCentavos: number; deudaExigibleCentavos: number;
+    porFacturarCentavos: number; incontactables: number;
   };
 }
 
@@ -47,7 +55,10 @@ interface Detalle {
   hijos: { estudianteId: number | null; nombre: string; curso: string | null;
     estado: string | null; deudaCentavos: number; cargos: number }[];
   facturas: { id: number; codigo: string | null; encf: string | null; fecha: string;
-    montoTotal: number; pagadoCentavos: number }[];
+    montoTotal: number; pagadoCentavos: number; esMora: boolean; saldoCentavos: number; vence: string }[];
+  /** Los cargos de sus hijos: con ellos y las facturas sale el resumen de cobro. */
+  cargos: { saldoCentavos: number; montoCentavos: number; fechaVencimiento: string | null;
+    ecfDocumentId: number | null; estado: string }[];
   avisos: { id: number; enviadoAt: string; tipo: string; canal: string;
     destino: string | null; alumno: string; concepto: string | null }[];
 }
@@ -59,17 +70,48 @@ const traer = (u: string) => fetch(u).then((r) => {
 
 const POR_PAGINA = 25;
 
+
+/** Imprimir / PDF / Excel de las familias filtradas (todas las páginas). Sin filtro de fecha: es un padrón. */
+const EXPORTAR: ExportTabla<FilaResponsable> = {
+  titulo: 'Responsables de pago',
+  archivo: 'responsables-pago',
+  columnas: [
+    { titulo: 'Responsable', valor: f => f.razonSocial, sub: f => f.rnc, ancho: 2 },
+    // Los canales salen de la misma regla que el motor de avisos (destinoDeContacto).
+    { titulo: 'WhatsApp', valor: f => destinoDeContacto(f, 'whatsapp'), sub: f => destinoDeContacto(f, 'correo'), ancho: 1.3 },
+    { titulo: 'SMS / teléfono', valor: f => destinoDeContacto(f, 'sms') ?? f.telefono, ancho: 1 },
+    { titulo: 'Hijos', valor: f => f.alumnos, tipo: 'numero', total: true, ancho: 0.5 },
+    { titulo: 'Deuda escolar', valor: f => Math.max(0, f.deudaEscolarCentavos - f.porFacturarCentavos), tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Por facturar', valor: f => f.porFacturarCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Otras facturas', valor: f => f.deudaFacturasCentavos || null, tipo: 'moneda', total: true, ancho: 1 },
+    { titulo: 'Mora', valor: f => f.deudaMoraCentavos || null, tipo: 'moneda', total: true, ancho: 0.9 },
+    { titulo: 'Vence más viejo', valor: f => (f.venceMasViejo ? fmtFechaCorta(f.venceMasViejo) : null), ancho: 0.9 },
+  ],
+};
+
 export default function ResponsablesClient() {
   const { params, setParams } = useUrlParams();
   const filtro = params.get('filtro') ?? 'todos';
   const pagina = Number(params.get('p')) || 1;
+  /**
+   * Por concepto: las familias con cargos de UN cobro (el paseo que se le
+   * cargó a un grupo, los «Pago de más» a revisión). Lo daba «Cargos y deudas»
+   * antes de quitarla.
+   */
+  const concepto = params.get('concepto') ?? '';
+  const { can, pantallasOcultas } = usePermissions();
+  const { data: catalogo } = useSWR<{ conceptos?: { id: number; nombre: string; activo: boolean }[] }>(
+    '/api/administracion-escolar/conceptos', traer, { revalidateOnFocus: false, dedupingInterval: 60_000 });
+  const conceptos = catalogo?.conceptos ?? [];
+  const nombreConcepto = conceptos.find((c) => String(c.id) === concepto)?.nombre ?? null;
+  const qsConcepto = concepto ? `&concepto=${encodeURIComponent(concepto)}` : '';
 
   // Lo que se teclea va aparte de lo que viaja: una consulta por tecla sobre
   // seiscientos contactos no adelanta nada.
   const [texto, setTexto] = useState(params.get('q') ?? '');
   const q = params.get('q') ?? '';
 
-  const url = `/api/administracion-escolar/responsables?filtro=${filtro}`
+  const url = `/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}`
     + `&limit=${POR_PAGINA}&offset=${(pagina - 1) * POR_PAGINA}`
     + (q ? `&q=${encodeURIComponent(q)}` : '');
   /**
@@ -77,6 +119,21 @@ export default function ResponsablesClient() {
    * `dedupingInterval` para que volver de la ficha de una familia no repita la
    * consulta pesada del listado: son cuatro LATERAL por contacto.
    */
+  async function armarExport() {
+    const filas: FilaResponsable[] = [];
+    let totalFamilias = 0;
+    for (let offset = 0; offset < 10000; offset += 200) {
+      const r = await fetch(`/api/administracion-escolar/responsables?filtro=${filtro}${qsConcepto}&limit=200&offset=${offset}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+      const d = await r.json().catch(() => null) as (Resp & { error?: string }) | null;
+      if (!r.ok || !d) throw new Error(d?.error ?? 'No se pudo leer el listado para exportarlo');
+      filas.push(...(d.filas ?? []));
+      totalFamilias = d.total ?? filas.length;
+      if ((d.filas ?? []).length < 200 || filas.length >= (d.total ?? 0)) break;
+    }
+    return armarEnvioTabla(EXPORTAR, filas, [`Filtro: ${filtro}`, nombreConcepto ? `Concepto: ${nombreConcepto}` : null, q ? `Búsqueda: «${q}»` : null,
+      totalFamilias > filas.length ? notaDeCorte(filas.length, totalFamilias) : null].filter(Boolean).join(' · '));
+  }
+
   const { data, isLoading, error } = useSWR<Resp>(url, traer, {
     keepPreviousData: true,
     revalidateOnFocus: false,
@@ -121,15 +178,33 @@ export default function ResponsablesClient() {
             Las familias que pagan, con sus hijos y su deuda junta.
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Cobrarle lo mismo a un grupo (paseo, fotos): vivía en «Cargos y deudas». */}
+          {can('administracion-escolar:gestionar') && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/escolar/cobrar-grupo">Cobrar a un grupo</Link>
+            </Button>
+          )}
+          {/* La otra mitad: ya hay cargos, falta ponerles factura a muchos. */}
+          {can('administracion-escolar:gestionar') && !pantallasOcultas.includes('escolar-facturar') && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/escolar/facturar">Facturar por lote</Link>
+            </Button>
+          )}
+          <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-responsables" />
+        </div>
       </div>
 
       {/* Las cifras del colegio, como en Estudiantes: del team entero, no de
           la página ni del filtro. */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={Users} label="Familias" value={data ? String(data.stats.familias) : '—'} />
-        <StatCard icon={Wallet} label="Deuda total"
-          value={data ? fmtDOP(data.stats.deudaTotalCentavos) : '—'}
-          accent={(data?.stats.deudaTotalCentavos ?? 0) > 0} />
+        {/* «Por cobrar» = lo exigible hoy (escolar ya facturada + otras
+            facturas). Lo que aún no tiene factura es anualidad futura y no se
+            mezcla aquí: se ve como «por facturar» en cada familia. */}
+        <StatCard icon={Wallet} label="Por cobrar"
+          value={data ? fmtDOP(data.stats.deudaExigibleCentavos) : '—'}
+          accent={(data?.stats.deudaExigibleCentavos ?? 0) > 0} />
         <StatCard icon={AlertTriangle} label="Con deuda"
           value={data ? String(data.stats.conDeuda) : '—'}
           accent={(data?.stats.conDeuda ?? 0) > 0} />
@@ -170,18 +245,37 @@ export default function ResponsablesClient() {
             </Badge>
           </div>
 
+          {/* Buscador y concepto arriba; las pastillas en su propia línea: las
+              tres cosas juntas dejaban el buscador sin ancho. */}
+          <div className="space-y-2">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
+            <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input className="pl-8" placeholder="Buscar por nombre, cédula o RNC…"
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setParams({ q: texto || null, p: null }); }} />
             </div>
+            <NativeSelect aria-label="Concepto" className="sm:!w-60 sm:shrink-0" value={concepto}
+              onChange={(e) => setParams({ concepto: e.target.value || null, p: null })}>
+              <option value="">Todos los conceptos</option>
+              {/* Mientras llega el catálogo, el concepto del enlace tiene su
+                  opción: sin ella el selector quedaba sin valor y el filtro se
+                  perdía al abrir un enlace con ?concepto=. */}
+              {concepto && !conceptos.some((c) => String(c.id) === concepto) && (
+                <option value={concepto}>Concepto seleccionado</option>
+              )}
+              {/* Los inactivos también: uno retirado del catálogo puede seguir con cargos vivos. */}
+              {conceptos.map((c) => (
+                <option key={c.id} value={String(c.id)}>{c.nombre}{c.activo === false ? ' (inactivo)' : ''}</option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {/* «Sin hijos activos» solo aparece si hay alguna: son las familias
                 que ya no tienen a nadie en el colegio ni deben nada. Salían
                 mezcladas con las que pagan este año y engordaban el contador. */}
-            {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['sin-contacto', 'Sin contacto'],
+            {([['todos', 'Todas'], ['con-deuda', 'Con deuda'], ['por-facturar', 'Por facturar'], ['sin-contacto', 'Sin contacto'],
                ['sin-ficha', `Falta traerlas${data?.sinFicha ? ` (${data.sinFicha})` : ''}`],
                ...((data?.retiradas ?? 0) > 0 || filtro === 'retiradas'
                  ? [['retiradas', `Sin hijos activos${data?.retiradas ? ` (${data.retiradas})` : ''}`] as const]
@@ -189,7 +283,7 @@ export default function ResponsablesClient() {
               .map(([v, etiqueta]) => (
                 <button key={v} type="button"
                   onClick={() => setParams({ filtro: v === 'todos' ? null : v, p: null })}
-                  className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                  className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                     filtro === v
                       ? 'border-zero-600 bg-zero-600 font-medium text-white'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
@@ -197,6 +291,7 @@ export default function ResponsablesClient() {
                   {etiqueta}
                 </button>
               ))}
+          </div>
           </div>
 
           {error ? (
@@ -215,7 +310,7 @@ export default function ResponsablesClient() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-lg border border-gray-100">
-                <table className="w-full min-w-[52rem] text-sm">
+                <table className="w-full min-w-[58rem] text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                       <th className="px-3 py-2 font-medium">Familia</th>
@@ -223,6 +318,7 @@ export default function ResponsablesClient() {
                       <th className="px-3 py-2 font-medium">Avisos</th>
                       <th className="px-3 py-2 text-right font-medium">Deuda escolar</th>
                       <th className="px-3 py-2 text-right font-medium">Otras facturas</th>
+                      <th className="px-3 py-2 text-right font-medium">Mora</th>
                       <th className="px-3 py-2 font-medium">Más viejo sin pagar</th>
                     </tr>
                   </thead>
@@ -260,13 +356,33 @@ export default function ResponsablesClient() {
                         </td>
                         <td className="px-3 py-2.5"><Canales fila={f} /></td>
                         <td className="px-3 py-2.5 text-right">
-                          {f.deudaEscolarCentavos > 0
-                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos)}</span>
+                          {/* La cifra grande es lo EXIGIBLE (escolar ya facturada);
+                              lo que aún no tiene factura va debajo como «sin
+                              factura», que es la anualidad futura. */}
+                          {f.deudaEscolarCentavos - f.porFacturarCentavos > 0
+                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaEscolarCentavos - f.porFacturarCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
+                          {f.delConcepto && nombreConcepto && (
+                            <span className="block text-xs text-zero-700">
+                              {nombreConcepto}: {f.delConcepto.cargos} cargo{f.delConcepto.cargos === 1 ? '' : 's'}
+                              {f.delConcepto.saldoCentavos > 0 ? `, debe ${fmtDOP(f.delConcepto.saldoCentavos)}` : ', pagado'}
+                            </span>
+                          )}
+                          {f.porFacturarCentavos > 0 && (
+                            <span className="block text-xs text-gray-500">{fmtDOP(f.porFacturarCentavos)} sin factura</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           {f.deudaFacturasCentavos > 0
                             ? <span className="font-medium text-amber-700">{fmtDOP(f.deudaFacturasCentavos)}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        {/* Las notas de débito por mora, aparte de «otras
+                            facturas»: cuelgan de una factura escolar y antes se
+                            colaban ahí como si fueran deuda ajena al plan. */}
+                        <td className="px-3 py-2.5 text-right">
+                          {f.deudaMoraCentavos > 0
+                            ? <span className="font-medium text-red-600">{fmtDOP(f.deudaMoraCentavos)}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
@@ -316,10 +432,13 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
   detalle: Detalle | undefined;
   onCerrar: () => void;
 }) {
-  const deuda = fila.deudaEscolarCentavos + fila.deudaFacturasCentavos;
   const hijos = detalle?.hijos ?? [];
+  // Las notas de mora no son facturas: van en «Vencido» con lo demás.
   const facturasPendientes = (detalle?.facturas ?? [])
-    .filter((f) => f.montoTotal - f.pagadoCentavos > 0).length;
+    .filter((f) => !f.esMora && f.saldoCentavos > 0).length;
+  // Vencido / próximo pago / falta del año / pagado: la misma cuenta que la
+  // ficha completa de la familia (resumen-cobro.ts).
+  const resumen = detalle ? resumirCobro(partidasDeFamilia(detalle), hoyRD()) : null;
 
   return (
     // Misma tarjeta que la ficha del estudiante: encabezado con iniciales,
@@ -363,13 +482,10 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
           falta={!destinoDeContacto(fila, 'sms')} />
       </div>
 
-      <div className="space-y-2 border-t border-gray-100 pt-3">
-        <TotalRow icon={Receipt} tone="gray" label="Deuda escolar"
-          value={fmtDOP(fila.deudaEscolarCentavos)} muted={fila.deudaEscolarCentavos === 0} />
-        <TotalRow icon={FileText} tone="amber" label="Otras facturas"
-          value={fmtDOP(fila.deudaFacturasCentavos)} muted={fila.deudaFacturasCentavos === 0} />
-        <TotalRow icon={AlertTriangle} tone="red" label="Debe en total"
-          value={fmtDOP(deuda)} muted={deuda === 0} />
+      <div className="border-t border-gray-100 pt-3">
+        {resumen
+          ? <ResumenCobroFilas resumen={resumen} />
+          : <div className="flex justify-center py-3"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>}
       </div>
 
       {/* Los hijos, con lo que debe cada uno: es lo que se mira antes de
@@ -419,7 +535,9 @@ function FamiliaFicha({ fila, detalle, onCerrar }: {
           <Link href={`/escolar/responsables/${fila.clientId}`}>Abrir ficha completa</Link>
         </Button>
         <Button asChild variant="outline" className="w-full">
-          <Link href={`/dashboard/clientes/${fila.clientId}/editar`}>Editar contacto</Link>
+          <Link href={`/dashboard/clientes/${fila.clientId}/editar?volver=${encodeURIComponent(`/escolar/responsables?familia=${fila.clientId}`)}`}>
+            Editar contacto
+          </Link>
         </Button>
       </div>
     </div>

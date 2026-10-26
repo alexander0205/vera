@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { whatsappConfig } from '@/lib/db/schema';
+import { adminEscolarCanales, whatsappConfig } from '@/lib/db/schema';
 import { encryptField, decryptField } from '@/lib/crypto/cert';
 
 export interface WhatsAppTeamConfig {
@@ -10,6 +10,9 @@ export interface WhatsAppTeamConfig {
   conectado: boolean;
   numeroWhatsapp: string | null;
 }
+
+/** Por dónde eligió el colegio que salgan: el de Zero, el suyo, o null = el suyo si lo conectó. */
+export type ViaWhatsApp = 'zero' | 'propio' | null;
 
 /** Quién manda el mensaje: el número del propio negocio, o el de Zero. */
 export interface RemitenteWhatsApp {
@@ -35,19 +38,38 @@ export interface RemitenteWhatsApp {
  * Ojo con `conectado`: hay filas con negocio creado y número sin conectar
  * todavía. Esas NO valen como remitente, y sin este chequeo el aviso saldría
  * con una llave que el CRM contesta con 409.
+ *
+ * `via` es lo que eligió el colegio en Configuración › Avisos: «WhatsApp de
+ * Zero» sale siempre por el nuestro aunque tenga el suyo conectado; «Mi
+ * WhatsApp» sale solo por el suyo, y si no está conectado no sale —caer al de
+ * Zero sin decirlo mandaría a los padres un número que el colegio pidió no usar.
  */
 export function elegirRemitente(
   propia: WhatsAppTeamConfig | null,
   llaveZero: string | undefined,
+  via: ViaWhatsApp = null,
 ): RemitenteWhatsApp | null {
+  if (via === 'zero') return llaveZero ? { apiKey: llaveZero, propio: false } : null;
+  if (via === 'propio') return propia?.conectado ? { apiKey: propia.apiKey, propio: true } : null;
   if (propia?.conectado) return { apiKey: propia.apiKey, propio: true };
   if (llaveZero) return { apiKey: llaveZero, propio: false };
   return null;
 }
 
+/** Lo que eligió el colegio (fila de `admin_escolar_canales`); null si nunca eligió. */
+export async function viaDelTeam(teamId: number): Promise<ViaWhatsApp> {
+  const [fila] = await db
+    .select({ via: adminEscolarCanales.whatsappVia })
+    .from(adminEscolarCanales)
+    .where(eq(adminEscolarCanales.teamId, teamId))
+    .limit(1);
+  return fila?.via === 'zero' || fila?.via === 'propio' ? fila.via : null;
+}
+
 /** `elegirRemitente` con la config del team ya buscada. Devuelve null si no hay ninguna vía. */
 export async function resolverRemitente(teamId: number): Promise<RemitenteWhatsApp | null> {
-  return elegirRemitente(await getWhatsAppConfig(teamId), process.env.CRM_ZERO_API_KEY);
+  const [config, via] = await Promise.all([getWhatsAppConfig(teamId), viaDelTeam(teamId)]);
+  return elegirRemitente(config, process.env.CRM_ZERO_API_KEY, via);
 }
 
 export async function getWhatsAppConfig(teamId: number): Promise<WhatsAppTeamConfig | null> {

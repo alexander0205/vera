@@ -102,3 +102,17 @@ export function partirApellidos(apellidos: string): ApellidosPartidos {
     dudoso: piezas.length > 2,
   };
 }
+
+/**
+ * Separa las palabras que el PDF dejó pegadas: «Rosa MaríaPeñaPaniagua» →
+ * «Rosa María Peña Paniagua».
+ *
+ * El reporte en PDF de SIGERD (ficha-pdf.ts) pinta cada parte del nombre como un trozo de texto aparte, sin un
+ * espacio entre ellos, y al leerlo quedan juntas. Se corta donde una minúscula
+ * va seguida de una mayúscula, que dentro de un nombre propio solo pasa en la
+ * unión de dos palabras. Un nombre todo en mayúsculas no se puede separar así,
+ * y se deja como viene.
+ */
+export function separarPegadas(nombre: string): string {
+  return nombre.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2');
+}

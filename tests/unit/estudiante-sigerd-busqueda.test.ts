@@ -21,6 +21,15 @@ const VACIOS: CriteriosSigerd = {
   rne: '', nui: '', idEstudiante: '', fechaNacimiento: '',
 };
 
+/** Lo que el diálogo enseña en sus campos para la ficha `completa`. */
+const POR_NOMBRE = {
+  ...VACIOS,
+  nombres: 'ZUTANA',
+  primerApellido: 'DE LA NADA',
+  segundoApellido: 'INVENTADO',
+  fechaNacimiento: '2015-03-09',
+};
+
 describe('busquedaDesdeFicha', () => {
   const completa = {
     sigerdId: 10000001,
@@ -34,33 +43,35 @@ describe('busquedaDesdeFicha', () => {
     // Mezclarlo con el nombre es lo que se evita: una letra distinta en
     // nuestra ficha dejaría sin resultado a un id que es exacto.
     expect(busquedaDesdeFicha(completa))
-      .toEqual({ por: 'id', criterios: { ...VACIOS, idEstudiante: '10000001' } });
+      .toEqual({ por: 'id', criterios: { ...VACIOS, idEstudiante: '10000001' }, aLaVista: POR_NOMBRE });
   });
 
   it('sin id busca solo por el RNE, y se lleva la fecha aparte para comprobar', () => {
     // La fecha NO va en los criterios: como filtro, una mal escrita en nuestra
     // ficha vaciaría la búsqueda. Va al lado, para cotejar lo que vuelva.
     expect(busquedaDesdeFicha({ ...completa, sigerdId: null }))
-      .toEqual({ por: 'rne', criterios: { ...VACIOS, rne: 'RNEFICTICIO0001' }, nacio: '2015-03-09' });
+      .toEqual({ por: 'rne', criterios: { ...VACIOS, rne: 'RNEFICTICIO0001' }, nacio: '2015-03-09', aLaVista: POR_NOMBRE });
     // Sin fecha, o con una que no es `yyyy-MM-dd`, no hay con qué comprobar.
+    // Sin nombre en la ficha, en los campos sale el RNE con que se busca.
+    const soloRne = { ...VACIOS, rne: 'RNEFICTICIO0001' };
     expect(busquedaDesdeFicha({ codigoRne: 'RNEFICTICIO0001' }))
-      .toEqual({ por: 'rne', criterios: { ...VACIOS, rne: 'RNEFICTICIO0001' } });
+      .toEqual({ por: 'rne', criterios: soloRne, aLaVista: soloRne });
     expect(busquedaDesdeFicha({ codigoRne: 'RNEFICTICIO0001', fechaNacimiento: '09/03/2015' }))
-      .toEqual({ por: 'rne', criterios: { ...VACIOS, rne: 'RNEFICTICIO0001' } });
+      .toEqual({ por: 'rne', criterios: soloRne, aLaVista: soloRne });
   });
 
   it('sin id ni RNE busca por nombre, apellidos partidos y fecha', () => {
     expect(busquedaDesdeFicha({ ...completa, sigerdId: null, codigoRne: '' }))
-      .toEqual({
-        por: 'nombre',
-        criterios: {
-          ...VACIOS,
-          nombres: 'ZUTANA',
-          primerApellido: 'DE LA NADA',
-          segundoApellido: 'INVENTADO',
-          fechaNacimiento: '2015-03-09',
-        },
-      });
+      .toEqual({ por: 'nombre', criterios: POR_NOMBRE, aLaVista: POR_NOMBRE });
+  });
+
+  it('aunque busque por id, en los campos sale el nombre del alumno', () => {
+    // Abrir con los campos vacíos no decía a quién se buscaba. El id no se
+    // enseña: volver a pulsar «Buscar» con id y nombre juntos vaciaría la lista.
+    const b = busquedaDesdeFicha(completa);
+    expect(b?.criterios.idEstudiante).toBe('10000001');
+    expect(b?.aLaVista?.idEstudiante).toBe('');
+    expect(b?.aLaVista?.nombres).toBe('ZUTANA');
   });
 
   it('un id que no es un id no cuenta', () => {
@@ -154,16 +165,7 @@ describe('busquedaDesdeFicha', () => {
     // Es la salida de una ficha enlazada al alumno equivocado: por su id
     // volvería siempre él, se elegiría solo y no habría forma de cambiarlo.
     const otro = busquedaDesdeFicha(completa, { soloPorNombre: true });
-    expect(otro).toEqual({
-      por: 'nombre',
-      criterios: {
-        ...VACIOS,
-        nombres: 'ZUTANA',
-        primerApellido: 'DE LA NADA',
-        segundoApellido: 'INVENTADO',
-        fechaNacimiento: '2015-03-09',
-      },
-    });
+    expect(otro).toEqual({ por: 'nombre', criterios: POR_NOMBRE, aLaVista: POR_NOMBRE });
     // Y como va por nombre, no se elige solo ni aunque vuelva justo el de la ficha.
     expect(seEligeSolo({
       busqueda: otro!,

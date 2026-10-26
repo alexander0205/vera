@@ -539,7 +539,7 @@ export default function NuevaFacturaForm({
     cargo?: { id: number; saldoCentavos: number };
     comprador?: { clienteId: number; razonSocial?: string | null; rnc?: string | null; email?: string | null; telefono?: string | null } | null;
     linea?: {
-      productoId?: number | null; nombreItem?: string; cantidadItem?: number;
+      productoId?: number | null; nombreItem?: string; descripcionItem?: string; cantidadItem?: number;
       precioUnitarioItem?: number; tasaItbis?: string; indicadorBienoServicio?: string;
       dependienteId?: number | null; dependienteNombre?: string;
       /** `estudiante:cargo:mes:año` — ver `LineaPrefill.cuotaClave`. */
@@ -588,7 +588,9 @@ export default function NuevaFacturaForm({
       productoId:             typeof l.productoId === 'number' ? l.productoId : undefined,
       nombreItem:             String(l.nombreItem ?? ''),
       referencia:             '',
-      descripcionItem:        '',
+      // El mes de la cuota («Agosto 2026»): con dos meses del mismo concepto,
+      // es lo que los distingue en la factura.
+      descripcionItem:        typeof l.descripcionItem === 'string' ? l.descripcionItem : '',
       cantidadItem:           Number(l.cantidadItem) || 1,
       precioUnitarioItem:     Number(l.precioUnitarioItem) || 0,
       descuentoPct:           0,
@@ -2563,7 +2565,7 @@ export default function NuevaFacturaForm({
                 </SectionCard>
               ) : (
                 <>
-                  <SectionCard number={1} title="Datos del cliente" icon={User}>
+                  <SectionCard number={1} title="Datos del cliente" icon={User} tour="factura-cliente">
                     <ClienteSection
                       clienteSeleccionado={clienteSeleccionado}
                       buscarClientes={buscarClientes}
@@ -2601,6 +2603,7 @@ export default function NuevaFacturaForm({
                 number={esGasto ? 2 : 3}
                 title={esGasto ? 'Detalle e importe' : 'Productos y servicios'}
                 icon={Package}
+                tour="factura-lineas"
                 actions={
                   <ColumnasToggle
                     showReferencia={showItemRef}

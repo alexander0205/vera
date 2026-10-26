@@ -31,6 +31,7 @@ import { CompanySwitcher } from '@/components/company-switcher';
 import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import { ProfileDropdown, type UserInfo } from '@/components/profile-dropdown';
 import { BotonSoporte } from '@/components/support/BotonSoporte';
+import { CampanaTareas } from '@/components/administracion-escolar/CampanaTareas';
 import type { ModuleKey } from '@/lib/config/modules';
 import type { Team } from '@/lib/db/schema';
 
@@ -268,9 +269,13 @@ export function ModuleHeader({
 
           {/* `apartar` ya trae su propio sx con flex y gap; pasarle otro aquí
               lo reemplazaría entero y se perdería el colapso al buscar. */}
-          {/* 100 y no 56: el bloque tenía el ancho justo del avatar, y con
-              `overflow: hidden` el botón de soporte quedaba recortado. */}
-          <Box {...apartar(buscadorAbierto, 100)}>
+          {/* 220 y no 100: el botón «Asistencia» lleva ícono + palabra (≈120 px)
+              y con `overflow: hidden` y un tope de 100 empujaba al avatar fuera
+              de la barra, que es lo que lleva al perfil. En Gobernanza va además
+              la campana de las tareas por revisar: fuera del colegio no hay
+              tareas, y pedirla ahí sería una consulta para enseñar un cero. */}
+          <Box {...apartar(buscadorAbierto, current === 'escolar' ? 260 : 220)}>
+            {current === 'escolar' && <CampanaTareas />}
             <BotonSoporte />
             <ProfileDropdown user={user} />
           </Box>

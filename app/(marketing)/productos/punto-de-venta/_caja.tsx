@@ -4,10 +4,10 @@
  * Una caja de mentira que se usa de verdad.
  *
  * Toca productos, ve el carrito crecer con su ITBIS y cobra. Al cobrar no sale
- * un «gracias»: sale lo que el sistema hace de verdad en ese mismo acto —emite
- * el comprobante fiscal, descuenta el inventario, asienta la venta y, si fue a
- * crédito, la manda a la cartera—. Eso es lo que separa a esta caja de una
- * calculadora con tickets.
+ * un «gracias»: sale lo que el sistema hace de verdad en ese mismo acto con un
+ * ticket —registra la venta, descuenta el inventario, la asienta e imprime el
+ * ticket—. La venta con comprobante fiscal NO sale a la DGII desde la caja: se
+ * guarda y se emite en Facturación, así que aquí no se anuncia.
  *
  * Los cuatro pasos aparecen con retraso a propósito: en el mostrador ocurren en
  * un segundo, pero contados de golpe no se leen.
@@ -31,10 +31,10 @@ const peso = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDig
 
 /** Lo que pasa al cobrar. Uno por uno, con su respiro. */
 const AL_COBRAR = [
-  'Comprobante fiscal emitido y aceptado por la DGII',
+  'Venta registrada en el acto, como ticket',
   'Inventario descontado, artículo por artículo',
   'Asiento contable de la venta, en el diario',
-  'Ticket impreso o enviado por WhatsApp',
+  'Ticket impreso en la térmica',
 ] as const;
 
 export function CajaDemo() {

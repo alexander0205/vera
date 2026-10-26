@@ -11,6 +11,7 @@ import { products, inventoryMovements, teamMembers } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 const ajusteSchema = z.object({
   productoId:  z.number().int().positive(),
@@ -51,6 +52,10 @@ export async function POST(req: NextRequest) {
   const { productoId, tipo, cantidad, motivo, almacenId, variantId } = parsed.data;
 
   const esEntrada = tipo === 'ENTRADA' || tipo === 'AJUSTE_ENTRADA' || tipo === 'STOCK_INICIAL';
+
+  // El almacén tiene que ser de esta empresa.
+  const errRefs = await validarReferenciasDeEmpresa(teamId, { almacenId: almacenId ?? null });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
   const result = await db.transaction(async (tx) => {
     // Lock row para evitar race conditions en stock concurrente

@@ -4,7 +4,7 @@ import { useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import useSWR, { mutate as revalidar } from 'swr';
 import {
-  AlertTriangle, ArrowLeft, CalendarDays, Check, ChevronRight, Download,
+  AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, CalendarRange, Check, Download,
   HandCoins, Loader2, Mail, MessageCircle, Pencil, Receipt, Smartphone,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -13,17 +13,20 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Button } from '@/components/ui/button';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl, useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { EnlacePagoFamilia } from '@/components/administracion-escolar/EnlacePagoFamilia';
 import { PeriodosDeLaFamilia } from '@/components/administracion-escolar/PeriodosDeLaFamilia';
+import { CuentasPorCobrarPanel } from '@/components/administracion-escolar/CuentasPorCobrarPanel';
 import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
 import { useAccionesDeCargo } from '@/components/administracion-escolar/useAccionesDeCargo';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { DetalleResponsable } from '@/lib/administracion-escolar/responsables';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 import { destinoDeContacto } from '@/lib/administracion-escolar/destino-canal';
+import { partidasDeFamilia, resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
+import { textosResumenCobro } from '@/components/administracion-escolar/ResumenCobro';
 
 /**
  * La ficha completa de una familia.
@@ -43,16 +46,16 @@ const traer = (u: string) => fetch(u).then((r) => {
   return r.json();
 });
 
-const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
 const AVISO_TEXTO: Record<string, string> = {
   'al-emitir': 'Factura nueva',
   'al-vencer': 'Venció hoy',
   'antes-mora': 'Antes del recargo',
 };
 
-const VISTAS = ['cuenta', 'pagos', 'facturas', 'avisos'] as const;
+// «Estado de cuenta» se quitó: repetía el pendiente y el vencido que ya están
+// en el resumen de arriba (Alex lo pidió). La ficha abre en «Cuentas por
+// cobrar», que es la deuda que se viene a mirar.
+const VISTAS = ['cxc', 'notas', 'pagos', 'facturas', 'avisos'] as const;
 
 /** Descarga en el navegador, sin pasar por el servidor. */
 function descargarCsv(nombre: string, filas: (string | number)[][]) {
@@ -75,7 +78,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   perfilEmpresa: EmpresaPerfil | null;
 }) {
   const volver = useVolver('/escolar/responsables');
-  const [vista, setVista] = useTabUrl('v', VISTAS, 'cuenta');
+  const [vista, setVista] = useTabUrl('v', VISTAS, 'cxc');
 
   const { permissions } = usePermissions();
   // Facturar toca dos módulos: mueve dinero en el escolar y emite un documento
@@ -151,7 +154,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
   );
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   /**
    * El estado de cuenta agrupado por hijo.
@@ -226,17 +229,33 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const facturadoCargos = data.cargos.reduce((s, g) => s + g.montoCentavos, 0);
   const pendienteCargos = data.cargos.reduce((s, g) => s + g.saldoCentavos, 0);
   const deudaFacturas = data.facturas.reduce(
-    (s, f) => s + Math.max(0, f.montoTotal - f.pagadoCentavos), 0);
+    (s, f) => s + f.saldoCentavos, 0);
+  // La mora (notas de débito) cuenta en el total de la familia —es deuda—,
+  // pero no es una «factura suelta»: se nombra aparte y su lista vive en la
+  // pestaña «Notas de débito». Antes se colaba entera como factura suelta.
+  const sueltas = data.facturas.filter((f) => !f.esMora);
+  const notasMora = data.facturas.length - sueltas.length;
+  const deudaSueltas = sueltas.reduce(
+    (s, f) => s + f.saldoCentavos, 0);
+  const deudaMora = deudaFacturas - deudaSueltas;
   const facturadoSueltas = data.facturas.reduce((s, f) => s + f.montoTotal, 0);
   // Acotado al monto: un cobro de más —una transferencia redonda sobre una
   // factura con centavos— no puede hacer que lo cobrado pase de lo facturado.
   const cobradoSueltas = data.facturas.reduce(
     (s, f) => s + Math.min(f.pagadoCentavos, f.montoTotal), 0);
 
-  const facturado = facturadoCargos + facturadoSueltas;
+  /*
+    Vencido / próximo pago / falta del año / pagado: la regla de todas las
+    fichas (resumen-cobro.ts), la misma que el panel de Responsables. Reemplaza
+    «Facturado / Cobrado / Pendiente / Vencido», que no decían si lo pendiente
+    ya se debía o era de junio.
+  */
+  const resumen = resumirCobro(partidasDeFamilia(data), hoy);
+  const textos = textosResumenCobro(resumen,
+    `${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`);
+  const facturado = resumen.totalCentavos;
   const pendiente = pendienteCargos + deudaFacturas;
-  const cobrado = (facturadoCargos - pendienteCargos) + cobradoSueltas;
-  const vencido = porHijo.reduce((s, h) => s + h.vencido, 0);
+  const cobrado = resumen.pagadoCentavos;
   const totalPagado = data.pagos.reduce((s, p) => s + p.montoCentavos, 0);
 
   /*
@@ -265,9 +284,6 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const sinFacturar = data.cargos.filter((g) =>
     g.ecfDocumentId == null && g.saldoCentavos > 0 && COBRABLES.includes(g.estado));
   const cargosSaldados = data.cargos.filter((g) => g.saldoCentavos <= 0).length;
-  // El más reciente por fecha, no el primero de la lista: el orden que llega
-  // de la consulta no es contrato de esta pantalla.
-  const ultimoPago = [...data.pagos].sort((a, b) => b.fechaPago.localeCompare(a.fechaPago))[0] ?? null;
   // Se redondea hacia abajo: un 99.6% cobrado no puede decir «100%» mientras
   // quede un peso vivo. Y al revés, si de verdad está todo, tiene que decir 100.
   const pctCobrado = facturado > 0
@@ -403,7 +419,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           alignSelf: { xs: 'flex-start', md: 'center' },
         }}>
           <Button asChild variant="outline" size="sm">
-            <Link href={`/dashboard/clientes/${clientId}/editar`}>
+            <Link href={`/dashboard/clientes/${clientId}/editar?volver=${encodeURIComponent(`/escolar/responsables/${clientId}`)}`}>
               <Pencil className="mr-1.5 h-4 w-4" />Editar contacto
             </Link>
           </Button>
@@ -471,34 +487,14 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
         }}
       >
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
-          <Cifra icon={Receipt} label="Facturado" valor={fmtDOP(facturado)}
-            detalle={[
-              `${data.cargos.length} ${data.cargos.length === 1 ? 'cargo' : 'cargos'} del año escolar`,
-              // Se nombran aparte porque no salen del plan de cobro: si no,
-              // la cifra no cuadra con los cargos que se ven más abajo.
-              data.facturas.length > 0
-                ? `${data.facturas.length} ${data.facturas.length === 1 ? 'factura suelta' : 'facturas sueltas'}`
-                : null,
-            ].filter(Boolean).join(' · ')}
-            primera />
-          <Cifra icon={HandCoins} label="Cobrado" valor={fmtDOP(cobrado)}
-            detalle={`${data.pagos.length} ${data.pagos.length === 1 ? 'pago aplicado' : 'pagos aplicados'}`}
-            tono={cobrado > 0 ? 'verde' : 'gris'} />
-          <Cifra icon={AlertTriangle} label="Pendiente" valor={fmtDOP(pendiente)}
-            // Rojo solo por lo emitido sin cobrar. Si además queda por facturar,
-            // se dice aparte para no mezclarlo con lo que ya es exigible.
-            detalle={pendientePorCobrar > 0 && pendientePorFacturar > 0
-              ? `Por cobrar ${fmtDOP(pendientePorCobrar)} · por facturar ${fmtDOP(pendientePorFacturar)}`
-              : pendientePorCobrar > 0
-              ? (deudaFacturas > 0 ? `con ${fmtDOP(deudaFacturas)} de facturas sueltas` : 'Del plan de cobro')
-              : pendientePorFacturar > 0 ? 'Aún por facturar'
-              : 'Nada por cobrar'}
-            tono={pendientePorCobrar > 0 ? 'rojo' : 'gris'} />
-          <Cifra icon={CalendarDays} label="Vencido" valor={fmtDOP(vencido)}
-            // Solo del plan de cobro: una factura suelta no lleva fecha de
-            // vencimiento en el módulo, y contarla aquí sería inventarle una.
-            detalle={vencido > 0 ? 'Ya pasó su fecha · del plan de cobro' : 'Sin atrasos registrados'}
-            tono={vencido > 0 ? 'rojo' : 'gris'} />
+          <Cifra icon={AlertTriangle} label="Vencido" valor={fmtDOP(resumen.vencido.centavos)}
+            detalle={textos.vencido} tono={resumen.vencido.centavos > 0 ? 'rojo' : 'gris'} primera />
+          <Cifra icon={CalendarClock} label="Próximo pago" valor={fmtDOP(resumen.proximo.centavos)}
+            detalle={textos.proximo} tono={resumen.proximo.centavos > 0 ? 'ambar' : 'gris'} />
+          <Cifra icon={CalendarRange} label="Falta del año" valor={fmtDOP(resumen.falta.centavos)}
+            detalle={textos.falta} />
+          <Cifra icon={HandCoins} label="Pagado" valor={fmtDOP(resumen.pagadoCentavos)}
+            detalle={textos.pagado} tono={resumen.pagadoCentavos > 0 ? 'verde' : 'gris'} />
         </Box>
 
         {/* Cuánto de lo facturado ya entró. Sin nada emitido no hay porcentaje
@@ -532,8 +528,11 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
               )}
               {/* Lo que antes hacía que la barra dijera 100 % con dinero vivo.
                   Ahora ni se esconde ni descuadra: se nombra. */}
-              {deudaFacturas > 0 && (
-                <>{' · '}{fmtDOP(deudaFacturas)} en facturas sueltas</>
+              {deudaSueltas > 0 && (
+                <>{' · '}{fmtDOP(deudaSueltas)} en facturas sueltas</>
+              )}
+              {deudaMora > 0 && (
+                <>{' · '}{fmtDOP(deudaMora)} de mora</>
               )}
             </Typography>
           </Box>
@@ -596,9 +595,10 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           display: 'flex', alignItems: 'center', gap: 0.5, px: 2.75,
           borderBottom: '1px solid #EDEFF5', overflowX: 'auto',
         }}>
-          {([['cuenta', 'Estado de cuenta'],
+          {([['cxc', 'Cuentas por cobrar'],
+             ['notas', 'Notas de débito'],
              ['pagos', `Pagos (${data.pagos.length})`],
-             ['facturas', `Facturas sueltas (${data.facturas.length})`],
+             ['facturas', `Facturas sueltas (${sueltas.length})`],
              ['avisos', `Recordatorios (${data.avisosProgramados.length + data.avisos.length})`]] as const)
             .map(([v, etiqueta]) => (
             <Box
@@ -622,47 +622,36 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
             </Box>
           ))}
           <Box sx={{ flex: 1 }} />
-          <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
-            <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
-              <Download className="mr-1.5 h-4 w-4" />Exportar
-            </Button>
-          </Box>
+          {/* «Cuentas por cobrar» y «Notas de débito» traen su propio export (o
+              no aplican); el de la ficha exportaría otra cosa, así que ahí se
+              oculta. */}
+          {vista !== 'cxc' && vista !== 'notas' && (
+            <Box sx={{ flex: '0 0 auto', py: 0.875 }}>
+              <Button size="sm" variant="outline" onClick={() => exportar(vista, data)}>
+                <Download className="mr-1.5 h-4 w-4" />Exportar
+              </Button>
+            </Box>
+          )}
         </Box>
 
         <Box sx={{ px: 2.75, pt: 0.75, pb: 1.75 }}>
-          {vista === 'cuenta' && (
-            <>
-              <FilaResumen
-                icono={<HandCoins size={17} />}
-                tono={pendiente > 0 ? 'rojo' : 'verde'}
-                titulo="Saldo al día de hoy"
-                detalle={pendiente > 0
-                  ? `${porHijo.filter((h) => h.pendiente > 0).length} de ${porHijo.length} estudiantes con saldo`
-                  : 'No hay saldo pendiente en ningún estudiante'}
-                monto={fmtDOP(pendiente)}
-              />
-              <FilaResumen
-                icono={<AlertTriangle size={17} />}
-                tono={vencido > 0 ? 'rojo' : 'gris'}
-                titulo="Vencido"
-                detalle={vencido > 0
-                  ? 'Ya pasó su fecha de pago · genera mora si está configurada'
-                  : 'Sin atrasos registrados'}
-                monto={fmtDOP(vencido)}
-              />
-              <FilaResumen
-                icono={<Receipt size={17} />}
-                tono="azul"
-                titulo="Último pago recibido"
-                detalle={ultimoPago
-                  ? [ultimoPago.encf || ultimoPago.codigo, fmtFechaCorta(ultimoPago.fechaPago), ultimoPago.metodo]
-                      .filter(Boolean).join(' · ')
-                  : 'Todavía no ha pagado nada'}
-                monto={ultimoPago ? fmtDOP(ultimoPago.montoCentavos) : '—'}
-                href={ultimoPago ? `/dashboard/facturas/${ultimoPago.ecfDocumentId}` : undefined}
-                ultima
-              />
-            </>
+          {vista === 'cxc' && (
+            /* Las cuentas por cobrar de Facturación del responsable: sus
+               facturas con saldo (totales de la familia). La mora va en su
+               propia pestaña, «Notas de débito». Reusa la cartera general
+               acotada a este cliente; el cobro refresca las cifras de arriba. */
+            <Box sx={{ pt: 0.75 }}>
+              <CuentasPorCobrarPanel clientId={clientId} puedePagos={puedePagos} onCambio={refrescar} seccion="cuentas" />
+            </Box>
+          )}
+
+          {vista === 'notas' && (
+            /* Notas de débito (mora) del responsable, en su sección propia al
+               lado de «Cuentas por cobrar». Se cobran junto con la factura de
+               la que cuelgan. */
+            <Box sx={{ pt: 0.75 }}>
+              <CuentasPorCobrarPanel clientId={clientId} puedePagos={puedePagos} onCambio={refrescar} seccion="notas" />
+            </Box>
           )}
 
           {vista === 'pagos' && (
@@ -695,7 +684,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
           )}
 
           {vista === 'facturas' && (
-            data.facturas.length === 0 ? (
+            sueltas.length === 0 ? (
               <Vacio texto="Ninguna factura fuera del plan de cobro." />
             ) : (
               <TablaLista
@@ -706,8 +695,8 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
                   { nombre: 'Pagado', ancho: '120px', alinear: 'right' },
                   { nombre: 'Pendiente', ancho: '120px', alinear: 'right' },
                 ]}
-                filas={data.facturas.map((f) => {
-                  const saldo = Math.max(0, f.montoTotal - f.pagadoCentavos);
+                filas={sueltas.map((f) => {
+                  const saldo = f.saldoCentavos;
                   return {
                     key: String(f.id),
                     celdas: [
@@ -819,16 +808,7 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
 /** Saca a CSV lo que se está mirando, no la ficha entera. */
 function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
   const nombre = (d.contacto?.razonSocial ?? 'familia').replace(/[^\w]+/g, '-').toLowerCase();
-  if (vista === 'cuenta') {
-    descargarCsv(`estado-de-cuenta-${nombre}.csv`, [
-      ['Alumno', 'Concepto', 'Mes', 'Año', 'Vence', 'Factura', 'Monto', 'Pendiente', 'Estado'],
-      ...d.cargos.map((g) => [
-        g.alumno, g.concepto ?? '', g.mes ? MESES[g.mes] : '', g.anio,
-        g.fechaVencimiento ?? '', g.encf || g.codigo || '',
-        (g.montoCentavos / 100).toFixed(2), (g.saldoCentavos / 100).toFixed(2), g.estado,
-      ]),
-    ]);
-  } else if (vista === 'pagos') {
+  if (vista === 'pagos') {
     descargarCsv(`pagos-${nombre}.csv`, [
       ['Fecha', 'Alumno', 'Factura', 'Método', 'Referencia', 'Monto'],
       ...d.pagos.map((p) => [
@@ -839,10 +819,11 @@ function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
   } else if (vista === 'facturas') {
     descargarCsv(`facturas-${nombre}.csv`, [
       ['Fecha', 'Comprobante', 'Monto', 'Pagado', 'Pendiente'],
-      ...d.facturas.map((f) => [
+      // Sin las notas de mora: tienen su propio export en «Notas de débito».
+      ...d.facturas.filter((f) => !f.esMora).map((f) => [
         f.fecha.slice(0, 10), f.encf || f.codigo || '',
         (f.montoTotal / 100).toFixed(2), (f.pagadoCentavos / 100).toFixed(2),
-        (Math.max(0, f.montoTotal - f.pagadoCentavos) / 100).toFixed(2),
+        (f.saldoCentavos / 100).toFixed(2),
       ]),
     ]);
   } else {
@@ -911,6 +892,7 @@ const TONOS = {
   gris:  '#0F1118',
   verde: '#0F7A4A',
   rojo:  '#B4231F',
+  ambar: '#B45309',
 } as const;
 
 /**
@@ -954,65 +936,6 @@ function Cifra({ icon: Icon, label, valor, detalle, tono = 'gris', primera = fal
       </Typography>
     </Box>
   );
-}
-
-const TONO_FILA = {
-  verde: { bg: '#E8F6EF', fg: '#0F7A4A' },
-  rojo:  { bg: '#FDECEC', fg: '#B4231F' },
-  azul:  { bg: '#EDF1FE', fg: '#2A48C4' },
-  gris:  { bg: '#F2F4FA', fg: '#8A90A0' },
-} as const;
-
-/**
- * Un renglón del resumen: icono, qué es, el detalle y la cifra.
- *
- * Sustituye al acordeón que repetía los cargos hijo por hijo. Ese detalle ya
- * está arriba en la tarjeta de cada uno, y tenerlo dos veces hacía que las dos
- * copias se contradijeran en cuanto una de las dos consultas se refrescaba
- * antes que la otra.
- */
-function FilaResumen({ icono, tono, titulo, detalle, monto, href, ultima = false }: {
-  icono: React.ReactNode;
-  tono: keyof typeof TONO_FILA;
-  titulo: string;
-  detalle: string;
-  monto: string;
-  /** Si lleva, la fila entera es un enlace. */
-  href?: string;
-  ultima?: boolean;
-}) {
-  const c = TONO_FILA[tono];
-  const cuerpo = (
-    <Box sx={{
-      display: 'flex', alignItems: 'center', gap: 1.75, py: 1.75,
-      borderBottom: ultima ? 'none' : '1px solid #F1F3F9',
-      cursor: href ? 'pointer' : 'default',
-      transition: 'background .12s',
-      '&:hover': href ? { bgcolor: '#FBFCFE' } : undefined,
-    }}>
-      <Box sx={{
-        width: 36, height: 36, flex: '0 0 36px', borderRadius: '10px',
-        bgcolor: c.bg, color: c.fg, display: 'grid', placeItems: 'center',
-      }}>
-        {icono}
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: '0.84375rem', fontWeight: 600, color: '#0F1118' }}>{titulo}</Typography>
-        <Typography noWrap sx={{ mt: 0.25, fontSize: '0.75rem', color: '#8A90A0' }}>{detalle}</Typography>
-      </Box>
-      <Typography sx={{
-        flex: '0 0 auto', fontSize: '0.9375rem', fontWeight: 600,
-        color: tono === 'rojo' ? '#B4231F' : tono === 'verde' ? '#0F7A4A' : '#0F1118',
-        letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums',
-      }}>
-        {monto}
-      </Typography>
-      {href && <ChevronRight size={15} style={{ flexShrink: 0, color: '#C3C8D4' }} />}
-    </Box>
-  );
-  return href
-    ? <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>{cuerpo}</Link>
-    : cuerpo;
 }
 
 /** Cifra alineada a la derecha, con dígitos de ancho fijo. */

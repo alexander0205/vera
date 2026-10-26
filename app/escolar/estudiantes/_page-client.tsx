@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { fmtDOP } from '@/lib/utils/format';
 import { EstudianteFicha, type EstudianteEnriquecido } from '@/components/administracion-escolar/EstudianteFicha';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { codigoVisible } from '@/lib/administracion-escolar/estudiante-utils';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { TraerDeContactosDialog } from '@/components/administracion-escolar/TraerDeContactosDialog';
 import {
@@ -25,6 +26,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
+import { ExportarListado } from '@/components/reportes/exportar-listado';
+import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
+import { notaDeCorte } from '@/lib/export/paginas';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 const PAGE_SIZE = 25;
@@ -44,6 +48,21 @@ interface Periodo { activo: boolean; nombre: string }
 function iniciales(nombres: string, apellidos: string): string {
   return `${nombres[0] ?? ''}${apellidos[0] ?? ''}`.toUpperCase();
 }
+
+
+/** Imprimir / PDF / Excel de los estudiantes filtrados (todas las páginas). Sin filtro de fecha: es un padrón. */
+const EXPORTAR: ExportTabla<EstudianteEnriquecido> = {
+  titulo: 'Estudiantes',
+  archivo: 'estudiantes',
+  columnas: [
+    { titulo: 'Estudiante', valor: e => `${e.nombres} ${e.apellidos}`.trim(), sub: e => codigoVisible(e), ancho: 2 },
+    { titulo: 'Curso', valor: e => e.cursoActual, ancho: 1.4 },
+    { titulo: 'Estado', valor: e => e.estado ?? (e.origen === 'dependiente' ? 'Sin matricular' : null), ancho: 0.8 },
+    { titulo: 'Responsable', valor: e => e.tutorResponsable ?? e.contacto, sub: e => e.tutorTelefono ?? e.tutorEmail, ancho: 1.8 },
+    { titulo: 'Cargos pend.', valor: e => e.cargosPendientes, tipo: 'numero', ancho: 0.7 },
+    { titulo: 'Deuda', valor: e => e.deudaCentavos, tipo: 'moneda', total: true, ancho: 0.9 },
+  ],
+};
 
 export default function EstudiantesClient() {
   const router = useRouter();
@@ -150,6 +169,30 @@ export default function EstudiantesClient() {
     '/api/administracion-escolar/periodos', fetcher, { revalidateOnFocus: false });
 
   const estudiantes = data?.estudiantes ?? [];
+
+  async function armarExport() {
+    const todos: EstudianteEnriquecido[] = [];
+    let totalEstudiantes = 0;
+    for (let offset = 0; offset < 10000; offset += 200) {
+      const q = new URLSearchParams(params);
+      q.set('limit', '200'); q.set('offset', String(offset));
+      // Un error del servidor corta el exporte con su mensaje: antes salía un
+      // archivo vacío o a medias como si fuera el padrón entero.
+      const r = await fetch(`/api/administracion-escolar/estudiantes?${q}`);
+      const d = await r.json().catch(() => null) as (ListaResp & { error?: string }) | null;
+      if (!r.ok || !d) throw new Error(d?.error ?? 'No se pudo leer el listado para exportarlo');
+      todos.push(...(d.estudiantes ?? []));
+      totalEstudiantes = d.total ?? todos.length;
+      if ((d.estudiantes ?? []).length < 200 || todos.length >= (d.total ?? 0)) break;
+    }
+    const partes = [
+      filtroEstado && filtroEstado !== 'todos' ? `Estado: ${filtroEstado}` : 'Todos los estados',
+      filtroCurso !== 'todos' ? `Curso: ${cursosData?.cursos.find(c => String(c.id) === filtroCurso)?.nombre ?? filtroCurso}` : null,
+      qUrl ? `Búsqueda: «${qUrl}»` : null,
+      totalEstudiantes > todos.length ? notaDeCorte(todos.length, totalEstudiantes) : null,
+    ];
+    return armarEnvioTabla(EXPORTAR, todos, partes.filter(Boolean).join(' · '));
+  }
   const total = data?.total ?? 0;
   const stats = data?.stats;
   const cursos = cursosData?.cursos ?? [];
@@ -207,6 +250,9 @@ export default function EstudiantesClient() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Estudiantes</h1>
           <p className="text-sm text-gray-500 mt-1">Matrículas, tutores, pagos y deudas por estudiante</p>
+        </div>
+        <div className="ml-auto">
+          <ExportarListado armar={armarExport} deshabilitado={isLoading || !data?.total} testId="exportar-estudiantes" />
         </div>
         {puedeGestionar && (
           <div className="flex shrink-0 items-center gap-2">
@@ -368,7 +414,7 @@ export default function EstudiantesClient() {
                                     </Badge>
                                   )}
                                 </div>
-                                <p className="text-xs text-gray-400">{e.codigo ?? '—'}</p>
+                                <p className="text-xs text-gray-400">{codigoVisible(e) ?? '—'}</p>
                               </div>
                             </div>
                           </td>

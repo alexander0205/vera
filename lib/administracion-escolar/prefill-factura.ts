@@ -17,6 +17,7 @@ import {
   dependientes,
   products,
 } from '@/lib/db/schema';
+import { descripcionDelMes } from './referencia-servicio';
 
 /**
  * Todo lo que hace falta para facturar cargos escolares, en una sola consulta.
@@ -35,6 +36,8 @@ import {
 export interface LineaPrefill {
   productoId: number | null;
   nombreItem: string;
+  /** El mes de la cuota («Agosto 2026»); vacío si el cargo no es de un mes. Ver `descripcionDelMes`. */
+  descripcionItem?: string;
   cantidadItem: number;
   /** En PESOS, que es como trabaja el formulario de factura. */
   precioUnitarioItem: number;
@@ -567,6 +570,7 @@ export async function prefillDeCargos(
       linea: {
         productoId: prodId ?? null,
         nombreItem: prod?.nombre ?? f.conceptoNombre ?? 'Cargo escolar',
+        descripcionItem: descripcionDelMes(f.mes, f.anio),
         cantidadItem: 1,
         precioUnitarioItem: f.saldoCentavos / 100,
         tasaItbis,
@@ -592,6 +596,7 @@ export async function prefillDeCargos(
         fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
         becaTipo: adminEscolarMatriculas.becaTipo,
         becaValor: adminEscolarMatriculas.becaValor,
+        conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
       })
       .from(adminEscolarMatriculas)
       .where(eq(adminEscolarMatriculas.id, matriculaId))
@@ -599,7 +604,7 @@ export async function prefillDeCargos(
 
     const ctxTarifa = mat
       ? await contextoDeSeccion(teamId, mat.periodoId, mat.cursoId,
-          { tipo: mat.becaTipo, valor: mat.becaValor }, mat.estudianteId)
+          { tipo: mat.becaTipo, valor: mat.becaValor }, mat.estudianteId, mat.conceptoMensualidadId)
       : null;
 
     if (!ctxTarifa || !mat) {
@@ -653,6 +658,7 @@ export async function prefillDeCargos(
       linea: {
         productoId: prevProdId,
         nombreItem: prevProd?.nombre ?? linea.nombre,
+        descripcionItem: descripcionDelMes(cuota.mes, Number(cuota.fechaEmision.slice(0, 4))),
         cantidadItem: 1,
         precioUnitarioItem: cuota.montoCentavos / 100,
         tasaItbis: tasaPrevisto,

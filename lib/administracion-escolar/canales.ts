@@ -20,9 +20,11 @@ export interface CanalesActivos {
   correo: boolean;
   whatsapp: boolean;
   sms: boolean;
+  /** Por dónde salen los WhatsApp: 'zero', 'propio' o null (el suyo si lo conectó). */
+  whatsappVia?: 'zero' | 'propio' | null;
 }
 
-export const CANALES_TODOS_ACTIVOS: CanalesActivos = { correo: true, whatsapp: true, sms: true };
+export const CANALES_TODOS_ACTIVOS: CanalesActivos = { correo: true, whatsapp: true, sms: true, whatsappVia: null };
 
 export async function canalesDelColegio(teamId: number): Promise<CanalesActivos> {
   const [fila] = await db
@@ -30,12 +32,13 @@ export async function canalesDelColegio(teamId: number): Promise<CanalesActivos>
       correo: adminEscolarCanales.correoActivo,
       whatsapp: adminEscolarCanales.whatsappActivo,
       sms: adminEscolarCanales.smsActivo,
+      whatsappVia: adminEscolarCanales.whatsappVia,
     })
     .from(adminEscolarCanales)
     .where(eq(adminEscolarCanales.teamId, teamId))
     .limit(1);
 
-  return fila ?? CANALES_TODOS_ACTIVOS;
+  return fila ? { ...fila, whatsappVia: fila.whatsappVia ?? null } : CANALES_TODOS_ACTIVOS;
 }
 
 /** Guarda los tres de una vez. Crea la fila la primera vez que se apaga algo. */
@@ -47,6 +50,7 @@ export async function guardarCanales(teamId: number, canales: CanalesActivos): P
       correoActivo: canales.correo,
       whatsappActivo: canales.whatsapp,
       smsActivo: canales.sms,
+      whatsappVia: canales.whatsappVia ?? null,
     })
     .onConflictDoUpdate({
       target: adminEscolarCanales.teamId,
@@ -54,6 +58,7 @@ export async function guardarCanales(teamId: number, canales: CanalesActivos): P
         correoActivo: canales.correo,
         whatsappActivo: canales.whatsapp,
         smsActivo: canales.sms,
+        whatsappVia: canales.whatsappVia ?? null,
         updatedAt: new Date(),
       },
     });
