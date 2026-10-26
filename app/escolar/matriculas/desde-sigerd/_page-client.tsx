@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
+import { toast } from 'sonner';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GitCompareArrows, GraduationCap,
   Layers, Loader2, Pencil, RotateCcw, Search, Tag, UserCheck, UserMinus, UserX, Users, X, XCircle,
@@ -49,6 +50,11 @@ import { VistaConceptos } from './_vista-conceptos';
  * Al confirmar se matricula sección por sección —una petición cada una— para
  * ver el avance y no chocar con el tiempo máximo de una petición. Debajo es el
  * mismo `matricularLote` de «Matricular en lote».
+ *
+ * También se puede ir uno por uno: el cajón de cada alumno tiene «Matricular»,
+ * que crea solo su matrícula (la misma petición, con un alumno). Y lo decidido
+ * aquí —el plan de cada uno, quién queda fuera, lo de cada sección y la fecha—
+ * se guarda en el navegador: recargar la página no lo pierde.
  */
 
 interface Omitido { nombre: string; ubicacion: string }
@@ -108,6 +114,37 @@ const claveGrado = (g: Grupo) => `g:${claveNivel(g)}|${g.grado}`;
 const claveSeccion = (g: Grupo) => `s:${g.cursoId}`;
 const enAlcance = (g: Grupo, alcance: string | null) =>
   !alcance || alcance === claveNivel(g) || alcance === claveGrado(g) || alcance === claveSeccion(g);
+
+/**
+ * Lo decidido en la pantalla, guardado en este navegador por año escolar: si
+ * se recarga la página o se cierra, al volver sigue ahí (pedido del usuario,
+ * 26-10). Es el borrador de quien está matriculando, no un dato del colegio:
+ * no va a la base.
+ */
+const claveGuardado = (periodoId: number) => `escolar.matricular-sigerd.${periodoId}`;
+interface Guardado {
+  fecha: string | null;
+  fuera: number[];
+  cambiadosSeccion: Array<[number, number[]]>;
+  /** El tercer valor: si el alumno ya estaba matriculado cuando se guardó. */
+  ajustes: Array<[number, Ajuste, boolean]>;
+}
+function leerGuardado(periodoId: number): Partial<Guardado> | null {
+  try {
+    const crudo = window.localStorage.getItem(claveGuardado(periodoId));
+    return crudo ? JSON.parse(crudo) as Partial<Guardado> : null;
+  } catch {
+    return null;
+  }
+}
+function escribirGuardado(periodoId: number, g: Guardado | null) {
+  try {
+    if (g) window.localStorage.setItem(claveGuardado(periodoId), JSON.stringify(g));
+    else window.localStorage.removeItem(claveGuardado(periodoId));
+  } catch {
+    // Navegación privada o sin espacio: la pantalla sigue, solo no lo recuerda.
+  }
+}
 
 export default function MatricularDesdeSigerd() {
   const { can, isLoading: cargandoPermisos } = usePermissions();
@@ -176,15 +213,52 @@ export default function MatricularDesdeSigerd() {
   }, []);
   useEffect(() => { void cargar(); }, [cargar]);
 
-  // El plan de cada sección, con la fecha elegida: la fecha decide qué cuotas
-  // ya tocan y cuáles espera el devengo.
+  /**
+   * Lo guardado en el navegador vuelve en cuanto se sabe el año escolar, pero
+   * solo lo que sigue teniendo sentido: alumnos y secciones que siguen en la
+   * lista, y el plan de un alumno si sigue igual de matriculado (o no) que
+   * cuando se guardó. Al que ya se matriculó no se le aplica su plan de antes
+   * como un cambio a su matrícula.
+   */
+  const [restaurado, setRestaurado] = useState<number | null>(null);
+  const [recuperados, setRecuperados] = useState(0);
   useEffect(() => {
-    if (!datos?.periodo || datos.grupos.length === 0) return;
+    if (!datos?.periodo || restaurado === datos.periodo.id) return;
+    const g = leerGuardado(datos.periodo.id);
+    if (g) {
+      const alumnos = new Map(datos.grupos.flatMap((gr) => gr.estudiantes.map((e) => [e.id, e] as const)));
+      const cursos = new Set(datos.grupos.map((gr) => gr.cursoId));
+      const ajustesOk = (Array.isArray(g.ajustes) ? g.ajustes : []).filter(([id, , eraMatriculado]) => {
+        const e = alumnos.get(id);
+        return e != null && esMatriculado(e) === eraMatriculado;
+      });
+      const fueraOk = (Array.isArray(g.fuera) ? g.fuera : []).filter((id) => {
+        const e = alumnos.get(id);
+        return e != null && !esMatriculado(e);
+      });
+      const seccionesOk = (Array.isArray(g.cambiadosSeccion) ? g.cambiadosSeccion : []).filter(([id]) => cursos.has(id));
+      setAjustes(new Map(ajustesOk.map(([id, a]) => [id, a])));
+      setFuera(new Set(fueraOk));
+      setCambiadosSeccion(new Map(seccionesOk.map(([id, ids]) => [id, new Set(ids)])));
+      if (typeof g.fecha === 'string') setFecha(g.fecha);
+      setRecuperados(ajustesOk.length + fueraOk.length + seccionesOk.length);
+    }
+    setRestaurado(datos.periodo.id);
+  }, [datos, restaurado]);
+
+  // El plan de cada sección, con la fecha elegida: la fecha decide qué cuotas
+  // ya tocan y cuáles espera el devengo. Espera a lo guardado (su fecha puede
+  // ser otra) y no depende de `datos` entero: releer la lista después de
+  // matricular a uno no vuelve a pedir el plan de todas las secciones.
+  const periodoId = datos?.periodo?.id ?? null;
+  const cursosClave = useMemo(() => (datos?.grupos ?? []).map((g) => g.cursoId).join(','), [datos]);
+  useEffect(() => {
+    if (periodoId == null || restaurado !== periodoId || !cursosClave) return;
     let vigente = true;
-    const periodoId = String(datos.periodo.id);
-    setPlanes(new Map(datos.grupos.map((g) => [g.cursoId, { estado: 'cargando' } as PlanSeccion])));
-    for (const g of datos.grupos) {
-      const params = new URLSearchParams({ periodoId, cursoId: String(g.cursoId), desde: fecha });
+    const cursoIds = cursosClave.split(',').map(Number);
+    setPlanes(new Map(cursoIds.map((id) => [id, { estado: 'cargando' } as PlanSeccion])));
+    for (const cursoId of cursoIds) {
+      const params = new URLSearchParams({ periodoId: String(periodoId), cursoId: String(cursoId), desde: fecha });
       fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
         .then(async (res) => {
           const d = await res.json();
@@ -192,10 +266,10 @@ export default function MatricularDesdeSigerd() {
           return { estado: 'listo', lineas: d.lineas as LineaPlan[] } as PlanSeccion;
         })
         .catch((e: unknown) => ({ estado: 'error', mensaje: e instanceof Error ? e.message : 'Error' } as PlanSeccion))
-        .then((p) => { if (vigente) setPlanes((m) => new Map(m).set(g.cursoId, p)); });
+        .then((p) => { if (vigente) setPlanes((m) => new Map(m).set(cursoId, p)); });
     }
     return () => { vigente = false; };
-  }, [datos, fecha]);
+  }, [periodoId, cursosClave, fecha, restaurado]);
 
   /** Lo que ya tiene guardado la matrícula de quien ya está matriculado. */
   const guardados = useMemo(() => {
@@ -205,6 +279,30 @@ export default function MatricularDesdeSigerd() {
     }
     return m;
   }, [datos]);
+
+  // Cada cambio se guarda en el navegador; sin nada decidido, se borra. No
+  // antes de haber leído lo guardado: si no, lo pisaría con la pantalla vacía.
+  useEffect(() => {
+    if (periodoId == null || restaurado !== periodoId) return;
+    const vacio = ajustes.size === 0 && fuera.size === 0 && cambiadosSeccion.size === 0 && fechaElegida == null;
+    escribirGuardado(periodoId, vacio ? null : {
+      fecha: fechaElegida,
+      fuera: [...fuera],
+      cambiadosSeccion: [...cambiadosSeccion].map(([id, s]) => [id, [...s]]),
+      ajustes: [...ajustes].map(([id, a]) => [id, a, guardados.has(id)]),
+    });
+  }, [periodoId, restaurado, ajustes, fuera, cambiadosSeccion, fechaElegida, guardados]);
+
+  const [avisoCero, setAvisoCero] = useState(false);
+  /** Vuelve a lo de cada sección y olvida lo guardado en el navegador. */
+  function empezarDeCero() {
+    setAjustes(new Map());
+    setFuera(new Set());
+    setCambiadosSeccion(new Map());
+    setFecha(null);
+    setRecuperados(0);
+    setAvisoCero(false);
+  }
 
   /**
    * Los conceptos que se le cobran a un alumno si nadie lo abrió: los de su
@@ -493,6 +591,53 @@ export default function MatricularDesdeSigerd() {
   const conceptosDelLote = useMemo(() => conceptosDe_(marcadosDentro), [conceptosDe_, marcadosDentro]);
   const conceptosParaPrecio = useMemo(() => conceptosDe_(marcadosPorMatricular), [conceptosDe_, marcadosPorMatricular]);
 
+  // ── Matricular a uno solo ─────────────────────────────────────────────
+  /** El alumno que se va a matricular solo, con lo que decía su cajón al pulsar «Matricular». */
+  const [uno, setUno] = useState<{ alumno: Alumno; grupo: Grupo; ajuste: Ajuste } | null>(null);
+  const [matriculandoUno, setMatriculandoUno] = useState(false);
+  const cuentaUno = useMemo(() => {
+    if (!uno) return null;
+    const p = planes.get(uno.grupo.cursoId);
+    return p?.estado === 'listo' ? cuentaDe(p.lineas, uno.ajuste.conceptos, uno.ajuste.precios, corte) : null;
+  }, [uno, planes, corte]);
+
+  /**
+   * Crea solo la matrícula del alumno: la misma petición que la de toda su
+   * sección, con él solo. Después se relee la lista, donde ya sale como
+   * matriculado, y lo suyo deja de estar guardado aquí.
+   */
+  async function matricularUno() {
+    if (!uno) return;
+    const { alumno, grupo, ajuste } = uno;
+    setMatriculandoUno(true);
+    try {
+      const res = await fetch('/api/administracion-escolar/matriculas/desde-sigerd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cursoId: grupo.cursoId,
+          fechaInscripcion: fecha,
+          alumnos: [{ estudianteId: alumno.id, conceptos: ajuste.conceptos, precios: ajuste.precios }],
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'No se pudo matricular');
+      if (d.creadas !== 1) {
+        const r = (d.resultados as ResultadoAlumno[] | undefined)?.find((x) => x.estudianteId === alumno.id);
+        throw new Error(r?.motivo ?? 'No se creó la matrícula');
+      }
+      toast.success(`Listo: ${alumno.nombre} ya tiene su matrícula en ${titulo(grupo)}.`);
+      deshacerAjuste(alumno.id);
+      alternarFuera([alumno.id], false);
+      setUno(null);
+      await cargar();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo matricular');
+    } finally {
+      setMatriculandoUno(false);
+    }
+  }
+
   async function matricular() {
     if (!datos) return;
     setConfirmar(false);
@@ -689,6 +834,12 @@ export default function MatricularDesdeSigerd() {
         setEditando(null);
       }}
       onSacar={() => { alternarFuera([editando.alumno.id], true); setEditando(null); }}
+      onMatricular={esMatriculado(editando.alumno) ? undefined : (a) => {
+        // Lo del cajón queda guardado aunque después no se confirme o falle.
+        guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a);
+        setUno({ alumno: editando.alumno, grupo: editando.grupo, ajuste: a });
+        setEditando(null);
+      }}
       onCerrar={cerrarEditor}
       onSucio={setEditorSucio}
       conCambios={ajustes.has(editando.alumno.id)}
@@ -732,6 +883,15 @@ export default function MatricularDesdeSigerd() {
       {/* Sin tarjetas de resumen: cuántos alumnos, en cuántas secciones y
           cuánto se carga hoy ya lo dice la barra de abajo, junto al botón que
           matricula. Arriba solo quedaba repetido (pedido del usuario, 24-10). */}
+
+      {recuperados > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-zero-200 bg-zero-50 px-4 py-3 text-sm text-zero-900">
+          <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-zero-600" />
+          <p>Sigue lo que habías dejado guardado en esta pantalla: los planes de cada alumno, quién no se matricula y lo de cada sección.</p>
+          <button type="button" onClick={() => setAvisoCero(true)}
+            className="ml-auto shrink-0 text-xs font-medium text-zero-800 hover:underline">Empezar de cero</button>
+        </div>
+      )}
 
       {/* ── Avisos ─────────────────────────────────────────────────── */}
       {(resumen.sinResponsable > 0 || omitidos.length > 0) && (
@@ -1112,6 +1272,30 @@ export default function MatricularDesdeSigerd() {
         confirmLabel={resumen.alumnos > 0 ? (cambiosMatriculados.length > 0 ? 'Sí, matricular y guardar' : 'Sí, matricular') : 'Sí, guardar'}
         onConfirm={() => void matricular()} />
 
+      <ConfirmDialog open={!!uno} onOpenChange={(o) => { if (!o) setUno(null); }}
+        title={uno ? `¿Matricular a ${uno.alumno.nombre}?` : ''}
+        icon={<GraduationCap className="h-5 w-5 text-zero-600" />}
+        description={uno && (
+          <>
+            Se crea solo su matrícula, en {titulo(uno.grupo)}, con fecha de inscripción{' '}
+            {fecha.split('-').reverse().join('/')}
+            {cuentaUno && `, y ${cuentaUno.cargos} cargo(s) pendientes por ${fmtDOP(cuentaUno.hoy)}`}. No se cobra nada ahora.
+            {uno.alumno.sinResponsable && ' No tiene responsable de pago: sus cargos no se facturan hasta asignarle uno en su ficha.'}
+          </>
+        )}
+        confirmLabel="Sí, matricular"
+        confirmClassName="bg-zero-600 hover:bg-zero-700"
+        loading={matriculandoUno}
+        onConfirm={() => void matricularUno()} />
+
+      <ConfirmDialog open={avisoCero} onOpenChange={setAvisoCero}
+        title="¿Empezar de cero?"
+        description="Se borra lo que habías decidido aquí sin matricular: los planes de cada alumno, quién no se matricula, lo de cada sección y la fecha. Lo ya matriculado no se toca."
+        confirmLabel="Sí, empezar de cero"
+        cancelLabel="No, seguir"
+        destructive
+        onConfirm={empezarDeCero} />
+
       {/* En la vista por alumno el plan se abre debajo de su fila; en las demás, en el cajón. */}
       <Drawer anchor="right" open={!!editando && vista !== 'alumno'} onClose={cerrarEditor} keepMounted={false}
         slotProps={{
@@ -1267,7 +1451,8 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
+  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onMatricular, onRestablecer, onSacar,
+  onCerrar, onSucio,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -1278,6 +1463,8 @@ function EditorAlumno({
   puedePrecios: boolean;
   conCambios: boolean;
   onGuardar: (a: Ajuste) => void;
+  /** Matricular ya solo a este alumno, con lo que dice el cajón. Sin él (ya matriculado), no sale. */
+  onMatricular?: (a: Ajuste) => void;
   onRestablecer: () => void;
   onSacar: () => void;
   onCerrar: () => void;
@@ -1379,12 +1566,21 @@ function EditorAlumno({
             </button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
+          {/* «Guardar» deja el plan listo para después; «Matricular» crea ya su matrícula. */}
+          <Button variant={onMatricular ? 'outline' : undefined}
+            className={onMatricular ? undefined : 'bg-zero-600 hover:bg-zero-700'} disabled={!cargado}
             onClick={() => onGuardar({ conceptos, precios })}>
             Guardar
           </Button>
+          {onMatricular && (
+            <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
+              title="Crea ya la matrícula de este alumno, solo la suya"
+              onClick={() => onMatricular({ conceptos, precios })}>
+              <GraduationCap className="mr-2 h-4 w-4" />Matricular
+            </Button>
+          )}
         </div>
       </div>
     </div>
