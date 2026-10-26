@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { InputMoneda } from '@/components/ui/input-moneda';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP } from '@/lib/utils/format';
 import { referenciaServicio } from '@/lib/administracion-escolar/referencia-servicio';
@@ -818,8 +819,8 @@ function ModalTarifa({
                 <div>
                   <label htmlFor="tarifa-precio" className="mb-1.5 block text-sm font-medium text-gray-700">Precio</label>
                   <div className="flex items-center gap-2">
-                    <Input id="tarifa-precio" autoFocus type="number" step="0.01" min="0" className="h-10 flex-1 font-mono" placeholder="0.00"
-                      value={precio} onChange={(e) => setPrecio(e.target.value)}
+                    <InputMoneda id="tarifa-precio" autoFocus className="h-10"
+                      value={precio} onValueChange={setPrecio}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void guardar(); } }} />
                     <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">Itbis exento</span>
                   </div>

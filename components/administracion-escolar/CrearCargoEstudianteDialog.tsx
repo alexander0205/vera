@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { InputMoneda } from '@/components/ui/input-moneda';
 import { fmtDOP, parseDOPaCentavos } from '@/lib/utils/format';
 import { deDondeSaleElPrecio, type SugerenciaDeMonto } from '@/lib/administracion-escolar/precio-cargo-individual';
 import { Label } from '@/components/ui/label';
@@ -294,7 +295,7 @@ export function CrearCargoEstudianteDialog({
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Monto (RD$) *</Label><Input type="number" step="0.01" min={0} inputMode="decimal" placeholder="0.00" value={form.monto} onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Monto (RD$) *</Label><InputMoneda value={form.monto} onValueChange={(v) => setForm((f) => ({ ...f, monto: v }))} /></div>
               <div className="space-y-1.5">
                 <Label>Vencimiento</Label>
                 {(() => {

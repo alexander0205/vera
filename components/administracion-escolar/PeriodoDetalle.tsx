@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChipEstado } from './ChipEstado';
 import { Input } from '@/components/ui/input';
+import { InputMoneda } from '@/components/ui/input-moneda';
 import { Label } from '@/components/ui/label';
 
 import { NativeSelect } from '@/components/ui/native-select';
@@ -1168,7 +1169,7 @@ function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matricu
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Monto por mes (RD$)</Label>
-              <Input type="number" step="0.01" min={0} inputMode="decimal" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} />
+              <InputMoneda value={monto} onValueChange={setMonto} />
             </div>
           </div>
           <div className="space-y-1">
@@ -2833,10 +2834,10 @@ function TarifaEstudianteDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">{modo === 'monto' ? 'Monto al mes (RD$)' : 'Descuento (%)'}</Label>
-                <Input type="number" step={modo === 'monto' ? '0.01' : '1'} min={0} max={modo === 'monto' ? undefined : 100}
-                  inputMode={modo === 'monto' ? 'decimal' : 'numeric'} value={valor}
-                  onChange={(e) => setValor(e.target.value)}
-                  placeholder={modo === 'monto' ? '0.00' : '0'} autoFocus />
+                {modo === 'monto'
+                  ? <InputMoneda value={valor} onValueChange={setValor} autoFocus />
+                  : <Input type="number" step="1" min={0} max={100} inputMode="numeric" value={valor}
+                      onChange={(e) => setValor(e.target.value)} placeholder="0" autoFocus />}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Motivo (opcional)</Label>
@@ -2875,8 +2876,7 @@ function TarifaEstudianteDialog({
                       ? 'Precio para este alumno, por mes (RD$)'
                       : 'Precio para este alumno (RD$)'}
                   </Label>
-                  <Input type="number" step="0.01" min={0} inputMode="decimal" value={precioOtro}
-                    onChange={(e) => setPrecioOtro(e.target.value)} placeholder="0.00" />
+                  <InputMoneda value={precioOtro} onValueChange={setPrecioOtro} />
                   {precioPersonal && (
                     <p className="text-[11px] text-gray-400">Ya tiene un precio personal puesto. Cámbialo o quítalo.</p>
                   )}
