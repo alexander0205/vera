@@ -257,7 +257,7 @@ function FilaAviso({
       <Canales aviso={aviso} activos={canales} />
       {activo && disponible && dias != null && onDias && (
         <span className="flex shrink-0 items-center gap-1.5">
-          <Input type="number" min={0} max={60} className="h-8 w-16" value={dias}
+          <Input type="number" min={0} max={60} className="h-9 w-24" value={dias}
             onChange={(e) => onDias(Number(e.target.value) || 0)} />
           <span className="text-xs text-gray-500">{sufijo ?? 'días antes'}</span>
         </span>
@@ -609,7 +609,7 @@ export function ConceptoDetalle({
               </span>
               {tieneVencimiento && (
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <Input type="number" min={0} max={90} className="h-8 w-16"
+                  <Input type="number" min={0} max={90} className="h-9 w-24"
                     value={borrador.diasParaPago ?? 0}
                     onChange={(e) => editar('diasParaPago', Number(e.target.value) || 0)} />
                   <span className="text-xs text-gray-500">días después</span>
@@ -646,7 +646,7 @@ export function ConceptoDetalle({
               </span>
               {hayMora && (
                 <span className="flex shrink-0 items-center gap-2">
-                  <Input type="number" min={0} max={60} className="h-8 w-20"
+                  <Input type="number" min={0} max={60} className="h-9 w-24"
                     value={gracia}
                     onChange={(e) => {
                       const n = Math.max(0, Math.min(60, Number(e.target.value) || 0));
@@ -691,7 +691,7 @@ export function ConceptoDetalle({
                 </span>
                 {borrador.descuentoAdelantoPct != null && (
                   <span className="flex shrink-0 items-center gap-1.5">
-                    <Input type="number" min={1} max={100} className="h-8 w-16"
+                    <Input type="number" min={1} max={100} className="h-9 w-24"
                       value={borrador.descuentoAdelantoPct}
                       onChange={(e) => editar('descuentoAdelantoPct',
                         Math.min(100, Math.max(1, Number(e.target.value) || 1)))} />

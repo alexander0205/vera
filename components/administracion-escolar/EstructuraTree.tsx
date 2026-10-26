@@ -56,6 +56,16 @@ function rango(p: { fechaInicio: string | null; fechaFin: string | null }): stri
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+/** La primera letra A–Z que no usa ninguna de las secciones dadas. */
+function siguienteLetra(usadas: string[]): string {
+  const en = new Set(usadas.map((n) => n.trim().toUpperCase()));
+  for (let i = 0; i < 26; i++) {
+    const L = String.fromCharCode(65 + i);
+    if (!en.has(L)) return L;
+  }
+  return '';
+}
+
 const post = (url: string, body: unknown) =>
   fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const patch = (url: string, body: unknown) =>
@@ -74,15 +84,25 @@ function CamposEdicion({ edicion, setEdicion, onGuardar }: {
     if (e.key === 'Enter') { e.preventDefault(); onGuardar(); }
     if (e.key === 'Escape') setEdicion(null);
   };
+  // Los anchos van en el contenedor y no en `className` del Input: ese `className`
+  // llega al <input> interno de MUI (cuyo borde exterior sigue ocupando el 100%
+  // de su caja) y con `w-32`/`w-[8.5rem]` los campos quedaban en ~100px, con el
+  // icono del calendario pisando el "al" de al lado. Además la fila envuelve:
+  // en pantallas estrechas ya no se aplastan unos contra otros.
   return (
-    <>
-      <Input autoFocus className="h-7 min-w-0 flex-1" value={edicion.nombre}
-        onChange={(e) => setEdicion((x) => x && ({ ...x, nombre: e.target.value }))}
-        onKeyDown={teclas} />
-      {edicion.nivel === 'servicio' && (
-        <Input className="h-7 w-32 shrink-0" placeholder="Tanda" value={edicion.tanda}
-          onChange={(e) => setEdicion((x) => x && ({ ...x, tanda: e.target.value }))}
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="min-w-[11rem] flex-[2_1_14rem]">
+        <Input autoFocus aria-label="Nombre" maxLength={120} className="h-8"
+          value={edicion.nombre}
+          onChange={(e) => setEdicion((x) => x && ({ ...x, nombre: e.target.value }))}
           onKeyDown={teclas} />
+      </div>
+      {edicion.nivel === 'servicio' && (
+        <div className="w-48 shrink-0">
+          <Input aria-label="Tanda" maxLength={60} className="h-8" placeholder="Tanda (ej. Matutina)" value={edicion.tanda}
+            onChange={(e) => setEdicion((x) => x && ({ ...x, tanda: e.target.value }))}
+            onKeyDown={teclas} />
+        </div>
       )}
       {/* Las fechas del año escolar se editan aquí y no en una pantalla aparte
           porque son del año, no de otra cosa, y hasta ahora no había DÓNDE
@@ -90,23 +110,33 @@ function CamposEdicion({ edicion, setEdicion, onGuardar }: {
           sale cuántas cuotas genera el calendario de cobro. */}
       {edicion.nivel === 'periodo' && (
         <>
-          <span className="shrink-0 text-xs text-gray-400">del</span>
-          <Input type="date" className="h-7 w-[8.5rem] shrink-0" aria-label="Fecha de inicio"
-            value={edicion.fechaInicio}
-            onChange={(e) => setEdicion((x) => x && ({ ...x, fechaInicio: e.target.value }))}
-            onKeyDown={teclas} />
-          <span className="shrink-0 text-xs text-gray-400">al</span>
-          <Input type="date" className="h-7 w-[8.5rem] shrink-0" aria-label="Fecha de fin"
-            value={edicion.fechaFin}
-            onChange={(e) => setEdicion((x) => x && ({ ...x, fechaFin: e.target.value }))}
-            onKeyDown={teclas} />
+          <label className="flex shrink-0 items-center gap-1.5 text-xs text-gray-500">
+            Del
+            <span className="w-44 shrink-0">
+              <Input type="date" className="h-8" aria-label="Fecha de inicio"
+                value={edicion.fechaInicio}
+                onChange={(e) => setEdicion((x) => x && ({ ...x, fechaInicio: e.target.value }))}
+                onKeyDown={teclas} />
+            </span>
+          </label>
+          <label className="flex shrink-0 items-center gap-1.5 text-xs text-gray-500">
+            al
+            <span className="w-44 shrink-0">
+              <Input type="date" className="h-8" aria-label="Fecha de fin"
+                value={edicion.fechaFin}
+                onChange={(e) => setEdicion((x) => x && ({ ...x, fechaFin: e.target.value }))}
+                onKeyDown={teclas} />
+            </span>
+          </label>
         </>
       )}
-      <button type="button" className="shrink-0 text-zero-600 hover:text-zero-700" title="Guardar"
-        onClick={onGuardar}><Check className="h-4 w-4" /></button>
-      <button type="button" className="shrink-0 text-gray-400 hover:text-gray-600" title="Cancelar"
-        onClick={() => setEdicion(null)}><X className="h-3.5 w-3.5" /></button>
-    </>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <button type="button" className="rounded p-1 text-zero-600 hover:bg-zero-50 hover:text-zero-700" title="Guardar (Enter)"
+          aria-label="Guardar" onClick={onGuardar}><Check className="h-4 w-4" /></button>
+        <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Cancelar (Esc)"
+          aria-label="Cancelar" onClick={() => setEdicion(null)}><X className="h-4 w-4" /></button>
+      </span>
+    </div>
   );
 }
 
@@ -140,21 +170,35 @@ function FilaAdd({
   onGuardar: () => void;
   ocupado: boolean;
 }) {
+  const teclas = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); onGuardar(); }
+    if (e.key === 'Escape') setAdd(null);
+  };
   return (
-    <div className="flex items-center gap-2 py-1.5" style={{ paddingLeft: 8 + sangria * SANGRIA }}>
-      <Input autoFocus className="h-8 max-w-52"
-        placeholder={add.nivel === 'periodo' ? 'Año escolar (ej. 2026-2027)' : add.nivel === 'servicio' ? 'Servicio (ej. Secundario)' : add.nivel === 'curso' ? 'Grado (ej. Primero)' : 'Sección (ej. A)'}
-        value={add.nombre} onChange={(e) => setAdd((a) => a && ({ ...a, nombre: e.target.value }))}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
+    <div className="flex flex-wrap items-center gap-2 py-1.5 pr-3" style={{ paddingLeft: 8 + sangria * SANGRIA }}>
+      <div className="min-w-[14rem] flex-[1_1_18rem] sm:max-w-md">
+        <Input autoFocus className="h-9" maxLength={120} aria-label="Nombre"
+          placeholder={add.nivel === 'periodo' ? 'Año escolar (ej. 2026-2027)' : add.nivel === 'servicio' ? 'Servicio (ej. Secundario)' : add.nivel === 'curso' ? 'Grado (ej. Primero)' : 'Sección (ej. A)'}
+          value={add.nombre} onChange={(e) => setAdd((a) => a && ({ ...a, nombre: e.target.value }))}
+          onKeyDown={teclas} />
+      </div>
       {add.nivel === 'servicio' && (
-        <Input className="h-8 max-w-40" placeholder="Tanda (ej. Matutina)" value={add.tanda}
-          onChange={(e) => setAdd((a) => a && ({ ...a, tanda: e.target.value }))}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
+        <div className="w-56 shrink-0">
+          <Input className="h-9" maxLength={60} aria-label="Tanda" placeholder="Tanda (ej. Matutina)" value={add.tanda}
+            onChange={(e) => setAdd((a) => a && ({ ...a, tanda: e.target.value }))}
+            onKeyDown={teclas} />
+        </div>
       )}
-      <Button size="sm" className="h-8 bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={ocupado || !add.nombre.trim()}>
+      <Button size="sm" className="h-9 bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={ocupado || !add.nombre.trim()}>
         {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Agregar'}
       </Button>
-      <Button size="sm" variant="outline" className="h-8" onClick={() => setAdd(null)}>Cancelar</Button>
+      <Button size="sm" variant="outline" className="h-9" onClick={() => setAdd(null)}>Cancelar</Button>
+      {/* Enter agrega y deja la fila lista para el siguiente: cargar un colegio
+          son decenas de grados y secciones, y reabrir el formulario cada vez
+          era el grueso del tiempo. */}
+      {add.nivel !== 'periodo' && (
+        <span className="hidden text-xs text-gray-400 md:inline">Enter agrega y sigue con otro · Esc termina</span>
+      )}
     </div>
   );
 }
@@ -182,6 +226,8 @@ export function EstructuraTree() {
   const [add, setAdd] = useState<AddState | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [edicion, setEdicion] = useState<EditState | null>(null);
+  /** Fallo de la última acción. Se pinta arriba del árbol: un `alert` bloquea la página y se pierde el foco. */
+  const [aviso, setAviso] = useState<string | null>(null);
   /** Ramas desplegadas, por clave `p:1` / `s:5` / `g:27`. */
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
 
@@ -237,9 +283,10 @@ export function EstructuraTree() {
   // Alta optimista: insertamos la fila que devuelve el POST en el estado local,
   // sin volver a bajar todo. Instantáneo y sin parpadeo.
   async function guardarAdd() {
-    if (!add || !add.nombre.trim()) return;
+    if (!add || !add.nombre.trim() || ocupado) return;
     const nombre = add.nombre.trim();
     setOcupado(true);
+    setAviso(null);
     try {
       if (add.nivel === 'periodo') {
         // "2026-2027" ya dice cuándo empieza y cuándo acaba el año escolar
@@ -249,37 +296,45 @@ export function EstructuraTree() {
         const r = await post('/api/administracion-escolar/periodos', {
           nombre, ...(fechasDesdeNombre(nombre) ?? {}),
         });
-        const j = await r.json();
-        if (!r.ok) { alert(j.error ?? 'No se pudo guardar.'); return; }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { setAviso(j.error ?? 'No se pudo guardar.'); return; }
         setPeriodos((xs) => [...xs, j.periodo as Periodo]);
-      } else if (add.nivel === 'servicio') {
+        desplegar(`p:${(j.periodo as Periodo).id}`);
+        setAdd(null);
+        return;
+      }
+
+      if (add.nivel === 'servicio') {
         const r = await post('/api/administracion-escolar/servicios', { periodoId: add.parentId, nombre, tanda: add.tanda.trim() || null, orden: servicios.filter((s) => s.periodoId === add.parentId).length });
-        const j = await r.json();
-        if (!r.ok) { alert(j.error ?? 'No se pudo guardar.'); return; }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { setAviso(j.error ?? 'No se pudo guardar.'); return; }
         setServicios((xs) => [...xs, j.servicio as Servicio]);
+        // La tanda suele repetirse (Matutina, Matutina…): se conserva.
+        setAdd({ ...add, nombre: '', tanda: add.tanda });
       } else if (add.nivel === 'curso') {
         const r = await post('/api/administracion-escolar/grados', { servicioId: add.parentId, nombre, orden: cursos.filter((c) => c.servicioId === add.parentId).length });
-        const j = await r.json();
-        if (!r.ok) { alert(j.error ?? 'No se pudo guardar.'); return; }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { setAviso(j.error ?? 'No se pudo guardar.'); return; }
         setCursos((xs) => [...xs, j.grado as Curso]);
+        setAdd({ ...add, nombre: '' });
       } else {
         const r = await post('/api/administracion-escolar/cursos', { gradoId: add.parentId, nombre, orden: secciones.filter((s) => s.gradoId === add.parentId).length });
-        const j = await r.json();
-        if (!r.ok) { alert(j.error ?? 'No se pudo agregar la sección.'); return; }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { setAviso(j.error ?? 'No se pudo agregar la sección.'); return; }
         setSecciones((xs) => [...xs, j.curso as Seccion]);
+        // La siguiente letra libre, contando la que acaba de entrar.
+        setAdd({ ...add, nombre: siguienteLetra([...secciones.filter((s) => s.gradoId === add.parentId).map((s) => s.nombre), nombre]) });
       }
-      setAdd(null);
+    } catch {
+      setAviso('No hay conexión con el servidor. Inténtalo otra vez.');
     } finally { setOcupado(false); }
   }
 
   // Abre el alta de sección con la SIGUIENTE letra libre como sugerencia
   // (editable). No crea nada hasta que el usuario confirma.
   function abrirSeccion(gradoId: number) {
-    const usadas = secciones.filter((s) => s.gradoId === gradoId).map((s) => s.nombre.toUpperCase());
-    let letra = 'A';
-    for (let i = 0; i < 26; i++) { const L = String.fromCharCode(65 + i); if (!usadas.includes(L)) { letra = L; break; } }
     desplegar(`g:${gradoId}`);
-    setAdd({ nivel: 'seccion', parentId: gradoId, nombre: letra, tanda: '' });
+    setAdd({ nivel: 'seccion', parentId: gradoId, nombre: siguienteLetra(secciones.filter((s) => s.gradoId === gradoId).map((s) => s.nombre)), tanda: '' });
   }
 
   /**
@@ -322,7 +377,7 @@ export function EstructuraTree() {
       items: [...cambios].map(([hijoId, orden]) => ({ id: hijoId, orden })),
     });
     // Si falló, el estado local quedó mintiendo: se vuelve a bajar todo.
-    if (!r.ok) { alert('No se pudo guardar el orden.'); await cargar(); }
+    if (!r.ok) { setAviso('No se pudo guardar el orden.'); await cargar(); }
   }
 
   const hermanosServicio = (periodoId: number) =>
@@ -419,7 +474,7 @@ export function EstructuraTree() {
     // para saber cuántos meses tiene el año. El servidor lo rechaza igual, pero
     // decirlo aquí evita el viaje.
     if (nivel === 'periodo' && Boolean(fechaInicio) !== Boolean(fechaFin)) {
-      alert('Pon las dos fechas del año escolar, o ninguna.');
+      setAviso('Pon las dos fechas del año escolar, o ninguna.');
       return;
     }
     const r = await patch(`/api/administracion-escolar/${recurso}/${id}`, {
@@ -427,8 +482,9 @@ export function EstructuraTree() {
       ...(nivel === 'servicio' ? { tanda: tanda.trim() || null } : {}),
       ...(nivel === 'periodo' ? { fechaInicio: fechaInicio || null, fechaFin: fechaFin || null } : {}),
     });
-    const j = await r.json();
-    if (!r.ok) { alert(j.error ?? 'No se pudo guardar.'); return; }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setAviso(j.error ?? 'No se pudo guardar.'); return; }
+    setAviso(null);
 
     // Se toma lo que devolvió el servidor: él normaliza (recorta, pasa la
     // tanda vacía a NULL) y así la pantalla no queda diciendo otra cosa.
@@ -449,8 +505,15 @@ export function EstructuraTree() {
   async function activarPeriodo(id: number) {
     // Optimista: marca uno activo y apaga los demás sin recargar.
     setPeriodos((xs) => xs.map((p) => ({ ...p, activo: p.id === id })));
-    await patch(`/api/administracion-escolar/periodos/${id}`, { activo: true });
-    await Promise.all(periodos.filter((p) => p.id !== id && p.activo).map((p) => patch(`/api/administracion-escolar/periodos/${p.id}`, { activo: false })));
+    try {
+      const r = await patch(`/api/administracion-escolar/periodos/${id}`, { activo: true });
+      if (!r.ok) throw new Error();
+      await Promise.all(periodos.filter((p) => p.id !== id && p.activo).map((p) => patch(`/api/administracion-escolar/periodos/${p.id}`, { activo: false })));
+    } catch {
+      // Lo pintado quedó mintiendo: se vuelve a bajar lo que hay de verdad.
+      setAviso('No se pudo activar el año escolar.');
+      await cargar();
+    }
   }
 
   /**
@@ -501,6 +564,13 @@ export function EstructuraTree() {
           <Plus className="h-4 w-4" /> Nuevo año escolar
         </Button>
       </div>
+
+      {aviso && (
+        <div role="alert" className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span className="flex-1">{aviso}</span>
+          <button type="button" onClick={() => setAviso(null)} aria-label="Cerrar aviso" className="text-red-400 hover:text-red-700"><X className="h-4 w-4" /></button>
+        </div>
+      )}
 
       <div className="px-2 py-1.5">
         {loading ? (

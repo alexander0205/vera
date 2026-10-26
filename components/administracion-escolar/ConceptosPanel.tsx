@@ -131,6 +131,8 @@ export function ConceptosPanel() {
   const [quitando, setQuitando] = useState(false);
   const [errorPrecio, setErrorPrecio] = useState<string | null>(null);
   /** La fila a la que se le está cargando el concepto. `null` = el diálogo está cerrado. */
+  /** Fallo de una acción suelta (no de un diálogo): se pinta arriba, no en un `alert`. */
+  const [aviso, setAviso] = useState<string | null>(null);
   const [cargaDe, setCargaDe] = useState<{ grupoNombre: string; montoCentavos: number; cuotas: number | null; cursoIds: number[] } | null>(null);
 
   // Poner precio y cobrar no son el mismo permiso: configurar tarifas lo hace
@@ -138,8 +140,11 @@ export function ConceptosPanel() {
   const { permissions } = usePermissions();
   const puedeCobrar = permissions.includes('administracion-escolar:gestionar');
 
-  const cargar = useCallback(async (pid?: number | null) => {
-    setLoading(true);
+  // `silencioso` revalida sin tapar la pantalla con el «Cargando…»: tras quitar
+  // una tarifa o un concepto no hay por qué desmontar todo el árbol —y con él
+  // lo que tenías desplegado— para volver a pintarlo igual menos una fila.
+  const cargar = useCallback(async (pid?: number | null, silencioso = false) => {
+    if (!silencioso) setLoading(true);
     try {
       const url = pid
         ? `/api/administracion-escolar/concepto-precios?periodoId=${pid}`
@@ -160,7 +165,7 @@ export function ConceptosPanel() {
       // cambiar de año escolar sí pasa por aquí y no tiene por qué cerrarte lo
       // que tenías abierto.
       setAbiertos((prev) => prev);
-    } finally { setLoading(false); }
+    } finally { if (!silencioso) setLoading(false); }
   }, []);
   useEffect(() => { void cargar(); }, [cargar]);
 
@@ -192,7 +197,7 @@ export function ConceptosPanel() {
       }
       setPorBorrar(null); setImpacto(null); setErrorBorrado(null);
       if (conceptoSel === c.id) setConceptoSel(null);
-      await cargar(data?.periodo?.id);
+      await cargar(data?.periodo?.id, true);
     } finally { setBorrando(false); }
   }
 
@@ -217,7 +222,7 @@ export function ConceptosPanel() {
         return;
       }
       setPrecioPorQuitar(null); setImpactoPrecio(null); setErrorPrecio(null);
-      await cargar(data?.periodo?.id);
+      await cargar(data?.periodo?.id, true);
     } finally { setQuitando(false); }
   }
 
@@ -280,12 +285,13 @@ export function ConceptosPanel() {
     return (
       <span className="flex shrink-0 items-center gap-1.5 text-xs text-gray-500">
         <span>{porCuota ? 'por cuota' : 'en el año'}</span>
-        <NativeSelect className="h-7 min-w-0 py-0 pl-2 pr-7 text-xs" value={p.cuotas ?? ''}
+        <NativeSelect className="h-8 min-w-[9.5rem] py-0 pl-2 pr-7 text-xs" value={p.cuotas ?? ''}
           aria-label="Cuántas cuotas paga"
           onChange={async (e) => {
             const cuotas = e.target.value === '' ? null : Number(e.target.value);
             const r = await jsonReq('/api/administracion-escolar/concepto-precios', 'PATCH', { id: p.id, cuotas });
-            if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo guardar.'); return; }
+            if (!r.ok) { const j = await r.json().catch(() => ({})); setAviso(j.error ?? 'No se pudo guardar las cuotas.'); return; }
+            setAviso(null);
             setData((d) => d && ({ ...d, precios: d.precios.map((x) => (x.id === p.id ? { ...x, cuotas } : x)) }));
           }}>
           <option value="">{total} cuotas (todas)</option>
@@ -307,11 +313,17 @@ export function ConceptosPanel() {
 
   return (
     <div className="space-y-4">
+      {aviso && (
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span className="flex-1">{aviso}</span>
+          <button type="button" onClick={() => setAviso(null)} aria-label="Cerrar aviso" className="text-red-400 hover:text-red-700"><X className="h-4 w-4" /></button>
+        </div>
+      )}
       {/* Año escolar */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
         <CalendarDays className="h-4 w-4 shrink-0 text-zero-600" />
         <span className="text-sm text-gray-600">Año escolar</span>
-        <NativeSelect className="min-w-44" value={data.periodo?.id ?? ''} onChange={(e) => void cargar(Number(e.target.value))}>
+        <NativeSelect className="min-w-56" value={data.periodo?.id ?? ''} onChange={(e) => void cargar(Number(e.target.value))}>
           {data.periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{p.activo ? ' (activo)' : ''}</option>)}
         </NativeSelect>
         <span className="text-xs text-gray-400">Las tarifas del año pasado se conservan.</span>
@@ -658,7 +670,13 @@ function ModalTarifa({
 }) {
   const [busca, setBusca] = useState('');
   const [elegido, setElegido] = useState<Producto | null>(null);
-  const [creando, setCreando] = useState(false);
+  // Sin ningún servicio parecido en el catálogo, elegir de una lista vacía es un
+  // paso de sobra: se abre directo en «crear», con el precio listo para teclear.
+  const [creando, setCreando] = useState(() => {
+    const clave = concepto.nombre.toLowerCase().split(/\s+/)[0];
+    return !productos.some((p) => `${p.nombre} ${p.referencia ?? ''}`.toLowerCase().includes(clave));
+  });
+  const [error, setError] = useState<string | null>(null);
   const [refNueva, setRefNueva] = useState('');
   // El nombre del concepto sirve de punto de partida, no de jaula: es lo que
   // acaba impreso en la factura, y ahí el colegio puede querer decirlo de otra
@@ -696,6 +714,8 @@ function ModalTarifa({
     .filter(Boolean).join(' de ');
 
   async function guardar() {
+    if (ocupado) return;
+    setError(null);
     setOcupado(true);
     try {
       const body: Record<string, unknown> = {
@@ -704,24 +724,26 @@ function ModalTarifa({
       };
       if (creando) {
         const p = Number(precio);
-        if (!(p >= 0)) { alert('Pon un precio.'); return; }
+        if (precio === '' || !(p >= 0)) { setError('Pon un precio.'); return; }
         body.nuevoProducto = { nombre: nombreNuevo.trim() || concepto.nombre, referencia: refNueva.trim(), precio: p };
       } else if (elegido) {
         body.productId = elegido.id;
-      } else { alert('Elige un servicio de facturación o crea uno.'); return; }
+      } else { setError('Elige un servicio de facturación o crea uno.'); return; }
 
       const r = await jsonReq('/api/administracion-escolar/concepto-precios', 'POST', body);
       if (r.status === 401) {
         // La página sigue pintada aunque la sesión haya caducado, así que sin
         // este aviso el botón parece roto.
-        alert('Tu sesión caducó. Recarga la página y vuelve a entrar.');
+        setError('Tu sesión caducó. Recarga la página y vuelve a entrar.');
         return;
       }
-      if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo guardar.'); return; }
+      if (!r.ok) { const j = await r.json().catch(() => ({})); setError(j.error ?? 'No se pudo guardar.'); return; }
       // `guardado` y no `precio`: aquí `precio` ya es el importe que se teclea
       // en el formulario, y reusar el nombre lo tapaba.
       const { precio: guardado, producto } = await r.json();
       onGuardado(guardado as Precio, (producto ?? null) as Producto | null);
+    } catch {
+      setError('No hay conexión con el servidor. Inténtalo otra vez.');
     } finally { setOcupado(false); }
   }
 
@@ -792,31 +814,40 @@ function ModalTarifa({
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Nombre</label>
-                  <Input className="h-10" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} />
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    Es lo que el padre lee en su factura. Empieza por el del concepto.
-                  </p>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Precio</label>
+                  <label htmlFor="tarifa-precio" className="mb-1.5 block text-sm font-medium text-gray-700">Precio</label>
                   <div className="flex items-center gap-2">
-                    <Input autoFocus type="number" step="0.01" className="h-10 flex-1 font-mono" placeholder="0.00" value={precio} onChange={(e) => setPrecio(e.target.value)} />
+                    <Input id="tarifa-precio" autoFocus type="number" step="0.01" min="0" className="h-10 flex-1 font-mono" placeholder="0.00"
+                      value={precio} onChange={(e) => setPrecio(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void guardar(); } }} />
                     <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">Itbis exento</span>
                   </div>
                   <p className="mt-1.5 text-xs text-gray-400">La enseñanza no lleva itbis.</p>
                 </div>
+                <div>
+                  <label htmlFor="tarifa-nombre" className="mb-1.5 block text-sm font-medium text-gray-700">Nombre en la factura</label>
+                  <Input id="tarifa-nombre" className="h-10" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void guardar(); } }} />
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    Es lo que el padre lee. Empieza por el del concepto.
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Referencia</label>
-                <Input className="h-10 font-mono text-sm" value={refNueva} onChange={(e) => setRefNueva(e.target.value)} />
+              {/* La referencia se arma sola; casi nadie la toca, así que no
+                  ocupa un campo a la vista en cada tarifa. */}
+              <details className="group rounded-lg border border-gray-200 px-3 py-2">
+                <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-gray-600">
+                  <span className="text-gray-400 transition-transform group-open:rotate-90">›</span>
+                  Referencia
+                  <span className="min-w-0 flex-1 truncate text-right font-mono text-xs text-gray-400">{refNueva}</span>
+                </summary>
+                <Input className="mt-2 h-10 font-mono text-sm" value={refNueva} aria-label="Referencia" onChange={(e) => setRefNueva(e.target.value)} />
                 <p className="mt-1.5 text-xs text-gray-400">
                   Armada con el concepto, el grado, el servicio, la tanda y el año. Puedes cambiarla.
                 </p>
-              </div>
+              </details>
 
               <button onClick={() => setCreando(false)} className="text-sm text-gray-500 hover:text-gray-900">
                 ← Elegir uno que ya existe
@@ -862,9 +893,10 @@ function ModalTarifa({
           </div>
         </div>
 
+        {error && <p role="alert" className="border-t border-red-100 bg-red-50 px-7 py-2.5 text-sm text-red-700">{error}</p>}
         <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50/60 px-7 py-4">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button className="bg-zero-600 px-6 hover:bg-zero-700" onClick={guardar} disabled={ocupado || (!creando && !elegido) || (creando && (precio === '' || !nombreNuevo.trim()))}>
+          <Button className="bg-zero-600 px-6 hover:bg-zero-700" onClick={() => void guardar()} disabled={ocupado || (!creando && !elegido) || (creando && (precio === '' || !nombreNuevo.trim()))}>
             {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : creando ? 'Crear y atar' : 'Atar'}
           </Button>
         </div>

@@ -67,6 +67,7 @@ export function ConceptosCatalogo() {
   const [error, setError] = useState<string | null>(null);
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [creando, setCreando] = useState(false);
+  const [errorCrear, setErrorCrear] = useState<string | null>(null);
   /**
    * El calendario de cuotas se registra aquí para que «Guardar cambios» lo
    * guarde con el concepto. Antes tenía botón propio, abajo de su tabla, y era
@@ -202,20 +203,29 @@ export function ConceptosCatalogo() {
 
   async function crear() {
     const nombre = nuevoNombre.trim();
-    if (!nombre) return;
+    if (!nombre || creando) return;
     setCreando(true);
+    setErrorCrear(null);
     try {
       const res = await fetch('/api/administracion-escolar/conceptos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre, tipo: 'otro' }),
       });
-      const json = await res.json();
-      if (res.ok && json.concepto) {
-        setNuevoNombre('');
-        await mutate();
-        setSelId(json.concepto.id);
+      // Un 500 no trae JSON: sin el `catch` la excepción moría en la consola y
+      // el botón parecía no hacer nada.
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.concepto) {
+        setErrorCrear(json.error ?? 'No se pudo crear el concepto. Inténtalo otra vez.');
+        return;
       }
+      setNuevoNombre('');
+      // El concepto nuevo entra a la lista sin esperar la revalidación, y se
+      // abre listo para configurar.
+      await mutate((d) => ({ conceptos: [...(d?.conceptos ?? []), json.concepto as Concepto] }), { revalidate: true });
+      setSelId(json.concepto.id);
+    } catch {
+      setErrorCrear('No hay conexión con el servidor. Inténtalo otra vez.');
     } finally {
       setCreando(false);
     }
@@ -346,7 +356,7 @@ export function ConceptosCatalogo() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+    <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
 
       {/* ── Lista ──────────────────────────────────────────────────────── */}
       <div className="rounded-lg border border-gray-200 bg-white">
@@ -410,14 +420,19 @@ export function ConceptosCatalogo() {
             </span>
           </div>
         ))}
-        <div className="flex gap-1.5 border-t border-gray-100 p-2">
-          <Input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void crear(); }}
-            placeholder="Nuevo concepto" className="h-8 text-sm" />
-          <Button size="sm" variant="outline" onClick={() => void crear()}
-            disabled={creando || !nuevoNombre.trim()} className="h-8 shrink-0 px-2">
-            {creando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-          </Button>
+        <div className="border-t border-gray-100 p-2">
+          <div className="flex gap-1.5">
+            <Input value={nuevoNombre} onChange={(e) => { setNuevoNombre(e.target.value); setErrorCrear(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') void crear(); }}
+              placeholder="Nuevo concepto (Enter para crear)" aria-label="Nombre del nuevo concepto" maxLength={120}
+              className="h-9 text-sm" />
+            <Button size="sm" variant="outline" onClick={() => void crear()}
+              aria-label="Crear concepto"
+              disabled={creando || !nuevoNombre.trim()} className="h-10 shrink-0 px-3">
+              {creando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </Button>
+          </div>
+          {errorCrear && <p role="alert" className="mt-1.5 text-xs text-red-600">{errorCrear}</p>}
         </div>
       </div>
 

@@ -48,8 +48,15 @@ export function cachearPorTag<T>(
  * envuelve para no repetir el casteo en cada llamada, igual que ya hace
  * `lib/dgii/catalogos.ts`, y para que un fallo al invalidar no tumbe la
  * escritura que acaba de guardarse bien.
+ *
+ * Caduca en el acto (`expire: 0`) y no con `'max'`: con `'max'` la entrada vieja
+ * se sigue sirviendo UNA vez más mientras se refresca por detrás. Las pantallas
+ * de Configuración vuelven a pedir la lista justo después de escribir —crear un
+ * concepto y abrir Tarifas, agregar una sección y recargar el árbol— y esa
+ * única lectura les devolvía la lista de antes: había que recargar la página
+ * para ver lo que acababas de guardar.
  */
-function invalidar(tag: string, perfil: string | { expire: number } = 'max'): void {
+function invalidar(tag: string, perfil: string | { expire: number } = { expire: 0 }): void {
   try {
     (revalidateTag as (tag: string, perfil?: string | { expire: number }) => void)(tag, perfil);
   } catch (err) {
