@@ -104,6 +104,16 @@ const CASOS: Caso[] = [
   { p: 'quien eres', intencion: 'politica:identidad' },
   { p: 'que puedes hacer', intencion: 'politica:capacidades' },
 
+  // ── Colegio: la deuda son los cargos de los estudiantes (prueba «colegio desde cero», 25-10-2026) ──
+  { p: '¿Cuántos estudiantes tienen deuda vencida?', intencion: 'deuda-colegio', herramienta: 'cargos_escolares', no: /matriculad/ },
+  { p: 'que familias deben', intencion: 'deuda-colegio', herramienta: 'cargos_escolares' },
+  { p: 'alumnos en mora', intencion: 'deuda-colegio' },
+  // Acotadas a un grado o con «desde cuándo»: la lista general no las contesta, va la IA.
+  { p: '¿Qué estudiante de 2do de primaria debe más y desde cuándo?', intencion: null },
+  { p: '¿Cuántos estudiantes hay en primero de primaria?', intencion: null },
+  { p: 'cuantos estudiantes hay matriculados', intencion: 'matriculas', herramienta: 'resumen_matriculas' },
+  { p: '¿Cuánto se ha cobrado este mes?', intencion: 'cobrado', herramienta: 'pagos_recibidos' },
+
   // ── Conversación ──
   { p: 'hola', intencion: 'saludo' },
   { p: 'gracias', intencion: 'gracias' },
@@ -743,5 +753,36 @@ describe('evaluación: pedir la respuesta a la IA', () => {
 
   it('con un modelo de prueba nunca se usa el automático', () => {
     expect(usaContestadorLocal({ modeloPrueba: true, forzarIa: false, hayIa: true })).toBe(false);
+  });
+});
+
+describe('evaluación: la deuda de un colegio no se esconde detrás de Cuentas por cobrar', () => {
+  const COLEGIO = {
+    saldoTotal: 64400, saldoVencido: 44400, saldoSinFacturar: 64400, estudiantesConDeuda: 4,
+    enlaceLista: '/escolar/responsables?filtro=con-deuda',
+    porEstudiante: [{ estudiante: 'Sofía Prueba', debe: 17000, vencido: 12000, cargos: 4 }],
+  };
+
+  it('«quién me debe» sin facturas pendientes pero con cargos: dice lo que deben, no «todo está cobrado»', async () => {
+    const { tools, llamadas } = herramientas({ cuentas_por_cobrar: { totalPorCobrar: 0 }, cargos_escolares: COLEGIO });
+    const r = await responderLocal('quien me debe', tools, { hoy: HOY });
+    expect(r?.intencion).toBe('cartera');
+    expect(llamadas).toContain('cargos_escolares');
+    expect(r?.respuesta).not.toMatch(/Todo está cobrado/);
+    expect(r?.respuesta).toContain('RD$ 64,400.00');
+    expect(r?.respuesta).toContain('RD$ 44,400.00');
+  });
+
+  it('sin cargos ni facturas sí está todo cobrado', async () => {
+    const { tools } = herramientas({ cuentas_por_cobrar: { totalPorCobrar: 0 }, cargos_escolares: { saldoTotal: 0 } });
+    const r = await responderLocal('quien me debe', tools, { hoy: HOY });
+    expect(r?.respuesta).toMatch(/Todo está cobrado/);
+  });
+
+  it('«cuántos estudiantes tienen deuda vencida» cuenta estudiantes con deuda, no matriculados', async () => {
+    const { tools } = herramientas({ cargos_escolares: { ...COLEGIO, saldoTotal: 44400 } });
+    const r = await responderLocal('¿Cuántos estudiantes tienen deuda vencida?', tools, { hoy: HOY });
+    expect(r?.respuesta).toMatch(/4 estudiantes/);
+    expect(r?.respuesta).toContain('vencidos');
   });
 });

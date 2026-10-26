@@ -17,6 +17,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import { Bot, CheckCircle2, XCircle, Zap } from 'lucide-react';
 import type { ModeloIa, ModelosDeUso, UsoIa, UsoIaInfo } from '@/lib/ia/modelos';
+import ConsumoIaClient from './_consumo-client';
 
 const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 const INPUT = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
@@ -25,6 +26,8 @@ interface Estado {
   modelos: ModeloIa[];
   usos: (UsoIaInfo & { actual: ModelosDeUso })[];
   gateway: boolean;
+  claudeDirecto: boolean;
+  jev: boolean;
 }
 
 type Prueba = { estado: 'probando' } | { estado: 'ok'; ms: number } | { estado: 'error'; error: string };
@@ -170,6 +173,39 @@ export default function ModelosIaClient() {
           {guardando ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Guardar'}
         </Button>
       </Box>
+
+      <Box sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700 }}>Cómo escoge el asistente</Typography>
+        <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+          Lo frecuente lo contesta el automático, sin IA. Lo demás: si la pregunta es normal, el modelo de «Asistente del chat»; si es de análisis (porqués, comparaciones, recomendaciones), el de «preguntas de análisis». Cada uno con su respaldo si falla.
+        </Typography>
+        {[
+          {
+            titulo: 'Claude: llave propia de Anthropic',
+            listo: datos.claudeDirecto,
+            si: 'Claude va directo a Anthropic con la llave de este despliegue.',
+            no: 'Falta ANTHROPIC_API_KEY: Claude va por el AI Gateway, que pide créditos pagados o la llave cargada como BYOK en Vercel. Si no contesta, sale el respaldo.',
+          },
+          {
+            titulo: 'Decisiones: Jev (TypeSafe)',
+            listo: datos.jev,
+            si: 'Decide si la pregunta es de análisis y revisa que la respuesta automática conteste lo preguntado.',
+            no: 'Falta TYPESAFE_API_KEY: el nivel lo deciden las palabras de la pregunta y la respuesta automática sale sin revisar.',
+          },
+        ].map((f) => (
+          <Box key={f.titulo} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <Box sx={{ mt: '2px', color: f.listo ? '#047857' : '#b45309', flexShrink: 0 }}>
+              {f.listo ? <CheckCircle2 size={15} aria-label="Listo" /> : <XCircle size={15} aria-label="Falta configurar" />}
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>{f.titulo}</Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{f.listo ? f.si : f.no}</Typography>
+            </Box>
+          </Box>
+        ))}
+      </Box>
+
+      <ConsumoIaClient />
     </Box>
   );
 }

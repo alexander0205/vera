@@ -4,8 +4,11 @@ import {
 } from '@/lib/ia/modelos';
 
 describe('qué modelo usa cada parte de Zero', () => {
-  it('sin nada guardado van los de fábrica, los mismos que había en código', () => {
-    expect(elegirModelos(null, 'asistente')).toEqual({ principal: 'google/gemini-2.5-flash', respaldo: 'google/gemini-2.5-flash-lite' });
+  it('sin nada guardado van los de fábrica', () => {
+    // El respaldo del chat es Haiku: Flash-Lite devolvía vacío con herramientas (26-10-2026).
+    expect(elegirModelos(null, 'asistente')).toEqual({ principal: 'google/gemini-2.5-flash', respaldo: 'anthropic/claude-haiku-5.5' });
+    // Las preguntas de análisis: Claude Haiku primero, Gemini si falla.
+    expect(elegirModelos(null, 'analisis')).toEqual({ principal: 'anthropic/claude-haiku-5.5', respaldo: 'google/gemini-2.5-flash' });
     expect(elegirModelos(null, 'plantillas')).toEqual({ principal: 'google/gemini-2.5-flash', respaldo: 'google/gemini-2.5-flash-lite' });
     expect(elegirModelos(null, 'captura')).toEqual({ principal: 'google/gemini-2.5-flash-lite', respaldo: 'google/gemini-2.5-flash' });
   });
@@ -24,7 +27,7 @@ describe('qué modelo usa cada parte de Zero', () => {
   it('un id que no está en el catálogo no deja a Zero sin IA: vuelve el de fábrica', () => {
     const g = { asistente: { principal: 'openai/gpt-borrado', respaldo: 42 as unknown as string } };
     expect(elegirModelos(g, 'asistente')).toEqual(usosIa().find((u) => u.uso === 'asistente') && {
-      principal: 'google/gemini-2.5-flash', respaldo: 'google/gemini-2.5-flash-lite',
+      principal: 'google/gemini-2.5-flash', respaldo: 'anthropic/claude-haiku-5.5',
     });
   });
 });

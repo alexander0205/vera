@@ -57,14 +57,16 @@ export const jevDisponible = () => Boolean(process.env.TYPESAFE_API_KEY);
 export async function preguntarAJev<Q extends Record<string, PreguntaJev>>(
   state: string | Record<string, unknown> | unknown[],
   questions: Q,
-  opciones: { modelo?: string; fetch?: typeof fetch } = {},
+  /** `topeMs`: quien está esperando a una persona (el chat) no puede esperar los 8 s. */
+  opciones: { modelo?: string; fetch?: typeof fetch; topeMs?: number } = {},
 ): Promise<ResultadoJev<Q>> {
   const llave = process.env.TYPESAFE_API_KEY;
   if (!llave) throw new ErrorJev('Jev no está configurado (falta TYPESAFE_API_KEY).', null);
   if (Object.keys(questions).length === 0) throw new ErrorJev('No hay preguntas para Jev.', null);
 
+  const tope = opciones.topeMs ?? TOPE_MS;
   const controlador = new AbortController();
-  const reloj = setTimeout(() => controlador.abort(), TOPE_MS);
+  const reloj = setTimeout(() => controlador.abort(), tope);
   try {
     const r = await (opciones.fetch ?? fetch)(`${BASE()}/v1/systemone`, {
       method: 'POST',
@@ -84,7 +86,7 @@ export async function preguntarAJev<Q extends Record<string, PreguntaJev>>(
     return d;
   } catch (e) {
     if (e instanceof ErrorJev) throw e;
-    if (e instanceof Error && e.name === 'AbortError') throw new ErrorJev(`Jev tardó más de ${TOPE_MS / 1000} s.`, null);
+    if (e instanceof Error && e.name === 'AbortError') throw new ErrorJev(`Jev tardó más de ${tope / 1000} s.`, null);
     throw new ErrorJev(`No se pudo hablar con Jev: ${e instanceof Error ? e.message : String(e)}`, null);
   } finally {
     clearTimeout(reloj);

@@ -3969,6 +3969,35 @@ export const asistenteMensajes = pgTable('asistente_mensajes', {
   convIdx: index('asistente_msg_conv_idx').on(t.conversacionId, t.id),
 }));
 
+/**
+ * Lo que gasta la IA (0208): una fila por llamada a un modelo, con su empresa,
+ * su chat y su costo. Ver lib/ia/consumo.ts.
+ */
+export const iaConsumo = pgTable('ia_consumo', {
+  id:             serial('id').primaryKey(),
+  /** null = de la plataforma («Probar» en /admin/ia). */
+  teamId:         integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+  userId:         integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  /** asistente | decisiones | plantillas | captura */
+  uso:            varchar('uso', { length: 20 }).notNull(),
+  /** anthropic | gateway | google | typesafe */
+  proveedor:      varchar('proveedor', { length: 20 }).notNull(),
+  modelo:         varchar('modelo', { length: 80 }).notNull(),
+  conversacionId: integer('conversacion_id').references(() => asistenteConversaciones.id, { onDelete: 'set null' }),
+  mensajeId:      integer('mensaje_id').references(() => asistenteMensajes.id, { onDelete: 'set null' }),
+  tokensEntrada:  integer('tokens_entrada').notNull().default(0),
+  tokensSalida:   integer('tokens_salida').notNull().default(0),
+  tokensCache:    integer('tokens_cache').notNull().default(0),
+  tokensCacheEscritura: integer('tokens_cache_escritura').notNull().default(0),
+  /** Del asistente: normal o analisis. */
+  nivel:          varchar('nivel', { length: 12 }),
+  costoUsd:       numeric('costo_usd', { precision: 14, scale: 8 }).notNull().default('0'),
+  creadoEn:       timestamp('creado_en').notNull().defaultNow(),
+}, (t) => ({
+  teamIdx: index('ia_consumo_team_idx').on(t.teamId, t.creadoEn),
+  convIdx: index('ia_consumo_conversacion_idx').on(t.conversacionId),
+}));
+
 export type AsistenteConversacion = typeof asistenteConversaciones.$inferSelect;
 export type AsistenteMensaje = typeof asistenteMensajes.$inferSelect;
 

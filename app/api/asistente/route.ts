@@ -13,7 +13,7 @@
  * conversación, y el id solo vale si es de ESTE usuario en ESTE team.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { asistenteConversaciones, asistenteMensajes, teams } from '@/lib/db/schema';
@@ -31,6 +31,8 @@ import { responderGuiado } from '@/lib/asistente/guiado-servidor';
 import { quitarBloquesGuiados, sinBloquesGuiadosParaElModelo } from '@/lib/asistente/formulario';
 import { esRespuestaGrande, pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
+import { registrarConsumo } from '@/lib/ia/consumo-servidor';
+import type { Consumo } from '@/lib/ia/consumo';
 
 // Principal 35 s + respaldo 25 s + consultas a la base: cabe en 60.
 export const maxDuration = 60;
@@ -293,6 +295,9 @@ export async function POST(req: NextRequest) {
 
   const [team] = await db.select({ nombre: teams.name }).from(teams).where(eq(teams.id, teamId)).limit(1);
 
+  // Lo que gaste la IA en este turno, con su empresa y su chat; se anota aunque el turno falle.
+  const consumos: Consumo[] = [];
+  const anotarConsumo = (mensajeId?: number) => after(() => registrarConsumo({ teamId, userId: user.id, conversacionId, mensajeId }, consumos));
   try {
     // Las búsquedas van por la API de la app con la cookie de la persona: ve lo que ve la pantalla.
     const api = crearClienteApi({ origen: req.nextUrl.origin, cookie: req.headers.get('cookie') });
@@ -300,7 +305,7 @@ export async function POST(req: NextRequest) {
     const r = await conversar(ctx, historial, {
       empresa: team?.nombre ?? null, usuario: user.name ?? null, usuarioId: user.id,
       pantalla: interpretarPantalla(b?.pantalla),
-      forzarIa,
+      forzarIa, consumos,
     });
     // Solo la creación guiada (código determinista y firmado) escribe bloques de paso o formularios llenos.
     r.respuesta = quitarBloquesGuiados(r.respuesta);
@@ -311,6 +316,7 @@ export async function POST(req: NextRequest) {
     }).returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
     await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() })
       .where(eq(asistenteConversaciones.id, conversacionId));
+    anotarConsumo(guardado.id);
 
     return NextResponse.json({
       conversacionId,
@@ -329,6 +335,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error('[asistente]', e);
+    anotarConsumo();
     // Cuota agotada del proveedor: no sirve reintentar de inmediato.
     if (e instanceof AsistenteSinCuotaError) {
       return NextResponse.json(

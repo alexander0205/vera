@@ -29,18 +29,21 @@ export interface ModeloIa {
   /** US$ por millón de tokens, según el catálogo del gateway. */
   entradaUsd: number;
   salidaUsd: number;
+  /** Precio cuando una sola llamada pasa de `desdeTokens` de entrada (Haiku 5.5 cobra 5× más). */
+  largo?: { desdeTokens: number; entradaUsd: number; salidaUsd: number };
 }
 
 export const MODELOS_IA: readonly ModeloIa[] = [
   { id: 'anthropic/claude-sonnet-5.5', nombre: 'Claude Sonnet 5.5', proveedor: 'Anthropic', nota: 'El mejor equilibrio entre calidad y costo', entradaUsd: 2, salidaUsd: 10 },
-  { id: 'anthropic/claude-haiku-5.5', nombre: 'Claude Haiku 5.5', proveedor: 'Anthropic', nota: 'Rápido y barato', entradaUsd: 0.1, salidaUsd: 0.5 },
+  // Precio oficial de Anthropic: hasta 100K tokens de entrada por llamada; más allá, 0.50 / 2.50.
+  { id: 'anthropic/claude-haiku-5.5', nombre: 'Claude Haiku 5.5', proveedor: 'Anthropic', nota: 'Rápido y barato', entradaUsd: 0.1, salidaUsd: 0.5, largo: { desdeTokens: 100_000, entradaUsd: 0.5, salidaUsd: 2.5 } },
   { id: 'anthropic/claude-opus-5.5', nombre: 'Claude Opus 5.5', proveedor: 'Anthropic', nota: 'El más capaz y el más caro', entradaUsd: 4, salidaUsd: 20 },
   { id: 'google/gemini-2.5-flash', nombre: 'Gemini 2.5 Flash', proveedor: 'Google', nota: 'Rápido; el que se usaba hasta ahora', entradaUsd: 0.3, salidaUsd: 2.5 },
   { id: 'google/gemini-2.5-flash-lite', nombre: 'Gemini 2.5 Flash-Lite', proveedor: 'Google', nota: 'El más barato', entradaUsd: 0.1, salidaUsd: 0.4 },
   { id: 'google/gemini-3-flash', nombre: 'Gemini 3 Flash', proveedor: 'Google', nota: 'Más nuevo; razona antes de contestar', entradaUsd: 0.5, salidaUsd: 3 },
 ];
 
-export type UsoIa = 'asistente' | 'plantillas' | 'captura';
+export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura';
 
 export interface UsoIaInfo {
   uso: UsoIa;
@@ -63,7 +66,15 @@ export function usosIa(env: Record<string, string | undefined> = {}): UsoIaInfo[
       nombre: 'Asistente del chat',
       descripcion: 'Contesta preguntas del dueño o administrador sobre su empresa (ventas, cobros, dónde está cada cosa).',
       principal: env.ASISTENTE_IA_MODELO || 'google/gemini-2.5-flash',
-      respaldo: env.ASISTENTE_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash-lite',
+      // Flash-Lite devolvía respuestas vacías con herramientas: el respaldo es Haiku.
+      respaldo: env.ASISTENTE_IA_MODELO_RESPALDO || 'anthropic/claude-haiku-5.5',
+    },
+    {
+      uso: 'analisis',
+      nombre: 'Asistente: preguntas de análisis',
+      descripcion: 'Los porqués, las comparaciones y las recomendaciones. Jev (o, sin él, las palabras de la pregunta) decide cuándo una pregunta es de análisis.',
+      principal: env.ASISTENTE_ANALISIS_IA_MODELO || 'anthropic/claude-haiku-5.5',
+      respaldo: env.ASISTENTE_ANALISIS_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
     },
     {
       uso: 'plantillas',
@@ -82,7 +93,7 @@ export function usosIa(env: Record<string, string | undefined> = {}): UsoIaInfo[
   ];
 }
 
-export const USOS_IA: readonly UsoIa[] = ['asistente', 'plantillas', 'captura'];
+export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura'];
 
 export interface ModelosDeUso { principal: string; respaldo: string }
 

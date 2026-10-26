@@ -115,7 +115,9 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
       'Pulsa «Registrar pago» en la fila para anotar el cobro.',
       'Si necesitas cargar una deuda vieja, usa «Agregar cuenta histórica».',
     ],
-    palabras: ['cuentas por cobrar', 'cxc', 'quien me debe', 'deudas de clientes', 'cobrar', 'cartera', 'morosos', 'facturas vencidas', 'cobranza', 'registrar pago', 'abono'],
+    palabras: ['cuentas por cobrar', 'cxc', 'quien me debe', 'deudas de clientes', 'cobrar', 'cartera', 'morosos', 'facturas vencidas', 'cobranza', 'registrar pago', 'abono',
+      // Así lo dice un colegio (prueba «colegio desde cero», 25-10-2026): antes caía en las cuentas bancarias.
+      'registro un pago', 'registrar un pago', 'pago de una familia', 'pago de un padre', 'registrar cobro', 'pago de la mensualidad', 'abono de una familia'],
     permiso: 'facturas:ver',
   },
   {

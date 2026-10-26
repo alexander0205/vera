@@ -79,7 +79,7 @@ describe('herramientas del asistente', () => {
       '/api/cuentas-por-cobrar': {
         cuentas: [
           { id: 1, razonSocialComprador: 'Familia Pérez', saldo: 20000, diasVencido: 10 },
-          { id: 2, razonSocialComprador: 'Familia Pérez', saldo: 30000, diasVencido: 120 },
+          { id: 2, razonSocialComprador: 'Familia Pérez', saldo: 30000, moraSaldo: 600, diasVencido: 120 },
           { id: 3, razonSocialComprador: 'Familia Gómez', saldo: 10000, diasVencido: 0 },
         ],
         totales: { pendiente: 60000 },
@@ -93,7 +93,56 @@ describe('herramientas del asistente', () => {
     expect(llamadas[0].ruta).toBe('/api/cuentas-por-cobrar');
     expect(r.totalPorCobrar).toBe(600);
     expect(r.vencidoMasDe90).toBe(300);
-    expect(r.mayoresDeudores[0]).toEqual({ cliente: 'Familia Pérez', debe: 500, facturas: 2, diasVencidoMaximo: 120 });
+    expect(r.mayoresDeudores[0]).toEqual({ cliente: 'Familia Pérez', debe: 500, deEsoMora: 6, facturas: 2, diasVencidoMaximo: 120 });
+    // La mora va aparte: lo vencido (300 a más de 90 días) no es recargo.
+    expect((r as unknown as { recargosMora: number }).recargosMora).toBe(6);
+  });
+
+  it('los cargos del colegio: «vencido» se decide por la fecha, no por el estado guardado', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-25T15:00:00Z'));
+    try {
+      const cargo = (estudiante: string, mes: number, saldo: number, vence: string | null, estado = 'pendiente', ecf: number | null = null) => ({
+        estudiante, estudianteApellidos: 'Prueba', concepto: 'Mensualidad', mes, anio: 2026,
+        montoCentavos: 400000, saldoCentavos: saldo, fechaVencimiento: vence, estado, ecfDocumentId: ecf,
+      });
+      const { api, llamadas } = apiFalsa({
+        '/api/administracion-escolar/cargos': {
+          cargos: [
+            cargo('Ana', 9, 400000, '2026-09-06'),           // pendiente en la base, pero ya venció
+            cargo('Ana', 11, 400000, '2026-11-06'),          // todavía no vence
+            cargo('Luis', 10, 400000, '2026-10-06', 'pendiente', 77), // vencido y facturado
+            cargo('Luis', 8, 0, '2026-08-06', 'pagado'),     // pagado: no cuenta
+          ],
+        },
+      });
+      const h = crearHerramientas(contextoDePrueba(1, { api }), []);
+      const r = await ejecutar(h.cargos_escolares, { soloVencido: true, limite: 10 }) as {
+        saldoTotal: number; saldoVencido: number; saldoSinFacturar: number; estudiantesConDeuda: number;
+      };
+      // No se filtra por estado en la API: así entra lo que venció y sigue «pendiente».
+      expect(llamadas[0].params.estado).toBeUndefined();
+      expect(r.saldoTotal).toBe(8000);
+      expect(r.saldoVencido).toBe(8000);
+      expect(r.saldoSinFacturar).toBe(4000);
+      expect(r.estudiantesConDeuda).toBe(2);
+
+      const todo = await ejecutar(h.cargos_escolares, { soloConDeuda: true, limite: 10 }) as { saldoTotal: number; saldoVencido: number };
+      expect(todo.saldoTotal).toBe(12000);
+      expect(todo.saldoVencido).toBe(8000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('el curso que dice la persona se encuentra en el del cargo', async () => {
+    const { cursoCoincide } = await import('@/lib/asistente/herramientas-api');
+    expect(cursoCoincide('2do de Primaria — A', '2do de primaria')).toBe(true);
+    expect(cursoCoincide('2do de Primaria — A', 'segundo de primaria')).toBe(true);
+    expect(cursoCoincide('2do de Primaria — A', '2do A')).toBe(true);
+    expect(cursoCoincide('1ro de Primaria — A', '2do de primaria')).toBe(false);
+    expect(cursoCoincide('Inicial (Pre-Primario) — A', 'inicial')).toBe(true);
+    expect(cursoCoincide(null, 'inicial')).toBe(false);
   });
 
   it('el catálogo es exactamente el de consultas: una herramienta nueva obliga a revisar esto', () => {
@@ -236,6 +285,11 @@ describe('herramientas según módulo y permiso', () => {
 });
 
 describe('mapa del sistema', () => {
+  it('«cómo registro un pago de una familia» lleva a Cuentas por cobrar, no a las cuentas bancarias', () => {
+    const r = buscarEnMapa('¿Cómo registro un pago de una familia?', contextoDePrueba(1));
+    expect(r.resultados[0]?.ruta).toBe('/dashboard/cuentas-por-cobrar');
+  });
+
   it('cada ruta del mapa existe como pantalla real y no hay ids repetidos', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');

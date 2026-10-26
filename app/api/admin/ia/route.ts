@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/admin-guard';
 import { MODELOS_IA, USOS_IA, elegirModelos, usosIa, validarAjusteModelos } from '@/lib/ia/modelos';
 import { guardarAjusteModelos, leerAjusteModelos, porGateway } from '@/lib/ia/modelo-servidor';
+import { jevDisponible } from '@/lib/ia/jev';
 
 async function estado() {
   const guardado = await leerAjusteModelos();
@@ -15,6 +16,9 @@ async function estado() {
     modelos: MODELOS_IA,
     usos: usosIa(process.env).map((u) => ({ ...u, actual: elegirModelos(guardado, u.uso, process.env) })),
     gateway: porGateway(),
+    // Claude con llave propia (si no, va por el gateway, que pide créditos o BYOK). Decisiones: Jev.
+    claudeDirecto: Boolean(process.env.ANTHROPIC_API_KEY),
+    jev: jevDisponible(),
   };
 }
 

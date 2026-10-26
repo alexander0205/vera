@@ -11,7 +11,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
-import { eq, and, desc, count, ne, asc } from 'drizzle-orm';
+import { eq, and, desc, count, ne, asc, sql } from 'drizzle-orm';
 import { armarPagina, leerPaginacion } from '@/lib/api/paginacion';
 
 export async function GET(req: NextRequest) {
@@ -63,6 +63,12 @@ export async function GET(req: NextRequest) {
       // Para saber si el cargo todavía se puede corregir: con factura detrás, el
       // importe que vale es el del e-CF.
       ecfDocumentId: adminEscolarCargos.ecfDocumentId,
+      // «2do de Primaria — A»: con esto el asistente contesta por grado o sección.
+      curso: sql<string | null>`(SELECT gr.nombre || ' — ' || cu.nombre
+        FROM admin_escolar_matriculas m
+        JOIN admin_escolar_cursos cu ON cu.id = m.curso_id
+        JOIN admin_escolar_grados gr ON gr.id = cu.grado_id
+       WHERE m.id = ${adminEscolarCargos.matriculaId})`,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarEstudiantes, and(

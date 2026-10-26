@@ -151,6 +151,9 @@ const PIDE_CAMBIO = new RegExp(`^${ENTRADA_CAMBIO}(?:${VERBOS_CAMBIO.join('|')})
 
 const GUIA = /\b(donde|en que (modulo|parte|seccion|pantalla|menu)|que pantalla|como (se |puedo |hago |creo |registro |veo |configuro |agrego |anado |cambio |anulo |emito |envio |imprimo |exporto |cobro |pago |declaro |programo |recibo |activo |desactivo |doy de alta |subo |cargo |ingreso |hago para )|como (crear|registrar|ver|configurar|agregar|cambiar|anular|emitir|enviar|programar|recibir|imprimir|exportar|cobrar|activar|subir|cargar|hacer))/;
 
+/** Una pregunta del colegio acotada a un grado, una sección o un detalle que la lista general no da. */
+const FILTRO_ESCOLAR = /\b(inicial|pre ?primario|kinder|maternal|primaria|secundaria|bachillerato|\d+(ro|do|to|vo|no|er|mo)|primero|segundo|tercero|cuarto|quinto|sexto|seccion|grado|curso|desde cuando|quien debe mas|que estudiante|cual estudiante|cual alumno|que alumno)\b/;
+
 interface Intencion {
   id: string;
   /** Cuánto pesa si coincide: con dos temas a la vez, decide el más específico. */
@@ -167,15 +170,18 @@ const INTENCIONES: Intencion[] = [
   { id: 'borradores', peso: 8, re: /\bborrador(es)?\b/, herramienta: 'buscar_facturas' },
   { id: 'stock-bajo', peso: 8, re: /\b(agot\w*|stock bajo|bajo (el )?minimo|por acabarse|se (me )?(esta|estan) acabando|poco inventario|sin existencia)\b/, herramienta: 'buscar_productos' },
   { id: 'turnos-caja', peso: 8, re: /\b(turnos? (de caja )?abiertos?|caja abierta|cajas abiertas|quien tiene (la )?caja)\b/, herramienta: 'turnos_caja' },
-  { id: 'matriculas', peso: 7, re: /\b(matriculad\w*|inscritos|cuantos (estudiantes|alumnos)|estudiantes por curso|alumnos por curso)\b/, herramienta: 'resumen_matriculas' },
+  // «¿Cuántos estudiantes tienen deuda vencida?» es de cobros, no de matrícula: con deuda o mora no se cuenta aquí.
+  { id: 'matriculas', peso: 7, re: /\b(matriculad\w*|inscritos|cuantos (estudiantes|alumnos)(?! (tienen|con|deben|que (deben|tienen)|estan (en mora|atrasad|vencid|debiendo)|en mora|atrasad))|estudiantes por curso|alumnos por curso)\b/, herramienta: 'resumen_matriculas' },
   { id: 'nomina', peso: 7, re: /\b(cuantos empleados|empleados activos|costo de (la )?nomina|nomina del mes|cuanto (pago|pagamos) (en|de) nomina|ultima nomina)\b/, herramienta: 'resumen_nomina' },
   { id: 'itbis', peso: 7, re: /\bitbis\b/, herramienta: 'resumen_itbis', usaPeriodo: true },
   { id: 'cobros-metodo', peso: 6, re: /\b(metodos? de pago|formas? de pago|por metodo|en efectivo|por transferencia|con tarjeta)\b/, herramienta: 'cobros_por_metodo', usaPeriodo: true },
   { id: 'mejores-clientes', peso: 6, re: /\b((mejores|principales|top) clientes|clientes que mas (compran|compraron|facturan)|quien(es)? (me )?compra(n)? mas)\b/, herramienta: 'ventas_por_cliente', usaPeriodo: true },
   { id: 'mas-vendidos', peso: 6, re: /\b((productos?|servicios?|conceptos?) (mas vendidos?|que mas (se )?vend\w*)|que (es lo que )?mas (se )?vend\w*|lo mas vendido)\b/, herramienta: 'ventas_por_producto', usaPeriodo: true },
+  // La deuda del colegio son sus CARGOS (mensualidades, inscripción), con factura o sin ella: no sale en Cuentas por cobrar.
+  { id: 'deuda-colegio', peso: 9, re: /\b(estudiantes?|alumnos?|familias?|padres|representantes)\b.{0,40}\b(deben|debe|deuda\w*|mora\b|moros\w*|vencid\w*|atrasad\w*|no (han |ha )?pagad\w*|sin pagar)|\b(deben|deuda|moros\w*|mora)\b.{0,40}\b(estudiantes?|alumnos?|familias?|padres)\b/, herramienta: 'cargos_escolares' },
   { id: 'cartera', peso: 5, re: /\b(quien(es)? me debe(n)?|me deben|que me deben|cuentas? por cobrar|cartera|morosos?|deudores|vencid[oa]s?|pendiente de cobro|por cobrar|quien no me (ha )?pagado|facturas? sin pagar|facturas? pendientes? de pago|que mas me debe|mas me debe)\b/, herramienta: 'cuentas_por_cobrar' },
   { id: 'gastos', peso: 5, re: /\b(gast(o|os|e|ado|amos|aron)|cuanto (he |hemos )?gastado|egresos)\b/, herramienta: 'resumen_gastos', usaPeriodo: true },
-  { id: 'cobrado', peso: 4, re: /\b(cuanto (se )?(he |hemos )?(cobr\w*|recib\w*)|que (se )?(cobr\w*|entro)|cobros?|pagos recibidos|ultim[oa]s (pagos|cobros))\b/, herramienta: 'pagos_recibidos', usaPeriodo: true },
+  { id: 'cobrado', peso: 4, re: /\b(cuanto (se )?(ha |han |he |hemos )?(cobr\w*|recib\w*)|que (se )?(cobr\w*|entro)|cobros?|pagos recibidos|ultim[oa]s (pagos|cobros))\b/, herramienta: 'pagos_recibidos', usaPeriodo: true },
   { id: 'cliente-mas-facturas', peso: 7, re: /\b(cliente (con|que tiene|que tuvo) (mas|mayor)( cantidad de| numero de)? facturas|(quien|que cliente|cual cliente) (tiene|tuvo|se repite|repite)( mas)? facturas?|mas facturas (repetidas|por cliente)|facturas mas repetidas|cliente mas repetido|quien se repite mas)\b/, herramienta: 'clientes_con_mas_facturas', usaPeriodo: true },
   { id: 'recurrentes', peso: 6, re: /\b(facturas? recurrentes?|facturacion (automatica|recurrente)|cobros? automaticos?|mensualidades? automaticas?|recurrentes activas?)\b/, herramienta: 'facturas_recurrentes' },
   { id: 'ventas', peso: 3, re: /\b(vend(i|ido|imos|ieron|emos)|ventas|facturad[oa]s?|factur(e|amos)|ingresos|ticket promedio|cuantas facturas (emiti|hice|genere|hicimos|emitimos)|cuanto (he |hemos )?factur\w*)\b/, herramienta: 'resumen_ventas', usaPeriodo: true },
@@ -185,6 +191,13 @@ const INTENCIONES: Intencion[] = [
   { id: 'cotizaciones', peso: 7, re: /\b(cuantas cotizaciones|ultimas cotizaciones|mis cotizaciones|cotizaciones (pendientes|enviadas|aceptadas|rechazadas|vencidas|abiertas))\b/, herramienta: 'listar_cotizaciones' },
   { id: 'por-pagar', peso: 7, re: /\b(cuentas por pagar|cuanto debo( a (mis )?proveedores)?|deuda con (mis )?proveedores|por pagar a proveedores)\b/, herramienta: 'resumen_gastos', usaPeriodo: true },
 ];
+
+/**
+ * Las respuestas que salen de elegir un tema por palabras clave: aciertan el
+ * tema pero pueden errar el dato. Son las que se le pasan a Jev para revisar
+ * (ver decisiones.ts); un saludo o un formulario no hace falta revisarlos.
+ */
+export const INTENCIONES_POR_PALABRAS: ReadonlySet<string> = new Set(INTENCIONES.map((i) => i.id));
 
 // ── Plantillas ──────────────────────────────────────────────────────────────
 
@@ -213,6 +226,29 @@ const cifra = (monto: number, ruta: string) => `[${rd(monto)}](${ruta})`;
 
 type Plantilla = (r: Fila, p: Periodo | null, pedido: Record<string, unknown>) => string;
 
+/** Lo que deben los estudiantes según sus cargos (de `cargos_escolares` con `soloConDeuda`). */
+function deudaColegio(r: Fila, soloVencido: boolean): string {
+  const total = n(r.saldoTotal);
+  const vencido = n(r.saldoVencido);
+  const cuantos = n(r.estudiantesConDeuda);
+  if (!total) return soloVencido ? 'Ningún estudiante tiene cargos vencidos.' : 'Ningún estudiante tiene cargos pendientes de pago.';
+  const est = `${cuantos} estudiante${cuantos === 1 ? '' : 's'}`;
+  const sinFactura = n(r.saldoSinFacturar);
+  const l = [
+    soloVencido
+      ? `**${est}** tiene${cuantos === 1 ? '' : 'n'} cargos vencidos por ${enlazar(rd(total), r.enlaceLista)}.`
+      : `**${est}** debe${cuantos === 1 ? '' : 'n'} ${enlazar(rd(total), r.enlaceLista)}${vencido ? `; **${rd(vencido)}** ya está vencido` : ', y nada está vencido todavía'}.`,
+  ];
+  if (sinFactura >= total) l.push('Nada de eso tiene factura todavía: no sale en Cuentas por cobrar hasta que se facture.');
+  else if (sinFactura) l.push(`De eso, ${rd(sinFactura)} todavía no tiene factura.`);
+  const filas = (r.porEstudiante as Fila[] | undefined) ?? [];
+  if (filas.length) {
+    l.push('', tabla(['Estudiante', 'Debe', 'Vencido', 'Cargos'],
+      filas.slice(0, 10).map((f) => [String(f.estudiante), rd(n(f.debe)), n(f.vencido) ? rd(n(f.vencido)) : '—', n(f.cargos)])));
+  }
+  return l.join('\n');
+}
+
 const PLANTILLAS: Record<string, Plantilla> = {
   ventas: (r, p) => {
     const ventas = n(r.ventasNetas);
@@ -229,8 +265,14 @@ const PLANTILLAS: Record<string, Plantilla> = {
     ].join('\n');
   },
 
+  'deuda-colegio': (r, _p, pedido) => deudaColegio(r, pedido.soloVencido === true),
+
   cartera: (r, _p, pedido) => {
     const total = n(r.totalPorCobrar);
+    const colegio = pedido.colegio as Fila | undefined;
+    // Un colegio puede no tener ni una factura pendiente y deber sus mensualidades:
+    // los cargos sin facturar no están en Cuentas por cobrar. Antes decía «Todo está cobrado».
+    if (!total && colegio && n(colegio.saldoTotal)) return deudaColegio(colegio, pedido.soloVencidas === true);
     if (!total) return 'No tienes cuentas por cobrar pendientes. Todo está cobrado.';
     const vencido = n(r.vencido0a30) + n(r.vencido31a60) + n(r.vencido61a90) + n(r.vencidoMasDe90);
     const deudores = (r.mayoresDeudores as Fila[] | undefined) ?? [];
@@ -252,6 +294,9 @@ const PLANTILLAS: Record<string, Plantilla> = {
       }
     }
     if (n(r.vencidoMasDe90)) lineas.push('', `Ojo: ${rd(n(r.vencidoMasDe90))} tienen más de 90 días vencidos.`);
+    if (colegio && n(colegio.saldoSinFacturar)) {
+      lineas.push('', `Además, el colegio tiene ${enlazar(rd(n(colegio.saldoSinFacturar)), colegio.enlaceLista)} en cargos de estudiantes que todavía no tienen factura.`);
+    }
     return lineas.join('\n');
   },
 
@@ -1227,6 +1272,10 @@ export async function responderLocal(
   // («cobros por método» también dice «cobros», pero es una sola pregunta).
   if (!tolerante && coinciden.length > 1 && (/\b(y|e|tambien|ademas)\b|,/.test(t) || coinciden[0].peso === coinciden[1].peso)) return null;
   const it = coinciden[0];
+  // Las respuestas del colegio son listas generales: si la pregunta filtra por
+  // grado o sección, o pide «desde cuándo» / «quién debe más», la contesta la
+  // IA con las herramientas. Antes salía la lista de todos sin filtrar.
+  if (!tolerante && (it.id === 'deuda-colegio' || it.id === 'matriculas') && FILTRO_ESCOLAR.test(t)) return null;
 
   const periodo = interpretarPeriodo(t, opts.hoy);
   if (it.usaPeriodo && !periodo) return null;
@@ -1248,6 +1297,7 @@ export async function responderLocal(
       : it.id === 'stock-bajo' ? { soloBajoMinimo: true, limite: 10 }
         : it.id === 'turnos-caja' ? { estado: 'ABIERTO', limite: 10 }
           : it.id === 'cartera' ? { soloVencidas: /\b(vencid|moros)/.test(t), limite: 8 }
+            : it.id === 'deuda-colegio' ? { soloConDeuda: true, soloVencido: /\b(vencid|moros|mora\b|atrasad)/.test(t), limite: 10 }
             : it.id === 'por-revisar' ? { limite: 8 }
               : {};
   if (it.usaPeriodo && periodo && it.id !== 'cliente-mas-facturas') Object.assign(input, { desde: periodo.desde, hasta: periodo.hasta, limite: 8 });
@@ -1267,5 +1317,10 @@ export async function responderLocal(
 
   const r = await ejecutar(tools, it.herramienta, input);
   if (!r) return null;
+  // En un colegio, «quién me debe» también son los cargos de los estudiantes, con factura o sin ella.
+  if (it.id === 'cartera' && tools.cargos_escolares) {
+    const colegio = await ejecutar(tools, 'cargos_escolares', { soloConDeuda: true, soloVencido: input.soloVencidas === true, limite: 10 });
+    if (colegio && !colegio.error) input.colegio = colegio;
+  }
   return { intencion: it.id, respuesta: PLANTILLAS[it.id](r, periodo, input) };
 }

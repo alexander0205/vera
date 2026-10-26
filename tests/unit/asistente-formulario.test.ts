@@ -54,6 +54,14 @@ describe('detectar el pedido de un formulario', () => {
     expect(detectarFormulario(texto)).toBeNull();
   });
 
+  it('el cliente de la factura es solo el nombre, no el resto de la frase (prueba del 26-10)', () => {
+    expect(detectarFormulario('Crea una factura para María Ficticia Uno por la mensualidad de noviembre, RD$4,000')?.valores)
+      .toEqual({ clienteNombre: 'María Ficticia Uno' });
+    expect(detectarFormulario('hazme una cotización para Colegio de Santo Domingo, 10 uniformes')?.valores)
+      .toEqual({ clienteNombre: 'Colegio de Santo Domingo' });
+    expect(detectarFormulario('crea una factura para Ana Pérez con 2 cuadernos')?.valores).toEqual({ clienteNombre: 'Ana Pérez' });
+  });
+
   it('adelanta el nombre si lo dijo', () => {
     expect(detectarFormulario('crea un cliente llamado Juan Pérez')?.valores).toEqual({ razonSocial: 'Juan Pérez' });
     expect(detectarFormulario('crear un producto de nombre Uniforme escolar')?.valores).toEqual({ nombre: 'Uniforme escolar' });

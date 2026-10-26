@@ -9,7 +9,7 @@ import {
 } from './enlaces';
 import { leerMensajesDgii } from './dgii';
 import { leerEstadoConfiguracion } from './estado-configuracion';
-import { pesos, fechaYmd, ymd, normalizar, quitarTildes } from './util';
+import { pesos, fechaYmd, ymd, normalizar, quitarTildes, hoyRd } from './util';
 
 /**
  * Consultas del asistente que pasan por la API de la app.
@@ -258,7 +258,8 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
     cuentas_por_cobrar: tool({
       description:
         'Cartera pendiente de HOY, por la API de Cuentas por cobrar: total, antigüedad por cubetas y los clientes que más deben. ' +
-        'Úsala para «quién me debe», «cuánto tengo vencido», «cartera», «morosos».',
+        'Úsala para «quién me debe», «cuánto tengo vencido», «cartera», «morosos». ' +
+        'Los RECARGOS POR MORA (notas de débito por pagar tarde) van aparte en `recargosMora`: lo vencido NO es mora.',
       inputSchema: z.object({
         soloVencidas: z.boolean().default(false).describe('Solo lo que ya pasó su fecha límite'),
         limite: z.number().int().min(1).max(MAX).default(10),
@@ -266,11 +267,14 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
       execute: seguro('las cuentas por cobrar', async ({ soloVencidas, limite }) => {
         const r = await api.get<CxcApi>('/api/cuentas-por-cobrar', { soloVencidas: soloVencidas || undefined, limit: 2000 });
         anotar('Cuentas por cobrar', soloVencidas ? 'solo vencidas' : 'toda la cartera');
-        const porCliente = new Map<string, { saldo: number; facturas: number; diasMax: number; enlace: string }>();
+        const porCliente = new Map<string, { saldo: number; mora: number; facturas: number; diasMax: number; enlace: string }>();
+        let mora = 0;
         for (const c of r.cuentas ?? []) {
           const cliente = c.razonSocialComprador?.trim() || c.clienteRazonSocial?.trim() || 'Consumidor Final';
-          const x = porCliente.get(cliente) ?? { saldo: 0, facturas: 0, diasMax: 0, enlace: enlaceFactura(c.id) };
+          const x = porCliente.get(cliente) ?? { saldo: 0, mora: 0, facturas: 0, diasMax: 0, enlace: enlaceFactura(c.id) };
           x.saldo += Number(c.saldo || 0);
+          x.mora += Number(c.moraSaldo || 0);
+          mora += Number(c.moraSaldo || 0);
           x.facturas += 1;
           x.diasMax = Math.max(x.diasMax, Number(c.diasVencido || 0));
           porCliente.set(cliente, x);
@@ -279,6 +283,8 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         const g = (k: string) => pesos(a[k]?.saldo);
         return {
           totalPorCobrar: pesos(r.totales?.pendiente),
+          // El recargo por pagar tarde, ya incluido en lo que debe cada cliente. El chat lo confundía con lo vencido.
+          recargosMora: pesos(mora),
           porVencer: g('porVencer'),
           vencido0a30: g('d1a30'),
           vencido31a60: g('d31a60'),
@@ -289,7 +295,7 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
           mayoresDeudores: [...porCliente.entries()]
             .sort((x, y) => y[1].saldo - x[1].saldo)
             .slice(0, limite)
-            .map(([cliente, c]) => ({ cliente, debe: pesos(c.saldo), facturas: c.facturas, diasVencidoMaximo: c.diasMax })),
+            .map(([cliente, c]) => ({ cliente, debe: pesos(c.saldo), deEsoMora: pesos(c.mora), facturas: c.facturas, diasVencidoMaximo: c.diasMax })),
         };
       }),
     }),
@@ -654,10 +660,13 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
       execute: seguro('las matrículas', async ({ periodo }) => {
         const filas: { periodo: string; curso: string }[] = [];
         for (let pagina = 1; pagina <= 10; pagina++) {
-          const r = await api.get<{ matriculas: { periodo: string; curso: string; estado: string }[]; paginas?: number }>(
+          const r = await api.get<{ matriculas: { periodo: string; curso: string; grado?: string | null; estado: string }[]; paginas?: number }>(
             '/api/administracion-escolar/matriculas', { estado: 'activa', pagina, porPagina: 200 },
           );
-          for (const m of r.matriculas ?? []) if (m.estado === 'activa') filas.push({ periodo: m.periodo, curso: m.curso });
+          // El curso con su grado: «A» solo junta las secciones A de todos los grados.
+          for (const m of r.matriculas ?? []) {
+            if (m.estado === 'activa') filas.push({ periodo: m.periodo, curso: m.grado ? `${m.grado} — ${m.curso}` : m.curso });
+          }
           if (!r.paginas || pagina >= r.paginas) break;
         }
         const f = periodo?.trim() ? filas.filter((x) => contiene(x.periodo, periodo)) : filas;
@@ -678,28 +687,66 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
     cargos_escolares: tool({
       description:
         'Cargos del colegio (mensualidades, inscripción…) por estudiante, por la API de Cargos: lo que se debe y lo pagado. ' +
-        'Estados: pendiente, vencido, parcial, pagado, anulado. «Quién no ha pagado la mensualidad de octubre» = estado vencido o pendiente, mes 10.',
+        'Es la deuda del colegio aunque todavía no tenga factura: para «quién debe», «cuántos estudiantes deben» o «morosos» usa soloConDeuda ' +
+        '(y soloVencido para lo ya vencido). Estados: pendiente, vencido, parcial, pagado, anulado. ' +
+        '«Quién no ha pagado la mensualidad de octubre» = soloConDeuda, mes 10.',
       inputSchema: z.object({
         estudiante: z.string().max(60).optional().describe('Nombre o apellido del estudiante'),
+        curso: z.string().max(60).optional().describe('Grado o sección, como lo diga la persona: «2do de primaria», «inicial», «1ro A».'),
         estado: z.enum(['pendiente', 'vencido', 'parcial', 'pagado', 'anulado']).optional(),
+        soloConDeuda: z.boolean().optional().describe('Solo cargos con saldo por pagar (pendiente, vencido o parcial).'),
+        soloVencido: z.boolean().optional().describe('Solo cargos con saldo cuya fecha de vencimiento ya pasó.'),
         mes: z.number().int().min(1).max(12).optional(),
         anio: z.number().int().min(2000).max(2100).optional(),
         limite: z.number().int().min(1).max(MAX).default(15),
       }),
-      execute: seguro('los cargos escolares', async ({ estudiante, estado, mes, anio, limite }) => {
+      execute: seguro('los cargos escolares', async ({ estudiante, curso, estado, soloConDeuda, soloVencido, mes, anio, limite }) => {
+        // «Vencido» se decide por la fecha y no por el estado guardado: un cargo
+        // sigue «pendiente» en la base hasta que una tarea lo marca, y pedir
+        // estado=vencido dejaba fuera lo que venció ayer.
+        const porFecha = estado === 'vencido' || soloVencido === true;
+        const conDeuda = porFecha || soloConDeuda === true;
         const cargos: CargoApi[] = [];
         for (let pagina = 1; pagina <= 5; pagina++) {
-          const r = await api.get<{ cargos: CargoApi[]; paginas?: number }>('/api/administracion-escolar/cargos', { estado, pagina, porPagina: 200 });
+          const r = await api.get<{ cargos: CargoApi[]; paginas?: number }>('/api/administracion-escolar/cargos', {
+            estado: conDeuda ? undefined : estado, pagina, porPagina: 200,
+          });
           cargos.push(...(r.cargos ?? []));
           if (!r.paginas || pagina >= r.paginas) break;
         }
+        const hoy = hoyRd();
+        const debe = (x: CargoApi) => Number(x.saldoCentavos || 0) > 0 && ['pendiente', 'vencido', 'parcial'].includes(x.estado);
+        const vencio = (x: CargoApi) => debe(x) && Boolean(x.fechaVencimiento) && String(x.fechaVencimiento).slice(0, 10) < hoy;
         const c = cargos.filter((x) =>
           (!mes || x.mes === mes) && (!anio || x.anio === anio)
-          && (!estudiante?.trim() || contiene(`${x.estudiante} ${x.estudianteApellidos}`, estudiante)));
-        anotar('Cargos escolares', [estado, mes && `mes ${mes}`, anio, estudiante].filter(Boolean).join(' · ') || 'todos');
+          && (!conDeuda || debe(x)) && (!porFecha || vencio(x))
+          && (!estudiante?.trim() || contiene(`${x.estudiante} ${x.estudianteApellidos}`, estudiante))
+          && (!curso?.trim() || cursoCoincide(x.curso, curso)));
+        const porEst = new Map<string, { debe: number; vencido: number; cargos: number; curso: string | null; desde: string | null }>();
+        for (const x of c) {
+          if (!debe(x)) continue;
+          const k = `${x.estudiante} ${x.estudianteApellidos}`.trim();
+          const e = porEst.get(k) ?? { debe: 0, vencido: 0, cargos: 0, curso: x.curso ?? null, desde: null };
+          e.debe += Number(x.saldoCentavos || 0);
+          if (vencio(x)) {
+            e.vencido += Number(x.saldoCentavos || 0);
+            const f = String(x.fechaVencimiento).slice(0, 10);
+            if (!e.desde || f < e.desde) e.desde = f;
+          }
+          e.cargos += 1;
+          porEst.set(k, e);
+        }
+        const suma = (f: (x: CargoApi) => boolean) => pesos(c.filter(f).reduce((s, x) => s + Number(x.saldoCentavos || 0), 0));
+        anotar('Cargos escolares', [estado, soloVencido ? 'vencidos' : soloConDeuda && 'con deuda', mes && `mes ${mes}`, anio, estudiante].filter(Boolean).join(' · ') || 'todos');
         return {
           coinciden: c.length,
           saldoTotal: pesos(c.reduce((s, x) => s + Number(x.saldoCentavos || 0), 0)),
+          saldoVencido: suma(vencio),
+          // Lo que se debe y todavía no tiene factura: no sale en Cuentas por cobrar.
+          saldoSinFacturar: suma((x) => debe(x) && !x.ecfDocumentId),
+          estudiantesConDeuda: porEst.size,
+          porEstudiante: [...porEst.entries()].sort((a, b) => b[1].debe - a[1].debe).slice(0, limite)
+            .map(([nombre, e]) => ({ estudiante: nombre, curso: e.curso, debe: pesos(e.debe), vencido: pesos(e.vencido), vencidoDesde: e.desde, cargos: e.cargos })),
           enlaceLista: '/escolar/responsables?filtro=con-deuda',
           cargos: c.slice(0, limite).map((x) => ({
             enlace: x.ecfDocumentId ? enlaceFactura(x.ecfDocumentId) : undefined,
@@ -806,7 +853,7 @@ interface FacturaApi {
   fechaEmision?: string | null; createdAt?: string | null; fechaLimitePago?: string | null; dependienteNombre?: string | null;
 }
 interface CxcApi {
-  cuentas?: { id: number; razonSocialComprador?: string | null; clienteRazonSocial?: string | null; saldo: number; diasVencido?: number }[];
+  cuentas?: { id: number; razonSocialComprador?: string | null; clienteRazonSocial?: string | null; saldo: number; moraSaldo?: number; diasVencido?: number }[];
   totales?: { pendiente: number };
   antiguedad?: Record<string, { saldo: number }>;
 }
@@ -853,8 +900,26 @@ interface EstudianteApi {
   origen?: string; id: number; codigo?: string | null; nombres: string; apellidos: string; estado: string; matriculaActivaId?: number | null;
   periodoActivo?: string | null; cursoActual?: string | null; tutorResponsable?: string | null; deudaCentavos?: number | null;
 }
+/**
+ * ¿El curso del cargo («2do de Primaria — A») es el que dijo la persona
+ * («2do de primaria», «segundo», «2do A»)? Se comparan las palabras sin tildes,
+ * con los ordinales en número.
+ */
+export function cursoCoincide(cursoCargo: string | null | undefined, pedido: string): boolean {
+  if (!cursoCargo) return false;
+  const ORD: Record<string, string> = { primero: '1', segundo: '2', tercero: '3', cuarto: '4', quinto: '5', sexto: '6' };
+  const palabras = (x: string) => quitarTildes(x.toLowerCase())
+    .replace(/(\d+)\s*(ro|do|to|vo|no|er|mo|°|º)\b/g, '$1')
+    .split(/[^a-z0-9]+/).filter(Boolean)
+    .map((w) => ORD[w] ?? w)
+    .filter((w) => !['de', 'del', 'la', 'el', 'grado', 'curso', 'seccion'].includes(w));
+  const del = new Set(palabras(cursoCargo));
+  const quiere = palabras(pedido);
+  return quiere.length > 0 && quiere.every((w) => del.has(w));
+}
+
 interface CargoApi {
-  estudiante: string; estudianteApellidos: string; concepto: string; mes: number; anio: number;
+  estudiante: string; estudianteApellidos: string; concepto: string; mes: number; anio: number; curso?: string | null;
   montoCentavos: number; saldoCentavos: number; fechaVencimiento: string; estado: string; ecfDocumentId?: number | null;
 }
 interface EmpleadoApi { nombres: string; apellidos: string; cargo?: string | null; tipoContrato: string; estado: string; fechaIngreso?: string | null; frecuenciaPago: string; salarioBaseCents: number }

@@ -17,17 +17,29 @@ import {
 export const porGateway = () => Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
 
 /**
- * Con gateway, el id tal cual (`anthropic/claude-sonnet-5.5`). Sin gateway, se
- * habla directo con el proveedor si hay su llave. Sin ninguna de las dos, null.
+ * Claude con `ANTHROPIC_API_KEY`: directo a Anthropic. Lo demás, con gateway, el
+ * id tal cual (`google/gemini-2.5-flash`); sin gateway, directo con el
+ * proveedor si hay su llave. Sin ninguna de las dos, null.
  */
 export function comoModelo(id: string): LanguageModel | null {
   if (!id) return null;
-  if (porGateway()) return id;
   const directo = idDirecto(id);
+  // Con llave propia de Anthropic, Claude va directo: por el gateway pide
+  // créditos pagados (o la llave cargada como BYOK en Vercel).
+  if (directo?.proveedor === 'anthropic' && process.env.ANTHROPIC_API_KEY) return anthropic(directo.modelo);
+  if (porGateway()) return id;
   if (!directo) return null;
   if (directo.proveedor === 'google' && process.env.GOOGLE_GENERATIVE_AI_API_KEY) return google(directo.modelo);
   if (directo.proveedor === 'anthropic' && process.env.ANTHROPIC_API_KEY) return anthropic(directo.modelo);
   return null;
+}
+
+/** ¿Por dónde sale este modelo? Para anotar el gasto con su proveedor real. */
+export function caminoDe(id: string): 'anthropic' | 'google' | 'gateway' {
+  const directo = idDirecto(id);
+  if (directo?.proveedor === 'anthropic' && process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (porGateway()) return 'gateway';
+  return directo?.proveedor === 'anthropic' ? 'anthropic' : 'google';
 }
 
 /** ¿Hay algún camino para llamar a un modelo? (gateway o la llave de un proveedor) */

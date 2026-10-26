@@ -1095,7 +1095,12 @@ export function detectarFormulario(texto: string): { id: IdFormulario; valores: 
   const t = normalizar(texto);
   if (!t || t.length > 200) return null;
   const original = texto.replace(/\s+/g, ' ').trim();
-  const nombreDe = (patron: RegExp) => original.match(patron)?.[1];
+  // «Factura para María Pérez por la mensualidad de noviembre, RD$4,000»: el
+  // cliente es «María Pérez». Antes se tomaba la frase entera como nombre.
+  // No se corta en «de»: hay nombres como «Colegio de Santo Domingo».
+  const nombreDe = (patron: RegExp) => original.match(patron)?.[1]
+    ?.split(/\s+(?:por|con|que|para que)\s+|[,;:(]|\s+(?:RD)?\$|\s+\d/i)[0]
+    .trim() || undefined;
   const llamado = /\b(?:llamad[oa]|de nombre|que se llama|se llama)\s+(.{2,80})$/i;
   const para = /\b(?:para|a nombre de|de)\s+(?!la |el |los |las |un |una )(.{2,80})$/i;
 
