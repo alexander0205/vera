@@ -495,18 +495,19 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
                 {d.grados.map((g) => (
                   <div key={g.gradoId}>
                     <div className="flex items-baseline justify-between gap-2 text-sm">
-                      <span className="truncate font-medium text-gray-900">
-                        {g.grado}
-                        <span className="ml-1.5 font-normal text-gray-400">
-                          {g.servicio}{g.tanda ? ` · ${g.tanda}` : ''} · {g.alumnos} alum.
-                        </span>
-                      </span>
+                      <span className="min-w-0 truncate font-medium text-gray-900">{g.grado}</span>
                       <span className="shrink-0 tabular-nums text-gray-500">
                         {g.pendienteCentavos > 0
                           ? <b className="font-semibold text-red-600">{fmtDOP(g.pendienteCentavos)}</b>
                           : '—'}
                       </span>
                     </div>
+                    {/* Nivel, tanda y alumnos en su propia línea: al lado del grado
+                        no cabían y se truncaba justo la tanda y la cantidad de
+                        alumnos, que es lo que aquí se quiere ver. */}
+                    <p className="text-xs text-gray-400">
+                      {g.servicio}{g.tanda ? ` · ${g.tanda}` : ''} · {g.alumnos} alum.
+                    </p>
                     <Barra valor={g.cobradoCentavos} total={g.devengadoCentavos} color="#2a45c4" />
                   </div>
                 ))}
