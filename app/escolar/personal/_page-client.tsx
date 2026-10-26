@@ -372,13 +372,13 @@ export default function PersonalClient() {
 
           <DialogBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CampoForm label="Nombres" id="nombres">
-              <Input id="nombres" value={form.nombres} onChange={(e) => setForm({ ...form, nombres: e.target.value })} />
+              <Input id="nombres" value={form.nombres} maxLength={100} autoComplete="off" onChange={(e) => setForm({ ...form, nombres: e.target.value })} />
             </CampoForm>
             <CampoForm label="Apellidos" id="apellidos">
-              <Input id="apellidos" value={form.apellidos} onChange={(e) => setForm({ ...form, apellidos: e.target.value })} />
+              <Input id="apellidos" value={form.apellidos} maxLength={100} autoComplete="off" onChange={(e) => setForm({ ...form, apellidos: e.target.value })} />
             </CampoForm>
             <CampoForm label="Cédula" id="cedula">
-              <Input id="cedula" value={form.cedula} onChange={(e) => setForm({ ...form, cedula: e.target.value })} placeholder="000-0000000-0" />
+              <Input id="cedula" value={form.cedula} maxLength={20} inputMode="numeric" autoComplete="off" onChange={(e) => setForm({ ...form, cedula: e.target.value })} placeholder="000-0000000-0" />
             </CampoForm>
             <CampoForm label="Cargo" id="cargo">
               <Input
@@ -418,22 +418,31 @@ export default function PersonalClient() {
               </select>
             </CampoForm>
             <CampoForm label="Sexo" id="sexo">
-              <Input id="sexo" value={form.sexo} onChange={(e) => setForm({ ...form, sexo: e.target.value })} placeholder="Masculino / Femenino" />
+              {/* Antes un texto libre ("M", "masculino", "Hombre"…): los reportes y la
+                  exportación recibían cualquier cosa. Una lista cierra el dato; si lo
+                  guardado es otra cosa, se conserva como opción para no perderlo. */}
+              <select id="sexo" className={SELECT_CLS} value={form.sexo}
+                onChange={(e) => setForm({ ...form, sexo: e.target.value })}>
+                <option value="">Sin indicar</option>
+                <option value="Masculino">Masculino</option>
+                <option value="Femenino">Femenino</option>
+                {form.sexo && !['Masculino', 'Femenino'].includes(form.sexo) && <option value={form.sexo}>{form.sexo}</option>}
+              </select>
             </CampoForm>
             <CampoForm label="Fecha de nacimiento" id="fnac">
               <Input id="fnac" type="date" value={form.fechaNacimiento} onChange={(e) => setForm({ ...form, fechaNacimiento: e.target.value })} />
             </CampoForm>
             <CampoForm label="Nacionalidad" id="nac">
-              <Input id="nac" value={form.nacionalidad} onChange={(e) => setForm({ ...form, nacionalidad: e.target.value })} placeholder="Dominicana" />
+              <Input id="nac" value={form.nacionalidad} maxLength={60} onChange={(e) => setForm({ ...form, nacionalidad: e.target.value })} placeholder="Dominicana" />
             </CampoForm>
             <CampoForm label="Teléfono" id="tel">
-              <Input id="tel" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="809-000-0000" />
+              <Input id="tel" type="tel" inputMode="tel" maxLength={20} autoComplete="off" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="809-000-0000" />
             </CampoForm>
             <CampoForm label="Correo" id="email">
-              <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Input id="email" type="email" maxLength={120} autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </CampoForm>
             <CampoForm label="Notas" id="notas" full>
-              <Textarea id="notas" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} rows={2} />
+              <Textarea id="notas" value={form.notas} maxLength={500} onChange={(e) => setForm({ ...form, notas: e.target.value })} rows={3} />
             </CampoForm>
           </DialogBody>
 

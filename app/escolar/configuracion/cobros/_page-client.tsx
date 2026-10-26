@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertTriangle, CheckCircle2, Landmark, Loader2, Phone, Plus, Trash2,
 } from 'lucide-react';
@@ -72,6 +73,31 @@ export function opcionQueCoincide(valor: string, opciones: string[]): string | n
     return x === v || (v.length >= 3 && (v.includes(x) || x.includes(v)));
   }) ?? null;
 }
+/**
+ * Validación de lo que el servidor acepta pero recorta o guarda mal sin decirlo
+ * (`datos-pago` hace `slice` a 20/40/60 y quita lo que no es \w). Aquí se avisa
+ * antes de guardar, junto al campo, en vez de descubrirlo en la página del padre.
+ * Los topes son los mismos que los del servidor.
+ */
+const MAX = { banco: 120, cuenta: 60, titular: 120, documento: 20, telefono: 40, horario: 120, instrucciones: 500 } as const;
+
+const soloDigitos = (v: string) => v.replace(/\D/g, '');
+
+/** RNC (9) o cédula (11). Vacío es válido: es opcional o hereda el del colegio. */
+function errorDocumento(v: string): string | null {
+  if (!v.trim()) return null;
+  const n = soloDigitos(v).length;
+  return n === 9 || n === 11 ? null : `Un RNC lleva 9 dígitos y una cédula 11; tiene ${n}.`;
+}
+
+/** Teléfono dominicano: 10 dígitos (809/829/849), con o sin +1. */
+function errorTelefono(v: string): string | null {
+  if (!v.trim()) return null;
+  const d = soloDigitos(v);
+  const n = d.startsWith('1') && d.length === 11 ? 10 : d.length;
+  return n >= 7 && n <= 11 ? null : 'Escribe un teléfono completo, con el código de área (809, 829 o 849).';
+}
+
 const claseLista = 'h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-zero-500 focus:outline-none focus:ring-1 focus:ring-zero-500';
 
 /**
@@ -91,7 +117,7 @@ function ListaConOtro({ valor, opciones, etiquetaOtro, placeholderOtro, onCambio
   const [escribiendo, setEscribiendo] = useState(!coincide && valor.trim() !== '');
   return (
     <div className="space-y-2">
-      <select className={claseLista} value={escribiendo ? OTRO : coincide ?? ''}
+      <select className={claseLista} aria-label={etiquetaOtro.replace('…', '')} value={escribiendo ? OTRO : coincide ?? ''}
         onChange={(e) => {
           if (e.target.value === OTRO) { setEscribiendo(true); onCambio(''); return; }
           setEscribiendo(false);
@@ -102,7 +128,8 @@ function ListaConOtro({ valor, opciones, etiquetaOtro, placeholderOtro, onCambio
         <option value={OTRO}>{etiquetaOtro}</option>
       </select>
       {escribiendo && (
-        <Input autoFocus value={valor} placeholder={placeholderOtro}
+        <Input autoFocus value={valor} placeholder={placeholderOtro} maxLength={MAX.banco}
+          aria-label={etiquetaOtro}
           onChange={(e) => onCambio(e.target.value)} />
       )}
     </div>
@@ -116,10 +143,12 @@ export default function CobrosClient() {
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Tras el primer intento de guardar se enseñan los errores de cada campo. */
+  const [intento, setIntento] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
-      const r = await fetch('/api/administracion-escolar/datos-pago');
+      const r = await fetch('/api/administracion-escolar/datos-pago', { cache: 'no-store' });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? 'Error cargando');
       setCuentas((d.cuentas ?? []).map((c: Partial<Cuenta>) => ({
@@ -149,7 +178,15 @@ export default function CobrosClient() {
     setCuentas((prev) => prev.map((c, j) => (j === i ? { ...c, [campo]: valor } : c)));
   }
 
+  /** Cuentas a medio llenar: se descartan al guardar, y es mejor decirlo que callarlo. */
+  const incompletas = cuentas.filter((c) => (c.banco.trim() || c.numeroCuenta.trim() || c.titular.trim()) && !(c.banco.trim() && c.numeroCuenta.trim()));
+  const hayErrores = errorDocumento(contacto.documento) || errorTelefono(contacto.telefonoAyuda)
+    || cuentas.some((c) => errorDocumento(c.documento));
+
   async function guardar() {
+    setIntento(true);
+    if (hayErrores) { setError('Corrige los campos marcados en rojo antes de guardar.'); return; }
+    if (incompletas.length > 0) { setError('Hay cuentas sin banco o sin número. Complétalas o quítalas.'); return; }
     setGuardando(true); setError(null); setGuardado(false);
     try {
       const r = await fetch('/api/administracion-escolar/datos-pago', {
@@ -222,7 +259,7 @@ export default function CobrosClient() {
                     <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                       {c.banco.trim() || `Banco ${i + 1}`}
                     </span>
-                    <button type="button" title="Quitar esta cuenta"
+                    <button type="button" title="Quitar esta cuenta" aria-label={`Quitar la cuenta ${c.banco.trim() || i + 1}`}
                       onClick={() => setCuentas((p) => p.filter((_, j) => j !== i))}
                       className="text-gray-400 transition hover:text-red-600">
                       <Trash2 className="h-4 w-4" />
@@ -244,23 +281,31 @@ export default function CobrosClient() {
                     </label>
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-gray-700">Número de cuenta</span>
-                      <Input value={c.numeroCuenta} inputMode="numeric"
-                        onChange={(e) => editar(i, 'numeroCuenta', e.target.value)} />
+                      <Input value={c.numeroCuenta} inputMode="numeric" autoComplete="off" maxLength={MAX.cuenta}
+                        error={intento && !c.numeroCuenta.trim() && !!c.banco.trim()}
+                        onChange={(e) => editar(i, 'numeroCuenta', e.target.value.replace(/[^\w-]/g, ''))} />
+                      {intento && !c.numeroCuenta.trim() && !!c.banco.trim() && (
+                        <span className="mt-1 block text-xs text-red-600">Falta el número de cuenta.</span>
+                      )}
                     </label>
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-gray-700">Titular</span>
-                      <Input value={c.titular} placeholder="Tal como aparece en el banco"
+                      <Input value={c.titular} placeholder="Tal como aparece en el banco" maxLength={MAX.titular}
                         onChange={(e) => editar(i, 'titular', e.target.value)} />
                     </label>
                     <label className="block text-sm sm:col-span-2">
                       <span className="mb-1 block font-medium text-gray-700">
                         RNC o cédula del titular
                       </span>
-                      <Input value={c.documento}
+                      <Input value={c.documento} inputMode="numeric" maxLength={MAX.documento}
                         placeholder={contacto.documento
                           ? `${contacto.documento} (el del colegio)`
                           : 'RNC o cédula'}
+                        error={intento && !!errorDocumento(c.documento)}
                         onChange={(e) => editar(i, 'documento', e.target.value)} />
+                      {intento && errorDocumento(c.documento) && (
+                        <span className="mt-1 block text-xs text-red-600">{errorDocumento(c.documento)}</span>
+                      )}
                       <span className="mt-1 block text-xs text-gray-400">
                         Solo si esta cuenta está a nombre de otro —una fundación, el
                         dueño—. En blanco usa el del colegio. El padre lo teclea en su
@@ -290,8 +335,12 @@ export default function CobrosClient() {
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-gray-700">RNC o cédula del colegio</span>
-              <Input value={contacto.documento}
+              <Input value={contacto.documento} inputMode="numeric" maxLength={MAX.documento}
+                error={intento && !!errorDocumento(contacto.documento)}
                 onChange={(e) => setContacto({ ...contacto, documento: e.target.value })} />
+              {intento && errorDocumento(contacto.documento) && (
+                <span className="mt-1 block text-xs text-red-600">{errorDocumento(contacto.documento)}</span>
+              )}
               <span className="mt-1 block text-xs text-gray-400">
                 El que usan las cuentas que no digan otro. El RNC lleva 9 dígitos y la
                 cédula 11; la página de la familia lo llama por su nombre según lo que
@@ -300,25 +349,29 @@ export default function CobrosClient() {
             </label>
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-gray-700">Teléfono de ayuda</span>
-              <Input value={contacto.telefonoAyuda}
+              <Input value={contacto.telefonoAyuda} type="tel" inputMode="tel" maxLength={MAX.telefono} placeholder="809-555-1234"
+                error={intento && !!errorTelefono(contacto.telefonoAyuda)}
                 onChange={(e) => setContacto({ ...contacto, telefonoAyuda: e.target.value })} />
+              {intento && errorTelefono(contacto.telefonoAyuda) && (
+                <span className="mt-1 block text-xs text-red-600">{errorTelefono(contacto.telefonoAyuda)}</span>
+              )}
               <span className="mt-1 block text-xs text-gray-400">
                 A dónde llama la familia si algo falla.
               </span>
             </label>
             <label className="block text-sm sm:col-span-2">
               <span className="mb-1 block font-medium text-gray-700">Horario</span>
-              <Input value={contacto.horarioAyuda} placeholder="Lun–Vie 8:00 a.m. – 5:00 p.m."
+              <Input value={contacto.horarioAyuda} placeholder="Lun–Vie 8:00 a.m. – 5:00 p.m." maxLength={MAX.horario}
                 onChange={(e) => setContacto({ ...contacto, horarioAyuda: e.target.value })} />
             </label>
           </div>
 
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-gray-700">Instrucciones extra (opcional)</span>
-            <textarea rows={2} value={contacto.instrucciones}
+            <Textarea rows={3} value={contacto.instrucciones} maxLength={MAX.instrucciones}
               onChange={(e) => setContacto({ ...contacto, instrucciones: e.target.value })}
-              placeholder="Ej.: no aceptamos depósitos en efectivo en ventanilla."
-              className="w-full rounded-md border border-gray-200 p-2 text-sm" />
+              placeholder="Ej.: no aceptamos depósitos en efectivo en ventanilla." />
+            <span className="mt-1 block text-right text-xs text-gray-400">{contacto.instrucciones.length}/{MAX.instrucciones}</span>
           </label>
 
           <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -327,7 +380,7 @@ export default function CobrosClient() {
             Aceptar transferencias desde el enlace de pago
           </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
           <div className="flex items-center gap-3">
             <Button onClick={guardar} disabled={guardando}>

@@ -290,12 +290,15 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="sig-usuario">Usuario (cédula)</Label>
-            <Input id="sig-usuario" value={usuario} onChange={(e) => setUsuario(e.target.value)}
-              placeholder="001-0000000-0" autoComplete="off" />
+            <Input id="sig-usuario" value={usuario} inputMode="numeric" maxLength={14}
+              // La cédula se guarda solo con dígitos, como la pide SIGERD: si la
+              // pegan con guiones se limpian aquí en vez de fallar al conectar.
+              onChange={(e) => setUsuario(e.target.value.replace(/[\s-]/g, ''))}
+              placeholder="00100000000" autoComplete="off" spellCheck={false} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sig-clave">Contraseña</Label>
-            <Input id="sig-clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)}
+            <Input id="sig-clave" type="password" value={clave} maxLength={128} onChange={(e) => setClave(e.target.value)}
               autoComplete="new-password" />
           </div>
         </div>

@@ -1168,7 +1168,7 @@ function CrearCargoVariosMesesDialog({ open, onOpenChange, estudianteId, matricu
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Monto por mes (RD$)</Label>
-              <Input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} />
+              <Input type="number" step="0.01" min={0} inputMode="decimal" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
@@ -2833,13 +2833,14 @@ function TarifaEstudianteDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">{modo === 'monto' ? 'Monto al mes (RD$)' : 'Descuento (%)'}</Label>
-                <Input type="number" step={modo === 'monto' ? '0.01' : '1'} value={valor}
+                <Input type="number" step={modo === 'monto' ? '0.01' : '1'} min={0} max={modo === 'monto' ? undefined : 100}
+                  inputMode={modo === 'monto' ? 'decimal' : 'numeric'} value={valor}
                   onChange={(e) => setValor(e.target.value)}
                   placeholder={modo === 'monto' ? '0.00' : '0'} autoFocus />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Motivo (opcional)</Label>
-                <Input value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                <Input value={motivo} maxLength={120} onChange={(e) => setMotivo(e.target.value)}
                   placeholder="Hermano, histórico…" />
               </div>
             </div>
@@ -2874,7 +2875,7 @@ function TarifaEstudianteDialog({
                       ? 'Precio para este alumno, por mes (RD$)'
                       : 'Precio para este alumno (RD$)'}
                   </Label>
-                  <Input type="number" step="0.01" value={precioOtro}
+                  <Input type="number" step="0.01" min={0} inputMode="decimal" value={precioOtro}
                     onChange={(e) => setPrecioOtro(e.target.value)} placeholder="0.00" />
                   {precioPersonal && (
                     <p className="text-[11px] text-gray-400">Ya tiene un precio personal puesto. Cámbialo o quítalo.</p>

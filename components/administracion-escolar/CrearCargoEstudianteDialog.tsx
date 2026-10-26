@@ -294,7 +294,7 @@ export function CrearCargoEstudianteDialog({
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Monto (RD$) *</Label><Input type="number" step="0.01" value={form.monto} onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Monto (RD$) *</Label><Input type="number" step="0.01" min={0} inputMode="decimal" placeholder="0.00" value={form.monto} onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))} /></div>
               <div className="space-y-1.5">
                 <Label>Vencimiento</Label>
                 {(() => {

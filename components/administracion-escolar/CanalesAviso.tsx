@@ -177,8 +177,11 @@ function ProbarCanal({ canal, etiqueta, placeholder, disponible, motivo }: {
           <input
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && destino.trim() && !enviando) { e.preventDefault(); void probar(); } }}
             placeholder={placeholder}
-            className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-zero-600"
+            aria-label={`Destino de la prueba por ${etiqueta}`}
+            maxLength={120} autoComplete="off" spellCheck={false}
+            className="h-10 min-w-[14rem] flex-1 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-zero-600 focus:ring-1 focus:ring-zero-500"
           />
           <Button size="sm" variant="outline" disabled={enviando || !destino.trim()} onClick={() => void probar()}>
             {enviando ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Enviando…</> : 'Enviar prueba'}
@@ -520,10 +523,12 @@ export function CanalesAviso() {
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <input
-                      type="password" value={claveNegocio} autoComplete="off"
-                      onChange={(e) => setClaveNegocio(e.target.value)}
+                      type="password" value={claveNegocio} autoComplete="off" spellCheck={false}
+                      aria-label="Clave del negocio" maxLength={200}
+                      onChange={(e) => setClaveNegocio(e.target.value.trim())}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && claveNegocio.trim() && !ocupado) { e.preventDefault(); void enlazar(); } }}
                       placeholder="sk_live_…"
-                      className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 font-mono text-sm outline-none focus:border-zero-600"
+                      className="h-10 min-w-[14rem] flex-1 rounded-lg border border-gray-300 px-3 font-mono text-sm outline-none focus:border-zero-600 focus:ring-1 focus:ring-zero-500"
                     />
                     <Button size="sm" disabled={ocupado || !claveNegocio.trim()}
                       onClick={() => void enlazar()}>

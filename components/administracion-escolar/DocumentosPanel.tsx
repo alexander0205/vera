@@ -414,7 +414,7 @@ export function DocumentosPanel() {
                       {/* `Input` lleva `fullWidth` de MUI, que gana a cualquier
                           `w-*` de Tailwind: envuelto en una caja llena la caja
                           y no la fila —sin esto el nombre se quedaba sin sitio. */}
-                      <div className="w-16 shrink-0">
+                      <div className="w-20 shrink-0">
                         <Input type="number" min={1} max={20} value={d.cantidad}
                           aria-label={`Cantidad de ${d.nombre}`}
                           onChange={(e) => void cambiarDoc(d, { cantidad: Number(e.target.value) || 1 })}
