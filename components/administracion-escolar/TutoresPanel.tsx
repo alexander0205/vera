@@ -13,6 +13,7 @@ import {
 import { NativeSelect } from '@/components/ui/native-select';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { Plus, Pencil, X, Loader2, Camera, User, Wallet } from 'lucide-react';
+import { fmtDocumento } from '@/lib/utils/format';
 
 export interface TutorVinculo {
   id: number;
@@ -323,7 +324,7 @@ export function TutoresPanel({
                             </span>
                           )}
                         </div>
-                        {t.documento && <span className="text-xs text-gray-400">Cédula: {t.documento}</span>}
+                        {t.documento && <span className="text-xs text-gray-400">Cédula: {fmtDocumento(t.documento)}</span>}
                       </div>
                     </div>
                   </td>
@@ -389,7 +390,7 @@ export function TutoresPanel({
                   <option value="" disabled>Selecciona un tutor</option>
                   {disponibles.map((t) => (
                     <option key={t.id} value={String(t.id)}>
-                      {t.nombre}{t.documento ? ` · ${t.documento}` : ''}
+                      {t.nombre}{t.documento ? ` · ${fmtDocumento(t.documento)}` : ''}
                     </option>
                   ))}
                 </NativeSelect>
@@ -399,7 +400,7 @@ export function TutoresPanel({
                     <TutorAvatar nombre={tutorPreview.nombre} imagen={tutorPreview.imagen} size="lg" />
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 truncate">{tutorPreview.nombre}</p>
-                      <p className="text-xs text-gray-500">Cédula: {tutorPreview.documento || '—'}</p>
+                      <p className="text-xs text-gray-500">Cédula: {fmtDocumento(tutorPreview.documento) || '—'}</p>
                       {tutorPreview.telefono && <p className="text-xs text-gray-500">{tutorPreview.telefono}</p>}
                       {tutorPreview.whatsapp && (
                         <p className="text-xs text-gray-500">WhatsApp: {tutorPreview.whatsapp}</p>

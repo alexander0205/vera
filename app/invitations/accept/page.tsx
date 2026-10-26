@@ -143,7 +143,7 @@ export default async function AcceptInvitationPage({
           {!hasAccount && (
             <TextField
               name="nombre"
-              label={<>Tu nombre <Box component="span" sx={{ color: '#ef4444' }}>*</Box></>}
+              label="Tu nombre"
               required
               size="small"
               fullWidth
@@ -158,7 +158,7 @@ export default async function AcceptInvitationPage({
           <TextField
             name="password"
             type="password"
-            label={<>{hasAccount ? 'Contraseña' : 'Crear contraseña'} <Box component="span" sx={{ color: '#ef4444' }}>*</Box></>}
+            label={hasAccount ? 'Contraseña' : 'Crear contraseña'}
             required
             size="small"
             fullWidth

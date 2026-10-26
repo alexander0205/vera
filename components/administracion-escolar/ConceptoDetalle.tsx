@@ -314,7 +314,16 @@ export function ConceptoDetalle({
    * que hace que una evaluación trimestral deje de nacer descontando beca.
    */
   const cambiarTipo = (tipo: TipoDeConcepto) =>
-    setBorrador((b) => (b ? { ...b, tipo, categoria: null, admiteBeca: becaPorDefecto(tipo) } : b));
+    setBorrador((b) => (b ? {
+      ...b,
+      tipo,
+      categoria: null,
+      admiteBeca: becaPorDefecto(tipo),
+      // La colegiatura se cobra cada mes: elegirla enciende la recurrencia si
+      // estaba en «una sola vez». Un cobro único de colegiatura no existe, y
+      // dejarlo así hacía que la colegiatura naciera sin calendario ni cuotas.
+      frecuencia: tipo === 'mensualidad' && b.frecuencia === 'unico' ? 'mensual' : b.frecuencia,
+    } : b));
 
   /**
    * Una categoría propia («Servicios», «Transporte»…) se cobra como «Otro

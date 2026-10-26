@@ -84,24 +84,38 @@ export function MatriculaLoteDialog({ open, onClose, onSaved }: Props) {
     setBusqueda(''); setSeleccion(new Set());
     setRevision(null); setResultado(null); setError(null);
 
+    // Los estudiantes NO van aquí: se piden por período (abajo), porque la lista
+    // depende de quién ya está matriculado en ese año.
     void (async () => {
-      const [p, c, e, l] = await Promise.all([
+      const [p, c, l] = await Promise.all([
         fetch('/api/administracion-escolar/periodos').then((r) => r.json()),
         fetch('/api/administracion-escolar/cursos').then((r) => r.json()),
-        fetch('/api/administracion-escolar/estudiantes/opciones').then((r) => r.json()),
         fetch('/api/administracion-escolar/documentos/listas')
           .then((r) => (r.ok ? r.json() : { listas: [] })).catch(() => ({ listas: [] })),
       ]);
       const lista: Periodo[] = p.periodos ?? [];
       setPeriodos(lista);
       setCursos(c.cursos ?? []);
-      setEstudiantes(e.estudiantes ?? []);
       setListasDoc(l.listas ?? []);
       // Se matricula al año que va a empezar: el período activo queda puesto.
       const activo = lista.find((x) => x.activo);
       if (activo) setPeriodoId((v) => v || String(activo.id));
     })();
   }, [open]);
+
+  // La lista de estudiantes es por período: excluye a los que YA tienen
+  // matrícula activa en ese año (antes salían y la revisión los rebotaba como
+  // «ya matriculados»). Al cambiar de período, lo seleccionado antes ya no vale.
+  useEffect(() => {
+    if (!open || !periodoId) { setEstudiantes([]); return; }
+    let vivo = true;
+    void fetch(`/api/administracion-escolar/estudiantes/opciones?periodoId=${periodoId}`)
+      .then((r) => r.json())
+      .then((d) => { if (vivo) setEstudiantes(d.estudiantes ?? []); })
+      .catch(() => { if (vivo) setEstudiantes([]); });
+    setSeleccion(new Set());
+    return () => { vivo = false; };
+  }, [open, periodoId]);
 
   const cursosActivos = useMemo(
     () => cursos.filter((c) => c.activo !== false && c.gradoActivo !== false && c.servicioActivo !== false),
