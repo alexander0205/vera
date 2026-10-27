@@ -1,11 +1,12 @@
 /**
- * lib/administracion-escolar/tareas.ts — las tareas por revisar de un alumno y
- * de su familia, con su conversación.
+ * lib/administracion-escolar/tareas.ts — las tareas por revisar de un alumno,
+ * de su familia o del colegio, con su conversación.
  *
- * Una tarea es de un alumno o de toda su familia. La familia es el responsable
- * de pago (`facturar_a_client_id`): la de un alumno guarda también ese
- * responsable, para que salga al mirar a la familia entera desde cualquiera de
- * los hermanos. Las reglas sin base de datos están en `tareas-reglas.ts`.
+ * Una tarea es de un alumno, de toda su familia o del colegio (sin alumno ni
+ * familia: se crean desde «Por revisar»). La familia es el responsable de pago
+ * (`facturar_a_client_id`): la de un alumno guarda también ese responsable,
+ * para que salga al mirar a la familia entera desde cualquiera de los
+ * hermanos. Las reglas sin base de datos están en `tareas-reglas.ts`.
  */
 import 'server-only';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
@@ -16,7 +17,7 @@ import {
 import { SOPORTE } from '@/lib/config/soporte';
 import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
 import {
-  aQuienAvisar, etiquetaAsignada, textoEvento, type AutorTarea, type AvisoTarea, type NuevaTarea,
+  aQuienAvisar, DE_COLEGIO, etiquetaAsignada, textoEvento, type AutorTarea, type AvisoTarea, type NuevaTarea,
 } from './tareas-reglas';
 
 export interface FamiliaDeAlumno {
@@ -146,15 +147,16 @@ export async function listarTareas(
   });
 }
 
+/** `fam` es null en una tarea del colegio: no lleva alumno ni familia. */
 export async function crearTarea(
-  teamId: number, fam: FamiliaDeAlumno, autor: AutorTarea, t: NuevaTarea,
+  teamId: number, fam: FamiliaDeAlumno | null, autor: AutorTarea, t: NuevaTarea,
   personaNombre: string | null, ia?: { origenClave: string; cargoId: number | null },
 ) {
   return db.transaction(async (tx) => {
     const [fila] = await tx.insert(adminEscolarTareas).values({
       teamId,
-      estudianteId: t.alcance === 'familia' && fam.clientId != null ? null : fam.estudianteId,
-      clientId: fam.clientId,
+      estudianteId: !fam || (t.alcance === 'familia' && fam.clientId != null) ? null : fam.estudianteId,
+      clientId: fam?.clientId ?? null,
       titulo: t.titulo,
       descripcion: t.descripcion,
       asignadaA: t.asignadaA,
@@ -180,6 +182,10 @@ export async function crearTarea(
   });
 }
 
+/** De quién es, como se lee en la lista y en el correo. */
+const deQuien = (estudianteId: number | null, clientId: number | null, alumno: string | null) =>
+  estudianteId != null ? (alumno ?? 'Alumno') : clientId != null ? 'Toda la familia' : DE_COLEGIO;
+
 /** Una tarea del colegio con su conversación, o null si no es de este colegio. */
 export async function leerTarea(teamId: number, id: number) {
   const persona = sql<string | null>`(SELECT coalesce(nullif(trim(u.name), ''), u.email) FROM users u WHERE u.id = ${adminEscolarTareas.asignadaUserId})`;
@@ -191,7 +197,7 @@ export async function leerTarea(teamId: number, id: number) {
     ORDER BY (e.estado = 'activo') DESC, e.id LIMIT 1))`;
   const [t] = await db.select({
     id: adminEscolarTareas.id, titulo: adminEscolarTareas.titulo, descripcion: adminEscolarTareas.descripcion,
-    estado: adminEscolarTareas.estado, estudianteId: adminEscolarTareas.estudianteId, alumno, fichaId,
+    estado: adminEscolarTareas.estado, estudianteId: adminEscolarTareas.estudianteId, clientId: adminEscolarTareas.clientId, alumno, fichaId,
     asignadaA: adminEscolarTareas.asignadaA, persona, documento: ecfDocuments.codigo,
     ecfDocumentId: adminEscolarTareas.ecfDocumentId, creadaPorIa: adminEscolarTareas.creadaPorIa,
     venceEl: adminEscolarTareas.venceEl,
@@ -210,7 +216,7 @@ export async function leerTarea(teamId: number, id: number) {
     .orderBy(asc(adminEscolarTareaMensajes.creadoEn), asc(adminEscolarTareaMensajes.id));
   return {
     id: t.id, titulo: t.titulo, descripcion: t.descripcion, estado: t.estado,
-    de: t.estudianteId == null ? 'Toda la familia' : (t.alumno ?? 'Alumno'),
+    de: deQuien(t.estudianteId, t.clientId, t.alumno),
     fichaId: t.fichaId,
     asignada: etiquetaAsignada(t.asignadaA, t.persona),
     documento: t.documento ?? null, ecfDocumentId: t.ecfDocumentId,
@@ -371,6 +377,9 @@ export interface FamiliaConTareas {
   tareas: TareaDelColegio[];
 }
 
+/** El grupo de las tareas sin alumno ni familia. */
+export const CLAVE_COLEGIO = 'colegio';
+
 const nombreCorto = (nombres: string) => {
   const p = nombres.trim().split(/\s+/)[0] ?? '';
   return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
@@ -387,6 +396,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
     ia: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.creadaPorIa})::int`,
     viejas: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.creadoEn} < now() - interval '7 days')::int`,
     familias: sql<number>`count(distinct coalesce(${t.clientId}::text, 'e' || ${t.estudianteId}::text)) filter (where ${t.estado} = 'abierta')::int`,
+    colegio: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.clientId} is null and ${t.estudianteId} is null)::int`,
   }).from(t).where(eq(t.teamId, teamId));
 
   const condiciones = [eq(t.teamId, teamId)];
@@ -439,35 +449,39 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
 
   const familias = new Map<string, FamiliaConTareas>();
   for (const x of filas) {
-    const clave = x.clientId != null ? `c${x.clientId}` : `e${x.estudianteId}`;
+    // Las que no son de ningún alumno ni familia van juntas en «Del colegio».
+    const clave = x.clientId != null ? `c${x.clientId}` : x.estudianteId != null ? `e${x.estudianteId}` : CLAVE_COLEGIO;
     const alumno = x.nombres ? nombreCorto(x.nombres) : null;
     let fam = familias.get(clave);
     if (!fam) {
       const hs = x.clientId != null ? (porFamilia.get(x.clientId) ?? []) : [];
       fam = {
         clave,
-        nombre: x.responsable ?? (x.nombres ? `${x.nombres} ${x.apellidos ?? ''}`.trim() : 'Sin responsable'),
+        nombre: clave === CLAVE_COLEGIO ? DE_COLEGIO
+          : x.responsable ?? (x.nombres ? `${x.nombres} ${x.apellidos ?? ''}`.trim() : 'Sin responsable'),
         alumnos: enLista(hs.length ? hs.map((h) => h.nombre) : (alumno ? [alumno] : [])),
         estudianteId: x.estudianteId ?? hs[0]?.id ?? null,
-        abiertas: abiertasPor.get(clave) ?? 0,
+        abiertas: clave === CLAVE_COLEGIO ? (c?.colegio ?? 0) : (abiertasPor.get(clave) ?? 0),
         tareas: [],
       };
       familias.set(clave, fam);
     }
-    if (x.clientId == null && x.estado === 'abierta') fam.abiertas += 1;
+    if (x.clientId == null && clave !== CLAVE_COLEGIO && x.estado === 'abierta') fam.abiertas += 1;
     fam.tareas.push({
       id: x.id, titulo: x.titulo, descripcion: x.descripcion, estado: x.estado as TareaDelColegio['estado'],
-      de: x.estudianteId == null ? 'Toda la familia' : (alumno ?? 'Alumno'),
+      de: deQuien(x.estudianteId, x.clientId, alumno),
       asignadaA: x.asignadaA, asignada: etiquetaAsignada(x.asignadaA, x.persona),
       documento: x.documento ?? null, creadaPorIa: x.creadaPorIa,
       creadoEn: x.creadoEn.toISOString(), actualizadoEn: x.actualizadoEn.toISOString(),
     });
   }
 
+  // Las del colegio arriba: no tienen ficha a la que ir, y abajo se pierden entre las familias.
+  const grupos = [...familias.values()].sort((a, b) => Number(b.clave === CLAVE_COLEGIO) - Number(a.clave === CLAVE_COLEGIO));
   return {
     cuentas: { mias: c?.mias ?? 0, todas: c?.abiertas ?? 0, hechas: c?.hechas ?? 0 },
-    kpis: { abiertas: c?.abiertas ?? 0, familias: c?.familias ?? 0, mias: c?.mias ?? 0, ia: c?.ia ?? 0, viejas: c?.viejas ?? 0 },
-    familias: [...familias.values()],
+    kpis: { abiertas: c?.abiertas ?? 0, familias: c?.familias ?? 0, colegio: c?.colegio ?? 0, mias: c?.mias ?? 0, ia: c?.ia ?? 0, viejas: c?.viejas ?? 0 },
+    familias: grupos,
   };
 }
 

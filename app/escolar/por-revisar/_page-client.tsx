@@ -4,9 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
-import { Check, Loader2, Sparkles } from 'lucide-react';
+import { Check, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { PanelTarea, Segmento, traer } from '@/components/administracion-escolar/TareasEstudiante';
+import { PanelNuevaTarea, PanelTarea, Segmento, traer } from '@/components/administracion-escolar/TareasEstudiante';
 import { refrescarCampana } from '@/components/administracion-escolar/CampanaTareas';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
@@ -19,8 +19,10 @@ import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-esc
  * quien tiene que decidir y no sabe todavía de qué alumno. Por defecto, las
  * que le tocan a quien mira. Las tareas van agrupadas por familia porque así
  * llegan los casos: un pago de más de un hermano se arregla con la factura del
- * otro. Cada tarea se abre en el mismo panel de conversación que en la ficha,
- * y se completa sin abrirla con la casilla.
+ * otro; las que no son de nadie van arriba, en «Del colegio». Cada tarea se
+ * abre en el mismo panel de conversación que en la ficha, y se completa sin
+ * abrirla con la casilla. «Nueva tarea» crea una aquí mismo, del colegio o de
+ * un alumno que se busca en el formulario.
  */
 
 type Vista = 'mias' | 'todas' | 'hechas';
@@ -29,7 +31,7 @@ type Origen = 'todas' | 'ia' | 'personas';
 interface Respuesta {
   familias: FamiliaConTareas[];
   cuentas: { mias: number; todas: number; hechas: number };
-  kpis: { abiertas: number; familias: number; mias: number; ia: number; viejas: number };
+  kpis: { abiertas: number; familias: number; colegio: number; mias: number; ia: number; viejas: number };
 }
 
 const DIA = 86_400_000;
@@ -38,6 +40,15 @@ function edad(t: TareaDelColegio) {
   const dias = Math.floor((Date.now() - new Date(t.creadoEn).getTime()) / DIA);
   const texto = dias <= 0 ? 'Hoy' : dias === 1 ? 'Ayer' : `Hace ${dias} días`;
   return { texto, clase: dias >= 7 ? 'text-red-700' : 'text-gray-600' };
+}
+
+/** «en 3 familias y 1 del colegio», «1 del colegio», «en 0 familias». */
+function dondeEstan(familias: number, colegio: number) {
+  const partes = [
+    familias || !colegio ? `en ${familias} ${familias === 1 ? 'familia' : 'familias'}` : '',
+    colegio ? `${colegio} del colegio` : '',
+  ].filter(Boolean);
+  return partes.join(' y ');
 }
 
 const inicialesDe = (asignada: string) => {
@@ -58,6 +69,7 @@ export default function PorRevisarClient() {
   const [asignada, setAsignada] = useState('');
   const [cambiando, setCambiando] = useState<number | null>(null);
   const [revisando, setRevisando] = useState(false);
+  const [creando, setCreando] = useState(false);
 
   // La tarea abierta vive en la URL: es lo que trae el enlace del correo.
   const abierta = Number(sp.get('tarea')) || null;
@@ -114,24 +126,31 @@ export default function PorRevisarClient() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Por revisar</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Lo que alguien tiene que decidir o arreglar, de todas las familias del colegio.
-            Las tareas se crean desde la ficha de cada alumno.
+            Lo que alguien tiene que decidir o arreglar en el colegio y en sus familias.
           </p>
         </div>
-        {/* Zero AI mira los cargos y las facturas y abre una tarea por cada
-            cosa que alguien tiene que decidir: un pago de más guardado, un mes
-            cobrado dos veces, una factura que no cubre su cargo. */}
-        {ZERO_AI_TAREAS && puedeGestionar && (
-          <button type="button" onClick={() => void revisarConIa()} disabled={revisando}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60">
-            {revisando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {revisando ? 'Revisando…' : 'Revisar con Zero AI'}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Zero AI mira los cargos y las facturas y abre una tarea por cada
+              cosa que alguien tiene que decidir: un pago de más guardado, un mes
+              cobrado dos veces, una factura que no cubre su cargo. */}
+          {ZERO_AI_TAREAS && puedeGestionar && (
+            <button type="button" onClick={() => void revisarConIa()} disabled={revisando}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-60">
+              {revisando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {revisando ? 'Revisando…' : 'Revisar con Zero AI'}
+            </button>
+          )}
+          {puedeGestionar && (
+            <button type="button" onClick={() => setCreando(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-zero-600 px-3 text-sm font-semibold text-white hover:bg-zero-700">
+              <Plus className="h-4 w-4" />Nueva tarea
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={`grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white ${ZERO_AI_TAREAS ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        <Kpi titulo="Abiertas" valor={k?.abiertas} nota={k ? `en ${k.familias} ${k.familias === 1 ? 'familia' : 'familias'}` : ''} resalte={!!k?.abiertas} />
+        <Kpi titulo="Abiertas" valor={k?.abiertas} resalte={!!k?.abiertas} nota={k ? dondeEstan(k.familias, k.colegio) : ''} />
         <Kpi titulo="Asignadas a ti" valor={k?.mias} nota="con tu nombre" />
         {ZERO_AI_TAREAS && <Kpi titulo="Sugeridas por Zero AI" valor={k?.ia} nota="las encontró al revisar facturas" />}
         <Kpi titulo="Más de una semana" valor={k?.viejas} nota={k?.viejas ? 'conviene moverlas' : 'nada atrasado'} alerta={!!k?.viejas} />
@@ -225,6 +244,15 @@ export default function PorRevisarClient() {
 
       <PanelTarea tareaId={abierta} puedeGestionar={puedeGestionar}
         onCerrar={() => abrir(null)} onCambio={() => void mutate()} />
+      <PanelNuevaTarea abierto={creando} onCerrar={() => setCreando(false)}
+        onCreada={(id) => {
+          setCreando(false);
+          // Se ve en «Todo el colegio» aunque no sea de quien la crea.
+          if (vista === 'hechas') setVista('todas');
+          void mutate();
+          refrescarCampana();
+          abrir(id);
+        }} />
     </section>
   );
 }

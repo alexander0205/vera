@@ -13,7 +13,7 @@
 
 import { resend, assertSent } from '@/lib/email';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
-import type { AvisoTarea } from '@/lib/administracion-escolar/tareas-reglas';
+import { DE_COLEGIO, type AvisoTarea } from '@/lib/administracion-escolar/tareas-reglas';
 
 const DE = 'Zero <noreply@zero.com.do>';
 const AZUL = '#2a45c4';
@@ -68,7 +68,8 @@ const PIE = 'Este correo no se responde: escribe en la tarea y la respuesta le l
 export function armarCorreoTarea(d: DatosAvisoTarea): CorreoTarea {
   const { asunto, intro } = redactar(d);
   const url = urlDeTarea(d.tareaId);
-  const meta = [`De: ${d.de}`, `Asignada a ${d.asignada}`, ...(d.documento ? [d.documento] : [])].join(' · ');
+  // «Del colegio» ya se lee solo; «De: Del colegio» no.
+  const meta = [d.de === DE_COLEGIO ? d.de : `De: ${d.de}`, `Asignada a ${d.asignada}`, ...(d.documento ? [d.documento] : [])].join(' · ');
   const texto = d.texto ? recortar(d.texto, 1200) : null;
 
   const html = `
