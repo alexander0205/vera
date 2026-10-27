@@ -6,7 +6,7 @@ import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import { ArrowLeft, Bell, Check, ExternalLink, Loader2, Plus, Sparkles, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Asignacion } from '@/lib/administracion-escolar/tareas-reglas';
+import { DE_COLEGIO, type Asignacion } from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { refrescarCampana } from './CampanaTareas';
 
@@ -17,7 +17,8 @@ import { refrescarCampana } from './CampanaTareas';
  * a la derecha. Ahí está la lista (abiertas o el historial), y cada tarea se
  * lleva como una conversación: lo que se dijo, quién la creó, quién la marcó
  * como completada. Las tareas las crea una persona del colegio, el equipo de
- * Zero (firma «Soporte IT · Zero») o Zero AI.
+ * Zero (firma «Soporte IT · Zero») o Zero AI. El formulario de una tarea nueva
+ * también lo usa «Por revisar», donde la tarea puede ser del colegio.
  */
 
 interface Conteo { alumno: number; familia: number }
@@ -212,8 +213,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
           )}
 
           {vista.tipo === 'nueva' && (
-            <NuevaTarea estudianteId={estudianteId} nombre={nombre}
-              familiaPosible={dataLista?.familia.tieneResponsable ?? true}
+            <NuevaTarea alumnoFijo={{ id: estudianteId, nombre, familiaPosible: dataLista?.familia.tieneResponsable ?? true }}
               onCreada={(id) => { refrescar(); setVista({ tipo: 'hilo', id }); }} />
           )}
         </div>
@@ -336,11 +336,20 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
   );
 }
 
-function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
-  estudianteId: number; nombre: string; familiaPosible: boolean; onCreada: (id: number) => void;
+interface AlumnoDeTarea { id: number; nombre: string; familiaPosible: boolean }
+
+/**
+ * El formulario de una tarea nueva. Desde la ficha, el alumno ya viene
+ * (`alumnoFijo`). Desde «Por revisar» no: la tarea puede ser del colegio, sin
+ * nadie («llamar al proveedor de uniformes»), o de un alumno que se busca ahí.
+ */
+function NuevaTarea({ alumnoFijo, onCreada }: {
+  alumnoFijo?: AlumnoDeTarea; onCreada: (id: number) => void;
 }) {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [delColegio, setDelColegio] = useState(!alumnoFijo);
+  const [alumno, setAlumno] = useState<AlumnoDeTarea | null>(alumnoFijo ?? null);
   const [alcance, setAlcance] = useState<'alumno' | 'familia'>('alumno');
   const [asignadaA, setAsignadaA] = useState<Asignacion>('persona');
   const [persona, setPersona] = useState('');
@@ -350,8 +359,8 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
   const { data: dataPersonas } = useSWR<{ personas: { id: number; nombre: string }[] }>(
     asignadaA === 'persona' ? '/api/administracion-escolar/tareas/personas' : null, traer);
   const { data: dataDocs } = useSWR<{ documentos: DocumentoFamilia[] }>(
-    `/api/administracion-escolar/tareas/facturas?estudianteId=${estudianteId}`, traer);
-  const documentos = dataDocs?.documentos ?? [];
+    !delColegio && alumno ? `/api/administracion-escolar/tareas/facturas?estudianteId=${alumno.id}` : null, traer);
+  const documentos = !delColegio && alumno ? (dataDocs?.documentos ?? []) : [];
 
   const opciones: { id: Asignacion; texto: string; detalle: string }[] = [
     { id: 'soporte', texto: 'Soporte IT · Zero', detalle: 'El equipo de Zero lo revisa' },
@@ -364,9 +373,11 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
       const res = await fetch('/api/administracion-escolar/tareas', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          estudianteId, alcance, titulo, descripcion, asignadaA,
+          estudianteId: delColegio ? null : alumno?.id ?? null,
+          alcance: delColegio ? 'colegio' : alcance,
+          titulo, descripcion, asignadaA,
           asignadaUserId: asignadaA === 'persona' ? Number(persona) || null : null,
-          ecfDocumentId: Number(documento) || null,
+          ecfDocumentId: delColegio ? null : Number(documento) || null,
           venceEl: venceEl || null,
         }),
       });
@@ -385,7 +396,7 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium text-gray-700">Qué hay que revisar *</span>
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={160} autoFocus
-            placeholder="Ej.: Decidir qué hacer con RD$3,000 de pago de más"
+            placeholder={delColegio ? 'Ej.: Llamar al proveedor de uniformes' : 'Ej.: Decidir qué hacer con RD$3,000 de pago de más'}
             className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
         </label>
         <label className="block space-y-1.5 text-sm">
@@ -394,11 +405,29 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
             placeholder="Lo que se sabe y lo que hay que decidir. Queda como el primer mensaje de la conversación."
             className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
         </label>
-        {familiaPosible && (
+        {!alumnoFijo && (
           <div className="space-y-1.5 text-sm">
             <span className="font-medium text-gray-700">De quién es</span>
-            <div><Segmento etiqueta="De quién es" valor={alcance} onCambio={setAlcance}
-              opciones={[{ id: 'alumno', texto: nombre }, { id: 'familia', texto: 'Toda la familia' }]} /></div>
+            <div><Segmento etiqueta="De quién es la tarea" valor={delColegio ? 'colegio' : 'alumno'}
+              onCambio={(v) => setDelColegio(v === 'colegio')}
+              opciones={[{ id: 'colegio', texto: DE_COLEGIO }, { id: 'alumno', texto: 'De un alumno o su familia' }]} /></div>
+            {delColegio && <span className="block text-xs text-gray-500">No es de ningún alumno: sale en «Por revisar», en el grupo {DE_COLEGIO}.</span>}
+            {!delColegio && (alumno
+              ? (
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{alumno.nombre}</span>
+                  <button type="button" onClick={() => { setAlumno(null); setAlcance('alumno'); setDocumento(''); }}
+                    className="text-xs font-medium text-zero-700 hover:underline">Cambiar</button>
+                </div>
+              )
+              : <BuscarAlumno onElegir={setAlumno} />)}
+          </div>
+        )}
+        {!delColegio && alumno?.familiaPosible && (
+          <div className="space-y-1.5 text-sm">
+            {alumnoFijo && <span className="font-medium text-gray-700">De quién es</span>}
+            <div><Segmento etiqueta="Del alumno o de la familia" valor={alcance} onCambio={setAlcance}
+              opciones={[{ id: 'alumno', texto: alumno.nombre.split(' ')[0] }, { id: 'familia', texto: 'Toda la familia' }]} /></div>
           </div>
         )}
         <div className="space-y-1.5 text-sm">
@@ -444,12 +473,69 @@ function NuevaTarea({ estudianteId, nombre, familiaPosible, onCreada }: {
       </div>
       <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-3">
         <button type="button" onClick={() => void crear()}
-          disabled={guardando || !titulo.trim() || (asignadaA === 'persona' && !persona)}
+          disabled={guardando || !titulo.trim() || (asignadaA === 'persona' && !persona) || (!delColegio && !alumno)}
           className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
           {guardando && <Loader2 className="h-4 w-4 animate-spin" />}Crear tarea
         </button>
       </div>
     </>
+  );
+}
+
+/** Busca un alumno del colegio por nombre, código o responsable. */
+function BuscarAlumno({ onElegir }: { onElegir: (a: AlumnoDeTarea) => void }) {
+  const [q, setQ] = useState('');
+  const texto = q.trim();
+  const { data, isLoading } = useSWR<{ estudiantes: { id: number; origen: string; nombres: string; apellidos: string; cursoActual: string | null; contacto: string | null }[] }>(
+    texto.length >= 2 ? `/api/administracion-escolar/estudiantes?q=${encodeURIComponent(texto)}&estado=activo&limit=8` : null,
+    traer, { keepPreviousData: true });
+  // Los beneficiarios de Contactos todavía no son alumnos: no tienen ficha.
+  const alumnos = texto.length >= 2 ? (data?.estudiantes ?? []).filter((e) => e.origen !== 'dependiente') : [];
+  return (
+    <div className="space-y-1">
+      <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar alumno"
+        placeholder="Buscar alumno por nombre, código o responsable…"
+        className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
+      {texto.length >= 2 && (
+        <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+          {isLoading && alumnos.length === 0 && <p className="px-3 py-2 text-xs text-gray-500">Buscando…</p>}
+          {!isLoading && alumnos.length === 0 && <p className="px-3 py-2 text-xs text-gray-500">Ningún alumno activo con «{texto}».</p>}
+          {alumnos.map((e) => (
+            <button key={e.id} type="button"
+              onClick={() => onElegir({ id: e.id, nombre: `${e.nombres} ${e.apellidos}`.trim(), familiaPosible: e.contacto != null })}
+              className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-gray-50">
+              <span className="text-sm font-medium text-gray-900">{`${e.nombres} ${e.apellidos}`.trim()}</span>
+              <span className="text-xs text-gray-500">{[e.cursoActual, e.contacto].filter(Boolean).join(' · ') || 'Sin matrícula activa'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * «Nueva tarea» desde «Por revisar»: del colegio o de un alumno que se busca
+ * ahí. Al crearla se abre su conversación.
+ */
+export function PanelNuevaTarea({ abierto, onCerrar, onCreada }: {
+  abierto: boolean; onCerrar: () => void; onCreada: (id: number) => void;
+}) {
+  return (
+    <Drawer anchor="right" open={abierto} onClose={onCerrar} keepMounted={false}
+      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 520 } } } }}>
+      <div className="flex h-full flex-col">
+        <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold text-gray-900">Nueva tarea</h2>
+            <p className="text-xs text-gray-500">Algo que alguien tiene que decidir o arreglar</p>
+          </div>
+          <button type="button" onClick={onCerrar} aria-label="Cerrar"
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+        </div>
+        <NuevaTarea onCreada={onCreada} />
+      </div>
+    </Drawer>
   );
 }
 

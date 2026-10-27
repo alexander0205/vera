@@ -24,6 +24,12 @@ describe('el correo de una tarea', () => {
     expect(c.texto).toContain('¿Sala de tarea de septiembre o saldo a favor?');
   });
 
+  it('una tarea del colegio dice «Del colegio», sin «De:»', () => {
+    const c = armarCorreoTarea({ ...base, de: 'Del colegio', documento: null });
+    expect(c.texto).toContain('Del colegio · Asignada a Lizandro');
+    expect(c.texto).not.toContain('De: Del colegio');
+  });
+
   it('cada cambio tiene su asunto', () => {
     expect(armarCorreoTarea({ ...base, aviso: 'mensaje', autor: 'Lizandro' }).asunto).toMatch(/^Lizandro respondió: /);
     expect(armarCorreoTarea({ ...base, aviso: 'completada' }).asunto).toMatch(/^Completada: /);
