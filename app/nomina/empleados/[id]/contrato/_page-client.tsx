@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +30,10 @@ const ESTADO_CONTRATO: Record<string, { label: string; variant: 'default' | 'sec
 
 export default function ContratoEmpleadoClient({ id }: { id: string }) {
   const router = useRouter();
+  const ruta = useRutaNomina();
   const { can } = usePermissions();
   const puedeGestionar = can('empleados:gestionar');
-  const volver = () => router.push('/nomina/empleados');
+  const volver = () => router.push(ruta('/empleados'));
 
   const { data: dEmpleado, isLoading } = useSWR<{ empleado?: Empleado }>(
     `/api/nomina/empleados/${id}`, fetcher,
