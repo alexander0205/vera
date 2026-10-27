@@ -583,7 +583,7 @@ export async function dashboardDelPeriodo(
           filtros.gradoId ? sql` AND g.id = ${filtros.gradoId}` : sql``}
       ),
       tarifa AS (
-        SELECT mat.id AS matricula_id, mat.desde, co.id AS concepto_id, co.tipo,
+        SELECT mat.id AS matricula_id, mat.desde, co.id AS concepto_id, co.tipo, co.precio_por_cuota,
                CASE
                  -- El monto fijo es la mensualidad pactada: solo a la generación,
                  -- si se conoce (como becaAplica en lib/.../tarifas.ts).
@@ -622,8 +622,11 @@ export async function dashboardDelPeriodo(
         WHERE team_id = ${teamId} AND periodo_id = ${periodoId} AND activo
         GROUP BY 1
       )
+      -- Lo de CADA cuota o un total que se reparte: la regla de
+      -- \`precioEsPorCuota\` (repartir.ts). Con solo «mensualidad», un almuerzo
+      -- de 3,000 al mes contaba 300 por cuota.
       SELECT COALESCE(SUM(
-        CASE WHEN t.tipo = 'mensualidad' THEN t.monto
+        CASE WHEN COALESCE(t.precio_por_cuota, t.tipo NOT IN ('inscripcion', 'actividad', 'uniforme')) THEN t.monto
              ELSE round(t.monto * q.porcentaje_milesimas / NULLIF(pe.total, 0)) END
       ), 0)::bigint AS centavos
       FROM tarifa t
