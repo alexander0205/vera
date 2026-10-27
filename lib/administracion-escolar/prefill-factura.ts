@@ -1,6 +1,9 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { armarPlanDeCobro } from './plan-cobro';
+import { cargarPlan } from './plan-matricula';
+import { previstosDelPlan } from './previstos';
+import { claveDePrevisto } from './clave-previsto';
 import { contextoDeSeccion, resolverTarifa } from './tarifas';
 import {
   adminEscolarCargos,
@@ -77,6 +80,14 @@ export interface OpcionCargo {
    */
   previstoCuotaId?: number;
   conceptoId?: number;
+  /** De qué matrícula es la cuota prevista (las de `futuros`). */
+  matriculaId?: number;
+  /**
+   * Un mes que todavía no salió, ofrecido para cobrarlo por adelantado. Su
+   * línea lleva una clave `p<matrícula>.<cuota>` y el cargo lo crea la emisión
+   * al guardar la factura (ver `adelantarPrevistosDeFactura`).
+   */
+  adelantado?: boolean;
   /** Venía en la petición: sale marcado en el modal. */
   seleccionado: boolean;
   concepto: string;
@@ -147,10 +158,20 @@ export interface PrevistoPedido {
   conceptoId: number;
 }
 
+export interface OpcionesPrefill {
+  /**
+   * Entrar por un alumno cuando no hay ningún cargo que pedir: la familia ya
+   * lo tiene todo facturado y lo que queda son meses que todavía no salen.
+   */
+  estudianteId?: number;
+  /** Ofrecer también los meses que todavía no son cargo, de todos los conceptos de cada hijo. */
+  futuros?: boolean;
+}
+
 export async function prefillDeCargos(
-  teamId: number, cargoIds: number[], previsto?: PrevistoPedido,
+  teamId: number, cargoIds: number[], previsto?: PrevistoPedido, opts: OpcionesPrefill = {},
 ): Promise<{ ok: true; datos: PrefillFactura } | PrefillError> {
-  if (cargoIds.length === 0 && !previsto) {
+  if (cargoIds.length === 0 && !previsto && !opts.estudianteId) {
     return { ok: false, status: 400, error: 'No se indicó ningún cargo' };
   }
 
@@ -190,6 +211,22 @@ export async function prefillDeCargos(
     if (baseMatriculaId != null && baseMatriculaId !== m.id) {
       return { ok: false, status: 400, error: 'La cuota es de otra matrícula' };
     }
+    baseEstudianteId = m.estudianteId;
+    baseMatriculaId = m.id;
+  }
+  // Solo el alumno: su matrícula activa (la más reciente) hace de ancla.
+  if (baseEstudianteId == null && opts.estudianteId) {
+    const [m] = await db
+      .select({ id: adminEscolarMatriculas.id, estudianteId: adminEscolarMatriculas.estudianteId })
+      .from(adminEscolarMatriculas)
+      .where(and(
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.estudianteId, opts.estudianteId),
+        eq(adminEscolarMatriculas.estado, 'activa'),
+      ))
+      .orderBy(desc(adminEscolarMatriculas.id))
+      .limit(1);
+    if (!m) return { ok: false, status: 404, error: 'El alumno no tiene matrícula activa' };
     baseEstudianteId = m.estudianteId;
     baseMatriculaId = m.id;
   }
@@ -673,6 +710,18 @@ export async function prefillDeCargos(
     });
   }
 
+  // Los meses que todavía no salieron, de TODOS los conceptos de cada hijo
+  // (mensualidad y otros cargos con calendario), para cobrarlos por adelantado
+  // sin pasar por «Adelantar». Mismo plan que el devengo: el monto y la fecha
+  // son los que tendría el cargo cuando le toque.
+  if (opts.futuros) {
+    opciones.push(...await cuotasFuturas({
+      teamId, alumnos, dependientePorAlumno,
+      yaPedido: previsto ? { matriculaId: previsto.matriculaId, cuotaId: previsto.cuotaId } : null,
+      prodMap,
+    }));
+  }
+
   // Primero agrupado por hijo —el del clic arriba, que es lo que se vino a
   // hacer— y dentro de cada uno los meses en orden, con lo que no cae en ningún
   // mes al final: leer "Diciembre, Evaluaciones, Inscripción, Febrero" no tiene
@@ -710,4 +759,108 @@ export async function prefillDeCargos(
       advertencias,
     },
   };
+}
+
+/**
+ * Las cuotas que todavía no son cargo, de las matrículas activas de estos
+ * alumnos. Solo las que tienen calendario (una cuota con id): un concepto sin
+ * calendario se cobra al matricular y no tiene mes que adelantar.
+ */
+async function cuotasFuturas(args: {
+  teamId: number;
+  alumnos: { id: number; nombres: string; apellidos: string | null }[];
+  dependientePorAlumno: Map<number, { id: number; nombre: string } | null>;
+  yaPedido: { matriculaId: number; cuotaId: number } | null;
+  prodMap: Map<number, { id: number; nombre: string; tasaItbis: string; tipo: string }>;
+}): Promise<OpcionCargo[]> {
+  const { teamId, alumnos } = args;
+  if (alumnos.length === 0) return [];
+  const mats = await db
+    .select({ id: adminEscolarMatriculas.id, estudianteId: adminEscolarMatriculas.estudianteId })
+    .from(adminEscolarMatriculas)
+    .where(and(
+      eq(adminEscolarMatriculas.teamId, teamId),
+      inArray(adminEscolarMatriculas.estudianteId, alumnos.map((a) => a.id)),
+      eq(adminEscolarMatriculas.estado, 'activa'),
+    ));
+  if (mats.length === 0) return [];
+
+  // Todas las cuotas ya gastadas, también las anuladas: una cuota omitida no se vuelve a ofrecer.
+  const gastadas = await db
+    .select({ matriculaId: adminEscolarCargos.matriculaId, conceptoId: adminEscolarCargos.conceptoId, cuotaId: adminEscolarCargos.cuotaId })
+    .from(adminEscolarCargos)
+    .where(and(eq(adminEscolarCargos.teamId, teamId), inArray(adminEscolarCargos.matriculaId, mats.map((m) => m.id))));
+
+  const out: OpcionCargo[] = [];
+  const conceptosSinProducto = new Set<number>();
+  const crudas: { m: (typeof mats)[number]; p: ReturnType<typeof previstosDelPlan<unknown>>[number]; productId: number | null }[] = [];
+  for (const m of mats) {
+    const plan = await cargarPlan(teamId, m.id);
+    if (!plan?.devenga) continue;
+    const previstos = previstosDelPlan(
+      plan.lineas.map((l) => ({ ...l, reglas: null as unknown })),
+      gastadas.filter((g) => g.matriculaId === m.id),
+    );
+    for (const p of previstos) {
+      if (p.cuotaId <= 0) continue;
+      if (args.yaPedido && args.yaPedido.matriculaId === m.id && args.yaPedido.cuotaId === p.cuotaId) continue;
+      const productId = plan.lineas.find((l) => l.conceptoId === p.conceptoId)?.productId ?? null;
+      if (productId == null) conceptosSinProducto.add(p.conceptoId);
+      crudas.push({ m, p, productId });
+    }
+  }
+  if (crudas.length === 0) return [];
+
+  // Producto de reserva: el del concepto, como en los cargos.
+  const delConcepto = conceptosSinProducto.size
+    ? new Map((await db.select({ id: adminEscolarConceptosPago.id, productId: adminEscolarConceptosPago.productId })
+        .from(adminEscolarConceptosPago)
+        .where(and(eq(adminEscolarConceptosPago.teamId, teamId), inArray(adminEscolarConceptosPago.id, [...conceptosSinProducto]))))
+        .map((c) => [c.id, c.productId]))
+    : new Map<number, number | null>();
+  const idsProd = [...new Set(crudas.map((c) => c.productId ?? delConcepto.get(c.p.conceptoId) ?? null)
+    .filter((x): x is number => x != null && !args.prodMap.has(x)))];
+  if (idsProd.length) {
+    const extra = await db.select({ id: products.id, nombre: products.nombre, tasaItbis: products.tasaItbis, tipo: products.tipo })
+      .from(products)
+      .where(and(eq(products.teamId, teamId), inArray(products.id, idsProd)));
+    for (const p of extra) args.prodMap.set(p.id, p);
+  }
+
+  for (const { m, p, productId } of crudas) {
+    const prodId = productId ?? delConcepto.get(p.conceptoId) ?? null;
+    const prod = prodId != null ? args.prodMap.get(prodId) : undefined;
+    const alumno = alumnos.find((a) => a.id === m.estudianteId);
+    const suyo = args.dependientePorAlumno.get(m.estudianteId) ?? null;
+    out.push({
+      cargoId: 0,
+      estudianteId: m.estudianteId,
+      estudianteNombre: `${alumno?.nombres ?? ''} ${alumno?.apellidos ?? ''}`.trim(),
+      previstoCuotaId: p.cuotaId,
+      conceptoId: p.conceptoId,
+      matriculaId: m.id,
+      adelantado: true,
+      seleccionado: false,
+      concepto: p.concepto,
+      esMensualidad: p.tipo === 'mensualidad',
+      mes: p.mes,
+      anio: p.anio,
+      fechaVencimiento: p.fechaVencimiento,
+      saldoCentavos: p.montoCentavos,
+      sinProducto: prodId == null,
+      linea: {
+        productoId: prodId,
+        nombreItem: prod?.nombre ?? p.concepto,
+        descripcionItem: descripcionDelMes(p.mes, p.anio),
+        cantidadItem: 1,
+        precioUnitarioItem: p.montoCentavos / 100,
+        tasaItbis: prod && TASAS_VALIDAS.includes(prod.tasaItbis) ? prod.tasaItbis : 'exento',
+        indicadorBienoServicio: prod?.tipo === 'bien' ? '1' : '2',
+        dependienteId: suyo?.id ?? null,
+        dependienteNombre: suyo?.nombre ?? '',
+        cuotaClave: claveDePrevisto({ estudianteId: m.estudianteId, matriculaId: m.id, cuotaId: p.cuotaId, mes: p.mes, anio: p.anio }),
+      },
+    });
+  }
+  return out;
 }

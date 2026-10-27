@@ -314,6 +314,8 @@ export default function NuevaFacturaForm({
     cargoId: number; estudianteId: number; seleccionado: boolean;
     saldoCentavos: number; mes: number | null; anio: number;
     linea?: PrefillCargo['linea']; contexto: string;
+    /** Un mes que todavía no salió: su cargo lo crea la emisión al guardar. */
+    adelantado?: boolean; previstoCuotaId?: number;
   };
   const [opcionesEscolares, setOpcionesEscolares] = useState<OpcionEscolar[]>([]);
   const [saldandoCargo, setSaldandoCargo] = useState(false);
@@ -568,6 +570,8 @@ export default function NuevaFacturaForm({
       mes: number | null;
       anio: number;
       linea?: PrefillCargo['linea'];
+      adelantado?: boolean;
+      previstoCuotaId?: number;
     }[];
   };
 
@@ -660,13 +664,18 @@ export default function NuevaFacturaForm({
    */
   function cargarPrefillEscolar(
     cargoIds: number[], p?: { matriculaId: number; cuotaId: number; conceptoId: number } | null,
-    /** Solo alimenta el buscador: ni líneas, ni comprador, ni cargos de origen. */
+    /**
+     * Solo alimenta el buscador: ni líneas, ni comprador, ni cargos de origen.
+     * Trae también los meses que todavía no salen, para cobrarlos por adelantado.
+     */
     soloOfrecer = false,
+    /** Sin cargos que pedir (la familia lo tiene todo facturado): se entra por este alumno. */
+    anclaEstudianteId?: number,
   ) {
     fetch('/api/administracion-escolar/cargos/prefill-factura', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cargoIds, previsto: p ?? undefined }),
+      body: JSON.stringify({ cargoIds, previsto: p ?? undefined, futuros: soloOfrecer, estudianteId: anclaEstudianteId }),
     })
       .then(async (r) => {
         const j = await r.json().catch(() => ({}));
@@ -1274,8 +1283,10 @@ export default function NuevaFacturaForm({
     setOpcionesEscolares([]);
     fetch(`/api/administracion-escolar/responsables/${c.id}/sin-facturar`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { cargoIds?: number[] } | null) => {
+      .then((d: { cargoIds?: number[]; estudianteId?: number | null } | null) => {
         if (d?.cargoIds?.length) cargarPrefillEscolar(d.cargoIds, null, true);
+        // Todo facturado: igual se ofrecen los meses que faltan por salir.
+        else if (d?.estudianteId) cargarPrefillEscolar([], null, true, d.estudianteId);
       })
       .catch(() => { /* sin cargos que ofrecer: queda el catálogo */ });
   }
@@ -1320,6 +1331,9 @@ export default function NuevaFacturaForm({
    *
    * El `id` va en negativo para no chocar nunca con un producto real.
    */
+  /** La clave de la línea que saldría de esta opción: la del servidor, o la de siempre. */
+  const claveDeOpcion = (o: OpcionEscolar) => o.linea?.cuotaClave ?? `${o.estudianteId}:${o.cargoId}:${o.mes ?? 0}:${o.anio}`;
+
   function cuotasComoProductos(dependienteId: number | null | undefined, q: string): Producto[] {
     if (!dependienteId || opcionesEscolares.length === 0) return [];
     const texto = q.trim().toLowerCase();
@@ -1332,24 +1346,26 @@ export default function NuevaFacturaForm({
       // casualidad, y quedaban solo los productos genéricos del catálogo.
       .filter((o) => o.linea?.dependienteId === dependienteId)
       // Lo que ya está en la factura no se vuelve a ofrecer: añadir dos veces
-      // el mismo mes es cobrarlo dos veces.
-      .filter((o) => !items.some((it) => it.cuotaClave === `${o.estudianteId}:${o.cargoId}:${o.mes ?? 0}:${o.anio}`))
+      // el mismo mes es cobrarlo dos veces. La clave es la del servidor: en un
+      // mes adelantado lleva su cuota, y dos conceptos del mismo mes no chocan.
+      .filter((o) => !items.some((it) => it.cuotaClave === claveDeOpcion(o)))
       .map((o) => {
         const nombre = o.mes
           ? `${o.linea!.nombreItem} — ${MESES_LINEA[o.mes]} ${o.anio}`
           : String(o.linea!.nombreItem);
         return {
-          id: -(o.cargoId || (o.estudianteId * 100 + (o.mes ?? 0))),
+          id: -(o.cargoId || (o.previstoCuotaId ? 1_000_000_000 + o.previstoCuotaId : o.estudianteId * 100 + (o.mes ?? 0))),
           nombre,
           descripcion: o.contexto || null,
           precioDOP: Number(o.linea!.precioUnitarioItem) || 0,
           tasaItbis: String(o.linea!.tasaItbis ?? 'exento'),
           tipo: String(o.linea!.indicadorBienoServicio) === '1' ? 'bien' : 'servicio',
-          referencia: 'PLAN',
+          // «ADELANTO»: todavía no es deuda; al guardar la factura nace el cargo ya atado.
+          referencia: o.adelantado ? 'ADELANTO' : 'PLAN',
           stockActual: 0, stockMinimo: 0,
           controlaInventario: false, permiteVentaSinStock: true,
           cuotaEscolar: {
-            cargoId: o.cargoId, estudianteId: o.estudianteId,
+            cargoId: o.cargoId, estudianteId: o.estudianteId, clave: claveDeOpcion(o),
             mes: o.mes, anio: o.anio, saldoCentavos: o.saldoCentavos,
             productoId: typeof o.linea!.productoId === 'number' ? o.linea!.productoId : null,
             contexto: o.contexto,
@@ -1438,7 +1454,7 @@ export default function NuevaFacturaForm({
         precioUnitarioItem: p.precioDOP,
         tasaItbis: tasaFinal,
         indicadorBienoServicio: p.tipo === 'bien' ? '1' : '2',
-        cuotaClave: `${c.estudianteId}:${c.cargoId}:${c.mes ?? 0}:${c.anio}`,
+        cuotaClave: c.clave ?? `${c.estudianteId}:${c.cargoId}:${c.mes ?? 0}:${c.anio}`,
       },
     });
 

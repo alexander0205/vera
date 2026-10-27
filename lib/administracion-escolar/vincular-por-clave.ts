@@ -22,8 +22,10 @@
 
 import 'server-only';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { adminEscolarCargos, adminEscolarEstudiantes, ecfDocuments } from '@/lib/db/schema';
+import { adminEscolarCargos, adminEscolarEstudiantes, adminEscolarMatriculas, ecfDocuments } from '@/lib/db/schema';
 import type { db as Db } from '@/lib/db/drizzle';
+import { cargarPlan } from './plan-matricula';
+import { leerPrevisto, type PrevistoDeLinea } from './clave-previsto';
 
 /** Lo que se pudo atar, para poder contarlo y contarlo bien. */
 export interface ResultadoVinculo {
@@ -202,4 +204,100 @@ export async function responsableDeLosEstudiantes(
     ));
   const ids = filas.map((f) => f.clientId).filter((x): x is number => x != null);
   return new Set(ids).size === 1 ? ids[0] : null;
+}
+
+
+/** Los meses adelantados que vienen en las líneas (`p<matrícula>.<cuota>`), sin repetir. */
+export function previstosDeLasLineas(
+  lineas: { cuotaClave?: string | null }[] | null | undefined,
+): PrevistoDeLinea[] {
+  if (!Array.isArray(lineas)) return [];
+  const vistos = new Map<string, PrevistoDeLinea>();
+  for (const l of lineas) {
+    const p = leerPrevisto(l?.cuotaClave);
+    if (p) vistos.set(`${p.matriculaId}.${p.cuotaId}`, p);
+  }
+  return [...vistos.values()];
+}
+
+/**
+ * Crea, ya atados a la factura, los cargos de los meses que se cobraron por
+ * adelantado desde el buscador de «Nueva factura».
+ *
+ * Mismos candados que `vincularCargosDeFactura`, más los del plan:
+ *   1. La matrícula es de este equipo y de ESE alumno, y está activa.
+ *   2. El alumno le factura al cliente de la factura.
+ *   3. La cuota sale del plan de esa matrícula (monto y fechas del servidor,
+ *      nunca del navegador) y no está omitida.
+ * Si el devengo llegó antes y la cuota ya es cargo, se ata ese cargo si sigue
+ * sin factura; si ya tiene otra, se deja y se anota. No lanza.
+ */
+export async function adelantarPrevistosDeFactura(
+  tx: typeof Db,
+  args: { teamId: number; documentoId: number; clientId: number | null; previstos: PrevistoDeLinea[] },
+): Promise<ResultadoVinculo> {
+  const { teamId, documentoId, clientId, previstos } = args;
+  const vinculados: number[] = [];
+  const omitidos: number[] = [];
+  if (previstos.length === 0 || clientId == null) return { vinculados, omitidos: previstos.map((p) => p.cuotaId) };
+
+  for (const p of previstos) {
+    const [mat] = await tx
+      .select({ id: adminEscolarMatriculas.id })
+      .from(adminEscolarMatriculas)
+      .innerJoin(adminEscolarEstudiantes, eq(adminEscolarEstudiantes.id, adminEscolarMatriculas.estudianteId))
+      .where(and(
+        eq(adminEscolarMatriculas.id, p.matriculaId),
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.estudianteId, p.estudianteId),
+        eq(adminEscolarMatriculas.estado, 'activa'),
+        eq(adminEscolarEstudiantes.facturarAClientId, clientId),
+      ))
+      .limit(1);
+    if (!mat) { omitidos.push(p.cuotaId); continue; }
+
+    const plan = await cargarPlan(teamId, p.matriculaId);
+    let cuota = null as null | { conceptoId: number; mes: number | null; fechaEmision: string; fechaVencimiento: string | null; montoCentavos: number };
+    for (const l of plan?.lineas ?? []) {
+      const c = l.cuotas.find((x) => x.cuotaId === p.cuotaId && !x.omitida);
+      if (c) { cuota = { conceptoId: l.conceptoId, mes: c.mes, fechaEmision: c.fechaEmision, fechaVencimiento: c.fechaVencimiento, montoCentavos: c.montoCentavos }; break; }
+    }
+    if (!plan || !cuota) { omitidos.push(p.cuotaId); continue; }
+
+    const [creado] = await tx
+      .insert(adminEscolarCargos)
+      .values({
+        teamId,
+        estudianteId: p.estudianteId,
+        matriculaId: p.matriculaId,
+        periodoId: plan.periodoId,
+        conceptoId: cuota.conceptoId,
+        cuotaId: p.cuotaId,
+        mes: cuota.mes,
+        anio: Number(cuota.fechaEmision.slice(0, 4)),
+        montoCentavos: cuota.montoCentavos,
+        saldoCentavos: cuota.montoCentavos,
+        fechaVencimiento: cuota.fechaVencimiento,
+        estado: 'pendiente',
+        ecfDocumentId: documentoId,
+      })
+      // El índice único (matrícula, cuota): si el devengo ya la creó, no se duplica.
+      .onConflictDoNothing()
+      .returning({ id: adminEscolarCargos.id });
+    if (creado) { vinculados.push(creado.id); continue; }
+
+    const [existente] = await tx
+      .update(adminEscolarCargos)
+      .set({ ecfDocumentId: documentoId, updatedAt: new Date() })
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.matriculaId, p.matriculaId),
+        eq(adminEscolarCargos.cuotaId, p.cuotaId),
+        isNull(adminEscolarCargos.ecfDocumentId),
+        inArray(adminEscolarCargos.estado, ['pendiente', 'parcial', 'vencido']),
+      ))
+      .returning({ id: adminEscolarCargos.id });
+    if (existente) vinculados.push(existente.id); else omitidos.push(p.cuotaId);
+  }
+  return { vinculados, omitidos };
 }

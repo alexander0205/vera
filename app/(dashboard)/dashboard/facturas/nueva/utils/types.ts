@@ -39,6 +39,8 @@ export interface Producto {
   cuotaEscolar?: {
     cargoId:        number;      // 0 = todavía no existe la deuda
     estudianteId:   number;
+    /** La `cuotaClave` de la línea, tal como la armó el servidor. */
+    clave?:         string;
     mes:            number | null;
     anio:           number;
     saldoCentavos:  number;
