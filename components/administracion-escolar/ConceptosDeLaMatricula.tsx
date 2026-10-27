@@ -283,15 +283,20 @@ export function ConceptosDeLaMatricula({
           await guardarLista([...efectivos, c.id]);
           toast.success(`El sistema empieza a cargarle «${c.nombre}». Sus cargos salen cuando llegue su fecha.`);
         } else {
-          const hoy = hoyRD();
+          // La inscripción pertenece al momento de inscribirse, no al día en que
+          // se teclea: un alumno inscrito el 01/08 y montado en octubre tendría
+          // la inscripción fechada en octubre, y al facturar por meses se
+          // escaparía. Se ancla a la inscripción. Un pago único cualquiera
+          // (excursión, uniforme) sí nace hoy: es cuando ocurre.
+          const ancla = c.tipo === 'inscripcion' && inscritoDesde ? inscritoDesde : hoyRD();
           await pedir('/api/administracion-escolar/cargos', {
             method: 'POST', headers: JSON_HEADERS,
             body: JSON.stringify({
               estudianteId, matriculaId, periodoId, conceptoId: c.id,
-              mes: null, anio: Number(hoy.slice(0, 4)),
+              mes: null, anio: Number(ancla.slice(0, 4)),
               ...(centavos != null ? { montoCentavos: centavos } : {}),
               // El plazo que el colegio le puso al concepto, no «vence hoy».
-              fechaVencimiento: vencimientoDe(hoy, c.diasParaPago ?? null),
+              fechaVencimiento: vencimientoDe(ancla, c.diasParaPago ?? null),
             }),
           }, 'No se pudo agregar el cargo');
           toast.success(`Se agregó «${c.nombre}»`);
@@ -603,7 +608,8 @@ export function ConceptosDeLaMatricula({
               })()}
 
               {nuevo && seAgregaComo(nuevo) === 'cargo' && (() => {
-                const vence = vencimientoDe(hoyRD(), nuevo.diasParaPago ?? null);
+                const ancla = nuevo.tipo === 'inscripcion' && inscritoDesde ? inscritoDesde : hoyRD();
+                const vence = vencimientoDe(ancla, nuevo.diasParaPago ?? null);
                 return (
                   <div className="mt-2 rounded-lg border border-zero-200 bg-zero-50/60 p-2.5">
                     <p className="text-xs text-gray-700">
