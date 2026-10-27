@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR, { mutate as mutarCache } from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -151,6 +152,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   // instante, y un segundo clic ahí devolvía el 409 de «ya pagada».
   const ocupadoRef = useRef(false);
   const router = useRouter();
+  const ruta = useRutaNomina();
 
   const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
   const { data: preview } = useSWR<PreviewDispersion>(
@@ -322,7 +324,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         (actual) => (actual ? { ...actual, corridas: actual.corridas.filter((c) => c.id !== Number(id)) } : actual),
         { revalidate: true },
       );
-      router.push('/nomina/corridas');
+      router.push(ruta('/corridas'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
       setBorrando(false);
@@ -334,7 +336,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-      <Link href="/nomina/corridas" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href={ruta('/corridas')} className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Corridas
       </Link>
 
@@ -400,7 +402,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               {data?.horasPendientes} registro{data?.horasPendientes === 1 ? '' : 's'} de horas sin revisar en estas fechas.
             </span>{' '}
             Esta corrida paga solo las horas aprobadas: revísalas en{' '}
-            <Link href="/nomina/horas" className="font-medium underline">Horas</Link>, borra este borrador y vuelve a generarlo.
+            <Link href={ruta('/horas')} className="font-medium underline">Horas</Link>, borra este borrador y vuelve a generarlo.
           </div>
         </div>
       )}

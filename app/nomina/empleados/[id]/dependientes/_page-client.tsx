@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,9 +52,10 @@ const LABEL_TIPO: Record<TipoDependiente, string> = { directo: 'Directo', adicio
 
 export default function DependientesEmpleadoClient({ id }: { id: string }) {
   const router = useRouter();
+  const ruta = useRutaNomina();
   const { can } = usePermissions();
   const puedeGestionar = can('empleados:gestionar');
-  const volver = () => router.push('/nomina/empleados');
+  const volver = () => router.push(ruta('/empleados'));
 
   const { data: dEmpleado, isLoading } = useSWR<{ empleado?: Empleado }>(`/api/nomina/empleados/${id}`, fetcher);
   const empleado = dEmpleado?.empleado ?? null;
