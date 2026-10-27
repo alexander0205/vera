@@ -65,6 +65,13 @@ describe('crear una tarea', () => {
     expect(sinAlcance.ok && sinAlcance.tarea.alcance).toBe('alumno');
   });
 
+  it('una tarea del colegio no es de ningún alumno; un alcance desconocido cae en el del alumno', () => {
+    const delColegio = validarNuevaTarea({ ...base, alcance: 'colegio' });
+    expect(delColegio.ok && delColegio.tarea.alcance).toBe('colegio');
+    const raro = validarNuevaTarea({ ...base, alcance: 'todo' });
+    expect(raro.ok && raro.tarea.alcance).toBe('alumno');
+  });
+
   it('rechaza una fecha mal escrita y un título demasiado largo', () => {
     expect(validarNuevaTarea({ ...base, venceEl: '31/10/2026' })).toEqual({ ok: false, error: 'La fecha no es válida.' });
     expect(validarNuevaTarea({ ...base, titulo: 'x'.repeat(161) }).ok).toBe(false);

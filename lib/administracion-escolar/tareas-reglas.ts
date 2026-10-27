@@ -44,8 +44,17 @@ export const autorTarea = (user: { id: number; name?: string | null; email: stri
 
 export const AUTOR_ZERO_AI: AutorTarea = { userId: null, nombre: AUTOR_IA, esSoporte: false };
 
+/**
+ * De quién es: un alumno, toda su familia o el colegio (nadie en concreto:
+ * «llamar al proveedor de uniformes», «revisar la nómina»).
+ */
+export type AlcanceTarea = 'alumno' | 'familia' | 'colegio';
+
+/** Cómo se lee una tarea que no es de ningún alumno ni familia. */
+export const DE_COLEGIO = 'Del colegio';
+
 export interface NuevaTarea {
-  alcance: 'alumno' | 'familia';
+  alcance: AlcanceTarea;
   titulo: string;
   descripcion: string | null;
   asignadaA: Asignacion;
@@ -70,7 +79,7 @@ export function validarNuevaTarea(entrada: unknown): { ok: true; tarea: NuevaTar
   if (titulo.length > TOPE_TITULO) return { ok: false, error: `El título es muy largo (máximo ${TOPE_TITULO} letras).` };
   const descripcion = typeof e.descripcion === 'string' && e.descripcion.trim() ? e.descripcion.trim() : null;
   if (descripcion && descripcion.length > TOPE_TEXTO) return { ok: false, error: 'La descripción es muy larga.' };
-  const alcance = e.alcance === 'familia' ? 'familia' : 'alumno';
+  const alcance: AlcanceTarea = e.alcance === 'familia' || e.alcance === 'colegio' ? e.alcance : 'alumno';
   if (!ASIGNACIONES.includes(e.asignadaA as Asignacion)) return { ok: false, error: 'Elige a quién se le asigna.' };
   const asignadaA = e.asignadaA as Asignacion;
   const asignadaUserId = idPositivo(e.asignadaUserId);
