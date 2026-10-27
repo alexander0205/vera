@@ -67,6 +67,37 @@ async function graciaDeFactura(
 }
 
 /**
+ * Unidades de mora de una factura, para el modo FIJO: cuántas veces se cobra el
+ * monto fijo. La factura escolar agrupa cargos de varios hijos (N:1); la mora
+ * fija debe cobrarse por CADA estudiante que todavía debe, no una sola vez por
+ * documento (RD$500 × 3 hijos = RD$1,500, no RD$500).
+ *
+ * Cuenta estudiantes DISTINTOS con al menos un cargo cuyo concepto cobra mora y
+ * que todavía tiene saldo. Un cargo ya saldado (saldo 0) no suma: si un hijo ya
+ * pagó su parte, no se le cobra mora. (El reparto fino de abonos PARCIALES entre
+ * líneas de una factura queda para después; aquí basta el saldo del propio
+ * cargo, que es la fuente de verdad de la deuda.) Venta normal sin cargos, o
+ * divergencia de datos, → 1: el comportamiento histórico, una mora por factura.
+ */
+async function unidadesMoraDeFactura(ecfDocumentId: number, teamId: number): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(distinct ${adminEscolarCargos.estudianteId})` })
+    .from(adminEscolarCargos)
+    .innerJoin(
+      adminEscolarConceptosPago,
+      eq(adminEscolarConceptosPago.id, adminEscolarCargos.conceptoId),
+    )
+    .where(and(
+      eq(adminEscolarCargos.ecfDocumentId, ecfDocumentId),
+      eq(adminEscolarCargos.teamId, teamId),
+      eq(adminEscolarConceptosPago.cobraMora, true),
+      ne(adminEscolarCargos.estado, 'anulado'),
+      sql`${adminEscolarCargos.saldoCentavos} > 0`,
+    ));
+  return Math.max(1, Number(row?.n ?? 0));
+}
+
+/**
  * Preview de la próxima mora automática de una factura, para mostrarla en el
  * detalle SIN generar nada. Read-only. Reusa `calcularMora`, así que el monto
  * coincide con lo que cobraría el cron.
@@ -163,6 +194,12 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
     (Date.now() - Date.parse(`${padre.fechaLimitePago}T00:00:00Z`)) / 86_400_000,
   );
 
+  // Mismo cálculo de unidades que el generador, para que el preview coincida
+  // con lo que cobrará el cron (modo fijo × estudiantes; porcentaje → 1).
+  const unidadesFijo = config.modo === 'fijo'
+    ? await unidadesMoraDeFactura(padre.id, padre.teamId)
+    : 1;
+
   const entradaBase = {
     config,
     montoFacturaCents: padre.montoTotal,
@@ -170,6 +207,7 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
     moraImpagaCents,
     moraCobradaAcumCents,
     periodosCobrados,
+    unidadesFijo,
   };
 
   // Cargo exigible HOY.
@@ -333,6 +371,12 @@ export async function generarNotaDebitoMora(
     ? Math.floor((Date.now() - Date.parse(`${padre.fechaLimitePago}T00:00:00Z`)) / 86_400_000)
     : config.diasGracia;
 
+  // Modo fijo: la mora se cobra por cada estudiante con cargo que cobra mora
+  // (factura N:1 de varios hijos). Porcentaje ya escala con el saldo → 1.
+  const unidadesFijo = config.modo === 'fijo'
+    ? await unidadesMoraDeFactura(padre.id, padre.teamId)
+    : 1;
+
   const calculo = calcularMora({
     config,
     montoFacturaCents: padre.montoTotal,
@@ -340,6 +384,7 @@ export async function generarNotaDebitoMora(
     moraImpagaCents,
     moraCobradaAcumCents,
     periodosCobrados,
+    unidadesFijo,
     diasVencido,
   });
 
