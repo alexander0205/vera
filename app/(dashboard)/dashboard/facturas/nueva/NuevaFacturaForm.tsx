@@ -1261,6 +1261,25 @@ export default function NuevaFacturaForm({
       .catch(() => setDependientesCliente([]));
   }
 
+  /**
+   * El contacto escogido a mano en «Nueva factura»: si es responsable de pago
+   * de alumnos, sus mensualidades y cargos sin facturar pasan al buscador de
+   * productos, igual que al abrir la factura desde la familia. Sin esto el
+   * buscador solo enseñaba el catálogo («Mensualidad CDN» a 0) y la línea no
+   * quedaba atada a ningún cargo. Sin módulo escolar la ruta dice que no y no
+   * pasa nada.
+   */
+  function elegirCliente(c: Cliente) {
+    seleccionarCliente(c);
+    setOpcionesEscolares([]);
+    fetch(`/api/administracion-escolar/responsables/${c.id}/sin-facturar`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { cargoIds?: number[] } | null) => {
+        if (d?.cargoIds?.length) cargarPrefillEscolar(d.cargoIds, null, true);
+      })
+      .catch(() => { /* sin cargos que ofrecer: queda el catálogo */ });
+  }
+
   function limpiarCliente() {
     setClienteSeleccionado(null);
     setRncManual('');
@@ -2586,7 +2605,7 @@ export default function NuevaFacturaForm({
                     <ClienteSection
                       clienteSeleccionado={clienteSeleccionado}
                       buscarClientes={buscarClientes}
-                      onSelectCliente={seleccionarCliente}
+                      onSelectCliente={elegirCliente}
                       onClearCliente={limpiarCliente}
                       onOpenNuevoCliente={() => setShowNuevoCliente(true)}
                       regla={regla}

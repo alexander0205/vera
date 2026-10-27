@@ -6,6 +6,9 @@
  * deducirla y no es tutor de nadie.
  *
  * `clientId: null` lo quita y se vuelve al tutor responsable.
+ *
+ * Con un contacto, el alumno queda además como su beneficiario (ver
+ * lib/administracion-escolar/beneficiario.ts).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,6 +16,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes, clients } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { asegurarBeneficiario } from '@/lib/administracion-escolar/beneficiario';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
@@ -43,14 +47,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!cli) return NextResponse.json({ error: 'Contacto no encontrado' }, { status: 404 });
   }
 
-  const [fila] = await db
-    .update(adminEscolarEstudiantes)
-    .set({ facturarAClientId: clientId, updatedAt: new Date() })
-    .where(and(
-      eq(adminEscolarEstudiantes.id, estudianteId),
-      eq(adminEscolarEstudiantes.teamId, teamId),
-    ))
-    .returning({ id: adminEscolarEstudiantes.id });
+  // El contacto y el beneficiario cambian juntos: con el contacto nuevo y el
+  // beneficiario del anterior (o ninguno), «Nueva factura» no ofrece sus
+  // mensualidades y las líneas quedan sin decir de quién son.
+  const fila = await db.transaction(async (tx) => {
+    const [f] = await tx
+      .update(adminEscolarEstudiantes)
+      .set({ facturarAClientId: clientId, updatedAt: new Date() })
+      .where(and(
+        eq(adminEscolarEstudiantes.id, estudianteId),
+        eq(adminEscolarEstudiantes.teamId, teamId),
+      ))
+      .returning({ id: adminEscolarEstudiantes.id });
+    if (f && clientId !== null) await asegurarBeneficiario(tx, teamId, estudianteId, clientId);
+    return f;
+  });
 
   if (!fila) return NextResponse.json({ error: 'Estudiante no encontrado' }, { status: 404 });
   return NextResponse.json({ ok: true, clientId });
