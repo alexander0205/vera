@@ -17,6 +17,19 @@ import { userCanForTeam } from '@/lib/auth/permissions';
 
 type Usuario = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
+/**
+ * Mientras se prueba en producción, el asistente es solo para estos correos
+ * (separados por coma). Sin la variable queda para el dueño de Zero; con `*`
+ * se abre a todos los que cumplan los permisos de abajo.
+ */
+const SOLO_PARA_POR_DEFECTO = 'alexander.ferreras@yisraeltech.com';
+
+export function correoPermitido(email: string | null | undefined, lista = process.env.ASISTENTE_SOLO_CORREOS): boolean {
+  const permitidos = (lista ?? SOLO_PARA_POR_DEFECTO).split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+  if (permitidos.includes('*')) return true;
+  return !!email && permitidos.includes(email.trim().toLowerCase());
+}
+
 export type Acceso =
   | { ok: true; user: Usuario; teamId: number; teamRole: string | null }
   | { ok: false; status: 401 | 403; motivo: string };
@@ -25,6 +38,7 @@ export async function evaluarAcceso(): Promise<Acceso> {
   const [user, teamId, teamRole] = await Promise.all([getUser(), getTeamIdForUser(), getTeamRoleForUser()]);
   if (!user) return { ok: false, status: 401, motivo: 'No autenticado' };
   if (!teamId) return { ok: false, status: 403, motivo: 'Sin empresa configurada' };
+  if (!correoPermitido(user.email)) return { ok: false, status: 403, motivo: 'El asistente todavía no está disponible para tu usuario' };
 
   const [administra, veReportes] = await Promise.all([
     userCanForTeam(teamId, user.platformRole, teamRole, 'configuracion:gestionar'),
