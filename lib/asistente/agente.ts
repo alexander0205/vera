@@ -8,6 +8,7 @@ import { hoyRd } from './util';
 import { sanitizarEnlaces, registrarEnlacesDeHerramientas, rutaLimpia, enlazarNombresDePantalla } from './enlaces';
 import { filtrarFormulariosDeIa } from './formulario';
 import { depurarSalida, crearDetectorFuga, clasificarSolicitud, pareceDescripcionDeReglas } from './politicas';
+import { GUIA_GOBERNANZA } from './guia-gobernanza';
 import { NOMBRE_REGISTRO, type PantallaActual } from './pantalla';
 import type { Propuesta } from './acciones';
 import { caminoDe, comoModelo, hayCaminoIa, modelosDe } from '@/lib/ia/modelo-servidor';
@@ -166,6 +167,30 @@ export function usaContestadorLocal(o: { modeloPrueba: boolean; forzarIa: boolea
   return true;
 }
 
+/**
+ * El modelo dice «pulsa Confirmar» sin haber llamado ninguna proponer_…: la
+ * persona buscaría un botón que no existe. Pasó con Gemini Flash al pedirle
+ * varios conceptos juntos.
+ */
+export const PROMETE_CONFIRMAR = /\b(puls\w*|toc\w*|dale|presion\w*|oprim\w*|clic)\b[^.\n]{0,25}confirm/i;
+/**
+ * Pide hacer algo en el colegio (crear, poner, matricular, facturar…) o sigue
+ * una configuración que ya va por pasos. Gemini Flash, con las ~20 acciones de
+ * Gobernanza a la vez, a menudo contestaba «pulsa Confirmar» sin llamar
+ * ninguna: estos turnos van a los modelos de análisis (Claude), que sí las llaman.
+ */
+export const PIDE_ACCION = /\b(cr[eé]a(me|le|les|los|las|r)?|pon(me|le|les|los|las|er\w*)?|agr[eé]g\w*|añ[aá]d\w*|config[uú]r\w*|matr[ií]c[uú]l\w*|inscr[ií]b\w*|fact[uú]ra(r|l[eao]s?|me)|g[eé]ner[ae]\w*|c[oó]bra(le|les|los|me)|c[aá]mbi\w*|qu[ií]t\w*|asign\w*|da(r|le)? de baja|ret[ií]r\w*|desc[aá]rg\w*|tr[aá]e(me|r)?|prop[oó]n\w*|sigue|seguimos|contin[uú]a|confirmad[oa])\b/i;
+const NOTA_SIN_PROPUESTA =
+  'No llamaste ninguna herramienta proponer_…: no hay tarjeta ni botón «Confirmar». ' +
+  'Llama ahora la proponer_… que corresponde con los datos que la persona ya dio y luego responde. ' +
+  'Si te falta un dato, pregúntalo sin mencionar el botón.';
+/** Un monto en pesos o una cifra con miles: lo que no puede salir de la nada. */
+export const CON_CIFRAS = /RD\$\s?\d|\b\d{1,3}(,\d{3})+(\.\d+)?\b/;
+const NOTA_SIN_DATOS =
+  'No llamaste ninguna herramienta en esta respuesta, así que esas cifras no salen de Zero. ' +
+  'Llama ahora las herramientas que hagan falta y responde solo con lo que devuelvan; si es algo que ya está más arriba en la conversación, dilo así.';
+const SIN_TARJETA = 'No pude preparar la tarjeta para confirmar. Dime otra vez qué quieres crear o cambiar y lo intento de nuevo.';
+
 const NOTA_INSISTENCIA =
   '\n\nLA PERSONA PIDIÓ OTRA RESPUESTA: la respuesta automática anterior no era lo que buscaba. ' +
   'No la repitas; interpreta la pregunta de nuevo, usa las herramientas que hagan falta y responde lo que realmente pidió.';
@@ -199,10 +224,15 @@ export async function conversar(
     if (r) enlacesTurno.add(r);
   }
   const hayIa = Boolean(modeloPrueba) || asistenteIaDisponible();
+  // La guía del colegio solo va a quien tiene Gobernanza: cuesta tokens y a los demás no les sirve.
+  const conGobernanza = typeof ctx !== 'number' && ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver');
+  const enAccion = conGobernanza && (PIDE_ACCION.test(pregunta) || PROMETE_CONFIRMAR.test(previa ?? ''));
 
   // 1. Lo claro y frecuente se contesta aquí, sin gastar una llamada a la IA.
-  //    Sin IA configurada, con más tolerancia: es lo único que hay.
-  if (usaContestadorLocal({ modeloPrueba: Boolean(modeloPrueba), forzarIa: contexto.forzarIa === true, hayIa })) {
+  //    Sin IA configurada, con más tolerancia: es lo único que hay. Un pedido
+  //    de hacer algo («genera la mora») no es una consulta: lo atiende la IA,
+  //    que es la que puede proponer la acción.
+  if (!(enAccion && hayIa) && usaContestadorLocal({ modeloPrueba: Boolean(modeloPrueba), forzarIa: contexto.forzarIa === true, hayIa })) {
     let local = await responderLocal(pregunta, tools, { tolerante: !hayIa, previa, preguntaPrevia, pantalla: contexto.pantalla });
     // Elegida por palabras clave y con IA que la pueda mejorar: Jev revisa que conteste lo preguntado.
     if (local && hayIa && local.intencion && INTENCIONES_POR_PALABRAS.has(local.intencion)) {
@@ -224,7 +254,8 @@ export async function conversar(
   const inicio = Date.now();
   const restante = () => PRESUPUESTO_IA_MS - (Date.now() - inicio);
 
-  const sistema = instrucciones(contexto.empresa, contexto.usuario) + descripcionPantalla(contexto.pantalla) + (contexto.forzarIa ? NOTA_INSISTENCIA : '');
+  const sistema = instrucciones(contexto.empresa, contexto.usuario) + (conGobernanza ? GUIA_GOBERNANZA : '')
+    + descripcionPantalla(contexto.pantalla) + (contexto.forzarIa ? NOTA_INSISTENCIA : '');
   const filtraPrompt = crearDetectorFuga(instrucciones(contexto.empresa, contexto.usuario));
 
   // Normal o de análisis: decide qué modelos se usan (y cuánto razonan).
@@ -241,18 +272,21 @@ export async function conversar(
       : id.startsWith('anthropic/')
         ? { anthropic: { effort: nivel === 'analisis' ? 'medium' : 'low' } }
         : undefined;
-    const { text } = await generateText({
+    const mensajes = conPantalla(historial, contexto.pantalla);
+    let llamadas = 0;
+    const pedir = (msgs: typeof mensajes, ms: number) => generateText({
       model,
       instructions: sistema,
-      messages: conPantalla(historial, contexto.pantalla),
+      messages: msgs,
       tools,
       stopWhen: stepCountIs(8),
-      abortSignal: AbortSignal.timeout(Math.max(1_000, tiempoMs)),
+      abortSignal: AbortSignal.timeout(Math.max(1_000, ms)),
       // Un reintento y a otro modelo: esperar tres veces al mismo es esperar de más.
       maxRetries: 1,
       providerOptions: razonamiento,
       // Cada paso se anota al terminar: si uno posterior falla, lo gastado ya está.
-      onStepFinish: ({ usage }) => {
+      onStepFinish: ({ usage, toolCalls }) => {
+        llamadas += toolCalls.length;
         if (id === 'simulado') return;
         consumos.push({
           uso: 'asistente', proveedor: caminoDe(id), modelo: id, nivel,
@@ -262,7 +296,18 @@ export async function conversar(
         });
       },
     });
-    return text;
+    let { text } = await pedir(mensajes, tiempoMs);
+    if (llamadas === 0 && CON_CIFRAS.test(text) && restante() >= MINIMO_RESPALDO_MS) {
+      // Montos sin haber consultado nada: Gemini Flash armó un informe entero así.
+      console.warn(`[asistente] ${id} dio cifras sin consultar ninguna herramienta; se le pide que consulte`);
+      ({ text } = await pedir([...mensajes, { role: 'assistant', content: text }, { role: 'user', content: NOTA_SIN_DATOS }], restante()));
+    }
+    if (propuestas.length || !PROMETE_CONFIRMAR.test(text)) return text;
+    // Una sola vuelta más para que arme la propuesta que prometió.
+    console.warn(`[asistente] ${id} dijo «Confirmar» sin proponer nada; se le pide la propuesta`);
+    if (restante() < MINIMO_RESPALDO_MS) return SIN_TARJETA;
+    ({ text } = await pedir([...mensajes, { role: 'assistant', content: text }, { role: 'user', content: NOTA_SIN_PROPUESTA }], restante()));
+    return propuestas.length || !PROMETE_CONFIRMAR.test(text) ? text : SIN_TARJETA;
   };
 
   let texto: string | null = null;
@@ -272,8 +317,8 @@ export async function conversar(
       const { modeloSimulado } = await import('./modelo-simulado');
       texto = await correr(modeloPrueba ?? modeloSimulado(), 'simulado', 30_000);
     } else {
-      const { principal: MODELO, respaldo: RESPALDO } = await modelosDe(nivel === 'analisis' ? 'analisis' : 'asistente');
-      console.info(`[asistente] pregunta ${nivel} (por ${nivelPor}): ${MODELO}, respaldo ${RESPALDO}`);
+      const { principal: MODELO, respaldo: RESPALDO } = await modelosDe(nivel === 'analisis' || enAccion ? 'analisis' : 'asistente');
+      console.info(`[asistente] pregunta ${nivel}${enAccion ? ' (acción del colegio)' : ''} (por ${nivelPor}): ${MODELO}, respaldo ${RESPALDO}`);
       let cuota = false;
       try {
         const principal = comoModelo(MODELO);

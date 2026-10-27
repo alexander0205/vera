@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle, AlertTriangle, ArrowRight, ArrowUp, CheckCircle2, Circle, Rocket, ChevronDown, Sheet, Banknote, History, BookOpen, Check, Copy, CreditCard, FileDown, FilePen, GraduationCap, PackageSearch, Receipt, ScanSearch,
-  Sparkles, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
+  Loader2, Mic, Sparkles, Square, ThumbsDown, ThumbsUp, TrendingUp, UserCog, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { descargarExcel, descargarPdf, type AsistenteEstado, type MensajeAsistente } from './use-asistente';
@@ -14,7 +14,13 @@ import { Markdown } from './markdown';
 import { leerPasoVisible, progresoGuiado, type Estado as PasoGuiado } from '@/lib/asistente/guiado';
 import { bloquesDeRevelado, conviene, pasoDeRevelado } from '@/lib/asistente/revelado';
 import { describirError, mensajeDeEspera } from '@/lib/asistente/estados';
+import { useDictado } from './use-dictado';
 import s from './asistente.module.css';
+import { TARJETA_GUARDADA } from '@/lib/asistente/tarjeta-guardada';
+
+/** Lo que se consultó, sin repetir; las tarjetas guardadas no son consultas. */
+const consultadas = (hs?: { nombre: string }[] | null) =>
+  (hs ?? []).map((h) => h.nombre).filter((n, i, a) => n !== TARJETA_GUARDADA && a.indexOf(n) === i);
 
 /**
  * El cuerpo del asistente (mensajes + compositor). El marco, el encabezado y el
@@ -244,9 +250,9 @@ function MensajeAsistenteVista({
         ))}
         {!m.error && (
           <div className={s.debajo}>
-            {m.herramientas && m.herramientas.length > 0 && (
+            {consultadas(m.herramientas).length > 0 && (
               <span className={s.consulto} title="Datos consultados">
-                {m.herramientas.map((h) => h.nombre).filter((n, i, a) => a.indexOf(n) === i).join(' · ')}
+                {consultadas(m.herramientas).join(' · ')}
               </span>
             )}
             <div className={s.accionesMensaje} style={/```(formulario|paso)/.test(m.contenido) ? { display: 'none' } : undefined}>
@@ -313,6 +319,11 @@ export function PanelAsistente({
   const [vende, setVende] = useState('');
   const listaRef = useRef<HTMLDivElement>(null);
   const campoRef = useRef<HTMLTextAreaElement>(null);
+  // Lo dictado se suma a lo escrito y queda en la caja para revisarlo: no se envía solo.
+  const dictado = useDictado((dicho) => {
+    setTexto((antes) => (antes.trim() ? `${antes.trim()} ${dicho}` : dicho));
+    campoRef.current?.focus();
+  });
 
   const irAlFinal = useCallback(() => {
     const el = listaRef.current;
@@ -507,6 +518,13 @@ export function PanelAsistente({
       <div className={s.pie}>
         {a.derivada && <p className={s.derivada}>Ya abriste un ticket con esta conversación.</p>}
         {a.errorDerivar && <p className={s.errorDerivar} role="alert">{a.errorDerivar}</p>}
+        {dictado.estado === 'grabando' && (
+          <p className={s.dictando} role="status">
+            <span className={s.dictandoPunto} aria-hidden /> Te escucho… {Math.floor(dictado.segundos / 60)}:{String(dictado.segundos % 60).padStart(2, '0')} · pulsa el cuadro para terminar
+          </p>
+        )}
+        {dictado.estado === 'transcribiendo' && <p className={s.dictando} role="status">Pasando tu voz a texto…</p>}
+        {dictado.error && <p className={s.errorDerivar} role="alert">{dictado.error}</p>}
         <div className={s.compositor}>
           <textarea
             id="asistente-texto"
@@ -525,6 +543,19 @@ export function PanelAsistente({
               }
             }}
           />
+          {dictado.disponible && (
+            <button
+              type="button"
+              className={`${s.microfono} ${dictado.estado === 'grabando' ? s.microfonoActivo : ''}`}
+              onClick={() => void dictado.alternar()}
+              disabled={dictado.estado === 'transcribiendo' || a.enviando}
+              aria-label={dictado.estado === 'grabando' ? 'Terminar de dictar' : 'Dictar la pregunta'}
+              title={dictado.estado === 'grabando' ? 'Terminar de dictar' : 'Dictar con la voz'}
+            >
+              {dictado.estado === 'transcribiendo' ? <Loader2 size={17} className={s.girando} aria-hidden />
+                : dictado.estado === 'grabando' ? <Square size={13} fill="currentColor" aria-hidden /> : <Mic size={17} aria-hidden />}
+            </button>
+          )}
           <button
             type="button"
             className={s.enviar}

@@ -9,7 +9,7 @@ import {
 } from './enlaces';
 import { leerMensajesDgii } from './dgii';
 import { leerEstadoConfiguracion } from './estado-configuracion';
-import { pesos, fechaYmd, ymd, normalizar, quitarTildes, hoyRd } from './util';
+import { pesos, rd, fechaYmd, ymd, normalizar, quitarTildes, hoyRd } from './util';
 
 /**
  * Consultas del asistente que pasan por la API de la app.
@@ -632,7 +632,7 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
 
     // ── Escolar ───────────────────────────────────────────────────────────
     buscar_estudiantes: tool({
-      description: 'Busca estudiantes por nombre, apellido, código o tutor, por la API de Estudiantes: estado, curso actual y deuda.',
+      description: 'Busca estudiantes por nombre, apellido, código o tutor, por la API de Estudiantes: su estudianteId (el que piden las acciones del colegio), estado, curso actual, matrícula activa y deuda.',
       inputSchema: z.object({ q: z.string().min(2).max(60), limite: z.number().int().min(1).max(MAX).default(10) }),
       execute: seguro('los estudiantes', async ({ q, limite }) => {
         const r = await api.get<{ estudiantes: EstudianteApi[]; total?: number }>('/api/administracion-escolar/estudiantes', {
@@ -645,10 +645,197 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
           enlaceLista: '/escolar/estudiantes',
           estudiantes: e.slice(0, limite).map((x) => ({
             enlace: x.origen === 'dependiente' || !x.matriculaActivaId && !x.codigo ? undefined : enlaceEstudiante(x.id),
+            // Los dependientes de un cliente (sin ficha) no tienen id de estudiante.
+            estudianteId: x.origen === 'dependiente' ? null : x.id, matriculaActivaId: x.matriculaActivaId ?? null,
             nombre: `${x.nombres} ${x.apellidos}`.trim(), codigo: x.codigo ?? null, estado: x.estado,
             curso: x.cursoActual ?? null, periodo: x.periodoActivo ?? null,
             tutor: x.tutorResponsable ?? null,
             deuda: x.deudaCentavos != null ? pesos(x.deudaCentavos) : null,
+          })),
+        };
+      }),
+    }),
+
+    // ── Gobernanza: configuración y estado del colegio ───────────────────
+    configuracion_colegio: tool({
+      description:
+        'La configuración de Gobernanza del año escolar activo, con los ids que piden las acciones: el año y sus fechas, ' +
+        'la estructura (nivel › grado › sección con cursoId), los conceptos (cómo se cobra cada uno y cuántas cuotas tiene), ' +
+        'las tarifas puestas (concepto, dónde, monto) y los paquetes. Úsala antes de proponer crear o cambiar algo del colegio.',
+      inputSchema: z.object({}),
+      execute: seguro('la configuración del colegio', async () => {
+        const AE = '/api/administracion-escolar';
+        type C = { id: number; nombre: string; tipo: string; frecuencia: string; opcional: boolean; productId: number | null; diaEmision: number | null; diasParaPago: number | null; cobraMora: boolean; moraDiasGracia: number | null; avisosActivos: boolean;
+          avisoDiaEmision?: boolean; avisoDiaVencimiento?: boolean; avisoAntesMoraDias?: number | null; avisoCorreo?: boolean; avisoWhatsapp?: boolean; avisoSms?: boolean };
+        type T = {
+          periodo: { id: number; nombre: string } | null;
+          servicios: { id: number; nombre: string; tanda: string | null }[];
+          grados: { id: number; servicioId: number; nombre: string }[];
+          secciones: { id: number; gradoId: number; nombre: string }[];
+          conceptos: { id: number; cuotasCalendario: number }[];
+          precios: { conceptoId: number; objetivoTipo: string; objetivoId: number; montoCentavos: number; activo?: boolean }[];
+        };
+        const [{ periodos }, t, { conceptos }, { paquetes }] = await Promise.all([
+          api.get<{ periodos: { id: number; nombre: string; activo: boolean; fechaInicio: string | null; fechaFin: string | null }[] }>(`${AE}/periodos`),
+          api.get<T>(`${AE}/concepto-precios`),
+          api.get<{ conceptos: C[] }>(`${AE}/conceptos`),
+          api.get<{ paquetes: { id: number; nombre: string; conceptosIds: number[]; activo?: boolean }[] }>(`${AE}/paquetes`),
+        ]);
+        anotar('Configuración del colegio', t.periodo?.nombre ?? 'sin año activo');
+        const activo = periodos.find((p) => p.activo) ?? null;
+        const cuotas = new Map(t.conceptos.map((c) => [c.id, c.cuotasCalendario]));
+        const nombreC = new Map(conceptos.map((c) => [c.id, c.nombre]));
+        const dondeEs = (tipo: string, oid: number) => {
+          if (tipo === 'servicio') return t.servicios.find((s) => s.id === oid)?.nombre ?? `nivel #${oid}`;
+          if (tipo === 'grado') return t.grados.find((g) => g.id === oid)?.nombre ?? `grado #${oid}`;
+          if (tipo === 'seccion') {
+            const s = t.secciones.find((x) => x.id === oid);
+            return s ? `${t.grados.find((g) => g.id === s.gradoId)?.nombre ?? ''} ${s.nombre}`.trim() : `sección #${oid}`;
+          }
+          return `alumno #${oid}`;
+        };
+        return {
+          anoEscolar: activo ? { id: activo.id, nombre: activo.nombre, fechaInicio: activo.fechaInicio, fechaFin: activo.fechaFin } : null,
+          otrosAnos: periodos.filter((p) => !p.activo).map((p) => p.nombre),
+          estructura: t.servicios.map((s) => ({
+            servicioId: s.id, nivel: s.nombre, tanda: s.tanda,
+            grados: t.grados.filter((g) => g.servicioId === s.id).map((g) => ({
+              gradoId: g.id, grado: g.nombre,
+              secciones: t.secciones.filter((x) => x.gradoId === g.id).map((x) => ({ cursoId: x.id, seccion: x.nombre })),
+            })),
+          })),
+          conceptos: conceptos.map((c) => ({
+            id: c.id, nombre: c.nombre, tipo: c.tipo, obligatorio: !c.opcional, frecuencia: c.frecuencia,
+            cuotasEsteAno: cuotas.get(c.id) ?? 0, diaEmision: c.diaEmision, diasParaPago: c.diasParaPago,
+            cobraMora: c.cobraMora, diasGraciaMora: c.moraDiasGracia, avisos: c.avisosActivos ? {
+              alEmitir: c.avisoDiaEmision ?? false, alVencer: c.avisoDiaVencimiento ?? false, diasAntesDeMora: c.avisoAntesMoraDias ?? null,
+              por: [c.avisoCorreo && 'correo', c.avisoWhatsapp && 'WhatsApp', c.avisoSms && 'SMS'].filter(Boolean),
+            } : 'no',
+            tieneProductoParaFacturar: c.productId != null,
+          })),
+          tarifas: t.precios.filter((p) => p.activo !== false).slice(0, 150).map((p) => ({
+            conceptoId: p.conceptoId, concepto: nombreC.get(p.conceptoId) ?? `#${p.conceptoId}`,
+            aplicaA: p.objetivoTipo, objetivoId: p.objetivoId, donde: dondeEs(p.objetivoTipo, p.objetivoId), monto: rd(pesos(p.montoCentavos)),
+          })),
+          paquetes: paquetes.filter((p) => p.activo !== false).map((p) => ({ id: p.id, nombre: p.nombre, conceptos: p.conceptosIds.map((i) => nombreC.get(i) ?? `#${i}`), conceptosIds: p.conceptosIds })),
+          enlace: '/escolar/configuracion',
+        };
+      }),
+    }),
+
+    estado_colegio: tool({
+      description:
+        'Qué tiene listo y qué le falta a Gobernanza para empezar a cobrar, en orden: año escolar con fechas, estructura, SIGERD, conceptos con su calendario, ' +
+        'tarifas, paquetes, estudiantes, matrículas y responsables de pago. Úsala cuando digan «tengo un colegio nuevo», «configúrame el colegio» o «qué me falta».',
+      inputSchema: z.object({}),
+      execute: seguro('el estado del colegio', async () => {
+        const AE = '/api/administracion-escolar';
+        const [{ periodos }, t, sigerd, pend, fichas, panorama] = await Promise.all([
+          api.get<{ periodos: { id: number; nombre: string; activo: boolean; fechaInicio: string | null; fechaFin: string | null }[] }>(`${AE}/periodos`),
+          api.get<{ secciones: unknown[]; conceptos: { id: number; nombre: string; cuotasCalendario: number }[]; precios: { conceptoId: number }[] }>(`${AE}/concepto-precios`),
+          api.get<{ estado: string; conDescarga: boolean; nEstudiantes: number | null; completadoEn: string | null }>('/api/sigerd/obtener').catch(() => null),
+          api.get<{ disponible: boolean; porMatricular: number; yaMatriculados: number; grupos: { estudiantes: { sinResponsable: boolean; matriculaId?: number }[] }[] }>(`${AE}/matriculas/desde-sigerd`, { matriculados: 1 }).catch(() => null),
+          // Sin SIGERD no hay con qué comparar: se cuentan las fichas y las matrículas activas.
+          api.get<{ total?: number; estudiantes?: { tutorResponsable?: string | null }[] }>(`${AE}/estudiantes`, { estado: 'activo', limit: 200, offset: 0 }).catch(() => null),
+          api.get<{ datos: { matricula: { activos: number } } | null }>(`${AE}/dashboard`).catch(() => null),
+        ]);
+        anotar('Estado del colegio', 'checklist');
+        const activo = periodos.find((p) => p.activo);
+        const conTarifa = new Set(t.precios.map((p) => p.conceptoId));
+        const sinCalendario = t.conceptos.filter((c) => c.cuotasCalendario === 0).map((c) => c.nombre);
+        const sinTarifa = t.conceptos.filter((c) => !conTarifa.has(c.id)).map((c) => c.nombre);
+        const alumnos = pend?.grupos.flatMap((g) => g.estudiantes) ?? [];
+        const pasos = [
+          { paso: 'Año escolar con fechas', listo: !!activo?.fechaInicio && !!activo?.fechaFin, detalle: activo ? `${activo.nombre} (${activo.fechaInicio ?? '¿?'} a ${activo.fechaFin ?? '¿?'})` : 'no hay año activo' },
+          // Opcional: un colegio fuera de SIGERD que ya creó su estructura no tiene nada pendiente aquí.
+          { paso: 'Descarga de SIGERD (opcional)', listo: !!sigerd?.conDescarga || t.secciones.length > 0, detalle: sigerd?.conDescarga ? `${sigerd.nEstudiantes ?? 0} estudiantes${sigerd.completadoEn ? `, del ${sigerd.completadoEn.slice(0, 10)}` : ''}` : 'sin descargar (si el colegio no está en SIGERD, se salta y la estructura se crea a mano)' },
+          { paso: 'Estructura (niveles, grados, secciones)', listo: t.secciones.length > 0, detalle: `${t.secciones.length} sección(es)` },
+          { paso: 'Conceptos de cobro', listo: t.conceptos.length > 0, detalle: `${t.conceptos.length} concepto(s)${sinCalendario.length ? `; sin calendario (se cobran una vez al matricular): ${sinCalendario.slice(0, 6).join(', ')}` : ''}` },
+          { paso: 'Tarifas', listo: t.conceptos.length > 0 && sinTarifa.length === 0, detalle: sinTarifa.length ? `sin precio: ${sinTarifa.slice(0, 8).join(', ')}` : 'todos los conceptos tienen precio' },
+          { paso: 'Estudiantes', listo: Number(fichas?.total ?? 0) > 0, detalle: `${Number(fichas?.total ?? 0)} ficha(s) activas` },
+          pend?.disponible
+            ? { paso: 'Matrículas', listo: pend.porMatricular === 0 && pend.yaMatriculados > 0, detalle: `${pend.yaMatriculados} matriculados, ${pend.porMatricular} de SIGERD por matricular` }
+            : { paso: 'Matrículas', listo: (panorama?.datos?.matricula.activos ?? 0) > 0 && (panorama?.datos?.matricula.activos ?? 0) >= Number(fichas?.total ?? 0), detalle: `${panorama?.datos?.matricula.activos ?? 0} matrícula(s) activas de ${Number(fichas?.total ?? 0)} estudiante(s)` },
+          pend?.disponible
+            ? { paso: 'Responsables de pago', listo: alumnos.length > 0 && alumnos.every((a) => !a.sinResponsable), detalle: `${alumnos.filter((a) => a.sinResponsable).length} estudiante(s) sin responsable (no se les factura)` }
+            : (() => {
+              const sin = (fichas?.estudiantes ?? []).filter((e) => !e.tutorResponsable).length;
+              return { paso: 'Responsables de pago', listo: Number(fichas?.total ?? 0) > 0 && sin === 0, detalle: `${sin} estudiante(s) sin responsable (no se les factura)` };
+            })(),
+        ];
+        return { pasos, siguiente: pasos.find((p) => !p.listo)?.paso ?? 'Todo listo para facturar', enlace: '/escolar' };
+      }),
+    }),
+
+    panorama_colegio: tool({
+      description:
+        'El panorama de cobros del año escolar en UNA llamada (la pantalla Panorama de Gobernanza): lo cargado (devengado), cobrado, pendiente, vencido y por vencer; ' +
+        'la antigüedad de lo vencido; lo cobrado este mes; por concepto y por grado (con alumnos); los que más deben; lo que falta por facturar; ' +
+        'lo que falta por cargar del año (cuotas que todavía no salen) y las matrículas activas, nuevas y retiradas. ' +
+        'Úsala para informes y análisis del colegio («cómo va el colegio», «cuánto falta por cobrar del año», «qué grado debe más»). La mora va aparte, en cuentas_por_cobrar.',
+      inputSchema: z.object({
+        mes: z.string().regex(/^\d{4}-\d{2}$/).optional().describe('Solo ese mes, YYYY-MM.'),
+        gradoId: z.number().int().positive().optional().describe('Solo ese grado (ids en configuracion_colegio).'),
+        conceptoId: z.number().int().positive().optional(),
+      }),
+      execute: seguro('el panorama del colegio', async ({ mes, gradoId, conceptoId }) => {
+        type Montos = { devengadoCentavos: number; cobradoCentavos: number; pendienteCentavos: number };
+        const r = await api.get<{ datos: null | {
+          periodo: string; hoy: string;
+          cartera: Montos & { vencidoCentavos: number; corrienteCentavos: number; futuroCentavos: number; cargos: number; familiasConDeuda: number };
+          tramos: Record<'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas', number>;
+          caja: { mes: string; esteMesCentavos: number; mesAnteriorCentavos: number; totalCentavos: number };
+          serie: (Montos & { key: string; transcurrido: boolean })[];
+          conceptos: (Montos & { nombre: string })[];
+          grados: (Montos & { grado: string; servicio: string; alumnos: number })[];
+          deudores: { estudiante: string; curso: string; responsable: string | null; deudaCentavos: number; diasAtraso: number }[];
+          sinFacturar: { centavosTotal: number; cargosTotal: number };
+          porDevengarCentavos: number;
+          matricula: { activos: number; nuevos: number; retirados: number; finalizados: number };
+        } }>('/api/administracion-escolar/dashboard', { mes, gradoId, conceptoId });
+        anotar('Panorama del colegio', [mes, gradoId && `grado ${gradoId}`, conceptoId && `concepto ${conceptoId}`].filter(Boolean).join(', ') || 'año completo');
+        const d = r.datos;
+        if (!d) return { hayDatos: false, motivo: 'No hay año escolar todavía.' };
+        const m = (x: Montos) => ({ cargado: pesos(x.devengadoCentavos), cobrado: pesos(x.cobradoCentavos), pendiente: pesos(x.pendienteCentavos) });
+        return {
+          anoEscolar: d.periodo, hoy: d.hoy, enlace: '/escolar',
+          cartera: {
+            ...m(d.cartera), vencido: pesos(d.cartera.vencidoCentavos), porVencer: pesos(d.cartera.corrienteCentavos),
+            cargos: d.cartera.cargos, familiasConDeuda: d.cartera.familiasConDeuda,
+          },
+          antiguedadVencido: { d1a30: pesos(d.tramos.d1a30), d31a60: pesos(d.tramos.d31a60), d61a90: pesos(d.tramos.d61a90), masDe90: pesos(d.tramos.d90mas) },
+          cobradoEsteMes: pesos(d.caja.esteMesCentavos), cobradoMesAnterior: pesos(d.caja.mesAnteriorCentavos),
+          porMes: d.serie.filter((x) => x.transcurrido).map((x) => ({ mes: x.key, ...m(x) })),
+          porConcepto: d.conceptos.map((x) => ({ concepto: x.nombre, ...m(x) })),
+          porGrado: d.grados.map((x) => ({ grado: `${x.servicio} › ${x.grado}`, alumnos: x.alumnos, ...m(x) })),
+          masDeben: d.deudores.slice(0, 10).map((x) => ({ estudiante: x.estudiante, curso: x.curso, responsable: x.responsable, debe: pesos(x.deudaCentavos), diasAtraso: x.diasAtraso })),
+          cargadoSinFacturar: pesos(d.sinFacturar.centavosTotal),
+          faltaPorCargarDelAno: pesos(d.porDevengarCentavos),
+          matriculas: d.matricula,
+        };
+      }),
+    }),
+
+    pendientes_sigerd: tool({
+      description:
+        'Por sección, los alumnos que SIGERD tiene en el colegio con su estudianteId: los que faltan por matricular y los ya matriculados (con matriculaId y los conceptos que llevan) ' +
+        'y quién no tiene responsable de pago. Úsala antes de matricular_desde_sigerd o cambiar_servicios.',
+      inputSchema: z.object({ cursoId: z.number().int().positive().optional().describe('Solo esta sección. Sin él, todas (resumidas).') }),
+      execute: seguro('los alumnos de SIGERD', async ({ cursoId }) => {
+        type Al = { id: number; nombre: string; sinResponsable: boolean; matriculaId?: number; conceptos?: number[] };
+        const r = await api.get<{ disponible: boolean; motivo?: string; porMatricular: number; yaMatriculados: number; grupos: { cursoId: number; curso: string; estudiantes: Al[] }[] }>(
+          '/api/administracion-escolar/matriculas/desde-sigerd', { matriculados: 1 },
+        );
+        anotar('Alumnos de SIGERD', cursoId ? `sección ${cursoId}` : 'todas');
+        if (!r.disponible) return { disponible: false, motivo: r.motivo ?? 'No hay descarga de SIGERD o no hay año activo.' };
+        const grupos = cursoId ? r.grupos.filter((g) => g.cursoId === cursoId) : r.grupos;
+        return {
+          porMatricular: r.porMatricular, yaMatriculados: r.yaMatriculados,
+          enlace: '/escolar/matriculas/desde-sigerd',
+          secciones: grupos.map((g) => ({
+            cursoId: g.cursoId, curso: g.curso,
+            porMatricular: g.estudiantes.filter((e) => e.matriculaId == null).map((e) => ({ estudianteId: e.id, nombre: e.nombre, sinResponsable: e.sinResponsable })).slice(0, cursoId ? 80 : 12),
+            matriculados: g.estudiantes.filter((e) => e.matriculaId != null).map((e) => ({ estudianteId: e.id, matriculaId: e.matriculaId, nombre: e.nombre, conceptos: e.conceptos ?? [], sinResponsable: e.sinResponsable })).slice(0, cursoId ? 80 : 12),
           })),
         };
       }),

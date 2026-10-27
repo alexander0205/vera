@@ -12,6 +12,7 @@ import { crearHerramientasApi } from './herramientas-api';
 import { contextoDePrueba, type ContextoAsistente } from './contexto';
 import { buscarEnMapa } from './guia';
 import { herramientasDeAcciones, type Propuesta } from './acciones';
+import { asegurarAccionesEscolares } from './acciones-escolar';
 import { pesos, fechaYmd } from './util';
 
 /**
@@ -243,13 +244,17 @@ export function crearHerramientas(
   dar(true, ['estado_configuracion']);
   dar(ctx.puede('cotizaciones:ver'), ['listar_cotizaciones', 'ver_cotizacion']);
   dar(ctx.tieneModulo('contabilidad') && ctx.puede('contabilidad:ver'), ['libro_diario', 'catalogo_cuentas']);
-  dar(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver'), ['buscar_estudiantes', 'resumen_matriculas', 'cargos_escolares']);
+  dar(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:ver'), ['buscar_estudiantes', 'resumen_matriculas', 'cargos_escolares', 'configuracion_colegio', 'estado_colegio', 'panorama_colegio']);
+  dar(ctx.tieneModulo('escolar') && ctx.puede('administracion-escolar:gestionar'), ['pendientes_sigerd']);
   dar(ctx.tieneModulo('nomina') && ctx.puede('empleados:ver'), ['resumen_nomina', 'buscar_empleados']);
   dar(ctx.tieneModulo('pos') && ctx.puede('caja:ver'), ['turnos_caja']);
 
   // Acciones (crear / modificar / eliminar): el modelo solo PROPONE; la persona
-  // confirma en el panel. Hoy no hay ninguna registrada. Ver acciones.ts.
-  if (usuarioId != null) Object.assign(t, herramientasDeAcciones(ctx, usuarioId, propuestas));
+  // confirma en el panel. Las de Gobernanza están en acciones-escolar.ts.
+  if (usuarioId != null) {
+    asegurarAccionesEscolares();
+    Object.assign(t, herramientasDeAcciones(ctx, usuarioId, propuestas));
+  }
 
   // La guía va siempre: orientar no abre ningún dato.
   t.donde_encontrar = tool({

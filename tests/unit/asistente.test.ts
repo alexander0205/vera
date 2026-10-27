@@ -150,9 +150,9 @@ describe('herramientas del asistente', () => {
     // herramienta del asistente tiene que ser de lectura y pasar por revisión.
     expect(Object.keys(crearHerramientas(1, [])).sort()).toEqual([
       'buscar_clientes', 'buscar_empleados', 'buscar_estudiantes', 'buscar_facturas', 'buscar_productos',
-      'cargos_escolares', 'catalogo_cuentas', 'clientes_con_mas_facturas', 'cobros_por_metodo', 'cuentas_por_cobrar', 'donde_encontrar', 'estado_configuracion',
+      'cargos_escolares', 'catalogo_cuentas', 'clientes_con_mas_facturas', 'cobros_por_metodo', 'configuracion_colegio', 'cuentas_por_cobrar', 'donde_encontrar', 'estado_colegio', 'estado_configuracion',
       'facturas_por_revisar', 'facturas_recurrentes', 'ingresos_por_mes', 'libro_diario', 'listar_cotizaciones', 'listar_gastos_compras',
-      'pagos_recibidos', 'resumen_gastos', 'resumen_itbis', 'resumen_matriculas', 'resumen_nomina', 'resumen_ventas',
+      'pagos_recibidos', 'panorama_colegio', 'pendientes_sigerd', 'resumen_gastos', 'resumen_itbis', 'resumen_matriculas', 'resumen_nomina', 'resumen_ventas',
       'tendencia_ventas', 'turnos_caja', 'ventas_por_cliente', 'ventas_por_producto',
       'ventas_por_tipo_comprobante', 'ventas_por_usuario', 'ver_cliente', 'ver_cotizacion', 'ver_factura', 'ver_producto',
     ]);
@@ -741,7 +741,7 @@ describe('búsqueda de facturas por la API', () => {
     const h = crearHerramientas(contextoDePrueba(1, { api }), []);
     const r = await ejecutar(h.buscar_facturas, { limite: 5 }) as { error: string };
     expect(r.error).toMatch(/No pude consultar las facturas/);
-    const sinPermiso = { async get() { throw new ErrorApi(403, '/api/facturas'); } };
+    const sinPermiso = { async get() { throw new ErrorApi(403, '/api/facturas'); }, async enviar() { throw new ErrorApi(403, '/api/facturas'); } };
     const h2 = crearHerramientas(contextoDePrueba(1, { api: sinPermiso }), []);
     expect(((await ejecutar(h2.buscar_facturas, { limite: 5 })) as { error: string }).error).toMatch(/no tiene acceso/);
   });

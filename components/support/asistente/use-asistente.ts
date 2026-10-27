@@ -311,7 +311,7 @@ export function useAsistente(activo: boolean) {
     cambiar({ estado: 'confirmando' });
     try {
       const r = await fetch('/api/asistente/confirmar', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, mensajeId }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { cambiar({ estado: 'error', resultado: d.error ?? 'No se pudo completar la acción.' }); return; }

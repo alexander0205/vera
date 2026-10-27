@@ -31,6 +31,7 @@ import { responderGuiado } from '@/lib/asistente/guiado-servidor';
 import { quitarBloquesGuiados, sinBloquesGuiadosParaElModelo } from '@/lib/asistente/formulario';
 import { esRespuestaGrande, pideExcel, pidePdf, tieneDatosTabulares } from '@/lib/asistente/bloques';
 import { asistenteIaDisponible, conversar, AsistenteSinCuotaError, type MensajeChat } from '@/lib/asistente/agente';
+import { TARJETA_GUARDADA, conTarjetas } from '@/lib/asistente/tarjeta-guardada';
 import { registrarConsumo } from '@/lib/ia/consumo-servidor';
 import type { Consumo } from '@/lib/ia/consumo';
 
@@ -213,14 +214,14 @@ export async function POST(req: NextRequest) {
     await db.insert(asistenteMensajes).values({ conversacionId, rol: 'user', contenido: texto });
   }
 
-  const previos = await db.select({ rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido })
+  const previos = await db.select({ rol: asistenteMensajes.rol, contenido: asistenteMensajes.contenido, herramientas: asistenteMensajes.herramientas })
     .from(asistenteMensajes)
     .where(eq(asistenteMensajes.conversacionId, conversacionId))
     .orderBy(desc(asistenteMensajes.id))
     .limit(MAX_HISTORIAL);
   previos.reverse();
   // Al modelo no le llega el estado interno de la creación guiada ni los formularios ya llenos: solo ruido y superficie de inyección.
-  const paraModelo = (m: { rol: string; contenido: string }) => (m.rol === 'assistant' ? sinBloquesGuiadosParaElModelo(m.contenido) : m.contenido);
+  const paraModelo = (m: { rol: string; contenido: string; herramientas: unknown }) => (m.rol === 'assistant' ? conTarjetas(sinBloquesGuiadosParaElModelo(m.contenido), m.herramientas) : m.contenido);
   const historial: MensajeChat[] = previos.map((m) => ({
     role: m.rol === 'assistant' ? 'assistant' : 'user', content: paraModelo(m),
   }));
@@ -311,7 +312,9 @@ export async function POST(req: NextRequest) {
     r.respuesta = quitarBloquesGuiados(r.respuesta);
     const [guardado] = await db.insert(asistenteMensajes).values({
       conversacionId, rol: 'assistant', contenido: r.respuesta,
-      herramientas: r.consultas.length ? r.consultas : null,
+      herramientas: r.consultas.length || r.propuestas?.length
+        ? [...r.consultas, ...(r.propuestas ?? []).map((p) => ({ nombre: TARJETA_GUARDADA, resumen: p.resumen }))]
+        : null,
       origen: r.origen,
     }).returning({ id: asistenteMensajes.id, creadoEn: asistenteMensajes.creadoEn });
     await db.update(asistenteConversaciones).set({ actualizadaEn: new Date() })
@@ -346,3 +349,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'El asistente no pudo responder. Intenta de nuevo.', conversacionId }, { status: 502 });
   }
 }
+

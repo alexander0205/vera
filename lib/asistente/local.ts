@@ -282,7 +282,8 @@ const PLANTILLAS: Record<string, Plantilla> = {
     }
     const lineas = [
       pedido.soloVencidas
-        ? `Tienes **${rd(vencido)}** vencido entre ${n(r.clientesConDeuda)} cliente${n(r.clientesConDeuda) === 1 ? '' : 's'} (de ${rd(total)} por cobrar en total).`
+        // Con «solo vencidas» la API ya filtró: su total es lo vencido, no la cartera entera.
+        ? `Tienes **${rd(vencido)}** vencido entre ${n(r.clientesConDeuda)} cliente${n(r.clientesConDeuda) === 1 ? '' : 's'}.`
         : `Te deben ${cifra(total, PANTALLA_DE_CIFRA.porCobrar)} entre ${n(r.clientesConDeuda)} cliente${n(r.clientesConDeuda) === 1 ? '' : 's'}${vencido ? `; **${rd(vencido)}** ya está vencido` : ', y nada está vencido todavía'}.`,
     ];
     if (deudores.length) {
@@ -1140,7 +1141,8 @@ export async function responderLocal(
   }
 
   // «¿Qué me falta para emitir mi primera factura?»: pasos reales con lo que ya está hecho.
-  if ((DISPARA_FLUJO_FACTURA.test(t) || DISPARA_FLUJO_COTIZACION.test(t)) && tools.estado_configuracion) {
+  // «¿Qué me falta en el colegio?» es otra lista (estado_colegio): la arma la IA.
+  if ((DISPARA_FLUJO_FACTURA.test(t) || DISPARA_FLUJO_COTIZACION.test(t)) && !/\b(colegio|escuela|gobernanza|escolar|matricul)/.test(t) && tools.estado_configuracion) {
     const flujo = FLUJOS.find((f) => f.id === (DISPARA_FLUJO_COTIZACION.test(t) ? 'primera-cotizacion' : 'primera-factura'))!;
     const estado = await intentar(tools, 'estado_configuracion', {});
     if (estado) return { intencion: 'guia-paso', respuesta: formatearFlujo(flujo, estado as unknown as EstadoConfiguracion) };

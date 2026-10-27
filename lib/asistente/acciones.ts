@@ -22,10 +22,9 @@ import { rateLimitDb } from '@/lib/rate-limit';
  *    que valía al proponer.
  * 5. Las acciones destructivas (eliminar) se marcan como tales en la tarjeta.
  *
- * Hoy el asistente es de consulta y NO hay acciones registradas: este módulo
- * es el carril por el que tendrá que pasar cualquier acción futura. Agregar
- * una es registrarla aquí con `registrarAccion`; no hay otra forma de que el
- * modelo escriba.
+ * Las acciones de Gobernanza (año escolar, conceptos, tarifas, matrículas,
+ * facturación…) están en `acciones-escolar.ts`. Agregar una es registrarla con
+ * `registrarAccion`; no hay otra forma de que el modelo escriba.
  */
 
 export type TipoAccion = 'crear' | 'modificar' | 'eliminar';
@@ -42,6 +41,13 @@ export interface AccionDef<S extends z.ZodTypeAny = z.ZodTypeAny> {
   esquema: S;
   /** Frase para la tarjeta de confirmación: qué va a pasar, con los datos concretos. */
   resumen: (args: z.infer<S>) => string;
+  /**
+   * Lo que va a pasar de verdad, preguntado a la API antes de proponer (una
+   * revisión «dryRun» o una vista previa): cuántas matrículas, cuántos cargos,
+   * por cuánto. Su texto va en la tarjeta en vez de `resumen`; si devuelve
+   * `error`, no se propone nada. Solo lee: nunca escribe.
+   */
+  previsualizar?: (ctx: ContextoAsistente, args: z.infer<S>) => Promise<{ resumen: string } | { error: string }>;
   /** Lo que de verdad hace; recibe la sesión ya verificada. Pasa por los mismos servicios que la pantalla. */
   ejecutar: (ctx: ContextoAsistente, usuarioId: number, args: z.infer<S>) => Promise<{ mensaje: string; enlace?: string }>;
 }
@@ -52,8 +58,21 @@ export function registrarAccion<S extends z.ZodTypeAny>(def: AccionDef<S>) {
   if (REGISTRO.has(def.nombre)) throw new Error(`Acción duplicada: ${def.nombre}`);
   REGISTRO.set(def.nombre, def as unknown as AccionDef);
 }
+export const accionRegistrada = (nombre: string) => REGISTRO.has(nombre);
 /** Solo para pruebas. */
 export const limpiarAcciones = () => REGISTRO.clear();
+
+/** Lo que la persona no ve (el genérico) tiene que quedar en el log para arreglarlo. */
+function anotarFallo(paso: 'revisar' | 'ejecutar', nombre: string, e: unknown) {
+  const api = e instanceof Error && e.name === 'ErrorApi';
+  (api ? console.warn : console.error)(`[asistente] ${nombre}: falló al ${paso}:`, api ? e.message : e);
+}
+
+/** El error de la API ya viene escrito para la persona; lo demás, genérico. */
+const mensajeDeError = (e: unknown) =>
+  e instanceof Error && e.name === 'ErrorApi' && !/^La API respondió/.test(e.message)
+    ? e.message
+    : 'No se pudo completar. Inténtalo de nuevo o hazlo desde la pantalla.';
 export const accionesRegistradas = () => [...REGISTRO.values()].map((a) => ({ nombre: a.nombre, tipo: a.tipo }));
 
 // ── Propuesta y confirmación ────────────────────────────────────────────────
@@ -78,7 +97,20 @@ export async function proponerAccion(
   if (def.modulo && !ctx.tieneModulo(def.modulo)) return { error: 'Tu empresa no tiene el módulo necesario para esa acción.' };
   if (!ctx.puede(def.permiso)) return { error: 'Tu rol no tiene permiso para esa acción.' };
   const v = def.esquema.safeParse(argsCrudos);
-  if (!v.success) return { error: 'Faltan datos o no son válidos para esa acción.' };
+  // Se le dice al modelo qué campo falló: con eso corrige la llamada en vez de rendirse.
+  if (!v.success) return { error: `Faltan datos o no son válidos para esa acción (${v.error.issues.slice(0, 3).map((i) => `${i.path.join('.') || 'datos'}: ${i.message}`).join('; ')}).` };
+
+  let resumen = def.resumen(v.data);
+  if (def.previsualizar) {
+    try {
+      const pv = await def.previsualizar(ctx, v.data);
+      if ('error' in pv) return { error: pv.error };
+      resumen = pv.resumen;
+    } catch (e) {
+      anotarFallo('revisar', nombre, e);
+      return { error: mensajeDeError(e) };
+    }
+  }
 
   const token = await new SignJWT({ n: nombre, a: v.data, u: usuarioId, t: ctx.teamId })
     .setProtectedHeader({ alg: 'HS256' })
@@ -91,7 +123,7 @@ export async function proponerAccion(
     token,
     tipo: def.tipo,
     destructiva: def.tipo === 'eliminar',
-    resumen: def.resumen(v.data),
+    resumen,
   };
 }
 
@@ -123,8 +155,14 @@ export async function confirmarAccion(
   const uso = await rateLimitDb(`asistente_accion:${p.jti}`, 1, 10 * 60_000);
   if (!uso.allowed) return { ok: false, error: 'Esta acción ya se confirmó.', status: 409 };
 
-  const r = await def.ejecutar(ctx, usuarioId, v.data);
-  return { ok: true, ...r, nombre: def.nombre, tipo: def.tipo, resumen: def.resumen(v.data) };
+  try {
+    const r = await def.ejecutar(ctx, usuarioId, v.data);
+    return { ok: true, ...r, nombre: def.nombre, tipo: def.tipo, resumen: def.resumen(v.data) };
+  } catch (e) {
+    anotarFallo('ejecutar', def.nombre, e);
+    // La API se negó (un 409 «ya tiene matrícula», un 400 de datos): se dice tal cual.
+    return { ok: false, error: mensajeDeError(e), status: 400 };
+  }
 }
 
 // ── Herramientas del modelo ─────────────────────────────────────────────────

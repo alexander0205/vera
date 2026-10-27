@@ -168,6 +168,18 @@ ul.lista { list-style: disc; }
   background: var(--primary); color: var(--primary-foreground); flex-shrink: 0;
 }
 .enviar:disabled { background: var(--muted); color: var(--muted-foreground); cursor: default; }
+.microfono {
+  width: 36px; height: 36px; border: 0; border-radius: 10px; display: grid; place-items: center; cursor: pointer;
+  background: transparent; color: var(--muted-foreground); flex-shrink: 0;
+}
+.microfono:hover:not(:disabled) { background: var(--muted); color: var(--foreground); }
+.microfono:disabled { opacity: .5; cursor: default; }
+.microfonoActivo, .microfonoActivo:hover:not(:disabled) { background: #dc2626; color: #fff; }
+.girando { animation: girar 1s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+.dictando { display: flex; align-items: center; gap: 6px; margin: 0 2px 6px; font-size: 12px; color: var(--muted-foreground); }
+.dictandoPunto { width: 8px; height: 8px; border-radius: 50%; background: #dc2626; animation: salto 1.2s infinite ease-in-out; }
+@media (prefers-reduced-motion: reduce) { .girando, .dictandoPunto { animation: none; } }
 .notas {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 0 2px;
   font-size: 11.5px; color: var(--muted-foreground);
