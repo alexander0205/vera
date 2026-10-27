@@ -10,6 +10,7 @@ import {
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
+import { diaDelAvisoAlCrear } from '@/lib/administracion-escolar/aviso-al-crear';
 import { eq, and, asc, inArray, isNull, ne } from 'drizzle-orm';
 
 /**
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
     periodoId, cursoId, cursoIds, estudianteIds,
     conceptoId, mes, anio, montoCentavos, fechaVencimiento,
   } = body ?? {};
+  // «Avisar a las familias»: cada cargo creado lleva el día en que sale su
+  // aviso de «cobro nuevo», y lo manda el cron de avisos (ver aviso-al-crear.ts).
+  const avisoAlCrear = body?.avisar === true ? diaDelAvisoAlCrear(new Date()) : null;
 
   if (!periodoId || !conceptoId || !Number.isInteger(anio)) {
     return NextResponse.json({ error: 'periodoId, conceptoId y anio son requeridos' }, { status: 400 });
@@ -241,6 +245,7 @@ export async function POST(req: NextRequest) {
     montoCentavos,
     saldoCentavos: montoCentavos,
     fechaVencimiento: fechaVencimiento || null,
+    avisoAlCrear,
     estado: 'pendiente' as const,
   }));
 
@@ -256,5 +261,7 @@ export async function POST(req: NextRequest) {
     omitidos: matriculas.length - creados.length,
     total: matriculas.length,
     detalles,
+    // El día en que sale el aviso a las familias, si se pidió.
+    avisoAlCrear: creados.length > 0 ? avisoAlCrear : null,
   });
 }

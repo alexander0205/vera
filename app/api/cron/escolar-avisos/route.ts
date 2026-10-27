@@ -3,7 +3,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import {
-  avisosDeHoy, candidatos, canalesSinWhatsApp, despachar, equiposConAvisos, mensajesEnviados,
+  avisosDeHoy, candidatos, canalesSinWhatsApp, despachar, destinoDelCanal, equiposConAvisos, mensajesEnviados,
   type AvisoPendiente, type EnvioHecho,
 } from '@/lib/administracion-escolar/avisos';
 import { asuntoDeAviso, datosWhatsAppDeGrupo, sufijoDeBoton } from '@/lib/administracion-escolar/agrupar-avisos';
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
   const pausaMs = Number(process.env.ESCOLAR_AVISOS_PAUSA_MS) || 1100;
 
   const hoy = new Date().toISOString().slice(0, 10);
-  const equipos = await equiposConAvisos();
+  const equipos = await equiposConAvisos(hoy);
   if (equipos.length === 0) {
     return NextResponse.json({ hoy, dryRun, equipos: 0, avisos: 0, envios: [] });
   }
@@ -143,6 +143,13 @@ export async function GET(req: NextRequest) {
     let whatsappSinPlantilla = 0;
     const pendientes: AvisoPendiente[] = crudos.map((p) => {
       if (!p.canales.includes('whatsapp')) return p;
+      // El de «cobro nuevo» pedido al cobrar a un grupo lleva respaldo por SMS
+      // también cuando la familia no tiene WhatsApp: quien lo pidió quiere que
+      // se entere. Los avisos de siempre no cambian (el de la emisión no va por
+      // SMS de ordinario).
+      if (p.fila.avisoAlCrear === p.fecha && !destinoDelCanal(p.fila, 'whatsapp')) {
+        return { ...p, canales: canalesSinWhatsApp(p.canales, p.fila, canales) };
+      }
       const hueco = huecoDe(p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia);
       const asignada = plantillasDelColegio.find((x) => x.aviso === hueco) ?? null;
       const hayEnlace = p.fila.clientId != null && p.fila.ecfDocumentId != null;
@@ -170,7 +177,7 @@ export async function GET(req: NextRequest) {
         correo: (destino, texto, m) => enviarAvisoCobroEmail({
           email: destino,
           colegio,
-          asunto: asuntoDeAviso(m.aviso, m.miembros.length),
+          asunto: asuntoDeAviso(m.aviso, m.miembros.length, m.miembros.some((x) => x.fila.ecfDocumentId != null)),
           texto,
           // La lista de varios cobros necesita sus saltos de línea. El de un
           // solo cobro sale como siempre.

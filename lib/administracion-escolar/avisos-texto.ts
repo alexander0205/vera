@@ -35,6 +35,15 @@ export function redactar(p: AvisoPendiente, colegio: string): { largo: string; c
   const alumno = fila.estudiante;
   const monto = pesos(fila.saldoCentavos);
 
+  if (p.aviso === 'al-emitir' && fila.ecfDocumentId == null) {
+    // Un cobro recién puesto (el día de cine) todavía no tiene factura: decir
+    // «ya está lista la factura» manda al padre a buscar algo que no existe.
+    const vence = fila.fechaVencimiento ? ` Tienes hasta el ${enLetra(fila.fechaVencimiento)} para pagarlo.` : '';
+    return {
+      largo: `Hay un cobro nuevo de ${fila.concepto} para ${alumno}: ${monto}.${vence}`,
+      corto: `${colegio}: cobro nuevo de ${fila.concepto} para ${alumno}, ${monto}.${vence}`,
+    };
+  }
   if (p.aviso === 'al-emitir') {
     const vence = fila.fechaVencimiento ? ` Tienes hasta el ${enLetra(fila.fechaVencimiento)} para pagarla.` : '';
     return {

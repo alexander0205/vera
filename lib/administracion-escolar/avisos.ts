@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { and, asc, eq, gt, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { getOCrearLink, urlDelLink } from './link-pago';
 import {
@@ -89,6 +89,18 @@ export interface FilaAviso {
    * aire y al colegio una explicación que dar.
    */
   ecfDocumentId: number | null;
+  /**
+   * Día en que sale el aviso de «cobro nuevo» que se pidió al cobrar a un grupo
+   * (`aviso_al_crear`). Sale como el de la emisión: es lo mismo dicho a un
+   * cargo que no tiene calendario. Ver `aviso-al-crear.ts`.
+   */
+  avisoAlCrear?: string | null;
+  /**
+   * El concepto tiene los avisos encendidos. Falso cuando la fila entra SOLO
+   * por el aviso de «cobro nuevo»: pedir ese aviso no enciende los demás
+   * (vencimiento, recargo) de un concepto que el colegio dejó sin avisos.
+   */
+  conceptoConAvisos?: boolean;
   /** Los cuatro son distintos y no siempre coinciden. Uno por canal. */
   email: string | null;
   whatsapp: string | null;
@@ -150,8 +162,15 @@ export interface AvisoPendiente {
  */
 export function fechasDeAviso(fila: FilaAviso): { aviso: Aviso; fecha: string; offsetDias: number }[] {
   const salen: { aviso: Aviso; fecha: string; offsetDias: number }[] = [];
+  // El de «cobro nuevo» pedido al cobrar a un grupo. Es el aviso de la emisión
+  // de un cargo sin calendario: comparte su fila en la tabla de idempotencia
+  // (tipo y offset), así que nunca salen los dos.
+  if (fila.avisoAlCrear) {
+    salen.push({ aviso: 'al-emitir', fecha: fila.avisoAlCrear, offsetDias: 0 });
+  }
+  if (fila.conceptoConAvisos === false) return salen;
 
-  if (fila.fechaEmision && fila.avisoDiaEmision) {
+  if (fila.fechaEmision && fila.avisoDiaEmision && !fila.avisoAlCrear) {
     salen.push({ aviso: 'al-emitir', fecha: fila.fechaEmision, offsetDias: 0 });
   }
   if (fila.fechaVencimiento) {
@@ -264,6 +283,8 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
       avisoCorreo: adminEscolarConceptosPago.avisoCorreo,
       avisoWhatsapp: adminEscolarConceptosPago.avisoWhatsapp,
       avisoSms: adminEscolarConceptosPago.avisoSms,
+      avisosActivos: adminEscolarConceptosPago.avisosActivos,
+      avisoAlCrear: adminEscolarCargos.avisoAlCrear,
       estudianteId: adminEscolarCargos.estudianteId,
       clientId: clients.id,
       destinatario: clients.razonSocial,
@@ -273,10 +294,7 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
       telefono: clients.telefono,
     })
     .from(adminEscolarCargos)
-    .innerJoin(adminEscolarConceptosPago, and(
-      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
-      eq(adminEscolarConceptosPago.avisosActivos, true),
-    ))
+    .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
     .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
     .leftJoin(adminEscolarConceptoCuotas, eq(adminEscolarCargos.cuotaId, adminEscolarConceptoCuotas.id))
     // El responsable de pago del alumno, que es un contacto de Facturación.
@@ -292,6 +310,8 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
       gt(adminEscolarCargos.saldoCentavos, 0),
       ne(adminEscolarCargos.estado, 'anulado'),
       ne(adminEscolarCargos.estado, 'pagado'),
+      // El concepto avisa, o a este cargo se le pidió el aviso de «cobro nuevo».
+      or(eq(adminEscolarConceptosPago.avisosActivos, true), isNotNull(adminEscolarCargos.avisoAlCrear)),
     ))
     // Siempre en el mismo orden: colegio, responsable, cargo. Sin ORDER BY
     // Postgres devuelve las filas como le da la gana, y los hermanos de una
@@ -301,11 +321,17 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
     // se quedó. Los alumnos sin responsable (NULL) quedan al final.
     .orderBy(asc(adminEscolarCargos.teamId), asc(clients.id), asc(adminEscolarCargos.id));
 
-  return filas.map((f) => ({
+  return filas.map(({ avisosActivos, ...f }) => ({
     ...f,
     estudiante: `${f.nombres} ${f.apellidos ?? ''}`.trim(),
     fechaEmision: f.fechaEmision ? String(f.fechaEmision) : null,
     fechaVencimiento: f.fechaVencimiento ? String(f.fechaVencimiento) : null,
+    avisoAlCrear: f.avisoAlCrear ? String(f.avisoAlCrear) : null,
+    conceptoConAvisos: avisosActivos,
+    // Un concepto sin avisos no tiene canales elegidos. Quien pidió el aviso
+    // de «cobro nuevo» pidió que se enterara la familia: van los tres, y el
+    // interruptor del colegio (Configuración › Avisos) sigue mandando encima.
+    ...(avisosActivos ? {} : { avisoCorreo: true, avisoWhatsapp: true, avisoSms: true }),
   }));
 }
 
@@ -627,16 +653,25 @@ export async function despachar(
   return hechos;
 }
 
-/** Equipos con algún concepto escolar que tenga los avisos encendidos. */
-export async function equiposConAvisos(): Promise<number[]> {
-  const filas = await db
-    .selectDistinct({ teamId: adminEscolarConceptosPago.teamId })
-    .from(adminEscolarConceptosPago)
-    .where(and(
-      eq(adminEscolarConceptosPago.avisosActivos, true),
-      eq(adminEscolarConceptosPago.activo, true),
-    ));
-  return filas.map((f) => f.teamId);
+/**
+ * Equipos con algún concepto escolar que tenga los avisos encendidos, o con
+ * algún aviso de «cobro nuevo» pedido para hoy o después (`hoy`, `YYYY-MM-DD`).
+ */
+export async function equiposConAvisos(hoy: string): Promise<number[]> {
+  const [conConcepto, conAvisoAlCrear] = await Promise.all([
+    db
+      .selectDistinct({ teamId: adminEscolarConceptosPago.teamId })
+      .from(adminEscolarConceptosPago)
+      .where(and(
+        eq(adminEscolarConceptosPago.avisosActivos, true),
+        eq(adminEscolarConceptosPago.activo, true),
+      )),
+    db
+      .selectDistinct({ teamId: adminEscolarCargos.teamId })
+      .from(adminEscolarCargos)
+      .where(gte(adminEscolarCargos.avisoAlCrear, hoy)),
+  ]);
+  return [...new Set([...conConcepto, ...conAvisoAlCrear].map((f) => f.teamId))];
 }
 
 /** Cargos que ya recibieron algún aviso hoy. Solo para el reporte del cron. */
