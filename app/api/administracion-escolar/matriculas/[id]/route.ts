@@ -9,6 +9,7 @@ import {
   adminEscolarConceptosPago,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { logAudit, getIp } from '@/lib/audit';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { eq, and, count, inArray } from 'drizzle-orm';
 
@@ -247,6 +248,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
       .returning();
 
+    if (row && row.estado !== actual.estado) {
+      logAudit({
+        teamId, userId: auth.user.id, actor: auth.user.email,
+        action: 'ESCOLAR_MATRICULA_ESTADO',
+        resource: `matricula:${matriculaId}`,
+        ip: getIp(req),
+        meta: { estudianteId: actual.estudianteId, de: actual.estado, a: row.estado },
+      });
+    }
     return NextResponse.json({ matricula: row });
   } catch (err: unknown) {
     // Choque con el índice parcial: ya hay otra matrícula activa en ese período.
@@ -273,7 +283,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
  * colgando: borrar ahí dejaría deuda y cobros apuntando a una matrícula que ya
  * no existe, y el plan seguiría generando cargos huérfanos cada mes.
  */
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
@@ -284,7 +294,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
 
   const [actual] = await db
-    .select({ id: adminEscolarMatriculas.id, facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId })
+    .select({
+      id: adminEscolarMatriculas.id,
+      facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId,
+      estudianteId: adminEscolarMatriculas.estudianteId,
+      cursoId: adminEscolarMatriculas.cursoId,
+    })
     .from(adminEscolarMatriculas)
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
     .limit(1);
@@ -315,5 +330,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   await db.delete(adminEscolarMatriculas)
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)));
+  logAudit({
+    teamId, userId: auth.user.id, actor: auth.user.email,
+    action: 'ESCOLAR_MATRICULA_BORRADA',
+    resource: `matricula:${matriculaId}`,
+    ip: getIp(req),
+    meta: { estudianteId: actual.estudianteId, cursoId: actual.cursoId },
+  });
   return NextResponse.json({ ok: true });
 }

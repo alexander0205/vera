@@ -12,6 +12,7 @@ import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
 import { armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
 import { crearMatriculaConCargos } from '@/lib/administracion-escolar/matricula-alta';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { logAudit, getIp } from '@/lib/audit';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { eq, and, desc, count, ilike, or, sql } from 'drizzle-orm';
@@ -207,6 +208,13 @@ export async function POST(req: NextRequest) {
       conceptos:        pedidos,
     }, plan);
 
+    logAudit({
+      teamId, userId: auth.user.id, actor: auth.user.email,
+      action: 'ESCOLAR_MATRICULA_CREADA',
+      resource: `matricula:${row.id}`,
+      ip: getIp(req),
+      meta: { estudianteId: estudianteIdOk, cursoId: cursoIdOk, fechaInscripcion: inscripcion, conceptos: pedidos },
+    });
     return NextResponse.json({ matricula: row });
   } catch (err: unknown) {
     // Choque con el índice parcial: ya hay una matrícula activa en ese período.

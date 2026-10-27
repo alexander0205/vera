@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LoteError, matricularLote } from '@/lib/administracion-escolar/matricula-lote';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { logAudit, getIp } from '@/lib/audit';
 
 /**
  * Matricular en lote: varios estudiantes en la MISMA sección, con el MISMO plan
@@ -38,6 +39,20 @@ export async function POST(req: NextRequest) {
       notas,
       dryRun,
     });
+    if (!dryRun && respuesta.resumen.crear > 0) {
+      logAudit({
+        teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email,
+        action: 'ESCOLAR_MATRICULAS_LOTE',
+        resource: `curso:${cursoId}`,
+        ip: getIp(req),
+        meta: {
+          origen: 'lote',
+          creadas: respuesta.resumen.crear,
+          fechaInscripcion: fechaInscripcion ?? null,
+          matriculas: respuesta.resultados.filter((x) => x.resultado === 'creada').map((x) => x.matriculaId),
+        },
+      });
+    }
     return NextResponse.json(respuesta);
   } catch (err) {
     if (err instanceof LoteError) return NextResponse.json({ error: err.message }, { status: err.status });

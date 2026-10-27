@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { logAudit, getIp } from '@/lib/audit';
 import { LoteError } from '@/lib/administracion-escolar/matricula-lote';
 import {
   matricularSeccionDesdeSigerd, pendientesDesdeSigerd, type AlumnoDesdeSigerd,
@@ -62,11 +63,23 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await matricularSeccionDesdeSigerd(auth.teamId, {
-      cursoId,
-      fechaInscripcion: String(body.fechaInscripcion ?? ''),
-      alumnos,
-    }));
+    const fechaInscripcion = String(body.fechaInscripcion ?? '');
+    const r = await matricularSeccionDesdeSigerd(auth.teamId, { cursoId, fechaInscripcion, alumnos });
+    if (r.creadas > 0) {
+      logAudit({
+        teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email,
+        action: 'ESCOLAR_MATRICULAS_LOTE',
+        resource: `curso:${cursoId}`,
+        ip: getIp(req),
+        meta: {
+          origen: 'sigerd',
+          creadas: r.creadas,
+          fechaInscripcion,
+          matriculas: r.resultados.filter((x) => x.resultado === 'creada').map((x) => x.matriculaId),
+        },
+      });
+    }
+    return NextResponse.json(r);
   } catch (err) {
     if (err instanceof LoteError) return NextResponse.json({ error: err.message }, { status: err.status });
     throw err;
