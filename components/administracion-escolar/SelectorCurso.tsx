@@ -74,10 +74,21 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled }: 
   const grado = elegido?.gradoId ?? gradoTanteo;
 
   // Con un solo servicio no hay nada que decidir: se deja puesto. Obligar a
-  // elegir entre uno es un clic que no aporta.
+  // elegir entre uno es un clic que no aporta. Y si de ese único servicio solo
+  // sale un grado y una sección, se encadena hasta la sección: cuando no hay
+  // alternativa en ningún paso, nadie está eligiendo por el usuario.
   useEffect(() => {
-    if (servicio == null && servicios.length === 1) setServicioTanteo(servicios[0].id);
-  }, [servicio, servicios]);
+    if (servicio != null || servicios.length !== 1) return;
+    const unico = servicios[0].id;
+    setServicioTanteo(unico);
+    const suyos = delPeriodo.filter((c) => c.servicioId === unico);
+    const gradosDe = [...new Set(suyos.map((c) => c.gradoId))];
+    if (gradosDe.length === 1) {
+      setGradoTanteo(gradosDe[0]);
+      if (suyos.length === 1) onChange(String(suyos[0].id));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servicio, servicios, delPeriodo]);
 
   // Al cambiar de año escolar, la sección elegida es de otro año y ya no está
   // en la lista: se suelta todo en vez de dejar los campos enseñando algo que

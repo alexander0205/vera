@@ -197,6 +197,7 @@ export function ResponsablePagoDialog({
                 siga creando responsables sin él. */}
             <ClienteForm
               embebido
+              textoCrear="Crear responsable"
               // Aquí el dependiente es el alumno que se está vinculando y lo
               // agrega esta ficha al guardar. Dejar la caja de «Agregar» a la
               // vista invitaría a teclear al mismo niño una segunda vez.

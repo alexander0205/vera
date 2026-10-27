@@ -4,6 +4,7 @@ import {
   FACTURAS_POR_TANDA,
   MAX_ALUMNOS_POR_PETICION,
   MAX_CONCEPTOS_POR_PETICION,
+  PAGO_UNICO,
   SIN_FILTRO,
   agruparOmitidos,
   crearPorTandas,
@@ -250,6 +251,37 @@ describe('los meses que se eligen: facturar solo algunos', () => {
     expect(plan.facturas[0].lineas.map((l) => l.mes)).toEqual([10]);
   });
 
+  it('un pago único (sin mes ni calendario) no cuenta por el mes en que se creó: va aparte', () => {
+    // Inscrito el 1 de agosto, matriculado en octubre: la inscripción se creó en octubre.
+    const inscripcion = cargo(1, { mes: null, fechaEmision: '2026-10-16', pagoUnico: true });
+    const conUnicos = planearFacturasPorLote([inscripcion, ago(), sep()],
+      opciones({ alumnos: [ana], meses: ['2026-08', '2026-09'], conPagosUnicos: true }));
+    expect(conUnicos.facturas[0].cargoIds).toContain(inscripcion.id);
+    expect(conUnicos.facturas[0].lineas.map((l) => l.mes)).toEqual([8, 9, null]);
+
+    // Sin «Pago único» no entra aunque se marque octubre.
+    const sinUnicos = planearFacturasPorLote([inscripcion, oct()], opciones({ alumnos: [ana], meses: ['2026-10'] }));
+    expect(sinUnicos.facturas[0].cargoIds).not.toContain(inscripcion.id);
+
+    // Solo los pagos únicos, sin ningún mes.
+    const solo = planearFacturasPorLote([inscripcion, ago()], opciones({ alumnos: [ana], meses: [], conPagosUnicos: true }));
+    expect(solo.facturas[0].cargoIds).toEqual([inscripcion.id]);
+
+    // Todo lo pendiente: entra como siempre.
+    expect(planearFacturasPorLote([inscripcion], opciones({ alumnos: [ana] })).facturas[0].cargoIds).toEqual([inscripcion.id]);
+
+    // Si es lo único que debe, se dice.
+    const fuera = planearFacturasPorLote([inscripcion], opciones({ alumnos: [ana], meses: ['2026-09'] }));
+    expect(fuera.omitidos[0]).toMatchObject({ motivo: 'otros-meses' });
+    expect(fuera.omitidos[0].detalle).toContain('los pagos únicos');
+  });
+
+  it('un cargo sin mes PERO con calendario sigue contando por el mes de su cuota', () => {
+    const conCuota = cargo(1, { mes: null, fechaEmision: '2026-10-01', pagoUnico: false });
+    const plan = planearFacturasPorLote([conCuota], opciones({ alumnos: [ana], meses: ['2026-10'] }));
+    expect(plan.facturas[0].cargoIds).toEqual([conCuota.id]);
+  });
+
   it('si todo lo que debe es de otros meses, se dice cuáles', () => {
     const plan = planearFacturasPorLote([ago(), sep()], opciones({ alumnos: [ana], meses: ['2026-10'] }));
     expect(plan.facturas).toHaveLength(0);
@@ -276,6 +308,11 @@ describe('los meses que se eligen: facturar solo algunos', () => {
     // Noviembre por adelantado: el corte es su último día. Solo meses pasados: el corte es hoy.
     expect(hastaParaMeses(['2026-10', '2026-11'], '2026-10-24')).toBe('2026-11-30');
     expect(hastaParaMeses(['2026-08'], '2026-10-24')).toBe('2026-10-24');
+    // «Pago único» no es un mes: ni mueve el corte ni sale como mes en la frase.
+    expect(hastaParaMeses(['2026-10', PAGO_UNICO], '2026-10-24')).toBe('2026-10-31');
+    expect(hastaParaMeses([PAGO_UNICO], '2026-10-24')).toBe('2026-10-24');
+    expect(listaDeMeses(['2026-09', PAGO_UNICO, '2026-08'])).toBe('agosto y septiembre 2026 y los pagos únicos');
+    expect(listaDeMeses([PAGO_UNICO])).toBe('los pagos únicos');
     const pend = [
       { e: 1, c: 1, m: '2026-10', n: 2, centavos: 600000 },
       { e: 2, c: 1, m: '2026-10', n: 1, centavos: 300000 },
@@ -422,7 +459,7 @@ describe('leerPeticionLote', () => {
       ok: true,
       datos: {
         periodoId: null, estudianteIds: [1, 2], conceptoIds: [3],
-        hasta: hoy, meses: null, juntarHermanos: false, confirmar: false,
+        hasta: hoy, meses: null, conPagosUnicos: false, juntarHermanos: false, confirmar: false,
       },
     });
   });
@@ -433,6 +470,9 @@ describe('leerPeticionLote', () => {
       .toMatchObject({ ok: true, datos: { meses: ['2026-09', '2026-10'] } });
     expect(leerPeticionLote({ ...buena, meses: ['2026-13'] }, hoy)).toEqual({ ok: false, error: 'Los meses deben venir como AAAA-MM.' });
     expect(leerPeticionLote({ ...buena, meses: [] }, hoy)).toEqual({ ok: false, error: 'Elige al menos un mes.' });
+    // Ningún mes pero con los pagos únicos: es facturar solo esos.
+    expect(leerPeticionLote({ ...buena, meses: [], conPagosUnicos: true }, hoy))
+      .toMatchObject({ ok: true, datos: { meses: [], conPagosUnicos: true } });
     expect(leerPeticionLote({ ...buena, meses: ['2026-12'] }, hoy))
       .toEqual({ ok: false, error: 'Hay un mes elegido después de la fecha de corte.' });
   });

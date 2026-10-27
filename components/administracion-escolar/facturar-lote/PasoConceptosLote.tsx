@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react';
 import {
-  conceptosDelMes, describirCalendario, listaDeMeses, marcarVarios, resumenPorMes,
+  PAGO_UNICO, conceptosDelMes, describirCalendario, listaDeMeses, marcarVarios, resumenPorMes,
   type ConceptoCatalogo, type CuotaCalendario, type PendienteMes,
 } from '@/lib/administracion-escolar/facturar-lote';
 import { fmtDOP } from '@/lib/utils/format';
@@ -26,6 +26,10 @@ import { fmtDOP } from '@/lib/utils/format';
  *    fecha: nadie sabía qué meses entraban hasta ver la revisión, y a algunas
  *    familias se les factura un mes concreto (octubre y noviembre juntos, por
  *    ejemplo) aunque deban otros. El corte se calcula solo de los meses.
+ *    Debajo, **Pago único**: lo que no es de ningún mes (la inscripción, un
+ *    uniforme). Antes caía en el mes en que se creó el cargo —la inscripción
+ *    del 1 de agosto, matriculado en octubre, en «octubre»— y quien facturaba
+ *    agosto y septiembre la dejaba fuera sin verla. Los atajos lo marcan.
  *  - **¿Juntar hermanos?** Apagado, una factura por alumno — como lo pidió el
  *    colegio. Encendido, una por responsable de pago.
  *
@@ -74,8 +78,14 @@ export function PasoConceptosLote({
       .filter((l) => l.cargos > 0 || (l.cuota && m.valor >= esteMes));
     return [m.valor, lineas] as const;
   }));
+  /** Lo que no es de ningún mes: sus propios cargos, sin calendario. */
+  const unicos = conceptosDelMes(PAGO_UNICO, pendientes, [], alumnos, seleccionados);
+  const hayUnicos = unicos.length > 0;
+  delMes.set(PAGO_UNICO, unicos);
+  const conUnicos = (ms: string[]) => (hayUnicos ? [...ms, PAGO_UNICO] : ms);
   const hastaHoy = meses.filter((m) => m.valor <= esteMes).map((m) => m.valor);
-  const marcados = mesesSel === 'todo' ? new Set(hastaHoy) : mesesSel;
+  const marcados = mesesSel === 'todo' ? new Set(conUnicos(hastaHoy)) : mesesSel;
+  const unicoMarcado = hayUnicos && marcados.has(PAGO_UNICO);
   const siguiente = meses.find((m) => m.valor > esteMes)?.valor ?? null;
 
   const alternar = (valor: string) => {
@@ -85,22 +95,25 @@ export function PasoConceptosLote({
     onMeses(s);
   };
 
-  // Lo que dice la frase de abajo.
-  const elegidos = [...marcados].sort();
+  // Lo que dice la frase de abajo. `elegidos` son solo meses; «Pago único» va aparte.
+  const elegidos = [...marcados].filter((m) => m !== PAGO_UNICO).sort();
   const sumaDe = (lista: string[]) => lista.reduce((acc, m) => {
     const x = porMes.get(m);
     return { cargos: acc.cargos + (x?.cargos ?? 0), centavos: acc.centavos + (x?.centavos ?? 0) };
   }, { cargos: 0, centavos: 0 });
   const dentro = mesesSel === 'todo'
-    ? sumaDe([...porMes.keys()].filter((m) => m <= esteMes))
-    : sumaDe(elegidos);
+    ? sumaDe([...porMes.keys()].filter((m) => m === PAGO_UNICO || m <= esteMes))
+    : sumaDe(unicoMarcado ? [...elegidos, PAGO_UNICO] : elegidos);
   const adelantados = elegidos.filter((m) => m > esteMes);
   const quedanFuera = mesesSel === 'todo'
     ? []
-    : [...porMes.keys()].filter((m) => !marcados.has(m) && m <= (elegidos.at(-1) ?? esteMes)).sort();
+    : [...porMes.keys()].filter((m) => m !== PAGO_UNICO && !marcados.has(m) && m <= (elegidos.at(-1) ?? esteMes)).sort()
+      .concat(hayUnicos && !unicoMarcado ? [PAGO_UNICO] : []);
   const fuera = sumaDe(quedanFuera);
   // Concepto por concepto, qué meses entran: lo que más importa leer antes de revisar.
-  const mesesDentro = mesesSel === 'todo' ? meses.map((m) => m.valor).filter((m) => m <= esteMes) : elegidos;
+  const mesesDentro = mesesSel === 'todo'
+    ? conUnicos(meses.map((m) => m.valor).filter((m) => m <= esteMes))
+    : unicoMarcado ? [...elegidos, PAGO_UNICO] : elegidos;
   const porConcepto = new Map<number, string[]>();
   for (const m of mesesDentro) {
     for (const l of delMes.get(m) ?? []) porConcepto.set(l.conceptoId, [...(porConcepto.get(l.conceptoId) ?? []), m]);
@@ -113,6 +126,8 @@ export function PasoConceptosLote({
       {texto}
     </button>
   );
+  const textoUnico = (l: (typeof unicos)[number]) =>
+    `${nombreDe.get(l.conceptoId) ?? 'Concepto'}: ${l.cargos} ${l.cargos === 1 ? 'cargo' : 'cargos'} · ${fmtDOP(l.centavos)}`;
   const soloEste = mesesSel !== 'todo' && elegidos.length === 1 && elegidos[0] === esteMes;
   const esteYSiguiente = mesesSel !== 'todo' && siguiente != null
     && elegidos.length === 2 && elegidos[0] === esteMes && elegidos[1] === siguiente;
@@ -171,10 +186,10 @@ export function PasoConceptosLote({
         <legend className="text-sm font-semibold text-gray-900">¿Qué meses?</legend>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Atajos de meses">
           {preset(mesesSel === 'todo', 'Todo lo pendiente hasta hoy', () => onMeses('todo'))}
-          {preset(soloEste, `Solo ${MESES_CORTOS[Number(esteMes.slice(5)) - 1].toLowerCase()}`, () => onMeses(new Set([esteMes])))}
+          {preset(soloEste, `Solo ${MESES_CORTOS[Number(esteMes.slice(5)) - 1].toLowerCase()}`, () => onMeses(new Set(conUnicos([esteMes]))))}
           {siguiente && preset(esteYSiguiente,
             `${MESES_CORTOS[Number(esteMes.slice(5)) - 1]} y ${MESES_CORTOS[Number(siguiente.slice(5)) - 1].toLowerCase()}`,
-            () => onMeses(new Set([esteMes, siguiente])))}
+            () => onMeses(new Set(conUnicos([esteMes, siguiente]))))}
         </div>
 
         <ul className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
@@ -231,20 +246,46 @@ export function PasoConceptosLote({
             );
           })}
         </ul>
+
+        {hayUnicos && (
+          <label className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-zero-500 has-[:focus-visible]:ring-offset-1 ${
+            unicoMarcado ? 'border-zero-600 bg-zero-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+            <input type="checkbox" className="sr-only" checked={unicoMarcado} onChange={() => alternar(PAGO_UNICO)}
+              aria-label={`Pago único. No es de ningún mes. ${unicos.map(textoUnico).join('. ')}.`} />
+            <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+              unicoMarcado ? 'border-zero-600 bg-zero-600 text-white' : 'border-gray-400 bg-white'}`} aria-hidden>
+              {unicoMarcado && <Check className="h-3 w-3" strokeWidth={3} />}
+            </span>
+            <span className="min-w-0 flex-1" aria-hidden>
+              <span className="block text-sm font-semibold text-gray-900">Pago único</span>
+              <span className="block text-xs text-gray-500">Inscripción, uniforme y lo que se cobra una vez: no es de ningún mes.</span>
+              <ul className="mt-1 space-y-0.5">
+                {unicos.map((l) => (
+                  <li key={l.conceptoId} className="flex gap-1 text-xs leading-snug">
+                    <span className="min-w-0 truncate text-gray-800">{nombreDe.get(l.conceptoId) ?? 'Concepto'}</span>
+                    <span className="ml-auto shrink-0 tabular-nums text-gray-700">
+                      {l.cargos} {l.cargos === 1 ? 'cargo' : 'cargos'} · {fmtDOP(l.centavos)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </span>
+          </label>
+        )}
       </fieldset>
 
       {/* ── Lo que va a pasar ── */}
       <div aria-live="polite" className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800">
         {seleccionados.size === 0 ? (
           <p>Marca al menos un concepto.</p>
-        ) : mesesSel !== 'todo' && elegidos.length === 0 ? (
+        ) : mesesSel !== 'todo' && elegidos.length === 0 && !unicoMarcado ? (
           <p>Marca al menos un mes.</p>
         ) : (
           <ul className="space-y-1">
             <li>
               Vas a facturar{' '}
               <strong className="font-semibold text-gray-900">
-                {mesesSel === 'todo' ? 'todo lo pendiente hasta hoy' : listaDeMeses(elegidos)}
+                {mesesSel === 'todo' ? 'todo lo pendiente hasta hoy' : listaDeMeses(unicoMarcado ? [...elegidos, PAGO_UNICO] : elegidos)}
               </strong>
               {dentro.cargos > 0 && <>: {dentro.cargos} {dentro.cargos === 1 ? 'cargo pendiente' : 'cargos pendientes'} por <strong className="font-semibold text-gray-900 tabular-nums">{fmtDOP(dentro.centavos)}</strong></>}.
             </li>
@@ -253,7 +294,7 @@ export function PasoConceptosLote({
                 <ul className="mt-1 space-y-0.5 border-l-2 border-zero-200 pl-3">
                   {[...porConcepto].map(([c, ms]) => (
                     <li key={c}>
-                      <span className="font-medium text-gray-900">{nombreDe.get(c) ?? 'Concepto'}</span>: {listaDeMeses(ms)}
+                      <span className="font-medium text-gray-900">{nombreDe.get(c) ?? 'Concepto'}</span>: {ms.length === 1 && ms[0] === PAGO_UNICO ? 'pago único' : listaDeMeses(ms)}
                     </li>
                   ))}
                 </ul>

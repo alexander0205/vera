@@ -44,6 +44,9 @@ export interface Producto {
     saldoCentavos:  number;
     productoId:     number | null;
     contexto:       string;
+    /** Beneficiario de Facturación del alumno; null si no está enlazado a ninguno. */
+    dependienteId?:     number | null;
+    dependienteNombre?: string;
   };
 }
 

@@ -518,7 +518,9 @@ describe('solo usa las rutas que ya existían, y por sus mismas guardas', () => 
     const crear = lee('app/api/administracion-escolar/cargos/route.ts');
     expect(lista).toContain("await pedir('/api/administracion-escolar/cargos', {");
     expect(lista).toContain('...(centavos != null ? { montoCentavos: centavos } : {}),');
-    expect(lista).toContain('fechaVencimiento: vencimientoDe(hoy, c.diasParaPago ?? null),');
+    expect(lista).toContain('fechaVencimiento: vencimientoDe(ancla, c.diasParaPago ?? null),');
+    // La inscripción se fecha en la inscripción; los demás pagos únicos, hoy.
+    expect(lista).toContain("const ancla = c.tipo === 'inscripcion' && inscritoDesde ? inscritoDesde : hoyRD();");
     expect(crear).toContain('const tarifa = await resolverTarifa(teamId, refs.ids.matricula!, refs.ids.concepto!);');
   });
 

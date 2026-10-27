@@ -317,7 +317,15 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
         </div>
 
         {/* ── Las cuatro cifras de pie ─────────────────────────────────── */}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* `@container`: la grilla mide su PROPIO ancho, no el de la ventana.
+            Con el asistente abierto el área se angosta sin cambiar el viewport, y
+            cuatro columnas por breakpoint de pantalla (`xl`) dejaban cifras como
+            «RD$6,027,900.00» sin espacio —se comían los centavos o empujaban una
+            barra horizontal—. Aquí 1 columna muy angosto, 2 desde ~460px y las 4
+            solo cuando de verdad caben (~960px del contenedor: a esa anchura la
+            cifra más alta entra en una línea; por debajo, 2 columnas anchas). */}
+        <div className="@container">
+        <div className="grid gap-4 @min-[460px]:grid-cols-2 @min-[960px]:grid-cols-4">
           <Tarjeta
             icono={<CalendarRange className="h-4 w-4" />}
             titulo={filtros.mes ? `Total de ${nombreDeMes(filtros.mes)}` : 'Total del año'}
@@ -390,6 +398,7 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
               <p className="text-sm text-gray-500">En el año: {fmtDOP(caja.totalCentavos)}</p>
             )}
           </Tarjeta>
+        </div>
         </div>
 
         {/* ── Mes a mes ────────────────────────────────────────────────── */}
@@ -486,18 +495,19 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
                 {d.grados.map((g) => (
                   <div key={g.gradoId}>
                     <div className="flex items-baseline justify-between gap-2 text-sm">
-                      <span className="truncate font-medium text-gray-900">
-                        {g.grado}
-                        <span className="ml-1.5 font-normal text-gray-400">
-                          {g.servicio}{g.tanda ? ` · ${g.tanda}` : ''} · {g.alumnos} alum.
-                        </span>
-                      </span>
+                      <span className="min-w-0 truncate font-medium text-gray-900">{g.grado}</span>
                       <span className="shrink-0 tabular-nums text-gray-500">
                         {g.pendienteCentavos > 0
                           ? <b className="font-semibold text-red-600">{fmtDOP(g.pendienteCentavos)}</b>
                           : '—'}
                       </span>
                     </div>
+                    {/* Nivel, tanda y alumnos en su propia línea: al lado del grado
+                        no cabían y se truncaba justo la tanda y la cantidad de
+                        alumnos, que es lo que aquí se quiere ver. */}
+                    <p className="text-xs text-gray-400">
+                      {g.servicio}{g.tanda ? ` · ${g.tanda}` : ''} · {g.alumnos} alum.
+                    </p>
                     <Barra valor={g.cobradoCentavos} total={g.devengadoCentavos} color="#2a45c4" />
                   </div>
                 ))}
@@ -646,14 +656,37 @@ function Tarjeta({ icono, titulo, valor, nota, children }: {
   icono: React.ReactNode; titulo: string; valor: string; nota: string; children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    // `min-w-0`: una celda de grilla no se encoge por debajo de su contenido si
+    // no se le dice, y una cifra ancha sacaba la tarjeta de la rejilla (barra
+    // horizontal). Ver la misma nota en `Panel`.
+    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
       <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
         <span className="text-gray-400">{icono}</span>{titulo}
       </span>
-      <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900">{valor}</p>
+      <Monto texto={valor} />
       <div className="mt-1 space-y-1">{children}</div>
       <p className="mt-2 text-xs leading-snug text-gray-400">{nota}</p>
     </div>
+  );
+}
+
+/**
+ * El monto de una tarjeta: la parte entera grande y los centavos en chico.
+ *
+ * `fmtDOP` siempre trae dos decimales, y a tamaño completo «RD$6,027,900.00» no
+ * cabía en una tarjeta angosta. Pintar los centavos en una talla menor quita
+ * ancho sin perder el dato. El texto se parte por si acaso (`break-words`), pero
+ * con la grilla por contenedor casi nunca hace falta.
+ */
+function Monto({ texto }: { texto: string }) {
+  const corte = texto.lastIndexOf('.');
+  const entero = corte === -1 ? texto : texto.slice(0, corte);
+  const centavos = corte === -1 ? '' : texto.slice(corte);
+  return (
+    <p className="mt-2 break-words text-2xl font-bold leading-tight tabular-nums text-gray-900">
+      {entero}
+      {centavos && <span className="text-base font-semibold text-gray-400">{centavos}</span>}
+    </p>
   );
 }
 

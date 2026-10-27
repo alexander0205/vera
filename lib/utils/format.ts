@@ -167,6 +167,23 @@ export function fmtCodigoCorto(codigo: string | null | undefined): string {
 }
 
 /**
+ * Formatea un documento dominicano para MOSTRARLO: cédula de 11 dígitos como
+ * `000-0000000-0` y RNC de 9 como `0-00-00000-0`. Cualquier otra cosa —ya con
+ * guiones, pasaporte, longitud rara o vacío— se devuelve tal cual.
+ *
+ * Es solo para pintar: la cédula se guarda en crudo («00000000018») y así salía
+ * en pantalla. No normaliza para guardar; para comparar dos documentos se siguen
+ * usando solo los dígitos.
+ */
+export function fmtDocumento(doc: string | null | undefined): string {
+  if (!doc) return '';
+  const d = doc.replace(/\D/g, '');
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 10)}-${d.slice(10)}`;
+  if (d.length === 9) return `${d.slice(0, 1)}-${d.slice(1, 3)}-${d.slice(3, 8)}-${d.slice(8)}`;
+  return doc;
+}
+
+/**
  * Formatea un teléfono RD a `(XXX) XXX-XXXX`. Acepta cualquier input,
  * extrae dígitos (max 10) y aplica máscara progresivamente.
  *

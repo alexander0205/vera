@@ -89,6 +89,7 @@ function Field({ label, field, type = 'text', placeholder, form, setForm, ayuda 
 export default function ClienteForm({
   clienteId, embebido = false, dependientesEditables = true,
   valoresIniciales, onGuardado, onCancelar, onSucioChange, volverA = null,
+  textoCrear = 'Crear cliente',
 }: {
   clienteId?: number;
   /**
@@ -107,6 +108,12 @@ export default function ClienteForm({
    * separaría del original al primer campo nuevo.
    */
   embebido?: boolean;
+  /**
+   * Texto del botón al CREAR. Por defecto «Crear cliente»; el colegio lo embebe
+   * para crear el responsable de pago y ahí dice «Crear responsable», que es
+   * como se llama ese contacto en Gobernanza.
+   */
+  textoCrear?: string;
   /**
    * Si se pueden agregar dependientes desde aquí.
    *
@@ -594,7 +601,7 @@ export default function ClienteForm({
           startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
           sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, textTransform: 'none', borderRadius: '8px' }}
         >
-          {saving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Crear cliente')}
+          {saving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : textoCrear)}
         </Button>
       </Box>
     </Box>

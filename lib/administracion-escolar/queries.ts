@@ -9,6 +9,7 @@ import 'server-only';
 import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists, notExists } from 'drizzle-orm';
 import { coincideDocumento } from '@/lib/busqueda/documento';
 import { repartirCobroEntreHermanos, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
+import { hoyRD } from '@/lib/utils/format';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes,
@@ -652,7 +653,7 @@ export async function sincronizarSaldosDesdeFacturas(
     subPorFacturaHijo.set(Number(r.fid), m);
   }
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   // 4. Agrupar cargos por factura y repartir lo cobrado en cascada.
   const porFactura = new Map<number, typeof cargos>();

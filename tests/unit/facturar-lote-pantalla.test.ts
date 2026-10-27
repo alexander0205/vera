@@ -118,6 +118,26 @@ describe('PasoConceptosLote', () => {
     expect(html(createElement(PasoConceptosLote, { ...props, mesesSel: new Set<string>() }))).toContain('Marca al menos un mes');
   });
 
+  it('la inscripción sin mes va en «Pago único», aparte de los meses, y los atajos la marcan', () => {
+    const conUnico = {
+      ...props,
+      pendientes: [...props.pendientes, { e: 7, c: 1, m: 'unico', n: 1, centavos: 250000 }],
+    };
+    const h = html(createElement(PasoConceptosLote, conUnico));
+    expect(h).toContain('Pago único');
+    expect(h).toContain('Pago único. No es de ningún mes. Colegiatura: 1 cargo');
+    // Ningún mes la lleva.
+    expect(h).not.toMatch(/Octubre 2026\. Este mes\. [^"]*2,500/);
+    // Marcada: la frase la cuenta.
+    const marcado = html(createElement(PasoConceptosLote, { ...conUnico, mesesSel: new Set(['2026-09', 'unico']) }));
+    expect(marcado).toContain('septiembre 2026 y los pagos únicos');
+    // Sin marcar: se avisa que se queda fuera.
+    const sinMarcar = html(createElement(PasoConceptosLote, { ...conUnico, mesesSel: new Set(['2026-09']) }));
+    expect(sinMarcar).toContain('Se quedan sin facturar los pagos únicos');
+    // Solo «Pago único» ya es una elección válida.
+    expect(html(createElement(PasoConceptosLote, { ...conUnico, mesesSel: new Set(['unico']) }))).not.toContain('Marca al menos un mes');
+  });
+
   it('con «juntar» encendido explica que sale una por responsable', () => {
     expect(html(createElement(PasoConceptosLote, { ...props, juntar: true }))).toContain('Una factura por responsable de pago');
   });

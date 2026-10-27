@@ -311,7 +311,7 @@ export default function NuevaFacturaForm({
    * sin salir de la factura.
    */
   type OpcionEscolar = {
-    cargoId: number; estudianteId: number; seleccionado: boolean;
+    cargoId: number; estudianteId: number; estudianteNombre?: string; seleccionado: boolean;
     saldoCentavos: number; mes: number | null; anio: number;
     linea?: PrefillCargo['linea']; contexto: string;
   };
@@ -563,6 +563,7 @@ export default function NuevaFacturaForm({
     opciones?: {
       cargoId: number;
       estudianteId: number;
+      estudianteNombre?: string;
       seleccionado: boolean;
       saldoCentavos: number;
       mes: number | null;
@@ -1296,13 +1297,21 @@ export default function NuevaFacturaForm({
   // ─── Búsqueda productos ───────────────────────────────────────────────────
   /**
    * Cuotas del plan de un alumno, en forma de producto, para que el buscador
-   * las pueda ofrecer. Solo las de ESE beneficiario: con hermanos en la misma
-   * factura, mezclarlas haría cobrarle a uno la mensualidad del otro.
+   * las pueda ofrecer. Con beneficiario en la línea, solo las de ESE hijo: con
+   * hermanos en la misma factura, mezclarlas haría cobrarle a uno la
+   * mensualidad del otro.
+   *
+   * Sin beneficiario se ofrecen todas, con el nombre del alumno delante. Antes
+   * no se ofrecía ninguna, y en un colegio cuyos alumnos no están enlazados a
+   * un beneficiario de Contactos —los que entran desde SIGERD— nunca hay
+   * beneficiario que elegir: ni columna, ni meses, solo el catálogo. Al elegir
+   * la cuota, la línea toma el beneficiario del alumno si lo tiene
+   * (`aplicarCuotaEnLinea`).
    *
    * El `id` va en negativo para no chocar nunca con un producto real.
    */
   function cuotasComoProductos(dependienteId: number | null | undefined, q: string): Producto[] {
-    if (!dependienteId || opcionesEscolares.length === 0) return [];
+    if (opcionesEscolares.length === 0) return [];
     const texto = q.trim().toLowerCase();
 
     return opcionesEscolares
@@ -1311,7 +1320,7 @@ export default function NuevaFacturaForm({
       // de Gobernanza lleva otro número: comparando uno con otro el buscador no
       // ofrecía ninguna cuota, salvo que los dos ids coincidieran por
       // casualidad, y quedaban solo los productos genéricos del catálogo.
-      .filter((o) => o.linea?.dependienteId === dependienteId)
+      .filter((o) => !dependienteId || o.linea?.dependienteId === dependienteId)
       // Lo que ya está en la factura no se vuelve a ofrecer: añadir dos veces
       // el mismo mes es cobrarlo dos veces.
       .filter((o) => !items.some((it) => it.cuotaClave === `${o.estudianteId}:${o.cargoId}:${o.mes ?? 0}:${o.anio}`))
@@ -1319,10 +1328,20 @@ export default function NuevaFacturaForm({
         const nombre = o.mes
           ? `${o.linea!.nombreItem} — ${MESES_LINEA[o.mes]} ${o.anio}`
           : String(o.linea!.nombreItem);
+        // De quién es. Si el alumno tiene beneficiario, eso lo dice la columna
+        // de la línea; si no, lo tiene que decir la descripción, que es lo
+        // único que queda en la factura.
+        const depAlumno = o.linea?.dependienteId ?? null;
+        const contexto = depAlumno == null && o.estudianteNombre
+          ? [o.estudianteNombre, o.contexto].filter(Boolean).join(' · ')
+          : o.contexto;
+        const descripcion = !dependienteId && o.estudianteNombre
+          ? [o.estudianteNombre, o.contexto].filter(Boolean).join(' · ')
+          : o.contexto;
         return {
           id: -(o.cargoId || (o.estudianteId * 100 + (o.mes ?? 0))),
           nombre,
-          descripcion: o.contexto || null,
+          descripcion: descripcion || null,
           precioDOP: Number(o.linea!.precioUnitarioItem) || 0,
           tasaItbis: String(o.linea!.tasaItbis ?? 'exento'),
           tipo: String(o.linea!.indicadorBienoServicio) === '1' ? 'bien' : 'servicio',
@@ -1333,7 +1352,9 @@ export default function NuevaFacturaForm({
             cargoId: o.cargoId, estudianteId: o.estudianteId,
             mes: o.mes, anio: o.anio, saldoCentavos: o.saldoCentavos,
             productoId: typeof o.linea!.productoId === 'number' ? o.linea!.productoId : null,
-            contexto: o.contexto,
+            contexto,
+            dependienteId: depAlumno,
+            dependienteNombre: o.linea?.dependienteNombre ?? '',
           },
         } satisfies Producto;
       })
@@ -1422,6 +1443,14 @@ export default function NuevaFacturaForm({
         cuotaClave: `${c.estudianteId}:${c.cargoId}:${c.mes ?? 0}:${c.anio}`,
       },
     });
+
+    // Elegida sin beneficiario —el buscador ya las ofrece así—, la línea toma
+    // el del alumno: no se le pide a nadie que lo vuelva a elegir para un mes
+    // que ya dice de quién es.
+    const linea = items[idx];
+    if (linea && linea.dependienteId == null && c.dependienteId != null) {
+      handleSelectBeneficiario(linea.id, c.dependienteId, c.dependienteNombre ?? '');
+    }
 
     // Solo si la deuda ya existe. Una cuota prevista todavía no tiene cargo, y
     // apuntar el 0 haría que al emitir se intentara saldar un cargo inexistente.

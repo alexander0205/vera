@@ -18,6 +18,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { paymentLinks, pagosRecibidos, cotizaciones } from '@/lib/db/schema';
 import { registrarPago } from '@/lib/db/queries';
+import { hoyRD } from '@/lib/utils/format';
 import { logError, logInfo } from '@/lib/logger';
 
 export type PaymentLinkRow = typeof paymentLinks.$inferSelect;
@@ -198,7 +199,7 @@ export async function reconciliarLedger(token: string): Promise<number | null> {
     }
 
     try {
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = hoyRD();
       const { pago } = await registrarPago({
         teamId:        link.teamId,
         ecfDocumentId: link.ecfDocumentId,
