@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { puedeEnEmpresa } from '@/lib/seguridad/permisos';
 import { db } from '@/lib/db/drizzle';
 import { teams, whatsappConfig } from '@/lib/db/schema';
 import { crearNegocio, registrarWebhook, WhatsAppApiError } from '@/lib/whatsapp/client';
@@ -15,6 +16,10 @@ export async function POST(request: NextRequest) {
 
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+    // Conectar o cambiar el canal de WhatsApp de la empresa: solo quien administra la configuración.
+    if (!(await puedeEnEmpresa(user, teamId, 'configuracion:gestionar'))) {
+      return NextResponse.json({ error: 'Solo quien administra la empresa puede gestionar WhatsApp' }, { status: 403 });
+    }
 
     const rl = await rateLimitDb(`whatsapp_conectar:${teamId}`, 20, 60 * 60_000);
     if (!rl.allowed) {

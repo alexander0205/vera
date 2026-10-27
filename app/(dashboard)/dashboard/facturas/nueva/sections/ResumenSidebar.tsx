@@ -396,6 +396,7 @@ export function ResumenSidebar({
             <Box sx={{ px: 2, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {/* Toggle registrar pago */}
               <FormControlLabel
+                data-tour="factura-pago"
                 control={
                   <Checkbox
                     size="small"

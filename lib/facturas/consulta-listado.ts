@@ -5,7 +5,7 @@
  * (`/api/facturas/export`), para que un CSV/Excel/PDF traiga exactamente las
  * facturas que la tabla enseña con el mismo filtro.
  */
-import { eq, gte, lte, like, or, sql, type SQL } from 'drizzle-orm';
+import { eq, gte, lte, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { ecfDocuments } from '@/lib/db/schema';
 import type { FiltroFacturas } from './filtro-listado';
 
@@ -17,9 +17,9 @@ export function condicionesListadoFacturas(teamId: number, f: FiltroFacturas): S
   ];
   if (f.q) {
     c.push(or(
-      like(ecfDocuments.encf, `%${f.q}%`),
-      like(ecfDocuments.codigo, `%${f.q}%`),
-      like(ecfDocuments.razonSocialComprador, `%${f.q}%`),
+      ilike(ecfDocuments.encf, `%${f.q}%`),
+      ilike(ecfDocuments.codigo, `%${f.q}%`),
+      ilike(ecfDocuments.razonSocialComprador, `%${f.q}%`),
     )!);
   }
   if (f.estado) c.push(eq(ecfDocuments.estado, f.estado));

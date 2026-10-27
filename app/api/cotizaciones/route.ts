@@ -10,6 +10,7 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 import { eq, desc, and, or, ilike, getTableColumns } from 'drizzle-orm';
 
 // GET /api/cotizaciones?q=...
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
   const rows = await db
     .select({ ...getTableColumns(cotizaciones), emailCliente: clients.email })
     .from(cotizaciones)
-    .leftJoin(clients, eq(clients.id, cotizaciones.clientId))
+    .leftJoin(clients, and(eq(clients.id, cotizaciones.clientId), eq(clients.teamId, cotizaciones.teamId)))
     .where(where)
     .orderBy(desc(cotizaciones.createdAt))
     .limit(100);
@@ -51,6 +52,13 @@ export async function POST(req: NextRequest) {
   const { teamId, user, teamRole } = auth;
 
   const body = await req.json();
+
+  // El cliente y los productos del cuerpo tienen que ser de esta empresa.
+  const errRefs = await validarReferenciasDeEmpresa(teamId, {
+    clientId: typeof body.clientId === 'number' ? body.clientId : null,
+    productoIds: Array.isArray(body.items) ? body.items.map((i: { productoId?: unknown }) => (typeof i?.productoId === 'number' ? i.productoId : null)) : [],
+  });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
   // Mismo gate de precios que la factura: la cotización se convierte en una, y
   // la conversión no vuelve a mirar los precios. Si el control no estuviera

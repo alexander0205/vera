@@ -15,6 +15,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { sembrarAlmacenPorDefecto } from '@/lib/pos/asignaciones';
 import { eq, and, sql, desc, asc } from 'drizzle-orm';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 // Ejes de variante (igual que en POST /api/productos).
 const variantAtributoSchema = z.object({
@@ -111,6 +112,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const body = await req.json();
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
+
+  // La categoría tiene que ser de esta empresa.
+  const errRefs = await validarReferenciasDeEmpresa(teamId, { categoriaId: parsed.data.categoriaId ?? null });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo, activo,

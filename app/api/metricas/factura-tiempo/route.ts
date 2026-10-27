@@ -18,6 +18,7 @@ import { db } from '@/lib/db/drizzle';
 import { facturaTiempos } from '@/lib/db/schema';
 import { getSession } from '@/lib/auth/session';
 import { getTeamForUser } from '@/lib/db/queries';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,10 +44,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // El documento al que se asocia la métrica debe ser de la empresa; si no, se guarda sin él.
+    const docId = Number.isInteger(b.ecfDocumentId) ? b.ecfDocumentId : null;
+    const docPropio = docId != null && (await validarReferenciasDeEmpresa(team.id, { ecfDocumentId: docId })) === null;
     await db.insert(facturaTiempos).values({
       teamId: team.id,
       userId: sesion.user.id,
-      ecfDocumentId: Number.isInteger(b.ecfDocumentId) ? b.ecfDocumentId : null,
+      ecfDocumentId: docPropio ? docId : null,
       origen,
       ms: Math.round(ms),
       lineas: Number.isInteger(b.lineas) ? Math.min(b.lineas, 32767) : 0,

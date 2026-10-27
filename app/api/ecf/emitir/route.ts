@@ -39,6 +39,7 @@ import { labelMetodo } from '@/lib/pagos/metodos';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
 import { cargosDeLasLineas, estudiantesDeLasLineas, vincularCargosDeFactura, responsableDeLosCargos, responsableDeLosEstudiantes, ponerResponsableSiFalta } from '@/lib/administracion-escolar/vincular-por-clave';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
@@ -558,6 +559,13 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Toda referencia del cuerpo (cliente, almacén, vendedor, lista, productos) debe ser de ESTA empresa.
+    const errRefs = await validarReferenciasDeEmpresa(teamId, {
+      clientId: data.clientId, almacenId: data.almacenId, vendedorId: data.vendedorId, listaPreciosId: data.listaPreciosId,
+      productoIds: data.items.map((i) => i.productoId),
+    });
+    if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
     // Gasto (e43 menores / e47 pagos al exterior): dinero que SALE. Su efectivo
     // no entra a la caja como ingreso — se trata como salida (ver helpers arriba).

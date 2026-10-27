@@ -70,7 +70,8 @@ export async function GET(
     const [cl] = await db
       .select()
       .from(clients)
-      .where(eq(clients.id, doc.clientId))
+      // De esta empresa: un documento con un cliente ajeno (id mal puesto) no debe enseñar sus datos.
+      .where(and(eq(clients.id, doc.clientId), eq(clients.teamId, teamId)))
       .limit(1);
     cliente = cl ?? null;
   }
@@ -245,6 +246,11 @@ export async function GET(
     createdByName,
     updatedByName,
     dependienteNombre: doc.dependienteNombre ?? null,
+    // Lo que un borrador conserva al re-guardarse (la API de emisión los reescribe).
+    almacenId: doc.almacenId ?? null,
+    vendedorId: doc.vendedorId ?? null,
+    listaPreciosId: doc.listaPreciosId ?? null,
+    tipoOrden: doc.tipoOrden ?? null,
 
     // Form payload (terminos / notas / pie / comentario)
     terminosCondiciones: doc.terminosCondiciones,

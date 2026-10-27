@@ -269,12 +269,12 @@ export function ModuleHeader({
 
           {/* `apartar` ya trae su propio sx con flex y gap; pasarle otro aquí
               lo reemplazaría entero y se perdería el colapso al buscar. */}
-          {/* 100 y no 56: el bloque tenía el ancho justo del avatar, y con
-              `overflow: hidden` el botón de soporte quedaba recortado. */}
-          {/* La campana de las tareas por revisar, solo en Gobernanza: fuera
-              del colegio no hay tareas, y pedirla ahí sería una consulta
-              para enseñar un cero. */}
-          <Box {...apartar(buscadorAbierto, current === 'escolar' ? 140 : 100)}>
+          {/* 220 y no 100: el botón «Asistencia» lleva ícono + palabra (≈120 px)
+              y con `overflow: hidden` y un tope de 100 empujaba al avatar fuera
+              de la barra, que es lo que lleva al perfil. En Gobernanza va además
+              la campana de las tareas por revisar: fuera del colegio no hay
+              tareas, y pedirla ahí sería una consulta para enseñar un cero. */}
+          <Box {...apartar(buscadorAbierto, current === 'escolar' ? 260 : 220)}>
             {current === 'escolar' && <CampanaTareas />}
             <BotonSoporte />
             <ProfileDropdown user={user} />

@@ -13,6 +13,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { sembrarAlmacenPorDefecto } from '@/lib/pos/asignaciones';
 import { eq, ilike, or, and, sql, getTableColumns, desc, asc } from 'drizzle-orm';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 // Ejes de variante definidos por el usuario (MVP "por producto"):
 // [{ nombre: "Talla", valores: ["M","L","XL"] }]
@@ -145,6 +146,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = productoSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
+
+  // La categoría tiene que ser de esta empresa.
+  const errRefs = await validarReferenciasDeEmpresa(teamId, { categoriaId: parsed.data.categoriaId ?? null });
+  if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
 
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,

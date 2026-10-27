@@ -18,6 +18,7 @@ import { enviarSms } from '@/lib/sms/enviar';
 import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
 import { equiposConProcesosVivos } from '@/lib/suscripcion/procesos';
 import { AL_CANCELAR } from '@/lib/config/suscripcion';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 /**
  * Los recordatorios de cobro del módulo escolar.
@@ -51,7 +52,7 @@ import { AL_CANCELAR } from '@/lib/config/suscripcion';
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

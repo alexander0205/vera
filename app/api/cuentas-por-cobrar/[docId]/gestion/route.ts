@@ -23,6 +23,7 @@ import {
   getGestionCuenta, registrarEvento, guardarSeguimiento, cerrarPromesa,
   evaluarPromesasVencidas, CANALES,
 } from '@/lib/cobranza/seguimiento';
+import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 
 const ISO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -146,6 +147,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ doc
   }
 
   if (body.accion === 'seguimiento') {
+    // El responsable tiene que ser miembro de esta empresa.
+    const errRefs = await validarReferenciasDeEmpresa(ctx.teamId, { miembroUserId: body.responsableUserId ?? null });
+    if (errRefs) return NextResponse.json({ error: errRefs }, { status: 422 });
     await guardarSeguimiento({
       teamId: ctx.teamId,
       docId:  ctx.docId,

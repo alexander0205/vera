@@ -2582,7 +2582,7 @@ export default function NuevaFacturaForm({
                 </SectionCard>
               ) : (
                 <>
-                  <SectionCard number={1} title="Datos del cliente" icon={User}>
+                  <SectionCard number={1} title="Datos del cliente" icon={User} tour="factura-cliente">
                     <ClienteSection
                       clienteSeleccionado={clienteSeleccionado}
                       buscarClientes={buscarClientes}
@@ -2620,6 +2620,7 @@ export default function NuevaFacturaForm({
                 number={esGasto ? 2 : 3}
                 title={esGasto ? 'Detalle e importe' : 'Productos y servicios'}
                 icon={Package}
+                tour="factura-lineas"
                 actions={
                   <ColumnasToggle
                     showReferencia={showItemRef}

@@ -7,6 +7,7 @@ import { crearEnlace, DIAS_VIGENCIA_ENLACE } from '@/lib/administracion-escolar/
 import { enviarEnlaceDocumentosEmail } from '@/lib/email/escolar-avisos';
 import { registrarAvisoExpediente } from '@/lib/administracion-escolar/avisos-expediente';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
+import { llamadaDeCronValida } from '@/lib/seguridad/cron';
 
 /**
  * El recordatorio de documentos que falta entregar.
@@ -44,7 +45,7 @@ const TOPE_POR_COLEGIO = 120;
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!llamadaDeCronValida(authHeader)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 

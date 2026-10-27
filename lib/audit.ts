@@ -90,6 +90,10 @@ export type AuditAction =
   | 'ESCOLAR_TAREAS_ZERO_AI'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR'
+  // Asistente de IA: acción que la persona confirmó en el panel (crear, modificar, eliminar).
+  | 'ASISTENTE_ACCION_CONFIRMADA'
+  // Asistente de IA: intento de extracción masiva o ráfaga de consultas.
+  | 'ASISTENTE_ABUSO'
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
   | 'CONTABILIDAD_CATALOGO_IMPORTADO'
@@ -97,6 +101,9 @@ export type AuditAction =
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
   | 'SUSCRIPCION_AVISO'
+  // El administrador de Zero cambió el modelo de IA de alguna parte (/admin/ia).
+  // Es de la plataforma, no de una empresa: va con team_id vacío.
+  | 'IA_MODELOS_CAMBIADOS'
   // «Mover a la sección de SIGERD»: la matrícula de un alumno pasó de un curso
   // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
   // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
