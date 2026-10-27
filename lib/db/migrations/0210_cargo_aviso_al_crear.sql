@@ -1,4 +1,4 @@
--- 0209 · Avisar a las familias al crear un cobro a un grupo.
+-- 0210 · Avisar a las familias al crear un cobro a un grupo.
 --
 -- «Cobrar a un grupo» (el día de cine, la excursión) crea cargos hechos a mano,
 -- sin calendario. Los avisos de cobro solo salían colgados del vencimiento, así
