@@ -127,8 +127,29 @@ describe('el formulario ofrece los cargos sin ponerlos en la factura', () => {
 
 describe('el buscador de productos ofrece los meses del alumno', () => {
   it('los empareja por el beneficiario de la línea, no por el id del alumno', () => {
-    expect(formulario).toContain('.filter((o) => o.linea?.dependienteId === dependienteId)');
+    expect(formulario).toContain('.filter((o) => !dependienteId || o.linea?.dependienteId === dependienteId)');
     expect(formulario).not.toContain('.filter((o) => o.estudianteId === dependienteId)');
+  });
+
+  /*
+   * CEMM: sus alumnos entraron desde SIGERD y ninguno está enlazado a un
+   * beneficiario de Contactos. Sin beneficiario el buscador no ofrecía nada
+   * —ni columna de hijo ni meses, solo el catálogo— y parecía que los
+   * conceptos de los alumnos habían desaparecido de «Nueva factura».
+   */
+  it('sin beneficiario en la línea ofrece igual los cargos, con el nombre del alumno', () => {
+    expect(formulario).not.toMatch(/if \(!dependienteId \|\| opcionesEscolares\.length === 0\) return \[\];/);
+    expect(formulario).toMatch(/if \(opcionesEscolares\.length === 0\) return \[\];/);
+    expect(formulario).toMatch(/!dependienteId && o\.estudianteNombre/);
+  });
+
+  it('al elegir la cuota, la línea toma el beneficiario del alumno si lo tiene', () => {
+    expect(formulario).toMatch(/linea\.dependienteId == null && c\.dependienteId != null/);
+    expect(formulario).toMatch(/handleSelectBeneficiario\(linea\.id, c\.dependienteId, c\.dependienteNombre \?\? ''\)/);
+  });
+
+  it('si el alumno no tiene beneficiario, la factura dice de quién es en la descripción', () => {
+    expect(formulario).toMatch(/depAlumno == null && o\.estudianteNombre/);
   });
 
   it('el precio es el del cargo de ese alumno, no el de la lista', () => {
