@@ -34,7 +34,15 @@ import { fmtDOP } from '@/lib/utils/format';
  */
 export function ConfirmarCobroDialog({
   abierto, frase, marcados, notas, avisos, creando, error, onCerrar, onConfirmar,
+  avisarFamilias, onAvisarFamilias,
 }: {
+  /**
+   * Avisar a las familias del cobro nuevo (correo y WhatsApp con la plantilla
+   * aprobada; SMS si no hay WhatsApp). Va aquí, junto al «Sí», porque es parte
+   * de lo que se confirma: a cuántas familias les va a llegar un mensaje.
+   */
+  avisarFamilias: boolean;
+  onAvisarFamilias: (v: boolean) => void;
   abierto: boolean;
   /** La misma frase de la barra de cobrar. `null` si no hay nada revisado. */
   frase: FraseDelCobro | null;
@@ -81,6 +89,19 @@ export function ConfirmarCobroDialog({
               {aviso}
             </p>
           ))}
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 px-3 py-2.5">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-zero-600"
+              checked={avisarFamilias} disabled={creando}
+              onChange={(e) => onAvisarFamilias(e.target.checked)} />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">Avisar a las familias</span>
+              <span className="block text-xs text-gray-500">
+                Por correo y WhatsApp; por SMS a quien no tenga WhatsApp. Sale en la tanda de avisos de la
+                mañana (8:00 a 11:45): hoy si cobras antes de las 11:30, si no, mañana.
+              </span>
+            </span>
+          </label>
 
           <ul className="list-disc space-y-1 pl-5 text-sm text-gray-600">
             <li>Se crea un cargo pendiente en la cuenta de cada alumno. Nadie ha pagado todavía.</li>

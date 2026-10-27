@@ -20,7 +20,7 @@ import Box from '@mui/material/Box';
 import Link from 'next/link';
 import {
   Users, ClipboardList, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
-  LayoutDashboard, ListChecks, Plus, FilePlus2,
+  LayoutDashboard, ListChecks, Plus, FilePlus2, Briefcase,
 } from 'lucide-react';
 
 /**
@@ -28,7 +28,7 @@ import {
  * filtra por permiso (lo hace cada pantalla al abrirse), pero una acción que
  * crea documentos no debe ofrecerse a quien la pantalla va a rechazar.
  */
-type SeccionEscolar = RailSeccion & { oculto?: boolean; permiso?: Permission };
+type SeccionEscolar = RailSeccion & { oculto?: boolean; permiso?: Permission; modulo?: 'nomina' };
 
 // El orden es FIJO en Gobernanza: este es el que se ve siempre (el rail va con
 // `ordenFijo`, ver EscolarNavRail). No se reordena por uso como los otros
@@ -85,6 +85,10 @@ const SECCIONES: SeccionEscolar[] = [
   // eso vivía en un chat o en la memoria de alguien y terminaba en un arreglo
   // por SQL de soporte. La campana de arriba lleva aquí con su número.
   { tipo: 'item', id: 'escolar-por-revisar', href: '/escolar/por-revisar',  label: 'Por revisar',    icon: ListChecks },
+  // La nómina del colegio sin salir de Gobernanza (Lizandro: «lo más urgente»).
+  // Son las pantallas del módulo Nómina, así que solo sale con ese módulo
+  // activo (`conNomina`) y a quien puede ver empleados.
+  { tipo: 'item', id: 'escolar-nomina',      href: '/escolar/nomina',        label: 'Nómina',         icon: Briefcase, permiso: 'empleados:ver', modulo: 'nomina' },
   // SIGERD se fue a Configuración: se usa al montar el colegio y una vez al
   // año, y aquí ocupaba el sitio de algo que se abre a diario.
   { tipo: 'item', id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', icon: Settings },
@@ -100,14 +104,17 @@ const VISIBLES: SeccionEscolar[] = SECCIONES.filter(s => !s.oculto);
  *
  * `ocultas`: las pantallas que el dueño le apagó al rol de quien mira
  * (lib/config/pantallas.ts). Las calcula el layout en el servidor.
+ *
+ * `conNomina`: la empresa tiene el módulo Nómina. Sin él, la entrada no sale.
  */
-export function EscolarNavRail({ variant = 'rail', ocultas = [] }: {
+export function EscolarNavRail({ variant = 'rail', ocultas = [], conNomina = false }: {
   variant?: 'rail' | 'drawer';
   ocultas?: string[];
+  conNomina?: boolean;
 } = {}) {
   const { can } = usePermissions();
   const secciones: RailSeccion[] = VISIBLES.filter(s =>
-    !ocultas.includes(s.id) && (!s.permiso || can(s.permiso)));
+    !ocultas.includes(s.id) && (!s.permiso || can(s.permiso)) && (s.modulo !== 'nomina' || conNomina));
   // «Nueva Factura» abre su cajón sobre el Panorama: a quien tiene el Panorama
   // oculto lo mandaría al aviso de pantalla fuera de su menú.
   const puedeFacturar = can('administracion-escolar:pagos') && can('facturas:crear')

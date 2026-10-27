@@ -302,11 +302,15 @@ export function redactarGrupo(
   };
 }
 
-/** El asunto del correo: en plural (cobros) cuando el mensaje trae varios. */
-export function asuntoDeAviso(aviso: Aviso, cobros: number): string {
+/**
+ * El asunto del correo: en plural (cobros) cuando el mensaje trae varios.
+ * `conFactura` en false —un cobro recién puesto, sin facturar todavía— dice
+ * «cobro» y no «factura»: el padre buscaría una factura que no existe.
+ */
+export function asuntoDeAviso(aviso: Aviso, cobros: number, conFactura = true): string {
   const varios = cobros > 1;
   if (aviso === 'al-vencer') return varios ? 'Tus cobros vencieron hoy' : 'Tu factura venció hoy';
-  if (aviso === 'al-emitir') return varios ? `Tienes ${cobros} cobros nuevos` : 'Tienes una factura nueva';
+  if (aviso === 'al-emitir') return varios ? `Tienes ${cobros} cobros nuevos` : conFactura ? 'Tienes una factura nueva' : 'Tienes un cobro nuevo';
   // Antes del recargo ya están VENCIDOS: decir «próximos a vencer» contradice el cuerpo.
   return varios ? 'Evita el recargo de tus cobros' : 'Evita el recargo de tu factura';
 }

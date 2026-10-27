@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { fraseDelAvisoAlCrear } from '@/lib/administracion-escolar/aviso-al-crear';
 import {
   fraseDeLoCobrado, fraseDeNoEncontrados, fraseDeOmitidos, fraseDeSinComprobar, tituloDelResultado,
   type PedidoRevisado,
@@ -37,8 +38,10 @@ const NOMBRES_A_LA_VISTA = 8;
 
 export function ResultadoLote({
   creados, omitidos, detalles, pedido, grupo, noEncontrados, comprobado = false, sinComprobar = [],
-  hoy, onOtroGrupo, onOtroCargo,
+  avisoAlCrear = null, hoy, onOtroGrupo, onOtroCargo,
 }: {
+  /** El día en que sale el aviso a las familias, si se pidió. */
+  avisoAlCrear?: string | null;
   /** Cuántos cargos creó el servidor. */
   creados: number;
   /** Cuántos de los marcados ya lo tenían cuando se fue a crear. */
@@ -102,6 +105,9 @@ export function ResultadoLote({
             <span className="font-medium tabular-nums text-gray-900">{frase.total}</span>
           </p>
           <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">{frase.plazo}</p>
+          {avisoAlCrear && (
+            <p className="mx-auto mt-1 max-w-md text-sm text-gray-500">{fraseDelAvisoAlCrear(avisoAlCrear, hoy)}</p>
+          )}
         </>
       ) : omitidos > 0 && (
         <p className="mx-auto mt-1 max-w-md text-sm text-gray-600">Todos los que marcaste ya lo tenían.</p>

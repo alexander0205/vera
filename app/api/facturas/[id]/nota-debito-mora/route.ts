@@ -87,6 +87,8 @@ export async function POST(
       return NextResponse.json({ error: 'La factura no tiene saldo pendiente.' }, { status: 422 });
     case 'es_nota_mora':
       return NextResponse.json({ error: 'No se puede generar mora sobre una nota de débito de mora.' }, { status: 400 });
+    case 'tipo_sin_mora':
+      return NextResponse.json({ error: 'Este tipo de comprobante no genera mora (nota de crédito, compra o gasto).' }, { status: 400 });
     case 'anulada':
       return NextResponse.json({ error: 'La factura está anulada.' }, { status: 409 });
     case 'mora_cero':

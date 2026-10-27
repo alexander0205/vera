@@ -12,6 +12,8 @@ import { fmtDOP } from '@/lib/utils/format';
 import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { FacturaDrawer } from '@/components/administracion-escolar/FacturaDrawer';
+import { PanoramaGastos, type VistaPanorama } from '@/components/administracion-escolar/PanoramaGastos';
+import type { IngresoMes } from '@/lib/administracion-escolar/panorama-gastos';
 import { TRAMOS, tramoDeAtraso, type TramoKey } from '@/lib/administracion-escolar/cartera';
 import { mesCorto, nombreDeMes } from '@/lib/administracion-escolar/serie-mensual';
 import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
@@ -107,6 +109,10 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
   // ficha de la familia: recargar no lo cierra y el enlace se puede compartir.
   // Solo lee ese valor; el SWR del panorama ignora el parámetro.
   const facturaAbierta = params.get('factura') != null;
+  // Gastos y Ganancias enseñan lo que paga el colegio: solo a quien ve los gastos.
+  const puedeVerGastos = permissions.includes('compras:ver');
+  const pedida = params.get('vista');
+  const vista: VistaPanorama = puedeVerGastos && (pedida === 'gastos' || pedida === 'ganancias') ? pedida : 'ingresos';
 
   // Lo que se pide es lo que dice la URL, tal cual: quién es un mes, un
   // concepto o un grado válido lo decide el servidor y lo devuelve en
@@ -210,7 +216,9 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Panorama financiero</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Cómo va el cobro del colegio. Los cargos anulados no cuentan en ninguna cifra.
+            {vista === 'ingresos'
+              ? 'Cómo va el cobro del colegio. Los cargos anulados no cuentan en ninguna cifra.'
+              : 'Lo que sale del colegio —nómina, gastos y compras— y lo que de verdad queda.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -246,6 +254,21 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
       {/* Abre vacío; el responsable se busca dentro del formulario. */}
       {facturaDrawer}
 
+      {/* Ingresos / Gastos / Ganancias. Las dos últimas, a quien ve los gastos. */}
+      {puedeVerGastos && (
+        <div role="group" aria-label="Vista del panorama" className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+          {([['ingresos', 'Ingresos'], ['gastos', 'Gastos'], ['ganancias', 'Ganancias']] as const).map(([v, texto]) => (
+            <button key={v} type="button" aria-pressed={vista === v}
+              // Concepto y grado no aplican a los gastos: se sueltan al salir de Ingresos.
+              onClick={() => setParams(v === 'ingresos' ? { vista: null } : { vista: v, concepto: null, grado: null })}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                vista === v ? 'bg-zero-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+              {texto}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           No se pudieron actualizar las cifras: lo que ves es lo último que se leyó.
@@ -274,6 +297,8 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
           </div>
         </div>
 
+        {/* Concepto y grado son de lo que se cobra: los gastos no los tienen. */}
+        {vista === 'ingresos' && (
         <div className="flex flex-wrap items-end gap-3">
           <label className="block w-full sm:w-64">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Concepto</span>
@@ -306,8 +331,24 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
             </Button>
           )}
         </div>
+        )}
       </div>
 
+      {vista !== 'ingresos' ? (
+        <div className={`space-y-6 transition-opacity ${cargando ? 'opacity-60' : ''}`}>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <h2 className="text-lg font-semibold text-gray-900">{mayuscula(periodoTexto)}</h2>
+            {!filtros.mes && <span className="text-sm text-gray-400">· todos los meses</span>}
+          </div>
+          <PanoramaGastos
+            vista={vista}
+            periodoId={d.periodoId}
+            ingresos={ingresosPorMes(d)}
+            mes={filtros.mes}
+            hoy={d.hoy}
+          />
+        </div>
+      ) : (
       <div className={`space-y-6 transition-opacity ${cargando ? 'opacity-60' : ''}`}>
         {/* De qué son las cifras de abajo. */}
         <div className="flex flex-wrap items-baseline gap-x-2">
@@ -636,8 +677,28 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
           </div>
         </div>
       </div>
+      )}
     </section>
   );
+}
+
+/**
+ * Lo que entra cada mes, para Ganancias: la caja del mes y lo que se espera
+ * cobrar de él. Lo esperado son los cargos del mes MÁS las cuotas del
+ * calendario que aún no son cargo; sin ellas, en un colegio que devenga mes a
+ * mes, de noviembre en adelante solo se vería la nómina y la ganancia
+ * proyectada saldría negativa.
+ */
+function ingresosPorMes(d: DashboardEscolar): IngresoMes[] {
+  const falta = new Map(d.porDevengarPorMes.map((f) => [f.key, f.centavos]));
+  const meses = d.serie.map((p) => ({
+    key: p.key, cajaCentavos: p.cajaCentavos, devengadoCentavos: p.devengadoCentavos + (falta.get(p.key) ?? 0),
+  }));
+  const enSerie = new Set(meses.map((m) => m.key));
+  for (const [key, centavos] of falta) {
+    if (!enSerie.has(key)) meses.push({ key, cajaCentavos: 0, devengadoCentavos: centavos });
+  }
+  return meses;
 }
 
 // ─── Piezas ──────────────────────────────────────────────────────────────────

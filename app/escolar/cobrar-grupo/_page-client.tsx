@@ -88,6 +88,8 @@ interface Generacion {
   omitidos: number;
   total: number;
   detalles: DetalleRevisado[];
+  /** El día en que sale el aviso a las familias, si se pidió y se creó algo. */
+  avisoAlCrear?: string | null;
 }
 /**
  * La revisión que se enseña: la respuesta, el grupo por el que se preguntó con
@@ -115,6 +117,8 @@ interface Resultado {
   comprobado?: boolean;
   /** Tras comprobar: nombres de los marcados que ya no salen en el grupo. */
   sinComprobar?: string[];
+  /** El día en que sale el aviso a las familias, si se pidió. */
+  avisoAlCrear?: string | null;
 }
 
 interface Formulario {
@@ -297,6 +301,9 @@ export default function CargoLoteClient() {
   /** Lo que se supo al volver a mirar tras un «crear» sin respuesta, si no estaba todo creado. */
   const [avisoComprobado, setAvisoComprobado] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  // Encendido de entrada: un cobro que la familia no conoce es el que «se me
+  // olvidó» (Lizandro, reunión del 05-10). Se apaga en la confirmación.
+  const [avisarFamilias, setAvisarFamilias] = useState(true);
   const [creando, setCreando] = useState(false);
   const [errorCrear, setErrorCrear] = useState<string | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
@@ -975,7 +982,9 @@ export default function CargoLoteClient() {
       try {
         const res = await fetch('/api/administracion-escolar/cargos/generar', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...revision.pedido.cuerpo, dryRun: false, estudianteIds: [...seleccion] }),
+          body: JSON.stringify({
+            ...revision.pedido.cuerpo, dryRun: false, estudianteIds: [...seleccion], avisar: avisarFamilias,
+          }),
         });
         status = res.status;
         data = await res.json().catch(() => null);
@@ -1026,6 +1035,7 @@ export default function CargoLoteClient() {
         pedido,
         grupo: grupoRevisado,
         noEncontrados,
+        avisoAlCrear: data.avisoAlCrear ?? null,
       });
       if (data.creados > 0) {
         // Desde ahora este cobro «ya se cobró este año»: si se vuelve al paso 1
@@ -1328,6 +1338,7 @@ export default function CargoLoteClient() {
             noEncontrados={resultado.noEncontrados}
             comprobado={resultado.comprobado}
             sinComprobar={resultado.sinComprobar}
+            avisoAlCrear={resultado.avisoAlCrear ?? null}
             hoy={hoy}
             onOtroGrupo={otroGrupo}
             onOtroCargo={otroCargo}
@@ -1613,6 +1624,8 @@ export default function CargoLoteClient() {
         }) : []}
         creando={creando}
         error={errorCrear}
+        avisarFamilias={avisarFamilias}
+        onAvisarFamilias={setAvisarFamilias}
         onCerrar={() => { setConfirmando(false); setErrorCrear(null); }}
         onConfirmar={() => void crear()}
       />

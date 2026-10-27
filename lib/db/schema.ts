@@ -2722,6 +2722,12 @@ export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   montoCentavos:    integer('monto_centavos').notNull(),
   saldoCentavos:    integer('saldo_centavos').notNull(),
   fechaVencimiento: date('fecha_vencimiento'),
+  /**
+   * Día en que sale el aviso de «cobro nuevo» de este cargo (migración 0210).
+   * Lo pone «Cobrar a un grupo» cuando se pide avisar a las familias; lo manda
+   * el cron de avisos ese día. NULL = no se pidió. Ver `diaDelAvisoAlCrear`.
+   */
+  avisoAlCrear:     date('aviso_al_crear'),
   /** pendiente | parcial | pagado | vencido | anulado */
   estado:           varchar('estado', { length: 20 }).notNull().default('pendiente'),
   /** Enlace OPCIONAL a la factura (e-CF) que cubre este cargo. El cargo sigue
