@@ -14,7 +14,7 @@ import { RevisionLote } from '@/components/administracion-escolar/facturar-lote/
 import { ConfirmarFacturasDialog } from '@/components/administracion-escolar/facturar-lote/ConfirmarFacturasDialog';
 import { ResultadoFacturasLote } from '@/components/administracion-escolar/facturar-lote/ResultadoFacturasLote';
 import {
-  crearPorTandas, facturasEnLetras, hastaParaMeses, listaDeMeses, textoCrear,
+  PAGO_UNICO, crearPorTandas, facturasEnLetras, hastaParaMeses, listaDeMeses, textoCrear,
   type AlumnoCatalogo, type ConceptoCatalogo, type FacturaCreada, type FacturaFallida,
   type CuotaCalendario, type OmitidoPlan, type PendienteMes, type PlanLote,
 } from '@/lib/administracion-escolar/facturar-lote';
@@ -82,6 +82,8 @@ interface Pedido {
   hasta: string;
   /** Los meses elegidos ('YYYY-MM'), o null: todo lo pendiente hasta hoy. */
   meses: string[] | null;
+  /** Con meses elegidos, si entran también los pagos únicos (inscripción, uniforme…). */
+  conPagosUnicos: boolean;
   juntarHermanos: boolean;
 }
 
@@ -176,12 +178,14 @@ export default function FacturarLoteClient() {
     if (!catalogo) return;
     // El corte sale de los meses: el último día del mes más tardío (o hoy).
     const sel = sobre?.meses ?? mesesSel;
-    const meses = sel === 'todo' ? null : [...sel].sort();
+    // «Pago único» viaja en la misma selección que los meses, pero no es uno.
+    const meses = sel === 'todo' ? null : [...sel].filter((m) => m !== PAGO_UNICO).sort();
     const pedido: Pedido = {
       periodoId: catalogo.periodo.id,
       conceptoIds: sobre?.conceptos ?? [...conceptosSel],
       hasta: meses ? hastaParaMeses(meses, catalogo.hoy) : catalogo.hoy,
       meses,
+      conPagosUnicos: sel !== 'todo' && sel.has(PAGO_UNICO),
       juntarHermanos: juntar,
     };
     const estudianteIds = sobre?.alumnos ?? [...alumnosSel];
@@ -474,7 +478,9 @@ export default function FacturarLoteClient() {
         cargos={vista?.plan.totalCargos ?? 0}
         totalCentavos={vista?.plan.totalCentavos ?? 0}
         juntar={vista?.pedido.juntarHermanos ?? false}
-        meses={vista?.pedido.meses ? listaDeMeses(vista.pedido.meses) : 'todo lo pendiente hasta hoy'}
+        meses={vista?.pedido.meses
+          ? listaDeMeses(vista.pedido.conPagosUnicos ? [...vista.pedido.meses, PAGO_UNICO] : vista.pedido.meses)
+          : 'todo lo pendiente hasta hoy'}
         creando={creando}
         progreso={progreso}
         deteniendo={deteniendo}

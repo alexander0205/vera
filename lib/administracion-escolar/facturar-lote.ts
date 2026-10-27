@@ -87,6 +87,11 @@ export interface CargoLote {
    */
   fechaEmision: string;
   ecfDocumentId: number | null;
+  /**
+   * Sin mes y sin cuota de calendario (la inscripción cobrada al matricular, un
+   * uniforme, un paseo): no es de ningún mes. Ver `esPagoUnico`.
+   */
+  pagoUnico?: boolean;
 }
 
 export interface OpcionesLote {
@@ -102,12 +107,18 @@ export interface OpcionesLote {
    * deba otros: esos se quedan para otra factura. Ver `mesDelCargo`.
    */
   meses?: string[] | null;
+  /**
+   * Con meses elegidos, si entran los pagos únicos (`CargoLote.pagoUnico`).
+   * Van aparte de los meses: no tienen uno. Sin meses (todo lo pendiente)
+   * entran siempre.
+   */
+  conPagosUnicos?: boolean;
   /** false = una factura por alumno · true = una por responsable, como el cron. */
   juntarHermanos: boolean;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Lo que sale                                                        */
+/*  Lo que sale                                                      */
 /* ------------------------------------------------------------------ */
 
 export interface LineaPlan {
@@ -179,12 +190,27 @@ export function mesEnTexto(aaaamm: string): string {
 }
 
 /**
+ * La clave que en `PendienteMes.m` agrupa los pagos únicos, en vez de un mes.
+ *
+ * Un cargo sin mes ni calendario contaba por el día en que se creó: el alumno
+ * inscrito el 1 de agosto y matriculado en octubre tenía la inscripción en
+ * «octubre», y quien facturaba agosto y septiembre la dejaba fuera sin verla.
+ */
+export const PAGO_UNICO = 'unico';
+
+/** Sin mes y sin cuota de calendario: no es de ningún mes. */
+export function esPagoUnico(c: Pick<CargoLote, 'mes' | 'pagoUnico'>): boolean {
+  return c.pagoUnico === true && c.mes == null;
+}
+
+/**
  * El mes de un cargo, como 'YYYY-MM', para compararlo con los meses elegidos.
  *
  * Una cuota es de SU mes, no del día en que se emite: la de octubre de un
  * colegio que emite el 25 de septiembre sigue siendo «octubre», y es lo que
  * la persona tiene en la cabeza al decir «factura octubre». Un cargo sin mes
- * (inscripción, uniforme) cuenta por el mes en que se emitió.
+ * con calendario («Pago único · octubre») cuenta por el mes en que se emite; sin
+ * calendario es un pago único y no se elige por mes (ver `PAGO_UNICO`).
  */
 export function mesDelCargo(c: Pick<CargoLote, 'mes' | 'anio' | 'fechaEmision'>): string {
   if (c.mes != null && c.mes >= 1 && c.mes <= 12) return mesDeCuota(c.mes, c.fechaEmision, c.anio);
@@ -285,16 +311,18 @@ function porFecha(a: CargoLote, b: CargoLote): number {
 
 /**
  * Los meses elegidos en una frase: «octubre y noviembre 2026»,
- * «diciembre 2026 y enero 2027». En orden, con el año una vez por grupo.
+ * «diciembre 2026 y enero 2027». En orden, con el año una vez por grupo, y
+ * «los pagos únicos» al final si van (`PAGO_UNICO`).
  */
 export function listaDeMeses(meses: string[]): string {
-  const orden = [...new Set(meses)].sort();
+  const orden = [...new Set(meses)].filter((m) => m !== PAGO_UNICO).sort();
   const porAnio = new Map<string, string[]>();
   for (const m of orden) {
     const [a, mm] = m.split('-');
     porAnio.set(a, [...(porAnio.get(a) ?? []), MESES_LOTE[Number(mm) - 1] ?? mm]);
   }
   const trozos = [...porAnio].map(([a, ms]) => `${enLista(ms)} ${a}`);
+  if (meses.includes(PAGO_UNICO)) trozos.push('los pagos únicos');
   return enLista(trozos);
 }
 
@@ -313,8 +341,9 @@ export function finDeMes(aaaamm: string): string {
  * (se crea al facturar) y nunca se deja fuera algo ya emitido de un mes elegido.
  */
 export function hastaParaMeses(meses: string[], hoy: string): string {
-  if (meses.length === 0) return hoy;
-  const ultimo = finDeMes([...meses].sort().at(-1)!);
+  const deVerdad = meses.filter((m) => m !== PAGO_UNICO);
+  if (deVerdad.length === 0) return hoy;
+  const ultimo = finDeMes([...deVerdad].sort().at(-1)!);
   return ultimo > hoy ? ultimo : hoy;
 }
 
@@ -388,7 +417,9 @@ function razonSinNada(
  */
 export function planearFacturasPorLote(cargos: CargoLote[], opciones: OpcionesLote): PlanLote {
   const conceptos = new Set(opciones.conceptoIds);
-  const meses = opciones.meses && opciones.meses.length > 0 ? new Set(opciones.meses) : null;
+  // Sin meses elegidos pero con los pagos únicos: solo ellos.
+  const meses = opciones.meses && (opciones.meses.length > 0 || opciones.conPagosUnicos)
+    ? new Set(opciones.meses) : null;
 
   const porAlumno = new Map<number, CargoLote[]>();
   for (const c of cargos) {
@@ -413,8 +444,11 @@ export function planearFacturasPorLote(cargos: CargoLote[], opciones: OpcionesLo
 
     for (const c of porAlumno.get(alumno.id) ?? []) {
       if (c.ecfDocumentId != null || !COBRABLES.includes(c.estado)) { cuenta.hechos += 1; continue; }
-      // De un mes que no se eligió: se deja para otra factura, no se borra.
-      if (meses && !meses.has(mesDelCargo(c))) { if (c.saldoCentavos > 0) cuenta.fuera.add(mesDelCargo(c)); continue; }
+      // De un mes que no se eligió, o un pago único sin «Pago único» marcado:
+      // se deja para otra factura, no se borra.
+      const suMes = esPagoUnico(c) ? PAGO_UNICO : mesDelCargo(c);
+      const entra = suMes === PAGO_UNICO ? opciones.conPagosUnicos === true : meses?.has(suMes);
+      if (meses && !entra) { if (c.saldoCentavos > 0) cuenta.fuera.add(suMes); continue; }
       if (c.fechaEmision > opciones.hasta) {
         cuenta.despues += 1;
         if (cuenta.proxima === null || c.fechaEmision < cuenta.proxima) cuenta.proxima = c.fechaEmision;
@@ -502,6 +536,8 @@ export interface PeticionLote {
   hasta: string;
   /** Los meses elegidos ('YYYY-MM'), o null: todo lo pendiente. Ver `OpcionesLote.meses`. */
   meses: string[] | null;
+  /** Con meses elegidos, si entran los pagos únicos. Ver `OpcionesLote.conPagosUnicos`. */
+  conPagosUnicos: boolean;
   juntarHermanos: boolean;
   /** false = vista previa (no escribe) · true = crear de verdad. */
   confirmar: boolean;
@@ -559,7 +595,7 @@ export function leerPeticionLote(
       return { ok: false, error: 'Los meses deben venir como AAAA-MM.' };
     }
     meses = [...new Set(c.meses as string[])].sort();
-    if (meses.length === 0) return { ok: false, error: 'Elige al menos un mes.' };
+    if (meses.length === 0 && c.conPagosUnicos !== true) return { ok: false, error: 'Elige al menos un mes.' };
     if (meses.length > 24) return { ok: false, error: 'Son demasiados meses de una vez (máximo 24).' };
     if (meses.some((m) => m > hasta.slice(0, 7))) {
       return { ok: false, error: 'Hay un mes elegido después de la fecha de corte.' };
@@ -579,6 +615,7 @@ export function leerPeticionLote(
       conceptoIds,
       hasta,
       meses,
+      conPagosUnicos: c.conPagosUnicos === true,
       juntarHermanos: c.juntarHermanos === true,
       confirmar: c.confirmar === true,
     },
@@ -617,6 +654,7 @@ export interface RespuestaLote {
   periodo: string;
   hasta: string;
   meses: string[] | null;
+  conPagosUnicos: boolean;
   juntarHermanos: boolean;
   plan: PlanLote;
   /** Solo al crear. */

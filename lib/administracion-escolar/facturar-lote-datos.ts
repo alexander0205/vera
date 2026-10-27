@@ -31,7 +31,7 @@ import { devengarPeriodo } from './devengar';
 import type {
   AlumnoCatalogo, AlumnoLote, CargoLote, ConceptoCatalogo, CuotaCalendario, FacturaCreada, FacturaFallida, FacturaPlan, PendienteMes,
 } from './facturar-lote';
-import { mesDeCuota } from './facturar-lote';
+import { PAGO_UNICO, mesDeCuota } from './facturar-lote';
 
 /** Estados que se pueden cobrar. Mismo criterio que el cron y el prefill. */
 const COBRABLES = ['pendiente', 'parcial', 'vencido'];
@@ -70,8 +70,8 @@ export async function periodoDelLote(teamId: number, periodoId: number | null) {
 /**
  * El mes de un cargo como 'YYYY-MM', igual que `mesDelCargo`: el de su cuota si
  * es de un mes (con el año corregido como en `mesDeCuota`); si no, el día en
- * que se emitió (su cuota, o el día en que se creó, en hora de República
- * Dominicana).
+ * que se emite su cuota. Sin mes ni cuota es un pago único: `PAGO_UNICO`, no
+ * el mes en que se creó (ver `esPagoUnico`).
  */
 const emisionSql = sql`coalesce(${adminEscolarConceptoCuotas.fechaEmision},
   (${adminEscolarCargos.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santo_Domingo')::date)`;
@@ -81,6 +81,7 @@ const mesDelCargoSql = sql<string>`CASE
             WHEN ${adminEscolarCargos.mes} < extract(month FROM ${emisionSql}) - 6
              AND ${adminEscolarCargos.anio} = extract(year FROM ${emisionSql}) THEN 1 ELSE 0 END
          )::text || '-' || lpad(${adminEscolarCargos.mes}::text, 2, '0')
+  WHEN ${adminEscolarConceptoCuotas.fechaEmision} IS NULL THEN ${sql.raw(`'${PAGO_UNICO}'`)}
   ELSE to_char(${emisionSql}, 'YYYY-MM')
 END`;
 
@@ -297,6 +298,8 @@ export async function adelantarCuotasDelLote(
     fechaVencimiento: x.fila.fechaVencimiento ? String(x.fila.fechaVencimiento).slice(0, 10) : null,
     fechaEmision: x.fechaEmision,
     ecfDocumentId: null,
+    // Como lo verá `cargarDatosDelLote` una vez creado.
+    pagoUnico: x.fila.mes == null && !x.fila.cuotaId,
   }));
 }
 
@@ -392,6 +395,7 @@ export async function cargarDatosDelLote(
       ? String(c.emisionDeLaCuota).slice(0, 10)
       : fechaRD(c.creadoEn),
     ecfDocumentId: c.ecfDocumentId,
+    pagoUnico: c.mes == null && !c.emisionDeLaCuota,
   }));
 
   return { alumnos, cargos };

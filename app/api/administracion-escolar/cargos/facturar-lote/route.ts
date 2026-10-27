@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
     conceptoIds: p.conceptoIds,
     hasta: p.hasta,
     meses: p.meses,
+    conPagosUnicos: p.conPagosUnicos,
     juntarHermanos: p.juntarHermanos,
   });
 
@@ -124,6 +125,7 @@ export async function POST(req: NextRequest) {
     periodo: periodo.nombre,
     hasta: p.hasta,
     meses: p.meses,
+    conPagosUnicos: p.conPagosUnicos,
     juntarHermanos: p.juntarHermanos,
     plan,
   };
@@ -164,6 +166,7 @@ export async function POST(req: NextRequest) {
         conceptoIds: p.conceptoIds,
         hasta: p.hasta,
         meses: p.meses,
+        conPagosUnicos: p.conPagosUnicos,
         juntarHermanos: p.juntarHermanos,
       },
     });
