@@ -193,6 +193,8 @@ export interface DashboardEscolar {
   sinFacturar: { centavos: number; cargos: number; centavosTotal: number; cargosTotal: number };
   /** Lo que el calendario todavía no ha convertido en deuda. */
   porDevengarCentavos: number;
+  /** Lo mismo, por el mes de su cuota (`YYYY-MM`). Lo usa la vista Ganancias. */
+  porDevengarPorMes: { key: string; centavos: number }[];
   matricula: Matricula;
 }
 
@@ -625,7 +627,9 @@ export async function dashboardDelPeriodo(
       -- Lo de CADA cuota o un total que se reparte: la regla de
       -- \`precioEsPorCuota\` (repartir.ts). Con solo «mensualidad», un almuerzo
       -- de 3,000 al mes contaba 300 por cuota.
-      SELECT COALESCE(SUM(
+      -- Por mes de la cuota: la vista Ganancias lo reparte mes a mes; el total
+      -- de la tarjeta es la suma.
+      SELECT ${mesDeLaCuota} AS key, COALESCE(SUM(
         CASE WHEN COALESCE(t.precio_por_cuota, t.tipo NOT IN ('inscripcion', 'actividad', 'uniforme')) THEN t.monto
              ELSE round(t.monto * q.porcentaje_milesimas / NULLIF(pe.total, 0)) END
       ), 0)::bigint AS centavos
@@ -646,6 +650,7 @@ export async function dashboardDelPeriodo(
           SELECT 1 FROM admin_escolar_cargos x
            WHERE x.matricula_id = t.matricula_id AND x.cuota_id = q.id AND x.${NO_ANULADO}
         )
+      GROUP BY 1
     `),
 
     // ── 12. Matrícula. `nuevos` son los que no tienen matrícula en ningún otro
@@ -668,7 +673,9 @@ export async function dashboardDelPeriodo(
   const c0 = (cartera as unknown as Record<string, unknown>[])[0] ?? {};
   const k0 = (caja as unknown as Record<string, unknown>[])[0] ?? {};
   const s0 = (sinFacturar as unknown as Record<string, unknown>[])[0] ?? {};
-  const d0 = (porDevengar as unknown as Record<string, unknown>[])[0] ?? {};
+  const porDevengarPorMes = (porDevengar as unknown as { key: string | null; centavos: unknown }[])
+    .filter((f) => f.key != null && n(f.centavos) > 0)
+    .map((f) => ({ key: f.key as string, centavos: n(f.centavos) }));
   const t0 = (matricula as unknown as Record<string, unknown>[])[0] ?? {};
 
   const porTramo = Object.fromEntries(TRAMOS.map((t) => [t.key, 0])) as Record<TramoKey, number>;
@@ -750,7 +757,8 @@ export async function dashboardDelPeriodo(
       centavos: n(s0.centavos), cargos: n(s0.cargos),
       centavosTotal: n(s0.centavos_total), cargosTotal: n(s0.cargos_total),
     },
-    porDevengarCentavos: n(d0.centavos),
+    porDevengarCentavos: (porDevengar as unknown as { centavos: unknown }[]).reduce((s, f) => s + n(f.centavos), 0),
+    porDevengarPorMes,
     matricula: {
       activos:     n(t0.activos),
       nuevos:      n(t0.nuevos),

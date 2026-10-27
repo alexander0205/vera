@@ -137,19 +137,25 @@ export function armarGastos(filas: FilaGastoMes[], meses: string[], hoy: string)
 export function armarGanancias(ingresos: IngresoMes[], gastos: GastoMes[], hoy: string): ResumenGanancias {
   const esteMes = hoy.slice(0, 7);
   const deIngresos = new Map(ingresos.map((i) => [i.key, i]));
-  const meses: GananciaMes[] = gastos.map((g) => {
-    const i = deIngresos.get(g.key);
+  const deGastos = new Map(gastos.map((g) => [g.key, g]));
+  // Los meses de los dos lados: la inscripción se cobra en junio para un año
+  // que empieza en agosto, y ese dinero también es del año.
+  const claves = [...new Set([...deGastos.keys(), ...deIngresos.keys()])].sort();
+  const meses: GananciaMes[] = claves.map((key) => {
+    const i = deIngresos.get(key);
+    const g = deGastos.get(key);
     const caja = n(i?.cajaCentavos);
     const esperado = n(i?.devengadoCentavos);
+    const sale = g?.totalCentavos ?? 0;
     return {
-      key: g.key,
+      key,
       ingresosCentavos: caja,
       ingresosProyectadosCentavos: esperado,
-      gastosCentavos: g.totalCentavos,
-      gananciaCentavos: caja - g.totalCentavos,
-      gananciaProyectadaCentavos: esperado - g.totalCentavos,
-      transcurrido: g.key <= esteMes,
-      nominaEstimada: g.nominaEstimada,
+      gastosCentavos: sale,
+      gananciaCentavos: caja - sale,
+      gananciaProyectadaCentavos: esperado - sale,
+      transcurrido: key <= esteMes,
+      nominaEstimada: g?.nominaEstimada ?? false,
     };
   });
 

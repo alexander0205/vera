@@ -71,6 +71,13 @@ describe('ingresos − gastos', () => {
     expect(r.proyectado).toEqual({ ingresosCentavos: 320_000_00, gastosCentavos: 410_000_00, gananciaCentavos: -90_000_00 });
   });
 
+  it('lo cobrado antes del primer mes del año (la inscripción de junio) también cuenta', () => {
+    const r = armarGanancias([{ key: '2026-06', cajaCentavos: 20_000_00, devengadoCentavos: 20_000_00 }],
+      armarGastos([], MESES, HOY), HOY);
+    expect(r.meses[0]).toMatchObject({ key: '2026-06', ingresosCentavos: 20_000_00, gastosCentavos: 0 });
+    expect(r.hastaHoy.ingresosCentavos).toBe(20_000_00);
+  });
+
   it('los meses del año escolar', () => {
     expect(mesesDelPeriodo({ fechaInicio: '2026-08-01', fechaFin: '2027-06-30' }, HOY)).toHaveLength(11);
     expect(mesesDelPeriodo({}, HOY).at(-1)).toBe('2027-01');
