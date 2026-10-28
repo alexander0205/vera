@@ -39,11 +39,15 @@ export async function POST(req: NextRequest) {
     previsto = { matriculaId: m, cuotaId: c, conceptoId: k };
   }
 
-  if (cargoIds.length === 0 && !previsto) {
+  // Sin cargos que pedir se puede entrar por el alumno (la familia lo tiene
+  // todo facturado), y `futuros` ofrece además los meses que todavía no salen.
+  const estudianteId = Number.isInteger(Number(body.estudianteId)) && Number(body.estudianteId) > 0
+    ? Number(body.estudianteId) : undefined;
+  if (cargoIds.length === 0 && !previsto && !estudianteId) {
     return NextResponse.json({ error: 'cargoIds vacío o inválido' }, { status: 400 });
   }
 
-  const res = await prefillDeCargos(auth.teamId, cargoIds, previsto);
+  const res = await prefillDeCargos(auth.teamId, cargoIds, previsto, { estudianteId, futuros: body.futuros === true });
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: res.status });
   return NextResponse.json(res.datos);
 }

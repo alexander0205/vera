@@ -37,7 +37,7 @@ import { registrarMovimiento } from '@/lib/caja/core';
 import { enviarAlertaEmail } from '@/lib/email';
 import { labelMetodo } from '@/lib/pagos/metodos';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
-import { cargosDeLasLineas, estudiantesDeLasLineas, vincularCargosDeFactura, responsableDeLosCargos, responsableDeLosEstudiantes, ponerResponsableSiFalta } from '@/lib/administracion-escolar/vincular-por-clave';
+import { adelantarPrevistosDeFactura, cargosDeLasLineas, estudiantesDeLasLineas, previstosDeLasLineas, vincularCargosDeFactura, responsableDeLosCargos, responsableDeLosEstudiantes, ponerResponsableSiFalta } from '@/lib/administracion-escolar/vincular-por-clave';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
@@ -142,6 +142,18 @@ async function vincularCargosEscolares(
         '[ecf/emitir] cargos no vinculados a doc %d (ya tenían factura o no son de este responsable): %o',
         args.documentoId, r.omitidos,
       );
+    }
+    // Los meses cobrados por adelantado desde el buscador: su cargo nace aquí, ya atado.
+    const previstos = previstosDeLasLineas(args.items);
+    if (previstos.length) {
+      // En su propio savepoint: si algo falla al crear un cargo, la factura no
+      // se cae con él (un error de SQL dejaría abortada la transacción entera).
+      const a = await (tx as unknown as typeof db).transaction((sp) => adelantarPrevistosDeFactura(sp as never, {
+        teamId: args.teamId, documentoId: args.documentoId, clientId, previstos,
+      }));
+      if (a.omitidos.length) {
+        console.warn('[ecf/emitir] meses adelantados que no se pudieron atar al doc %d (cuotas): %o', args.documentoId, a.omitidos);
+      }
     }
   } catch (e) {
     console.error('[ecf/emitir] fallo al vincular cargos del doc %d', args.documentoId, e);

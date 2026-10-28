@@ -136,7 +136,8 @@ describe('el buscador de productos ofrece los meses del alumno', () => {
   });
 
   it('elegir un mes deja la factura atada a su cargo', () => {
-    expect(formulario).toMatch(/cuotaClave: `\$\{c\.estudianteId\}:\$\{c\.cargoId\}:\$\{c\.mes \?\? 0\}:\$\{c\.anio\}`/);
+    // La clave del servidor si la trae (un mes adelantado lleva su cuota); si no, la de siempre.
+    expect(formulario).toMatch(/cuotaClave: c\.clave \?\? `\$\{c\.estudianteId\}:\$\{c\.cargoId\}:\$\{c\.mes \?\? 0\}:\$\{c\.anio\}`/);
     expect(formulario).toMatch(/\[\.\.\.prev, \{ id: c\.cargoId, saldoCentavos: c\.saldoCentavos \}\]/);
   });
 });
