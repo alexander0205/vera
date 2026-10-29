@@ -275,7 +275,7 @@ export default function MatricularDesdeSigerd() {
     const c = cambioDeMatricula(e.conceptos ?? [], ajustes.get(e.id));
     if (!c) return null;
     const p = planes.get(cursoId);
-    const enPantalla = new Set(p?.estado === 'listo' ? p.lineas.map((l) => l.conceptoId) : []);
+    const enPantalla = new Set(p?.estado === 'listo' ? [...p.lineas, ...p.otros].map((l) => l.conceptoId) : []);
     const quitar = c.quitar.filter((id) => enPantalla.has(id));
     return c.agregar.length + quitar.length > 0 ? { agregar: c.agregar, quitar } : null;
   }, [ajustes, planes]);
@@ -595,7 +595,44 @@ export default function MatricularDesdeSigerd() {
     // sus cargos sin facturar ni pagar; lo agregado carga ya lo que venció.
     if (cambios.length > 0 && datos.periodo) {
       marcar(CAMBIOS, { estado: 'corriendo' });
+      // Lo que se les da de otros grados: su tarifa propia va ANTES, porque es
+      // lo único que se lo cobra y el devengo de «Servicios» la busca. Si su
+      // matrícula no se guarda, se quita.
+      const tarifasEscritas = new Map<number, number[]>();
+      const quitarTarifas = async (matriculaIds: Iterable<number>) => {
+        for (const id of matriculaIds) {
+          for (const precioId of tarifasEscritas.get(id) ?? []) {
+            await fetch(`/api/administracion-escolar/concepto-precios?id=${precioId}`, { method: 'DELETE' }).catch(() => null);
+          }
+          tarifasEscritas.delete(id);
+        }
+      };
       try {
+        for (const c of cambios) {
+          const precios = (ajustes.get(c.estudianteId)?.precios ?? []).filter((p) => c.agregar.includes(p.conceptoId));
+          const curso = grupoDe.get(c.estudianteId)?.cursoId;
+          const p = curso != null ? planes.get(curso) : undefined;
+          for (const precio of precios) {
+            const linea = p?.estado === 'listo' ? p.otros.find((l) => l.conceptoId === precio.conceptoId) : undefined;
+            const r = await fetch('/api/administracion-escolar/concepto-precios', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                conceptoId: precio.conceptoId,
+                periodoId: datos.periodo.id,
+                objetivoTipo: 'estudiante',
+                objetivoId: c.estudianteId,
+                monto: precio.montoCentavos / 100,
+                ...(linea?.productId != null ? { productId: linea.productId } : {}),
+                // Los cargos los crea «Servicios» al agregarlo, con lo ya vencido.
+                devengar: false,
+              }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(`${c.nombre}: ${d.error ?? 'no se pudo guardar el precio de lo de otros grados'}`);
+            if (d.precio?.id) tarifasEscritas.set(c.matriculaId, [...(tarifasEscritas.get(c.matriculaId) ?? []), d.precio.id as number]);
+          }
+        }
         const res = await fetch('/api/administracion-escolar/matriculas/servicios', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -609,6 +646,7 @@ export default function MatricularDesdeSigerd() {
         if (!res.ok) throw new Error(d.error ?? 'No se pudieron guardar los cambios');
         const porMatricula = new Map(cambios.map((c) => [c.matriculaId, c]));
         const conError = (d.conError ?? []) as { matriculaId: number; error?: string }[];
+        await quitarTarifas(conError.map((r) => r.matriculaId));
         marcar(CAMBIOS, {
           estado: 'hecho', creadas: d.guardados, error: conError.length,
           nota: `${d.anulados ?? 0} cargo(s) anulado(s) · ${d.cargosCreados ?? 0} cargo(s) creado(s)`
@@ -620,6 +658,7 @@ export default function MatricularDesdeSigerd() {
           })),
         });
       } catch (e) {
+        await quitarTarifas([...tarifasEscritas.keys()]);
         marcar(CAMBIOS, { estado: 'fallo', mensaje: e instanceof Error ? e.message : 'Error' });
       }
     }
@@ -731,8 +770,9 @@ export default function MatricularDesdeSigerd() {
         conceptos: conceptosDe(editando.alumno.id, editando.grupo.cursoId) ?? undefined,
         precios: ajustes.get(editando.alumno.id)?.precios ?? [],
       }}
-      // A los ya matriculados, por ahora, solo se les cambian conceptos.
-      puedePrecios={puedePrecios && !esMatriculado(editando.alumno)}
+      // A los ya matriculados solo se les pone precio a lo que se les da de
+      // otros grados: lo suyo ya tiene cargos y se cambia en Tarifas.
+      puedePrecios={puedePrecios}
       recargar={recargarPlanes}
       onAbrirConceptos={puedePrecios ? () => setConceptosAbierto(true) : undefined}
       onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
@@ -1029,8 +1069,10 @@ export default function MatricularDesdeSigerd() {
                     const sale = fuera.has(e.id);
                     const c = cuentas.get(e.id);
                     const a = ajustes.get(e.id);
-                    const lineas = plan?.estado === 'listo' ? plan.lineas : [];
                     const suyos = new Set(conceptosDe(e.id, g.cursoId) ?? []);
+                    // Con lo de otros grados que lleve, para nombrarlo en «+».
+                    const lineas = plan?.estado === 'listo'
+                      ? [...plan.lineas, ...plan.otros.filter((l) => suyos.has(l.conceptoId))] : [];
                     const sinEstos = lineas.filter((l) => !suyos.has(l.conceptoId) && cobraEnSeccion(l, cambiados));
                     // Lo que lleva y su sección no cobra (lo marcado en la vista por concepto, por ejemplo).
                     const conMas = lineas.filter((l) => suyos.has(l.conceptoId) && !cobraEnSeccion(l, cambiados));
@@ -1418,9 +1460,8 @@ function EditorAlumno({
           corte={corte}
           estudianteId={alumno.id}
           inicial={inicialFijo}
-          // A los ya matriculados se les cambia lo suyo en «Servicios por
-          // alumno», que solo da conceptos de su sección.
-          conOtros={!esMatriculado(alumno)}
+          conOtros
+          preciosSoloOtros={esMatriculado(alumno)}
           recargar={recargar}
           onPlan={alLlegarPlan}
           onCambio={alCambiar}
@@ -1432,11 +1473,11 @@ function EditorAlumno({
             <Tag className="h-3.5 w-3.5" />¿Falta un concepto o un precio? Abrir conceptos y tarifas
           </button>
         )}
-        {!puedePrecios && (
+        {(!puedePrecios || esMatriculado(alumno)) && (
           <p className="text-xs text-gray-500">
-            {esMatriculado(alumno)
-              ? 'El precio de un alumno ya matriculado se cambia en Tarifas. Aquí puedes darle o quitarle conceptos.'
-              : 'Cambiar el precio de un alumno lo hace quien puede tocar Tarifas. Aquí puedes quitarle conceptos.'}
+            {!puedePrecios
+              ? 'Cambiar el precio de un alumno lo hace quien puede tocar Tarifas. Aquí puedes darle o quitarle conceptos.'
+              : 'El precio de lo que ya lleva se cambia en Tarifas: tiene cargos hechos. Lo que le des de otros grados lleva aquí su precio.'}
           </p>
         )}
       </div>

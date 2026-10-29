@@ -140,7 +140,7 @@ function cuandoSeCobra(l: LineaPlan): string {
 export const obligatoriosPrimero = <L extends Pick<LineaPlan, 'opcional'>>(lineas: L[]): L[] =>
   [...lineas.filter((l) => !l.opcional), ...lineas.filter((l) => l.opcional)];
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, conOtros, recargar, onPlan, onCambio, onPrecios }: {
+export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, conOtros, preciosSoloOtros, recargar, onPlan, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
@@ -171,6 +171,12 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
    * tarifa propia, y quien no puede tocar precios no lo ve.
    */
   conOtros?: boolean;
+  /**
+   * Solo se escribe el precio de lo de otros grados. Es el alumno ya
+   * matriculado: el precio de sus conceptos ya tiene cargos hechos y se cambia
+   * en Tarifas, pero lo nuevo que se le da necesita el suyo.
+   */
+  preciosSoloOtros?: boolean;
   /** Cambia para volver a pedir el plan: se editaron conceptos o tarifas en otra ventana. */
   recargar?: number;
   /**
@@ -298,11 +304,11 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
         if (l.fueraDeSeccion) {
           return [{ conceptoId: l.conceptoId, montoCentavos: propio ?? l.montoCentavos, productId: l.productId }];
         }
-        return propio == null || propio === l.montoCentavos
+        return preciosSoloOtros || propio == null || propio === l.montoCentavos
           ? []
           : [{ conceptoId: l.conceptoId, montoCentavos: propio, productId: l.productId }];
       }));
-  }, [completo, propios, marcados, onPrecios]);
+  }, [completo, propios, marcados, onPrecios, preciosSoloOtros]);
 
   function abrirPrecio(l: LineaPlan) {
     setEditandoId(l.conceptoId);
@@ -351,7 +357,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
     // La beca ya es un descuento sobre la tarifa; dejar escribir
     // además un precio propio pone dos mecanismos a pelear por
     // la misma cifra. Se edita la beca donde se puso la beca.
-    const puedeEditar = !!onPrecios && activo && l.origen !== 'beca';
+    const puedeEditar = !!onPrecios && activo && l.origen !== 'beca' && (!preciosSoloOtros || deOtros);
     const vivas = l.cuotas.filter((c) => !c.omitida).length;
     const cuota = porCuotaDe(l);
     const editando = editandoId === l.conceptoId;
