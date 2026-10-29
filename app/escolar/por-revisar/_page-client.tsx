@@ -25,12 +25,12 @@ import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-esc
  * un alumno que se busca en el formulario.
  */
 
-type Vista = 'mias' | 'todas' | 'hechas';
+type Vista = 'mias' | 'todas' | 'revision' | 'hechas';
 type Origen = 'todas' | 'ia' | 'personas';
 
 interface Respuesta {
   familias: FamiliaConTareas[];
-  cuentas: { mias: number; todas: number; hechas: number };
+  cuentas: { mias: number; todas: number; revision: number; hechas: number };
   kpis: { abiertas: number; familias: number; colegio: number; mias: number; ia: number; viejas: number };
 }
 
@@ -87,11 +87,11 @@ export default function PorRevisarClient() {
     try {
       const res = await fetch(`/api/administracion-escolar/tareas/${t.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: t.estado === 'abierta' ? 'completar' : 'reabrir' }),
+        body: JSON.stringify({ accion: t.estado === 'completada' ? 'reabrir' : 'completar' }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'No se pudo cambiar');
-      toast.success(t.estado === 'abierta' ? 'Tarea completada' : 'Tarea abierta de nuevo');
+      toast.success(t.estado === 'completada' ? 'Tarea abierta de nuevo' : 'Tarea completada');
       void mutate();
       refrescarCampana();
     } catch (e) {
@@ -150,7 +150,7 @@ export default function PorRevisarClient() {
       </div>
 
       <div className={`grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white ${ZERO_AI_TAREAS ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        <Kpi titulo="Abiertas" valor={k?.abiertas} resalte={!!k?.abiertas} nota={k ? dondeEstan(k.familias, k.colegio) : ''} />
+        <Kpi titulo="Pendientes" valor={k?.abiertas} resalte={!!k?.abiertas} nota={k ? dondeEstan(k.familias, k.colegio) : ''} />
         <Kpi titulo="Asignadas a ti" valor={k?.mias} nota="con tu nombre" />
         {ZERO_AI_TAREAS && <Kpi titulo="Sugeridas por Zero AI" valor={k?.ia} nota="las encontró al revisar facturas" />}
         <Kpi titulo="Más de una semana" valor={k?.viejas} nota={k?.viejas ? 'conviene moverlas' : 'nada atrasado'} alerta={!!k?.viejas} />
@@ -160,6 +160,7 @@ export default function PorRevisarClient() {
         <Segmento etiqueta="Qué tareas" valor={vista} onCambio={setVista} opciones={[
           { id: 'mias', texto: `Asignadas a mí${cuentas ? ` · ${cuentas.mias}` : ''}` },
           { id: 'todas', texto: `Todo el colegio${cuentas ? ` · ${cuentas.todas}` : ''}` },
+          { id: 'revision', texto: `En revisión${cuentas ? ` · ${cuentas.revision}` : ''}` },
           { id: 'hechas', texto: `Completadas${cuentas ? ` · ${cuentas.hechas}` : ''}` },
         ]} />
         {ZERO_AI_TAREAS && (
@@ -182,7 +183,7 @@ export default function PorRevisarClient() {
       {error && <p className="text-sm text-red-600">No se pudieron leer las tareas.</p>}
       {data && familias.length === 0 && (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
-          {vista === 'mias' ? 'No tienes nada pendiente.' : 'Nada con estos filtros.'}
+          {vista === 'mias' ? 'No tienes nada pendiente.' : vista === 'revision' ? 'No hay nada en revisión.' : 'Nada con estos filtros.'}
         </div>
       )}
 
@@ -193,7 +194,7 @@ export default function PorRevisarClient() {
               <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
               {f.alumnos && <p className="text-xs text-gray-500">{f.alumnos}</p>}
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${f.abiertas ? 'bg-amber-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                {f.abiertas ? `${f.abiertas} ${f.abiertas === 1 ? 'abierta' : 'abiertas'}` : 'al día'}
+                {f.abiertas ? `${f.abiertas} ${f.abiertas === 1 ? 'pendiente' : 'pendientes'}` : 'al día'}
               </span>
               {f.estudianteId && (
                 <Link href={`/escolar/estudiantes/${f.estudianteId}`} className="ml-auto text-xs font-medium text-zero-700 hover:underline">
@@ -219,6 +220,7 @@ export default function PorRevisarClient() {
                       <span className={`block text-sm font-semibold ${hecha ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{t.titulo}</span>
                       {t.descripcion && <span className="line-clamp-1 block text-xs text-gray-600">{t.descripcion}</span>}
                       <span className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] text-gray-600">
+                        {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 py-0.5 font-semibold text-sky-800">En revisión</span>}
                         <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.de}</span>
                         <span className="inline-flex items-center gap-1">
                           <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${

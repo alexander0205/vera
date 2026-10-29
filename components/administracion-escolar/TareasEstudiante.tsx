@@ -1,12 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
-import { ArrowLeft, Bell, Check, ExternalLink, Loader2, Plus, Sparkles, Users, X } from 'lucide-react';
+import {
+  ArrowLeft, Bell, Check, Download, ExternalLink, FileText, Loader2, Paperclip, Plus, RotateCcw, ScanSearch, Sparkles, Users, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { DE_COLEGIO, type Asignacion } from '@/lib/administracion-escolar/tareas-reglas';
+import {
+  ACEPTA_ADJUNTOS, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, validarAdjunto,
+  type AccionEstado, type Asignacion, type EstadoTarea,
+} from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { refrescarCampana } from './CampanaTareas';
 
@@ -19,19 +24,26 @@ import { refrescarCampana } from './CampanaTareas';
  * como completada. Las tareas las crea una persona del colegio, el equipo de
  * Zero (firma «Soporte IT · Zero») o Zero AI. El formulario de una tarea nueva
  * también lo usa «Por revisar», donde la tarea puede ser del colegio.
+ *
+ * Una tarea puede quedar «En revisión» (alguien ya la tomó; sigue pendiente), y
+ * en la conversación se suben fotos, videos y documentos con el clip.
  */
 
 interface Conteo { alumno: number; familia: number }
 interface TareaEnLista {
-  id: number; titulo: string; estado: 'abierta' | 'completada'; de: string; asignada: string;
+  id: number; titulo: string; estado: EstadoTarea; de: string; asignada: string;
   documento: string | null; creadaPorIa: boolean; venceEl: string | null;
   ultimo: { autor: string; texto: string; tipo: string; creadoEn: string } | null;
   mensajes: number; actualizadoEn: string;
 }
 interface DocumentoFamilia { id: number; codigo: string; tipoEcf: string; fecha: string | null; montoTotal: number; anulado: boolean }
-interface Mensaje { id: number; tipo: 'mensaje' | 'evento' | 'ia'; userId: number | null; autor: string; texto: string; creadoEn: string }
+interface Mensaje {
+  id: number; tipo: 'mensaje' | 'evento' | 'ia' | 'adjunto'; userId: number | null; autor: string; texto: string; creadoEn: string;
+  /** Solo en los de tipo «adjunto», cuando el archivo ya subió entero. */
+  adjunto: { id: number; mime: string; bytes: number } | null;
+}
 export interface TareaCompleta {
-  id: number; titulo: string; estado: 'abierta' | 'completada'; de: string; fichaId: number | null; asignada: string;
+  id: number; titulo: string; estado: EstadoTarea; de: string; fichaId: number | null; asignada: string;
   documento: string | null; ecfDocumentId: number | null; creadaPorIa: boolean; venceEl: string | null; mensajes: Mensaje[];
 }
 
@@ -61,6 +73,44 @@ const iniciales = (nombre: string) => {
   const p = nombre.trim().split(/\s+/);
   return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase() || '·';
 };
+
+export const COLOR_PUNTO: Record<EstadoTarea, string> = {
+  abierta: 'bg-amber-500', en_revision: 'bg-sky-500', completada: 'bg-emerald-600',
+};
+export const COLOR_CHIP: Record<EstadoTarea, string> = {
+  abierta: 'bg-amber-50 text-amber-800', en_revision: 'bg-sky-50 text-sky-800', completada: 'bg-emerald-50 text-emerald-800',
+};
+
+const pesoLegible = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+/**
+ * Sube un archivo a una tarea: abre la subida y manda los trozos en orden
+ * (una función de Vercel no recibe más de 4.5 MB de una vez; un video sí pesa
+ * más). `onAvance` recibe de 0 a 1.
+ */
+export async function subirAdjunto(tareaId: number, archivo: File, onAvance?: (fraccion: number) => void) {
+  const v = validarAdjunto({ nombre: archivo.name, bytes: archivo.size });
+  if (!v.ok) throw new Error(v.error);
+  const base = `/api/administracion-escolar/tareas/${tareaId}/adjuntos`;
+  const res = await fetch(base, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: archivo.name, bytes: archivo.size }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error ?? 'No se pudo subir el archivo');
+  const { adjuntoId, trozo } = d as { adjuntoId: number; trozo: number };
+  const total = Math.ceil(archivo.size / trozo);
+  for (let n = 0; n < total; n++) {
+    const fin = n === total - 1;
+    const r = await fetch(`${base}/${adjuntoId}?n=${n}${fin ? '&fin=1' : ''}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' },
+      body: archivo.slice(n * trozo, (n + 1) * trozo),
+    });
+    const e = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(e.error ?? `No se pudo subir «${archivo.name}»`);
+    onAvance?.((n + 1) / total);
+  }
+}
 
 export const Segmento = <T extends string>({ opciones, valor, onCambio, etiqueta }: {
   opciones: { id: T; texto: string }[]; valor: T; onCambio: (v: T) => void; etiqueta: string;
@@ -109,8 +159,8 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
     : vista.tipo === 'nueva' ? 'Nueva tarea' : 'Tareas por revisar';
   const subtitulo = vista.tipo === 'hilo' ? 'La conversación de esta tarea'
     : vista.tipo === 'nueva' ? 'Algo que alguien tiene que decidir o arreglar'
-    : alcance === 'alumno' ? `De ${nombre} · ${conteo.alumno} abierta(s)`
-    : `De toda la familia · ${conteo.familia} abierta(s)`;
+    : alcance === 'alumno' ? `De ${nombre} · ${conteo.alumno} pendiente(s)`
+    : `De toda la familia · ${conteo.familia} pendiente(s)`;
 
   return (
     <>
@@ -156,7 +206,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                 <Segmento etiqueta="De quién" valor={alcance} onCambio={setAlcance}
                   opciones={[{ id: 'alumno', texto: nombre }, { id: 'familia', texto: 'Toda la familia' }]} />
                 <Segmento etiqueta="Estado" valor={estado} onCambio={setEstado}
-                  opciones={[{ id: 'abierta', texto: 'Abiertas' }, { id: 'completada', texto: 'Historial' }]} />
+                  opciones={[{ id: 'abierta', texto: 'Pendientes' }, { id: 'completada', texto: 'Historial' }]} />
               </div>
             )}
             {vista.tipo === 'hilo' && dataHilo && <CabeceraHilo tarea={dataHilo.tarea} />}
@@ -168,13 +218,13 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                 {cargandoLista && <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>}
                 {!cargandoLista && (dataLista?.tareas ?? []).length === 0 && (
                   <p className="px-4 py-10 text-center text-sm text-gray-500">
-                    {estado === 'abierta' ? 'No hay tareas abiertas.' : 'Todavía no hay tareas completadas.'}
+                    {estado === 'abierta' ? 'No hay tareas pendientes.' : 'Todavía no hay tareas completadas.'}
                   </p>
                 )}
                 {(dataLista?.tareas ?? []).map((t) => (
                   <button key={t.id} type="button" onClick={() => setVista({ tipo: 'hilo', id: t.id })}
                     className="flex w-full gap-3 rounded-xl p-3 text-left transition-colors hover:bg-gray-50">
-                    <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${t.estado === 'completada' ? 'bg-emerald-600' : 'bg-amber-500'}`} />
+                    <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${COLOR_PUNTO[t.estado]}`} />
                     <span className="min-w-0 flex-1 space-y-1">
                       <span className="flex items-baseline gap-2">
                         <span className={`text-sm font-semibold ${t.estado === 'completada' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{t.titulo}</span>
@@ -183,11 +233,12 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                       {t.ultimo && (
                         <span className="block truncate text-xs text-gray-600">
                           {t.ultimo.tipo !== 'evento' && <strong className="font-semibold text-gray-700">{t.ultimo.autor}: </strong>}
-                          {t.ultimo.texto}
+                          {t.ultimo.tipo === 'adjunto' && '📎 '}{t.ultimo.texto}
                         </span>
                       )}
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
                         {t.de} · {t.asignada}
+                        {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 font-semibold text-sky-800">En revisión</span>}
                         {t.creadaPorIa && <span className="rounded bg-violet-50 px-1.5 font-semibold text-violet-700">Zero AI</span>}
                         {t.documento && <span className="font-mono text-zero-700">{t.documento}</span>}
                       </span>
@@ -225,8 +276,8 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
 export function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
   return (
     <div className="flex flex-wrap gap-1.5 text-xs">
-      <span className={`rounded-md px-2 py-0.5 font-semibold ${tarea.estado === 'completada' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-        {tarea.estado === 'completada' ? 'Completada' : 'Abierta'}
+      <span className={`rounded-md px-2 py-0.5 font-semibold ${COLOR_CHIP[tarea.estado]}`}>
+        {ETIQUETA_ESTADO[tarea.estado]}
       </span>
       <span className="rounded-md bg-gray-100 px-2 py-0.5 text-gray-700">{tarea.de}</span>
       <span className="rounded-md bg-gray-100 px-2 py-0.5 text-gray-700">Asignada a {tarea.asignada}</span>
@@ -245,6 +296,8 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
 }) {
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [subiendo, setSubiendo] = useState<{ nombre: string; avance: number } | null>(null);
+  const elegir = useRef<HTMLInputElement>(null);
 
   async function enviar() {
     if (!texto.trim()) return;
@@ -262,12 +315,11 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
     } finally { setEnviando(false); }
   }
 
-  async function marcar() {
+  async function marcar(accion: AccionEstado) {
     setEnviando(true);
     try {
       const res = await fetch(`/api/administracion-escolar/tareas/${tarea.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: tarea.estado === 'abierta' ? 'completar' : 'reabrir' }),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'No se pudo cambiar');
@@ -277,19 +329,37 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
     } finally { setEnviando(false); }
   }
 
+  async function adjuntar(archivos: FileList | null) {
+    const lista = [...(archivos ?? [])];
+    if (elegir.current) elegir.current.value = '';
+    for (const archivo of lista) {
+      setSubiendo({ nombre: archivo.name, avance: 0 });
+      try {
+        await subirAdjunto(tarea.id, archivo, (avance) => setSubiendo({ nombre: archivo.name, avance }));
+        onCambio();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : `No se pudo subir «${archivo.name}»`);
+      }
+    }
+    setSubiendo(null);
+  }
+
+  const ocupado = enviando || subiendo != null;
+
   return (
     <>
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto bg-gray-50/60 px-5 py-4">
         {tarea.mensajes.map((m) => {
           if (m.tipo === 'evento') {
-            const cerrada = m.texto.includes('completada');
+            const color = m.texto.includes('completada') ? 'bg-emerald-50 text-emerald-800'
+              : m.texto.includes('revisión') ? 'bg-sky-50 text-sky-800' : 'bg-gray-100 text-gray-600';
             return (
-              <p key={m.id} className={`self-center rounded-full px-3 py-1 text-center text-[11px] font-medium ${cerrada ? 'bg-emerald-50 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+              <p key={m.id} className={`self-center rounded-full px-3 py-1 text-center text-[11px] font-medium ${color}`}>
                 {m.texto} · {cuando(m.creadoEn)}
               </p>
             );
           }
-          const mio = m.userId === yo && m.tipo === 'mensaje';
+          const mio = m.userId === yo && (m.tipo === 'mensaje' || m.tipo === 'adjunto');
           const ia = m.tipo === 'ia';
           return (
             <div key={m.id} className={`flex items-start gap-2 ${mio ? 'flex-row-reverse' : ''}`}>
@@ -299,12 +369,16 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
               </span>
               <div className={`flex max-w-[80%] flex-col gap-1 ${mio ? 'items-end' : ''}`}>
                 <span className="text-[11px] text-gray-500">{mio ? 'Tú' : m.autor} · {cuando(m.creadoEn)}</span>
-                <div className={`whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                  mio ? 'rounded-tr-sm bg-zero-600 text-white'
-                    : ia ? 'rounded-tl-sm border border-violet-200 bg-violet-50 text-violet-950'
-                    : 'rounded-tl-sm border border-gray-200 bg-white text-gray-900'}`}>
-                  {m.texto}
-                </div>
+                {m.tipo === 'adjunto' ? (
+                  <Adjunto tareaId={tarea.id} nombre={m.texto} adjunto={m.adjunto} />
+                ) : (
+                  <div className={`whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    mio ? 'rounded-tr-sm bg-zero-600 text-white'
+                      : ia ? 'rounded-tl-sm border border-violet-200 bg-violet-50 text-violet-950'
+                      : 'rounded-tl-sm border border-gray-200 bg-white text-gray-900'}`}>
+                    {m.texto}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -317,15 +391,44 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar(); }}
             placeholder="Escribe una respuesta…"
             className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void marcar()} disabled={enviando}
-              title={tarea.estado === 'abierta' ? 'Ya se resolvió: sale de las abiertas y queda en el historial' : 'Vuelve a las abiertas'}
-              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold disabled:opacity-50 ${
-                tarea.estado === 'abierta' ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <Check className="h-4 w-4" />{tarea.estado === 'abierta' ? 'Marcar como completada' : 'Volver a abrir'}
-            </button>
+          {subiendo && (
+            <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zero-600" />
+              <span className="min-w-0 flex-1 truncate">Subiendo {subiendo.nombre}</span>
+              <span className="tabular-nums">{Math.round(subiendo.avance * 100)}%</span>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {tarea.estado !== 'completada' && (
+              <button type="button" onClick={() => void marcar('completar')} disabled={ocupado}
+                title="Ya se resolvió: sale de las pendientes y queda en el historial"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+                <Check className="h-4 w-4" />Completar
+              </button>
+            )}
+            {tarea.estado === 'abierta' && (
+              <button type="button" onClick={() => void marcar('revision')} disabled={ocupado}
+                title="Alguien ya la está viendo o falta que la confirmen: sigue pendiente"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50">
+                <ScanSearch className="h-4 w-4" />En revisión
+              </button>
+            )}
+            {tarea.estado !== 'abierta' && (
+              <button type="button" onClick={() => void marcar('reabrir')} disabled={ocupado}
+                title="Vuelve a las abiertas"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                <RotateCcw className="h-4 w-4" />{tarea.estado === 'completada' ? 'Volver a abrir' : 'Quitar de revisión'}
+              </button>
+            )}
             <span className="flex-1" />
-            <button type="button" onClick={() => void enviar()} disabled={enviando || !texto.trim()}
+            <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
+              onChange={(e) => void adjuntar(e.target.files)} />
+            <button type="button" onClick={() => elegir.current?.click()} disabled={ocupado}
+              aria-label="Adjuntar fotos, videos o documentos" title="Adjuntar fotos, videos o documentos"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              <Paperclip className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => void enviar()} disabled={ocupado || !texto.trim()}
               className="h-9 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
               Enviar
             </button>
@@ -333,6 +436,46 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
         </div>
       )}
     </>
+  );
+}
+
+/** Un archivo de la conversación: la foto o el video se ven ahí mismo; un documento, como ficha. */
+function Adjunto({ tareaId, nombre, adjunto }: {
+  tareaId: number; nombre: string; adjunto: Mensaje['adjunto'];
+}) {
+  if (!adjunto) {
+    return <div className="rounded-2xl border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-500">📎 {nombre} (no disponible)</div>;
+  }
+  const url = `/api/administracion-escolar/tareas/${tareaId}/adjuntos/${adjunto.id}`;
+  const clase = claseDeMime(adjunto.mime);
+  // HEIC no se ve en casi ningún navegador fuera de Safari: va como documento.
+  if (clase === 'imagen' && !adjunto.mime.includes('hei')) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element -- la URL redirige a S3 firmada; next/image no la puede optimizar */}
+        <img src={url} alt={nombre} loading="lazy" className="max-h-64 w-auto max-w-full object-contain" />
+      </a>
+    );
+  }
+  if (clase === 'video') {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black">
+        <video src={url} controls preload="metadata" className="max-h-72 w-full max-w-sm" aria-label={nombre} />
+        <a href={`${url}?descargar=1`} className="flex items-center gap-1.5 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+          <Download className="h-3.5 w-3.5" /><span className="truncate">{nombre}</span>
+        </a>
+      </div>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer"
+      className="flex items-center gap-2.5 rounded-2xl border border-gray-200 bg-white px-3 py-2 text-left hover:bg-gray-50">
+      <FileText className="h-5 w-5 shrink-0 text-zero-600" />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-gray-900">{nombre}</span>
+        <span className="block text-[11px] text-gray-500">{pesoLegible(adjunto.bytes)}</span>
+      </span>
+    </a>
   );
 }
 
@@ -355,7 +498,19 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
   const [persona, setPersona] = useState('');
   const [documento, setDocumento] = useState('');
   const [venceEl, setVenceEl] = useState('');
-  const [guardando, setGuardando] = useState(false);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [guardando, setGuardando] = useState<string | false>(false);
+  const elegir = useRef<HTMLInputElement>(null);
+
+  function agregarArchivos(lista: FileList | null) {
+    const nuevos: File[] = [];
+    for (const f of [...(lista ?? [])]) {
+      const v = validarAdjunto({ nombre: f.name, bytes: f.size });
+      if (v.ok) nuevos.push(f); else toast.error(v.error);
+    }
+    setArchivos((a) => [...a, ...nuevos]);
+    if (elegir.current) elegir.current.value = '';
+  }
   const { data: dataPersonas } = useSWR<{ personas: { id: number; nombre: string }[] }>(
     asignadaA === 'persona' ? '/api/administracion-escolar/tareas/personas' : null, traer);
   const { data: dataDocs } = useSWR<{ documentos: DocumentoFamilia[] }>(
@@ -368,7 +523,7 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
   ];
 
   async function crear() {
-    setGuardando(true);
+    setGuardando('Creando…');
     try {
       const res = await fetch('/api/administracion-escolar/tareas', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -383,6 +538,12 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'No se pudo crear');
+      // La tarea ya existe: un archivo que no sube no la deshace, se avisa y se sigue.
+      for (const [i, f] of archivos.entries()) {
+        setGuardando(`Subiendo ${i + 1} de ${archivos.length}…`);
+        await subirAdjunto(d.id, f).catch((e: unknown) =>
+          toast.error(e instanceof Error ? e.message : `No se pudo subir «${f.name}»`));
+      }
       toast.success('Tarea creada');
       onCreada(d.id);
     } catch (e) {
@@ -465,6 +626,28 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
             <span className="block text-xs text-gray-500">Las de la familia, la más reciente primero. Queda como enlace en la tarea.</span>
           </label>
         )}
+        <div className="space-y-1.5 text-sm">
+          <span className="font-medium text-gray-700">Archivos</span>
+          {archivos.length > 0 && (
+            <ul className="space-y-1">
+              {archivos.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5">
+                  <Paperclip className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+                  <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                  <span className="shrink-0 text-xs text-gray-500">{pesoLegible(f.size)}</span>
+                  <button type="button" onClick={() => setArchivos((a) => a.filter((_, j) => j !== i))}
+                    aria-label={`Quitar ${f.name}`} className="rounded p-0.5 text-gray-500 hover:bg-gray-200"><X className="h-3.5 w-3.5" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
+            onChange={(e) => agregarArchivos(e.target.files)} />
+          <button type="button" onClick={() => elegir.current?.click()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <Paperclip className="h-4 w-4" />Adjuntar fotos, videos o documentos
+          </button>
+        </div>
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium text-gray-700">Para cuándo</span>
           <input type="date" value={venceEl} onChange={(e) => setVenceEl(e.target.value)}
@@ -473,9 +656,9 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
       </div>
       <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-3">
         <button type="button" onClick={() => void crear()}
-          disabled={guardando || !titulo.trim() || (asignadaA === 'persona' && !persona) || (!delColegio && !alumno)}
+          disabled={!!guardando || !titulo.trim() || (asignadaA === 'persona' && !persona) || (!delColegio && !alumno)}
           className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
-          {guardando && <Loader2 className="h-4 w-4 animate-spin" />}Crear tarea
+          {guardando && <Loader2 className="h-4 w-4 animate-spin" />}{guardando || 'Crear tarea'}
         </button>
       </div>
     </>
