@@ -4591,3 +4591,43 @@ export const capturaFacturasArchivos = pgTable('captura_facturas_archivos', {
 ]);
 
 export type CapturaFactura = typeof capturaFacturas.$inferSelect;
+
+/**
+ * Lo decidido en una pantalla larga antes de guardarlo de verdad («Matricular
+ * desde SIGERD»), para que recargar o abrirla en otra computadora vuelva al
+ * mismo punto. Uno por colegio, año y pantalla (`clave`). Migración 0211.
+ */
+export const adminEscolarBorradores = pgTable('admin_escolar_borradores', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  periodoId: integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id, { onDelete: 'cascade' }),
+  clave:     varchar('clave', { length: 40 }).notNull(),
+  datos:     jsonb('datos').notNull().default({}),
+  updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_borradores_clave_idx').on(t.teamId, t.periodoId, t.clave),
+]);
+
+/**
+ * Un trabajo largo que sigue aunque se cierre la pantalla (hoy: completar las
+ * familias desde SIGERD alumno por alumno). Lo avanza el servidor al empezar y
+ * el cron después, desde `cursorId`. Migración 0211.
+ */
+export const adminEscolarTrabajos = pgTable('admin_escolar_trabajos', {
+  id:           serial('id').primaryKey(),
+  teamId:       integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  tipo:         varchar('tipo', { length: 40 }).notNull(),
+  estado:       varchar('estado', { length: 16 }).notNull().default('pendiente'),
+  total:        integer('total').notNull().default(0),
+  hechos:       integer('hechos').notNull().default(0),
+  resumen:      jsonb('resumen').notNull().default({}),
+  cursorId:     integer('cursor_id').notNull().default(0),
+  ultimoError:  text('ultimo_error'),
+  ocupadoHasta: timestamp('ocupado_hasta'),
+  creadoPor:    integer('creado_por').references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+  terminadoAt:  timestamp('terminado_at'),
+});

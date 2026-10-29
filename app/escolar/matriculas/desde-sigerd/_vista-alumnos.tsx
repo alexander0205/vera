@@ -110,8 +110,10 @@ export function VistaAlumnos({
             const marcado = seleccion.has(e.id);
             const abierto = editandoId === e.id;
             const plan = planes.get(g.cursoId);
-            const lineas = plan?.estado === 'listo' ? plan.lineas : [];
             const suyos = new Set(conceptosDe(e.id, g.cursoId) ?? []);
+            // Lo de otros grados sale solo si lo lleva (se le dio en «Ver más»).
+            const lineas = plan?.estado === 'listo'
+              ? [...plan.lineas, ...plan.otros.filter((l) => suyos.has(l.conceptoId))] : [];
             const propios = new Map((ajustes.get(e.id)?.precios ?? []).map((p) => [p.conceptoId, p.montoCentavos]));
             const cambiados = cambiadosSeccion.get(g.cursoId);
             const c = cuentas.get(e.id);

@@ -1,9 +1,9 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarConceptoCuotas, adminEscolarConceptosPago } from '@/lib/db/schema';
+import { adminEscolarConceptoCuotas, adminEscolarConceptoPrecios, adminEscolarConceptosPago } from '@/lib/db/schema';
 import { vencimientoDe } from './calendario';
 import { cuotasDeLaTarifa, montosPorCuota, precioEsPorCuota, repartir } from './repartir';
-import { resolverTarifas, type ContextoTarifa, type OrigenTarifa } from './tarifas';
+import { resolverTarifas, type ContextoTarifa, type OrigenTarifa, type TarifaResuelta } from './tarifas';
 
 /**
  * Qué va a deber un estudiante en el año, concepto por concepto y cuota a cuota.
@@ -61,6 +61,12 @@ export interface LineaPlan {
    */
   montoCentavos: number;
   origen: OrigenTarifa;
+  /**
+   * El concepto no tiene tarifa en la sección: es de otros grados y se ofrece
+   * en «Ver más». Si se elige, se le guarda al alumno como tarifa propia
+   * (`origen` ya dice `estudiante`), con este precio de partida.
+   */
+  fueraDeSeccion?: boolean;
   productId: number | null;
   cuotas: CuotaPlan[];
   /** Suma de las cuotas que siguen vivas: lo que de verdad se le va a cargar. */
@@ -112,9 +118,60 @@ export async function armarPlanDeCobro(
   ctx: ContextoTarifa,
   desde: string,
 ): Promise<LineaPlan[]> {
+  return (await armarPlan(teamId, ctx, desde, false)).lineas;
+}
+
+/**
+ * El plan de la sección y, aparte, los conceptos del colegio que esta sección
+ * no cobra pero otros grados sí (transporte, un taller): lo que «Ver más»
+ * ofrece para darle a un alumno suelto sin ir a Tarifas.
+ *
+ * Cada uno de `otros` sale con el precio que más se repite en sus tarifas del
+ * año (las de grados y secciones antes que las de otros alumnos) y con el
+ * calendario completo del concepto: es lo que queda al guardarlo como tarifa
+ * propia del alumno, que no recorta cuotas.
+ */
+export async function armarPlanConOtros(
+  teamId: number,
+  ctx: ContextoTarifa,
+  desde: string,
+): Promise<{ lineas: LineaPlan[]; otros: LineaPlan[] }> {
+  return armarPlan(teamId, ctx, desde, true);
+}
+
+/** La tarifa de partida de un concepto que la sección no cobra. Ver `armarPlanConOtros`. */
+export function tarifaDeReferencia(
+  precios: Array<{ objetivoTipo: string; montoCentavos: number; productId: number | null }>,
+  productoDelConcepto: number | null,
+): TarifaResuelta | null {
+  const deEstructura = precios.filter((p) => p.objetivoTipo !== 'estudiante');
+  const fuente = deEstructura.length > 0 ? deEstructura : precios;
+  if (fuente.length === 0) return null;
+  const veces = new Map<number, number>();
+  for (const p of fuente) veces.set(p.montoCentavos, (veces.get(p.montoCentavos) ?? 0) + 1);
+  // El que más se repite; si empatan, el más bajo: que nadie se encuentre un
+  // precio inflado por haber elegido de la lista.
+  const monto = [...veces.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+  const fila = fuente.find((p) => p.montoCentavos === monto)!;
+  return {
+    montoCentavos: monto,
+    origen: 'estudiante',
+    objetivoId: null,
+    productId: fila.productId ?? productoDelConcepto,
+    cuotas: null,
+  };
+}
+
+async function armarPlan(
+  teamId: number,
+  ctx: ContextoTarifa,
+  desde: string,
+  conOtros: boolean,
+): Promise<{ lineas: LineaPlan[]; otros: LineaPlan[] }> {
   const conceptos = await db
     .select({
       id:         adminEscolarConceptosPago.id,
+      productId:  adminEscolarConceptosPago.productId,
       nombre:     adminEscolarConceptosPago.nombre,
       tipo:       adminEscolarConceptosPago.tipo,
       admiteBeca: adminEscolarConceptosPago.admiteBeca,
@@ -143,10 +200,10 @@ export async function armarPlanDeCobro(
     ))
     .orderBy(asc(adminEscolarConceptosPago.nombre));
 
-  if (conceptos.length === 0) return [];
+  if (conceptos.length === 0) return { lineas: [], otros: [] };
 
   const ids = conceptos.map((c) => c.id);
-  const [tarifas, cuotas] = await Promise.all([
+  const [tarifas, cuotas, preciosDelAno] = await Promise.all([
     resolverTarifas(teamId, ctx, ids),
     db.select()
       .from(adminEscolarConceptoCuotas)
@@ -157,14 +214,37 @@ export async function armarPlanDeCobro(
         inArray(adminEscolarConceptoCuotas.conceptoId, ids),
       ))
       .orderBy(asc(adminEscolarConceptoCuotas.numero)),
+    conOtros
+      ? db.select({
+          conceptoId:    adminEscolarConceptoPrecios.conceptoId,
+          objetivoTipo:  adminEscolarConceptoPrecios.objetivoTipo,
+          montoCentavos: adminEscolarConceptoPrecios.montoCentavos,
+          productId:     adminEscolarConceptoPrecios.productId,
+        })
+        .from(adminEscolarConceptoPrecios)
+        .where(and(
+          eq(adminEscolarConceptoPrecios.teamId, teamId),
+          eq(adminEscolarConceptoPrecios.periodoId, ctx.periodoId),
+          eq(adminEscolarConceptoPrecios.activo, true),
+          inArray(adminEscolarConceptoPrecios.conceptoId, ids),
+        ))
+      : Promise.resolve([]),
   ]);
 
   const lineas: LineaPlan[] = [];
+  const otros: LineaPlan[] = [];
 
   for (const concepto of conceptos) {
-    const tarifa = tarifas.get(concepto.id);
+    let tarifa = tarifas.get(concepto.id);
+    let destino = lineas;
     // Sin tarifa no hay nada que cobrar: el concepto existe pero este grado no
-    // lo paga. Enseñarlo en cero solo confunde.
+    // lo paga. Enseñarlo en cero solo confunde. Salvo en «Ver más», que lo
+    // ofrece aparte con el precio de otros grados.
+    if (!tarifa && conOtros) {
+      const referencia = tarifaDeReferencia(
+        preciosDelAno.filter((p) => p.conceptoId === concepto.id), concepto.productId);
+      if (referencia) { tarifa = referencia; destino = otros; }
+    }
     if (!tarifa) continue;
 
     // Las cuotas que cobra ESTA tarifa: un grado puede pagar 10 de las 11 del
@@ -222,12 +302,14 @@ export async function armarPlanDeCobro(
 
     const vigentes = detalle.filter((c) => !c.omitida);
 
-    lineas.push({
+    destino.push({
       conceptoId: concepto.id,
       nombre: concepto.nombre,
       tipo: concepto.tipo,
       admiteBeca: concepto.admiteBeca,
-      opcional: concepto.opcional,
+      // Lo de otros grados llega siempre sin marcar, como un opcional.
+      opcional: destino === otros || concepto.opcional,
+      ...(destino === otros ? { fueraDeSeccion: true } : {}),
       precioPorCuota: porCuota,
       montoCentavos: tarifa.montoCentavos,
       origen: tarifa.origen,
@@ -250,5 +332,5 @@ export async function armarPlanDeCobro(
     });
   }
 
-  return lineas;
+  return { lineas, otros };
 }

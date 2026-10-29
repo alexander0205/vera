@@ -10,10 +10,15 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ConceptosYTarifasDialog } from '@/components/administracion-escolar/ConceptosYTarifasDialog';
+import { FamiliaDelAlumno } from '@/components/administracion-escolar/FamiliaDelAlumno';
+import { CompletarFamiliasSigerd } from '@/components/administracion-escolar/CompletarFamiliasSigerd';
+import { aBorrador, deBorrador, estaVacio, type EstadoLote } from '@/lib/administracion-escolar/borrador-lote';
+import { PagosDelAlumno } from '@/components/administracion-escolar/PagosDelAlumno';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 import {
-  PlanCobroSelector, escritoDesdeTarifa, modoPrecio, type LineaPlan,
+  PlanCobroSelector, escritoDesdeTarifa, modoPrecio, obligatoriosPrimero, type LineaPlan,
 } from '@/components/administracion-escolar/PlanCobroSelector';
 import {
   cambioDeMatricula, conConcepto, conPaquete, conPrecio, conceptosDeSeccion, cuentaDe, igualASeccion,
@@ -101,6 +106,13 @@ const VISTAS: Array<{ id: Vista; etiqueta: string; icono: ReactNode; ayuda: stri
   { id: 'concepto', etiqueta: 'Por concepto', icono: <Tag className="h-4 w-4" />, ayuda: 'Elige un concepto y marca quién lo lleva' },
 ];
 
+export type PasoAlumno = 'familia' | 'conceptos' | 'pagos';
+const PASOS_ALUMNO: Array<{ id: PasoAlumno; etiqueta: string }> = [
+  { id: 'familia', etiqueta: 'Familia y quién paga' },
+  { id: 'conceptos', etiqueta: 'Cargos del año' },
+  { id: 'pagos', etiqueta: 'Pagos' },
+];
+
 // Las tres alturas del árbol: nivel → grado → sección. La clave de cada nodo
 // es lo que se guarda como «lo que se está viendo».
 const claveNivel = (g: Grupo) => `n:${g.servicio}${g.tanda ? ` · ${g.tanda}` : ''}`;
@@ -112,6 +124,7 @@ const enAlcance = (g: Grupo, alcance: string | null) =>
 export default function MatricularDesdeSigerd() {
   const { can, isLoading: cargandoPermisos } = usePermissions();
   const puedePrecios = can('administracion-escolar:configurar');
+  const puedeGestionar = can('administracion-escolar:gestionar');
   // Mover a un alumno de sección es de configurar, igual que cambiar tarifas.
   const puedeRevisarCambios = puedePrecios;
 
@@ -125,6 +138,9 @@ export default function MatricularDesdeSigerd() {
    */
   const [fechaElegida, setFecha] = useState<string | null>(null);
   const [planes, setPlanes] = useState<Map<number, PlanSeccion>>(new Map());
+  /** Conceptos y tarifas abierto encima; al cerrarlo se vuelven a pedir los planes. */
+  const [conceptosAbierto, setConceptosAbierto] = useState(false);
+  const [recargarPlanes, setRecargarPlanes] = useState(0);
 
   const [fuera, setFuera] = useState<Set<number>>(new Set());
   /** Paquetes del colegio (Configuración › Paquetes): aplicar uno a toda una sección. */
@@ -144,6 +160,8 @@ export default function MatricularDesdeSigerd() {
   const [alcance, setAlcance] = useState<string | null>(null);
   const [verOmitidos, setVerOmitidos] = useState(false);
   const [editando, setEditando] = useState<{ alumno: Alumno; grupo: Grupo } | null>(null);
+  /** El paso del alumno abierto. Arranca en sus cargos, que es lo que se revisa siempre. */
+  const [paso, setPaso] = useState<PasoAlumno>('conceptos');
   // Cambios en el panel sin «Guardar»: cerrar pregunta antes de perderlos.
   const [editorSucio, setEditorSucio] = useState(false);
   const [avisoSalir, setAvisoSalir] = useState(false);
@@ -152,6 +170,16 @@ export default function MatricularDesdeSigerd() {
     if (editorSucio) setAvisoSalir(true);
     else setEditando(null);
   }, [editorSucio]);
+  /** Lo que se guardó en «Familia» se ve ya en la lista, sin volver a leer SIGERD. */
+  const marcarResponsable = useCallback((id: number, tiene: boolean) => {
+    setDatos((d) => d && {
+      ...d,
+      grupos: d.grupos.map((g) => (g.estudiantes.some((e) => e.id === id)
+        ? { ...g, estudiantes: g.estudiantes.map((e) => (e.id === id ? { ...e, sinResponsable: !tiene } : e)) }
+        : g)),
+    });
+    setEditando((x) => (x && x.alumno.id === id ? { ...x, alumno: { ...x.alumno, sinResponsable: !tiene } } : x));
+  }, []);
   const deshacerAjuste = useCallback((id: number) => {
     setAjustes((m) => { const n = new Map(m); n.delete(id); return n; });
   }, []);
@@ -176,6 +204,95 @@ export default function MatricularDesdeSigerd() {
   }, []);
   useEffect(() => { void cargar(); }, [cargar]);
 
+  /*
+   * Autoguardado: lo decidido aquí (cambios por alumno, chips de sección,
+   * quién no entra ahora, la fecha) se guarda solo en la base, uno por colegio
+   * y año, para que recargar o abrirlo en otra computadora vuelva al mismo
+   * punto. Al entrar se recupera; se borra al terminar de matricular.
+   * La familia y los pagos no pasan por aquí: se guardan al momento.
+   */
+  const [borrador, setBorrador] = useState<{
+    estado: 'cargando' | 'listo' | 'guardando' | 'guardado' | 'error';
+    actualizado?: string | null; por?: string | null; recuperado?: boolean;
+  }>({ estado: 'cargando' });
+  const borradorExiste = useRef(false);
+  const datosRef = useRef(datos);
+  datosRef.current = datos;
+  const periodoBorrador = datos?.periodo?.id ?? null;
+  useEffect(() => {
+    const d0 = datosRef.current;
+    if (!periodoBorrador || !d0) return;
+    let vigente = true;
+    fetch(`/api/administracion-escolar/matriculas/desde-sigerd/borrador?periodoId=${periodoBorrador}`)
+      .then((r) => (r.ok ? r.json() : { datos: null }))
+      .then((d) => {
+        if (!vigente) return;
+        const e = d.datos ? deBorrador(d.datos, {
+          alumnos: new Set(d0.grupos.flatMap((g) => g.estudiantes.map((x) => x.id))),
+          secciones: new Set(d0.grupos.map((g) => g.cursoId)),
+        }) : null;
+        borradorExiste.current = !!d.datos;
+        if (e && !estaVacio(e)) {
+          setAjustes(e.ajustes);
+          setCambiadosSeccion(e.cambiadosSeccion);
+          setFuera(e.fuera);
+          if (e.fecha) setFecha(e.fecha);
+          setBorrador({ estado: 'guardado', actualizado: d.actualizado, por: d.por, recuperado: true });
+        } else {
+          setBorrador({ estado: 'listo' });
+        }
+      })
+      .catch(() => { if (vigente) setBorrador({ estado: 'listo' }); });
+    return () => { vigente = false; };
+  }, [periodoBorrador]);
+  const estadoLote = useMemo<EstadoLote>(
+    () => ({ fecha: fechaElegida, fuera, cambiadosSeccion, ajustes }), [fechaElegida, fuera, cambiadosSeccion, ajustes]);
+  const pendienteRef = useRef<EstadoLote | null>(null);
+  const guardarBorrador = useCallback(async (e: EstadoLote, alSalir = false) => {
+    if (!periodoBorrador) return;
+    pendienteRef.current = null;
+    const vacio = estaVacio(e);
+    if (vacio && !borradorExiste.current) return;
+    if (!alSalir) setBorrador((b) => ({ ...b, estado: 'guardando' }));
+    try {
+      const url = '/api/administracion-escolar/matriculas/desde-sigerd/borrador';
+      const r = vacio
+        ? await fetch(`${url}?periodoId=${periodoBorrador}`, { method: 'DELETE', keepalive: alSalir })
+        : await fetch(url, {
+            method: 'PUT', keepalive: alSalir, headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ periodoId: periodoBorrador, datos: aBorrador(e) }),
+          });
+      if (!r.ok) throw new Error();
+      borradorExiste.current = !vacio;
+      if (!alSalir) setBorrador({ estado: vacio ? 'listo' : 'guardado', actualizado: new Date().toISOString(), por: null });
+    } catch {
+      if (!alSalir) setBorrador((b) => ({ ...b, estado: 'error' }));
+    }
+  }, [periodoBorrador]);
+  // Un segundo después del último cambio, como un documento que se guarda solo.
+  // Lo que se acaba de recuperar no se vuelve a mandar.
+  const recienRecuperado = useRef(true);
+  useEffect(() => {
+    if (borrador.estado === 'cargando') return;
+    if (recienRecuperado.current) { recienRecuperado.current = false; return; }
+    pendienteRef.current = estadoLote;
+    const t = setTimeout(() => void guardarBorrador(estadoLote), 1000);
+    return () => clearTimeout(t);
+    // Solo cuando cambia lo decidido: que el indicador pase a «Guardando…» no es un cambio.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estadoLote, guardarBorrador, borrador.estado === 'cargando']);
+  // Si se cierra la pestaña antes de ese segundo, se manda igual.
+  useEffect(() => {
+    const alSalir = () => { if (pendienteRef.current) void guardarBorrador(pendienteRef.current, true); };
+    window.addEventListener('pagehide', alSalir);
+    return () => window.removeEventListener('pagehide', alSalir);
+  }, [guardarBorrador]);
+  /** Empezar de cero: lo decidido se descarta, aquí y en el borrador. */
+  const descartarBorrador = () => {
+    setAjustes(new Map()); setCambiadosSeccion(new Map()); setFuera(new Set()); setFecha(null);
+  };
+
+
   // El plan de cada sección, con la fecha elegida: la fecha decide qué cuotas
   // ya tocan y cuáles espera el devengo.
   useEffect(() => {
@@ -184,18 +301,22 @@ export default function MatricularDesdeSigerd() {
     const periodoId = String(datos.periodo.id);
     setPlanes(new Map(datos.grupos.map((g) => [g.cursoId, { estado: 'cargando' } as PlanSeccion])));
     for (const g of datos.grupos) {
-      const params = new URLSearchParams({ periodoId, cursoId: String(g.cursoId), desde: fecha });
+      const params = new URLSearchParams({ periodoId, cursoId: String(g.cursoId), desde: fecha, otros: '1' });
       fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
         .then(async (res) => {
           const d = await res.json();
           if (!res.ok) throw new Error(d.error ?? 'No se pudo calcular');
-          return { estado: 'listo', lineas: d.lineas as LineaPlan[] } as PlanSeccion;
+          return {
+            estado: 'listo',
+            lineas: obligatoriosPrimero(d.lineas as LineaPlan[]),
+            otros: (d.otros ?? []) as LineaPlan[],
+          } as PlanSeccion;
         })
         .catch((e: unknown) => ({ estado: 'error', mensaje: e instanceof Error ? e.message : 'Error' } as PlanSeccion))
         .then((p) => { if (vigente) setPlanes((m) => new Map(m).set(g.cursoId, p)); });
     }
     return () => { vigente = false; };
-  }, [datos, fecha]);
+  }, [datos, fecha, recargarPlanes]);
 
   /** Lo que ya tiene guardado la matrícula de quien ya está matriculado. */
   const guardados = useMemo(() => {
@@ -233,7 +354,8 @@ export default function MatricularDesdeSigerd() {
         // Al matriculado ya se le cargó lo suyo: aquí solo cuenta lo que se va a crear.
         if (esMatriculado(e)) continue;
         const conceptos = conceptosDe(e.id, g.cursoId) ?? [];
-        m.set(e.id, cuentaDe(p.lineas, conceptos, ajustes.get(e.id)?.precios ?? [], corte));
+        // Con lo de otros grados que se le haya dado en «Ver más».
+        m.set(e.id, cuentaDe([...p.lineas, ...p.otros], conceptos, ajustes.get(e.id)?.precios ?? [], corte));
       }
     }
     return m;
@@ -266,7 +388,7 @@ export default function MatricularDesdeSigerd() {
     const c = cambioDeMatricula(e.conceptos ?? [], ajustes.get(e.id));
     if (!c) return null;
     const p = planes.get(cursoId);
-    const enPantalla = new Set(p?.estado === 'listo' ? p.lineas.map((l) => l.conceptoId) : []);
+    const enPantalla = new Set(p?.estado === 'listo' ? [...p.lineas, ...p.otros].map((l) => l.conceptoId) : []);
     const quitar = c.quitar.filter((id) => enPantalla.has(id));
     return c.agregar.length + quitar.length > 0 ? { agregar: c.agregar, quitar } : null;
   }, [ajustes, planes]);
@@ -451,6 +573,50 @@ export default function MatricularDesdeSigerd() {
     setVista(v);
   };
 
+  /*
+   * Lo que se está viendo vive en la URL (`?vista=`, `?en=` y `?alumno=`):
+   * recargar, volver atrás o pasarle el enlace a otra persona deja la pantalla
+   * donde estaba, con el mismo alumno abierto. Se lee una vez al entrar; el
+   * alumno, cuando llega la lista. Hasta entonces no se escribe, para no
+   * borrar lo que traía el enlace.
+   */
+  const alumnoDeLaUrl = useRef<number | null>(null);
+  const [urlLista, setUrlLista] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const v = q.get('vista');
+    if (v && VISTAS.some((x) => x.id === v)) setVista(v as Vista);
+    const en = q.get('en');
+    if (en) setAlcance(en);
+    const pasoUrl = q.get('paso');
+    if (pasoUrl === 'familia' || pasoUrl === 'pagos') setPaso(pasoUrl);
+    const alumno = Number(q.get('alumno'));
+    if (Number.isInteger(alumno) && alumno > 0) alumnoDeLaUrl.current = alumno;
+    else setUrlLista(true);
+  }, []);
+  useEffect(() => {
+    if (alumnoDeLaUrl.current == null || (!datos && !errorCarga)) return;
+    const id = alumnoDeLaUrl.current;
+    alumnoDeLaUrl.current = null;
+    const grupo = datos?.grupos.find((g) => g.estudiantes.some((e) => e.id === id));
+    const alumno = grupo?.estudiantes.find((e) => e.id === id);
+    if (grupo && alumno) setEditando({ alumno, grupo });
+    setUrlLista(true);
+  }, [datos, errorCarga]);
+  useEffect(() => {
+    if (!urlLista) return;
+    const q = new URLSearchParams(window.location.search);
+    const poner = (k: string, v: string | null) => { if (v) q.set(k, v); else q.delete(k); };
+    poner('vista', vista === 'seccion' ? null : vista);
+    poner('en', alcance);
+    poner('alumno', editando ? String(editando.alumno.id) : null);
+    poner('paso', editando && paso !== 'conceptos' ? paso : null);
+    const destino = `${window.location.pathname}${q.size ? `?${q}` : ''}`;
+    if (destino !== window.location.pathname + window.location.search) {
+      window.history.replaceState(window.history.state, '', destino);
+    }
+  }, [urlLista, vista, alcance, editando, paso]);
+
   /** Cada alumno con su sección entera, para encontrarlo por id. */
   const grupoDe = useMemo(() => {
     const m = new Map<number, Grupo>();
@@ -545,7 +711,44 @@ export default function MatricularDesdeSigerd() {
     // sus cargos sin facturar ni pagar; lo agregado carga ya lo que venció.
     if (cambios.length > 0 && datos.periodo) {
       marcar(CAMBIOS, { estado: 'corriendo' });
+      // Lo que se les da de otros grados: su tarifa propia va ANTES, porque es
+      // lo único que se lo cobra y el devengo de «Servicios» la busca. Si su
+      // matrícula no se guarda, se quita.
+      const tarifasEscritas = new Map<number, number[]>();
+      const quitarTarifas = async (matriculaIds: Iterable<number>) => {
+        for (const id of matriculaIds) {
+          for (const precioId of tarifasEscritas.get(id) ?? []) {
+            await fetch(`/api/administracion-escolar/concepto-precios?id=${precioId}`, { method: 'DELETE' }).catch(() => null);
+          }
+          tarifasEscritas.delete(id);
+        }
+      };
       try {
+        for (const c of cambios) {
+          const precios = (ajustes.get(c.estudianteId)?.precios ?? []).filter((p) => c.agregar.includes(p.conceptoId));
+          const curso = grupoDe.get(c.estudianteId)?.cursoId;
+          const p = curso != null ? planes.get(curso) : undefined;
+          for (const precio of precios) {
+            const linea = p?.estado === 'listo' ? p.otros.find((l) => l.conceptoId === precio.conceptoId) : undefined;
+            const r = await fetch('/api/administracion-escolar/concepto-precios', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                conceptoId: precio.conceptoId,
+                periodoId: datos.periodo.id,
+                objetivoTipo: 'estudiante',
+                objetivoId: c.estudianteId,
+                monto: precio.montoCentavos / 100,
+                ...(linea?.productId != null ? { productId: linea.productId } : {}),
+                // Los cargos los crea «Servicios» al agregarlo, con lo ya vencido.
+                devengar: false,
+              }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(`${c.nombre}: ${d.error ?? 'no se pudo guardar el precio de lo de otros grados'}`);
+            if (d.precio?.id) tarifasEscritas.set(c.matriculaId, [...(tarifasEscritas.get(c.matriculaId) ?? []), d.precio.id as number]);
+          }
+        }
         const res = await fetch('/api/administracion-escolar/matriculas/servicios', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -559,6 +762,7 @@ export default function MatricularDesdeSigerd() {
         if (!res.ok) throw new Error(d.error ?? 'No se pudieron guardar los cambios');
         const porMatricula = new Map(cambios.map((c) => [c.matriculaId, c]));
         const conError = (d.conError ?? []) as { matriculaId: number; error?: string }[];
+        await quitarTarifas(conError.map((r) => r.matriculaId));
         marcar(CAMBIOS, {
           estado: 'hecho', creadas: d.guardados, error: conError.length,
           nota: `${d.anulados ?? 0} cargo(s) anulado(s) · ${d.cargosCreados ?? 0} cargo(s) creado(s)`
@@ -570,9 +774,17 @@ export default function MatricularDesdeSigerd() {
           })),
         });
       } catch (e) {
+        await quitarTarifas([...tarifasEscritas.keys()]);
         marcar(CAMBIOS, { estado: 'fallo', mensaje: e instanceof Error ? e.message : 'Error' });
       }
     }
+
+    // Ya se matriculó: el borrador hablaba de alumnos que ahora tienen su
+    // matrícula, y recuperarlo los pintaría con cambios que ya no son.
+    pendienteRef.current = null;
+    borradorExiste.current = false;
+    await fetch(`/api/administracion-escolar/matriculas/desde-sigerd/borrador?periodoId=${datos.periodo?.id}`, { method: 'DELETE' })
+      .catch(() => null);
   }
 
   // ── Estados de la página ──────────────────────────────────────────────
@@ -681,8 +893,14 @@ export default function MatricularDesdeSigerd() {
         conceptos: conceptosDe(editando.alumno.id, editando.grupo.cursoId) ?? undefined,
         precios: ajustes.get(editando.alumno.id)?.precios ?? [],
       }}
-      // A los ya matriculados, por ahora, solo se les cambian conceptos.
-      puedePrecios={puedePrecios && !esMatriculado(editando.alumno)}
+      // A los ya matriculados solo se les pone precio a lo que se les da de
+      // otros grados: lo suyo ya tiene cargos y se cambia en Tarifas.
+      puedePrecios={puedePrecios}
+      recargar={recargarPlanes}
+      onAbrirConceptos={puedePrecios ? () => setConceptosAbierto(true) : undefined}
+      paso={paso}
+      onPaso={setPaso}
+      onResponsable={(tiene) => marcarResponsable(editando.alumno.id, tiene)}
       onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
       onRestablecer={() => {
         deshacerAjuste(editando.alumno.id);
@@ -718,6 +936,7 @@ export default function MatricularDesdeSigerd() {
                 <span className="font-normal text-gray-400">(quien ya está matriculado y cambió de sección)</span>
               </Link>
             )}
+            <EstadoBorrador b={borrador} hayCambios={!estaVacio(estadoLote)} onDescartar={descartarBorrador} />
           </div>
         </div>
         <label className="flex flex-col gap-1 self-start lg:self-auto">
@@ -732,6 +951,9 @@ export default function MatricularDesdeSigerd() {
       {/* Sin tarjetas de resumen: cuántos alumnos, en cuántas secciones y
           cuánto se carga hoy ya lo dice la barra de abajo, junto al botón que
           matricula. Arriba solo quedaba repetido (pedido del usuario, 24-10). */}
+
+      {/* Padres, fecha y sexo de todos, desde SIGERD y en el servidor: sigue aunque se cierre. */}
+      {puedeGestionar && <CompletarFamiliasSigerd />}
 
       {/* ── Avisos ─────────────────────────────────────────────────── */}
       {(resumen.sinResponsable > 0 || omitidos.length > 0) && (
@@ -787,7 +1009,14 @@ export default function MatricularDesdeSigerd() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-gray-500">{VISTAS.find((v) => v.id === vista)?.ayuda}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-500">{VISTAS.find((v) => v.id === vista)?.ayuda}</p>
+          {puedePrecios && (
+            <Button variant="outline" size="sm" onClick={() => setConceptosAbierto(true)}>
+              <Tag className="mr-1.5 h-4 w-4" />Conceptos y tarifas
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Lista ──────────────────────────────────────────────────── */}
@@ -970,8 +1199,10 @@ export default function MatricularDesdeSigerd() {
                     const sale = fuera.has(e.id);
                     const c = cuentas.get(e.id);
                     const a = ajustes.get(e.id);
-                    const lineas = plan?.estado === 'listo' ? plan.lineas : [];
                     const suyos = new Set(conceptosDe(e.id, g.cursoId) ?? []);
+                    // Con lo de otros grados que lleve, para nombrarlo en «+».
+                    const lineas = plan?.estado === 'listo'
+                      ? [...plan.lineas, ...plan.otros.filter((l) => suyos.has(l.conceptoId))] : [];
                     const sinEstos = lineas.filter((l) => !suyos.has(l.conceptoId) && cobraEnSeccion(l, cambiados));
                     // Lo que lleva y su sección no cobra (lo marcado en la vista por concepto, por ejemplo).
                     const conMas = lineas.filter((l) => suyos.has(l.conceptoId) && !cobraEnSeccion(l, cambiados));
@@ -1113,6 +1344,9 @@ export default function MatricularDesdeSigerd() {
         onConfirm={() => void matricular()} />
 
       {/* En la vista por alumno el plan se abre debajo de su fila; en las demás, en el cajón. */}
+      <ConceptosYTarifasDialog open={conceptosAbierto}
+        onCerrar={() => { setConceptosAbierto(false); setRecargarPlanes((n) => n + 1); }} />
+
       <Drawer anchor="right" open={!!editando && vista !== 'alumno'} onClose={cerrarEditor} keepMounted={false}
         slotProps={{
           backdrop: { sx: { backdropFilter: 'blur(2px)' } },
@@ -1267,7 +1501,8 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
+  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
+  paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -1277,6 +1512,15 @@ function EditorAlumno({
   inicial: { conceptos?: number[]; precios: Ajuste['precios'] };
   puedePrecios: boolean;
   conCambios: boolean;
+  /** Cambia al cerrar «Conceptos y tarifas»: el selector vuelve a pedir el plan. */
+  recargar?: number;
+  /** Abre «Conceptos y tarifas» encima, para crear o corregir sin salir. */
+  onAbrirConceptos?: () => void;
+  /** Qué parte se ve: los padres y quién paga, o sus cargos del año. Vive en la URL (`?paso=`). */
+  paso: PasoAlumno;
+  onPaso: (p: PasoAlumno) => void;
+  /** Se le puso (o cambió) el responsable de pago desde «Familia». */
+  onResponsable: (tiene: boolean) => void;
   onGuardar: (a: Ajuste) => void;
   onRestablecer: () => void;
   onSacar: () => void;
@@ -1313,6 +1557,8 @@ function EditorAlumno({
     || (base.current.precios !== null && clavePrecios(precios) !== base.current.precios)
   );
   useEffect(() => { onSucio?.(sucio); }, [sucio, onSucio]);
+  const [pagosVisto, setPagosVisto] = useState(paso === 'pagos');
+  useEffect(() => { if (paso === 'pagos') setPagosVisto(true); }, [paso]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1330,7 +1576,42 @@ function EditorAlumno({
         </button>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      {/* Primero quién es su familia y quién paga, después lo que se le cobra:
+          el orden del formulario de migración. Los dos pasos quedan montados
+          para no perder lo marcado al ir y volver. */}
+      <div role="tablist" aria-label="Partes del alumno" className="flex gap-1 border-b border-gray-100 px-5">
+        {PASOS_ALUMNO.map((p, i) => (
+          <button key={p.id} type="button" role="tab" aria-selected={paso === p.id} onClick={() => onPaso(p.id)}
+            className={`-mb-px inline-flex items-center gap-2 border-b-2 px-2 py-2.5 text-sm font-medium ${
+              paso === p.id ? 'border-zero-600 text-zero-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${
+              paso === p.id ? 'bg-zero-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{i + 1}</span>
+            {p.etiqueta}
+            {p.id === 'familia' && alumno.sinResponsable && (
+              <span className="h-2 w-2 rounded-full bg-amber-500" title="Sin responsable de pago" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'familia' ? '' : 'hidden'}`}>
+        <FamiliaDelAlumno estudianteId={alumno.id} onResponsable={onResponsable} />
+      </div>
+
+      {/* Se monta la primera vez que se entra: abrir un alumno no pide sus cargos. */}
+      {(paso === 'pagos' || pagosVisto) && (
+        <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'pagos' ? '' : 'hidden'}`}>
+          {alumno.matriculaId != null ? (
+            <PagosDelAlumno estudianteId={alumno.id} matriculaId={alumno.matriculaId} />
+          ) : (
+            <p className="text-sm text-gray-500">
+              Sus cargos nacen al matricularlo. Matricúlalo y vuelve aquí para anotar lo que ya pagó.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className={`flex-1 space-y-4 overflow-y-auto px-5 py-4 ${paso === 'conceptos' ? '' : 'hidden'}`}>
         {esMatriculado(alumno) && (
           <div className="flex gap-2 rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-xs text-zero-900">
             <GraduationCap className="h-4 w-4 shrink-0 text-zero-600" />
@@ -1341,7 +1622,8 @@ function EditorAlumno({
         {alumno.sinResponsable && (
           <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-            No tiene responsable de pago: sus cargos no se facturarán hasta asignarle uno en su ficha.
+            No tiene responsable de pago: sus cargos no se facturarán hasta asignarle uno en
+            <button type="button" onClick={() => onPaso('familia')} className="font-medium underline">Familia</button>.
           </div>
         )}
         <PlanCobroSelector
@@ -1351,15 +1633,24 @@ function EditorAlumno({
           corte={corte}
           estudianteId={alumno.id}
           inicial={inicialFijo}
+          conOtros
+          preciosSoloOtros={esMatriculado(alumno)}
+          recargar={recargar}
           onPlan={alLlegarPlan}
           onCambio={alCambiar}
           onPrecios={puedePrecios ? alCambiarPrecios : undefined}
         />
-        {!puedePrecios && (
+        {onAbrirConceptos && (
+          <button type="button" onClick={onAbrirConceptos}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:text-zero-800">
+            <Tag className="h-3.5 w-3.5" />¿Falta un concepto o un precio? Abrir conceptos y tarifas
+          </button>
+        )}
+        {(!puedePrecios || esMatriculado(alumno)) && (
           <p className="text-xs text-gray-500">
-            {esMatriculado(alumno)
-              ? 'El precio de un alumno ya matriculado se cambia en Tarifas. Aquí puedes darle o quitarle conceptos.'
-              : 'Cambiar el precio de un alumno lo hace quien puede tocar Tarifas. Aquí puedes quitarle conceptos.'}
+            {!puedePrecios
+              ? 'Cambiar el precio de un alumno lo hace quien puede tocar Tarifas. Aquí puedes darle o quitarle conceptos.'
+              : 'El precio de lo que ya lleva se cambia en Tarifas: tiene cargos hechos. Lo que le des de otros grados lleva aquí su precio.'}
           </p>
         )}
       </div>
@@ -1381,10 +1672,17 @@ function EditorAlumno({
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
-            onClick={() => onGuardar({ conceptos, precios })}>
-            Guardar
-          </Button>
+          {paso === 'familia' ? (
+            // La familia ya quedó guardada: lo que sigue es su plan.
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={() => onPaso('conceptos')}>
+              Siguiente: cargos del año
+            </Button>
+          ) : (
+            <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
+              onClick={() => onGuardar({ conceptos, precios })}>
+              Guardar
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -1493,3 +1791,33 @@ function Kpi({ icono, etiqueta, valor, nota, destacado }: {
 const claveIds = (ids: number[]) => [...ids].sort((a, b) => a - b).join(',');
 const clavePrecios = (ps: { conceptoId: number; montoCentavos: number }[]) =>
   ps.map((p) => `${p.conceptoId}:${p.montoCentavos}`).sort().join(',');
+
+/** Junto al título: si lo decidido está guardado, y de cuándo es lo recuperado. */
+function EstadoBorrador({ b, hayCambios, onDescartar }: {
+  b: { estado: string; actualizado?: string | null; por?: string | null; recuperado?: boolean };
+  hayCambios: boolean;
+  onDescartar: () => void;
+}) {
+  if (b.estado === 'cargando' || (!hayCambios && b.estado !== 'error')) return null;
+  const cuando = b.actualizado
+    ? new Date(b.actualizado).toLocaleString('es-DO', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
+      {b.estado === 'guardando' && <><Loader2 className="h-3 w-3 animate-spin" />Guardando…</>}
+      {b.estado === 'error' && <span className="text-red-600">No se pudo guardar lo último: revisa la conexión.</span>}
+      {(b.estado === 'guardado' || b.estado === 'listo') && (
+        <span className="inline-flex items-center gap-1">
+          <Check className="h-3 w-3 text-emerald-600" />
+          {b.recuperado
+            ? <>Seguimos donde se quedó{cuando ? ` el ${cuando}` : ''}{b.por ? ` (${b.por})` : ''}</>
+            : 'Guardado solo'}
+        </span>
+      )}
+      {hayCambios && b.estado !== 'guardando' && (
+        <button type="button" onClick={onDescartar} className="font-medium text-gray-500 underline hover:text-gray-700">
+          Empezar de cero
+        </button>
+      )}
+    </p>
+  );
+}

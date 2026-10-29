@@ -26,7 +26,8 @@ export interface Grupo {
 
 export type PlanSeccion =
   | { estado: 'cargando' }
-  | { estado: 'listo'; lineas: LineaPlan[] }
+  /** `otros`: lo que la sección no cobra y otros grados sí, para «Ver más» de cada alumno. */
+  | { estado: 'listo'; lineas: LineaPlan[]; otros: LineaPlan[] }
   | { estado: 'error'; mensaje: string };
 
 /** Lo que se decidió para un alumno al abrirlo. Sin entrada, va con lo de su sección. */
