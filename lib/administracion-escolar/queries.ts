@@ -15,6 +15,8 @@ import {
   adminEscolarMatriculas,
   adminEscolarPeriodos,
   adminEscolarCursos,
+  adminEscolarGrados,
+  adminEscolarServicios,
   adminEscolarTutores,
   adminEscolarEstudianteTutores,
   adminEscolarCargos,
@@ -72,7 +74,13 @@ export interface ListarEstudiantesOpts {
   q?: string;
   /** Filtro por estado del estudiante ('' o 'todos' = sin filtro). */
   estado?: string;
-  /** Filtro por curso de la matrícula activa (id). */
+  /**
+   * Filtro por la estructura de la matrícula activa: nivel (servicio), grado o
+   * sección, por id. Se puede parar en cualquiera: el servicio son todos sus
+   * grados y el grado todas sus secciones.
+   */
+  servicioId?: number | null;
+  gradoId?: number | null;
   cursoId?: number | null;
   /** Tamaño de página (default 25). */
   limit?: number;
@@ -127,13 +135,26 @@ export async function listarEstudiantesEnriquecidos(
   const filtros = [eq(adminEscolarEstudiantes.teamId, teamId)];
   const estadoF = opts.estado?.trim();
   if (estadoF && estadoF !== 'todos') filtros.push(eq(adminEscolarEstudiantes.estado, estadoF));
-  if (opts.cursoId) {
-    filtros.push(exists(db.select({ x: sql`1` }).from(adminEscolarMatriculas).where(and(
-      eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
-      eq(adminEscolarMatriculas.teamId, teamId),
-      eq(adminEscolarMatriculas.estado, 'activa'),
-      eq(adminEscolarMatriculas.cursoId, opts.cursoId),
-    ))));
+  const porEstructura = !!(opts.servicioId || opts.gradoId || opts.cursoId);
+  if (porEstructura) {
+    // Antes solo se podía filtrar por sección, y la pantalla ofrecía las
+    // secciones sueltas («A», «B»…) de todos los años: no había forma de pedir
+    // «todo Primaria» ni de saber de qué grado era cada «A». Los ids de
+    // servicio, grado y sección ya son de un año escolar.
+    filtros.push(exists(db.select({ x: sql`1` }).from(adminEscolarMatriculas)
+      .innerJoin(adminEscolarCursos, and(
+        eq(adminEscolarCursos.id, adminEscolarMatriculas.cursoId),
+        eq(adminEscolarCursos.teamId, teamId),
+      ))
+      .innerJoin(adminEscolarGrados, eq(adminEscolarGrados.id, adminEscolarCursos.gradoId))
+      .where(and(
+        eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.estado, 'activa'),
+        opts.cursoId ? eq(adminEscolarMatriculas.cursoId, opts.cursoId) : undefined,
+        opts.gradoId ? eq(adminEscolarCursos.gradoId, opts.gradoId) : undefined,
+        opts.servicioId ? eq(adminEscolarGrados.servicioId, opts.servicioId) : undefined,
+      ))));
   }
   const q = opts.q?.trim();
   if (q) {
@@ -196,7 +217,7 @@ export async function listarEstudiantesEnriquecidos(
    * "3ro A" devolvería gente sin matrícula.
    */
   const incluirDependientes = opts.incluirDeContactos === true
-    && (!estadoF || estadoF === 'todos') && !opts.cursoId;
+    && (!estadoF || estadoF === 'todos') && !porEstructura;
 
   // Beneficiario que "todavía no es alumno" = ningún estudiante del team lo
   // apunta por `dependiente_id`. El criterio es SOLO ese: dos personas pueden
@@ -374,7 +395,10 @@ async function enriquecerPagina(teamId: number, ids: number[]) {
       periodoId: adminEscolarMatriculas.periodoId,
       estudianteId: adminEscolarMatriculas.estudianteId,
       periodo: adminEscolarPeriodos.nombre,
-      curso: adminEscolarCursos.nombre,
+      // «Primero A · Primaria»: la letra sola («A») no decía de qué grado era.
+      curso: sql<string | null>`CASE WHEN ${adminEscolarCursos.id} IS NULL THEN NULL ELSE concat_ws(' · ',
+        nullif(trim(concat_ws(' ', ${adminEscolarGrados.nombre}, ${adminEscolarCursos.nombre})), ''),
+        nullif(trim(concat_ws(' · ', ${adminEscolarServicios.nombre}, ${adminEscolarServicios.tanda})), '')) END`,
     })
     .from(adminEscolarMatriculas)
     .leftJoin(adminEscolarPeriodos, and(
@@ -385,6 +409,8 @@ async function enriquecerPagina(teamId: number, ids: number[]) {
       eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id),
       eq(adminEscolarCursos.teamId, teamId),
     ))
+    .leftJoin(adminEscolarGrados, eq(adminEscolarGrados.id, adminEscolarCursos.gradoId))
+    .leftJoin(adminEscolarServicios, eq(adminEscolarServicios.id, adminEscolarGrados.servicioId))
     .where(and(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.estado, 'activa'),

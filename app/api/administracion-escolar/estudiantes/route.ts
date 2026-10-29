@@ -22,7 +22,8 @@ import { eq, and } from 'drizzle-orm';
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 
 /**
- * Listado paginado. Params: `q` (búsqueda), `estado`, `cursoId`, y la página.
+ * Listado paginado. Params: `q` (búsqueda), `estado`, `servicioId`/`gradoId`/`cursoId`
+ * (la estructura de la matrícula activa), y la página.
  *
  * La página se puede pedir de dos maneras y las dos valen: `pagina`/`porPagina`,
  * que es la convención del resto de la API, o `limit`/`offset`, que es lo que
@@ -44,7 +45,10 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const sp = req.nextUrl.searchParams;
+  // `|| null` deja fuera NaN y 0: un id que no es número no filtra nada.
   const cursoId = Number(sp.get('cursoId')) || null;
+  const gradoId = Number(sp.get('gradoId')) || null;
+  const servicioId = Number(sp.get('servicioId')) || null;
   // `porPagina` gana si viene, porque es la convención de la casa; si no, el
   // `limit` de siempre. El tope real (200) lo pone listarEstudiantesEnriquecidos.
   const porPagina = Number(sp.get('porPagina')) || 0;
@@ -57,6 +61,8 @@ export async function GET(req: NextRequest) {
     listarEstudiantesEnriquecidos(teamId, {
       q: sp.get('q') ?? undefined,
       estado: sp.get('estado') ?? undefined,
+      servicioId,
+      gradoId,
       cursoId,
       limit,
       offset,

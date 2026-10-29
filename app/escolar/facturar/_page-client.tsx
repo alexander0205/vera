@@ -392,7 +392,10 @@ export default function FacturarLoteClient() {
           {/* ── 1. A quiénes ── */}
           {paso === 1 ? (
             <PasoLote numero={1} titulo="¿A quiénes les vas a facturar?" estado="abierto">
-              <PasoAlumnosLote alumnos={catalogo.alumnos} seleccion={alumnosSel} onCambiar={cambiarAlumnos} />
+              {/* `key` por año: el filtro de grado vive dentro del paso, y al
+                  cambiar de año se quedaba con un grado del anterior — la lista
+                  salía vacía con el desplegable diciendo «Todos los grados». */}
+              <PasoAlumnosLote key={catalogo.periodo.id} alumnos={catalogo.alumnos} seleccion={alumnosSel} onCambiar={cambiarAlumnos} />
               <div className="flex justify-end border-t border-gray-100 px-4 py-3 sm:px-5">
                 <Button className="bg-zero-600 hover:bg-zero-700" disabled={alumnosMarcados === 0}
                   onClick={() => setPaso(2)}>

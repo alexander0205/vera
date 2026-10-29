@@ -9,10 +9,14 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { NativeSelect } from '@/components/ui/native-select';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { ModalHeader } from '@/components/ui/modal-header';
 import type { ResumenSeguimiento, FilaSeguimiento } from '@/lib/administracion-escolar/documentos-seguimiento';
+import { FiltroEstructura } from '@/components/administracion-escolar/FiltroEstructura';
+import {
+  completarFiltro, normalizarFiltro, seccionesDelFiltro, TODOS_LOS_CURSOS,
+  type CursoFiltrable, type FiltroGrupo,
+} from '@/lib/administracion-escolar/filtro-curso';
 
 /**
  * Quién tiene el expediente incompleto, en todo el colegio.
@@ -39,25 +43,40 @@ export function SeguimientoDocumentos() {
   );
 
   const [busca, setBusca] = useState('');
-  const [curso, setCurso] = useState('');
+  const [filtroEstr, setFiltroEstr] = useState<FiltroGrupo>(TODOS_LOS_CURSOS);
   const [soloIncompletas, setSoloIncompletas] = useState(true);
   const [elegidas, setElegidas] = useState<Set<number>>(new Set());
   const [previa, setPrevia] = useState<Previsualizacion | null>(null);
   const [mandando, setMandando] = useState(false);
 
-  const cursos = useMemo(
-    () => [...new Set((data?.filas ?? []).map((f) => f.curso).filter(Boolean))].sort() as string[],
-    [data],
+  const { data: cursosData } = useSWR<{ cursos: CursoFiltrable[] }>(
+    '/api/administracion-escolar/cursos', fetcher, { revalidateOnFocus: false },
   );
+  const cursos = useMemo(() => cursosData?.cursos ?? [], [cursosData]);
+  const periodoId = data?.periodoId ?? null;
 
+  // Antes se filtraba por la LETRA de la sección: elegir «A» traía la A de
+  // todos los grados. Ahora por id, dentro del año que se está mirando.
   const filas = useMemo(() => {
     let r = data?.filas ?? [];
     if (soloIncompletas) r = r.filter((f) => !f.completa);
-    if (curso) r = r.filter((f) => f.curso === curso);
-    const q = busca.trim().toLowerCase();
-    if (q) r = r.filter((f) => f.estudiante.toLowerCase().includes(q));
+    const ids = seccionesDelFiltro(cursos, periodoId, normalizarFiltro(cursos, periodoId, completarFiltro(cursos, filtroEstr)));
+    if (ids) {
+      const dentro = new Set(ids);
+      r = r.filter((f) => f.cursoId != null && dentro.has(f.cursoId));
+    }
+    const q = sinAcentos(busca.trim());
+    if (q) r = r.filter((f) => sinAcentos(f.estudiante).includes(q));
     return r;
-  }, [data, soloIncompletas, curso, busca]);
+  }, [data, soloIncompletas, cursos, periodoId, filtroEstr, busca]);
+
+  // Lo elegido que sigue a la vista. Si un filtro esconde a alguien marcado,
+  // «Reclamar a N» no puede contarlo ni mandarle: se reclamaba a gente que ya
+  // no se veía en la lista.
+  const elegidasVisibles = useMemo(
+    () => filas.filter((f) => elegidas.has(f.matriculaId)).map((f) => f.matriculaId),
+    [filas, elegidas],
+  );
 
   const seleccionables = filas.filter((f) => !f.completa);
   const todasElegidas = seleccionables.length > 0 && seleccionables.every((f) => elegidas.has(f.matriculaId));
@@ -75,7 +94,7 @@ export function SeguimientoDocumentos() {
       const res = await fetch('/api/administracion-escolar/documentos/reclamar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matriculaIds: [...elegidas] }),
+        body: JSON.stringify({ matriculaIds: elegidasVisibles }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'No se pudo preparar el envío');
@@ -91,7 +110,7 @@ export function SeguimientoDocumentos() {
       const res = await fetch('/api/administracion-escolar/documentos/reclamar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matriculaIds: [...elegidas], confirmar: true }),
+        body: JSON.stringify({ matriculaIds: elegidasVisibles, confirmar: true }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'No se pudo enviar');
@@ -154,13 +173,13 @@ export function SeguimientoDocumentos() {
         </div>
 
         <Button
-          disabled={elegidas.size === 0}
+          disabled={elegidasVisibles.length === 0}
           onClick={() => void pedirPrevia()}
         >
           <Mail className="mr-1.5 h-4 w-4" />
-          {elegidas.size === 0
+          {elegidasVisibles.length === 0
             ? 'Reclamar por correo'
-            : `Reclamar a ${elegidas.size}`}
+            : `Reclamar a ${elegidasVisibles.length}`}
         </Button>
       </div>
 
@@ -171,13 +190,7 @@ export function SeguimientoDocumentos() {
           <Input value={busca} onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar alumno…" className="h-9 pl-9 text-sm" />
         </div>
-        <div className="w-44">
-          <NativeSelect value={curso} onChange={(e) => setCurso(e.target.value)}
-            aria-label="Filtrar por curso" className="text-sm">
-            <option value="">Todos los cursos</option>
-            {cursos.map((c) => <option key={c} value={c}>{c}</option>)}
-          </NativeSelect>
-        </div>
+        <FiltroEstructura cursos={cursos} periodoId={periodoId} filtro={filtroEstr} onChange={setFiltroEstr} className="h-9 w-44 text-sm" />
         <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" checked={soloIncompletas}
             onChange={(e) => setSoloIncompletas(e.target.checked)}
@@ -332,4 +345,9 @@ function Fila({ f, elegida, onElegir }: {
       </td>
     </tr>
   );
+}
+
+/** Para buscar «Jose» y encontrar «José». */
+function sinAcentos(t: string): string {
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
