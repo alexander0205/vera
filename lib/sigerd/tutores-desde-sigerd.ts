@@ -9,7 +9,7 @@
  */
 
 import 'server-only';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarTutores } from '@/lib/db/schema';
 import type { SigerdClient } from './client';
@@ -38,6 +38,21 @@ function nombreDe(p: { nombreCompleto?: string } & Partial<Omit<ParienteSigerd, 
 export function esNombreDePersona(nombre: string): boolean {
   const letras = (nombre.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g) ?? []).length;
   return letras >= 4 && !/\d{3}/.test(nombre);
+}
+
+const soloCifras = (v: string | null | undefined) => (v ?? '').replace(/\D/g, '');
+
+/** El nombre para comparar personas: sin espacios, tildes ni mayúsculas. */
+export function claveDeNombre(nombre: string): string {
+  return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/gi, '').toLowerCase();
+}
+
+/** Un teléfono que se pueda marcar; el PDF a veces deja solo el prefijo «(829)». */
+function telefonoDe(p: { celular: string | null; telefono: string | null }): string | null {
+  for (const t of [p.celular, p.telefono]) {
+    if (t && soloCifras(t).length >= 7) return t.trim();
+  }
+  return null;
 }
 
 export async function traerTutoresDeSigerd(
@@ -80,6 +95,7 @@ export async function traerTutoresDeSigerd(
   }
 
   const tutores: TutorDeSigerd[] = [];
+  let yaEnElColegio: Array<{ id: number; clientId: number | null; nombre: string; documento: string | null }> | undefined;
   for (const p of parientes) {
     const nombre = nombreDe(p);
     // Sin nombre no hay tutor que crear: el hueco del portal estaba a medias.
@@ -91,19 +107,22 @@ export async function traerTutoresDeSigerd(
 
     const documento = p.cedula?.trim() || null;
 
-    // Reutilizar antes que duplicar. La cédula manda —es la identidad— y solo
-    // cuando falta se cae al nombre exacto. Sin esto, traer los parientes de
-    // dos hermanos crearía al mismo padre dos veces.
-    const [existente] = await db
-      .select({ id: adminEscolarTutores.id, clientId: adminEscolarTutores.clientId })
+    // Reutilizar antes que duplicar. La cédula manda —es la identidad— y se
+    // compara por sus cifras: el colegio la guarda sin guiones y el PDF con
+    // ellos. Si no está, la misma persona por su nombre sin espacios ni tildes:
+    // el PDF los pega («AMANDAJAVIERACOSTA») y a veces trae la cédula con una
+    // cifra cambiada (CEMM 29-oct), y así se creaba otra Amanda. Sin esto, traer
+    // los parientes de dos hermanos crearía al mismo padre dos veces.
+    yaEnElColegio ??= await db
+      .select({
+        id: adminEscolarTutores.id, clientId: adminEscolarTutores.clientId,
+        nombre: adminEscolarTutores.nombre, documento: adminEscolarTutores.documento,
+      })
       .from(adminEscolarTutores)
-      .where(and(
-        eq(adminEscolarTutores.teamId, teamId),
-        documento
-          ? eq(adminEscolarTutores.documento, documento)
-          : eq(adminEscolarTutores.nombre, nombre),
-      ))
-      .limit(1);
+      .where(eq(adminEscolarTutores.teamId, teamId));
+    const cifras = soloCifras(documento);
+    const existente = (cifras.length >= 7 ? yaEnElColegio.find((t) => soloCifras(t.documento) === cifras) : undefined)
+      ?? yaEnElColegio.find((t) => claveDeNombre(t.nombre) === claveDeNombre(nombre));
 
     let tutorId: number;
     let clientId: number | null;
@@ -116,7 +135,7 @@ export async function traerTutoresDeSigerd(
         nombre,
         documento,
         // El portal guarda los dos; el celular es el que contesta.
-        telefono: p.celular?.trim() || p.telefono?.trim() || null,
+        telefono: telefonoDe(p),
         email: p.email?.trim() || null,
         direccion: p.direccion?.trim() || null,
       }).returning({ id: adminEscolarTutores.id });
@@ -128,7 +147,7 @@ export async function traerTutoresDeSigerd(
       tutorId,
       nombre,
       documento,
-      telefono: p.celular?.trim() || p.telefono?.trim() || null,
+      telefono: telefonoDe(p),
       email: p.email?.trim() || null,
       clientId,
       // `padre` | `madre` | `tutor` son tres de nuestras cinco relaciones, así

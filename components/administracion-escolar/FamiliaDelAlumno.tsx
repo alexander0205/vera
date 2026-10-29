@@ -122,7 +122,8 @@ export function FamiliaDelAlumno({ estudianteId, onResponsable }: {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'No se pudo consultar SIGERD');
-      const traidos = (d.tutores ?? []) as Array<{ tutorId: number; relacion: string }>;
+      // Como todo lo que pasa por `conSesionSigerdAuto`, viene envuelto en `datos`.
+      const traidos = (d.datos?.tutores ?? []) as Array<{ tutorId: number; relacion: string }>;
       const ya = new Set(tutores.map((t) => t.tutorId));
       const nuevos = traidos.filter((t) => !ya.has(t.tutorId));
       for (const t of nuevos) {
