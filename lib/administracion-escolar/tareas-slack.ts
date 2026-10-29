@@ -38,6 +38,7 @@ const QUE_PASO: Record<AvisoTarea, { icono: string; verbo: string }> = {
   revision: { icono: '🔎', verbo: 'pasó a revisión' },
   completada: { icono: '✅', verbo: 'completó' },
   reabierta: { icono: '↩️', verbo: 'volvió a abrir' },
+  urgente: { icono: '🚨', verbo: 'avisa: 24 horas sin respuesta en' },
 };
 
 export function armarSlackTarea(d: DatosSlackTarea): { blocks: object[]; texto: string } {

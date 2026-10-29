@@ -9,7 +9,7 @@
  * hermanos. Las reglas sin base de datos están en `tareas-reglas.ts`.
  */
 import 'server-only';
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes, adminEscolarTareaAdjuntos, adminEscolarTareaMensajes, adminEscolarTareas, clients, ecfDocuments,
@@ -20,7 +20,8 @@ import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTa
 import { avisarTareaEnSlack } from './tareas-slack';
 import { notificarTarea } from '@/lib/notificaciones/tareas';
 import {
-  aQuienAvisar, DE_COLEGIO, DESTINO, etiquetaAsignada, PENDIENTES, textoEvento,
+  aQuienAvisar, AUTOR_SOPORTE, DE_COLEGIO, DESTINO, etiquetaAsignada, HORAS_SIN_RESPUESTA, PENDIENTES,
+  TEXTO_CIERRE_AUTOMATICO, textoEvento, turnoDe,
   type AccionEstado, type AutorTarea, type AvisoTarea, type EstadoTarea, type NuevoAdjunto, type NuevaTarea,
 } from './tareas-reglas';
 
@@ -244,7 +245,10 @@ export async function agregarMensaje(teamId: number, id: number, autor: AutorTar
       .where(and(eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId))).limit(1);
     if (!t) return false;
     await tx.insert(adminEscolarTareaMensajes).values({ teamId, tareaId: id, tipo: 'mensaje', userId: autor.userId, autor: autor.nombre, texto });
-    await tx.update(adminEscolarTareas).set({ actualizadoEn: new Date() }).where(eq(adminEscolarTareas.id, id));
+    // Si contesta el colegio, la tarea ya no se cierra sola: ahora nos toca a nosotros.
+    await tx.update(adminEscolarTareas)
+      .set(autor.esSoporte ? { actualizadoEn: new Date() } : { actualizadoEn: new Date(), revisionVenceEn: null })
+      .where(eq(adminEscolarTareas.id, id));
     return true;
   });
 }
@@ -258,8 +262,8 @@ export async function cambiarEstadoTarea(teamId: number, id: number, autor: Auto
   return db.transaction(async (tx) => {
     const [fila] = await tx.update(adminEscolarTareas)
       .set(a === 'completada'
-        ? { estado: a, completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date() }
-        : { estado: a, completadaPorUserId: null, completadaEn: null, actualizadoEn: new Date() })
+        ? { estado: a, completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date(), revisionVenceEn: null }
+        : { estado: a, completadaPorUserId: null, completadaEn: null, actualizadoEn: new Date(), revisionVenceEn: null })
       .where(and(
         eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId), inArray(adminEscolarTareas.estado, desde),
       ))
@@ -303,8 +307,11 @@ const correosDeVerdad = () => process.env.VERCEL_ENV === 'production';
  */
 export async function avisarDeTarea(
   teamId: number, tareaId: number, aviso: AvisoTarea, autor: AutorTarea, texto: string | null,
-  /** `duenos`: también a los dueños del colegio (las plantillas de Soporte: ver la ruta `plantilla`). */
-  opts: { duenos?: boolean } = {},
+  /**
+   * `duenos`: también a los dueños del colegio (las plantillas de Soporte: ver la ruta `plantilla`).
+   * `para`: a quién, en vez de `aQuienAvisar` (el correo urgente decide por `turnoDe`).
+   */
+  opts: { duenos?: boolean; para?: { usuarios: number[]; soporte: boolean } } = {},
 ): Promise<void> {
   try {
     const t = await leerTarea(teamId, tareaId);
@@ -330,7 +337,7 @@ export async function avisarDeTarea(
 
     const participantes = [...new Set(t.mensajes
       .filter((m) => m.tipo === 'mensaje' && m.userId != null).map((m) => m.userId as number))];
-    const avisar = aQuienAvisar(fila, participantes, aviso, autor);
+    const avisar = opts.para ?? aQuienAvisar(fila, participantes, aviso, autor);
     const { soporte } = avisar;
     let usuarios = avisar.usuarios;
     if (opts.duenos) {
@@ -584,9 +591,98 @@ export async function cerrarAdjunto(teamId: number, tareaId: number, adjuntoId: 
     await tx.insert(adminEscolarTareaMensajes).values({
       teamId, tareaId, tipo: 'adjunto', userId: autor.userId, autor: autor.nombre, texto: nombre, adjuntoId,
     });
-    await tx.update(adminEscolarTareas).set({ actualizadoEn: new Date() }).where(eq(adminEscolarTareas.id, tareaId));
+    await tx.update(adminEscolarTareas)
+      .set(autor.esSoporte ? { actualizadoEn: new Date() } : { actualizadoEn: new Date(), revisionVenceEn: null })
+      .where(eq(adminEscolarTareas.id, tareaId));
     return true;
   });
+}
+
+// ── Lo que hace el cron cada hora: cierre automático y aviso urgente ─────────
+
+/** Soporte IT firmando por el sistema: el cron no tiene sesión. */
+const AUTOR_SISTEMA: AutorTarea = { userId: null, nombre: AUTOR_SOPORTE, esSoporte: true };
+
+/** La tarea que Soporte dejó en revisión se cierra sola si nadie contesta en 24 horas. */
+export async function venceRevisionEn(teamId: number, id: number, horas = HORAS_SIN_RESPUESTA) {
+  await db.update(adminEscolarTareas)
+    .set({ revisionVenceEn: new Date(Date.now() + horas * 3_600_000) })
+    .where(and(eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId), eq(adminEscolarTareas.estado, 'en_revision')));
+}
+
+/**
+ * Cierra las tareas en revisión cuyo plazo pasó sin respuesta: deja el
+ * mensaje, la completa y avisa (correo, campana, celular, Slack) a quien la
+ * creó, a los participantes y a los dueños. Devuelve cuántas cerró.
+ */
+export async function cerrarRevisionesVencidas(): Promise<number> {
+  const t = adminEscolarTareas;
+  const vencidas = await db.select({ id: t.id, teamId: t.teamId }).from(t)
+    .where(and(eq(t.estado, 'en_revision'), lte(t.revisionVenceEn, new Date())));
+  let cerradas = 0;
+  for (const v of vencidas) {
+    try {
+      // Se reclama antes de tocarla: si el colegio contestó entre medio, ya no tiene plazo.
+      const [suya] = await db.update(t).set({ revisionVenceEn: null })
+        .where(and(eq(t.id, v.id), eq(t.estado, 'en_revision'), lte(t.revisionVenceEn, new Date())))
+        .returning({ id: t.id });
+      if (!suya) continue;
+      await agregarMensaje(v.teamId, v.id, AUTOR_SISTEMA, TEXTO_CIERRE_AUTOMATICO);
+      if (!(await cambiarEstadoTarea(v.teamId, v.id, AUTOR_SISTEMA, 'completar'))) continue;
+      cerradas += 1;
+      await avisarDeTarea(v.teamId, v.id, 'completada', AUTOR_SISTEMA, TEXTO_CIERRE_AUTOMATICO, { duenos: true });
+    } catch (err) {
+      console.error('[tareas] no se pudo cerrar sola', v.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return cerradas;
+}
+
+/**
+ * Las tareas pendientes que llevan 24 horas sin movimiento: un correo URGENTE
+ * (y campana, celular y Slack) a quien le toca contestar (`turnoDe`). Uno por
+ * cada vez que se queda parada: `urgente_enviado_en` no vuelve a dispararse
+ * hasta que haya movimiento nuevo. Las que se cierran solas no entran.
+ */
+export async function avisarTareasSinRespuesta(): Promise<number> {
+  const t = adminEscolarTareas;
+  const limite = new Date(Date.now() - HORAS_SIN_RESPUESTA * 3_600_000);
+  const paradas = await db.select({
+    id: t.id, teamId: t.teamId, asignadaA: t.asignadaA, asignadaUserId: t.asignadaUserId, creadaPorUserId: t.creadaPorUserId,
+  }).from(t)
+    .where(and(
+      inArray(t.estado, PENDIENTES), isNull(t.revisionVenceEn), lt(t.actualizadoEn, limite),
+      or(isNull(t.urgenteEnviadoEn), lt(t.urgenteEnviadoEn, t.actualizadoEn)),
+    ));
+  let avisadas = 0;
+  for (const p of paradas) {
+    try {
+      const [ultimo] = await db.select({
+        userId: adminEscolarTareaMensajes.userId, autor: adminEscolarTareaMensajes.autor, tipo: adminEscolarTareaMensajes.tipo,
+      }).from(adminEscolarTareaMensajes)
+        .where(and(eq(adminEscolarTareaMensajes.tareaId, p.id), inArray(adminEscolarTareaMensajes.tipo, ['mensaje', 'adjunto', 'ia'])))
+        .orderBy(desc(adminEscolarTareaMensajes.creadoEn), desc(adminEscolarTareaMensajes.id))
+        .limit(1);
+      const turno = turnoDe({
+        ...p,
+        ultimo: ultimo ? { userId: ultimo.userId, esSoporte: ultimo.autor === AUTOR_SOPORTE || ultimo.tipo === 'ia' } : null,
+      });
+      const [suya] = await db.update(t).set({ urgenteEnviadoEn: new Date() })
+        .where(and(eq(t.id, p.id), or(isNull(t.urgenteEnviadoEn), lt(t.urgenteEnviadoEn, t.actualizadoEn))))
+        .returning({ id: t.id });
+      if (!suya) continue;
+      const texto = turno.soporte
+        ? 'Esta tarea lleva más de 24 horas esperando respuesta de Soporte IT.'
+        : 'Esta tarea lleva más de 24 horas esperando tu respuesta. Entra y respóndela, o márcala como completada si ya se resolvió.';
+      await avisarDeTarea(p.teamId, p.id, 'urgente', AUTOR_SISTEMA, texto, {
+        para: { usuarios: turno.usuarios, soporte: turno.soporte }, duenos: turno.colegio,
+      });
+      avisadas += 1;
+    } catch (err) {
+      console.error('[tareas] no salió el aviso urgente', p.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return avisadas;
 }
 
 // ── La factura relacionada ───────────────────────────────────────────────────

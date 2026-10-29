@@ -2764,6 +2764,10 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   origenClave:         varchar('origen_clave', { length: 120 }),
   completadaPorUserId: integer('completada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   completadaEn:        timestamp('completada_en'),
+  /** Se cierra sola a esta hora si sigue en revisión sin respuesta (0212; la pone la plantilla de Soporte). */
+  revisionVenceEn:     timestamp('revision_vence_en'),
+  /** Último correo URGENTE por 24 horas sin movimiento (0212). */
+  urgenteEnviadoEn:    timestamp('urgente_enviado_en'),
   creadoEn:            timestamp('creado_en').notNull().defaultNow(),
   actualizadoEn:       timestamp('actualizado_en').notNull().defaultNow(),
 }, (t) => [

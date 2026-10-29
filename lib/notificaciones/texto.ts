@@ -123,7 +123,7 @@ export function notificacionDePagoEnLinea(d: DatosPagoEnLinea): NotificacionNuev
 
 // ── Lo que pasa en una tarea por revisar (personal) ──────────────────────────
 
-export type CambioTarea = 'creada' | 'mensaje' | 'adjunto' | 'revision' | 'completada' | 'reabierta';
+export type CambioTarea = 'creada' | 'mensaje' | 'adjunto' | 'revision' | 'completada' | 'reabierta' | 'urgente';
 
 export interface DatosTarea {
   cambio: CambioTarea;
@@ -143,6 +143,7 @@ const QUE_HIZO: Record<CambioTarea, string> = {
   revision: 'pasó a revisión',
   completada: 'completó',
   reabierta: 'volvió a abrir',
+  urgente: '',
 };
 
 /** El enlace del correo, el mismo: abre la tarea en «Por revisar». */
@@ -153,7 +154,7 @@ export function notificacionDeTarea(d: DatosTarea): { titulo: string; detalle: s
   const texto = d.texto?.trim() ? (d.cambio === 'adjunto' ? `📎 ${d.texto.trim()}` : d.texto.trim()) : null;
   const detalle = texto ? `${d.titulo}: ${texto}` : d.titulo;
   return {
-    titulo: `${d.autor} ${QUE_HIZO[d.cambio]}`.slice(0, 160),
+    titulo: (d.cambio === 'urgente' ? 'URGENTE: 24 horas sin respuesta' : `${d.autor} ${QUE_HIZO[d.cambio]}`).slice(0, 160),
     detalle: detalle.length > 280 ? `${detalle.slice(0, 279).trimEnd()}…` : detalle,
     enlace: enlaceDeTarea(d.tareaId),
   };
