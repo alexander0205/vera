@@ -52,8 +52,11 @@ const resumenVacio = (): ResumenFamilias => ({
   ficha: 0, conTutores: 0, tutores: 0, sinTutoresEnSigerd: 0, errores: 0, fallidos: [],
 });
 
+// La tabla de fuera va escrita a mano: en un `select` de una sola tabla Drizzle
+// pone la columna sin su tabla, y dentro de la subconsulta `"id"` era el del
+// vínculo, no el del alumno — a todos les salía «sin tutores».
 const tieneTutores = sql<boolean>`EXISTS (
-  SELECT 1 FROM ${adminEscolarEstudianteTutores} et WHERE et.estudiante_id = ${adminEscolarEstudiantes.id}
+  SELECT 1 FROM admin_escolar_estudiante_tutores et WHERE et.estudiante_id = "admin_escolar_estudiantes"."id"
 )`;
 
 /** A quién le falta algo que SIGERD puede traer. */
@@ -225,7 +228,7 @@ export async function avanzarFamilias(trabajoId: number, presupuestoMs: number) 
           await guardar();
         }
       }
-    }, { soloCredenciales: true });
+    }, { sinCookie: true });
 
     if (r === null) {
       error = 'Este colegio no tiene guardadas sus credenciales de SIGERD (Configuración → SIGERD).';

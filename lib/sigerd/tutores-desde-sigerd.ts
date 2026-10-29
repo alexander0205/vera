@@ -34,6 +34,12 @@ function nombreDe(p: { nombreCompleto?: string } & Partial<Omit<ParienteSigerd, 
     .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Un nombre que se puede guardar como persona: con letras, sin tiras de cifras. */
+export function esNombreDePersona(nombre: string): boolean {
+  const letras = (nombre.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g) ?? []).length;
+  return letras >= 4 && !/\d{3}/.test(nombre);
+}
+
 export async function traerTutoresDeSigerd(
   teamId: number, cli: SigerdClient, idEstudianteSigerd: number,
 ): Promise<TutorDeSigerd[]> {
@@ -78,6 +84,10 @@ export async function traerTutoresDeSigerd(
     const nombre = nombreDe(p);
     // Sin nombre no hay tutor que crear: el hueco del portal estaba a medias.
     if (!nombre) continue;
+    // Ni un nombre que no lo es: el PDF a veces corre los teléfonos a esa
+    // columna («143-880675 (849) 537-4954…», CEMM 29-oct). Sin letras de
+    // verdad, o con una tira de cifras, no se crea un tutor con eso.
+    if (!esNombreDePersona(nombre)) continue;
 
     const documento = p.cedula?.trim() || null;
 
