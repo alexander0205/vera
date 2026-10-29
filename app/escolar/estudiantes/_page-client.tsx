@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,6 +29,10 @@ import { ModalHeader } from '@/components/ui/modal-header';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import { notaDeCorte } from '@/lib/export/paginas';
+import { FiltroEstructura, filtroAUrl, filtroDeUrl } from '@/components/administracion-escolar/FiltroEstructura';
+import {
+  completarFiltro, nombreDelGrupo, normalizarFiltro, type CursoFiltrable, type FiltroGrupo,
+} from '@/lib/administracion-escolar/filtro-curso';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 const PAGE_SIZE = 25;
@@ -42,8 +46,8 @@ interface ListaResp {
   sinMatricular: number;
   stats: { activos: number; balancePendienteCentavos: number; morosos: number };
 }
-interface Curso { id: number; nombre: string }
-interface Periodo { activo: boolean; nombre: string }
+type Curso = CursoFiltrable & { activo?: boolean | null; gradoActivo?: boolean | null; servicioActivo?: boolean | null };
+interface Periodo { id: number; activo: boolean; nombre: string }
 
 function iniciales(nombres: string, apellidos: string): string {
   return `${nombres[0] ?? ''}${apellidos[0] ?? ''}`.toUpperCase();
@@ -83,7 +87,9 @@ export default function EstudiantesClient() {
   const { params: urlParams, setParams } = useUrlParams();
 
   const qUrl = urlParams.get('q') ?? '';
-  const filtroCurso = urlParams.get('curso') ?? 'todos';
+  // Nivel, grado y sección por id (`?servicio=&grado=&curso=`). Un enlace
+  // viejo con solo `?curso=` sigue valiendo: se completa con el catálogo.
+  const filtroCrudo = filtroDeUrl(urlParams);
   const estadoCrudo = urlParams.get('estado') ?? 'activo';
   // Lo que venga de fuera se valida: un ?estado=cualquiercosa escrito a mano
   // llegaría tal cual a la consulta del servidor.
@@ -148,6 +154,21 @@ export default function EstudiantesClient() {
     setQuery((actual) => (actual.trim() === qUrl ? actual : qUrl));
   }, [qUrl]);
 
+  const { data: cursosData } = useSWR<{ cursos: Curso[] }>(
+    '/api/administracion-escolar/cursos', fetcher, { revalidateOnFocus: false });
+  const { data: periodosData } = useSWR<{ periodos: Periodo[] }>(
+    '/api/administracion-escolar/periodos', fetcher, { revalidateOnFocus: false });
+  const cursos = useMemo(() => cursosData?.cursos ?? [], [cursosData]);
+  // Las opciones son las del año en curso (o el más reciente, que la API
+  // devuelve primero si ninguno está marcado como activo).
+  const periodoFiltro = periodosData?.periodos?.find((p) => p.activo)?.id ?? periodosData?.periodos?.[0]?.id ?? null;
+  // Lo que de verdad se filtra: el de la URL recortado a lo que existe ese año.
+  // Mientras llega el catálogo se manda tal cual — son ids, el servidor los entiende.
+  const filtroEstr: FiltroGrupo = cursosData
+    ? normalizarFiltro(cursos, periodoFiltro, completarFiltro(cursos, filtroCrudo))
+    : filtroCrudo;
+  const hayFiltroEstr = filtroEstr.servicioId != null || filtroEstr.gradoId != null || filtroEstr.cursoId != null;
+
   // Key del listado — SWR cachea por combinación de filtros+página.
   const params = new URLSearchParams({
     limit: String(PAGE_SIZE),
@@ -155,7 +176,9 @@ export default function EstudiantesClient() {
     estado: filtroEstado,
   });
   if (qUrl) params.set('q', qUrl);
-  if (filtroCurso !== 'todos') params.set('cursoId', filtroCurso);
+  if (filtroEstr.servicioId) params.set('servicioId', String(filtroEstr.servicioId));
+  if (filtroEstr.gradoId) params.set('gradoId', String(filtroEstr.gradoId));
+  if (filtroEstr.cursoId) params.set('cursoId', String(filtroEstr.cursoId));
   const listaKey = `/api/administracion-escolar/estudiantes?${params.toString()}`;
 
   const { data, isLoading, mutate } = useSWR<ListaResp>(listaKey, fetcher, {
@@ -163,11 +186,6 @@ export default function EstudiantesClient() {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
   });
-  const { data: cursosData } = useSWR<{ cursos: Curso[] }>(
-    '/api/administracion-escolar/cursos', fetcher, { revalidateOnFocus: false });
-  const { data: periodosData } = useSWR<{ periodos: Periodo[] }>(
-    '/api/administracion-escolar/periodos', fetcher, { revalidateOnFocus: false });
-
   const estudiantes = data?.estudiantes ?? [];
 
   async function armarExport() {
@@ -187,7 +205,7 @@ export default function EstudiantesClient() {
     }
     const partes = [
       filtroEstado && filtroEstado !== 'todos' ? `Estado: ${filtroEstado}` : 'Todos los estados',
-      filtroCurso !== 'todos' ? `Curso: ${cursosData?.cursos.find(c => String(c.id) === filtroCurso)?.nombre ?? filtroCurso}` : null,
+      hayFiltroEstr ? `Curso: ${nombreDelGrupo(cursos, periodoFiltro, filtroEstr) ?? '—'}` : null,
       qUrl ? `Búsqueda: «${qUrl}»` : null,
       totalEstudiantes > todos.length ? notaDeCorte(todos.length, totalEstudiantes) : null,
     ];
@@ -195,7 +213,6 @@ export default function EstudiantesClient() {
   }
   const total = data?.total ?? 0;
   const stats = data?.stats;
-  const cursos = cursosData?.cursos ?? [];
   const periodoActivo = periodosData?.periodos?.find((p) => p.activo)?.nombre ?? null;
 
   // Los beneficiarios sin ficha escolar no tienen curso ni estado, así que el
@@ -233,12 +250,12 @@ export default function EstudiantesClient() {
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const desde = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const hasta = Math.min((page + 1) * PAGE_SIZE, total);
-  const filtrosActivos = qUrl !== '' || filtroCurso !== 'todos';
+  const filtrosActivos = qUrl !== '' || hayFiltroEstr;
 
   // Curso y estado van con la página en la MISMA escritura: son un solo cambio
   // para el usuario, y en dos llamadas seguidas la segunda pisaba a la primera
   // (las dos parten de la query de este render).
-  const cambiarCurso  = (v: string) => setParams({ curso: v === 'todos' ? null : v, page: null });
+  const cambiarEstructura = (f: FiltroGrupo) => setParams({ ...filtroAUrl(f), page: null });
   const cambiarEstado = (v: string) => setParams({ estado: v === 'activo' ? null : v, page: null });
   // Recibe el índice en base 0 y escribe la página tal como se ve, en base 1.
   const irAPagina = (i: number) => setParams({ page: i <= 0 ? null : i + 1 });
@@ -320,13 +337,13 @@ export default function EstudiantesClient() {
                   <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-zero-500" />
                 )}
               </div>
-              <Select value={filtroCurso} onValueChange={cambiarCurso}>
-                <SelectTrigger className="sm:w-40"><SelectValue placeholder="Curso" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Curso: Todos</SelectItem>
-                  {cursos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <FiltroEstructura
+                cursos={cursos}
+                periodoId={periodoFiltro}
+                filtro={filtroEstr}
+                onChange={cambiarEstructura}
+                className="sm:w-40"
+              />
               <Select value={filtroEstado} onValueChange={cambiarEstado}>
                 <SelectTrigger className="sm:w-36"><SelectValue placeholder="Estado" /></SelectTrigger>
                 <SelectContent>

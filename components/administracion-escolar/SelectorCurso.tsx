@@ -42,7 +42,9 @@ export function SelectorCurso({ cursos, periodoId, valor, onChange, disabled }: 
   disabled?: boolean;
 }) {
   const delPeriodo = useMemo(
-    () => cursos.filter((c) => !periodoId || c.periodoId === periodoId),
+    // Sin año no se ofrece nada, como dice el contrato: antes salían las
+    // secciones de TODOS los años, repetidas.
+    () => (periodoId == null ? [] : cursos.filter((c) => c.periodoId === periodoId)),
     [cursos, periodoId],
   );
 

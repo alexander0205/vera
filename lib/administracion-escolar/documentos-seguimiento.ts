@@ -38,8 +38,13 @@ export interface FilaSeguimiento {
   matriculaId: number;
   estudianteId: number;
   estudiante: string;
+  /** «Primero A»: la letra sola no decía de qué grado era. */
   curso: string | null;
   nivel: string | null;
+  /** La estructura por id, para filtrar sin confundir la A de un grado con la de otro. */
+  cursoId: number | null;
+  gradoId: number | null;
+  servicioId: number | null;
   /** Correo del responsable, si lo hay. Sin él no se le puede mandar nada. */
   email: string | null;
   total: number;
@@ -97,6 +102,10 @@ export async function seguimientoDeDocumentos(
       nombres: adminEscolarEstudiantes.nombres,
       apellidos: adminEscolarEstudiantes.apellidos,
       curso: adminEscolarCursos.nombre,
+      grado: adminEscolarGrados.nombre,
+      cursoId: adminEscolarMatriculas.cursoId,
+      gradoId: adminEscolarGrados.id,
+      servicioId: adminEscolarServicios.id,
       nivel: adminEscolarServicios.nombre,
       // El correo vive en el TUTOR responsable de pago, no en el alumno: es a
       // quien se le reclama, y es el mismo criterio que usa el enlace de
@@ -117,6 +126,9 @@ export async function seguimientoDeDocumentos(
     .where(and(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.periodoId, periodo.id),
+      // Solo las vivas: a una matrícula anulada o retirada no se le reclama
+      // nada, y contarla inflaba «con pendientes».
+      eq(adminEscolarMatriculas.estado, 'activa'),
     ));
 
   if (matriculas.length === 0) {
@@ -200,8 +212,11 @@ export async function seguimientoDeDocumentos(
       matriculaId: m.id,
       estudianteId: m.estudianteId,
       estudiante: [m.nombres, m.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre',
-      curso: m.curso,
+      curso: m.curso ? [m.grado, m.curso].filter(Boolean).join(' ') : null,
       nivel: m.nivel,
+      cursoId: m.cursoId,
+      gradoId: m.gradoId,
+      servicioId: m.servicioId,
       email: m.email?.trim() || null,
       total: suyos.length,
       aprobados,
