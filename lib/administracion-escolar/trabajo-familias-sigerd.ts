@@ -172,12 +172,21 @@ export async function avanzarFamilias(trabajoId: number, presupuestoMs: number) 
   let cancelado = false;
 
   const guardar = async (final: Partial<typeof adminEscolarTrabajos.$inferInsert> = {}) => {
+    // El avance se anota aunque lo hayan cancelado mientras corría: el alumno
+    // que estaba a medias ya quedó completado y tiene que contar. Lo que cierra
+    // (hecho, fallo, soltar el candado) solo sobre uno que sigue corriendo: un
+    // cancelado se queda cancelado.
+    const soloAvance = Object.keys(final).length === 0;
     const filas = await db.update(adminEscolarTrabajos)
       .set({ cursorId: cursor, hechos, resumen, ultimoError: error, updatedAt: new Date(), ...final })
-      .where(and(eq(adminEscolarTrabajos.id, trabajoId), eq(adminEscolarTrabajos.estado, 'corriendo')))
-      .returning({ id: adminEscolarTrabajos.id });
-    // Alguien lo canceló mientras corría: se deja como esté.
-    if (filas.length === 0) cancelado = true;
+      .where(and(
+        eq(adminEscolarTrabajos.id, trabajoId),
+        soloAvance
+          ? inArray(adminEscolarTrabajos.estado, ['corriendo', 'cancelado'])
+          : eq(adminEscolarTrabajos.estado, 'corriendo'),
+      ))
+      .returning({ estado: adminEscolarTrabajos.estado });
+    if (filas.length === 0 || filas[0].estado === 'cancelado') cancelado = true;
   };
 
   try {
