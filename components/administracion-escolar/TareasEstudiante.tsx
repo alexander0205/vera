@@ -5,12 +5,15 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import {
-  ArrowLeft, Bell, Check, Download, ExternalLink, FileText, Loader2, Paperclip, Plus, RotateCcw, ScanSearch, Sparkles, Users, X,
+  ArrowLeft, Bell, Check, Download, ExternalLink, FileText, Loader2, MessageSquareText, Paperclip, Plus, RotateCcw, ScanSearch,
+  Sparkles, Users, X,
 } from 'lucide-react';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import { toast } from 'sonner';
 import {
-  ACEPTA_ADJUNTOS, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, validarAdjunto,
-  type AccionEstado, type Asignacion, type EstadoTarea,
+  ACEPTA_ADJUNTOS, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, PLANTILLAS_SOPORTE, validarAdjunto,
+  type AccionEstado, type Asignacion, type EstadoTarea, type PlantillaSoporte,
 } from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { refrescarCampana } from './CampanaTareas';
@@ -148,7 +151,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
   }>(claveLista, traer);
 
   const claveHilo = abierto && vista.tipo === 'hilo' ? `${base}/${vista.id}` : null;
-  const { data: dataHilo, mutate: mutarHilo } = useSWR<{ tarea: TareaCompleta; yo: number }>(claveHilo, traer);
+  const { data: dataHilo, mutate: mutarHilo } = useSWR<{ tarea: TareaCompleta; yo: number; soporte?: boolean }>(claveHilo, traer);
 
   const abrir = (a: 'alumno' | 'familia') => {
     setAlcance(a); setEstado('abierta'); setVista({ tipo: 'lista' }); setAbierto(true);
@@ -259,7 +262,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
 
           {vista.tipo === 'hilo' && (
             dataHilo
-              ? <Hilo tarea={dataHilo.tarea} yo={dataHilo.yo} puedeGestionar={puedeGestionar} onCambio={refrescar} />
+              ? <Hilo tarea={dataHilo.tarea} yo={dataHilo.yo} soporte={dataHilo.soporte} puedeGestionar={puedeGestionar} onCambio={refrescar} />
               : <div className="flex flex-1 justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
           )}
 
@@ -291,24 +294,47 @@ export function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
   );
 }
 
-export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
-  tarea: TareaCompleta; yo: number; puedeGestionar: boolean; onCambio: () => void;
+export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
+  tarea: TareaCompleta; yo: number;
+  /** Quien mira es del equipo de Zero: ve las plantillas de Soporte IT. */
+  soporte?: boolean;
+  puedeGestionar: boolean; onCambio: () => void;
 }) {
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // Con una plantilla elegida, «Enviar» manda el texto (editable) y cambia el estado.
+  const [plantilla, setPlantilla] = useState<PlantillaSoporte | null>(null);
+  const [menuPlantillas, setMenuPlantillas] = useState<HTMLElement | null>(null);
   const [subiendo, setSubiendo] = useState<{ nombre: string; avance: number } | null>(null);
   const elegir = useRef<HTMLInputElement>(null);
+
+  async function usarPlantilla(p: PlantillaSoporte) {
+    setMenuPlantillas(null);
+    try {
+      const d = await traer(`/api/administracion-escolar/tareas/${tarea.id}/plantilla?plantilla=${p}`);
+      setTexto(d.texto);
+      setPlantilla(p);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo preparar la plantilla');
+    }
+  }
 
   async function enviar() {
     if (!texto.trim()) return;
     setEnviando(true);
     try {
-      const res = await fetch(`/api/administracion-escolar/tareas/${tarea.id}/mensajes`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }),
-      });
+      const res = plantilla
+        ? await fetch(`/api/administracion-escolar/tareas/${tarea.id}/plantilla`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla, texto }),
+        })
+        : await fetch(`/api/administracion-escolar/tareas/${tarea.id}/mensajes`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }),
+        });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'No se pudo enviar');
+      if (plantilla) toast.success('Enviado: le llega por correo y en la campana');
       setTexto('');
+      setPlantilla(null);
       onCambio();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo enviar');
@@ -387,7 +413,17 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
       {puedeGestionar && (
         <div className="space-y-2 border-t border-gray-100 bg-white px-5 py-3">
           <label className="sr-only" htmlFor={`responder-${tarea.id}`}>Responder</label>
-          <textarea id={`responder-${tarea.id}`} rows={2} value={texto} onChange={(e) => setTexto(e.target.value)}
+          {plantilla && (
+            <div className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-1.5 text-xs text-violet-900">
+              <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                Plantilla «{PLANTILLAS_SOPORTE[plantilla].etiqueta}»: revisa el texto. Le llega a quien la creó y a los dueños del colegio.
+              </span>
+              <button type="button" onClick={() => { setPlantilla(null); setTexto(''); }}
+                className="font-semibold hover:underline">Quitar</button>
+            </div>
+          )}
+          <textarea id={`responder-${tarea.id}`} rows={plantilla ? 5 : 2} value={texto} onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar(); }}
             placeholder="Escribe una respuesta…"
             className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
@@ -421,6 +457,26 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
               </button>
             )}
             <span className="flex-1" />
+            {soporte && (
+              <>
+                <button type="button" onClick={(e) => setMenuPlantillas(e.currentTarget)} disabled={ocupado}
+                  title="Plantillas de Soporte IT (solo el equipo de Zero)"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-2.5 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-50">
+                  <MessageSquareText className="h-4 w-4" />Plantilla
+                </button>
+                <Menu anchorEl={menuPlantillas} open={Boolean(menuPlantillas)} onClose={() => setMenuPlantillas(null)}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'right' }} transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                  {(Object.keys(PLANTILLAS_SOPORTE) as PlantillaSoporte[]).map((p) => (
+                    <MenuItem key={p} onClick={() => void usarPlantilla(p)}>
+                      <span className="flex flex-col">
+                        <span className="text-sm font-semibold text-gray-900">{PLANTILLAS_SOPORTE[p].etiqueta}</span>
+                        <span className="text-xs text-gray-500">{PLANTILLAS_SOPORTE[p].detalle}</span>
+                      </span>
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </>
+            )}
             <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
               onChange={(e) => void adjuntar(e.target.files)} />
             <button type="button" onClick={() => elegir.current?.click()} disabled={ocupado}
@@ -430,7 +486,7 @@ export function Hilo({ tarea, yo, puedeGestionar, onCambio }: {
             </button>
             <button type="button" onClick={() => void enviar()} disabled={ocupado || !texto.trim()}
               className="h-9 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
-              Enviar
+              {plantilla ? PLANTILLAS_SOPORTE[plantilla].boton : 'Enviar'}
             </button>
           </div>
         </div>
@@ -729,7 +785,7 @@ export function PanelNuevaTarea({ abierto, onCerrar, onCreada }: {
 export function PanelTarea({ tareaId, puedeGestionar, onCerrar, onCambio }: {
   tareaId: number | null; puedeGestionar: boolean; onCerrar: () => void; onCambio: () => void;
 }) {
-  const { data, error, mutate } = useSWR<{ tarea: TareaCompleta; yo: number }>(
+  const { data, error, mutate } = useSWR<{ tarea: TareaCompleta; yo: number; soporte?: boolean }>(
     tareaId ? `/api/administracion-escolar/tareas/${tareaId}` : null, traer);
   const refrescar = () => { void mutate(); onCambio(); refrescarCampana(); };
 
@@ -757,7 +813,7 @@ export function PanelTarea({ tareaId, puedeGestionar, onCerrar, onCambio }: {
         {error ? (
           <p className="px-5 py-10 text-center text-sm text-gray-500">No se encontró esta tarea en el colegio.</p>
         ) : data ? (
-          <Hilo tarea={data.tarea} yo={data.yo} puedeGestionar={puedeGestionar} onCambio={refrescar} />
+          <Hilo tarea={data.tarea} yo={data.yo} soporte={data.soporte} puedeGestionar={puedeGestionar} onCambio={refrescar} />
         ) : (
           <div className="flex flex-1 justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
         )}

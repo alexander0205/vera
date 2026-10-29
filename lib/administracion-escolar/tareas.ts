@@ -303,6 +303,8 @@ const correosDeVerdad = () => process.env.VERCEL_ENV === 'production';
  */
 export async function avisarDeTarea(
   teamId: number, tareaId: number, aviso: AvisoTarea, autor: AutorTarea, texto: string | null,
+  /** `duenos`: también a los dueños del colegio (las plantillas de Soporte: ver la ruta `plantilla`). */
+  opts: { duenos?: boolean } = {},
 ): Promise<void> {
   try {
     const t = await leerTarea(teamId, tareaId);
@@ -328,7 +330,16 @@ export async function avisarDeTarea(
 
     const participantes = [...new Set(t.mensajes
       .filter((m) => m.tipo === 'mensaje' && m.userId != null).map((m) => m.userId as number))];
-    const { usuarios, soporte } = aQuienAvisar(fila, participantes, aviso, autor);
+    const avisar = aQuienAvisar(fila, participantes, aviso, autor);
+    const { soporte } = avisar;
+    let usuarios = avisar.usuarios;
+    if (opts.duenos) {
+      const duenos = await db.select({ id: users.id, platformRole: users.platformRole })
+        .from(teamMembers).innerJoin(users, eq(users.id, teamMembers.userId))
+        .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, 'owner'), isNull(users.deletedAt)));
+      usuarios = [...new Set([...usuarios, ...duenos
+        .filter((d) => d.platformRole !== 'admin' && d.id !== autor.userId).map((d) => d.id)])];
+    }
 
     // La campana y el celular de las mismas personas que reciben el correo.
     await notificarTarea(teamId, usuarios, {
