@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ConceptosYTarifasDialog } from '@/components/administracion-escolar/ConceptosYTarifasDialog';
 import { FamiliaDelAlumno } from '@/components/administracion-escolar/FamiliaDelAlumno';
+import { PagosDelAlumno } from '@/components/administracion-escolar/PagosDelAlumno';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 import {
@@ -103,10 +104,11 @@ const VISTAS: Array<{ id: Vista; etiqueta: string; icono: ReactNode; ayuda: stri
   { id: 'concepto', etiqueta: 'Por concepto', icono: <Tag className="h-4 w-4" />, ayuda: 'Elige un concepto y marca quién lo lleva' },
 ];
 
-export type PasoAlumno = 'familia' | 'conceptos';
+export type PasoAlumno = 'familia' | 'conceptos' | 'pagos';
 const PASOS_ALUMNO: Array<{ id: PasoAlumno; etiqueta: string }> = [
   { id: 'familia', etiqueta: 'Familia y quién paga' },
   { id: 'conceptos', etiqueta: 'Cargos del año' },
+  { id: 'pagos', etiqueta: 'Pagos' },
 ];
 
 // Las tres alturas del árbol: nivel → grado → sección. La clave de cada nodo
@@ -494,7 +496,8 @@ export default function MatricularDesdeSigerd() {
     if (v && VISTAS.some((x) => x.id === v)) setVista(v as Vista);
     const en = q.get('en');
     if (en) setAlcance(en);
-    if (q.get('paso') === 'familia') setPaso('familia');
+    const pasoUrl = q.get('paso');
+    if (pasoUrl === 'familia' || pasoUrl === 'pagos') setPaso(pasoUrl);
     const alumno = Number(q.get('alumno'));
     if (Number.isInteger(alumno) && alumno > 0) alumnoDeLaUrl.current = alumno;
     else setUrlLista(true);
@@ -515,7 +518,7 @@ export default function MatricularDesdeSigerd() {
     poner('vista', vista === 'seccion' ? null : vista);
     poner('en', alcance);
     poner('alumno', editando ? String(editando.alumno.id) : null);
-    poner('paso', editando && paso === 'familia' ? 'familia' : null);
+    poner('paso', editando && paso !== 'conceptos' ? paso : null);
     const destino = `${window.location.pathname}${q.size ? `?${q}` : ''}`;
     if (destino !== window.location.pathname + window.location.search) {
       window.history.replaceState(window.history.state, '', destino);
@@ -1451,6 +1454,8 @@ function EditorAlumno({
     || (base.current.precios !== null && clavePrecios(precios) !== base.current.precios)
   );
   useEffect(() => { onSucio?.(sucio); }, [sucio, onSucio]);
+  const [pagosVisto, setPagosVisto] = useState(paso === 'pagos');
+  useEffect(() => { if (paso === 'pagos') setPagosVisto(true); }, [paso]);
 
   return (
     <div className="flex h-full flex-col">
@@ -1489,6 +1494,19 @@ function EditorAlumno({
       <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'familia' ? '' : 'hidden'}`}>
         <FamiliaDelAlumno estudianteId={alumno.id} onResponsable={onResponsable} />
       </div>
+
+      {/* Se monta la primera vez que se entra: abrir un alumno no pide sus cargos. */}
+      {(paso === 'pagos' || pagosVisto) && (
+        <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'pagos' ? '' : 'hidden'}`}>
+          {alumno.matriculaId != null ? (
+            <PagosDelAlumno estudianteId={alumno.id} matriculaId={alumno.matriculaId} />
+          ) : (
+            <p className="text-sm text-gray-500">
+              Sus cargos nacen al matricularlo. Matricúlalo y vuelve aquí para anotar lo que ya pagó.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className={`flex-1 space-y-4 overflow-y-auto px-5 py-4 ${paso === 'conceptos' ? '' : 'hidden'}`}>
         {esMatriculado(alumno) && (
