@@ -106,13 +106,21 @@ interface Props {
   onVincularBorrador?: (vinculo: TutorVinculo) => void;
   /** Solo en borrador: quitar uno de la lista antes de guardar. */
   onQuitarBorrador?: (tutorId: number) => void;
+  /**
+   * Para un panel estrecho (el del alumno en «Matricular desde SIGERD»): sin
+   * las columnas de contacto y con «+ Madre», «+ Padre» y «+ Otro» en lugar de
+   * «Agregar tutor», para que la relación la diga el botón y no un desplegable.
+   */
+  compacto?: boolean;
 }
 
 export function TutoresPanel({
   estudianteId, tutores, onChange, onHacerResponsable, responsableDocumento,
-  onVincularBorrador, onQuitarBorrador,
+  onVincularBorrador, onQuitarBorrador, compacto,
 }: Props) {
   const borrador = estudianteId == null;
+  // Sin las columnas de contacto: en el alta no hacen falta y en un panel estrecho no caben.
+  const sinContacto = borrador || !!compacto;
   const docResponsable = (responsableDocumento ?? '').replace(/\D/g, '');
   const esResponsable = (t: TutorVinculo) =>
     docResponsable.length >= 7 && (t.documento ?? '').replace(/\D/g, '') === docResponsable;
@@ -150,13 +158,13 @@ export function TutoresPanel({
   const disponibles = tutoresTeam.filter((t) => !yaVinculados.has(t.id));
   const tutorPreview = tutoresTeam.find((t) => String(t.id) === tutorSeleccionado) ?? null;
 
-  function abrirNuevo() {
+  function abrirNuevo(conRelacion = 'tutor') {
     setEditVinculo(null);
     setModoNuevo(disponibles.length === 0);
     setTutorSeleccionado('');
     setNuevo(EMPTY_NUEVO);
     setNuevoAlAbrir(null);
-    setRelacion('tutor');
+    setRelacion(conRelacion);
     setError(null); setImgError(null);
     setShowForm(true);
   }
@@ -280,11 +288,25 @@ export function TutoresPanel({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        {!borrador && <h2 className="text-base font-semibold text-gray-900">Tutores</h2>}
-        {borrador && <span className="text-sm text-gray-500">Al menos uno, y marca quién paga</span>}
-        <Button size="sm" variant="outline" onClick={abrirNuevo}>
-          <Plus className="h-4 w-4 mr-1" />Agregar tutor
-        </Button>
+        {!borrador && !compacto && <h2 className="text-base font-semibold text-gray-900">Tutores</h2>}
+        {(borrador || compacto) && <span className="text-sm text-gray-500">Al menos uno, y marca quién paga</span>}
+        {compacto ? (
+          <div className="flex gap-1">
+            {/* La madre y el padre son uno cada uno: el botón se va cuando ya está. */}
+            {(['madre', 'padre'] as const).filter((r) => !tutores.some((t) => t.relacion === r)).map((r) => (
+              <Button key={r} size="sm" variant="outline" onClick={() => abrirNuevo(r)}>
+                <Plus className="h-4 w-4 mr-1" />{r === 'madre' ? 'Madre' : 'Padre'}
+              </Button>
+            ))}
+            <Button size="sm" variant="outline" onClick={() => abrirNuevo('tutor')}>
+              <Plus className="h-4 w-4 mr-1" />Otro
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => abrirNuevo()}>
+            <Plus className="h-4 w-4 mr-1" />Agregar tutor
+          </Button>
+        )}
       </div>
 
       {tutores.length === 0 ? (
@@ -298,9 +320,9 @@ export function TutoresPanel({
               <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                 <th className="px-3 py-2 font-medium">Tutor</th>
                 <th className="px-3 py-2 font-medium">Relación</th>
-                {!borrador && <th className="px-3 py-2 font-medium">Teléfono</th>}
-                {!borrador && <th className="px-3 py-2 font-medium">Email</th>}
-                {!borrador && <th className="px-3 py-2 font-medium">WhatsApp</th>}
+                {!sinContacto && <th className="px-3 py-2 font-medium">Teléfono</th>}
+                {!sinContacto && <th className="px-3 py-2 font-medium">Email</th>}
+                {!sinContacto && <th className="px-3 py-2 font-medium">WhatsApp</th>}
                 <th className="px-3 py-2 font-medium text-right">Acciones</th>
               </tr>
             </thead>
@@ -324,13 +346,16 @@ export function TutoresPanel({
                           )}
                         </div>
                         {t.documento && <span className="text-xs text-gray-400">Cédula: {t.documento}</span>}
+                        {compacto && (t.whatsapp || t.telefono) && (
+                          <span className="block text-xs text-gray-400">{t.whatsapp ? `WhatsApp ${t.whatsapp}` : `Tel. ${t.telefono}`}</span>
+                        )}
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-gray-600 capitalize">{t.relacion}</td>
-                  {!borrador && <td className="px-3 py-2.5 text-gray-600">{t.telefono ?? '—'}</td>}
-                  {!borrador && <td className="px-3 py-2.5 text-gray-600">{t.email ?? '—'}</td>}
-                  {!borrador && <td className="px-3 py-2.5 text-gray-600">{t.whatsapp ?? '—'}</td>}
+                  {!sinContacto && <td className="px-3 py-2.5 text-gray-600">{t.telefono ?? '—'}</td>}
+                  {!sinContacto && <td className="px-3 py-2.5 text-gray-600">{t.email ?? '—'}</td>}
+                  {!sinContacto && <td className="px-3 py-2.5 text-gray-600">{t.whatsapp ?? '—'}</td>}
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex justify-end gap-1">
                       {/* Al que ya paga no se le ofrece: pulsarlo no haría nada

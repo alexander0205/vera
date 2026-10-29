@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ConceptosYTarifasDialog } from '@/components/administracion-escolar/ConceptosYTarifasDialog';
+import { FamiliaDelAlumno } from '@/components/administracion-escolar/FamiliaDelAlumno';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 import {
@@ -102,6 +103,12 @@ const VISTAS: Array<{ id: Vista; etiqueta: string; icono: ReactNode; ayuda: stri
   { id: 'concepto', etiqueta: 'Por concepto', icono: <Tag className="h-4 w-4" />, ayuda: 'Elige un concepto y marca quién lo lleva' },
 ];
 
+export type PasoAlumno = 'familia' | 'conceptos';
+const PASOS_ALUMNO: Array<{ id: PasoAlumno; etiqueta: string }> = [
+  { id: 'familia', etiqueta: 'Familia y quién paga' },
+  { id: 'conceptos', etiqueta: 'Cargos del año' },
+];
+
 // Las tres alturas del árbol: nivel → grado → sección. La clave de cada nodo
 // es lo que se guarda como «lo que se está viendo».
 const claveNivel = (g: Grupo) => `n:${g.servicio}${g.tanda ? ` · ${g.tanda}` : ''}`;
@@ -148,6 +155,8 @@ export default function MatricularDesdeSigerd() {
   const [alcance, setAlcance] = useState<string | null>(null);
   const [verOmitidos, setVerOmitidos] = useState(false);
   const [editando, setEditando] = useState<{ alumno: Alumno; grupo: Grupo } | null>(null);
+  /** El paso del alumno abierto. Arranca en sus cargos, que es lo que se revisa siempre. */
+  const [paso, setPaso] = useState<PasoAlumno>('conceptos');
   // Cambios en el panel sin «Guardar»: cerrar pregunta antes de perderlos.
   const [editorSucio, setEditorSucio] = useState(false);
   const [avisoSalir, setAvisoSalir] = useState(false);
@@ -156,6 +165,16 @@ export default function MatricularDesdeSigerd() {
     if (editorSucio) setAvisoSalir(true);
     else setEditando(null);
   }, [editorSucio]);
+  /** Lo que se guardó en «Familia» se ve ya en la lista, sin volver a leer SIGERD. */
+  const marcarResponsable = useCallback((id: number, tiene: boolean) => {
+    setDatos((d) => d && {
+      ...d,
+      grupos: d.grupos.map((g) => (g.estudiantes.some((e) => e.id === id)
+        ? { ...g, estudiantes: g.estudiantes.map((e) => (e.id === id ? { ...e, sinResponsable: !tiene } : e)) }
+        : g)),
+    });
+    setEditando((x) => (x && x.alumno.id === id ? { ...x, alumno: { ...x.alumno, sinResponsable: !tiene } } : x));
+  }, []);
   const deshacerAjuste = useCallback((id: number) => {
     setAjustes((m) => { const n = new Map(m); n.delete(id); return n; });
   }, []);
@@ -475,6 +494,7 @@ export default function MatricularDesdeSigerd() {
     if (v && VISTAS.some((x) => x.id === v)) setVista(v as Vista);
     const en = q.get('en');
     if (en) setAlcance(en);
+    if (q.get('paso') === 'familia') setPaso('familia');
     const alumno = Number(q.get('alumno'));
     if (Number.isInteger(alumno) && alumno > 0) alumnoDeLaUrl.current = alumno;
     else setUrlLista(true);
@@ -495,11 +515,12 @@ export default function MatricularDesdeSigerd() {
     poner('vista', vista === 'seccion' ? null : vista);
     poner('en', alcance);
     poner('alumno', editando ? String(editando.alumno.id) : null);
+    poner('paso', editando && paso === 'familia' ? 'familia' : null);
     const destino = `${window.location.pathname}${q.size ? `?${q}` : ''}`;
     if (destino !== window.location.pathname + window.location.search) {
       window.history.replaceState(window.history.state, '', destino);
     }
-  }, [urlLista, vista, alcance, editando]);
+  }, [urlLista, vista, alcance, editando, paso]);
 
   /** Cada alumno con su sección entera, para encontrarlo por id. */
   const grupoDe = useMemo(() => {
@@ -775,6 +796,9 @@ export default function MatricularDesdeSigerd() {
       puedePrecios={puedePrecios}
       recargar={recargarPlanes}
       onAbrirConceptos={puedePrecios ? () => setConceptosAbierto(true) : undefined}
+      paso={paso}
+      onPaso={setPaso}
+      onResponsable={(tiene) => marcarResponsable(editando.alumno.id, tiene)}
       onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
       onRestablecer={() => {
         deshacerAjuste(editando.alumno.id);
@@ -1372,7 +1396,7 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
   alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
-  onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
+  paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -1386,6 +1410,11 @@ function EditorAlumno({
   recargar?: number;
   /** Abre «Conceptos y tarifas» encima, para crear o corregir sin salir. */
   onAbrirConceptos?: () => void;
+  /** Qué parte se ve: los padres y quién paga, o sus cargos del año. Vive en la URL (`?paso=`). */
+  paso: PasoAlumno;
+  onPaso: (p: PasoAlumno) => void;
+  /** Se le puso (o cambió) el responsable de pago desde «Familia». */
+  onResponsable: (tiene: boolean) => void;
   onGuardar: (a: Ajuste) => void;
   onRestablecer: () => void;
   onSacar: () => void;
@@ -1439,7 +1468,29 @@ function EditorAlumno({
         </button>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      {/* Primero quién es su familia y quién paga, después lo que se le cobra:
+          el orden del formulario de migración. Los dos pasos quedan montados
+          para no perder lo marcado al ir y volver. */}
+      <div role="tablist" aria-label="Partes del alumno" className="flex gap-1 border-b border-gray-100 px-5">
+        {PASOS_ALUMNO.map((p, i) => (
+          <button key={p.id} type="button" role="tab" aria-selected={paso === p.id} onClick={() => onPaso(p.id)}
+            className={`-mb-px inline-flex items-center gap-2 border-b-2 px-2 py-2.5 text-sm font-medium ${
+              paso === p.id ? 'border-zero-600 text-zero-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${
+              paso === p.id ? 'bg-zero-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{i + 1}</span>
+            {p.etiqueta}
+            {p.id === 'familia' && alumno.sinResponsable && (
+              <span className="h-2 w-2 rounded-full bg-amber-500" title="Sin responsable de pago" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'familia' ? '' : 'hidden'}`}>
+        <FamiliaDelAlumno estudianteId={alumno.id} onResponsable={onResponsable} />
+      </div>
+
+      <div className={`flex-1 space-y-4 overflow-y-auto px-5 py-4 ${paso === 'conceptos' ? '' : 'hidden'}`}>
         {esMatriculado(alumno) && (
           <div className="flex gap-2 rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-xs text-zero-900">
             <GraduationCap className="h-4 w-4 shrink-0 text-zero-600" />
@@ -1450,7 +1501,8 @@ function EditorAlumno({
         {alumno.sinResponsable && (
           <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-            No tiene responsable de pago: sus cargos no se facturarán hasta asignarle uno en su ficha.
+            No tiene responsable de pago: sus cargos no se facturarán hasta asignarle uno en
+            <button type="button" onClick={() => onPaso('familia')} className="font-medium underline">Familia</button>.
           </div>
         )}
         <PlanCobroSelector
@@ -1499,10 +1551,17 @@ function EditorAlumno({
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
-            onClick={() => onGuardar({ conceptos, precios })}>
-            Guardar
-          </Button>
+          {paso === 'familia' ? (
+            // La familia ya quedó guardada: lo que sigue es su plan.
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={() => onPaso('conceptos')}>
+              Siguiente: cargos del año
+            </Button>
+          ) : (
+            <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
+              onClick={() => onGuardar({ conceptos, precios })}>
+              Guardar
+            </Button>
+          )}
         </div>
       </div>
     </div>
