@@ -83,7 +83,12 @@ export default function PagosEscolaresClient() {
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  // `?buscar=` lo manda la campana de notificaciones: un pago con tarjeta lleva
+  // aquí con su número de autorización ya escrito en el buscador.
+  const [query, setQuery] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return (new URLSearchParams(window.location.search).get('buscar') ?? '').slice(0, 100);
+  });
   const [metodo, setMetodo] = useState('todos');
 
   // El listado viene paginado del servidor: un colegio cobra miles de pagos al

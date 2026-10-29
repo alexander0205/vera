@@ -19,6 +19,7 @@ import { db } from '@/lib/db/drizzle';
 import { paymentLinks, pagosRecibidos, cotizaciones } from '@/lib/db/schema';
 import { registrarPago } from '@/lib/db/queries';
 import { logError, logInfo } from '@/lib/logger';
+import { avisarPagoEnLinea } from '@/lib/notificaciones/pagos';
 
 export type PaymentLinkRow = typeof paymentLinks.$inferSelect;
 
@@ -149,12 +150,22 @@ export async function marcarLinkPagado(
   // ── Fase B: reconciliar contra el ledger (idempotente, reintentable) ────────
   // Si falla, el cobro NO se pierde: el link ya quedó 'pagado' con su referencia
   // y reconciliarLedger es reintentable (cron/manual). Devolvemos 'pagado'.
+  let pagoRecibidoId: number | null = null;
   try {
-    const pagoRecibidoId = await reconciliarLedger(token);
-    return { estado: 'pagado', pagoRecibidoId };
+    pagoRecibidoId = await reconciliarLedger(token);
   } catch {
-    return { estado: 'pagado', pagoRecibidoId: null };
+    pagoRecibidoId = null;
   }
+
+  // Avisar a la campana del colegio y a sus celulares. Es el ÚNICO punto en que
+  // un pago con tarjeta pasa a 'pagado' (CardNet, Azul y el simulador llegan
+  // todos aquí), y solo se alcanza la primera vez: un callback repetido sale
+  // arriba como 'ya_pagado'. Va después del ledger —con o sin éxito— porque el
+  // aviso no depende de él, y dentro de `after()` para no hacer esperar a quien
+  // acaba de pagar. No lanza.
+  avisarPagoEnLinea(fase.link.id);
+
+  return { estado: 'pagado', pagoRecibidoId };
 }
 
 /**

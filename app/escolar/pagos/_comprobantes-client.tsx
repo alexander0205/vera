@@ -16,7 +16,7 @@
  * necesita el motivo que el padre va a leer.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AprobarComprobanteDialog } from '@/components/administracion-escolar/AprobarComprobanteDialog';
@@ -95,6 +95,13 @@ export function ComprobantesClient() {
   const [motivo, setMotivo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'aprobado' | 'rechazado'>('todos');
   const [busca, setBusca] = useState('');
+  // El comprobante al que lleva la campana de notificaciones (`?comprobante=12`):
+  // se resalta y se baja hasta él. Se lee una vez; no es estado de la pantalla.
+  const [resaltado] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const v = new URLSearchParams(window.location.search).get('comprobante');
+    return v && /^\d+$/.test(v) ? Number(v) : null;
+  });
 
   const cargar = useCallback(async () => {
     setCargando(true); setError(null);
@@ -111,6 +118,16 @@ export function ComprobantesClient() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Llegar desde la campana: bajar hasta el comprobante que avisó. Solo cuando
+  // la lista ya pintó, y una vez — después de aprobar se recarga y no debe
+  // volver a saltar.
+  const yaBajo = useRef(false);
+  useEffect(() => {
+    if (cargando || resaltado == null || yaBajo.current) return;
+    yaBajo.current = true;
+    document.getElementById(`comprobante-${resaltado}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [cargando, resaltado]);
 
   async function rechazar(id: number, motivoTexto: string) {
     setOcupado(id); setAviso(null); setError(null);
@@ -283,7 +300,8 @@ export function ComprobantesClient() {
           const Icono = e.icono;
           const esImagen = c.archivoMime.startsWith('image/');
           return (
-            <Card key={c.id} className={`border-l-4 ${e.borde}`}>
+            <Card key={c.id} id={`comprobante-${c.id}`} className={`border-l-4 ${e.borde}`}
+              style={c.id === resaltado ? { outline: '2px solid #3658e1', outlineOffset: 2 } : undefined}>
               <CardContent className="space-y-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">

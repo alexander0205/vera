@@ -4564,3 +4564,56 @@ export const capturaFacturasArchivos = pgTable('captura_facturas_archivos', {
 ]);
 
 export type CapturaFactura = typeof capturaFacturas.$inferSelect;
+
+// ─── Notificaciones de pagos + push (0211) ───────────────────────────────────
+
+/**
+ * Lo que le pasó a una empresa y conviene que alguien vea: hoy, un comprobante
+ * que subió una familia o un pago con tarjeta. La campana de arriba lista estas
+ * filas; el índice único evita que un reintento del callback avise dos veces.
+ * Ver lib/notificaciones/pagos.ts.
+ */
+export const notificaciones = pgTable('notificaciones', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  /** comprobante | pago_en_linea */
+  tipo:          varchar('tipo', { length: 30 }).notNull(),
+  titulo:        varchar('titulo', { length: 160 }).notNull(),
+  detalle:       text('detalle'),
+  /** Ruta relativa de la pantalla donde se encuentra ese pago. */
+  enlace:        varchar('enlace', { length: 300 }).notNull(),
+  /** El comprobante o el enlace de pago de origen. */
+  refId:         integer('ref_id'),
+  montoCentavos: integer('monto_centavos'),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('notificaciones_team_creado_idx').on(t.teamId, t.creadoEn.desc()),
+  uniqueIndex('notificaciones_ref_uq').on(t.teamId, t.tipo, t.refId).where(sql`${t.refId} IS NOT NULL`),
+]);
+
+/** Hasta cuándo ha visto cada persona las notificaciones de una empresa. */
+export const notificacionesLeidas = pgTable('notificaciones_leidas', {
+  userId:     integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  teamId:     integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  leidoHasta: timestamp('leido_hasta').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.teamId] }),
+]);
+
+/** Dispositivos que activaron los avisos push. El `endpoint` identifica al dispositivo. */
+export const pushSuscripciones = pgTable('push_suscripciones', {
+  id:        serial('id').primaryKey(),
+  userId:    integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  endpoint:  text('endpoint').notNull().unique(),
+  p256dh:    text('p256dh').notNull(),
+  auth:      text('auth').notNull(),
+  userAgent: varchar('user_agent', { length: 300 }),
+  creadoEn:  timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('push_suscripciones_user_idx').on(t.userId),
+  index('push_suscripciones_team_idx').on(t.teamId),
+]);
+
+export type Notificacion = typeof notificaciones.$inferSelect;
+export type PushSuscripcion = typeof pushSuscripciones.$inferSelect;

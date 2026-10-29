@@ -243,6 +243,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // `sw-avisos.js` es el service worker de los avisos push (public/sw-avisos.js):
+  // un archivo estático que el navegador pide solo para comprobar si cambió, sin
+  // sesión que verificar ni cookie que refrescar. Pasar por aquí le pondría una
+  // `Set-Cookie` a cada comprobación y no aporta nada.
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|sw-avisos\\.js).*)'],
   runtime: 'nodejs'
 };
