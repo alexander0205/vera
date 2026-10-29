@@ -15,10 +15,17 @@ export type Asignacion = typeof ASIGNACIONES[number];
 
 /** Cómo se lee a quién le toca. «persona» se lee con su nombre. */
 export const ETIQUETA_ASIGNACION: Record<Exclude<Asignacion, 'persona'>, string> = {
-  soporte: 'Soporte IT · Zero',
+  soporte: 'Departamento de IT · Zero',
 };
 
-export const AUTOR_SOPORTE = 'Soporte IT · Zero';
+/**
+ * Cómo firma el equipo de Zero. Hasta el 29-10-2026 fue «Soporte IT · Zero», y
+ * las conversaciones guardan la firma con que se escribió cada mensaje: para
+ * saber si lo dijo el equipo de Zero se mira contra las dos (`esFirmaSoporte`).
+ */
+export const AUTOR_SOPORTE = 'Departamento de IT · Zero';
+const FIRMAS_SOPORTE = new Set([AUTOR_SOPORTE, 'Soporte IT · Zero']);
+export const esFirmaSoporte = (autor: string) => FIRMAS_SOPORTE.has(autor);
 export const AUTOR_IA = 'Zero AI';
 
 export function etiquetaAsignada(asignadaA: string, nombrePersona?: string | null): string {
