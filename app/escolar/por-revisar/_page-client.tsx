@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Check, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { PanelNuevaTarea, PanelTarea, Segmento, traer } from '@/components/administracion-escolar/TareasEstudiante';
+import { PanelNuevaTarea, PanelTarea, Segmento, traer, TurnoChip } from '@/components/administracion-escolar/TareasEstudiante';
 import { refrescarCampana } from '@/components/administracion-escolar/CampanaTareas';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
@@ -67,6 +67,7 @@ export default function PorRevisarClient() {
   const [vista, setVista] = useState<Vista>('mias');
   const [origen, setOrigen] = useState<Origen>('todas');
   const [asignada, setAsignada] = useState('');
+  const [esperando, setEsperando] = useState('');
   const [cambiando, setCambiando] = useState<number | null>(null);
   const [revisando, setRevisando] = useState(false);
   const [creando, setCreando] = useState(false);
@@ -79,7 +80,7 @@ export default function PorRevisarClient() {
     router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
   };
 
-  const clave = `/api/administracion-escolar/tareas/colegio?vista=${vista}&origen=${origen}&asignada=${asignada}`;
+  const clave = `/api/administracion-escolar/tareas/colegio?vista=${vista}&origen=${origen}&asignada=${asignada}&esperando=${esperando}`;
   const { data, error, isLoading, mutate } = useSWR<Respuesta>(clave, traer, { keepPreviousData: true });
 
   async function marcar(t: TareaDelColegio) {
@@ -168,7 +169,17 @@ export default function PorRevisarClient() {
             { id: 'todas', texto: 'Todas' }, { id: 'ia', texto: 'Zero AI' }, { id: 'personas', texto: 'Personas' },
           ]} />
         )}
+        {/* Quién tiene que contestar: lo que pide el equipo de Zero para ver primero lo que debe. */}
         <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+          Le toca a
+          <select value={esperando} onChange={(e) => setEsperando(e.target.value)}
+            className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
+            <option value="">Cualquiera</option>
+            <option value="soporte">Soporte IT · Zero</option>
+            <option value="colegio">El colegio</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
           Asignada a
           <select value={asignada} onChange={(e) => setAsignada(e.target.value)}
             className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
@@ -221,6 +232,7 @@ export default function PorRevisarClient() {
                       {t.descripcion && <span className="line-clamp-1 block text-xs text-gray-600">{t.descripcion}</span>}
                       <span className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] text-gray-600">
                         {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 py-0.5 font-semibold text-sky-800">En revisión</span>}
+                        <TurnoChip turno={t.turno} />
                         <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.de}</span>
                         <span className="inline-flex items-center gap-1">
                           <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${

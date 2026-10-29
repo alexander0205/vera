@@ -21,7 +21,7 @@ import { avisarTareaEnSlack } from './tareas-slack';
 import { notificarTarea } from '@/lib/notificaciones/tareas';
 import {
   aQuienAvisar, AUTOR_SOPORTE, DE_COLEGIO, DESTINO, etiquetaAsignada, HORAS_SIN_RESPUESTA, PENDIENTES,
-  TEXTO_CIERRE_AUTOMATICO, textoEvento, turnoDe,
+  primerNombre, TEXTO_CIERRE_AUTOMATICO, textoEvento, turnoDe,
   type AccionEstado, type AutorTarea, type AvisoTarea, type EstadoTarea, type NuevoAdjunto, type NuevaTarea,
 } from './tareas-reglas';
 
@@ -95,6 +95,54 @@ export interface TareaEnLista {
   ultimo: { autor: string; texto: string; tipo: string; creadoEn: string } | null;
   mensajes: number;
   actualizadoEn: string;
+  turno: TurnoTarea | null;
+}
+
+/**
+ * A quién le toca contestar una tarea pendiente (ver `turnoDe`), y desde
+ * cuándo espera: lo que se lee en «Le toca a Soporte IT · 3 h». `null` en una
+ * completada.
+ */
+export interface TurnoTarea {
+  quien: 'soporte' | 'colegio';
+  /** El primer nombre de a quién le toca en el colegio, si se sabe. */
+  nombre: string | null;
+  /** La última vez que se movió la tarea. */
+  desde: string;
+  /** Se cierra sola a esta hora si sigue en revisión sin respuesta. */
+  cierraEn: string | null;
+}
+
+/** El turno de cada tarea pendiente, con el último que escribió en cada una. */
+async function turnosDe(filas: {
+  id: number; estado: string; asignadaA: string; asignadaUserId: number | null; creadaPorUserId: number | null;
+  actualizadoEn: Date; revisionVenceEn: Date | null;
+}[]): Promise<Map<number, TurnoTarea>> {
+  const pendientes = filas.filter((f) => PENDIENTES.includes(f.estado as EstadoTarea));
+  const turnos = new Map<number, TurnoTarea>();
+  if (pendientes.length === 0) return turnos;
+  const m = adminEscolarTareaMensajes;
+  const ultimos = await db.selectDistinctOn([m.tareaId], { tareaId: m.tareaId, userId: m.userId, autor: m.autor, tipo: m.tipo })
+    .from(m)
+    .where(and(inArray(m.tareaId, pendientes.map((f) => f.id)), inArray(m.tipo, ['mensaje', 'adjunto', 'ia'])))
+    .orderBy(m.tareaId, desc(m.creadoEn), desc(m.id));
+  const ultimoDe = new Map(ultimos.map((u) => [u.tareaId, u]));
+  const calculados = pendientes.map((f) => {
+    const u = ultimoDe.get(f.id);
+    return { f, t: turnoDe({ ...f, ultimo: u ? { userId: u.userId, esSoporte: u.autor === AUTOR_SOPORTE || u.tipo === 'ia' } : null }) };
+  });
+  const ids = [...new Set(calculados.flatMap(({ t }) => t.usuarios.slice(0, 1)))];
+  const nombres = new Map(ids.length === 0 ? [] : (await db.select({ id: users.id, name: users.name, email: users.email })
+    .from(users).where(inArray(users.id, ids))).map((u) => [u.id, primerNombre(u.name) ?? u.email]));
+  for (const { f, t } of calculados) {
+    turnos.set(f.id, {
+      quien: t.soporte ? 'soporte' : 'colegio',
+      nombre: t.usuarios[0] != null ? (nombres.get(t.usuarios[0]) ?? null) : null,
+      desde: f.actualizadoEn.toISOString(),
+      cierraEn: f.revisionVenceEn ? f.revisionVenceEn.toISOString() : null,
+    });
+  }
+  return turnos;
 }
 
 /** `abierta` trae las pendientes: abiertas y en revisión. */
@@ -108,6 +156,9 @@ export async function listarTareas(
     estado: adminEscolarTareas.estado,
     estudianteId: adminEscolarTareas.estudianteId,
     asignadaA: adminEscolarTareas.asignadaA,
+    asignadaUserId: adminEscolarTareas.asignadaUserId,
+    creadaPorUserId: adminEscolarTareas.creadaPorUserId,
+    revisionVenceEn: adminEscolarTareas.revisionVenceEn,
     persona,
     documento: ecfDocuments.codigo,
     creadaPorIa: adminEscolarTareas.creadaPorIa,
@@ -133,6 +184,7 @@ export async function listarTareas(
   const porTarea = new Map<number, typeof mensajes>();
   for (const m of mensajes) porTarea.set(m.tareaId, [...(porTarea.get(m.tareaId) ?? []), m]);
   const nombres = new Map(fam.alumnos.map((a) => [a.id, a.nombre]));
+  const turnos = await turnosDe(filas);
 
   return filas.map((f) => {
     const suyos = porTarea.get(f.id) ?? [];
@@ -150,6 +202,7 @@ export async function listarTareas(
       ultimo: ultimo ? { autor: ultimo.autor, texto: ultimo.texto, tipo: ultimo.tipo, creadoEn: ultimo.creadoEn.toISOString() } : null,
       mensajes: suyos.filter((m) => m.tipo !== 'evento').length,
       actualizadoEn: f.actualizadoEn.toISOString(),
+      turno: turnos.get(f.id) ?? null,
     };
   });
 }
@@ -206,6 +259,8 @@ export async function leerTarea(teamId: number, id: number) {
     id: adminEscolarTareas.id, titulo: adminEscolarTareas.titulo, descripcion: adminEscolarTareas.descripcion,
     estado: adminEscolarTareas.estado, estudianteId: adminEscolarTareas.estudianteId, clientId: adminEscolarTareas.clientId, alumno, fichaId,
     asignadaA: adminEscolarTareas.asignadaA, persona, documento: ecfDocuments.codigo,
+    asignadaUserId: adminEscolarTareas.asignadaUserId, creadaPorUserId: adminEscolarTareas.creadaPorUserId,
+    actualizadoEn: adminEscolarTareas.actualizadoEn, revisionVenceEn: adminEscolarTareas.revisionVenceEn,
     ecfDocumentId: adminEscolarTareas.ecfDocumentId, creadaPorIa: adminEscolarTareas.creadaPorIa,
     venceEl: adminEscolarTareas.venceEl,
   })
@@ -231,6 +286,7 @@ export async function leerTarea(teamId: number, id: number) {
     asignada: etiquetaAsignada(t.asignadaA, t.persona),
     documento: t.documento ?? null, ecfDocumentId: t.ecfDocumentId,
     creadaPorIa: t.creadaPorIa, venceEl: t.venceEl ? String(t.venceEl) : null,
+    turno: (await turnosDe([{ ...t, id }])).get(id) ?? null,
     mensajes: mensajes.map(({ adjuntoId, adjuntoMime, adjuntoBytes, ...m }) => ({
       ...m,
       creadoEn: m.creadoEn.toISOString(),
@@ -400,6 +456,8 @@ export interface FiltroColegio {
   origen: 'todas' | 'ia' | 'personas';
   /** `soporte`, `persona` o vacío para cualquiera. */
   asignada: string;
+  /** A quién le toca contestar: `soporte` (nosotros), `colegio` o vacío para cualquiera. */
+  esperando: string;
 }
 
 export interface TareaDelColegio {
@@ -414,6 +472,7 @@ export interface TareaDelColegio {
   creadaPorIa: boolean;
   creadoEn: string;
   actualizadoEn: string;
+  turno: TurnoTarea | null;
 }
 
 export interface FamiliaConTareas {
@@ -462,12 +521,13 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
   if (f.asignada) condiciones.push(eq(t.asignadaA, f.asignada));
 
   const persona = sql<string | null>`(SELECT coalesce(nullif(trim(u.name), ''), u.email) FROM users u WHERE u.id = ${t.asignadaUserId})`;
-  const filas = await db.select({
+  const filasTodas = await db.select({
     id: t.id, titulo: t.titulo, descripcion: t.descripcion, estado: t.estado,
     estudianteId: t.estudianteId, clientId: t.clientId,
     nombres: adminEscolarEstudiantes.nombres, apellidos: adminEscolarEstudiantes.apellidos,
     responsable: clients.razonSocial,
     asignadaA: t.asignadaA, persona, documento: ecfDocuments.codigo, creadaPorIa: t.creadaPorIa,
+    asignadaUserId: t.asignadaUserId, creadaPorUserId: t.creadaPorUserId, revisionVenceEn: t.revisionVenceEn,
     creadoEn: t.creadoEn, actualizadoEn: t.actualizadoEn,
   })
     .from(t)
@@ -477,6 +537,10 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
     .where(and(...condiciones))
     .orderBy(desc(t.actualizadoEn))
     .limit(300);
+
+  // A quién le toca cada una; «Esperando a» filtra por eso.
+  const turnos = await turnosDe(filasTodas);
+  const filas = f.esperando ? filasTodas.filter((x) => turnos.get(x.id)?.quien === f.esperando) : filasTodas;
 
   // Los hermanos de cada familia, para decir de quién se habla y llevar a una ficha.
   const clientIds = [...new Set(filas.map((x) => x.clientId).filter((x): x is number => x != null))];
@@ -527,6 +591,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
       asignadaA: x.asignadaA, asignada: etiquetaAsignada(x.asignadaA, x.persona),
       documento: x.documento ?? null, creadaPorIa: x.creadaPorIa,
       creadoEn: x.creadoEn.toISOString(), actualizadoEn: x.actualizadoEn.toISOString(),
+      turno: turnos.get(x.id) ?? null,
     });
   }
 

@@ -2,7 +2,7 @@
  * Las tareas por revisar de todo el colegio: la pantalla «Por revisar» y la
  * campana de arriba.
  *
- *   GET ?vista=mias|todas|revision|hechas&origen=todas|ia|personas&asignada=soporte|persona
+ *   GET ?vista=mias|todas|revision|hechas&origen=todas|ia|personas&asignada=soporte|persona&esperando=soporte|colegio
  *       → { familias, cuentas, kpis }
  *   GET ?soloConteo=1 → { mias }   (el número de la campana)
  *
@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     vista: uno(sp.get('vista'), ['mias', 'todas', 'revision', 'hechas'] as const, 'mias'),
     origen: uno(sp.get('origen'), ['todas', 'ia', 'personas'] as const, 'todas'),
     asignada: uno(sp.get('asignada'), ['', 'soporte', 'persona'] as const, ''),
+    esperando: uno(sp.get('esperando'), ['', 'soporte', 'colegio'] as const, ''),
   };
   return NextResponse.json(await tareasDelColegio(auth.teamId, yo, filtro));
 }
