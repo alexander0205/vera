@@ -2972,6 +2972,34 @@ export interface MoraDelComprobante {
 }
 
 /**
+ * Lo que la IA leyó en la foto o el PDF del comprobante, ya saneado (ver
+ * `limpiarLectura`). Es una PROPUESTA: la persona que revisa decide, y nada de
+ * esto mueve dinero. Los montos van en centavos y la fecha como YYYY-MM-DD.
+ */
+export interface LecturaComprobanteIa {
+  /** false = la imagen no parece un comprobante de pago; el resto va vacío. */
+  esComprobante: boolean;
+  /** El banco al que ENTRÓ el dinero (el de la cuenta del colegio). */
+  bancoDestino: string | null;
+  /** El banco desde el que SALIÓ (el de la familia). */
+  bancoOrigen: string | null;
+  /** Últimos 4 dígitos de la cuenta destino, si el papel los muestra. */
+  cuentaDestinoUltimos4: string | null;
+  montoCentavos: number | null;
+  fecha: string | null;
+  /** Número de confirmación / referencia de la operación. */
+  referencia: string | null;
+  /** Quien envió el dinero. */
+  ordenante: string | null;
+  /** Quien lo recibió. */
+  beneficiario: string | null;
+  /** 0 a 1: qué tan segura está la lectura de sí misma. */
+  confianza: number;
+  /** El modelo que la hizo, para saber de dónde salió. */
+  modelo: string;
+}
+
+/**
  * Alguien DICE que transfirió, y trae una foto. No mueve un peso.
  *
  * No es un pago a propósito: el cobro de verdad vive en `pagos_recibidos`,
@@ -3006,6 +3034,24 @@ export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
 
   /** Las notas de mora que también estaba pagando. Ver `MoraDelComprobante`. */
   moras:         jsonb('moras').$type<MoraDelComprobante[]>().notNull().default([]),
+
+  /**
+   * sha256 del archivo tal como se subió. Dos comprobantes con el mismo hash son
+   * la misma foto subida dos veces. Null en los anteriores a la migración 0213.
+   */
+  archivoHash:   varchar('archivo_hash', { length: 64 }),
+
+  /** Lo que leyó la IA al subirse. Null = no se leyó (sin llave, falló o es anterior). */
+  lecturaIa:     jsonb('lectura_ia').$type<LecturaComprobanteIa>(),
+  lecturaIaEn:   timestamp('lectura_ia_en'),
+
+  /**
+   * El banco de la empresa al que entró el dinero, elegido al aprobar. El mismo
+   * dato viaja a `pagos_recibidos.cuenta_banco_id`; aquí queda para poder
+   * decirlo en la lista sin ir a buscar el cobro. Null en los rechazados, en los
+   * pendientes y en los aprobados antes de la migración 0213.
+   */
+  cuentaBancoId: integer('cuenta_banco_id').references(() => adminEscolarCuentasBanco.id, { onDelete: 'set null' }),
 
   /** pendiente | aprobado | rechazado */
   estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
