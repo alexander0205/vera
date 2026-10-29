@@ -11,6 +11,7 @@ import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
 import { useCuentasBanco } from '@/lib/hooks/useCuentasBanco';
+import { METODOS_CON_BANCO } from '@/lib/pagos/bancos';
 
 // Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
 export { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -60,14 +61,15 @@ const CUENTAS_RESERVA: MetodoOption[] = [
   { value: 'otro',        label: 'Otro' },
 ];
 
-/**
- * Métodos en los que el dinero cae en una cuenta concreta.
+/*
+ * `METODOS_CON_BANCO` (lib/pagos/bancos.ts): los métodos en los que el dinero cae
+ * en una cuenta concreta.
  *
  * Para estos el campo de cuenta se abre SOLO, sin tener que descubrir el enlace
  * «+ Cuenta». No es cosmético: en producción hay 809 transferencias y 9 dicen a
  * qué banco entraron. El campo existía; lo que no existía era encontrarlo.
+ * Vive en bancos.ts porque la aprobación de comprobantes aplica la misma regla.
  */
-const METODOS_CON_BANCO = new Set(['transferencia', 'deposito']);
 
 interface PagoMetodosProps {
   lineas: PagoLinea[];

@@ -14,12 +14,13 @@
  */
 
 import 'server-only';
-import { and, desc, eq, inArray, asc, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, asc, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarComprobantes,
   adminEscolarCargos,
   adminEscolarConceptosPago,
+  adminEscolarCuentasBanco,
   adminEscolarEstudiantes,
   clients,
   ecfDocuments,
@@ -28,6 +29,11 @@ import { registrarPago } from '@/lib/db/queries';
 import { sincronizarSaldosDesdeFacturas } from './queries';
 import { leerComprobante } from '@/lib/storage/comprobantes';
 import type { CargoDelComprobante, MoraDelComprobante } from '@/lib/db/schema';
+import { cuentasBancoDelEquipo } from '@/lib/pagos/cuentas-banco';
+import { etiquetaDe, resolverBancoDeAprobacion, ultimos4 } from '@/lib/pagos/bancos';
+import {
+  detectarDuplicado, type Duplicado, type LecturaComprobanteIa, type ParaDuplicado,
+} from './comprobante-lectura';
 
 export interface ComprobanteFila {
   id: number;
@@ -45,6 +51,13 @@ export interface ComprobanteFila {
   motivoRechazo: string | null;
   creadoEn: string;
   revisadoEn: string | null;
+  /** Lo que la IA leyó del papel; null = no se leyó (todavía, o nunca). Es una propuesta. */
+  lectura: LecturaComprobanteIa | null;
+  lecturaEn: string | null;
+  /** El banco de la empresa al que se dijo que entró, si ya se aprobó con uno. */
+  cuentaBanco: { id: number; etiqueta: string } | null;
+  /** Solo en los pendientes: a qué comprobante anterior de la misma familia se parece. */
+  duplicado: Duplicado | null;
 }
 
 export async function listarComprobantes(
@@ -58,6 +71,7 @@ export async function listarComprobantes(
     .select({
       id:            adminEscolarComprobantes.id,
       estado:        adminEscolarComprobantes.estado,
+      clientId:      adminEscolarComprobantes.clientId,
       montoCentavos: adminEscolarComprobantes.montoCentavos,
       referencia:    adminEscolarComprobantes.referencia,
       bancoOrigen:   adminEscolarComprobantes.bancoOrigen,
@@ -65,25 +79,70 @@ export async function listarComprobantes(
       archivoNombre: adminEscolarComprobantes.archivoNombre,
       archivoMime:   adminEscolarComprobantes.archivoMime,
       archivoBytes:  adminEscolarComprobantes.archivoBytes,
+      archivoHash:   adminEscolarComprobantes.archivoHash,
       cargos:        adminEscolarComprobantes.cargos,
       motivoRechazo: adminEscolarComprobantes.motivoRechazo,
       creadoEn:      adminEscolarComprobantes.creadoEn,
       revisadoEn:    adminEscolarComprobantes.revisadoEn,
+      lecturaIa:     adminEscolarComprobantes.lecturaIa,
+      lecturaIaEn:   adminEscolarComprobantes.lecturaIaEn,
+      cuentaBancoId: adminEscolarComprobantes.cuentaBancoId,
+      cuentaBanco:   adminEscolarCuentasBanco.banco,
+      cuentaTipo:    adminEscolarCuentasBanco.tipoCuenta,
+      cuentaNumero:  adminEscolarCuentasBanco.numeroCuenta,
       responsable:   clients.razonSocial,
       responsableEmail: clients.email,
     })
     .from(adminEscolarComprobantes)
     .leftJoin(clients, eq(clients.id, adminEscolarComprobantes.clientId))
+    .leftJoin(adminEscolarCuentasBanco, eq(adminEscolarCuentasBanco.id, adminEscolarComprobantes.cuentaBancoId))
     .where(and(...where))
     // Los pendientes primero: es una cola de trabajo, no un histórico.
     .orderBy(asc(adminEscolarComprobantes.estado), desc(adminEscolarComprobantes.id))
     .limit(300);
 
-  return filas.map((f) => ({
-    ...f,
-    creadoEn: f.creadoEn.toISOString(),
-    revisadoEn: f.revisadoEn?.toISOString() ?? null,
-  }));
+  // ── Posibles duplicados ────────────────────────────────────────────────────
+  // Solo importan en la cola (los pendientes). Se comparan contra TODOS los no
+  // rechazados de la misma familia, no solo contra los que cayeron en esta
+  // página de 300: el original puede ser de hace meses.
+  const clientesPendientes = [...new Set(
+    filas.filter((f) => f.estado === 'pendiente' && f.clientId != null).map((f) => f.clientId!),
+  )];
+  const delMismoCliente: ParaDuplicado[] = clientesPendientes.length === 0 ? [] : (await db
+    .select({
+      id:          adminEscolarComprobantes.id,
+      estado:      adminEscolarComprobantes.estado,
+      clientId:    adminEscolarComprobantes.clientId,
+      creadoEn:    adminEscolarComprobantes.creadoEn,
+      archivoHash: adminEscolarComprobantes.archivoHash,
+      lectura:     adminEscolarComprobantes.lecturaIa,
+    })
+    .from(adminEscolarComprobantes)
+    .where(and(
+      eq(adminEscolarComprobantes.teamId, teamId),
+      inArray(adminEscolarComprobantes.clientId, clientesPendientes),
+      ne(adminEscolarComprobantes.estado, 'rechazado'),
+    )));
+
+  return filas.map((f) => {
+    const { clientId, archivoHash, lecturaIa, lecturaIaEn, cuentaBancoId, cuentaBanco, cuentaTipo, cuentaNumero, ...resto } = f;
+    return {
+      ...resto,
+      creadoEn: f.creadoEn.toISOString(),
+      revisadoEn: f.revisadoEn?.toISOString() ?? null,
+      lectura: lecturaIa ?? null,
+      lecturaEn: lecturaIaEn?.toISOString() ?? null,
+      cuentaBanco: cuentaBancoId != null && cuentaBanco != null
+        ? { id: cuentaBancoId, etiqueta: etiquetaDe(cuentaBanco, cuentaTipo, ultimos4(cuentaNumero)) }
+        : null,
+      duplicado: f.estado === 'pendiente'
+        ? detectarDuplicado(
+            { id: f.id, estado: f.estado, clientId, creadoEn: f.creadoEn, archivoHash, lectura: lecturaIa ?? null },
+            delMismoCliente,
+          )
+        : null,
+    };
+  });
 }
 
 /** El binario, para servirlo por una ruta que ya validó sesión y empresa. */
@@ -109,7 +168,15 @@ export async function leerArchivoComprobante(
   return { buffer: await leerComprobante(f.archivoKey), mime: f.archivoMime, nombre };
 }
 
-export class ComprobanteError extends Error {}
+export class ComprobanteError extends Error {
+  /** El estado HTTP con que la ruta lo contesta. 409 = el comprobante no está en condiciones. */
+  readonly status: number = 409;
+}
+
+/** Lo que mandó quien aprueba no vale (una cuenta ajena, falta el banco): 400, no 409. */
+export class ComprobanteSolicitudError extends ComprobanteError {
+  override readonly status: number = 400;
+}
 
 /**
  * Cómo se reparte lo que llegó entre las facturas.
@@ -164,6 +231,11 @@ export interface AjustesAprobacion {
   fechaPago?: string;
   metodo?: string;
   referencia?: string;
+  /**
+   * El banco de la empresa al que entró el dinero. Viaja desde el navegador, así
+   * que `aprobarComprobante` comprueba que sea de este equipo antes de usarlo.
+   */
+  cuentaBancoId?: number;
 }
 
 export interface DestinoAplicacion {
@@ -367,6 +439,23 @@ export async function aprobarComprobante(
   turnoCajaId: number | null = null,
 ): Promise<ResultadoAprobacion> {
   /**
+   * El banco se comprueba ANTES de reclamar la fila: es lo único que se puede
+   * rechazar sin haber tocado nada, y así un id ajeno o un banco que falta no
+   * pasan por el reclamo y la devolución a la cola.
+   *
+   * El id llega del navegador. Se busca entre las cuentas de ESTE equipo —no
+   * basta con que exista—, porque atar un cobro a la cuenta de otra empresa lo
+   * haría aparecer en su reporte de «cuánto entró por esta cuenta».
+   */
+  const metodoDeCobro = ajustes.metodo?.trim() || 'transferencia';
+  const cuentas = await cuentasBancoDelEquipo(teamId);
+  const banco = resolverBancoDeAprobacion({
+    cuentaBancoId: ajustes.cuentaBancoId, metodo: metodoDeCobro, cuentas,
+  });
+  if (!banco.ok) throw new ComprobanteSolicitudError(banco.error);
+  const cuentaElegida = cuentas.find((c) => c.id === banco.cuentaId) ?? null;
+
+  /**
    * Se reclama ANTES de tocar dinero, no después.
    *
    * Antes esto leía el estado, registraba los pagos y recién entonces marcaba
@@ -379,7 +468,7 @@ export async function aprobarComprobante(
    * peticiones se lleva la fila. Es el mismo candado que ya usaba `rechazar`.
    */
   const [c] = await db.update(adminEscolarComprobantes)
-    .set({ estado: 'aprobado', revisadoPor: usuarioId, revisadoEn: new Date() })
+    .set({ estado: 'aprobado', revisadoPor: usuarioId, revisadoEn: new Date(), cuentaBancoId: cuentaElegida?.id ?? null })
     .where(and(
       eq(adminEscolarComprobantes.id, id),
       eq(adminEscolarComprobantes.teamId, teamId),
@@ -407,7 +496,7 @@ export async function aprobarComprobante(
     const plan = await planDeAplicacion(teamId, c.cargos, c.moras, monto);
 
     const fecha = ajustes.fechaPago?.trim() || new Date().toISOString().slice(0, 10);
-    const metodo = ajustes.metodo?.trim() || 'transferencia';
+    const metodo = metodoDeCobro;
     const referencia = ajustes.referencia?.trim() || c.referencia;
 
     for (const d of plan.destinos) {
@@ -417,6 +506,12 @@ export async function aprobarComprobante(
         montoCentavos: d.montoCentavos,
         metodo,
         referencia,
+        // Las DOS cosas, igual que el cobro manual (PagoMetodos): la etiqueta en
+        // `cuenta`, que es lo que leen el historial, el cuadre y el PDF sin
+        // resolver nada, y el id en `cuenta_banco_id`, que es lo que sobrevive a
+        // un renombre y permite agrupar. Ver migración 0173.
+        cuenta: cuentaElegida?.etiqueta ?? null,
+        cuentaBancoId: cuentaElegida?.id ?? null,
         fechaPago: fecha,
         notas: `Comprobante #${c.id} aprobado`,
         createdBy: usuarioId,
@@ -435,7 +530,7 @@ export async function aprobarComprobante(
     };
   } catch (e) {
     await db.update(adminEscolarComprobantes)
-      .set({ estado: 'pendiente', revisadoPor: null, revisadoEn: null })
+      .set({ estado: 'pendiente', revisadoPor: null, revisadoEn: null, cuentaBancoId: null })
       .where(eq(adminEscolarComprobantes.id, id));
     throw e;
   }

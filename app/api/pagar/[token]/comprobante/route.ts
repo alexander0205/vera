@@ -10,7 +10,7 @@
  * colegio. El dinero se registra cuando alguien del colegio aprueba.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarComprobantes, teams, teamMembers, users } from '@/lib/db/schema';
@@ -20,6 +20,7 @@ import { detectarTipo, ArchivoInvalidoError } from '@/lib/pagos/adjuntos';
 import { s3Disponible, subirComprobante, construirKey } from '@/lib/storage/comprobantes';
 import { enviarComprobanteRecibidoEmail } from '@/lib/email/escolar-avisos';
 import { avisarComprobante } from '@/lib/notificaciones/pagos';
+import { hashArchivo, leerYGuardarComprobante } from '@/lib/administracion-escolar/comprobantes-ia';
 
 /** Lo que promete la pantalla: 5 MB. */
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -171,6 +172,10 @@ export async function POST(
     archivoMime: tipo.mime,
     archivoNombre: (archivo.name || `comprobante.${tipo.ext}`).slice(0, 200),
     archivoBytes: buffer.length,
+    // La huella del archivo: con ella el colegio ve si esta misma foto ya se
+    // subió antes (ver detectarDuplicado). Se calcula aquí, con los bytes que
+    // acaban de pasar la validación, y no al revisar.
+    archivoHash: hashArchivo(buffer),
     cargos: link.vista.cargos.map((c) => ({
       cargoId: c.cargoId,
       estudiante: c.estudiante,
@@ -190,6 +195,15 @@ export async function POST(
   }).returning({ id: adminEscolarComprobantes.id });
 
   await marcarAcceso(link.linkId);
+
+  // La IA lee el papel —banco, monto, fecha, referencia— para que quien revise
+  // lo encuentre ya extraído. Va en `after()` y no lanza: la respuesta del padre
+  // no espera a que el modelo conteste, y sin llave de IA, sin red o con una
+  // imagen ilegible el comprobante queda como siempre, sin lectura. La IA solo
+  // propone; no aprueba nada. Ver lib/administracion-escolar/comprobantes-ia.ts.
+  after(() => leerYGuardarComprobante({
+    teamId: link.teamId, id: fila.id, buffer, mime: tipo.mime,
+  }));
 
   // La campana de arriba y el push al celular de quien revisa los pagos. Va en
   // `after()` y no lanza: el comprobante ya está guardado y el padre no tiene
