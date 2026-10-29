@@ -105,14 +105,92 @@ export function validarMensaje(texto: unknown): { ok: true; texto: string } | { 
   return { ok: true, texto: t };
 }
 
+/**
+ * Por dónde pasa una tarea. «En revisión» es que alguien ya la tomó o espera
+ * que se la confirmen: todavía no está hecha, así que cuenta como pendiente
+ * junto con las abiertas (campana, «Asignadas a mí», el número de la ficha).
+ */
+export type EstadoTarea = 'abierta' | 'en_revision' | 'completada';
+export const PENDIENTES: EstadoTarea[] = ['abierta', 'en_revision'];
+export const ETIQUETA_ESTADO: Record<EstadoTarea, string> = {
+  abierta: 'Abierta', en_revision: 'En revisión', completada: 'Completada',
+};
+
+/** Lo que se puede hacer con el estado, y de dónde se puede llegar. */
+export type AccionEstado = 'completar' | 'revision' | 'reabrir';
+export const DESTINO: Record<AccionEstado, { a: EstadoTarea; desde: EstadoTarea[] }> = {
+  completar: { a: 'completada', desde: ['abierta', 'en_revision'] },
+  revision: { a: 'en_revision', desde: ['abierta', 'completada'] },
+  reabrir: { a: 'abierta', desde: ['en_revision', 'completada'] },
+};
+
 /** Las líneas que deja cada cambio en la conversación. */
 export const textoEvento = {
   creada: (autor: string, asignada: string) => `${autor} creó la tarea y la asignó a ${asignada}`,
   completada: (autor: string) => `${autor} marcó la tarea como completada`,
   reabierta: (autor: string) => `${autor} volvió a abrir la tarea`,
+  revision: (autor: string) => `${autor} pasó la tarea a revisión`,
 };
 
-export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta';
+export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'revision' | 'adjunto';
+
+// ── Archivos adjuntos ────────────────────────────────────────────────────────
+
+const MB = 1024 * 1024;
+/** Un video del celular de un minuto pesa unos 100 MB. */
+export const TOPE_VIDEO = 200 * MB;
+export const TOPE_ARCHIVO = 25 * MB;
+
+/**
+ * Lo que se acepta, por extensión, con el tipo con que se guarda. El tipo que
+ * manda el navegador no se usa: se decide aquí. Nada que el navegador ejecute
+ * (html, svg, js): el archivo se sirve tal cual desde S3.
+ */
+const TIPOS: Record<string, { mime: string; clase: 'imagen' | 'video' | 'documento' }> = {
+  jpg: { mime: 'image/jpeg', clase: 'imagen' }, jpeg: { mime: 'image/jpeg', clase: 'imagen' },
+  png: { mime: 'image/png', clase: 'imagen' }, gif: { mime: 'image/gif', clase: 'imagen' },
+  webp: { mime: 'image/webp', clase: 'imagen' }, heic: { mime: 'image/heic', clase: 'imagen' },
+  heif: { mime: 'image/heif', clase: 'imagen' },
+  mp4: { mime: 'video/mp4', clase: 'video' }, mov: { mime: 'video/quicktime', clase: 'video' },
+  m4v: { mime: 'video/x-m4v', clase: 'video' }, webm: { mime: 'video/webm', clase: 'video' },
+  '3gp': { mime: 'video/3gpp', clase: 'video' },
+  pdf: { mime: 'application/pdf', clase: 'documento' },
+  doc: { mime: 'application/msword', clase: 'documento' },
+  docx: { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', clase: 'documento' },
+  xls: { mime: 'application/vnd.ms-excel', clase: 'documento' },
+  xlsx: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', clase: 'documento' },
+  ppt: { mime: 'application/vnd.ms-powerpoint', clase: 'documento' },
+  pptx: { mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', clase: 'documento' },
+  csv: { mime: 'text/csv', clase: 'documento' }, txt: { mime: 'text/plain', clase: 'documento' },
+  zip: { mime: 'application/zip', clase: 'documento' },
+};
+
+/** Lo que pone el selector de archivos para que solo ofrezca lo que se acepta. */
+export const ACEPTA_ADJUNTOS = Object.keys(TIPOS).map((e) => `.${e}`).join(',');
+
+export const extensionDe = (nombre: string) => (nombre.match(/\.([a-z0-9]{1,5})$/i)?.[1] ?? '').toLowerCase();
+
+export type ClaseAdjunto = 'imagen' | 'video' | 'documento';
+export function claseDeMime(mime: string): ClaseAdjunto {
+  return mime.startsWith('image/') ? 'imagen' : mime.startsWith('video/') ? 'video' : 'documento';
+}
+
+export interface NuevoAdjunto { nombre: string; extension: string; mime: string; bytes: number; clase: ClaseAdjunto }
+
+/** El archivo que se quiere subir, ya revisado, o el error para la persona. */
+export function validarAdjunto(entrada: unknown): { ok: true; adjunto: NuevoAdjunto } | { ok: false; error: string } {
+  const e = (entrada ?? {}) as Record<string, unknown>;
+  const nombre = typeof e.nombre === 'string' ? e.nombre.trim().replace(/[\\/]/g, '_').slice(-200) : '';
+  if (!nombre) return { ok: false, error: 'El archivo no tiene nombre.' };
+  const extension = extensionDe(nombre);
+  const tipo = TIPOS[extension];
+  if (!tipo) return { ok: false, error: `No se aceptan archivos .${extension || '¿?'}: sube fotos, videos, PDF, Word, Excel o PowerPoint.` };
+  const bytes = Number(e.bytes);
+  if (!Number.isInteger(bytes) || bytes <= 0) return { ok: false, error: 'El archivo está vacío.' };
+  const tope = tipo.clase === 'video' ? TOPE_VIDEO : TOPE_ARCHIVO;
+  if (bytes > tope) return { ok: false, error: `«${nombre}» pesa más de ${tope / MB} MB.` };
+  return { ok: true, adjunto: { nombre, extension, mime: tipo.mime, bytes, clase: tipo.clase } };
+}
 
 /**
  * A quién se le avisa por correo de un cambio en la tarea.
