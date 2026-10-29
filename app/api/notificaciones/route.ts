@@ -1,7 +1,9 @@
 /**
  * Las notificaciones de pagos de la empresa activa: la campana de arriba.
  *
- *   GET            → { items, noLeidas }   las últimas 20 que le tocan
+ *   GET            → { items, noLeidas, hayMas }   las últimas 20 que le tocan
+ *   GET ?antes=<id> → las 20 anteriores a esa (el historial no tiene tope: se
+ *                     va pidiendo de 20 en 20 con «Ver anteriores»)
  *   GET ?soloConteo=1 → { noLeidas }
  *
  * Qué ve cada persona: las de la empresa que su rol permite (ver
@@ -13,7 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificaciones, notificacionesLeidas } from '@/lib/db/schema';
 import { exigirAcceso } from '@/lib/notificaciones/acceso';
@@ -48,15 +50,18 @@ export async function GET(req: NextRequest) {
 
   if (soloConteo) return NextResponse.json({ noLeidas });
 
+  const antes = Number(req.nextUrl.searchParams.get('antes'));
   const filas = await db.select().from(notificaciones)
-    .where(deLaEmpresa)
-    .orderBy(desc(notificaciones.creadoEn), desc(notificaciones.id))
-    .limit(LIMITE);
+    .where(Number.isInteger(antes) && antes > 0 ? and(deLaEmpresa, lt(notificaciones.id, antes)) : deLaEmpresa)
+    .orderBy(desc(notificaciones.id))
+    .limit(LIMITE + 1);
+  const hayMas = filas.length > LIMITE;
 
   return NextResponse.json({
     puede: true,
     noLeidas,
-    items: filas.map((f) => ({
+    hayMas,
+    items: filas.slice(0, LIMITE).map((f) => ({
       id: f.id,
       tipo: f.tipo,
       titulo: f.titulo,

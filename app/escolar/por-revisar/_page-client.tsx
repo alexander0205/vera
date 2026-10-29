@@ -8,6 +8,7 @@ import { Check, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { PanelNuevaTarea, PanelTarea, Segmento, traer, TurnoChip } from '@/components/administracion-escolar/TareasEstudiante';
 import { refrescarCampana } from '@/components/administracion-escolar/CampanaTareas';
+import { PedirWhatsApp } from '@/components/notificaciones/PedirWhatsApp';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
 import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-escolar/tareas';
@@ -52,7 +53,7 @@ function dondeEstan(familias: number, colegio: number) {
 }
 
 const inicialesDe = (asignada: string) => {
-  if (asignada.startsWith('Soporte IT')) return 'IT';
+  if (asignada.startsWith('Soporte IT') || asignada.startsWith('Departamento de IT')) return 'IT';
   const p = asignada.trim().split(/\s+/).filter((x) => !/\.$/.test(x));
   return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase() || '·';
 };
@@ -125,7 +126,7 @@ export default function PorRevisarClient() {
     <section className="space-y-5 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Por revisar</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Tareas</h1>
           <p className="mt-1 text-sm text-gray-500">
             Lo que alguien tiene que decidir o arreglar en el colegio y en sus familias.
           </p>
@@ -149,6 +150,8 @@ export default function PorRevisarClient() {
           )}
         </div>
       </div>
+
+      <PedirWhatsApp />
 
       <div className={`grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white ${ZERO_AI_TAREAS ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         <Kpi titulo="Pendientes" valor={k?.abiertas} resalte={!!k?.abiertas} nota={k ? dondeEstan(k.familias, k.colegio) : ''} />
@@ -175,7 +178,7 @@ export default function PorRevisarClient() {
           <select value={esperando} onChange={(e) => setEsperando(e.target.value)}
             className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
             <option value="">Cualquiera</option>
-            <option value="soporte">Soporte IT · Zero</option>
+            <option value="soporte">Departamento de IT · Zero</option>
             <option value="colegio">El colegio</option>
           </select>
         </label>
@@ -184,7 +187,7 @@ export default function PorRevisarClient() {
           <select value={asignada} onChange={(e) => setAsignada(e.target.value)}
             className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
             <option value="">Cualquiera</option>
-            <option value="soporte">Soporte IT · Zero</option>
+            <option value="soporte">Departamento de IT · Zero</option>
             <option value="persona">Personas del colegio</option>
           </select>
         </label>

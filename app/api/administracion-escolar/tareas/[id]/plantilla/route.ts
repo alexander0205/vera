@@ -31,7 +31,7 @@ import { logAudit } from '@/lib/audit';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
-  if (auth.user.platformRole !== 'admin') return NextResponse.json({ error: 'Solo Soporte IT' }, { status: 403 });
+  if (auth.user.platformRole !== 'admin') return NextResponse.json({ error: 'Solo el Departamento de IT de Zero' }, { status: 403 });
   const id = Number((await params).id);
   const plantilla = req.nextUrl.searchParams.get('plantilla');
   if (!Number.isInteger(id) || id <= 0 || !esPlantilla(plantilla)) {
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar', { escritura: true });
   if (!auth.ok) return auth.response;
-  if (auth.user.platformRole !== 'admin') return NextResponse.json({ error: 'Solo Soporte IT' }, { status: 403 });
+  if (auth.user.platformRole !== 'admin') return NextResponse.json({ error: 'Solo el Departamento de IT de Zero' }, { status: 403 });
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
 
