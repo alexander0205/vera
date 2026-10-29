@@ -26,7 +26,7 @@ import {
 import { invalidarEstructura } from '@/lib/cache/escolar';
 import { LoteError, matricularLote, type ResultadoLote } from './matricula-lote';
 import { contextoDeSeccion } from './tarifas';
-import { armarPlanDeCobro } from './plan-cobro';
+import { armarPlanConOtros } from './plan-cobro';
 import { hoyRD } from '@/lib/utils/format';
 import type { ArbolCentro } from '@/lib/sigerd/sync';
 import { ultimoDumpSigerd } from '@/lib/sigerd/ultimo-dump';
@@ -410,6 +410,10 @@ interface PrecioEscrito {
  * El producto sale del plan de la sección calculado aquí —el mismo que heredaría
  * el alumno—, o del concepto. Sin ninguno de los dos la tarifa no se podría
  * facturar (regla R2) y se rechaza, como en Tarifas.
+ *
+ * Un concepto que la sección no cobra (elegido en «Ver más») también entra por
+ * aquí: su tarifa propia es lo único que se lo cobra, así que la pantalla manda
+ * su precio aunque sea el de partida.
  */
 async function escribirPreciosPropios(
   teamId: number, periodoId: number, cursoId: number, fecha: string, alumnos: AlumnoDesdeSigerd[],
@@ -418,8 +422,8 @@ async function escribirPreciosPropios(
   if (conPrecio.length === 0) return [];
 
   const ctx = await contextoDeSeccion(teamId, periodoId, cursoId);
-  const plan = ctx ? await armarPlanDeCobro(teamId, ctx, fecha) : [];
-  const lineas = new Map(plan.map((l) => [l.conceptoId, l]));
+  const plan = ctx ? await armarPlanConOtros(teamId, ctx, fecha) : { lineas: [], otros: [] };
+  const lineas = new Map([...plan.lineas, ...plan.otros].map((l) => [l.conceptoId, l]));
   const conceptos = await db
     .select({ id: adminEscolarConceptosPago.id, productId: adminEscolarConceptosPago.productId })
     .from(adminEscolarConceptosPago)
@@ -435,7 +439,7 @@ async function escribirPreciosPropios(
       for (const precio of a.precios) {
         const linea = lineas.get(precio.conceptoId);
         const monto = Math.round(Number(precio.montoCentavos));
-        if (!linea) throw new LoteError('Ese concepto no tiene tarifa en esta sección.', 400);
+        if (!linea) throw new LoteError('Ese concepto no tiene tarifa este año, ni en esta sección ni en otra.', 400);
         if (!Number.isFinite(monto) || monto < 0) throw new LoteError('Monto inválido', 400);
         const productId = linea.productId ?? productoDelConcepto.get(linea.conceptoId) ?? null;
         if (productId == null) {

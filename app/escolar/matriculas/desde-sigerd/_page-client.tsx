@@ -10,10 +10,11 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ConceptosYTarifasDialog } from '@/components/administracion-escolar/ConceptosYTarifasDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
 import {
-  PlanCobroSelector, escritoDesdeTarifa, modoPrecio, type LineaPlan,
+  PlanCobroSelector, escritoDesdeTarifa, modoPrecio, obligatoriosPrimero, type LineaPlan,
 } from '@/components/administracion-escolar/PlanCobroSelector';
 import {
   cambioDeMatricula, conConcepto, conPaquete, conPrecio, conceptosDeSeccion, cuentaDe, igualASeccion,
@@ -125,6 +126,9 @@ export default function MatricularDesdeSigerd() {
    */
   const [fechaElegida, setFecha] = useState<string | null>(null);
   const [planes, setPlanes] = useState<Map<number, PlanSeccion>>(new Map());
+  /** Conceptos y tarifas abierto encima; al cerrarlo se vuelven a pedir los planes. */
+  const [conceptosAbierto, setConceptosAbierto] = useState(false);
+  const [recargarPlanes, setRecargarPlanes] = useState(0);
 
   const [fuera, setFuera] = useState<Set<number>>(new Set());
   /** Paquetes del colegio (Configuración › Paquetes): aplicar uno a toda una sección. */
@@ -184,18 +188,22 @@ export default function MatricularDesdeSigerd() {
     const periodoId = String(datos.periodo.id);
     setPlanes(new Map(datos.grupos.map((g) => [g.cursoId, { estado: 'cargando' } as PlanSeccion])));
     for (const g of datos.grupos) {
-      const params = new URLSearchParams({ periodoId, cursoId: String(g.cursoId), desde: fecha });
+      const params = new URLSearchParams({ periodoId, cursoId: String(g.cursoId), desde: fecha, otros: '1' });
       fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
         .then(async (res) => {
           const d = await res.json();
           if (!res.ok) throw new Error(d.error ?? 'No se pudo calcular');
-          return { estado: 'listo', lineas: d.lineas as LineaPlan[] } as PlanSeccion;
+          return {
+            estado: 'listo',
+            lineas: obligatoriosPrimero(d.lineas as LineaPlan[]),
+            otros: (d.otros ?? []) as LineaPlan[],
+          } as PlanSeccion;
         })
         .catch((e: unknown) => ({ estado: 'error', mensaje: e instanceof Error ? e.message : 'Error' } as PlanSeccion))
         .then((p) => { if (vigente) setPlanes((m) => new Map(m).set(g.cursoId, p)); });
     }
     return () => { vigente = false; };
-  }, [datos, fecha]);
+  }, [datos, fecha, recargarPlanes]);
 
   /** Lo que ya tiene guardado la matrícula de quien ya está matriculado. */
   const guardados = useMemo(() => {
@@ -233,7 +241,8 @@ export default function MatricularDesdeSigerd() {
         // Al matriculado ya se le cargó lo suyo: aquí solo cuenta lo que se va a crear.
         if (esMatriculado(e)) continue;
         const conceptos = conceptosDe(e.id, g.cursoId) ?? [];
-        m.set(e.id, cuentaDe(p.lineas, conceptos, ajustes.get(e.id)?.precios ?? [], corte));
+        // Con lo de otros grados que se le haya dado en «Ver más».
+        m.set(e.id, cuentaDe([...p.lineas, ...p.otros], conceptos, ajustes.get(e.id)?.precios ?? [], corte));
       }
     }
     return m;
@@ -450,6 +459,47 @@ export default function MatricularDesdeSigerd() {
     }
     setVista(v);
   };
+
+  /*
+   * Lo que se está viendo vive en la URL (`?vista=`, `?en=` y `?alumno=`):
+   * recargar, volver atrás o pasarle el enlace a otra persona deja la pantalla
+   * donde estaba, con el mismo alumno abierto. Se lee una vez al entrar; el
+   * alumno, cuando llega la lista. Hasta entonces no se escribe, para no
+   * borrar lo que traía el enlace.
+   */
+  const alumnoDeLaUrl = useRef<number | null>(null);
+  const [urlLista, setUrlLista] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const v = q.get('vista');
+    if (v && VISTAS.some((x) => x.id === v)) setVista(v as Vista);
+    const en = q.get('en');
+    if (en) setAlcance(en);
+    const alumno = Number(q.get('alumno'));
+    if (Number.isInteger(alumno) && alumno > 0) alumnoDeLaUrl.current = alumno;
+    else setUrlLista(true);
+  }, []);
+  useEffect(() => {
+    if (alumnoDeLaUrl.current == null || (!datos && !errorCarga)) return;
+    const id = alumnoDeLaUrl.current;
+    alumnoDeLaUrl.current = null;
+    const grupo = datos?.grupos.find((g) => g.estudiantes.some((e) => e.id === id));
+    const alumno = grupo?.estudiantes.find((e) => e.id === id);
+    if (grupo && alumno) setEditando({ alumno, grupo });
+    setUrlLista(true);
+  }, [datos, errorCarga]);
+  useEffect(() => {
+    if (!urlLista) return;
+    const q = new URLSearchParams(window.location.search);
+    const poner = (k: string, v: string | null) => { if (v) q.set(k, v); else q.delete(k); };
+    poner('vista', vista === 'seccion' ? null : vista);
+    poner('en', alcance);
+    poner('alumno', editando ? String(editando.alumno.id) : null);
+    const destino = `${window.location.pathname}${q.size ? `?${q}` : ''}`;
+    if (destino !== window.location.pathname + window.location.search) {
+      window.history.replaceState(window.history.state, '', destino);
+    }
+  }, [urlLista, vista, alcance, editando]);
 
   /** Cada alumno con su sección entera, para encontrarlo por id. */
   const grupoDe = useMemo(() => {
@@ -683,6 +733,8 @@ export default function MatricularDesdeSigerd() {
       }}
       // A los ya matriculados, por ahora, solo se les cambian conceptos.
       puedePrecios={puedePrecios && !esMatriculado(editando.alumno)}
+      recargar={recargarPlanes}
+      onAbrirConceptos={puedePrecios ? () => setConceptosAbierto(true) : undefined}
       onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
       onRestablecer={() => {
         deshacerAjuste(editando.alumno.id);
@@ -787,7 +839,14 @@ export default function MatricularDesdeSigerd() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-gray-500">{VISTAS.find((v) => v.id === vista)?.ayuda}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-500">{VISTAS.find((v) => v.id === vista)?.ayuda}</p>
+          {puedePrecios && (
+            <Button variant="outline" size="sm" onClick={() => setConceptosAbierto(true)}>
+              <Tag className="mr-1.5 h-4 w-4" />Conceptos y tarifas
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Lista ──────────────────────────────────────────────────── */}
@@ -1113,6 +1172,9 @@ export default function MatricularDesdeSigerd() {
         onConfirm={() => void matricular()} />
 
       {/* En la vista por alumno el plan se abre debajo de su fila; en las demás, en el cajón. */}
+      <ConceptosYTarifasDialog open={conceptosAbierto}
+        onCerrar={() => { setConceptosAbierto(false); setRecargarPlanes((n) => n + 1); }} />
+
       <Drawer anchor="right" open={!!editando && vista !== 'alumno'} onClose={cerrarEditor} keepMounted={false}
         slotProps={{
           backdrop: { sx: { backdropFilter: 'blur(2px)' } },
@@ -1267,7 +1329,8 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
+  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
+  onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -1277,6 +1340,10 @@ function EditorAlumno({
   inicial: { conceptos?: number[]; precios: Ajuste['precios'] };
   puedePrecios: boolean;
   conCambios: boolean;
+  /** Cambia al cerrar «Conceptos y tarifas»: el selector vuelve a pedir el plan. */
+  recargar?: number;
+  /** Abre «Conceptos y tarifas» encima, para crear o corregir sin salir. */
+  onAbrirConceptos?: () => void;
   onGuardar: (a: Ajuste) => void;
   onRestablecer: () => void;
   onSacar: () => void;
@@ -1351,10 +1418,20 @@ function EditorAlumno({
           corte={corte}
           estudianteId={alumno.id}
           inicial={inicialFijo}
+          // A los ya matriculados se les cambia lo suyo en «Servicios por
+          // alumno», que solo da conceptos de su sección.
+          conOtros={!esMatriculado(alumno)}
+          recargar={recargar}
           onPlan={alLlegarPlan}
           onCambio={alCambiar}
           onPrecios={puedePrecios ? alCambiarPrecios : undefined}
         />
+        {onAbrirConceptos && (
+          <button type="button" onClick={onAbrirConceptos}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:text-zero-800">
+            <Tag className="h-3.5 w-3.5" />¿Falta un concepto o un precio? Abrir conceptos y tarifas
+          </button>
+        )}
         {!puedePrecios && (
           <p className="text-xs text-gray-500">
             {esMatriculado(alumno)

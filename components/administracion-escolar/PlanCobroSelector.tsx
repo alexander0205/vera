@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { Loader2, Pencil, RotateCcw } from 'lucide-react';
+import { ChevronDown, Loader2, Pencil, RotateCcw } from 'lucide-react';
 import { fmtFechaCorta, parseDOPaCentavos } from '@/lib/utils/format';
 import { cuotasAlMatricular, sumaCentavos } from '@/lib/administracion-escolar/cuotas-al-matricular';
 import { montosPorCuota, precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
@@ -33,6 +33,11 @@ export interface LineaPlan {
   opcional?: boolean;
   /** `montoCentavos` es lo de cada cuota (true) o el total que se reparte (false). */
   precioPorCuota?: boolean;
+  /**
+   * De otros grados, no de esta sección: sale en «Ver más». Elegirlo es darle
+   * al alumno una tarifa propia con `montoCentavos` de partida.
+   */
+  fueraDeSeccion?: boolean;
   cuotas: CuotaPlan[]; totalCentavos: number; omitidas: number;
   /**
    * El producto con el que se facturaría esta línea, ya resuelto por la cadena
@@ -128,7 +133,14 @@ function cuandoSeCobra(l: LineaPlan): string {
   return `${fmtFechaCorta(primera.fechaVencimiento ?? primera.fechaEmision)} – ${fmtFechaCorta(ultima.fechaVencimiento ?? ultima.fechaEmision)}`;
 }
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, onPlan, onCambio, onPrecios }: {
+/**
+ * Primero lo que se cobra a todos (obligatorios), después lo que se marca a
+ * quien lo usa. Dentro de cada grupo, el orden alfabético con el que llegan.
+ */
+export const obligatoriosPrimero = <L extends Pick<LineaPlan, 'opcional'>>(lineas: L[]): L[] =>
+  [...lineas.filter((l) => !l.opcional), ...lineas.filter((l) => l.opcional)];
+
+export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, conOtros, recargar, onPlan, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
@@ -154,6 +166,14 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
    */
   inicial?: { conceptos?: number[]; precios?: { conceptoId: number; montoCentavos: number }[] };
   /**
+   * Ofrecer debajo, en «Ver más», los conceptos que esta sección no cobra pero
+   * otros grados sí. Necesita `onPrecios`: elegir uno es ponerle al alumno una
+   * tarifa propia, y quien no puede tocar precios no lo ve.
+   */
+  conOtros?: boolean;
+  /** Cambia para volver a pedir el plan: se editaron conceptos o tarifas en otra ventana. */
+  recargar?: number;
+  /**
    * Llegó el plan. Hasta entonces los conceptos marcados son una lista vacía
    * que no significa «ninguno»: quien guarda lo que dice `onCambio` espera esto.
    */
@@ -168,6 +188,10 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
   onPrecios?: (precios: { conceptoId: number; montoCentavos: number; productId: number | null }[]) => void;
 }) {
   const [plan, setPlan] = useState<LineaPlan[]>([]);
+  /** Lo de otros grados («Ver más»). Vacío si no se pidió. */
+  const [otros, setOtros] = useState<LineaPlan[]>([]);
+  const [verOtros, setVerOtros] = useState(false);
+  const pideOtros = !!conOtros && !!onPrecios;
   // Paquetes del colegio: elegir uno marca sus conceptos de un clic.
   const { data: dataPaquetes } = useSWR<{ paquetes: { id: number; nombre: string; conceptosIds: number[] }[] }>(
     '/api/administracion-escolar/paquetes',
@@ -198,63 +222,87 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
   inicialRef.current = inicial;
   const onPlanRef = useRef(onPlan);
   onPlanRef.current = onPlan;
+  const recargaRef = useRef(recargar);
+  const marcadosRef = useRef(marcados);
+  marcadosRef.current = marcados;
+  const propiosRef = useRef(propios);
+  propiosRef.current = propios;
 
   useEffect(() => {
-    if (!periodoId || !cursoId) { setPlan([]); setPlanError(null); return; }
+    if (!periodoId || !cursoId) { setPlan([]); setOtros([]); setPlanError(null); return; }
     let vigente = true;
+    // Solo cambió `recargar`: es el mismo plan con algo editado, no otro curso.
+    const esRecarga = recargaRef.current !== recargar;
+    recargaRef.current = recargar;
     setPlanCargando(true);
     setPlanError(null);
     const params = new URLSearchParams({ periodoId, cursoId, desde });
     if (estudianteId) params.set('estudianteId', String(estudianteId));
+    if (pideOtros) params.set('otros', '1');
     fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'No se pudo calcular el plan de cobro');
-        return data.lineas as LineaPlan[];
+        return { lineas: obligatoriosPrimero(data.lineas as LineaPlan[]), otros: (data.otros ?? []) as LineaPlan[] };
       })
-      .then((lineas) => {
+      .then(({ lineas, otros: deOtros }) => {
         if (!vigente) return;
         setPlan(lineas);
+        setOtros(deOtros);
         // Marcados los obligatorios: aquí solo aparecen los conceptos con tarifa
         // para este grado, así que ya vienen filtrados por lo que ese grado
         // paga. Los opcionales (uniforme, transporte) llegan sin marcar y se
         // marcan a quien los use; lo dice el colegio en Conceptos.
-        const ids = new Set(lineas.map((l) => l.conceptoId));
+        const ids = new Set([...lineas, ...deOtros].map((l) => l.conceptoId));
         const ini = inicialRef.current;
-        setMarcados(ini?.conceptos
-          ? new Set(ini.conceptos.filter((c) => ids.has(c)))
-          : new Set(lineas.filter((l) => !l.opcional).map((l) => l.conceptoId)));
+        // Lo que ya está marcado se respeta al volver a pedir el plan (se
+        // editó un concepto en la ventana de Conceptos y tarifas).
+        const previos = esRecarga ? marcadosRef.current : ini?.conceptos;
+        const nuevosMarcados = previos
+          ? new Set([...previos].filter((c) => ids.has(c)))
+          : new Set(lineas.filter((l) => !l.opcional).map((l) => l.conceptoId));
+        setMarcados(nuevosMarcados);
+        // Si ya lleva algo de otros grados, se abre para que se vea.
+        setVerOtros(deOtros.some((l) => nuevosMarcados.has(l.conceptoId)));
         // Cambió el curso o la fecha: el plan es otro y los precios escritos
         // para el anterior no tienen por qué valer aquí. Los que se traen de
         // antes sí, si su concepto sigue en el plan.
-        setPropios(new Map((ini?.precios ?? [])
-          .filter((p) => ids.has(p.conceptoId))
-          .map((p) => [p.conceptoId, p.montoCentavos])));
+        setPropios(esRecarga
+          ? new Map([...propiosRef.current].filter(([c]) => ids.has(c)))
+          : new Map((ini?.precios ?? [])
+            .filter((p) => ids.has(p.conceptoId))
+            .map((p) => [p.conceptoId, p.montoCentavos])));
         setEditandoId(null);
-        onPlanRef.current?.(lineas);
+        onPlanRef.current?.([...lineas, ...deOtros]);
       })
       .catch((e) => { if (vigente) setPlanError(e instanceof Error ? e.message : 'Error'); })
       .finally(() => { if (vigente) setPlanCargando(false); });
     return () => { vigente = false; };
-  }, [periodoId, cursoId, desde, estudianteId]);
+  }, [periodoId, cursoId, desde, estudianteId, pideOtros, recargar]);
 
   useEffect(() => { onCambio([...marcados]); }, [marcados, onCambio]);
 
-  const planEfectivo = useMemo(() => aplicarPreciosPropios(plan, propios), [plan, propios]);
+  /** La sección y, debajo, lo de otros grados: todo lo que se puede marcar. */
+  const completo = useMemo(() => [...plan, ...otros], [plan, otros]);
+  const planEfectivo = useMemo(() => aplicarPreciosPropios(completo, propios), [completo, propios]);
 
   // Solo los que de verdad cambian algo: si alguien escribe el mismo precio que
   // ya tenía, no hay excepción que guardar.
+  // Lo de otros grados va siempre: sin su tarifa propia nada se lo cobraría.
   useEffect(() => {
     if (!onPrecios) return;
-    onPrecios(plan
+    onPrecios(completo
       .filter((l) => marcados.has(l.conceptoId))
       .flatMap((l) => {
         const propio = propios.get(l.conceptoId);
+        if (l.fueraDeSeccion) {
+          return [{ conceptoId: l.conceptoId, montoCentavos: propio ?? l.montoCentavos, productId: l.productId }];
+        }
         return propio == null || propio === l.montoCentavos
           ? []
           : [{ conceptoId: l.conceptoId, montoCentavos: propio, productId: l.productId }];
       }));
-  }, [plan, propios, marcados, onPrecios]);
+  }, [completo, propios, marcados, onPrecios]);
 
   function abrirPrecio(l: LineaPlan) {
     setEditandoId(l.conceptoId);
@@ -291,6 +339,138 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
 
   if (!cursoId) return null;
 
+  /** Los marcados de la sección, sin lo de otros grados: para «marcar todos». */
+  const deSeccionMarcados = plan.filter((l) => marcados.has(l.conceptoId)).length;
+  const otrosMarcados = otros.filter((l) => marcados.has(l.conceptoId)).map((l) => l.conceptoId);
+
+  const fila = (l: LineaPlan) => {
+    const activo = marcados.has(l.conceptoId);
+    const base = completo.find((p) => p.conceptoId === l.conceptoId)!;
+    const esPropio = propios.has(l.conceptoId);
+    const deOtros = !!l.fueraDeSeccion;
+    // La beca ya es un descuento sobre la tarifa; dejar escribir
+    // además un precio propio pone dos mecanismos a pelear por
+    // la misma cifra. Se edita la beca donde se puso la beca.
+    const puedeEditar = !!onPrecios && activo && l.origen !== 'beca';
+    const vivas = l.cuotas.filter((c) => !c.omitida).length;
+    const cuota = porCuotaDe(l);
+    const editando = editandoId === l.conceptoId;
+    const modo = modoPrecio(base);
+    const apagado = activo ? '' : 'opacity-50';
+    const escrito = editando ? parseDOPaCentavos(borrador) : null;
+    return (
+      <Fragment key={l.conceptoId}>
+        <tr className={`align-top ${editando ? '' : 'border-b border-gray-100'} hover:bg-gray-50`}>
+          <td className="py-2.5 pl-3">
+            <input type="checkbox" checked={activo} aria-label={`Cobrar ${l.nombre}`}
+              onChange={() => setMarcados((s) => {
+                const n = new Set(s);
+                if (n.has(l.conceptoId)) n.delete(l.conceptoId); else n.add(l.conceptoId);
+                return n;
+              })}
+              className="mt-0.5 h-4 w-4 cursor-pointer accent-zero-600" />
+          </td>
+          <td className={`py-2.5 pr-2 ${apagado}`}>
+            <span className="block text-gray-900">{l.nombre}</span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+              {cuandoSeCobra(l)}
+              {l.opcional && !deOtros && (
+                <span className="rounded bg-gray-100 px-1.5 py-px text-[11px] text-gray-600">opcional</span>
+              )}
+              {deOtros && (
+                <span className="rounded bg-sky-50 px-1.5 py-px text-[11px] text-sky-800">de otros grados</span>
+              )}
+              {esPropio && !deOtros && (
+                <span className="rounded bg-amber-50 px-1.5 py-px text-[11px] text-amber-800">precio propio</span>
+              )}
+              {l.origen === 'beca' && (
+                <span className="rounded bg-zero-50 px-1.5 py-px text-[11px] text-zero-700">con beca</span>
+              )}
+            </span>
+            {l.omitidas > 0 && (
+              <span className="mt-0.5 block text-xs text-amber-700">
+                no se le cobran {l.omitidas} cuota(s) de antes de su entrada
+              </span>
+            )}
+          </td>
+          <td className={`whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-gray-700 ${apagado}`}>
+            {l.omitidas > 0 ? `${vivas} de ${l.cuotas.length}` : vivas}
+          </td>
+          <td className={`whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-gray-700 ${apagado}`}>
+            {cuota == null ? <span className="text-gray-400">varía</span> : fmtRD(cuota)}
+          </td>
+          <td className={`whitespace-nowrap px-2 py-2.5 text-right font-medium tabular-nums text-gray-900 ${apagado}`}>
+            {fmtRD(l.totalCentavos)}
+          </td>
+          <td className="py-2 pr-3">
+            {puedeEditar && !editando && (
+              <div className="flex justify-end gap-1">
+                {esPropio && (
+                  <button type="button" title={`${deOtros ? 'Volver al precio de partida' : 'Volver al precio del grado'} (${fmtRD(escritoDesdeTarifa(base, base.montoCentavos))}${modo === 'cuota' ? ' por cuota' : ''})`}
+                    aria-label={deOtros ? 'Volver al precio de partida' : 'Volver al precio del grado'}
+                    onClick={() => setPropios((m) => { const n = new Map(m); n.delete(l.conceptoId); return n; })}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                )}
+                <button type="button" title="Cambiar precio para este alumno" aria-label={`Cambiar precio de ${l.nombre} para este alumno`}
+                  onClick={() => abrirPrecio(base)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zero-200 text-zero-700 hover:bg-zero-50">
+                  <Pencil className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
+            )}
+          </td>
+        </tr>
+        {editando && (
+          <tr className="border-b border-gray-100 bg-zero-50/40">
+            <td />
+            <td colSpan={5} className="pb-3 pr-3 pt-0.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-medium text-gray-700">
+                  {modo === 'cuota' ? 'Precio por cuota' : 'Total del año'} para este alumno: RD$
+                </span>
+                <input
+                  type="text" inputMode="decimal" autoFocus
+                  value={borrador}
+                  onChange={(e) => setBorrador(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); guardarPrecio(base); }
+                    if (e.key === 'Escape') { cancelando.current = true; setEditandoId(null); }
+                  }}
+                  /*
+                    Lo escrito se aplica al salir del campo: quien escribía el
+                    precio y pulsaba directo «Crear matrícula» perdía su número.
+                    Salvo si se va a Cancelar o se pulsó Escape: `onMouseDown`
+                    corre antes que el blur, así que la bandera ya está puesta.
+                  */
+                  onBlur={() => {
+                    if (cancelando.current) { cancelando.current = false; return; }
+                    guardarPrecio(base);
+                  }}
+                  className="h-7 w-28 rounded border border-gray-300 bg-white px-2 text-sm tabular-nums focus:border-zero-500 focus:outline-none"
+                />
+                <button type="button" onClick={() => guardarPrecio(base)}
+                  className="rounded bg-zero-600 px-2 py-1 text-xs font-medium text-white hover:bg-zero-700">
+                  Aplicar
+                </button>
+                <button type="button"
+                  onMouseDown={() => { cancelando.current = true; }}
+                  onClick={() => setEditandoId(null)}
+                  className="px-1.5 py-1 text-xs text-gray-500 hover:text-gray-700">
+                  Cancelar
+                </button>
+                {modo === 'cuota' && vivas > 1 && escrito != null && (
+                  <span className="text-xs text-gray-500">= {fmtRD(escrito * vivas)} en {vivas} cuotas</span>
+                )}
+              </div>
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  };
+
   return (
             <div className="rounded-lg border border-gray-200">
               <div className="flex items-baseline justify-between border-b border-gray-100 px-3 py-2">
@@ -301,11 +481,11 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
                     <select
                       value={paquetes.find((pq) => {
                         const suyos = plan.filter((l) => pq.conceptosIds.includes(l.conceptoId)).map((l) => l.conceptoId);
-                        return suyos.length === marcados.size && suyos.every((id) => marcados.has(id));
+                        return suyos.length === deSeccionMarcados && suyos.every((id) => marcados.has(id));
                       })?.id ?? ''}
                       onChange={(e) => {
                         const pq = paquetes.find((x) => x.id === Number(e.target.value));
-                        if (pq) setMarcados(new Set(plan.filter((l) => pq.conceptosIds.includes(l.conceptoId)).map((l) => l.conceptoId)));
+                        if (pq) setMarcados(new Set([...plan.filter((l) => pq.conceptosIds.includes(l.conceptoId)).map((l) => l.conceptoId), ...otrosMarcados]));
                       }}
                       className="h-7 rounded-md border border-gray-300 bg-white px-1.5 text-xs text-gray-800 focus:border-zero-500 focus:outline-none">
                       <option value="">— a mano —</option>
@@ -336,10 +516,11 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
                           <th className="w-8 py-2 pl-3">
                             {/* Todos de un clic: marcar los servicios de un niño que lo usa todo, o vaciar para empezar de cero. */}
                             <input type="checkbox" aria-label="Marcar todos los conceptos"
-                              title={marcados.size === plan.length ? 'Desmarcar todos' : 'Marcar todos'}
-                              checked={plan.length > 0 && marcados.size === plan.length}
-                              ref={(el) => { if (el) el.indeterminate = marcados.size > 0 && marcados.size < plan.length; }}
-                              onChange={() => setMarcados(marcados.size === plan.length ? new Set() : new Set(plan.map((l) => l.conceptoId)))}
+                              title={deSeccionMarcados === plan.length ? 'Desmarcar todos' : 'Marcar todos'}
+                              checked={plan.length > 0 && deSeccionMarcados === plan.length}
+                              ref={(el) => { if (el) el.indeterminate = deSeccionMarcados > 0 && deSeccionMarcados < plan.length; }}
+                              onChange={() => setMarcados(new Set([
+                                ...(deSeccionMarcados === plan.length ? [] : plan.map((l) => l.conceptoId)), ...otrosMarcados]))}
                               className="h-4 w-4 cursor-pointer accent-zero-600" />
                           </th>
                           <th className="py-2 pr-2 text-left font-medium">Concepto</th>
@@ -350,129 +531,26 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
                         </tr>
                       </thead>
                       <tbody>
-                        {planEfectivo.map((l) => {
-                          const activo = marcados.has(l.conceptoId);
-                          const base = plan.find((p) => p.conceptoId === l.conceptoId)!;
-                          const esPropio = propios.has(l.conceptoId);
-                          // La beca ya es un descuento sobre la tarifa; dejar escribir
-                          // además un precio propio pone dos mecanismos a pelear por
-                          // la misma cifra. Se edita la beca donde se puso la beca.
-                          const puedeEditar = !!onPrecios && activo && l.origen !== 'beca';
-                          const vivas = l.cuotas.filter((c) => !c.omitida).length;
-                          const cuota = porCuotaDe(l);
-                          const editando = editandoId === l.conceptoId;
-                          const modo = modoPrecio(base);
-                          const apagado = activo ? '' : 'opacity-50';
-                          const escrito = editando ? parseDOPaCentavos(borrador) : null;
-                          return (
-                            <Fragment key={l.conceptoId}>
-                              <tr className={`align-top ${editando ? '' : 'border-b border-gray-100'} hover:bg-gray-50`}>
-                                <td className="py-2.5 pl-3">
-                                  <input type="checkbox" checked={activo} aria-label={`Cobrar ${l.nombre}`}
-                                    onChange={() => setMarcados((s) => {
-                                      const n = new Set(s);
-                                      if (n.has(l.conceptoId)) n.delete(l.conceptoId); else n.add(l.conceptoId);
-                                      return n;
-                                    })}
-                                    className="mt-0.5 h-4 w-4 cursor-pointer accent-zero-600" />
-                                </td>
-                                <td className={`py-2.5 pr-2 ${apagado}`}>
-                                  <span className="block text-gray-900">{l.nombre}</span>
-                                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                                    {cuandoSeCobra(l)}
-                                    {l.opcional && (
-                                      <span className="rounded bg-gray-100 px-1.5 py-px text-[11px] text-gray-600">opcional</span>
-                                    )}
-                                    {esPropio && (
-                                      <span className="rounded bg-amber-50 px-1.5 py-px text-[11px] text-amber-800">precio propio</span>
-                                    )}
-                                    {l.origen === 'beca' && (
-                                      <span className="rounded bg-zero-50 px-1.5 py-px text-[11px] text-zero-700">con beca</span>
-                                    )}
-                                  </span>
-                                  {l.omitidas > 0 && (
-                                    <span className="mt-0.5 block text-xs text-amber-700">
-                                      no se le cobran {l.omitidas} cuota(s) de antes de su entrada
-                                    </span>
-                                  )}
-                                </td>
-                                <td className={`whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-gray-700 ${apagado}`}>
-                                  {l.omitidas > 0 ? `${vivas} de ${l.cuotas.length}` : vivas}
-                                </td>
-                                <td className={`whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-gray-700 ${apagado}`}>
-                                  {cuota == null ? <span className="text-gray-400">varía</span> : fmtRD(cuota)}
-                                </td>
-                                <td className={`whitespace-nowrap px-2 py-2.5 text-right font-medium tabular-nums text-gray-900 ${apagado}`}>
-                                  {fmtRD(l.totalCentavos)}
-                                </td>
-                                <td className="py-2 pr-3">
-                                  {puedeEditar && !editando && (
-                                    <div className="flex justify-end gap-1">
-                                      {esPropio && (
-                                        <button type="button" title={`Volver al precio del grado (${fmtRD(escritoDesdeTarifa(base, base.montoCentavos))}${modo === 'cuota' ? ' por cuota' : ''})`}
-                                          aria-label="Volver al precio del grado"
-                                          onClick={() => setPropios((m) => { const n = new Map(m); n.delete(l.conceptoId); return n; })}
-                                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
-                                          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-                                        </button>
-                                      )}
-                                      <button type="button" title="Cambiar precio para este alumno" aria-label={`Cambiar precio de ${l.nombre} para este alumno`}
-                                        onClick={() => abrirPrecio(base)}
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zero-200 text-zero-700 hover:bg-zero-50">
-                                        <Pencil className="h-3.5 w-3.5" aria-hidden />
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                              {editando && (
-                                <tr className="border-b border-gray-100 bg-zero-50/40">
-                                  <td />
-                                  <td colSpan={5} className="pb-3 pr-3 pt-0.5">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className="text-xs font-medium text-gray-700">
-                                        {modo === 'cuota' ? 'Precio por cuota' : 'Total del año'} para este alumno: RD$
-                                      </span>
-                                      <input
-                                        type="text" inputMode="decimal" autoFocus
-                                        value={borrador}
-                                        onChange={(e) => setBorrador(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') { e.preventDefault(); guardarPrecio(base); }
-                                          if (e.key === 'Escape') { cancelando.current = true; setEditandoId(null); }
-                                        }}
-                                        /*
-                                          Lo escrito se aplica al salir del campo: quien escribía el
-                                          precio y pulsaba directo «Crear matrícula» perdía su número.
-                                          Salvo si se va a Cancelar o se pulsó Escape: `onMouseDown`
-                                          corre antes que el blur, así que la bandera ya está puesta.
-                                        */
-                                        onBlur={() => {
-                                          if (cancelando.current) { cancelando.current = false; return; }
-                                          guardarPrecio(base);
-                                        }}
-                                        className="h-7 w-28 rounded border border-gray-300 bg-white px-2 text-sm tabular-nums focus:border-zero-500 focus:outline-none"
-                                      />
-                                      <button type="button" onClick={() => guardarPrecio(base)}
-                                        className="rounded bg-zero-600 px-2 py-1 text-xs font-medium text-white hover:bg-zero-700">
-                                        Aplicar
-                                      </button>
-                                      <button type="button"
-                                        onMouseDown={() => { cancelando.current = true; }}
-                                        onClick={() => setEditandoId(null)}
-                                        className="px-1.5 py-1 text-xs text-gray-500 hover:text-gray-700">
-                                        Cancelar
-                                      </button>
-                                      {modo === 'cuota' && vivas > 1 && escrito != null && (
-                                        <span className="text-xs text-gray-500">= {fmtRD(escrito * vivas)} en {vivas} cuotas</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
+                        {planEfectivo.slice(0, plan.length).map(fila)}
+                        {otros.length > 0 && (
+                          <tr className="border-b border-gray-100 bg-gray-50/60">
+                            <td colSpan={6} className="px-3 py-1.5">
+                              <button type="button" onClick={() => setVerOtros((v) => !v)} aria-expanded={verOtros}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-zero-700 hover:text-zero-800">
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${verOtros ? '' : '-rotate-90'}`} aria-hidden />
+                                {verOtros ? 'Ver menos' : `Ver más: ${otros.length} concepto(s) de otros grados`}
+                              </button>
+                              {verOtros && (
+                                <span className="ml-2 text-[11px] text-gray-500">
+                                  No son de este curso. El que marques se le cobra solo a este alumno, con su propio precio.
+                                </span>
                               )}
-                            </Fragment>
-                          );
-                        })}
+                            </td>
+                          </tr>
+                        )}
+                        {planEfectivo.slice(plan.length)
+                          .filter((l) => verOtros || marcados.has(l.conceptoId))
+                          .map(fila)}
                       </tbody>
                     </table>
                   </div>

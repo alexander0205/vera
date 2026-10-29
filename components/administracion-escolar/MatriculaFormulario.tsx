@@ -704,6 +704,9 @@ export function MatriculaFormulario({
                 // Poner el precio propio es configurar tarifas, no matricular:
                 // sin ese permiso la fila se enseña igual, pero sin editor.
                 onPrecios={puedeGestionar ? setPreciosPropios : undefined}
+                // «Ver más»: lo de otros grados, que se guarda como su
+                // tarifa propia con el resto de precios, antes de matricular.
+                conOtros
               />
             </div>
           )}

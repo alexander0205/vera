@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { contextoDeSeccion } from '@/lib/administracion-escolar/tarifas';
-import { armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
+import { armarPlanConOtros, armarPlanDeCobro } from '@/lib/administracion-escolar/plan-cobro';
 
 /**
  * Qué va a deber un alumno si se matricula en esta sección.
@@ -48,6 +48,10 @@ export async function GET(req: NextRequest) {
   }, estudianteId);
   if (!ctx) return NextResponse.json({ error: 'Curso no encontrado' }, { status: 404 });
 
+  // «Ver más»: también lo que cobran otros grados, para dárselo a este alumno.
+  if (q.get('otros') === '1') {
+    return NextResponse.json(await armarPlanConOtros(auth.teamId, ctx, desde));
+  }
   const lineas = await armarPlanDeCobro(auth.teamId, ctx, desde);
   return NextResponse.json({ lineas });
 }
