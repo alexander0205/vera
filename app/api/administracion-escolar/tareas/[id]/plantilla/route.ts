@@ -6,7 +6,9 @@
  *        Escribe el mensaje (el de la plantilla, o el que se editó en
  *        pantalla), cambia el estado y avisa por correo, campana, celular y
  *        Slack a quien creó la tarea, a los participantes y a los dueños del
- *        colegio. El mensaje lleva el enlace a la tarea.
+ *        colegio. El mensaje lleva el enlace a la tarea. «En revisión» además
+ *        le pone plazo: si en 24 horas nadie contesta, el cron
+ *        `escolar-tareas` la cierra sola.
  *
  * Solo el equipo de Zero (rol de plataforma `admin`): para el colegio, Soporte
  * IT es quien cierra lo que le pidieron.
@@ -16,7 +18,9 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarTareas, users } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { agregarMensaje, avisarDeTarea, cambiarEstadoTarea, leerTarea } from '@/lib/administracion-escolar/tareas';
+import {
+  agregarMensaje, avisarDeTarea, cambiarEstadoTarea, leerTarea, venceRevisionEn,
+} from '@/lib/administracion-escolar/tareas';
 import {
   autorTarea, esPlantilla, PLANTILLAS_SOPORTE, primerNombre, validarMensaje,
 } from '@/lib/administracion-escolar/tareas-reglas';
@@ -58,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await agregarMensaje(auth.teamId, id, autor, v.texto);
   // Si ya estaba así (p. ej. ya completada) solo sale el mensaje.
   const cambio = await cambiarEstadoTarea(auth.teamId, id, autor, p.accion);
+  if (p.accion === 'revision') await venceRevisionEn(auth.teamId, id);
   after(() => avisarDeTarea(auth.teamId, id, p.accion === 'completar' ? 'completada' : 'revision', autor, v.texto, { duenos: true }));
   logAudit({
     teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email,

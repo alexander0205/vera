@@ -37,8 +37,10 @@ interface TareaEnLista {
   id: number; titulo: string; estado: EstadoTarea; de: string; asignada: string;
   documento: string | null; creadaPorIa: boolean; venceEl: string | null;
   ultimo: { autor: string; texto: string; tipo: string; creadoEn: string } | null;
-  mensajes: number; actualizadoEn: string;
+  mensajes: number; actualizadoEn: string; turno: Turno | null;
 }
+/** A quién le toca contestar y desde cuándo (ver `turnoDe`). */
+export interface Turno { quien: 'soporte' | 'colegio'; nombre: string | null; desde: string; cierraEn: string | null }
 interface DocumentoFamilia { id: number; codigo: string; tipoEcf: string; fecha: string | null; montoTotal: number; anulado: boolean }
 interface Mensaje {
   id: number; tipo: 'mensaje' | 'evento' | 'ia' | 'adjunto'; userId: number | null; autor: string; texto: string; creadoEn: string;
@@ -48,6 +50,7 @@ interface Mensaje {
 export interface TareaCompleta {
   id: number; titulo: string; estado: EstadoTarea; de: string; fichaId: number | null; asignada: string;
   documento: string | null; ecfDocumentId: number | null; creadaPorIa: boolean; venceEl: string | null; mensajes: Mensaje[];
+  turno: Turno | null;
 }
 
 type Vista = { tipo: 'lista' } | { tipo: 'hilo'; id: number } | { tipo: 'nueva' };
@@ -113,6 +116,37 @@ export async function subirAdjunto(tareaId: number, archivo: File, onAvance?: (f
     if (!r.ok) throw new Error(e.error ?? `No se pudo subir «${archivo.name}»`);
     onAvance?.((n + 1) / total);
   }
+}
+
+/** «menos de 1 h», «5 h», «3 días». */
+function espera(desde: string, ahora = Date.now()) {
+  const horas = Math.floor((ahora - new Date(desde).getTime()) / 3_600_000);
+  if (horas < 1) return { texto: 'menos de 1 h', horas };
+  if (horas < 48) return { texto: `${horas} h`, horas };
+  return { texto: `${Math.floor(horas / 24)} días`, horas };
+}
+
+/**
+ * «Le toca a Soporte IT · 3 h» o «Le toca al colegio · Lizandro · 26 h»: quién
+ * tiene que contestar y cuánto lleva esperando. En rojo pasadas las 24 horas,
+ * que es cuando sale el correo urgente.
+ */
+export function TurnoChip({ turno }: { turno: Turno | null }) {
+  if (!turno) return null;
+  const e = espera(turno.desde);
+  const tarde = e.horas >= 24;
+  const quien = turno.quien === 'soporte' ? 'Le toca a Soporte IT' : `Le toca al colegio${turno.nombre ? ` · ${turno.nombre}` : ''}`;
+  const color = tarde ? 'bg-red-50 text-red-800 ring-red-200'
+    : turno.quien === 'soporte' ? 'bg-violet-50 text-violet-800 ring-violet-200' : 'bg-amber-50 text-amber-900 ring-amber-200';
+  const cierra = turno.cierraEn
+    ? ` · se cierra sola ${new Date(turno.cierraEn).toLocaleString('es-DO', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Santo_Domingo' })}`
+    : '';
+  return (
+    <span title={tarde ? 'Más de 24 horas sin respuesta: ya salió el correo urgente' : 'Quién tiene que contestar y cuánto lleva esperando'}
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${color}`}>
+      {quien} · {e.texto}{cierra}
+    </span>
+  );
 }
 
 export const Segmento = <T extends string>({ opciones, valor, onCambio, etiqueta }: {
@@ -242,6 +276,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
                         {t.de} · {t.asignada}
                         {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 font-semibold text-sky-800">En revisión</span>}
+                        <TurnoChip turno={t.turno} />
                         {t.creadaPorIa && <span className="rounded bg-violet-50 px-1.5 font-semibold text-violet-700">Zero AI</span>}
                         {t.documento && <span className="font-mono text-zero-700">{t.documento}</span>}
                       </span>
@@ -290,6 +325,7 @@ export function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
         </a>
       )}
       {tarea.venceEl && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-gray-700">Para el {tarea.venceEl.split('-').reverse().join('/')}</span>}
+      <TurnoChip turno={tarea.turno} />
     </div>
   );
 }

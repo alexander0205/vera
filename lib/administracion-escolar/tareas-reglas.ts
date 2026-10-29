@@ -132,7 +132,39 @@ export const textoEvento = {
   revision: (autor: string) => `${autor} pasó la tarea a revisión`,
 };
 
-export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'revision' | 'adjunto';
+/** Lo que deja el cron al cerrar sola una tarea que se quedó en revisión. */
+export const TEXTO_CIERRE_AUTOMATICO = 'Se cerró automáticamente: pasaron 24 horas en revisión sin respuesta. '
+  + 'Si algo no quedó bien, responde en esta tarea y la volvemos a abrir.';
+
+/** Cuánto espera una tarea en revisión (plantilla de Soporte) antes de cerrarse sola, y una parada antes del aviso urgente. */
+export const HORAS_SIN_RESPUESTA = 24;
+
+/** `urgente`: 24 horas sin movimiento, a quien le toca contestar (cron `escolar-tareas`). */
+export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'revision' | 'adjunto' | 'urgente';
+
+/**
+ * A quién le toca contestar una tarea parada, para el correo urgente.
+ *
+ * Una tarea de Soporte es trabajo nuestro mientras esté abierta, aunque lo
+ * último lo hayamos dicho nosotros («lo vamos a agregar»): nos toca a
+ * nosotros. Solo cuando la pasamos a revisión le toca al colegio confirmar.
+ *
+ * En una tarea de una persona: si lo último lo dijo Soporte, le toca a esa
+ * persona; si lo dijo ella, a quien la creó; si lo dijo otro, a ella. Sin
+ * nada escrito, a ella.
+ */
+export function turnoDe(t: {
+  estado: string; asignadaA: string; asignadaUserId: number | null; creadaPorUserId: number | null;
+  ultimo: { userId: number | null; esSoporte: boolean } | null;
+}): { soporte: boolean; colegio: boolean; usuarios: number[] } {
+  const colegio = (...ids: (number | null)[]) =>
+    ({ soporte: false, colegio: true, usuarios: [...new Set(ids.filter((x): x is number => x != null))] });
+  if (t.asignadaA === 'soporte') {
+    return t.estado === 'en_revision' ? colegio(t.creadaPorUserId) : { soporte: true, colegio: false, usuarios: [] };
+  }
+  if (!t.ultimo || t.ultimo.esSoporte) return colegio(t.asignadaUserId);
+  return colegio(t.ultimo.userId === t.asignadaUserId ? t.creadaPorUserId : t.asignadaUserId);
+}
 
 // ── Plantillas de Soporte IT ─────────────────────────────────────────────────
 
@@ -159,11 +191,12 @@ export const PLANTILLAS_SOPORTE: Record<PlantillaSoporte, {
   },
   revision: {
     etiqueta: 'En revisión: que la revise',
-    detalle: 'Le pide revisarla y confirmar; la pasa a «En revisión»',
+    detalle: 'Le pide revisarla; si no responde en 24 horas se cierra sola',
     accion: 'revision',
     boton: 'Enviar y pasar a revisión',
     texto: ({ nombre, url }) => `Hola${nombre ? ` ${nombre}` : ''}. Dejamos esta tarea en revisión. `
-      + `Por favor revísala y confírmanos si quedó bien: ${url}\n\nSi todo está correcto, puedes marcarla como completada.`,
+      + `Por favor revísala y confírmanos si quedó bien: ${url}\n\nSi no recibimos respuesta en 24 horas, `
+      + 'la cerramos automáticamente.',
   },
 };
 

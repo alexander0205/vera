@@ -9,7 +9,7 @@
  * hermanos. Las reglas sin base de datos están en `tareas-reglas.ts`.
  */
 import 'server-only';
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes, adminEscolarTareaAdjuntos, adminEscolarTareaMensajes, adminEscolarTareas, clients, ecfDocuments,
@@ -20,7 +20,8 @@ import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTa
 import { avisarTareaEnSlack } from './tareas-slack';
 import { notificarTarea } from '@/lib/notificaciones/tareas';
 import {
-  aQuienAvisar, DE_COLEGIO, DESTINO, etiquetaAsignada, PENDIENTES, textoEvento,
+  aQuienAvisar, AUTOR_SOPORTE, DE_COLEGIO, DESTINO, etiquetaAsignada, HORAS_SIN_RESPUESTA, PENDIENTES,
+  primerNombre, TEXTO_CIERRE_AUTOMATICO, textoEvento, turnoDe,
   type AccionEstado, type AutorTarea, type AvisoTarea, type EstadoTarea, type NuevoAdjunto, type NuevaTarea,
 } from './tareas-reglas';
 
@@ -94,6 +95,54 @@ export interface TareaEnLista {
   ultimo: { autor: string; texto: string; tipo: string; creadoEn: string } | null;
   mensajes: number;
   actualizadoEn: string;
+  turno: TurnoTarea | null;
+}
+
+/**
+ * A quién le toca contestar una tarea pendiente (ver `turnoDe`), y desde
+ * cuándo espera: lo que se lee en «Le toca a Soporte IT · 3 h». `null` en una
+ * completada.
+ */
+export interface TurnoTarea {
+  quien: 'soporte' | 'colegio';
+  /** El primer nombre de a quién le toca en el colegio, si se sabe. */
+  nombre: string | null;
+  /** La última vez que se movió la tarea. */
+  desde: string;
+  /** Se cierra sola a esta hora si sigue en revisión sin respuesta. */
+  cierraEn: string | null;
+}
+
+/** El turno de cada tarea pendiente, con el último que escribió en cada una. */
+async function turnosDe(filas: {
+  id: number; estado: string; asignadaA: string; asignadaUserId: number | null; creadaPorUserId: number | null;
+  actualizadoEn: Date; revisionVenceEn: Date | null;
+}[]): Promise<Map<number, TurnoTarea>> {
+  const pendientes = filas.filter((f) => PENDIENTES.includes(f.estado as EstadoTarea));
+  const turnos = new Map<number, TurnoTarea>();
+  if (pendientes.length === 0) return turnos;
+  const m = adminEscolarTareaMensajes;
+  const ultimos = await db.selectDistinctOn([m.tareaId], { tareaId: m.tareaId, userId: m.userId, autor: m.autor, tipo: m.tipo })
+    .from(m)
+    .where(and(inArray(m.tareaId, pendientes.map((f) => f.id)), inArray(m.tipo, ['mensaje', 'adjunto', 'ia'])))
+    .orderBy(m.tareaId, desc(m.creadoEn), desc(m.id));
+  const ultimoDe = new Map(ultimos.map((u) => [u.tareaId, u]));
+  const calculados = pendientes.map((f) => {
+    const u = ultimoDe.get(f.id);
+    return { f, t: turnoDe({ ...f, ultimo: u ? { userId: u.userId, esSoporte: u.autor === AUTOR_SOPORTE || u.tipo === 'ia' } : null }) };
+  });
+  const ids = [...new Set(calculados.flatMap(({ t }) => t.usuarios.slice(0, 1)))];
+  const nombres = new Map(ids.length === 0 ? [] : (await db.select({ id: users.id, name: users.name, email: users.email })
+    .from(users).where(inArray(users.id, ids))).map((u) => [u.id, primerNombre(u.name) ?? u.email]));
+  for (const { f, t } of calculados) {
+    turnos.set(f.id, {
+      quien: t.soporte ? 'soporte' : 'colegio',
+      nombre: t.usuarios[0] != null ? (nombres.get(t.usuarios[0]) ?? null) : null,
+      desde: f.actualizadoEn.toISOString(),
+      cierraEn: f.revisionVenceEn ? f.revisionVenceEn.toISOString() : null,
+    });
+  }
+  return turnos;
 }
 
 /** `abierta` trae las pendientes: abiertas y en revisión. */
@@ -107,6 +156,9 @@ export async function listarTareas(
     estado: adminEscolarTareas.estado,
     estudianteId: adminEscolarTareas.estudianteId,
     asignadaA: adminEscolarTareas.asignadaA,
+    asignadaUserId: adminEscolarTareas.asignadaUserId,
+    creadaPorUserId: adminEscolarTareas.creadaPorUserId,
+    revisionVenceEn: adminEscolarTareas.revisionVenceEn,
     persona,
     documento: ecfDocuments.codigo,
     creadaPorIa: adminEscolarTareas.creadaPorIa,
@@ -132,6 +184,7 @@ export async function listarTareas(
   const porTarea = new Map<number, typeof mensajes>();
   for (const m of mensajes) porTarea.set(m.tareaId, [...(porTarea.get(m.tareaId) ?? []), m]);
   const nombres = new Map(fam.alumnos.map((a) => [a.id, a.nombre]));
+  const turnos = await turnosDe(filas);
 
   return filas.map((f) => {
     const suyos = porTarea.get(f.id) ?? [];
@@ -149,6 +202,7 @@ export async function listarTareas(
       ultimo: ultimo ? { autor: ultimo.autor, texto: ultimo.texto, tipo: ultimo.tipo, creadoEn: ultimo.creadoEn.toISOString() } : null,
       mensajes: suyos.filter((m) => m.tipo !== 'evento').length,
       actualizadoEn: f.actualizadoEn.toISOString(),
+      turno: turnos.get(f.id) ?? null,
     };
   });
 }
@@ -205,6 +259,8 @@ export async function leerTarea(teamId: number, id: number) {
     id: adminEscolarTareas.id, titulo: adminEscolarTareas.titulo, descripcion: adminEscolarTareas.descripcion,
     estado: adminEscolarTareas.estado, estudianteId: adminEscolarTareas.estudianteId, clientId: adminEscolarTareas.clientId, alumno, fichaId,
     asignadaA: adminEscolarTareas.asignadaA, persona, documento: ecfDocuments.codigo,
+    asignadaUserId: adminEscolarTareas.asignadaUserId, creadaPorUserId: adminEscolarTareas.creadaPorUserId,
+    actualizadoEn: adminEscolarTareas.actualizadoEn, revisionVenceEn: adminEscolarTareas.revisionVenceEn,
     ecfDocumentId: adminEscolarTareas.ecfDocumentId, creadaPorIa: adminEscolarTareas.creadaPorIa,
     venceEl: adminEscolarTareas.venceEl,
   })
@@ -230,6 +286,7 @@ export async function leerTarea(teamId: number, id: number) {
     asignada: etiquetaAsignada(t.asignadaA, t.persona),
     documento: t.documento ?? null, ecfDocumentId: t.ecfDocumentId,
     creadaPorIa: t.creadaPorIa, venceEl: t.venceEl ? String(t.venceEl) : null,
+    turno: (await turnosDe([{ ...t, id }])).get(id) ?? null,
     mensajes: mensajes.map(({ adjuntoId, adjuntoMime, adjuntoBytes, ...m }) => ({
       ...m,
       creadoEn: m.creadoEn.toISOString(),
@@ -244,7 +301,10 @@ export async function agregarMensaje(teamId: number, id: number, autor: AutorTar
       .where(and(eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId))).limit(1);
     if (!t) return false;
     await tx.insert(adminEscolarTareaMensajes).values({ teamId, tareaId: id, tipo: 'mensaje', userId: autor.userId, autor: autor.nombre, texto });
-    await tx.update(adminEscolarTareas).set({ actualizadoEn: new Date() }).where(eq(adminEscolarTareas.id, id));
+    // Si contesta el colegio, la tarea ya no se cierra sola: ahora nos toca a nosotros.
+    await tx.update(adminEscolarTareas)
+      .set(autor.esSoporte ? { actualizadoEn: new Date() } : { actualizadoEn: new Date(), revisionVenceEn: null })
+      .where(eq(adminEscolarTareas.id, id));
     return true;
   });
 }
@@ -258,8 +318,8 @@ export async function cambiarEstadoTarea(teamId: number, id: number, autor: Auto
   return db.transaction(async (tx) => {
     const [fila] = await tx.update(adminEscolarTareas)
       .set(a === 'completada'
-        ? { estado: a, completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date() }
-        : { estado: a, completadaPorUserId: null, completadaEn: null, actualizadoEn: new Date() })
+        ? { estado: a, completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date(), revisionVenceEn: null }
+        : { estado: a, completadaPorUserId: null, completadaEn: null, actualizadoEn: new Date(), revisionVenceEn: null })
       .where(and(
         eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId), inArray(adminEscolarTareas.estado, desde),
       ))
@@ -303,8 +363,11 @@ const correosDeVerdad = () => process.env.VERCEL_ENV === 'production';
  */
 export async function avisarDeTarea(
   teamId: number, tareaId: number, aviso: AvisoTarea, autor: AutorTarea, texto: string | null,
-  /** `duenos`: también a los dueños del colegio (las plantillas de Soporte: ver la ruta `plantilla`). */
-  opts: { duenos?: boolean } = {},
+  /**
+   * `duenos`: también a los dueños del colegio (las plantillas de Soporte: ver la ruta `plantilla`).
+   * `para`: a quién, en vez de `aQuienAvisar` (el correo urgente decide por `turnoDe`).
+   */
+  opts: { duenos?: boolean; para?: { usuarios: number[]; soporte: boolean } } = {},
 ): Promise<void> {
   try {
     const t = await leerTarea(teamId, tareaId);
@@ -330,7 +393,7 @@ export async function avisarDeTarea(
 
     const participantes = [...new Set(t.mensajes
       .filter((m) => m.tipo === 'mensaje' && m.userId != null).map((m) => m.userId as number))];
-    const avisar = aQuienAvisar(fila, participantes, aviso, autor);
+    const avisar = opts.para ?? aQuienAvisar(fila, participantes, aviso, autor);
     const { soporte } = avisar;
     let usuarios = avisar.usuarios;
     if (opts.duenos) {
@@ -393,6 +456,8 @@ export interface FiltroColegio {
   origen: 'todas' | 'ia' | 'personas';
   /** `soporte`, `persona` o vacío para cualquiera. */
   asignada: string;
+  /** A quién le toca contestar: `soporte` (nosotros), `colegio` o vacío para cualquiera. */
+  esperando: string;
 }
 
 export interface TareaDelColegio {
@@ -407,6 +472,7 @@ export interface TareaDelColegio {
   creadaPorIa: boolean;
   creadoEn: string;
   actualizadoEn: string;
+  turno: TurnoTarea | null;
 }
 
 export interface FamiliaConTareas {
@@ -455,12 +521,13 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
   if (f.asignada) condiciones.push(eq(t.asignadaA, f.asignada));
 
   const persona = sql<string | null>`(SELECT coalesce(nullif(trim(u.name), ''), u.email) FROM users u WHERE u.id = ${t.asignadaUserId})`;
-  const filas = await db.select({
+  const filasTodas = await db.select({
     id: t.id, titulo: t.titulo, descripcion: t.descripcion, estado: t.estado,
     estudianteId: t.estudianteId, clientId: t.clientId,
     nombres: adminEscolarEstudiantes.nombres, apellidos: adminEscolarEstudiantes.apellidos,
     responsable: clients.razonSocial,
     asignadaA: t.asignadaA, persona, documento: ecfDocuments.codigo, creadaPorIa: t.creadaPorIa,
+    asignadaUserId: t.asignadaUserId, creadaPorUserId: t.creadaPorUserId, revisionVenceEn: t.revisionVenceEn,
     creadoEn: t.creadoEn, actualizadoEn: t.actualizadoEn,
   })
     .from(t)
@@ -470,6 +537,10 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
     .where(and(...condiciones))
     .orderBy(desc(t.actualizadoEn))
     .limit(300);
+
+  // A quién le toca cada una; «Esperando a» filtra por eso.
+  const turnos = await turnosDe(filasTodas);
+  const filas = f.esperando ? filasTodas.filter((x) => turnos.get(x.id)?.quien === f.esperando) : filasTodas;
 
   // Los hermanos de cada familia, para decir de quién se habla y llevar a una ficha.
   const clientIds = [...new Set(filas.map((x) => x.clientId).filter((x): x is number => x != null))];
@@ -520,6 +591,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
       asignadaA: x.asignadaA, asignada: etiquetaAsignada(x.asignadaA, x.persona),
       documento: x.documento ?? null, creadaPorIa: x.creadaPorIa,
       creadoEn: x.creadoEn.toISOString(), actualizadoEn: x.actualizadoEn.toISOString(),
+      turno: turnos.get(x.id) ?? null,
     });
   }
 
@@ -584,9 +656,99 @@ export async function cerrarAdjunto(teamId: number, tareaId: number, adjuntoId: 
     await tx.insert(adminEscolarTareaMensajes).values({
       teamId, tareaId, tipo: 'adjunto', userId: autor.userId, autor: autor.nombre, texto: nombre, adjuntoId,
     });
-    await tx.update(adminEscolarTareas).set({ actualizadoEn: new Date() }).where(eq(adminEscolarTareas.id, tareaId));
+    await tx.update(adminEscolarTareas)
+      .set(autor.esSoporte ? { actualizadoEn: new Date() } : { actualizadoEn: new Date(), revisionVenceEn: null })
+      .where(eq(adminEscolarTareas.id, tareaId));
     return true;
   });
+}
+
+// ── Lo que hace el cron cada hora: cierre automático y aviso urgente ─────────
+
+/** Soporte IT firmando por el sistema: el cron no tiene sesión. */
+const AUTOR_SISTEMA: AutorTarea = { userId: null, nombre: AUTOR_SOPORTE, esSoporte: true };
+
+/** La tarea que Soporte dejó en revisión se cierra sola si nadie contesta en 24 horas. */
+export async function venceRevisionEn(teamId: number, id: number, horas = HORAS_SIN_RESPUESTA) {
+  await db.update(adminEscolarTareas)
+    .set({ revisionVenceEn: new Date(Date.now() + horas * 3_600_000) })
+    .where(and(eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId), eq(adminEscolarTareas.estado, 'en_revision')));
+}
+
+/**
+ * Cierra las tareas en revisión cuyo plazo pasó sin respuesta: deja el
+ * mensaje, la completa y avisa (correo, campana, celular, Slack) a quien la
+ * creó, a los participantes y a los dueños. Devuelve cuántas cerró.
+ */
+export async function cerrarRevisionesVencidas(): Promise<number> {
+  const t = adminEscolarTareas;
+  const vencidas = await db.select({ id: t.id, teamId: t.teamId }).from(t)
+    .where(and(eq(t.estado, 'en_revision'), lte(t.revisionVenceEn, new Date())));
+  let cerradas = 0;
+  for (const v of vencidas) {
+    try {
+      // Se reclama antes de tocarla: si el colegio contestó entre medio, ya no tiene plazo.
+      const [suya] = await db.update(t).set({ revisionVenceEn: null })
+        .where(and(eq(t.id, v.id), eq(t.estado, 'en_revision'), lte(t.revisionVenceEn, new Date())))
+        .returning({ id: t.id });
+      if (!suya) continue;
+      await agregarMensaje(v.teamId, v.id, AUTOR_SISTEMA, TEXTO_CIERRE_AUTOMATICO);
+      if (!(await cambiarEstadoTarea(v.teamId, v.id, AUTOR_SISTEMA, 'completar'))) continue;
+      cerradas += 1;
+      await avisarDeTarea(v.teamId, v.id, 'completada', AUTOR_SISTEMA, TEXTO_CIERRE_AUTOMATICO, { duenos: true });
+    } catch (err) {
+      console.error('[tareas] no se pudo cerrar sola', v.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return cerradas;
+}
+
+/**
+ * Las tareas pendientes que llevan 24 horas sin movimiento: un correo URGENTE
+ * (y campana, celular y Slack) a quien le toca contestar (`turnoDe`). Uno por
+ * cada vez que se queda parada: `urgente_enviado_en` no vuelve a dispararse
+ * hasta que haya movimiento nuevo. Las que se cierran solas no entran.
+ */
+export async function avisarTareasSinRespuesta(): Promise<number> {
+  const t = adminEscolarTareas;
+  const limite = new Date(Date.now() - HORAS_SIN_RESPUESTA * 3_600_000);
+  const paradas = await db.select({
+    id: t.id, teamId: t.teamId, estado: t.estado, asignadaA: t.asignadaA, asignadaUserId: t.asignadaUserId,
+    creadaPorUserId: t.creadaPorUserId,
+  }).from(t)
+    .where(and(
+      inArray(t.estado, PENDIENTES), isNull(t.revisionVenceEn), lt(t.actualizadoEn, limite),
+      or(isNull(t.urgenteEnviadoEn), lt(t.urgenteEnviadoEn, t.actualizadoEn)),
+    ));
+  let avisadas = 0;
+  for (const p of paradas) {
+    try {
+      const [ultimo] = await db.select({
+        userId: adminEscolarTareaMensajes.userId, autor: adminEscolarTareaMensajes.autor, tipo: adminEscolarTareaMensajes.tipo,
+      }).from(adminEscolarTareaMensajes)
+        .where(and(eq(adminEscolarTareaMensajes.tareaId, p.id), inArray(adminEscolarTareaMensajes.tipo, ['mensaje', 'adjunto', 'ia'])))
+        .orderBy(desc(adminEscolarTareaMensajes.creadoEn), desc(adminEscolarTareaMensajes.id))
+        .limit(1);
+      const turno = turnoDe({
+        ...p,
+        ultimo: ultimo ? { userId: ultimo.userId, esSoporte: ultimo.autor === AUTOR_SOPORTE || ultimo.tipo === 'ia' } : null,
+      });
+      const [suya] = await db.update(t).set({ urgenteEnviadoEn: new Date() })
+        .where(and(eq(t.id, p.id), or(isNull(t.urgenteEnviadoEn), lt(t.urgenteEnviadoEn, t.actualizadoEn))))
+        .returning({ id: t.id });
+      if (!suya) continue;
+      const texto = turno.soporte
+        ? 'Esta tarea lleva más de 24 horas esperando respuesta de Soporte IT.'
+        : 'Esta tarea lleva más de 24 horas esperando tu respuesta. Entra y respóndela, o márcala como completada si ya se resolvió.';
+      await avisarDeTarea(p.teamId, p.id, 'urgente', AUTOR_SISTEMA, texto, {
+        para: { usuarios: turno.usuarios, soporte: turno.soporte }, duenos: turno.colegio,
+      });
+      avisadas += 1;
+    } catch (err) {
+      console.error('[tareas] no salió el aviso urgente', p.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return avisadas;
 }
 
 // ── La factura relacionada ───────────────────────────────────────────────────

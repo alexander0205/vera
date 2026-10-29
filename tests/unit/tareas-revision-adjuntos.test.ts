@@ -187,3 +187,34 @@ describe('plantillas de Soporte IT', () => {
     expect(esPlantilla('toString')).toBe(false);
   });
 });
+
+describe('24 horas sin respuesta', () => {
+  const soporte = { estado: 'abierta', asignadaA: 'soporte', asignadaUserId: null, creadaPorUserId: 35 };
+  it('una tarea de Soporte abierta es trabajo nuestro, aunque lo último lo hayamos dicho nosotros', async () => {
+    const { turnoDe } = await import('@/lib/administracion-escolar/tareas-reglas');
+    const nuestro = { soporte: true, colegio: false, usuarios: [] };
+    expect(turnoDe({ ...soporte, ultimo: { userId: 1, esSoporte: true } })).toEqual(nuestro);
+    expect(turnoDe({ ...soporte, ultimo: { userId: 35, esSoporte: false } })).toEqual(nuestro);
+    expect(turnoDe({ ...soporte, ultimo: null })).toEqual(nuestro);
+  });
+  it('si la pasamos a revisión, le toca al colegio: a quien la creó', async () => {
+    const { turnoDe } = await import('@/lib/administracion-escolar/tareas-reglas');
+    expect(turnoDe({ ...soporte, estado: 'en_revision', ultimo: { userId: 1, esSoporte: true } }))
+      .toEqual({ soporte: false, colegio: true, usuarios: [35] });
+  });
+  it('en una tarea de una persona: si escribió ella, le toca a quien la creó; si no, a ella', async () => {
+    const { turnoDe } = await import('@/lib/administracion-escolar/tareas-reglas');
+    const t = { estado: 'abierta', asignadaA: 'persona', asignadaUserId: 50, creadaPorUserId: 35 };
+    expect(turnoDe({ ...t, ultimo: { userId: 50, esSoporte: false } }).usuarios).toEqual([35]);
+    expect(turnoDe({ ...t, ultimo: { userId: 35, esSoporte: false } }).usuarios).toEqual([50]);
+    expect(turnoDe({ ...t, ultimo: { userId: 1, esSoporte: true } }).usuarios).toEqual([50]);
+    expect(turnoDe({ ...t, ultimo: null }).usuarios).toEqual([50]);
+  });
+  it('el correo urgente lo dice en el asunto; la plantilla de revisión avisa del cierre en 24 horas', async () => {
+    const { PLANTILLAS_SOPORTE } = await import('@/lib/administracion-escolar/tareas-reglas');
+    expect(armarCorreoTarea({ ...BASE, aviso: 'urgente', texto: 'x' }).asunto).toBe('URGENTE · 24 horas sin respuesta: Saber');
+    expect(PLANTILLAS_SOPORTE.revision.texto({ nombre: 'Lizandro', url: 'u' })).toContain('Si no recibimos respuesta en 24 horas, la cerramos automáticamente.');
+    const { blocks } = armarSlackTarea({ ...BASE, aviso: 'urgente', estado: 'abierta', texto: 'x' });
+    expect(JSON.stringify(blocks)).toContain('🚨');
+  });
+});

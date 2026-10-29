@@ -62,6 +62,8 @@ function redactar(d: DatosAvisoTarea): { asunto: string; intro: string } {
       return { asunto: `En revisión: ${t}`, intro: `${d.autor} pasó a revisión una tarea de ${d.colegio}.` };
     case 'adjunto':
       return { asunto: `${d.autor} subió un archivo: ${t}`, intro: `${d.autor} subió un archivo a una tarea de ${d.colegio}.` };
+    case 'urgente':
+      return { asunto: `URGENTE · 24 horas sin respuesta: ${t}`, intro: `Una tarea de ${d.colegio} lleva más de 24 horas sin respuesta.` };
   }
 }
 
