@@ -6,6 +6,11 @@ import useSWR from 'swr';
 import { ArrowLeft, Download, Grid3x3, Loader2, Search, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cambioParaPaquete, conceptosTrasCambio } from '@/lib/administracion-escolar/servicios-alumnos';
+import { FiltroEstructura } from '@/components/administracion-escolar/FiltroEstructura';
+import {
+  completarFiltro, normalizarFiltro, seccionesDelFiltro, TODOS_LOS_CURSOS,
+  type CursoFiltrable, type FiltroGrupo,
+} from '@/lib/administracion-escolar/filtro-curso';
 
 /**
  * «Servicios por alumno»: una fila por matrícula activa, una columna por
@@ -18,7 +23,7 @@ interface Concepto { id: number; nombre: string; opcional: boolean; categoria: s
 interface Paquete { id: number; nombre: string; conceptosIds: number[] }
 interface Fila {
   matriculaId: number; estudianteId: number; nombre: string; codigo: string | null;
-  grado: string; seccion: string; cursoId: number;
+  grado: string; seccion: string; cursoId: number; gradoId: number; servicioId: number;
   conceptosIds: number[]; conTarifa: number[];
   beca: { tipo: string; valor: number | null } | null;
 }
@@ -39,8 +44,9 @@ export default function ServiciosPorAlumno() {
   const [pendiente, setPendiente] = useState<Pendiente>(new Map());
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
   const [busqueda, setBusqueda] = useState('');
-  const [grado, setGrado] = useState('');
-  const [seccion, setSeccion] = useState('');
+  const [filtroEstr, setFiltroEstr] = useState<FiltroGrupo>(TODOS_LOS_CURSOS);
+  const { data: cursosData } = useSWR<{ cursos: CursoFiltrable[] }>('/api/administracion-escolar/cursos', traer,
+    { revalidateOnFocus: false });
   const [anular, setAnular] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState<{ tono: 'ok' | 'error'; texto: string } | null>(null);
@@ -57,13 +63,20 @@ export default function ServiciosPorAlumno() {
     return p ? conceptosTrasCambio(f.conceptosIds, { agregar: [...p.agregar], quitar: [...p.quitar] }) : f.conceptosIds;
   };
 
-  const grados = useMemo(() => [...new Set(filas.map((f) => f.grado))], [filas]);
-  const secciones = useMemo(() => [...new Set(filas.filter((f) => !grado || f.grado === grado).map((f) => f.seccion))], [filas, grado]);
+  const cursos = useMemo(() => cursosData?.cursos ?? [], [cursosData]);
+  const periodoId = data?.periodo?.id ?? null;
+  // Por id y no por nombre: «Primero» de la tanda matutina y el de la
+  // vespertina se fundían en uno, y «Sección A» traía la A de todos los grados.
   const visibles = useMemo(() => {
-    const q = busqueda.trim().toLocaleLowerCase('es');
-    return filas.filter((f) => (!grado || f.grado === grado) && (!seccion || f.seccion === seccion)
-      && (!q || `${f.nombre} ${f.codigo ?? ''}`.toLocaleLowerCase('es').includes(q)));
-  }, [filas, grado, seccion, busqueda]);
+    const ids = seccionesDelFiltro(cursos, periodoId, normalizarFiltro(cursos, periodoId, completarFiltro(cursos, filtroEstr)));
+    const dentro = ids ? new Set(ids) : null;
+    const q = sinAcentos(busqueda.trim());
+    return filas.filter((f) => (!dentro || dentro.has(f.cursoId))
+      && (!q || sinAcentos(`${f.nombre} ${f.codigo ?? ''}`).includes(q)));
+  }, [filas, cursos, periodoId, filtroEstr, busqueda]);
+  // Lo marcado que sigue a la vista: un filtro que esconde a alguien no puede
+  // dejar que el lote le cambie los servicios sin verlo.
+  const seleccionVisible = useMemo(() => visibles.filter((f) => seleccion.has(f.matriculaId)), [visibles, seleccion]);
 
   /** Pone una casilla en el estado pedido, guardando solo la diferencia con lo que hay. */
   function poner(p: Pendiente, f: Fila, conceptoId: number, quiere: boolean) {
@@ -83,7 +96,7 @@ export default function ServiciosPorAlumno() {
     return n;
   });
 
-  const objetivo = () => (seleccion.size > 0 ? filas.filter((f) => seleccion.has(f.matriculaId)) : visibles);
+  const objetivo = () => (seleccionVisible.length > 0 ? seleccionVisible : visibles);
 
   function aplicarPaquete(pq: Paquete) {
     cambiar((p) => {
@@ -199,17 +212,10 @@ export default function ServiciosPorAlumno() {
           <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar alumno o código…"
             className="h-9 w-56 rounded-md border border-gray-300 pl-8 pr-2 text-sm focus:border-zero-500 focus:outline-none" />
         </label>
-        <select value={grado} onChange={(e) => { setGrado(e.target.value); setSeccion(''); }} className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm">
-          <option value="">Todos los grados</option>
-          {grados.map((g) => <option key={g} value={g}>{g}</option>)}
-        </select>
-        <select value={seccion} onChange={(e) => setSeccion(e.target.value)} className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm">
-          <option value="">Todas las secciones</option>
-          {secciones.map((s) => <option key={s} value={s}>Sección {s}</option>)}
-        </select>
+        <FiltroEstructura cursos={cursos} periodoId={periodoId} filtro={filtroEstr} onChange={setFiltroEstr} className="h-9 w-44 text-sm" />
         <span className="mx-1 h-6 w-px bg-gray-200" />
         <span className="text-xs text-gray-500">
-          {seleccion.size > 0 ? `A ${seleccion.size} seleccionado(s):` : `A los ${visibles.length} de la lista:`}
+          {seleccionVisible.length > 0 ? `A ${seleccionVisible.length} seleccionado(s):` : `A los ${visibles.length} de la lista:`}
         </span>
         {paquetes.length > 0 && (
           <select value="" onChange={(e) => { const pq = paquetes.find((x) => x.id === Number(e.target.value)); if (pq) aplicarPaquete(pq); }}
@@ -322,4 +328,9 @@ export default function ServiciosPorAlumno() {
       )}
     </section>
   );
+}
+
+/** Para buscar «Jose» y encontrar «José». */
+function sinAcentos(t: string): string {
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 }

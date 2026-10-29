@@ -79,6 +79,26 @@ export function normalizarFiltro(
 }
 
 /**
+ * Rellena los niveles de arriba cuando el filtro viene solo con el de abajo:
+ * un enlace viejo `?curso=12` (antes Estudiantes solo filtraba por sección) o
+ * un grado sin su servicio. Sin esto `normalizarFiltro`, que exige cada nivel
+ * colgado del anterior, lo tiraría entero y el enlace dejaría de filtrar.
+ */
+export function completarFiltro(cursos: CursoFiltrable[], filtro: FiltroGrupo): FiltroGrupo {
+  if (filtro.cursoId != null) {
+    const c = cursos.find((x) => x.id === filtro.cursoId);
+    if (c && filtro.servicioId == null && filtro.gradoId == null) {
+      return { servicioId: c.servicioId, gradoId: c.gradoId, cursoId: c.id };
+    }
+  }
+  if (filtro.gradoId != null && filtro.servicioId == null) {
+    const c = cursos.find((x) => x.gradoId === filtro.gradoId);
+    if (c) return { servicioId: c.servicioId, gradoId: c.gradoId, cursoId: filtro.cursoId };
+  }
+  return filtro;
+}
+
+/**
  * Las secciones que entran en el filtro, dentro del año escolar elegido.
  *
  * `null` es «Todos los cursos»: no hay nada que acotar y no se manda lista.
