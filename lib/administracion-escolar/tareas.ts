@@ -12,12 +12,15 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
-  adminEscolarEstudiantes, adminEscolarTareaMensajes, adminEscolarTareas, clients, ecfDocuments, teamMembers, teams, users,
+  adminEscolarEstudiantes, adminEscolarTareaAdjuntos, adminEscolarTareaMensajes, adminEscolarTareas, clients, ecfDocuments,
+  teamMembers, teams, users,
 } from '@/lib/db/schema';
 import { SOPORTE } from '@/lib/config/soporte';
 import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
+import { avisarTareaEnSlack } from './tareas-slack';
 import {
-  aQuienAvisar, DE_COLEGIO, etiquetaAsignada, textoEvento, type AutorTarea, type AvisoTarea, type NuevaTarea,
+  aQuienAvisar, DE_COLEGIO, DESTINO, etiquetaAsignada, PENDIENTES, textoEvento,
+  type AccionEstado, type AutorTarea, type AvisoTarea, type EstadoTarea, type NuevoAdjunto, type NuevaTarea,
 } from './tareas-reglas';
 
 export interface FamiliaDeAlumno {
@@ -65,12 +68,12 @@ function filtroDe(teamId: number, fam: FamiliaDeAlumno, alcance: 'alumno' | 'fam
   );
 }
 
-/** Cuántas abiertas hay del alumno y de su familia: los números de las dos campanas. */
+/** Cuántas pendientes (abiertas o en revisión) hay del alumno y de su familia: los números de las dos campanas. */
 export async function conteoDeTareas(teamId: number, fam: FamiliaDeAlumno) {
   const contar = async (alcance: 'alumno' | 'familia') => {
     const [r] = await db.select({ n: sql<number>`count(*)::int` })
       .from(adminEscolarTareas)
-      .where(and(filtroDe(teamId, fam, alcance), eq(adminEscolarTareas.estado, 'abierta')));
+      .where(and(filtroDe(teamId, fam, alcance), inArray(adminEscolarTareas.estado, PENDIENTES)));
     return r?.n ?? 0;
   };
   const [alumno, familia] = await Promise.all([contar('alumno'), contar('familia')]);
@@ -80,7 +83,7 @@ export async function conteoDeTareas(teamId: number, fam: FamiliaDeAlumno) {
 export interface TareaEnLista {
   id: number;
   titulo: string;
-  estado: 'abierta' | 'completada';
+  estado: EstadoTarea;
   /** De quién es: el nombre del alumno, o «Toda la familia». */
   de: string;
   asignada: string;
@@ -92,6 +95,7 @@ export interface TareaEnLista {
   actualizadoEn: string;
 }
 
+/** `abierta` trae las pendientes: abiertas y en revisión. */
 export async function listarTareas(
   teamId: number, fam: FamiliaDeAlumno, alcance: 'alumno' | 'familia', estado: 'abierta' | 'completada',
 ): Promise<TareaEnLista[]> {
@@ -110,7 +114,8 @@ export async function listarTareas(
   })
     .from(adminEscolarTareas)
     .leftJoin(ecfDocuments, eq(ecfDocuments.id, adminEscolarTareas.ecfDocumentId))
-    .where(and(filtroDe(teamId, fam, alcance), eq(adminEscolarTareas.estado, estado)))
+    .where(and(filtroDe(teamId, fam, alcance), estado === 'abierta'
+      ? inArray(adminEscolarTareas.estado, PENDIENTES) : eq(adminEscolarTareas.estado, 'completada')))
     .orderBy(desc(adminEscolarTareas.actualizadoEn))
     .limit(200);
   if (filas.length === 0) return [];
@@ -210,8 +215,11 @@ export async function leerTarea(teamId: number, id: number) {
   const mensajes = await db.select({
     id: adminEscolarTareaMensajes.id, tipo: adminEscolarTareaMensajes.tipo, userId: adminEscolarTareaMensajes.userId,
     autor: adminEscolarTareaMensajes.autor, texto: adminEscolarTareaMensajes.texto, creadoEn: adminEscolarTareaMensajes.creadoEn,
+    adjuntoId: adminEscolarTareaAdjuntos.id, adjuntoMime: adminEscolarTareaAdjuntos.mime, adjuntoBytes: adminEscolarTareaAdjuntos.bytes,
   })
     .from(adminEscolarTareaMensajes)
+    .leftJoin(adminEscolarTareaAdjuntos, and(
+      eq(adminEscolarTareaAdjuntos.id, adminEscolarTareaMensajes.adjuntoId), eq(adminEscolarTareaAdjuntos.subido, true)))
     .where(eq(adminEscolarTareaMensajes.tareaId, id))
     .orderBy(asc(adminEscolarTareaMensajes.creadoEn), asc(adminEscolarTareaMensajes.id));
   return {
@@ -221,7 +229,11 @@ export async function leerTarea(teamId: number, id: number) {
     asignada: etiquetaAsignada(t.asignadaA, t.persona),
     documento: t.documento ?? null, ecfDocumentId: t.ecfDocumentId,
     creadaPorIa: t.creadaPorIa, venceEl: t.venceEl ? String(t.venceEl) : null,
-    mensajes: mensajes.map((m) => ({ ...m, creadoEn: m.creadoEn.toISOString() })),
+    mensajes: mensajes.map(({ adjuntoId, adjuntoMime, adjuntoBytes, ...m }) => ({
+      ...m,
+      creadoEn: m.creadoEn.toISOString(),
+      adjunto: adjuntoId != null ? { id: adjuntoId, mime: adjuntoMime ?? '', bytes: adjuntoBytes ?? 0 } : null,
+    })),
   };
 }
 
@@ -236,25 +248,26 @@ export async function agregarMensaje(teamId: number, id: number, autor: AutorTar
   });
 }
 
-/** Completar o volver a abrir. Deja su línea en la conversación. `null` si no existe o ya estaba así. */
-export async function cambiarEstadoTarea(
-  teamId: number, id: number, autor: AutorTarea, accion: 'completar' | 'reabrir',
-) {
+/**
+ * Completar, pasar a revisión o volver a abrir (ver `DESTINO`). Deja su línea
+ * en la conversación. `null` si no existe o ya estaba así.
+ */
+export async function cambiarEstadoTarea(teamId: number, id: number, autor: AutorTarea, accion: AccionEstado) {
+  const { a, desde } = DESTINO[accion];
   return db.transaction(async (tx) => {
-    const completar = accion === 'completar';
     const [fila] = await tx.update(adminEscolarTareas)
-      .set(completar
-        ? { estado: 'completada', completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date() }
-        : { estado: 'abierta', completadaPorUserId: null, completadaEn: null, actualizadoEn: new Date() })
+      .set(a === 'completada'
+        ? { estado: a, completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date() }
+        : { estado: a, completadaPorUserId: null, completadaEn: null, actualizadoEn: new Date() })
       .where(and(
-        eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId),
-        eq(adminEscolarTareas.estado, completar ? 'abierta' : 'completada'),
+        eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId), inArray(adminEscolarTareas.estado, desde),
       ))
       .returning({ id: adminEscolarTareas.id });
     if (!fila) return null;
+    const texto = a === 'completada' ? textoEvento.completada(autor.nombre)
+      : a === 'en_revision' ? textoEvento.revision(autor.nombre) : textoEvento.reabierta(autor.nombre);
     await tx.insert(adminEscolarTareaMensajes).values({
-      teamId, tareaId: id, tipo: 'evento', userId: autor.userId, autor: autor.nombre,
-      texto: completar ? textoEvento.completada(autor.nombre) : textoEvento.reabierta(autor.nombre),
+      teamId, tareaId: id, tipo: 'evento', userId: autor.userId, autor: autor.nombre, texto,
     });
     return fila.id;
   });
@@ -281,9 +294,10 @@ export async function personasDelColegio(teamId: number) {
 const correosDeVerdad = () => process.env.VERCEL_ENV === 'production';
 
 /**
- * Avisa por correo del cambio a quien le toca (ver `aQuienAvisar`). Nunca
- * lanza: la tarea ya quedó guardada, y un correo que no sale no la deshace.
- * Se llama con `after()` desde la ruta, para no hacer esperar a quien escribe.
+ * Avisa del cambio: por correo a quien le toca (ver `aQuienAvisar`) y, todo,
+ * al canal de Slack del equipo de Zero. Nunca lanza: la tarea ya quedó
+ * guardada, y un aviso que no sale no la deshace. Se llama con `after()` desde
+ * la ruta, para no hacer esperar a quien escribe.
  */
 export async function avisarDeTarea(
   teamId: number, tareaId: number, aviso: AvisoTarea, autor: AutorTarea, texto: string | null,
@@ -300,6 +314,16 @@ export async function avisarDeTarea(
       .where(eq(adminEscolarTareas.id, tareaId))
       .limit(1);
     if (!fila) return;
+
+    if (correosDeVerdad()) {
+      await avisarTareaEnSlack({
+        aviso, colegio: fila.colegio, tareaId, titulo: t.titulo, de: t.de, asignada: t.asignada,
+        estado: t.estado as EstadoTarea, autor: autor.nombre, texto, documento: t.documento,
+      });
+    } else {
+      console.info('[tareas] slack sin enviar (fuera de producción)', { tareaId, aviso });
+    }
+
     const participantes = [...new Set(t.mensajes
       .filter((m) => m.tipo === 'mensaje' && m.userId != null).map((m) => m.userId as number))];
     const { usuarios, soporte } = aQuienAvisar(fila, participantes, aviso, autor);
@@ -337,16 +361,17 @@ const sonMias = (yo: QuienMira) => or(
   yo.esSoporte ? eq(adminEscolarTareas.asignadaA, 'soporte') : sql`false`,
 )!;
 
-/** El número de la campana: las abiertas que le tocan a quien mira. */
+/** El número de la campana: las pendientes (abiertas o en revisión) que le tocan a quien mira. */
 export async function conteoMias(teamId: number, yo: QuienMira): Promise<number> {
   const [r] = await db.select({ n: sql<number>`count(*)::int` })
     .from(adminEscolarTareas)
-    .where(and(eq(adminEscolarTareas.teamId, teamId), eq(adminEscolarTareas.estado, 'abierta'), sonMias(yo)));
+    .where(and(eq(adminEscolarTareas.teamId, teamId), inArray(adminEscolarTareas.estado, PENDIENTES), sonMias(yo)));
   return r?.n ?? 0;
 }
 
 export interface FiltroColegio {
-  vista: 'mias' | 'todas' | 'hechas';
+  /** `mias` y `todas` son las pendientes (abiertas y en revisión). */
+  vista: 'mias' | 'todas' | 'revision' | 'hechas';
   origen: 'todas' | 'ia' | 'personas';
   /** `soporte`, `persona` o vacío para cualquiera. */
   asignada: string;
@@ -356,7 +381,7 @@ export interface TareaDelColegio {
   id: number;
   titulo: string;
   descripcion: string | null;
-  estado: 'abierta' | 'completada';
+  estado: EstadoTarea;
   de: string;
   asignadaA: string;
   asignada: string;
@@ -389,19 +414,23 @@ const enLista = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0,
 export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroColegio) {
   const t = adminEscolarTareas;
   const mias = sonMias(yo);
+  // «Abiertas» en los números son las pendientes: abiertas y en revisión.
+  const pendiente = sql`${t.estado} in ('abierta', 'en_revision')`;
   const [c] = await db.select({
-    abiertas: sql<number>`count(*) filter (where ${t.estado} = 'abierta')::int`,
-    mias: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${mias})::int`,
+    abiertas: sql<number>`count(*) filter (where ${pendiente})::int`,
+    mias: sql<number>`count(*) filter (where ${pendiente} and ${mias})::int`,
+    revision: sql<number>`count(*) filter (where ${t.estado} = 'en_revision')::int`,
     hechas: sql<number>`count(*) filter (where ${t.estado} = 'completada')::int`,
-    ia: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.creadaPorIa})::int`,
-    viejas: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.creadoEn} < now() - interval '7 days')::int`,
-    familias: sql<number>`count(distinct coalesce(${t.clientId}::text, 'e' || ${t.estudianteId}::text)) filter (where ${t.estado} = 'abierta')::int`,
-    colegio: sql<number>`count(*) filter (where ${t.estado} = 'abierta' and ${t.clientId} is null and ${t.estudianteId} is null)::int`,
+    ia: sql<number>`count(*) filter (where ${pendiente} and ${t.creadaPorIa})::int`,
+    viejas: sql<number>`count(*) filter (where ${pendiente} and ${t.creadoEn} < now() - interval '7 days')::int`,
+    familias: sql<number>`count(distinct coalesce(${t.clientId}::text, 'e' || ${t.estudianteId}::text)) filter (where ${pendiente})::int`,
+    colegio: sql<number>`count(*) filter (where ${pendiente} and ${t.clientId} is null and ${t.estudianteId} is null)::int`,
   }).from(t).where(eq(t.teamId, teamId));
 
   const condiciones = [eq(t.teamId, teamId)];
   if (f.vista === 'hechas') condiciones.push(eq(t.estado, 'completada'));
-  else condiciones.push(eq(t.estado, 'abierta'));
+  else if (f.vista === 'revision') condiciones.push(eq(t.estado, 'en_revision'));
+  else condiciones.push(inArray(t.estado, PENDIENTES));
   if (f.vista === 'mias') condiciones.push(mias);
   if (f.origen === 'ia') condiciones.push(eq(t.creadaPorIa, true));
   if (f.origen === 'personas') condiciones.push(eq(t.creadaPorIa, false));
@@ -443,7 +472,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
   const abiertasPor = new Map<string, number>();
   const claves = clientIds.length === 0 ? [] : await db.select({ clientId: t.clientId, n: sql<number>`count(*)::int` })
     .from(t)
-    .where(and(eq(t.teamId, teamId), eq(t.estado, 'abierta'), inArray(t.clientId, clientIds)))
+    .where(and(eq(t.teamId, teamId), inArray(t.estado, PENDIENTES), inArray(t.clientId, clientIds)))
     .groupBy(t.clientId);
   for (const k of claves) abiertasPor.set(`c${k.clientId}`, k.n);
 
@@ -466,9 +495,9 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
       };
       familias.set(clave, fam);
     }
-    if (x.clientId == null && clave !== CLAVE_COLEGIO && x.estado === 'abierta') fam.abiertas += 1;
+    if (x.clientId == null && clave !== CLAVE_COLEGIO && PENDIENTES.includes(x.estado as EstadoTarea)) fam.abiertas += 1;
     fam.tareas.push({
-      id: x.id, titulo: x.titulo, descripcion: x.descripcion, estado: x.estado as TareaDelColegio['estado'],
+      id: x.id, titulo: x.titulo, descripcion: x.descripcion, estado: x.estado as EstadoTarea,
       de: deQuien(x.estudianteId, x.clientId, alumno),
       asignadaA: x.asignadaA, asignada: etiquetaAsignada(x.asignadaA, x.persona),
       documento: x.documento ?? null, creadaPorIa: x.creadaPorIa,
@@ -479,10 +508,67 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
   // Las del colegio arriba: no tienen ficha a la que ir, y abajo se pierden entre las familias.
   const grupos = [...familias.values()].sort((a, b) => Number(b.clave === CLAVE_COLEGIO) - Number(a.clave === CLAVE_COLEGIO));
   return {
-    cuentas: { mias: c?.mias ?? 0, todas: c?.abiertas ?? 0, hechas: c?.hechas ?? 0 },
+    cuentas: { mias: c?.mias ?? 0, todas: c?.abiertas ?? 0, revision: c?.revision ?? 0, hechas: c?.hechas ?? 0 },
     kpis: { abiertas: c?.abiertas ?? 0, familias: c?.familias ?? 0, colegio: c?.colegio ?? 0, mias: c?.mias ?? 0, ia: c?.ia ?? 0, viejas: c?.viejas ?? 0 },
     familias: grupos,
   };
+}
+
+// ── Archivos adjuntos ────────────────────────────────────────────────────────
+
+/** Abre la subida de un archivo. `null` si la tarea no es de este colegio. */
+export async function crearAdjunto(teamId: number, tareaId: number, userId: number, a: NuevoAdjunto, s3Key: string) {
+  const [t] = await db.select({ id: adminEscolarTareas.id }).from(adminEscolarTareas)
+    .where(and(eq(adminEscolarTareas.id, tareaId), eq(adminEscolarTareas.teamId, teamId))).limit(1);
+  if (!t) return null;
+  const [fila] = await db.insert(adminEscolarTareaAdjuntos).values({
+    teamId, tareaId, userId, nombre: a.nombre, mime: a.mime, bytes: a.bytes, s3Key,
+  }).returning({ id: adminEscolarTareaAdjuntos.id });
+  return fila.id;
+}
+
+export async function leerAdjunto(teamId: number, tareaId: number, adjuntoId: number) {
+  const [a] = await db.select().from(adminEscolarTareaAdjuntos)
+    .where(and(
+      eq(adminEscolarTareaAdjuntos.id, adjuntoId), eq(adminEscolarTareaAdjuntos.teamId, teamId),
+      eq(adminEscolarTareaAdjuntos.tareaId, tareaId),
+    ))
+    .limit(1);
+  return a ?? null;
+}
+
+/**
+ * Guarda cómo va la subida después de un trozo. Solo si nadie la movió
+ * mientras tanto: `trozosAntes` es el turno que se procesó.
+ */
+export async function guardarSubida(
+  adjuntoId: number, trozosAntes: number,
+  e: { uploadId: string | null; partes: { PartNumber: number; ETag: string }[]; pendiente: boolean },
+): Promise<boolean> {
+  const r = await db.update(adminEscolarTareaAdjuntos)
+    .set({ uploadId: e.uploadId, partes: e.partes, pendiente: e.pendiente, trozos: trozosAntes + 1 })
+    .where(and(
+      eq(adminEscolarTareaAdjuntos.id, adjuntoId), eq(adminEscolarTareaAdjuntos.trozos, trozosAntes),
+      eq(adminEscolarTareaAdjuntos.subido, false),
+    ))
+    .returning({ id: adminEscolarTareaAdjuntos.id });
+  return r.length > 0;
+}
+
+/** El archivo quedó entero en S3: sale en la conversación con su nombre. */
+export async function cerrarAdjunto(teamId: number, tareaId: number, adjuntoId: number, autor: AutorTarea, nombre: string) {
+  return db.transaction(async (tx) => {
+    const [a] = await tx.update(adminEscolarTareaAdjuntos)
+      .set({ subido: true, pendiente: false })
+      .where(and(eq(adminEscolarTareaAdjuntos.id, adjuntoId), eq(adminEscolarTareaAdjuntos.subido, false)))
+      .returning({ id: adminEscolarTareaAdjuntos.id });
+    if (!a) return false;
+    await tx.insert(adminEscolarTareaMensajes).values({
+      teamId, tareaId, tipo: 'adjunto', userId: autor.userId, autor: autor.nombre, texto: nombre, adjuntoId,
+    });
+    await tx.update(adminEscolarTareas).set({ actualizadoEn: new Date() }).where(eq(adminEscolarTareas.id, tareaId));
+    return true;
+  });
 }
 
 // ── La factura relacionada ───────────────────────────────────────────────────

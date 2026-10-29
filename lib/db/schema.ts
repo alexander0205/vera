@@ -2756,7 +2756,7 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   ecfDocumentId:       integer('ecf_document_id').references(() => ecfDocuments.id, { onDelete: 'set null' }),
   cargoId:             integer('cargo_id').references(() => adminEscolarCargos.id, { onDelete: 'set null' }),
   venceEl:             date('vence_el'),
-  /** abierta | completada */
+  /** abierta | en_revision | completada (0210) */
   estado:              varchar('estado', { length: 12 }).notNull().default('abierta'),
   creadaPorUserId:     integer('creada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   creadaPorIa:         boolean('creada_por_ia').notNull().default(false),
@@ -2777,15 +2777,42 @@ export const adminEscolarTareaMensajes = pgTable('admin_escolar_tarea_mensajes',
   id:        serial('id').primaryKey(),
   teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
   tareaId:   integer('tarea_id').notNull().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
-  /** mensaje | evento | ia */
+  /** mensaje | evento | ia | adjunto (0210: un archivo; `texto` es su nombre) */
   tipo:      varchar('tipo', { length: 10 }).notNull(),
   userId:    integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   /** Quién lo dijo, como se enseña: el nombre de la persona, «Soporte IT · Zero» o «Zero AI». */
   autor:     varchar('autor', { length: 100 }).notNull(),
   texto:     text('texto').notNull(),
+  adjuntoId: integer('adjunto_id').references(() => adminEscolarTareaAdjuntos.id, { onDelete: 'set null' }),
   creadoEn:  timestamp('creado_en').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_tarea_mensajes_tarea_idx').on(t.tareaId, t.creadoEn),
+]);
+
+/**
+ * Una foto, un video o un documento de la conversación de una tarea (0210).
+ * El archivo está en S3; llega por trozos (ver lib/storage/tareas.ts) y solo
+ * se enseña cuando `subido`.
+ */
+export const adminEscolarTareaAdjuntos = pgTable('admin_escolar_tarea_adjuntos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  tareaId:   integer('tarea_id').notNull().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
+  userId:    integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  nombre:    varchar('nombre', { length: 200 }).notNull(),
+  mime:      varchar('mime', { length: 120 }).notNull(),
+  bytes:     integer('bytes').notNull(),
+  s3Key:     varchar('s3_key', { length: 300 }).notNull(),
+  /** El multipart de S3, si el archivo pasa de un trozo. */
+  uploadId:  varchar('upload_id', { length: 300 }),
+  partes:    jsonb('partes').$type<{ PartNumber: number; ETag: string }[]>().notNull().default([]),
+  trozos:    integer('trozos').notNull().default(0),
+  /** Hay un trozo guardado aparte esperando a su pareja (S3 pide partes de 5 MB). */
+  pendiente: boolean('pendiente').notNull().default(false),
+  subido:    boolean('subido').notNull().default(false),
+  creadoEn:  timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_tarea_adjuntos_tarea_idx').on(t.tareaId),
 ]);
 
 /** Pago escolar aplicado a un cargo. Enlace OPCIONAL a factura/pago_recibido,

@@ -58,6 +58,10 @@ function redactar(d: DatosAvisoTarea): { asunto: string; intro: string } {
       return { asunto: `Completada: ${t}`, intro: `${d.autor} marcó como completada una tarea de ${d.colegio}.` };
     case 'reabierta':
       return { asunto: `Abierta de nuevo: ${t}`, intro: `${d.autor} volvió a abrir una tarea de ${d.colegio}.` };
+    case 'revision':
+      return { asunto: `En revisión: ${t}`, intro: `${d.autor} pasó a revisión una tarea de ${d.colegio}.` };
+    case 'adjunto':
+      return { asunto: `${d.autor} subió un archivo: ${t}`, intro: `${d.autor} subió un archivo a una tarea de ${d.colegio}.` };
   }
 }
 
@@ -70,7 +74,7 @@ export function armarCorreoTarea(d: DatosAvisoTarea): CorreoTarea {
   const url = urlDeTarea(d.tareaId);
   // «Del colegio» ya se lee solo; «De: Del colegio» no.
   const meta = [d.de === DE_COLEGIO ? d.de : `De: ${d.de}`, `Asignada a ${d.asignada}`, ...(d.documento ? [d.documento] : [])].join(' · ');
-  const texto = d.texto ? recortar(d.texto, 1200) : null;
+  const texto = d.texto ? recortar(d.aviso === 'adjunto' ? `📎 ${d.texto}` : d.texto, 1200) : null;
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 520px; margin: 0 auto; color: #111827;">
