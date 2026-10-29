@@ -2,16 +2,18 @@ import { exigirAdmin } from '@/lib/auth/admin-guard';
 import { notFound, redirect } from 'next/navigation';
 import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/drizzle';
-import { teams, teamMembers, users, invitations, activityLogs, ActivityType } from '@/lib/db/schema';
+import { teams, teamMembers, users, invitations, activityLogs, ActivityType, passwordResetTokens } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
+import { hashPassword } from '@/lib/auth/session';
 import { sincronizarConStripe } from '@/lib/payments/sincronizar';
-import { sendInvitationEmail } from '@/lib/email';
+import { sendInvitationEmail, sendPasswordResetEmail } from '@/lib/email';
 import Link from 'next/link';
 import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight, CreditCard, RefreshCw } from 'lucide-react';
 import { ConfirmButton } from './confirm-button';
 import EcfApiSection from './_ecf-section';
 import { RoleSelect } from './_role-select';
+import { ContrasenaMiembro } from './_contrasena-miembro';
 import { ROLE_KEYS } from '@/lib/config/roles';
 import { revalidatePath } from 'next/cache';
 import Box from '@mui/material/Box';
@@ -168,6 +170,91 @@ async function cambiarRolMiembro(formData: FormData) {
   });
 
   revalidatePath(`/admin/empresas/${teamId}`);
+}
+
+// ─── Acceso de un miembro: contraseña y correo ──────────────────────────────
+
+/**
+ * El usuario que se toca tiene que ser miembro de ESTA empresa: los ids vienen
+ * del formulario y sin esto se podía cambiar la clave de cualquier cuenta. Las
+ * de admin de plataforma no se tocan desde aquí, que con una se entra a todo.
+ */
+async function miembroDeLaEmpresa(teamId: number, userId: number) {
+  const [m] = await db
+    .select({ id: users.id, email: users.email, name: users.name, platformRole: users.platformRole })
+    .from(teamMembers)
+    .innerJoin(users, eq(users.id, teamMembers.userId))
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+    .limit(1);
+  if (!m) throw new Error('Ese usuario no es miembro de esta empresa.');
+  if (m.platformRole === 'admin') throw new Error('La contraseña de un admin de Zero no se cambia desde aquí.');
+  return m;
+}
+
+/**
+ * Devuelve el error en vez de lanzarlo: en producción Next tapa el mensaje de
+ * lo que lanza una server action y en el diálogo saldría un texto genérico.
+ */
+async function cambiarContrasenaMiembro(formData: FormData): Promise<{ error?: string }> {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId   = parseInt(formData.get('teamId') as string);
+  const userId   = parseInt(formData.get('userId') as string);
+  const password = (formData.get('password') as string) ?? '';
+  if (isNaN(teamId) || isNaN(userId)) return { error: 'Datos inválidos' };
+  // La misma regla que /api/auth/reset-password.
+  if (password.length < 8) return { error: 'La contraseña tiene que tener al menos 8 caracteres.' };
+
+  let m: Awaited<ReturnType<typeof miembroDeLaEmpresa>>;
+  try {
+    m = await miembroDeLaEmpresa(teamId, userId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'No se pudo cambiar la contraseña' };
+  }
+  await db
+    .update(users)
+    .set({ passwordHash: await hashPassword(password), updatedAt: new Date() })
+    .where(eq(users.id, m.id));
+
+  await db.insert(activityLogs).values({
+    teamId, userId: admin.id, action: ActivityType.UPDATE_PASSWORD, ipAddress: '',
+  });
+  return {};
+}
+
+async function enviarAccesoMiembro(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId = parseInt(formData.get('teamId') as string);
+  const userId = parseInt(formData.get('userId') as string);
+  if (isNaN(teamId) || isNaN(userId)) return;
+
+  let m: Awaited<ReturnType<typeof miembroDeLaEmpresa>>;
+  try {
+    m = await miembroDeLaEmpresa(teamId, userId);
+  } catch {
+    redirect(`/admin/empresas/${teamId}?error=acceso_no_permitido`);
+  }
+
+  // 24 h como la invitación, no 1 h como el «olvidé mi contraseña»: lo pide
+  // soporte y la persona lo abre cuando lo ve.
+  const token = randomBytes(32).toString('hex');
+  await db.insert(passwordResetTokens).values({
+    userId: m.id, token, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  });
+
+  try {
+    await sendPasswordResetEmail(m.email, token, m.name, { porSoporte: true, expiraEn: '24 horas' });
+  } catch (e) {
+    console.error('[enviarAccesoMiembro]', e);
+    redirect(`/admin/empresas/${teamId}?error=reenvio_fallido`);
+  }
+
+  redirect(`/admin/empresas/${teamId}?ok=acceso_enviado`);
 }
 
 // ─── Server Action: toggle módulo caja ───────────────────────────────────────
@@ -493,6 +580,9 @@ export default async function EmpresaDetailPage({
       {ok === 'rango_eliminado'      && <Alert color="green" msg="✓ Rango desactivado." />}
       {ok === 'token_refrescado'     && <Alert color="green" msg="✓ Token DGII refrescado." />}
       {ok === 'reenviado'            && <Alert color="green" msg="✓ Invitación reenviada." />}
+      {ok === 'acceso_enviado'       && <Alert color="green" msg="✓ Correo enviado para crear la contraseña. El enlace vale 24 horas." />}
+      {error === 'ultimo_miembro'         && <Alert color="amber" msg="⚠ Es el único usuario de la empresa: si se elimina, nadie podría entrar. Invita a otro primero." />}
+      {error === 'acceso_no_permitido'    && <Alert color="amber" msg="⚠ A ese usuario no se le puede enviar el acceso desde aquí." />}
       {error === 'ya_miembro'             && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
       {error === 'reenvio_fallido'        && <Alert color="amber" msg="⚠ No se pudo reenviar el correo. Revisa la configuración de Resend." />}
       {error === 'inv_no_encontrada'      && <Alert color="amber" msg="⚠ Invitación no encontrada o ya cancelada." />}
@@ -768,14 +858,30 @@ export default async function EmpresaDetailPage({
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={{ borderBottom: '1px solid #f9fafb' }}>
-                      <ConfirmButton
-                        action={eliminarMiembro}
-                        message={`¿Eliminar a ${m.email} de esta empresa?`}
-                        fields={{ teamId, userId: m.id }}
-                        color="error"
-                      >
-                        Eliminar
-                      </ConfirmButton>
+                      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <ContrasenaMiembro teamId={teamId} userId={m.id} email={m.email} action={cambiarContrasenaMiembro} />
+                        <ConfirmButton
+                          action={enviarAccesoMiembro}
+                          message={`¿Enviar a ${m.email} un correo para crear su contraseña?`}
+                          fields={{ teamId, userId: m.id }}
+                        >
+                          Reenviar acceso
+                        </ConfirmButton>
+                        {members.length > 1 ? (
+                          <ConfirmButton
+                            action={eliminarMiembro}
+                            message={`¿Eliminar a ${m.email} de esta empresa?`}
+                            fields={{ teamId, userId: m.id }}
+                            color="error"
+                          >
+                            Eliminar
+                          </ConfirmButton>
+                        ) : (
+                          <Typography variant="caption" title="Es el único usuario: invita a otro antes de eliminarlo" sx={{ color: '#9ca3af' }}>
+                            Único usuario
+                          </Typography>
+                        )}
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ));

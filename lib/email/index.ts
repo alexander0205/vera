@@ -28,9 +28,23 @@ function escapeHtml(s: string | null | undefined): string {
   }[c]!));
 }
 
-export async function sendPasswordResetEmail(email: string, token: string, name: string | null) {
+/**
+ * `porSoporte`: lo mandó un admin de Zero desde /admin/empresas, no la persona.
+ * Cambia el texto («recibimos una solicitud» sería mentira) y el plazo, que
+ * tiene que coincidir con el `expiresAt` del token.
+ */
+export async function sendPasswordResetEmail(
+  email: string,
+  token: string,
+  name: string | null,
+  opts: { porSoporte?: boolean; expiraEn?: string } = {},
+) {
   const resetUrl = `${baseDeEnlaces()}/reset-password?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
+  const motivo = opts.porSoporte
+    ? 'Te enviamos este enlace para que crees o cambies la contraseña de tu cuenta Zero.'
+    : 'Recibimos una solicitud para restablecer la contraseña de tu cuenta Zero.';
+  const expira = escapeHtml(opts.expiraEn ?? '1 hora');
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
@@ -39,13 +53,13 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
         <h2 style="color: #2a45c4;">Restablecer contraseña</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
-        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Zero.</p>
+        <p>${motivo}</p>
         <p>
           <a href="${escapeHtml(resetUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
-            Restablecer contraseña
+            ${opts.porSoporte ? 'Crear contraseña' : 'Restablecer contraseña'}
           </a>
         </p>
-        <p style="color:#6b7280;font-size:14px;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este email.</p>
+        <p style="color:#6b7280;font-size:14px;">Este enlace expira en ${expira}.${opts.porSoporte ? '' : ' Si no solicitaste este cambio, ignora este email.'}</p>
       </div>
     `,
   });
