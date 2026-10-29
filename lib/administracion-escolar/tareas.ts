@@ -648,7 +648,8 @@ export async function avisarTareasSinRespuesta(): Promise<number> {
   const t = adminEscolarTareas;
   const limite = new Date(Date.now() - HORAS_SIN_RESPUESTA * 3_600_000);
   const paradas = await db.select({
-    id: t.id, teamId: t.teamId, asignadaA: t.asignadaA, asignadaUserId: t.asignadaUserId, creadaPorUserId: t.creadaPorUserId,
+    id: t.id, teamId: t.teamId, estado: t.estado, asignadaA: t.asignadaA, asignadaUserId: t.asignadaUserId,
+    creadaPorUserId: t.creadaPorUserId,
   }).from(t)
     .where(and(
       inArray(t.estado, PENDIENTES), isNull(t.revisionVenceEn), lt(t.actualizadoEn, limite),

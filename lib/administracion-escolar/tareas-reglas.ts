@@ -145,22 +145,24 @@ export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 're
 /**
  * A quién le toca contestar una tarea parada, para el correo urgente.
  *
- * Si lo último lo dijo Soporte (o Zero AI), le toca al colegio. Si lo dijo
- * alguien del colegio: en una tarea de Soporte nos toca a nosotros; en una de
- * una persona, a esa persona, o a quien la creó si fue ella la que escribió.
- * Sin nada escrito, le toca a quien se le asignó.
+ * Una tarea de Soporte es trabajo nuestro mientras esté abierta, aunque lo
+ * último lo hayamos dicho nosotros («lo vamos a agregar»): nos toca a
+ * nosotros. Solo cuando la pasamos a revisión le toca al colegio confirmar.
+ *
+ * En una tarea de una persona: si lo último lo dijo Soporte, le toca a esa
+ * persona; si lo dijo ella, a quien la creó; si lo dijo otro, a ella. Sin
+ * nada escrito, a ella.
  */
 export function turnoDe(t: {
-  asignadaA: string; asignadaUserId: number | null; creadaPorUserId: number | null;
+  estado: string; asignadaA: string; asignadaUserId: number | null; creadaPorUserId: number | null;
   ultimo: { userId: number | null; esSoporte: boolean } | null;
 }): { soporte: boolean; colegio: boolean; usuarios: number[] } {
   const colegio = (...ids: (number | null)[]) =>
     ({ soporte: false, colegio: true, usuarios: [...new Set(ids.filter((x): x is number => x != null))] });
-  if (!t.ultimo) {
-    return t.asignadaA === 'soporte' ? { soporte: true, colegio: false, usuarios: [] } : colegio(t.asignadaUserId);
+  if (t.asignadaA === 'soporte') {
+    return t.estado === 'en_revision' ? colegio(t.creadaPorUserId) : { soporte: true, colegio: false, usuarios: [] };
   }
-  if (t.ultimo.esSoporte) return colegio(t.creadaPorUserId, t.asignadaA === 'persona' ? t.asignadaUserId : null);
-  if (t.asignadaA === 'soporte') return { soporte: true, colegio: false, usuarios: [] };
+  if (!t.ultimo || t.ultimo.esSoporte) return colegio(t.asignadaUserId);
   return colegio(t.ultimo.userId === t.asignadaUserId ? t.creadaPorUserId : t.asignadaUserId);
 }
 
