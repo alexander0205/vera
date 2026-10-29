@@ -19,6 +19,7 @@ import { origenPublico } from '@/lib/http/origen-publico';
 import { detectarTipo, ArchivoInvalidoError } from '@/lib/pagos/adjuntos';
 import { s3Disponible, subirComprobante, construirKey } from '@/lib/storage/comprobantes';
 import { enviarComprobanteRecibidoEmail } from '@/lib/email/escolar-avisos';
+import { avisarComprobante } from '@/lib/notificaciones/pagos';
 
 /** Lo que promete la pantalla: 5 MB. */
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -189,6 +190,17 @@ export async function POST(
   }).returning({ id: adminEscolarComprobantes.id });
 
   await marcarAcceso(link.linkId);
+
+  // La campana de arriba y el push al celular de quien revisa los pagos. Va en
+  // `after()` y no lanza: el comprobante ya está guardado y el padre no tiene
+  // que esperar —ni enterarse— de si el aviso salió. Ver lib/notificaciones/pagos.ts.
+  avisarComprobante(link.teamId, {
+    id: fila.id,
+    montoCentavos,
+    responsable: link.vista.responsable.nombre,
+    estudiantes: link.vista.estudiantes,
+    referencia: texto('referencia', 120) ?? link.referencia,
+  });
 
   // El correo es el único empujón del flujo: sin él, el comprobante espera en
   // una pestaña que nadie abre mientras al padre le siguen saliendo avisos. Aun

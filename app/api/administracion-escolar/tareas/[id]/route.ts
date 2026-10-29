@@ -1,7 +1,8 @@
 /**
  * Una tarea por revisar con su conversación.
  *
- *   GET                                  → la tarea y sus mensajes
+ *   GET                                  → la tarea y sus mensajes (`soporte`: quien mira es
+ *                                          del equipo de Zero y ve las plantillas)
  *   PATCH { accion: 'completar' | 'revision' | 'reabrir' } → la marca; deja su línea en la conversación
  */
 import { NextRequest, NextResponse, after } from 'next/server';
@@ -21,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const id = idDe((await params).id);
   const tarea = id ? await leerTarea(auth.teamId, id) : null;
   if (!tarea) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
-  return NextResponse.json({ tarea, yo: auth.user.id });
+  return NextResponse.json({ tarea, yo: auth.user.id, soporte: auth.user.platformRole === 'admin' });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

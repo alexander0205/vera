@@ -134,6 +134,50 @@ export const textoEvento = {
 
 export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'revision' | 'adjunto';
 
+// ── Plantillas de Soporte IT ─────────────────────────────────────────────────
+
+/**
+ * Lo que el equipo de Zero le dice al colegio al cerrar una tarea o al dejarla
+ * en revisión, siempre igual y con el enlace a la tarea. Solo las ve y las usa
+ * el equipo de Zero (rol de plataforma `admin`); la ruta `plantilla` además
+ * cambia el estado y avisa a quien la creó, a los participantes y a los dueños
+ * del colegio.
+ */
+export type PlantillaSoporte = 'cerrada' | 'revision';
+
+export const PLANTILLAS_SOPORTE: Record<PlantillaSoporte, {
+  etiqueta: string; detalle: string; accion: AccionEstado; boton: string;
+  texto: (d: { nombre: string | null; url: string }) => string;
+}> = {
+  cerrada: {
+    etiqueta: 'Resuelta y cerrada',
+    detalle: 'Avisa que ya se resolvió y la marca como completada',
+    accion: 'completar',
+    boton: 'Enviar y cerrar',
+    texto: ({ nombre, url }) => `Hola${nombre ? ` ${nombre}` : ''}. Ya resolvimos esta tarea y la cerramos. `
+      + `Puedes ver lo que se hizo aquí: ${url}\n\nSi algo no quedó bien, respóndenos en esta misma tarea y la volvemos a abrir.`,
+  },
+  revision: {
+    etiqueta: 'En revisión: que la revise',
+    detalle: 'Le pide revisarla y confirmar; la pasa a «En revisión»',
+    accion: 'revision',
+    boton: 'Enviar y pasar a revisión',
+    texto: ({ nombre, url }) => `Hola${nombre ? ` ${nombre}` : ''}. Dejamos esta tarea en revisión. `
+      + `Por favor revísala y confírmanos si quedó bien: ${url}\n\nSi todo está correcto, puedes marcarla como completada.`,
+  },
+};
+
+export const esPlantilla = (v: unknown): v is PlantillaSoporte =>
+  typeof v === 'string' && Object.hasOwn(PLANTILLAS_SOPORTE, v);
+
+/** «Lic. Lizandro Martinez» → «Lizandro»: el saludo usa el primer nombre, sin el título. */
+export function primerNombre(nombre: string | null | undefined): string | null {
+  const partes = (nombre ?? '').trim().split(/\s+/).filter((p) => p && !/\.$/.test(p));
+  const n = partes[0];
+  if (!n || n.includes('@')) return null;
+  return n.charAt(0).toUpperCase() + n.slice(1).toLowerCase();
+}
+
 // ── Archivos adjuntos ────────────────────────────────────────────────────────
 
 const MB = 1024 * 1024;

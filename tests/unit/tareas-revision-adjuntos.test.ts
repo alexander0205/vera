@@ -167,3 +167,23 @@ describe('subida por trozos', () => {
     expect(parte[parte.length - 1]).toBe(1);
   });
 });
+
+describe('plantillas de Soporte IT', () => {
+  it('saludan por el primer nombre, sin el título, y llevan el enlace a la tarea', async () => {
+    const { PLANTILLAS_SOPORTE, primerNombre } = await import('@/lib/administracion-escolar/tareas-reglas');
+    expect(primerNombre('Lic. Lizandro Martinez')).toBe('Lizandro');
+    expect(primerNombre('caja@colegio.do')).toBeNull();
+    const url = 'https://app.zero.com.do/escolar/por-revisar?tarea=8';
+    const cerrada = PLANTILLAS_SOPORTE.cerrada.texto({ nombre: 'Lizandro', url });
+    expect(cerrada).toMatch(/^Hola Lizandro\. Ya resolvimos esta tarea y la cerramos\./);
+    expect(cerrada).toContain(url);
+    expect(PLANTILLAS_SOPORTE.revision.texto({ nombre: null, url })).toMatch(/^Hola\. Dejamos esta tarea en revisión\./);
+  });
+  it('cerrar completa y la de revisión la pasa a revisión', async () => {
+    const { PLANTILLAS_SOPORTE, esPlantilla } = await import('@/lib/administracion-escolar/tareas-reglas');
+    expect(PLANTILLAS_SOPORTE.cerrada.accion).toBe('completar');
+    expect(PLANTILLAS_SOPORTE.revision.accion).toBe('revision');
+    expect(esPlantilla('cerrada')).toBe(true);
+    expect(esPlantilla('toString')).toBe(false);
+  });
+});

@@ -32,6 +32,7 @@ import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import { ProfileDropdown, type UserInfo } from '@/components/profile-dropdown';
 import { BotonSoporte } from '@/components/support/BotonSoporte';
 import { CampanaTareas } from '@/components/administracion-escolar/CampanaTareas';
+import { CampanaNotificaciones } from '@/components/notificaciones/CampanaNotificaciones';
 import type { ModuleKey } from '@/lib/config/modules';
 import type { Team } from '@/lib/db/schema';
 
@@ -274,8 +275,13 @@ export function ModuleHeader({
               de la barra, que es lo que lleva al perfil. En Gobernanza va además
               la campana de las tareas por revisar: fuera del colegio no hay
               tareas, y pedirla ahí sería una consulta para enseñar un cero. */}
-          <Box {...apartar(buscadorAbierto, current === 'escolar' ? 260 : 220)}>
+          {/* La campana de pagos (comprobantes de las familias y cobros con
+              tarjeta) suma otros 34 px en el colegio y en Facturación, donde se
+              emiten los enlaces de pago; en el POS y el resto no llegan pagos así. */}
+          <Box {...apartar(buscadorAbierto, current === 'escolar' ? 300 : current === 'facturacion' ? 260 : 220)}>
             {current === 'escolar' && <CampanaTareas />}
+            {/* Ella misma se esconde si el rol no ve ningún tipo de aviso. */}
+            {(current === 'escolar' || current === 'facturacion') && <CampanaNotificaciones personales={current === 'escolar'} />}
             <BotonSoporte />
             <ProfileDropdown user={user} />
           </Box>
