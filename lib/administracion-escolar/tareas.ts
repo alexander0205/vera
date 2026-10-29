@@ -18,6 +18,7 @@ import {
 import { SOPORTE } from '@/lib/config/soporte';
 import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
 import { avisarTareaEnSlack } from './tareas-slack';
+import { notificarTarea } from '@/lib/notificaciones/tareas';
 import {
   aQuienAvisar, DE_COLEGIO, DESTINO, etiquetaAsignada, PENDIENTES, textoEvento,
   type AccionEstado, type AutorTarea, type AvisoTarea, type EstadoTarea, type NuevoAdjunto, type NuevaTarea,
@@ -294,8 +295,9 @@ export async function personasDelColegio(teamId: number) {
 const correosDeVerdad = () => process.env.VERCEL_ENV === 'production';
 
 /**
- * Avisa del cambio: por correo a quien le toca (ver `aQuienAvisar`) y, todo,
- * al canal de Slack del equipo de Zero. Nunca lanza: la tarea ya quedó
+ * Avisa del cambio: por correo y en la campana de arriba (con push al
+ * celular) a quien le toca (ver `aQuienAvisar`) y, todo, al canal de Slack del
+ * equipo de Zero. Nunca lanza: la tarea ya quedó
  * guardada, y un aviso que no sale no la deshace. Se llama con `after()` desde
  * la ruta, para no hacer esperar a quien escribe.
  */
@@ -327,6 +329,11 @@ export async function avisarDeTarea(
     const participantes = [...new Set(t.mensajes
       .filter((m) => m.tipo === 'mensaje' && m.userId != null).map((m) => m.userId as number))];
     const { usuarios, soporte } = aQuienAvisar(fila, participantes, aviso, autor);
+
+    // La campana y el celular de las mismas personas que reciben el correo.
+    await notificarTarea(teamId, usuarios, {
+      cambio: aviso, tareaId, titulo: t.titulo, autor: autor.nombre, texto,
+    }, fila.colegio);
 
     const correos = new Set<string>();
     if (soporte) correos.add(SOPORTE.correo);

@@ -4,16 +4,16 @@
  *   GET            → { items, noLeidas }   las últimas 20 que le tocan
  *   GET ?soloConteo=1 → { noLeidas }
  *
- * Qué ve cada persona lo decide su rol (ver `PERMISOS_POR_TIPO`): quien no
- * tiene permiso sobre ningún tipo recibe la lista vacía y NO un 403, para que
- * la campana se pueda montar en cualquier pantalla sin ruido en la consola.
+ * Qué ve cada persona: las de la empresa que su rol permite (ver
+ * `PERMISOS_POR_TIPO`) y las PERSONALES suyas (`user_id`: lo que pasa en sus
+ * tareas por revisar), tenga el rol que tenga.
  *
  * «No leída» es toda la creada después de la marca de la persona
  * (`notificaciones_leidas`) y dentro de los últimos 14 días. Ver ./tipos.ts.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { notificaciones, notificacionesLeidas } from '@/lib/db/schema';
 import { exigirAcceso } from '@/lib/notificaciones/acceso';
@@ -27,9 +27,6 @@ export async function GET(req: NextRequest) {
   const { user, teamId, tipos } = acceso;
 
   const soloConteo = req.nextUrl.searchParams.get('soloConteo') === '1';
-  if (tipos.length === 0) {
-    return NextResponse.json(soloConteo ? { noLeidas: 0 } : { items: [], noLeidas: 0, puede: false });
-  }
 
   const [marca] = await db.select({ leidoHasta: notificacionesLeidas.leidoHasta })
     .from(notificacionesLeidas)
@@ -38,7 +35,13 @@ export async function GET(req: NextRequest) {
   const leidoHasta = marca?.leidoHasta ?? null;
   const ahora = new Date();
 
-  const deLaEmpresa = and(eq(notificaciones.teamId, teamId), inArray(notificaciones.tipo, tipos));
+  const deLaEmpresa = and(
+    eq(notificaciones.teamId, teamId),
+    or(
+      eq(notificaciones.userId, user.id),
+      tipos.length > 0 ? and(isNull(notificaciones.userId), inArray(notificaciones.tipo, tipos)) : sql`false`,
+    ),
+  );
   const [{ n: noLeidas }] = await db.select({ n: sql<number>`count(*)::int` })
     .from(notificaciones)
     .where(and(deLaEmpresa, gt(notificaciones.creadoEn, umbralNoLeidas(leidoHasta, ahora))));

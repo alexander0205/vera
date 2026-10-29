@@ -42,11 +42,6 @@ export async function POST(req: NextRequest) {
   if (!clavePublicaVapid()) {
     return NextResponse.json({ error: 'Los avisos push no están configurados.' }, { status: 503 });
   }
-  // Un rol que no recibe ningún tipo de aviso no tiene nada que activar.
-  if (acceso.tipos.length === 0) {
-    return NextResponse.json({ error: 'Tu rol no recibe avisos de pagos.' }, { status: 403 });
-  }
-
   const parsed = suscripcion.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Suscripción no válida' }, { status: 400 });
   const { endpoint, keys } = parsed.data;

@@ -7,7 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import { Bell, BellOff, BellRing, CreditCard, Receipt } from 'lucide-react';
+import { Bell, BellOff, BellRing, CreditCard, ListChecks, Receipt } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { tiposVisibles } from '@/lib/notificaciones/tipos';
 import { cuandoLlego } from '@/lib/notificaciones/texto';
@@ -16,8 +16,9 @@ import { base64UrlABytes } from '@/lib/notificaciones/base64';
 /**
  * La campana de arriba, junto a «Asistencia»: los pagos que acaban de llegar —un
  * comprobante que subió una familia, un pago con tarjeta— para no tener que
- * entrar a «Pagos» a ver si hay algo. Cada renglón lleva directo a donde se
- * encuentra ese pago.
+ * entrar a «Pagos» a ver si hay algo, y lo que pasa en las tareas por revisar de
+ * quien mira (le respondieron, le subieron un archivo). Cada renglón lleva
+ * directo a donde se encuentra ese pago o esa tarea.
  *
  * Abajo, «Activar avisos en este dispositivo» suscribe el navegador a los avisos
  * push: el pago suena en el celular aunque Zero esté cerrado. Es opcional y por
@@ -79,11 +80,16 @@ async function guardarSuscripcion(sub: PushSubscription): Promise<boolean> {
   return r.ok;
 }
 
-const ICONO: Record<string, typeof Receipt> = { comprobante: Receipt, pago_en_linea: CreditCard };
+const ICONO: Record<string, typeof Receipt> = { comprobante: Receipt, pago_en_linea: CreditCard, tarea: ListChecks };
 
-export function CampanaNotificaciones() {
+/**
+ * `personales`: en Gobernanza a cualquiera le pueden llegar avisos de sus
+ * tareas por revisar, así que ahí la campana va para todos. En Facturación solo
+ * para quien recibe pagos.
+ */
+export function CampanaNotificaciones({ personales = false }: { personales?: boolean }) {
   const { permissions } = usePermissions();
-  const puede = tiposVisibles(permissions).length > 0;
+  const puede = personales || tiposVisibles(permissions).length > 0;
 
   const { data, mutate } = useSWR<Respuesta>(puede ? CLAVE_NOTIFICACIONES : null, traer, { revalidateOnFocus: true });
   const [ancla, setAncla] = useState<HTMLElement | null>(null);
@@ -182,8 +188,8 @@ export function CampanaNotificaciones() {
   if (!puede) return null;
 
   const titulo = noLeidas === 0
-    ? 'Notificaciones de pagos'
-    : `${noLeidas} ${noLeidas === 1 ? 'pago nuevo' : 'pagos nuevos'}`;
+    ? 'Notificaciones'
+    : `${noLeidas} ${noLeidas === 1 ? 'notificación nueva' : 'notificaciones nuevas'}`;
 
   return (
     <>
@@ -208,16 +214,16 @@ export function CampanaNotificaciones() {
         slotProps={{ paper: { sx: { width: 380, maxWidth: 'calc(100vw - 24px)', mt: 0.5, borderRadius: '12px' } }, list: { sx: { p: 0 } } }}
       >
         <div className="border-b border-gray-100 px-4 py-3" role="presentation">
-          <p className="text-sm font-semibold text-gray-900">Pagos que han llegado</p>
+          <p className="text-sm font-semibold text-gray-900">Notificaciones</p>
         </div>
 
         <div className="max-h-[420px] overflow-y-auto" role="presentation">
           {items.length === 0 ? (
             <div className="px-4 py-10 text-center" role="presentation">
               <Bell className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-              <p className="text-sm font-medium text-gray-900">Todavía no ha llegado ningún pago</p>
+              <p className="text-sm font-medium text-gray-900">Nada nuevo por ahora</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                Cuando una familia suba un comprobante o pague con tarjeta, aparecerá aquí.
+                Aquí llegan los pagos de las familias y las respuestas en tus tareas por revisar.
               </p>
             </div>
           ) : items.map((i) => {

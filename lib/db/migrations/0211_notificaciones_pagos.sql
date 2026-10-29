@@ -1,4 +1,5 @@
--- 0211 · Notificaciones de pagos (la campana de arriba) y avisos push.
+-- 0211 · Notificaciones (la campana de arriba) y avisos push: los pagos de las
+-- familias y lo que pasa en las tareas por revisar de cada persona.
 --
 -- Cuando una familia sube un comprobante o paga con tarjeta, el colegio se
 -- enteraba por un correo o entrando a revisar «Pagos» a ver si había algo. Esto
@@ -9,7 +10,10 @@
 -- Tres tablas:
 --   · `notificaciones`        lo que pasó, por empresa. Una fila por pago; el
 --                             índice único (team, tipo, ref) hace que un
---                             reintento del callback no avise dos veces.
+--                             reintento del callback no avise dos veces. Con
+--                             `user_id` es PERSONAL (una respuesta en una tarea
+--                             suya): solo la ve esa persona. Sin él, la ve
+--                             quien tenga el permiso de ese tipo.
 --   · `notificaciones_leidas` hasta cuándo ha visto cada persona. «No leída» es
 --                             toda la que se creó después de esa marca; así no
 --                             hay una fila por persona y por aviso.
@@ -23,7 +27,9 @@
 CREATE TABLE IF NOT EXISTS notificaciones (
   id             serial PRIMARY KEY,
   team_id        integer      NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-  -- comprobante | pago_en_linea
+  -- Para quién es, si es personal (tipo «tarea»). NULL = de la empresa.
+  user_id        integer      REFERENCES users(id) ON DELETE CASCADE,
+  -- comprobante | pago_en_linea | tarea
   tipo           varchar(30)  NOT NULL,
   titulo         varchar(160) NOT NULL,
   detalle        text,
@@ -36,6 +42,7 @@ CREATE TABLE IF NOT EXISTS notificaciones (
 );
 
 CREATE INDEX IF NOT EXISTS notificaciones_team_creado_idx ON notificaciones (team_id, creado_en DESC);
+CREATE INDEX IF NOT EXISTS notificaciones_user_creado_idx ON notificaciones (user_id, creado_en DESC) WHERE user_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS notificaciones_ref_uq ON notificaciones (team_id, tipo, ref_id) WHERE ref_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS notificaciones_leidas (

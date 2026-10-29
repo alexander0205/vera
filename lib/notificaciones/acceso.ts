@@ -11,12 +11,12 @@ import { NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import { ALL_PERMISSIONS } from '@/lib/config/roles';
-import { tiposVisibles, type TipoNotificacion } from './tipos';
+import { tiposVisibles, type TipoDeEmpresa } from './tipos';
 
 type Usuario = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
 export type Acceso =
-  | { ok: true; user: Usuario; teamId: number; tipos: TipoNotificacion[] }
+  | { ok: true; user: Usuario; teamId: number; tipos: TipoDeEmpresa[] }
   | { ok: false; response: NextResponse };
 
 export async function exigirAcceso(): Promise<Acceso> {

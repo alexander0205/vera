@@ -4603,7 +4603,9 @@ export type CapturaFactura = typeof capturaFacturas.$inferSelect;
 export const notificaciones = pgTable('notificaciones', {
   id:            serial('id').primaryKey(),
   teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
-  /** comprobante | pago_en_linea */
+  /** Para quién es, si es personal (tipo `tarea`). NULL = de la empresa, por permiso. */
+  userId:        integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  /** comprobante | pago_en_linea | tarea */
   tipo:          varchar('tipo', { length: 30 }).notNull(),
   titulo:        varchar('titulo', { length: 160 }).notNull(),
   detalle:       text('detalle'),
@@ -4615,6 +4617,7 @@ export const notificaciones = pgTable('notificaciones', {
   creadoEn:      timestamp('creado_en').notNull().defaultNow(),
 }, (t) => [
   index('notificaciones_team_creado_idx').on(t.teamId, t.creadoEn.desc()),
+  index('notificaciones_user_creado_idx').on(t.userId, t.creadoEn.desc()).where(sql`${t.userId} IS NOT NULL`),
   uniqueIndex('notificaciones_ref_uq').on(t.teamId, t.tipo, t.refId).where(sql`${t.refId} IS NOT NULL`),
 ]);
 

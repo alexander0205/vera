@@ -240,3 +240,30 @@ describe('la llave VAPID en bytes', () => {
     expect(base64UrlABytes(llave).length).toBe(65);
   });
 });
+
+// ── Las tareas por revisar en la campana (personales) ────────────────────────
+
+describe('aviso de una tarea', () => {
+  it('dice quién hizo qué, la tarea y lo que escribió, y lleva a la tarea', async () => {
+    const { notificacionDeTarea } = await import('@/lib/notificaciones/texto');
+    expect(notificacionDeTarea({
+      cambio: 'mensaje', tareaId: 8, titulo: 'Saber', autor: 'Soporte IT · Zero', texto: 'Te dejamos un video.',
+    })).toEqual({
+      titulo: 'Soporte IT · Zero respondió',
+      detalle: 'Saber: Te dejamos un video.',
+      enlace: '/escolar/por-revisar?tarea=8',
+    });
+  });
+  it('un archivo sale con su clip; sin texto queda solo el título de la tarea', async () => {
+    const { notificacionDeTarea } = await import('@/lib/notificaciones/texto');
+    expect(notificacionDeTarea({ cambio: 'adjunto', tareaId: 8, titulo: 'Saber', autor: 'Ana', texto: 'video.mp4' }).detalle)
+      .toBe('Saber: 📎 video.mp4');
+    expect(notificacionDeTarea({ cambio: 'completada', tareaId: 8, titulo: 'Saber', autor: 'Ana', texto: null }))
+      .toMatchObject({ titulo: 'Ana completó', detalle: 'Saber' });
+  });
+  it('las tareas no dependen del rol: no están entre los tipos de la empresa', async () => {
+    const { TIPOS_DE_EMPRESA, esTipo } = await import('@/lib/notificaciones/tipos');
+    expect(TIPOS_DE_EMPRESA).not.toContain('tarea');
+    expect(esTipo('tarea')).toBe(true);
+  });
+});

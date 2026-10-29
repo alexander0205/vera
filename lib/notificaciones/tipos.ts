@@ -9,9 +9,17 @@
 
 import type { Permission } from '@/lib/config/roles';
 
-export type TipoNotificacion = 'comprobante' | 'pago_en_linea';
+/**
+ * `comprobante` y `pago_en_linea` son de la EMPRESA: las ve quien tenga el
+ * permiso (ver `PERMISOS_POR_TIPO`). `tarea` es PERSONAL: lleva `user_id` y solo
+ * la ve esa persona (le respondieron, le subieron un archivo o cambió el estado
+ * de una tarea suya), tenga el rol que tenga.
+ */
+export type TipoNotificacion = 'comprobante' | 'pago_en_linea' | 'tarea';
 
-export const TIPOS_NOTIFICACION: readonly TipoNotificacion[] = ['comprobante', 'pago_en_linea'];
+export type TipoDeEmpresa = Exclude<TipoNotificacion, 'tarea'>;
+export const TIPOS_NOTIFICACION: readonly TipoNotificacion[] = ['comprobante', 'pago_en_linea', 'tarea'];
+export const TIPOS_DE_EMPRESA: readonly TipoDeEmpresa[] = ['comprobante', 'pago_en_linea'];
 
 /**
  * Con qué permiso se entera cada tipo. Basta UNO de la lista.
@@ -27,19 +35,19 @@ export const TIPOS_NOTIFICACION: readonly TipoNotificacion[] = ['comprobante', '
  *    cobros de Facturación) o `administracion-escolar:pagos` (el personal del
  *    colegio, que no tiene `pagos:ver` pero es quien concilia lo cobrado).
  */
-export const PERMISOS_POR_TIPO: Record<TipoNotificacion, readonly Permission[]> = {
+export const PERMISOS_POR_TIPO: Record<TipoDeEmpresa, readonly Permission[]> = {
   comprobante: ['administracion-escolar:pagos'],
   pago_en_linea: ['pagos:ver', 'administracion-escolar:pagos'],
 };
 
-/** ¿Esta persona se entera de este tipo? */
-export function veTipo(permisos: readonly Permission[], tipo: TipoNotificacion): boolean {
+/** ¿Esta persona se entera de este tipo de la empresa? */
+export function veTipo(permisos: readonly Permission[], tipo: TipoDeEmpresa): boolean {
   return PERMISOS_POR_TIPO[tipo].some((p) => permisos.includes(p));
 }
 
-/** Los tipos que le tocan según sus permisos. Vacío = la campana no le sirve. */
-export function tiposVisibles(permisos: readonly Permission[]): TipoNotificacion[] {
-  return TIPOS_NOTIFICACION.filter((t) => veTipo(permisos, t));
+/** Los tipos de la empresa que le tocan según sus permisos (las personales le llegan siempre). */
+export function tiposVisibles(permisos: readonly Permission[]): TipoDeEmpresa[] {
+  return TIPOS_DE_EMPRESA.filter((t) => veTipo(permisos, t));
 }
 
 /** Tipo válido recibido de fuera (base de datos o petición). */

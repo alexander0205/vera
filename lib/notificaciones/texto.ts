@@ -7,10 +7,10 @@
  */
 
 import { fmtDOP } from '@/lib/utils/format';
-import type { TipoNotificacion } from './tipos';
+import type { TipoDeEmpresa } from './tipos';
 
 export interface NotificacionNueva {
-  tipo: TipoNotificacion;
+  tipo: TipoDeEmpresa;
   titulo: string;
   detalle: string | null;
   /** Ruta relativa de la pantalla donde se encuentra el pago. */
@@ -118,6 +118,44 @@ export function notificacionDePagoEnLinea(d: DatosPagoEnLinea): NotificacionNuev
     enlace: enlaceDePagoEnLinea(d),
     refId: d.linkId,
     montoCentavos: d.montoCentavos,
+  };
+}
+
+// ── Lo que pasa en una tarea por revisar (personal) ──────────────────────────
+
+export type CambioTarea = 'creada' | 'mensaje' | 'adjunto' | 'revision' | 'completada' | 'reabierta';
+
+export interface DatosTarea {
+  cambio: CambioTarea;
+  tareaId: number;
+  /** El título de la tarea. */
+  titulo: string;
+  /** Quien hizo el cambio, como firma en la conversación. */
+  autor: string;
+  /** Lo que escribió, o el nombre del archivo. */
+  texto: string | null;
+}
+
+const QUE_HIZO: Record<CambioTarea, string> = {
+  creada: 'te asignó una tarea',
+  mensaje: 'respondió',
+  adjunto: 'subió un archivo',
+  revision: 'pasó a revisión',
+  completada: 'completó',
+  reabierta: 'volvió a abrir',
+};
+
+/** El enlace del correo, el mismo: abre la tarea en «Por revisar». */
+export const enlaceDeTarea = (id: number) => `/escolar/por-revisar?tarea=${id}`;
+
+/** «Soporte IT · Zero respondió» / «Saber: Te dejamos un video…». */
+export function notificacionDeTarea(d: DatosTarea): { titulo: string; detalle: string; enlace: string } {
+  const texto = d.texto?.trim() ? (d.cambio === 'adjunto' ? `📎 ${d.texto.trim()}` : d.texto.trim()) : null;
+  const detalle = texto ? `${d.titulo}: ${texto}` : d.titulo;
+  return {
+    titulo: `${d.autor} ${QUE_HIZO[d.cambio]}`.slice(0, 160),
+    detalle: detalle.length > 280 ? `${detalle.slice(0, 279).trimEnd()}…` : detalle,
+    enlace: enlaceDeTarea(d.tareaId),
   };
 }
 

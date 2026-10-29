@@ -281,7 +281,7 @@ export function ModuleHeader({
           <Box {...apartar(buscadorAbierto, current === 'escolar' ? 300 : current === 'facturacion' ? 260 : 220)}>
             {current === 'escolar' && <CampanaTareas />}
             {/* Ella misma se esconde si el rol no ve ningún tipo de aviso. */}
-            {(current === 'escolar' || current === 'facturacion') && <CampanaNotificaciones />}
+            {(current === 'escolar' || current === 'facturacion') && <CampanaNotificaciones personales={current === 'escolar'} />}
             <BotonSoporte />
             <ProfileDropdown user={user} />
           </Box>
