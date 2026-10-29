@@ -26,7 +26,7 @@ import { refrescarCampana } from './CampanaTareas';
  * lleva como una conversación: lo que se dijo, quién la creó, quién la marcó
  * como completada. Las tareas las crea una persona del colegio, el equipo de
  * Zero (firma «Soporte IT · Zero») o Zero AI. El formulario de una tarea nueva
- * también lo usa «Por revisar», donde la tarea puede ser del colegio.
+ * también lo usa «Tareas», donde la tarea puede ser del colegio.
  *
  * Una tarea puede quedar «En revisión» (alguien ya la tomó; sigue pendiente), y
  * en la conversación se suben fotos, videos y documentos con el clip.
@@ -74,7 +74,7 @@ export function cuando(iso: string) {
 }
 
 const iniciales = (nombre: string) => {
-  if (nombre.startsWith('Soporte IT')) return 'IT';
+  if (nombre.startsWith('Soporte IT') || nombre.startsWith('Departamento de IT')) return 'IT';
   if (nombre === 'Zero AI') return 'AI';
   const p = nombre.trim().split(/\s+/);
   return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase() || '·';
@@ -135,7 +135,7 @@ export function TurnoChip({ turno }: { turno: Turno | null }) {
   if (!turno) return null;
   const e = espera(turno.desde);
   const tarde = e.horas >= 24;
-  const quien = turno.quien === 'soporte' ? 'Le toca a Soporte IT' : `Le toca al colegio${turno.nombre ? ` · ${turno.nombre}` : ''}`;
+  const quien = turno.quien === 'soporte' ? 'Le toca al Departamento de IT' : `Le toca al colegio${turno.nombre ? ` · ${turno.nombre}` : ''}`;
   const color = tarde ? 'bg-red-50 text-red-800 ring-red-200'
     : turno.quien === 'soporte' ? 'bg-violet-50 text-violet-800 ring-violet-200' : 'bg-amber-50 text-amber-900 ring-amber-200';
   const cierra = turno.cierraEn
@@ -426,7 +426,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
           return (
             <div key={m.id} className={`flex items-start gap-2 ${mio ? 'flex-row-reverse' : ''}`}>
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                mio ? 'bg-zero-600 text-white' : ia ? 'bg-violet-600 text-white' : m.autor.startsWith('Soporte IT') ? 'bg-violet-100 text-violet-800' : 'bg-amber-100 text-amber-800'}`}>
+                mio ? 'bg-zero-600 text-white' : ia ? 'bg-violet-600 text-white' : (m.autor.startsWith('Soporte IT') || m.autor.startsWith('Departamento de IT')) ? 'bg-violet-100 text-violet-800' : 'bg-amber-100 text-amber-800'}`}>
                 {ia ? <Sparkles className="h-3.5 w-3.5" /> : iniciales(m.autor)}
               </span>
               <div className={`flex max-w-[80%] flex-col gap-1 ${mio ? 'items-end' : ''}`}>
@@ -496,7 +496,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
             {soporte && (
               <>
                 <button type="button" onClick={(e) => setMenuPlantillas(e.currentTarget)} disabled={ocupado}
-                  title="Plantillas de Soporte IT (solo el equipo de Zero)"
+                  title="Plantillas del Departamento de IT (solo el equipo de Zero)"
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-2.5 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-50">
                   <MessageSquareText className="h-4 w-4" />Plantilla
                 </button>
@@ -575,7 +575,7 @@ interface AlumnoDeTarea { id: number; nombre: string; familiaPosible: boolean }
 
 /**
  * El formulario de una tarea nueva. Desde la ficha, el alumno ya viene
- * (`alumnoFijo`). Desde «Por revisar» no: la tarea puede ser del colegio, sin
+ * (`alumnoFijo`). Desde «Tareas» no: la tarea puede ser del colegio, sin
  * nadie («llamar al proveedor de uniformes»), o de un alumno que se busca ahí.
  */
 function NuevaTarea({ alumnoFijo, onCreada }: {
@@ -610,7 +610,7 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
   const documentos = !delColegio && alumno ? (dataDocs?.documentos ?? []) : [];
 
   const opciones: { id: Asignacion; texto: string; detalle: string }[] = [
-    { id: 'soporte', texto: 'Soporte IT · Zero', detalle: 'El equipo de Zero lo revisa' },
+    { id: 'soporte', texto: 'Departamento de IT · Zero', detalle: 'El equipo de Zero lo revisa' },
     { id: 'persona', texto: 'Una persona', detalle: 'Alguien del colegio, con nombre' },
   ];
 
@@ -664,7 +664,7 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
             <div><Segmento etiqueta="De quién es la tarea" valor={delColegio ? 'colegio' : 'alumno'}
               onCambio={(v) => setDelColegio(v === 'colegio')}
               opciones={[{ id: 'colegio', texto: DE_COLEGIO }, { id: 'alumno', texto: 'De un alumno o su familia' }]} /></div>
-            {delColegio && <span className="block text-xs text-gray-500">No es de ningún alumno: sale en «Por revisar», en el grupo {DE_COLEGIO}.</span>}
+            {delColegio && <span className="block text-xs text-gray-500">No es de ningún alumno: sale en «Tareas», en el grupo {DE_COLEGIO}.</span>}
             {!delColegio && (alumno
               ? (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -790,7 +790,7 @@ function BuscarAlumno({ onElegir }: { onElegir: (a: AlumnoDeTarea) => void }) {
 }
 
 /**
- * «Nueva tarea» desde «Por revisar»: del colegio o de un alumno que se busca
+ * «Nueva tarea» desde «Tareas»: del colegio o de un alumno que se busca
  * ahí. Al crearla se abre su conversación.
  */
 export function PanelNuevaTarea({ abierto, onCerrar, onCreada }: {
@@ -816,7 +816,7 @@ export function PanelNuevaTarea({ abierto, onCerrar, onCreada }: {
 
 /**
  * Una tarea sola en el panel de la derecha, con su conversación. La abre la
- * pantalla «Por revisar» y el enlace del correo (`?tarea=N`).
+ * pantalla «Tareas» y el enlace del correo (`?tarea=N`).
  */
 export function PanelTarea({ tareaId, puedeGestionar, onCerrar, onCambio }: {
   tareaId: number | null; puedeGestionar: boolean; onCerrar: () => void; onCambio: () => void;

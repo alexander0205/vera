@@ -16,11 +16,12 @@ import {
   teamMembers, teams, users,
 } from '@/lib/db/schema';
 import { SOPORTE } from '@/lib/config/soporte';
-import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
+import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, urlDeTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
 import { avisarTareaEnSlack } from './tareas-slack';
 import { notificarTarea } from '@/lib/notificaciones/tareas';
+import { avisarTareaPorWhatsApp } from '@/lib/notificaciones/whatsapp-tareas';
 import {
-  aQuienAvisar, AUTOR_SOPORTE, DE_COLEGIO, DESTINO, etiquetaAsignada, HORAS_SIN_RESPUESTA, PENDIENTES,
+  aQuienAvisar, AUTOR_SOPORTE, DE_COLEGIO, esFirmaSoporte, DESTINO, etiquetaAsignada, HORAS_SIN_RESPUESTA, PENDIENTES,
   primerNombre, TEXTO_CIERRE_AUTOMATICO, textoEvento, turnoDe,
   type AccionEstado, type AutorTarea, type AvisoTarea, type EstadoTarea, type NuevoAdjunto, type NuevaTarea,
 } from './tareas-reglas';
@@ -129,7 +130,7 @@ async function turnosDe(filas: {
   const ultimoDe = new Map(ultimos.map((u) => [u.tareaId, u]));
   const calculados = pendientes.map((f) => {
     const u = ultimoDe.get(f.id);
-    return { f, t: turnoDe({ ...f, ultimo: u ? { userId: u.userId, esSoporte: u.autor === AUTOR_SOPORTE || u.tipo === 'ia' } : null }) };
+    return { f, t: turnoDe({ ...f, ultimo: u ? { userId: u.userId, esSoporte: esFirmaSoporte(u.autor) || u.tipo === 'ia' } : null }) };
   });
   const ids = [...new Set(calculados.flatMap(({ t }) => t.usuarios.slice(0, 1)))];
   const nombres = new Map(ids.length === 0 ? [] : (await db.select({ id: users.id, name: users.name, email: users.email })
@@ -404,10 +405,13 @@ export async function avisarDeTarea(
         .filter((d) => d.platformRole !== 'admin' && d.id !== autor.userId).map((d) => d.id)])];
     }
 
-    // La campana y el celular de las mismas personas que reciben el correo.
+    // La campana, el celular y el WhatsApp de las mismas personas que reciben el correo.
     await notificarTarea(teamId, usuarios, {
       cambio: aviso, tareaId, titulo: t.titulo, autor: autor.nombre, texto,
     }, fila.colegio);
+    await avisarTareaPorWhatsApp(usuarios, {
+      colegio: fila.colegio, cambio: aviso, autor: autor.nombre, titulo: t.titulo, url: urlDeTarea(tareaId),
+    });
 
     const correos = new Set<string>();
     if (soporte) correos.add(SOPORTE.correo);
@@ -731,14 +735,14 @@ export async function avisarTareasSinRespuesta(): Promise<number> {
         .limit(1);
       const turno = turnoDe({
         ...p,
-        ultimo: ultimo ? { userId: ultimo.userId, esSoporte: ultimo.autor === AUTOR_SOPORTE || ultimo.tipo === 'ia' } : null,
+        ultimo: ultimo ? { userId: ultimo.userId, esSoporte: esFirmaSoporte(ultimo.autor) || ultimo.tipo === 'ia' } : null,
       });
       const [suya] = await db.update(t).set({ urgenteEnviadoEn: new Date() })
         .where(and(eq(t.id, p.id), or(isNull(t.urgenteEnviadoEn), lt(t.urgenteEnviadoEn, t.actualizadoEn))))
         .returning({ id: t.id });
       if (!suya) continue;
       const texto = turno.soporte
-        ? 'Esta tarea lleva más de 24 horas esperando respuesta de Soporte IT.'
+        ? 'Esta tarea lleva más de 24 horas esperando respuesta del Departamento de IT de Zero.'
         : 'Esta tarea lleva más de 24 horas esperando tu respuesta. Entra y respóndela, o márcala como completada si ya se resolvió.';
       await avisarDeTarea(p.teamId, p.id, 'urgente', AUTOR_SISTEMA, texto, {
         para: { usuarios: turno.usuarios, soporte: turno.soporte }, duenos: turno.colegio,

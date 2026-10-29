@@ -84,7 +84,7 @@ const SECCIONES: SeccionEscolar[] = [
   // Lo que alguien tiene que decidir o arreglar, de todas las familias. Antes
   // eso vivía en un chat o en la memoria de alguien y terminaba en un arreglo
   // por SQL de soporte. La campana de arriba lleva aquí con su número.
-  { tipo: 'item', id: 'escolar-por-revisar', href: '/escolar/por-revisar',  label: 'Por revisar',    icon: ListChecks },
+  { tipo: 'item', id: 'escolar-por-revisar', href: '/escolar/por-revisar',  label: 'Tareas',    icon: ListChecks },
   // SIGERD se fue a Configuración: se usa al montar el colegio y una vez al
   // año, y aquí ocupaba el sitio de algo que se abre a diario.
   { tipo: 'item', id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', icon: Settings },

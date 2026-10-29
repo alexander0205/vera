@@ -162,6 +162,8 @@ describe('inventario de rutas que modifican datos', () => {
   const REVISADAS_SOLO_SESION = new Set([
     '/admin/empresas/[id]/set-pruebas/aprobaciones', '/admin/empresas/[id]/set-pruebas/runs', '/admin/empresas/[id]/simulacion/restart',
     '/admin/empresas/[id]/simulacion/start', '/auth/2fa/disable', '/auth/2fa/setup', '/auth/send-verification', '/ecf/preview',
+    // El WhatsApp de la propia persona, para avisarle de sus tareas (29-10-2026).
+    '/cuenta/whatsapp',
     '/empresa', '/empresa/switch', '/equipo/miembros/[id]', '/metricas/factura-tiempo', '/notes', '/novedades/vistas',
     '/pdf/factura/preview', '/rnc/sync', '/user', '/zero-tickets/tickets/rating', '/zero-tickets/tickets', '/zero-tickets/tickets/typing',
   ]);
