@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ConceptosYTarifasDialog } from '@/components/administracion-escolar/ConceptosYTarifasDialog';
 import { FamiliaDelAlumno } from '@/components/administracion-escolar/FamiliaDelAlumno';
+import { CompletarFamiliasSigerd } from '@/components/administracion-escolar/CompletarFamiliasSigerd';
 import { aBorrador, deBorrador, estaVacio, type EstadoLote } from '@/lib/administracion-escolar/borrador-lote';
 import { PagosDelAlumno } from '@/components/administracion-escolar/PagosDelAlumno';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -123,6 +124,7 @@ const enAlcance = (g: Grupo, alcance: string | null) =>
 export default function MatricularDesdeSigerd() {
   const { can, isLoading: cargandoPermisos } = usePermissions();
   const puedePrecios = can('administracion-escolar:configurar');
+  const puedeGestionar = can('administracion-escolar:gestionar');
   // Mover a un alumno de sección es de configurar, igual que cambiar tarifas.
   const puedeRevisarCambios = puedePrecios;
 
@@ -949,6 +951,9 @@ export default function MatricularDesdeSigerd() {
       {/* Sin tarjetas de resumen: cuántos alumnos, en cuántas secciones y
           cuánto se carga hoy ya lo dice la barra de abajo, junto al botón que
           matricula. Arriba solo quedaba repetido (pedido del usuario, 24-10). */}
+
+      {/* Padres, fecha y sexo de todos, desde SIGERD y en el servidor: sigue aunque se cierre. */}
+      {puedeGestionar && <CompletarFamiliasSigerd />}
 
       {/* ── Avisos ─────────────────────────────────────────────────── */}
       {(resumen.sinResponsable > 0 || omitidos.length > 0) && (
