@@ -4564,3 +4564,21 @@ export const capturaFacturasArchivos = pgTable('captura_facturas_archivos', {
 ]);
 
 export type CapturaFactura = typeof capturaFacturas.$inferSelect;
+
+/**
+ * Lo decidido en una pantalla larga antes de guardarlo de verdad («Matricular
+ * desde SIGERD»), para que recargar o abrirla en otra computadora vuelva al
+ * mismo punto. Uno por colegio, año y pantalla (`clave`). Migración 0211.
+ */
+export const adminEscolarBorradores = pgTable('admin_escolar_borradores', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  periodoId: integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id, { onDelete: 'cascade' }),
+  clave:     varchar('clave', { length: 40 }).notNull(),
+  datos:     jsonb('datos').notNull().default({}),
+  updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_borradores_clave_idx').on(t.teamId, t.periodoId, t.clave),
+]);

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ConceptosYTarifasDialog } from '@/components/administracion-escolar/ConceptosYTarifasDialog';
 import { FamiliaDelAlumno } from '@/components/administracion-escolar/FamiliaDelAlumno';
+import { aBorrador, deBorrador, estaVacio, type EstadoLote } from '@/lib/administracion-escolar/borrador-lote';
 import { PagosDelAlumno } from '@/components/administracion-escolar/PagosDelAlumno';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { fmtDOP, hoyRD } from '@/lib/utils/format';
@@ -200,6 +201,95 @@ export default function MatricularDesdeSigerd() {
     }
   }, []);
   useEffect(() => { void cargar(); }, [cargar]);
+
+  /*
+   * Autoguardado: lo decidido aquí (cambios por alumno, chips de sección,
+   * quién no entra ahora, la fecha) se guarda solo en la base, uno por colegio
+   * y año, para que recargar o abrirlo en otra computadora vuelva al mismo
+   * punto. Al entrar se recupera; se borra al terminar de matricular.
+   * La familia y los pagos no pasan por aquí: se guardan al momento.
+   */
+  const [borrador, setBorrador] = useState<{
+    estado: 'cargando' | 'listo' | 'guardando' | 'guardado' | 'error';
+    actualizado?: string | null; por?: string | null; recuperado?: boolean;
+  }>({ estado: 'cargando' });
+  const borradorExiste = useRef(false);
+  const datosRef = useRef(datos);
+  datosRef.current = datos;
+  const periodoBorrador = datos?.periodo?.id ?? null;
+  useEffect(() => {
+    const d0 = datosRef.current;
+    if (!periodoBorrador || !d0) return;
+    let vigente = true;
+    fetch(`/api/administracion-escolar/matriculas/desde-sigerd/borrador?periodoId=${periodoBorrador}`)
+      .then((r) => (r.ok ? r.json() : { datos: null }))
+      .then((d) => {
+        if (!vigente) return;
+        const e = d.datos ? deBorrador(d.datos, {
+          alumnos: new Set(d0.grupos.flatMap((g) => g.estudiantes.map((x) => x.id))),
+          secciones: new Set(d0.grupos.map((g) => g.cursoId)),
+        }) : null;
+        borradorExiste.current = !!d.datos;
+        if (e && !estaVacio(e)) {
+          setAjustes(e.ajustes);
+          setCambiadosSeccion(e.cambiadosSeccion);
+          setFuera(e.fuera);
+          if (e.fecha) setFecha(e.fecha);
+          setBorrador({ estado: 'guardado', actualizado: d.actualizado, por: d.por, recuperado: true });
+        } else {
+          setBorrador({ estado: 'listo' });
+        }
+      })
+      .catch(() => { if (vigente) setBorrador({ estado: 'listo' }); });
+    return () => { vigente = false; };
+  }, [periodoBorrador]);
+  const estadoLote = useMemo<EstadoLote>(
+    () => ({ fecha: fechaElegida, fuera, cambiadosSeccion, ajustes }), [fechaElegida, fuera, cambiadosSeccion, ajustes]);
+  const pendienteRef = useRef<EstadoLote | null>(null);
+  const guardarBorrador = useCallback(async (e: EstadoLote, alSalir = false) => {
+    if (!periodoBorrador) return;
+    pendienteRef.current = null;
+    const vacio = estaVacio(e);
+    if (vacio && !borradorExiste.current) return;
+    if (!alSalir) setBorrador((b) => ({ ...b, estado: 'guardando' }));
+    try {
+      const url = '/api/administracion-escolar/matriculas/desde-sigerd/borrador';
+      const r = vacio
+        ? await fetch(`${url}?periodoId=${periodoBorrador}`, { method: 'DELETE', keepalive: alSalir })
+        : await fetch(url, {
+            method: 'PUT', keepalive: alSalir, headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ periodoId: periodoBorrador, datos: aBorrador(e) }),
+          });
+      if (!r.ok) throw new Error();
+      borradorExiste.current = !vacio;
+      if (!alSalir) setBorrador({ estado: vacio ? 'listo' : 'guardado', actualizado: new Date().toISOString(), por: null });
+    } catch {
+      if (!alSalir) setBorrador((b) => ({ ...b, estado: 'error' }));
+    }
+  }, [periodoBorrador]);
+  // Un segundo después del último cambio, como un documento que se guarda solo.
+  // Lo que se acaba de recuperar no se vuelve a mandar.
+  const recienRecuperado = useRef(true);
+  useEffect(() => {
+    if (borrador.estado === 'cargando') return;
+    if (recienRecuperado.current) { recienRecuperado.current = false; return; }
+    pendienteRef.current = estadoLote;
+    const t = setTimeout(() => void guardarBorrador(estadoLote), 1000);
+    return () => clearTimeout(t);
+    // Solo cuando cambia lo decidido: que el indicador pase a «Guardando…» no es un cambio.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estadoLote, guardarBorrador, borrador.estado === 'cargando']);
+  // Si se cierra la pestaña antes de ese segundo, se manda igual.
+  useEffect(() => {
+    const alSalir = () => { if (pendienteRef.current) void guardarBorrador(pendienteRef.current, true); };
+    window.addEventListener('pagehide', alSalir);
+    return () => window.removeEventListener('pagehide', alSalir);
+  }, [guardarBorrador]);
+  /** Empezar de cero: lo decidido se descarta, aquí y en el borrador. */
+  const descartarBorrador = () => {
+    setAjustes(new Map()); setCambiadosSeccion(new Map()); setFuera(new Set()); setFecha(null);
+  };
+
 
   // El plan de cada sección, con la fecha elegida: la fecha decide qué cuotas
   // ya tocan y cuáles espera el devengo.
@@ -686,6 +776,13 @@ export default function MatricularDesdeSigerd() {
         marcar(CAMBIOS, { estado: 'fallo', mensaje: e instanceof Error ? e.message : 'Error' });
       }
     }
+
+    // Ya se matriculó: el borrador hablaba de alumnos que ahora tienen su
+    // matrícula, y recuperarlo los pintaría con cambios que ya no son.
+    pendienteRef.current = null;
+    borradorExiste.current = false;
+    await fetch(`/api/administracion-escolar/matriculas/desde-sigerd/borrador?periodoId=${datos.periodo?.id}`, { method: 'DELETE' })
+      .catch(() => null);
   }
 
   // ── Estados de la página ──────────────────────────────────────────────
@@ -837,6 +934,7 @@ export default function MatricularDesdeSigerd() {
                 <span className="font-normal text-gray-400">(quien ya está matriculado y cambió de sección)</span>
               </Link>
             )}
+            <EstadoBorrador b={borrador} hayCambios={!estaVacio(estadoLote)} onDescartar={descartarBorrador} />
           </div>
         </div>
         <label className="flex flex-col gap-1 self-start lg:self-auto">
@@ -1688,3 +1786,33 @@ function Kpi({ icono, etiqueta, valor, nota, destacado }: {
 const claveIds = (ids: number[]) => [...ids].sort((a, b) => a - b).join(',');
 const clavePrecios = (ps: { conceptoId: number; montoCentavos: number }[]) =>
   ps.map((p) => `${p.conceptoId}:${p.montoCentavos}`).sort().join(',');
+
+/** Junto al título: si lo decidido está guardado, y de cuándo es lo recuperado. */
+function EstadoBorrador({ b, hayCambios, onDescartar }: {
+  b: { estado: string; actualizado?: string | null; por?: string | null; recuperado?: boolean };
+  hayCambios: boolean;
+  onDescartar: () => void;
+}) {
+  if (b.estado === 'cargando' || (!hayCambios && b.estado !== 'error')) return null;
+  const cuando = b.actualizado
+    ? new Date(b.actualizado).toLocaleString('es-DO', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
+      {b.estado === 'guardando' && <><Loader2 className="h-3 w-3 animate-spin" />Guardando…</>}
+      {b.estado === 'error' && <span className="text-red-600">No se pudo guardar lo último: revisa la conexión.</span>}
+      {(b.estado === 'guardado' || b.estado === 'listo') && (
+        <span className="inline-flex items-center gap-1">
+          <Check className="h-3 w-3 text-emerald-600" />
+          {b.recuperado
+            ? <>Seguimos donde se quedó{cuando ? ` el ${cuando}` : ''}{b.por ? ` (${b.por})` : ''}</>
+            : 'Guardado solo'}
+        </span>
+      )}
+      {hayCambios && b.estado !== 'guardando' && (
+        <button type="button" onClick={onDescartar} className="font-medium text-gray-500 underline hover:text-gray-700">
+          Empezar de cero
+        </button>
+      )}
+    </p>
+  );
+}
