@@ -23,8 +23,8 @@ import { base64UrlABytes } from '@/lib/notificaciones/base64';
  * push: el pago suena en el celular aunque Zero esté cerrado. Es opcional y por
  * dispositivo; si el servidor no tiene las llaves VAPID, el botón no aparece.
  *
- * No se sondea con un reloj, igual que `CampanaTareas`: se pide al entrar, al
- * volver a la pestaña y al abrir la campana. Un sondeo en cada pestaña abierta
+ * No se sondea con un reloj: se pide al entrar, al volver a la pestaña y al
+ * abrir la campana. Un sondeo en cada pestaña abierta
  * fue en su día la mayoría de las peticiones del sistema; el push existe
  * justamente para que no haga falta preguntar.
  *

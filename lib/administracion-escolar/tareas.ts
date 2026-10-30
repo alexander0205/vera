@@ -446,14 +446,6 @@ const sonMias = (yo: QuienMira) => or(
   yo.esSoporte ? eq(adminEscolarTareas.asignadaA, 'soporte') : sql`false`,
 )!;
 
-/** El número de la campana: las pendientes (abiertas o en revisión) que le tocan a quien mira. */
-export async function conteoMias(teamId: number, yo: QuienMira): Promise<number> {
-  const [r] = await db.select({ n: sql<number>`count(*)::int` })
-    .from(adminEscolarTareas)
-    .where(and(eq(adminEscolarTareas.teamId, teamId), inArray(adminEscolarTareas.estado, PENDIENTES), sonMias(yo)));
-  return r?.n ?? 0;
-}
-
 export interface FiltroColegio {
   /** `mias` y `todas` son las pendientes (abiertas y en revisión). */
   vista: 'mias' | 'todas' | 'revision' | 'hechas';

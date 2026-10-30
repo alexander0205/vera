@@ -31,7 +31,6 @@ import { CompanySwitcher } from '@/components/company-switcher';
 import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import { ProfileDropdown, type UserInfo } from '@/components/profile-dropdown';
 import { BotonSoporte } from '@/components/support/BotonSoporte';
-import { CampanaTareas } from '@/components/administracion-escolar/CampanaTareas';
 import { CampanaNotificaciones } from '@/components/notificaciones/CampanaNotificaciones';
 import type { ModuleKey } from '@/lib/config/modules';
 import type { Team } from '@/lib/db/schema';
@@ -272,14 +271,13 @@ export function ModuleHeader({
               lo reemplazaría entero y se perdería el colapso al buscar. */}
           {/* 220 y no 100: el botón «Asistencia» lleva ícono + palabra (≈120 px)
               y con `overflow: hidden` y un tope de 100 empujaba al avatar fuera
-              de la barra, que es lo que lleva al perfil. En Gobernanza va además
-              la campana de las tareas por revisar: fuera del colegio no hay
-              tareas, y pedirla ahí sería una consulta para enseñar un cero. */}
-          {/* La campana de pagos (comprobantes de las familias y cobros con
-              tarjeta) suma otros 34 px en el colegio y en Facturación, donde se
-              emiten los enlaces de pago; en el POS y el resto no llegan pagos así. */}
-          <Box {...apartar(buscadorAbierto, current === 'escolar' ? 300 : current === 'facturacion' ? 260 : 220)}>
-            {current === 'escolar' && <CampanaTareas />}
+              de la barra, que es lo que lleva al perfil. */}
+          {/* La campana (comprobantes de las familias, cobros con tarjeta y, en
+              el colegio, las tareas) suma otros 34 px en el colegio y en
+              Facturación, donde se emiten los enlaces de pago; en el POS y el
+              resto no llegan pagos así. Las tareas ya no llevan ícono propio:
+              avisan por la campana, que abre cada una por su URL. */}
+          <Box {...apartar(buscadorAbierto, current === 'escolar' || current === 'facturacion' ? 260 : 220)}>
             {/* Ella misma se esconde si el rol no ve ningún tipo de aviso. */}
             {(current === 'escolar' || current === 'facturacion') && <CampanaNotificaciones personales={current === 'escolar'} />}
             <BotonSoporte />
