@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Paginador } from '@/components/ui/paginador';
@@ -96,11 +97,18 @@ export default function PagosEscolaresClient() {
   // Dos vistas de lo mismo visto desde dos momentos: lo que YA entró, y lo que
   // dice una familia que mandó y falta comprobar. El correo que le llega al
   // colegio apunta aquí con ?tab=comprobantes.
-  const [tab, setTab] = useState<'aplicados' | 'comprobantes'>(() => {
-    if (typeof window === 'undefined') return 'aplicados';
-    return new URLSearchParams(window.location.search).get('tab') === 'comprobantes'
-      ? 'comprobantes' : 'aplicados';
-  });
+  // La pestaña vive en la URL: si la campana avisa de un comprobante mientras
+  // se está en «Pagos aplicados», el enlace tiene que cambiar de pestaña solo.
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const tab: 'aplicados' | 'comprobantes' = sp.get('tab') === 'comprobantes' ? 'comprobantes' : 'aplicados';
+  const setTab = (t: 'aplicados' | 'comprobantes') => {
+    const q = new URLSearchParams(sp.toString());
+    if (t === 'comprobantes') q.set('tab', t); else q.delete('tab');
+    q.delete('comprobante');
+    router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
+  };
 
   const [pagina, setPagina] = useState(1);
   const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });

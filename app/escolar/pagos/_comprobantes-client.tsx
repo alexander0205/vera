@@ -16,12 +16,18 @@
  * decide en el sitio — no mueve dinero, solo necesita el motivo que el padre va
  * a leer.
  *
+ * El comprobante abierto vive en la URL (`?comprobante=12`), igual que la tarea
+ * abierta en «Tareas»: cada uno tiene su dirección, y la campana, el celular y
+ * el correo abren directo su ventana — la de aprobar si está pendiente, la del
+ * papel si ya se decidió.
+ *
  * Cada tarjeta muestra lo que la IA leyó del papel (rotulado «Leído por IA —
  * revísalo»: propone, no decide) y, si el comprobante se parece a otro de la
  * misma familia, un aviso de posible duplicado con un enlace al original.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AprobarComprobanteDialog } from '@/components/administracion-escolar/AprobarComprobanteDialog';
@@ -156,22 +162,26 @@ export function ComprobantesClient() {
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<number | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [viendo, setViendo] = useState<Comprobante | null>(null);
   const [cuentasBanco, setCuentasBanco] = useState<CuentaBancoOpcion[]>([]);
-  // Se guarda el id y no la fila: la lista se recarga sola (para traer la lectura
-  // de la IA) y el diálogo tiene que ver la fila nueva, no una copia vieja.
-  const [aprobandoId, setAprobandoId] = useState<number | null>(null);
   const [rechazando, setRechazando] = useState<number | null>(null);
   const [motivo, setMotivo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'aprobado' | 'rechazado'>('todos');
   const [busca, setBusca] = useState('');
-  // El comprobante al que lleva la campana de notificaciones (`?comprobante=12`):
-  // se resalta y se baja hasta él. Se lee una vez; no es estado de la pantalla.
-  const [resaltado, setResaltado] = useState<number | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const v = new URLSearchParams(window.location.search).get('comprobante');
-    return v && /^\d+$/.test(v) ? Number(v) : null;
-  });
+
+  // El abierto es un id de la URL y no una copia de la fila: la lista se recarga
+  // sola (para traer la lectura de la IA) y la ventana tiene que ver la fila
+  // nueva. Al cerrar se queda resaltado en la lista, para no perderle el rastro.
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const abiertoId = Number(sp.get('comprobante')) || null;
+  const [resaltado, setResaltado] = useState<number | null>(abiertoId);
+  useEffect(() => { if (abiertoId) setResaltado(abiertoId); }, [abiertoId]);
+  const abrir = useCallback((id: number | null) => {
+    const q = new URLSearchParams(sp.toString());
+    if (id) q.set('comprobante', String(id)); else q.delete('comprobante');
+    router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
+  }, [sp, pathname, router]);
 
   /**
    * `silenciosa` recarga sin el spinner de pantalla completa: se usa para traer
@@ -220,17 +230,17 @@ export function ComprobantesClient() {
   }, [filas, cargar]);
 
   /**
-   * Ir al comprobante del que este es posible duplicado: se quitan los filtros
-   * (el original puede estar aprobado y escondido), se resalta y se baja hasta él.
+   * Ir al comprobante del que este es posible duplicado: se abre el suyo y se
+   * quitan los filtros (el original puede estar aprobado y escondido), para que
+   * al cerrarlo quede resaltado a la vista.
    */
   const irA = useCallback((id: number) => {
-    setAprobandoId(null);
     setFiltroEstado('todos'); setBusca('');
-    setResaltado(id);
+    abrir(id);
     setTimeout(() => {
       document.getElementById(`comprobante-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, 60);
-  }, []);
+  }, [abrir]);
 
   async function rechazar(id: number, motivoTexto: string) {
     setOcupado(id); setAviso(null); setError(null);
@@ -274,7 +284,10 @@ export function ComprobantesClient() {
     await cargar();
   }, [cargar]);
 
-  const aprobando = aprobandoId == null ? null : filas.find((f) => f.id === aprobandoId) ?? null;
+  // Pendiente → la ventana de aprobar (que ya enseña el papel); decidido → solo el papel.
+  const abierto = abiertoId == null ? null : filas.find((f) => f.id === abiertoId) ?? null;
+  const aprobando = abierto?.estado === 'pendiente' ? abierto : null;
+  const viendo = abierto && abierto.estado !== 'pendiente' ? abierto : null;
   const pendientes = filas.filter((f) => f.estado === 'pendiente');
   const montoPendiente = pendientes.reduce((s, f) => s + f.montoCentavos, 0);
 
@@ -324,6 +337,17 @@ export function ComprobantesClient() {
         <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
           <p className="text-sm text-emerald-900">{aviso}</p>
+        </div>
+      )}
+      {/* Un enlace viejo, o de un comprobante que ya no entra en la lista: se
+          dice, en vez de abrir la pantalla como si no hubiera pasado nada. */}
+      {abiertoId != null && !abierto && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <p className="text-sm text-amber-900">
+            No encontramos el comprobante #{abiertoId} en la lista.{' '}
+            <button type="button" onClick={() => abrir(null)} className="font-medium underline">Cerrar</button>
+          </p>
         </div>
       )}
       {error && (
@@ -468,7 +492,7 @@ export function ComprobantesClient() {
                 )}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setViendo(c)}>
+                  <Button variant="outline" size="sm" onClick={() => abrir(c.id)}>
                     <FileText className="mr-1.5 h-4 w-4" /> Ver comprobante
                   </Button>
                   <a href={`/api/administracion-escolar/comprobantes/${c.id}/archivo`}
@@ -486,7 +510,7 @@ export function ComprobantesClient() {
                         Rechazar
                       </Button>
                       <Button size="sm" disabled={ocupado === c.id}
-                        onClick={() => setAprobandoId(c.id)}>
+                        onClick={() => abrir(c.id)}>
                         {ocupado === c.id
                           ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                           : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
@@ -524,7 +548,7 @@ export function ComprobantesClient() {
         comprobante={aprobando}
         cuentas={cuentasBanco}
         abierto={aprobando !== null}
-        onCerrar={() => setAprobandoId(null)}
+        onCerrar={() => abrir(null)}
         onVerDuplicado={irA}
         onAprobado={trasAprobar}
       />
@@ -532,7 +556,7 @@ export function ComprobantesClient() {
       {/* Ver el archivo sin salir de la cola. */}
       {viendo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setViendo(null)}>
+          onClick={() => abrir(null)}>
           <div className="max-h-full w-full max-w-3xl overflow-auto rounded-lg bg-white p-4"
             onClick={(ev) => ev.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -542,7 +566,7 @@ export function ComprobantesClient() {
                   {fmtDOP(viendo.montoCentavos)} · {viendo.archivoNombre}
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setViendo(null)}>Cerrar</Button>
+              <Button variant="outline" size="sm" onClick={() => abrir(null)}>Cerrar</Button>
             </div>
             {viendo.archivoMime.startsWith('image/') ? (
               // eslint-disable-next-line @next/next/no-img-element
