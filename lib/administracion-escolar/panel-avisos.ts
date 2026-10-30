@@ -12,12 +12,13 @@
  * errores— : en cuanto alguien le pone el correo al padre, desaparece solo.
  */
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarAvisosEnviados, adminEscolarCargos, adminEscolarConceptosPago,
-  adminEscolarEstudiantes,
+  adminEscolarEstudiantes, adminEscolarMatriculas,
 } from '@/lib/db/schema';
+import { entregaDe, type Entrega } from './avisos-etiquetas';
 import { avisosDeHoy, candidatos, destinoDelCanal } from './avisos';
 import { canalesDelColegio, type CanalesActivos } from './canales';
 import type { Aviso, Canal } from './ciclo-cobro';
@@ -167,55 +168,92 @@ export interface FilaHistorial {
   canal: string;
   tipo: string;
   destino: string | null;
+  /** «Enviado en un solo mensaje con 2 cobro(s) más», «Acta de nacimiento». */
+  detalle: string | null;
+  /** Las filas con el mismo grupo viajaron en UN mensaje. */
+  grupo: string | null;
+  entrega: Entrega;
+  /** El motivo de Meta cuando el WhatsApp falló. */
+  errorEntrega: string | null;
   estudiante: string;
-  estudianteId: number;
+  estudianteId: number | null;
   concepto: string | null;
+  /** El monto de la cuota avisada; nulo en los avisos del expediente. */
+  montoCentavos: number | null;
+  vence: string | null;
 }
 
+/** Más que esto no se pinta de una vez: con un rango más corto se ve todo. */
+export const TOPE_HISTORIAL = 5000;
+
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * Lo que ya salió, lo más reciente primero.
+ * Lo que ya salió en un rango de días (de República Dominicana), lo más
+ * reciente primero.
  *
  * Es la constancia del colegio cuando una familia dice que no le avisaron: el
- * día, la hora y a qué número fue. Por eso guarda el destino tal como estaba
- * ese día y no se lee del contacto — el teléfono de hoy puede ser otro.
+ * día, la hora, a qué número fue y si WhatsApp dijo que llegó. Por eso guarda
+ * el destino tal como estaba ese día y no se lee del contacto — el teléfono de
+ * hoy puede ser otro.
+ *
+ * Trae el rango entero (hasta `TOPE_HISTORIAL`) y no una página: la pantalla
+ * filtra, ordena, cuenta y exporta sobre todo lo del rango, que es lo que pide
+ * analizarlo. Los avisos del expediente no tienen cuota: el alumno sale de la
+ * matrícula.
  */
 export async function historialDeAvisos(
   teamId: number,
-  opts: { limit?: number; offset?: number; canal?: string } = {},
-): Promise<{ filas: FilaHistorial[]; total: number }> {
-  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
-  const offset = Math.max(opts.offset ?? 0, 0);
-  const donde = opts.canal
-    ? and(eq(adminEscolarAvisosEnviados.teamId, teamId), eq(adminEscolarAvisosEnviados.canal, opts.canal))
-    : eq(adminEscolarAvisosEnviados.teamId, teamId);
+  opts: { desde?: string | null; hasta?: string | null } = {},
+): Promise<{ filas: FilaHistorial[]; total: number; truncado: boolean }> {
+  const env = adminEscolarAvisosEnviados.enviadoAt;
+  // `enviado_at` se guarda en UTC sin zona; el rango viene en días de RD.
+  const condiciones = [
+    eq(adminEscolarAvisosEnviados.teamId, teamId),
+    opts.desde && FECHA.test(opts.desde)
+      ? gte(env, sql`(${opts.desde}::date::timestamp at time zone 'America/Santo_Domingo') at time zone 'UTC'`)
+      : undefined,
+    opts.hasta && FECHA.test(opts.hasta)
+      ? lt(env, sql`((${opts.hasta}::date + 1)::timestamp at time zone 'America/Santo_Domingo') at time zone 'UTC'`)
+      : undefined,
+  ];
+  const donde = and(...condiciones);
+  const estudianteId = sql<number | null>`coalesce(${adminEscolarCargos.estudianteId}, ${adminEscolarMatriculas.estudianteId})`;
 
   const [filas, [conteo]] = await Promise.all([
     db
       .select({
         id: adminEscolarAvisosEnviados.id,
-        enviadoAt: adminEscolarAvisosEnviados.enviadoAt,
+        enviadoAt: env,
         canal: adminEscolarAvisosEnviados.canal,
         tipo: adminEscolarAvisosEnviados.tipo,
         destino: adminEscolarAvisosEnviados.destino,
-        estudianteId: adminEscolarCargos.estudianteId,
+        detalle: adminEscolarAvisosEnviados.detalle,
+        grupo: adminEscolarAvisosEnviados.grupo,
+        estadoEntrega: adminEscolarAvisosEnviados.estadoEntrega,
+        errorEntrega: adminEscolarAvisosEnviados.errorEntrega,
+        estudianteId,
         nombres: adminEscolarEstudiantes.nombres,
         apellidos: adminEscolarEstudiantes.apellidos,
         concepto: adminEscolarConceptosPago.nombre,
+        montoCentavos: adminEscolarCargos.montoCentavos,
+        vence: adminEscolarCargos.fechaVencimiento,
       })
       .from(adminEscolarAvisosEnviados)
-      .innerJoin(adminEscolarCargos, eq(adminEscolarAvisosEnviados.cargoId, adminEscolarCargos.id))
-      .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
+      .leftJoin(adminEscolarCargos, eq(adminEscolarAvisosEnviados.cargoId, adminEscolarCargos.id))
+      .leftJoin(adminEscolarMatriculas, eq(adminEscolarAvisosEnviados.matriculaId, adminEscolarMatriculas.id))
+      .leftJoin(adminEscolarEstudiantes, eq(adminEscolarEstudiantes.id, estudianteId))
       .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
       .where(donde)
-      .orderBy(desc(adminEscolarAvisosEnviados.enviadoAt))
-      .limit(limit)
-      .offset(offset),
+      .orderBy(desc(env), desc(adminEscolarAvisosEnviados.id))
+      .limit(TOPE_HISTORIAL),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(adminEscolarAvisosEnviados)
       .where(donde),
   ]);
 
+  const total = conteo?.n ?? 0;
   return {
     filas: filas.map((f) => ({
       id: f.id,
@@ -223,10 +261,17 @@ export async function historialDeAvisos(
       canal: f.canal,
       tipo: f.tipo,
       destino: f.destino,
-      estudianteId: f.estudianteId,
-      estudiante: `${f.nombres} ${f.apellidos ?? ''}`.trim(),
+      detalle: f.detalle,
+      grupo: f.grupo,
+      entrega: entregaDe(f.estadoEntrega),
+      errorEntrega: f.errorEntrega,
+      estudianteId: f.estudianteId == null ? null : Number(f.estudianteId),
+      estudiante: f.nombres ? `${f.nombres} ${f.apellidos ?? ''}`.trim() : 'Alumno eliminado',
       concepto: f.concepto,
+      montoCentavos: f.montoCentavos,
+      vence: f.vence,
     })),
-    total: conteo?.n ?? 0,
+    total,
+    truncado: total > TOPE_HISTORIAL,
   };
 }

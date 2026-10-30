@@ -7,7 +7,6 @@ import useSWR from 'swr';
 import { Check, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { PanelNuevaTarea, PanelTarea, Segmento, traer, TurnoChip } from '@/components/administracion-escolar/TareasEstudiante';
-import { refrescarCampana } from '@/components/administracion-escolar/CampanaTareas';
 import { PedirWhatsApp } from '@/components/notificaciones/PedirWhatsApp';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
@@ -95,7 +94,6 @@ export default function PorRevisarClient() {
       if (!res.ok) throw new Error(d.error ?? 'No se pudo cambiar');
       toast.success(t.estado === 'completada' ? 'Tarea abierta de nuevo' : 'Tarea completada');
       void mutate();
-      refrescarCampana();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cambiar');
     } finally { setCambiando(null); }
@@ -112,7 +110,6 @@ export default function PorRevisarClient() {
       else toast.success('Zero AI no encontró nada por revisar');
       setOrigen('todas');
       void mutate();
-      refrescarCampana();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo revisar');
     } finally { setRevisando(false); }
@@ -267,7 +264,6 @@ export default function PorRevisarClient() {
           // Se ve en «Todo el colegio» aunque no sea de quien la crea.
           if (vista === 'hechas') setVista('todas');
           void mutate();
-          refrescarCampana();
           abrir(id);
         }} />
     </section>

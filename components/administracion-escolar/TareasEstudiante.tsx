@@ -16,7 +16,6 @@ import {
   type AccionEstado, type Asignacion, type EstadoTarea, type PlantillaSoporte,
 } from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { refrescarCampana } from './CampanaTareas';
 
 /**
  * Las tareas por revisar de un alumno y de su familia, desde su ficha.
@@ -190,7 +189,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
   const abrir = (a: 'alumno' | 'familia') => {
     setAlcance(a); setEstado('abierta'); setVista({ tipo: 'lista' }); setAbierto(true);
   };
-  const refrescar = () => { void mutarConteo(); void mutarLista(); void mutarHilo(); refrescarCampana(); };
+  const refrescar = () => { void mutarConteo(); void mutarLista(); void mutarHilo(); };
 
   const titulo = vista.tipo === 'hilo' ? (dataHilo?.tarea.titulo ?? 'Tarea')
     : vista.tipo === 'nueva' ? 'Nueva tarea' : 'Tareas por revisar';
@@ -823,7 +822,7 @@ export function PanelTarea({ tareaId, puedeGestionar, onCerrar, onCambio }: {
 }) {
   const { data, error, mutate } = useSWR<{ tarea: TareaCompleta; yo: number; soporte?: boolean }>(
     tareaId ? `/api/administracion-escolar/tareas/${tareaId}` : null, traer);
-  const refrescar = () => { void mutate(); onCambio(); refrescarCampana(); };
+  const refrescar = () => { void mutate(); onCambio(); };
 
   return (
     <Drawer anchor="right" open={tareaId != null} onClose={onCerrar}
