@@ -44,7 +44,7 @@ import { riesgosDeCambio } from '@/lib/suscripcion/cambio-plan';
 import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
 import { estadoDelTramo } from '@/lib/suscripcion/tramo';
 import { checkoutAction, empezarPruebaAction } from '@/lib/payments/actions';
-import { stripe, tieneMetodoDePago, historialDeCobros } from '@/lib/payments/stripe';
+import { stripe, estadoDelMetodoDePago, historialDeCobros } from '@/lib/payments/stripe';
 import { ecfDocuments, teamMembers } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { TIPOS_ECF } from '@/lib/ecf/types';
@@ -105,7 +105,9 @@ export default async function SuscripcionPage({
   // `null` = no se pudo preguntar a Stripe. Se trata como «no tiene», que es el
   // lado seguro: enseñar el botón de más se arregla con un clic; esconderlo deja
   // a alguien sin saber cómo pagar.
-  const tieneTarjeta = (await tieneMetodoDePago(team.stripeCustomerId)) === true;
+  const metodoDePago = await estadoDelMetodoDePago(team.stripeCustomerId, team.stripeSubscriptionId);
+  const tieneTarjeta = metodoDePago === 'predeterminado';
+  const tarjetaSuelta = metodoDePago === 'suelta';
 
   const cabecera = (
     <Cabecera esHistorial={esHistorial} />
@@ -214,7 +216,7 @@ export default async function SuscripcionPage({
     <Contenedor>
       {cabecera}
 
-      <BannerEstado datos={datosDelBanner({ suscripcion, team, tieneTarjeta, tieneCliente, tieneSuscripcion, total, esInterna })} />
+      <BannerEstado datos={datosDelBanner({ suscripcion, team, tieneTarjeta, tarjetaSuelta, tieneCliente, tieneSuscripcion, total, esInterna })} />
 
       {/* Sin plan no hay tarjeta «TU PLAN»: pintarla con lo que diga la
           columna es enseñar un contrato que no existe — fue exactamente lo que
@@ -289,7 +291,7 @@ export default async function SuscripcionPage({
             ni tarjeta que mantener. Lo que le toca está arriba: elegir. */}
         {!sinPlan && (
           <BloqueCobro
-            tieneTarjeta={tieneTarjeta}
+            tieneTarjeta={tieneTarjeta || tarjetaSuelta}
             tieneCliente={tieneCliente}
             esInterna={esInterna}
             legal={esInterna
@@ -548,6 +550,7 @@ function datosDelBanner(d: {
   };
   team: { trialEnd?: Date | null; periodoFin?: Date | null; morosoDesde?: Date | null };
   tieneTarjeta: boolean;
+  tarjetaSuelta?: boolean;
   tieneCliente: boolean;
   tieneSuscripcion: boolean;
   total: number;
@@ -592,11 +595,16 @@ function datosDelBanner(d: {
       borde: urgente ? '#f5e6c8' : '#dce4fa',
       titulo: d.tieneTarjeta
         ? 'Todo listo: al terminar, se cobra solo'
-        : 'Cuando termine, la cuenta pasa a solo lectura',
+        : d.tarjetaSuelta
+          ? 'Tu tarjeta aún no está como predeterminada'
+          : 'Cuando termine, la cuenta pasa a solo lectura',
       texto: d.tieneTarjeta
         ? `Al terminar la prueba se cobran ${usd(d.total)} y sigues sin interrupción. No tienes que hacer nada.`
-        : `Podrás consultar y descargar todo lo emitido durante ${plazo(SOLO_LECTURA.diasTrasPrueba)} más, pero no emitir comprobantes nuevos ni cobrar en caja. Agrega una tarjeta y no se interrumpe nada.`,
-      cta: d.tieneTarjeta ? alPortal('Tarjeta y facturas') : alPortal('Agregar método de pago'),
+        : d.tarjetaSuelta
+          ? 'Stripe solo cobra la tarjeta predeterminada. Márcala así para que se cobre sola; si no, al terminar la prueba la cuenta pasa a solo lectura.'
+          : `Podrás consultar y descargar todo lo emitido durante ${plazo(SOLO_LECTURA.diasTrasPrueba)} más, pero no emitir comprobantes nuevos ni cobrar en caja. Agrega una tarjeta y no se interrumpe nada.`,
+      cta: d.tieneTarjeta ? alPortal('Tarjeta y facturas')
+        : d.tarjetaSuelta ? alPortal('Marcarla como predeterminada') : alPortal('Agregar método de pago'),
     };
   }
 
@@ -682,7 +690,7 @@ function datosDelBanner(d: {
       pie: d.team.periodoFin ? `Se cobra el ${fechaCorta(d.team.periodoFin)}` : null,
       color: AMBAR, fondo: '#fffaf0', borde: '#f5e6c8',
       titulo: 'No encontramos tu método de pago',
-      // Sin acusar: `tieneMetodoDePago` devuelve null cuando no se pudo
+      // Sin acusar: `estadoDelMetodoDePago` devuelve null cuando no se pudo
       // preguntar a Stripe, y eso se trata como «no tiene». Decir «no tienes
       // tarjeta» a quien sí la tiene, porque Stripe tardó, es peor que pedirle
       // que lo revise.

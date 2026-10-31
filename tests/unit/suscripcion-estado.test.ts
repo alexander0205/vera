@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // se probaría nada de lo de abajo.
 vi.stubEnv('NEXT_PUBLIC_BILLING_ENABLED', 'true');
 
-const { evaluarSuscripcion, permiteEscritura } = await import('@/lib/suscripcion/estado');
+const { avisoDePruebaSegunMetodo, evaluarSuscripcion, permiteEscritura } = await import('@/lib/suscripcion/estado');
 const { evaluarLimite, LIMITES, PRUEBA, MORA, SOLO_LECTURA } =
   await import('@/lib/config/suscripcion');
 
@@ -232,3 +232,28 @@ describe('con el billing apagado', () => {
     expect(s.avisar).toBe(false);
   });
 });
+
+describe('el aviso de prueba según lo que Stripe puede cobrar', () => {
+  const porVencer = { estado: 'prueba-por-vencer' as const, avisar: true, mensaje: 'Agrega tu método de pago', diasRestantes: 2 };
+
+  it('con tarjeta predeterminada no se le pide nada', () => {
+    expect(avisoDePruebaSegunMetodo(porVencer, 'predeterminado')).toMatchObject({ avisar: false, mensaje: null, estado: 'prueba-por-vencer' });
+  });
+
+  it('con una tarjeta suelta se le pide marcarla, no agregar otra', () => {
+    const r = avisoDePruebaSegunMetodo(porVencer, 'suelta');
+    expect(r.avisar).toBe(true);
+    expect(r.mensaje).toBe('Te quedan 2 días de prueba. Marca tu tarjeta como predeterminada para que se cobre sola.');
+  });
+
+  it('sin tarjeta, o si Stripe no contestó, el aviso sigue igual', () => {
+    expect(avisoDePruebaSegunMetodo(porVencer, 'ninguno')).toEqual(porVencer);
+    expect(avisoDePruebaSegunMetodo(porVencer, null)).toEqual(porVencer);
+  });
+
+  it('los demás estados no se tocan', () => {
+    const mora = { estado: 'mora' as const, avisar: true, mensaje: 'Actualiza tu tarjeta', diasRestantes: 3 };
+    expect(avisoDePruebaSegunMetodo(mora, 'predeterminado')).toEqual(mora);
+  });
+});
+
