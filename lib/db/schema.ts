@@ -2664,6 +2664,13 @@ export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados
   /** El motivo real de Meta cuando falla. */
   errorEntrega: text('error_entrega'),
   revisadoAt: timestamp('revisado_at'),
+  /** Lo que salió, tal cual (0214). NULL = aviso anterior, su texto no se guardó. */
+  texto: text('texto'),
+  /** Si llevaba enlace de pago. NULL = no se sabe. */
+  conEnlace: boolean('con_enlace'),
+  /** La primera vez que se abrió ese enlace, y cuántas veces van. */
+  abiertoAt: timestamp('abierto_at'),
+  aperturas: integer('aperturas').notNull().default(0),
   enviadoAt: timestamp('enviado_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('admin_escolar_avisos_unico').on(t.cargoId, t.tipo, t.offsetDias, t.canal),

@@ -181,6 +181,11 @@ export interface FilaHistorial {
   /** El monto de la cuota avisada; nulo en los avisos del expediente. */
   montoCentavos: number | null;
   vence: string | null;
+  /** Si llevaba enlace; `null` = aviso anterior a saberlo. */
+  conEnlace: boolean | null;
+  /** La primera vez que abrieron el enlace. */
+  abiertoAt: string | null;
+  aperturas: number;
 }
 
 /** Más que esto no se pinta de una vez: con un rango más corto se ve todo. */
@@ -232,6 +237,9 @@ export async function historialDeAvisos(
         grupo: adminEscolarAvisosEnviados.grupo,
         estadoEntrega: adminEscolarAvisosEnviados.estadoEntrega,
         errorEntrega: adminEscolarAvisosEnviados.errorEntrega,
+        conEnlace: adminEscolarAvisosEnviados.conEnlace,
+        abiertoAt: adminEscolarAvisosEnviados.abiertoAt,
+        aperturas: adminEscolarAvisosEnviados.aperturas,
         estudianteId,
         nombres: adminEscolarEstudiantes.nombres,
         apellidos: adminEscolarEstudiantes.apellidos,
@@ -270,8 +278,21 @@ export async function historialDeAvisos(
       concepto: f.concepto,
       montoCentavos: f.montoCentavos,
       vence: f.vence,
+      conEnlace: f.conEnlace,
+      abiertoAt: f.abiertoAt ? f.abiertoAt.toISOString() : null,
+      aperturas: f.aperturas,
     })),
     total,
     truncado: total > TOPE_HISTORIAL,
   };
+}
+
+/** Lo que decía un aviso. Aparte del historial: son miles de filas y se lee de una en una. */
+export async function textoDeAviso(teamId: number, id: number): Promise<{ texto: string | null } | null> {
+  const [fila] = await db
+    .select({ texto: adminEscolarAvisosEnviados.texto })
+    .from(adminEscolarAvisosEnviados)
+    .where(and(eq(adminEscolarAvisosEnviados.id, id), eq(adminEscolarAvisosEnviados.teamId, teamId)))
+    .limit(1);
+  return fila ?? null;
 }

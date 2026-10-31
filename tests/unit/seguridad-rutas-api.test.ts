@@ -151,7 +151,7 @@ describe('inventario de rutas que modifican datos', () => {
     '/dgii/v1/[token]/fe/recepcion/api/ecf', '/dgii/[rnc]/aprobacioncomercial', '/dgii/[rnc]/recepcion',
     '/documentos-familia/[token]', '/firma/[token]', '/formularios-publicos/[slug]', '/formularios-publicos/[slug]/borrador',
     '/formularios-publicos/[slug]/borrador/[token]', '/formularios-publicos/[slug]/borrador/[token]/archivo', '/fotos/captura/[token]',
-    '/habilitacion/set-pruebas/runs/[runId]', '/horas/[token]', '/pagar/[token]/comprobante', '/pagos/link/[token]/iniciar',
+    '/habilitacion/set-pruebas/runs/[runId]', '/horas/[token]', '/pagar/[token]/abierto', '/pagar/[token]/comprobante', '/pagos/link/[token]/iniciar',
     '/pagos/link/[token]/simular', '/stripe/webhook', '/subir-factura/[token]', '/user', '/whatsapp/webhook/[teamId]',
     '/zero-tickets/agent/canned-responses', '/zero-tickets/agent/canned-responses/[id]', '/zero-tickets/agent/presence',
     '/zero-tickets/agent/tickets/[id]/claim', '/zero-tickets/agent/tickets/[id]/hold', '/zero-tickets/agent/tickets/[id]/reply',

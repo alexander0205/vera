@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 interface Fila {
   id: number; teamId: number; cargoId: number; tipo: string; offsetDias: number;
   canal: string; destino: string | null; grupo: string | null;
-  mensajeId?: string | null; detalle?: string | null;
+  mensajeId?: string | null; detalle?: string | null; texto?: string | null; conEnlace?: boolean | null;
 }
 
 const almacen = vi.hoisted(() => ({ filas: [] as unknown[], seq: 0 }));
@@ -115,7 +115,7 @@ function armar(over: Partial<OpcionesDespacho> = {}, fallar?: (canal: string) =>
       whatsapp: async (destino, texto, m) => {
         if (fallar?.('whatsapp')) throw new Error('Meta 131047');
         enviados.push({ canal: 'whatsapp', destino, texto, cobros: m.miembros.map((x) => x.fila.cargoId) });
-        return 'wamid.GRUPO';
+        return { mensajeId: 'wamid.GRUPO', texto: `Plantilla: ${texto}`, conEnlace: true };
       },
       sms: async (destino, texto) => {
         if (fallar?.('sms')) throw new Error('SNS caído');
@@ -174,8 +174,9 @@ describe('despachar: un mensaje por familia', () => {
     await despachar([p], opts);
 
     const correo = enviados.find((e) => e.canal === 'correo')!;
-    // El enlace lleva a SU factura (`?f=`), no a toda la deuda de la familia.
-    expect(correo.texto).toBe(`${redactar(p, 'Colegio X').largo}\n\nPaga o sube tu comprobante aquí: https://app.zero.com.do/pagar/tok123?f=${p.fila.ecfDocumentId}`);
+    // El enlace lleva a SU factura (`?f=`), no a toda la deuda de la familia, y
+    // dice de qué aviso viene (`a=`).
+    expect(correo.texto).toBe(`${redactar(p, 'Colegio X').largo}\n\nPaga o sube tu comprobante aquí: https://app.zero.com.do/pagar/tok123?f=${p.fila.ecfDocumentId}&a=${filas().find((f) => f.canal === 'correo')!.id}`);
     expect(filas().every((f) => f.grupo === null)).toBe(true);
     expect(filas().every((f) => f.detalle === undefined)).toBe(true);
     // El SMS de un cobro no lleva enlace.
@@ -367,3 +368,32 @@ describe('despachar: el día que vence, SMS solo si el WhatsApp no sale', () => 
     expect(enviados.filter((e) => e.canal === 'sms')).toHaveLength(1);
   });
 });
+
+describe('despachar: lo que salió queda guardado', () => {
+  it('guarda el texto de cada canal en todas las filas del mensaje', async () => {
+    const { opts } = armar();
+    await despachar(pendientesDe(FAMILIA_PEREZ), opts);
+    const de = (c: string) => filas().filter((f) => f.canal === c);
+    expect(de('whatsapp')).toHaveLength(3);
+    expect(de('whatsapp').every((f) => f.texto?.startsWith('Plantilla: '))).toBe(true);
+    expect(new Set(de('correo').map((f) => f.texto)).size).toBe(1);
+    expect(de('sms').every((f) => (f.texto ?? '').length > 0)).toBe(true);
+  });
+
+  it('anota si llevaba enlace y le dice de qué aviso viene, menos en el SMS', async () => {
+    const { opts, enviados } = armar();
+    await despachar(pendientesDe([FAMILIA_PEREZ[0]]), opts);
+    const correo = filas().find((f) => f.canal === 'correo')!;
+    expect(correo.conEnlace).toBe(true);
+    expect(enviados.find((e) => e.canal === 'correo')!.texto).toContain(`a=${correo.id}`);
+    expect(enviados.find((e) => e.canal === 'sms')!.texto).not.toContain('a=');
+    expect(filas().find((f) => f.canal === 'sms')!.conEnlace).toBe(false);
+  });
+
+  it('un envío que falla no deja texto, porque suelta la fila', async () => {
+    const { opts } = armar({}, (c) => c === 'correo');
+    await despachar(pendientesDe(FAMILIA_PEREZ), opts);
+    expect(filas().filter((f) => f.canal === 'correo')).toHaveLength(0);
+  });
+});
+

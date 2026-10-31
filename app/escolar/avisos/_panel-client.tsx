@@ -4,9 +4,10 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
+import Drawer from '@mui/material/Drawer';
 import {
-  AlertTriangle, BellRing, CheckCheck, Clock, Loader2, Mail,
-  MessageCircle, RefreshCw, Settings, Smartphone, Users, Wrench, XCircle,
+  AlertTriangle, BellRing, CheckCheck, Clock, Link2, Loader2, Mail,
+  MessageCircle, RefreshCw, Settings, Smartphone, Users, Wrench, X, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -70,6 +71,13 @@ const OPC_CANAL = opciones(CANAL_TEXTO);
 // En el orden en que le llegan a una familia; los del expediente al final.
 const OPC_AVISO = opciones(AVISO_TEXTO);
 const OPC_ENTREGA = opciones(ENTREGA_TEXTO);
+const OPC_ENLACE = [{ value: 'abrio', label: 'Abrieron el enlace' }, { value: 'no-abrio', label: 'No lo abrieron' }];
+
+/** Si abrieron el enlace, en palabras: la misma para la tabla y el Excel. */
+function textoApertura(f: FilaHistorial): string {
+  if (f.abiertoAt) return `Abrió · ${fechaHora(f.abiertoAt)}${f.aperturas > 1 ? ` · ${f.aperturas} veces` : ''}`;
+  return f.conEnlace ? 'No abrió' : '—';
+}
 
 /** La hora, sin la fecha: el panel ya dice que es de hoy. */
 function hora(iso: string): string {
@@ -252,6 +260,7 @@ const EXPORTAR_ENVIADOS: ExportTabla<FilaHistorial> = {
     { titulo: 'Aviso', valor: (r) => AVISO_TEXTO[r.tipo] ?? r.tipo, ancho: 1.1 },
     { titulo: 'Canal', valor: (r) => CANAL_TEXTO[r.canal] ?? r.canal, ancho: 0.8 },
     { titulo: 'Entrega', valor: (r) => ENTREGA_TEXTO[r.entrega], sub: (r) => r.errorEntrega, ancho: 0.9 },
+    { titulo: 'Enlace', valor: (r) => textoApertura(r), ancho: 1.2 },
     { titulo: 'A dónde fue', valor: (r) => r.destino, ancho: 1.6 },
     { titulo: 'Monto', valor: (r) => r.montoCentavos, tipo: 'moneda', ancho: 1 },
   ],
@@ -259,6 +268,7 @@ const EXPORTAR_ENVIADOS: ExportTabla<FilaHistorial> = {
     { label: 'Avisos', valor: String(rows.length), sub: `${contarMensajes(rows)} mensajes` },
     { label: 'Alumnos', valor: String(new Set(rows.map((r) => r.estudianteId)).size) },
     { label: 'Leídos', valor: String(rows.filter((r) => r.entrega === 'leido').length) },
+    { label: 'Abrieron el enlace', valor: String(rows.filter((r) => r.abiertoAt).length) },
     { label: 'Fallaron', valor: String(rows.filter((r) => r.entrega === 'fallido').length) },
   ],
 };
@@ -267,6 +277,7 @@ function TablaEnviados() {
   const [filtros, setFiltros] = useState<Record<string, string>>(() => ({
     fecha_desde: haceDias(29), fecha_hasta: hoyRD(),
   }));
+  const [abierta, setAbierta] = useState<FilaHistorial | null>(null);
   const desde = filtros.fecha_desde ?? '';
   const hasta = filtros.fecha_hasta ?? '';
   const { data, error, isLoading } = useSWR<Historial>(
@@ -279,6 +290,8 @@ function TablaEnviados() {
       (!filtros.canal || f.canal === filtros.canal)
       && (!filtros.tipo || f.tipo === filtros.tipo)
       && (!filtros.entrega || f.entrega === filtros.entrega)
+      && (filtros.enlace !== 'abrio' || f.abiertoAt != null)
+      && (filtros.enlace !== 'no-abrio' || (f.conEnlace === true && f.abiertoAt == null))
       && (!q || contiene(q, f.estudiante, f.concepto, f.destino)));
   }, [data, filtros]);
 
@@ -294,6 +307,8 @@ function TablaEnviados() {
       llegaron,
       leidos: wa.filter((f) => f.entrega === 'leido').length,
       fallaron: filas.filter((f) => f.entrega === 'fallido').length,
+      conEnlace: contarMensajes(filas.filter((f) => f.conEnlace || f.abiertoAt)),
+      abrieron: contarMensajes(filas.filter((f) => f.abiertoAt)),
     };
   }, [filas]);
   const pct = (n: number, de: number) => (de ? `${Math.round((n / de) * 100)} %` : '—');
@@ -333,6 +348,14 @@ function TablaEnviados() {
       render: (r) => <EntregaChip entrega={r.entrega} error={r.errorEntrega} />,
     },
     {
+      id: 'enlace', header: 'Enlace', sortable: true, sortAccessor: (r) => r.abiertoAt ?? (r.conEnlace ? '0' : ''),
+      render: (r) => (r.abiertoAt
+        ? <span title={textoApertura(r)} className="inline-flex whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Abrió{r.aperturas > 1 ? ` ×${r.aperturas}` : ''}</span>
+        : r.conEnlace
+          ? <span className="inline-flex whitespace-nowrap rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">No abrió</span>
+          : <span className="text-sm text-gray-300">—</span>),
+    },
+    {
       // El destino tal como estaba ese día: el teléfono de hoy puede ser otro,
       // y la constancia es de entonces.
       id: 'destino', header: 'A dónde fue', visibleAt: 'md', sortable: true, sortAccessor: (r) => r.destino ?? '',
@@ -346,12 +369,14 @@ function TablaEnviados() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi icono={BellRing} titulo="Avisos" valor={kpi.avisos.toLocaleString('es-DO')}
           sub={`${kpi.mensajes.toLocaleString('es-DO')} mensajes · varios cobros de una familia van juntos`} />
         <Kpi icono={Users} titulo="Alumnos avisados" valor={kpi.alumnos.toLocaleString('es-DO')} />
         <Kpi icono={CheckCheck} titulo="WhatsApp que llegaron" valor={pct(kpi.llegaron, kpi.wa)}
           sub={kpi.wa ? `${kpi.llegaron} de ${kpi.wa} · ${kpi.leidos} leídos` : 'Ningún WhatsApp en el rango'} tono="verde" />
+        <Kpi icono={Link2} titulo="Abrieron el enlace" valor={pct(kpi.abrieron, kpi.conEnlace)}
+          sub={kpi.conEnlace ? `${kpi.abrieron} de ${kpi.conEnlace} mensajes con enlace` : 'Ningún enlace en el rango'} />
         <Kpi icono={XCircle} titulo="Fallaron" valor={kpi.fallaron.toLocaleString('es-DO')}
           sub="WhatsApp que Meta no entregó" tono={kpi.fallaron > 0 ? 'rojo' : undefined} />
       </div>
@@ -371,11 +396,13 @@ function TablaEnviados() {
         title="Enviados"
         description="La constancia de cada aviso: cuándo, a quién, por dónde y si llegó. Solo WhatsApp confirma la entrega."
         defaultSort={{ columnId: 'enviadoAt', dir: 'desc' }}
+        onRowClick={setAbierta}
         filters={[
           { type: 'search', id: 'q', placeholder: 'Alumno, concepto, correo o teléfono…' },
           { type: 'select', id: 'canal', label: 'Canal', options: OPC_CANAL, placeholder: 'Todos los canales' },
           { type: 'select', id: 'tipo', label: 'Aviso', options: OPC_AVISO, placeholder: 'Todos los avisos' },
           { type: 'select', id: 'entrega', label: 'Entrega', options: OPC_ENTREGA, placeholder: 'Cualquier entrega' },
+          { type: 'select', id: 'enlace', label: 'Enlace', options: OPC_ENLACE, placeholder: 'Cualquier enlace' },
           { type: 'daterange', id: 'fecha' },
         ]}
         filterValues={filtros}
@@ -388,7 +415,48 @@ function TablaEnviados() {
           hint: (data?.filas.length ?? 0) > 0 ? 'Quita algún filtro para ver más.' : 'Amplía el rango de fechas.',
         }}
       />
+      <MensajeDelAviso fila={abierta} onCerrar={() => setAbierta(null)} />
     </div>
+  );
+}
+
+/** Lo que recibió la familia y qué pasó con ello. Nunca lo que ella respondió. */
+function MensajeDelAviso({ fila, onCerrar }: { fila: FilaHistorial | null; onCerrar: () => void }) {
+  const { data, error, isLoading } = useSWR<{ texto: string | null }>(
+    fila ? `/api/administracion-escolar/avisos/historial/${fila.id}` : null, traer,
+  );
+  return (
+    <Drawer anchor="right" open={fila != null} onClose={onCerrar} slotProps={{ paper: { sx: { width: { xs: '100%', sm: 460 } } } }}>
+      {fila && (
+        <div className="flex h-full flex-col">
+          <div className="flex items-start gap-2 border-b border-gray-100 px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold text-gray-900">{AVISO_TEXTO[fila.tipo] ?? fila.tipo}</h2>
+              <p className="text-xs text-gray-500">{fila.estudiante}{fila.concepto ? ` · ${fila.concepto}` : ''}</p>
+            </div>
+            <button type="button" onClick={onCerrar} aria-label="Cerrar" className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+              <dt className="text-gray-500">Cuándo</dt><dd className="text-gray-900">{fechaHora(fila.enviadoAt)}</dd>
+              <dt className="text-gray-500">Por dónde</dt><dd><CanalChip canal={fila.canal} /></dd>
+              <dt className="text-gray-500">A dónde fue</dt><dd className="break-all text-gray-900">{fila.destino ?? '—'}</dd>
+              <dt className="text-gray-500">Entrega</dt><dd><EntregaChip entrega={fila.entrega} error={fila.errorEntrega} /></dd>
+              <dt className="text-gray-500">Enlace</dt><dd className="text-gray-900">{textoApertura(fila)}</dd>
+            </dl>
+            {fila.detalle && <p className="text-xs text-gray-500">{fila.detalle}</p>}
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-gray-500">El mensaje</p>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-zero-600" />
+                : error ? <p className="text-sm text-red-600">No se pudo leer el mensaje.</p>
+                : data?.texto
+                  ? <div className="whitespace-pre-wrap break-words rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-relaxed text-gray-900">{data.texto}</div>
+                  : <p className="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500">Este aviso salió antes de que se guardara el texto.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </Drawer>
   );
 }
 
