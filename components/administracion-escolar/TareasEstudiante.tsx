@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
@@ -12,8 +12,9 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { toast } from 'sonner';
 import {
-  ACEPTA_ADJUNTOS, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, PLANTILLAS_SOPORTE, validarAdjunto,
-  type AccionEstado, type Asignacion, type EstadoTarea, type PlantillaSoporte,
+  ACEPTA_ADJUNTOS, archivosDelPegado, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, MODOS_REDACCION, nombreDePegado,
+  PLANTILLAS_SOPORTE, validarAdjunto,
+  type AccionEstado, type Asignacion, type EstadoTarea, type ModoRedaccion, type PlantillaSoporte,
 } from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
@@ -28,7 +29,8 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
  * también lo usa «Tareas», donde la tarea puede ser del colegio.
  *
  * Una tarea puede quedar «En revisión» (alguien ya la tomó; sigue pendiente), y
- * en la conversación se suben fotos, videos y documentos con el clip.
+ * en la conversación se suben fotos, videos y documentos con el clip o pegándolos
+ * con Ctrl+V. El equipo de Zero tiene además un corrector con IA.
  */
 
 interface Conteo { alumno: number; familia: number }
@@ -115,6 +117,60 @@ export async function subirAdjunto(tareaId: number, archivo: File, onAvance?: (f
     if (!r.ok) throw new Error(e.error ?? `No se pudo subir «${archivo.name}»`);
     onAvance?.((n + 1) / total);
   }
+}
+
+/**
+ * Los archivos que trae un Ctrl+V, ya con nombre. Si es texto devuelve nada y
+ * lo pega el navegador como siempre.
+ */
+function archivosDePegado(e: ClipboardEvent<HTMLTextAreaElement>): File[] {
+  const d = e.clipboardData;
+  const archivos = archivosDelPegado({ archivos: [...d.files], texto: d.getData('text/plain'), html: d.getData('text/html') });
+  if (archivos.length === 0) return [];
+  e.preventDefault();
+  const ahora = new Date();
+  return archivos.map((f, i) => new File([f], nombreDePegado(f.name, f.type, ahora, i), { type: f.type }));
+}
+
+/** Los que se pueden subir; de los demás se dice por qué no. */
+function soloValidos(archivos: File[]): File[] {
+  return archivos.filter((f) => {
+    const v = validarAdjunto({ nombre: f.name, bytes: f.size });
+    if (!v.ok) toast.error(v.error);
+    return v.ok;
+  });
+}
+
+/** La foto en pequeño o, si no es foto, un clip. */
+function Miniatura({ archivo }: { archivo: File }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!archivo.type.startsWith('image/') || archivo.type.includes('hei')) return;
+    const u = URL.createObjectURL(archivo);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [archivo]);
+  // eslint-disable-next-line @next/next/no-img-element -- es un blob del navegador, next/image no aplica
+  if (url) return <img src={url} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />;
+  return <Paperclip className="h-3.5 w-3.5 shrink-0 text-gray-500" />;
+}
+
+/** Lo que está listo para salir: se ve antes de enviarlo y se puede quitar. */
+function ArchivosPorEnviar({ archivos, onQuitar }: { archivos: File[]; onQuitar: (i: number) => void }) {
+  if (archivos.length === 0) return null;
+  return (
+    <ul className="space-y-1">
+      {archivos.map((f, i) => (
+        <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm">
+          <Miniatura archivo={f} />
+          <span className="min-w-0 flex-1 truncate">{f.name}</span>
+          <span className="shrink-0 text-xs text-gray-500">{pesoLegible(f.size)}</span>
+          <button type="button" onClick={() => onQuitar(i)}
+            aria-label={`Quitar ${f.name}`} className="rounded p-0.5 text-gray-500 hover:bg-gray-200"><X className="h-3.5 w-3.5" /></button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** «menos de 1 h», «5 h», «3 días». */
@@ -341,7 +397,29 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
   const [plantilla, setPlantilla] = useState<PlantillaSoporte | null>(null);
   const [menuPlantillas, setMenuPlantillas] = useState<HTMLElement | null>(null);
   const [subiendo, setSubiendo] = useState<{ nombre: string; avance: number } | null>(null);
+  // Lo elegido con el clip o pegado: se ve antes de enviarlo, porque un Ctrl+V sin querer no se puede borrar después.
+  const [porEnviar, setPorEnviar] = useState<File[]>([]);
+  // El corrector no envía nada: pone su texto en la caja y aquí queda el anterior para deshacer.
+  const [menuCorrector, setMenuCorrector] = useState<HTMLElement | null>(null);
+  const [corrigiendo, setCorrigiendo] = useState(false);
+  const [textoAnterior, setTextoAnterior] = useState<string | null>(null);
   const elegir = useRef<HTMLInputElement>(null);
+
+  async function corregir(modo: ModoRedaccion) {
+    setMenuCorrector(null);
+    setCorrigiendo(true);
+    try {
+      const res = await fetch(`/api/administracion-escolar/tareas/${tarea.id}/redactar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo, texto }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'No se pudo mejorar el texto');
+      setTextoAnterior(texto);
+      setTexto(d.texto);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo mejorar el texto');
+    } finally { setCorrigiendo(false); }
+  }
 
   async function usarPlantilla(p: PlantillaSoporte) {
     setMenuPlantillas(null);
@@ -355,22 +433,26 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
   }
 
   async function enviar() {
-    if (!texto.trim()) return;
+    if (ocupado || !hayQueEnviar) return;
     setEnviando(true);
     try {
-      const res = plantilla
-        ? await fetch(`/api/administracion-escolar/tareas/${tarea.id}/plantilla`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla, texto }),
-        })
-        : await fetch(`/api/administracion-escolar/tareas/${tarea.id}/mensajes`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }),
-        });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error ?? 'No se pudo enviar');
-      if (plantilla) toast.success('Enviado: le llega por correo y en la campana');
-      setTexto('');
-      setPlantilla(null);
-      onCambio();
+      if (texto.trim()) {
+        const res = plantilla
+          ? await fetch(`/api/administracion-escolar/tareas/${tarea.id}/plantilla`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla, texto }),
+          })
+          : await fetch(`/api/administracion-escolar/tareas/${tarea.id}/mensajes`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }),
+          });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error ?? 'No se pudo enviar');
+        if (plantilla) toast.success('Enviado: le llega por correo y en la campana');
+        setTexto('');
+        setTextoAnterior(null);
+        setPlantilla(null);
+        onCambio();
+      }
+      await subirPorEnviar();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo enviar');
     } finally { setEnviando(false); }
@@ -390,13 +472,13 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
     } finally { setEnviando(false); }
   }
 
-  async function adjuntar(archivos: FileList | null) {
-    const lista = [...(archivos ?? [])];
-    if (elegir.current) elegir.current.value = '';
-    for (const archivo of lista) {
+  /** Sube lo que está en espera. El que falla se queda ahí para reintentarlo. */
+  async function subirPorEnviar() {
+    for (const archivo of porEnviar) {
       setSubiendo({ nombre: archivo.name, avance: 0 });
       try {
         await subirAdjunto(tarea.id, archivo, (avance) => setSubiendo({ nombre: archivo.name, avance }));
+        setPorEnviar((a) => a.filter((f) => f !== archivo));
         onCambio();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : `No se pudo subir «${archivo.name}»`);
@@ -405,7 +487,10 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
     setSubiendo(null);
   }
 
-  const ocupado = enviando || subiendo != null;
+  const agregar = (archivos: File[]) => setPorEnviar((a) => [...a, ...soloValidos(archivos)]);
+
+  const ocupado = enviando || subiendo != null || corrigiendo;
+  const hayQueEnviar = Boolean(texto.trim()) || porEnviar.length > 0;
 
   return (
     <>
@@ -458,10 +543,21 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                 className="font-semibold hover:underline">Quitar</button>
             </div>
           )}
-          <textarea id={`responder-${tarea.id}`} rows={plantilla ? 5 : 2} value={texto} onChange={(e) => setTexto(e.target.value)}
+          {textoAnterior != null && (
+            <div className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-1.5 text-xs text-violet-900">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">Lo reescribió la IA: revísalo antes de enviarlo.</span>
+              <button type="button" onClick={() => { setTexto(textoAnterior); setTextoAnterior(null); }}
+                className="font-semibold hover:underline">Deshacer</button>
+            </div>
+          )}
+          <textarea id={`responder-${tarea.id}`} rows={plantilla || textoAnterior != null ? 5 : 2} value={texto} onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar(); }}
-            placeholder="Escribe una respuesta…"
+            onPaste={(e) => agregar(archivosDePegado(e))}
+            readOnly={corrigiendo}
+            placeholder="Escribe una respuesta, o pega una captura o un archivo…"
             className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
+          <ArchivosPorEnviar archivos={porEnviar} onQuitar={(i) => setPorEnviar((a) => a.filter((_, j) => j !== i))} />
           {subiendo && (
             <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zero-600" />
@@ -510,16 +606,32 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                     </MenuItem>
                   ))}
                 </Menu>
+                <button type="button" onClick={(e) => setMenuCorrector(e.currentTarget)} disabled={ocupado}
+                  title="Corrige o mejora el texto con IA, sin enviarlo (solo el equipo de Zero)"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-2.5 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-50">
+                  {corrigiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}Corrector
+                </button>
+                <Menu anchorEl={menuCorrector} open={Boolean(menuCorrector)} onClose={() => setMenuCorrector(null)}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'right' }} transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                  {(Object.keys(MODOS_REDACCION) as ModoRedaccion[]).map((m) => (
+                    <MenuItem key={m} disabled={MODOS_REDACCION[m].necesitaTexto && !texto.trim()} onClick={() => void corregir(m)}>
+                      <span className="flex flex-col">
+                        <span className="text-sm font-semibold text-gray-900">{MODOS_REDACCION[m].etiqueta}</span>
+                        <span className="text-xs text-gray-500">{MODOS_REDACCION[m].detalle}</span>
+                      </span>
+                    </MenuItem>
+                  ))}
+                </Menu>
               </>
             )}
             <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
-              onChange={(e) => void adjuntar(e.target.files)} />
+              onChange={(e) => { agregar([...(e.target.files ?? [])]); e.target.value = ''; }} />
             <button type="button" onClick={() => elegir.current?.click()} disabled={ocupado}
               aria-label="Adjuntar fotos, videos o documentos" title="Adjuntar fotos, videos o documentos"
               className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50">
               <Paperclip className="h-4 w-4" />
             </button>
-            <button type="button" onClick={() => void enviar()} disabled={ocupado || !texto.trim()}
+            <button type="button" onClick={() => void enviar()} disabled={ocupado || !hayQueEnviar}
               className="h-9 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
               {plantilla ? PLANTILLAS_SOPORTE[plantilla].boton : 'Enviar'}
             </button>
@@ -593,13 +705,8 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
   const [guardando, setGuardando] = useState<string | false>(false);
   const elegir = useRef<HTMLInputElement>(null);
 
-  function agregarArchivos(lista: FileList | null) {
-    const nuevos: File[] = [];
-    for (const f of [...(lista ?? [])]) {
-      const v = validarAdjunto({ nombre: f.name, bytes: f.size });
-      if (v.ok) nuevos.push(f); else toast.error(v.error);
-    }
-    setArchivos((a) => [...a, ...nuevos]);
+  function agregarArchivos(lista: File[]) {
+    setArchivos((a) => [...a, ...soloValidos(lista)]);
     if (elegir.current) elegir.current.value = '';
   }
   const { data: dataPersonas } = useSWR<{ personas: { id: number; nombre: string }[] }>(
@@ -654,7 +761,8 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium text-gray-700">Detalle</span>
           <textarea rows={4} value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
-            placeholder="Lo que se sabe y lo que hay que decidir. Queda como el primer mensaje de la conversación."
+            onPaste={(e) => agregarArchivos(archivosDePegado(e))}
+            placeholder="Lo que se sabe y lo que hay que decidir. Queda como el primer mensaje de la conversación. También puedes pegar una captura o un archivo."
             className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
         </label>
         {!alumnoFijo && (
@@ -719,21 +827,9 @@ function NuevaTarea({ alumnoFijo, onCreada }: {
         )}
         <div className="space-y-1.5 text-sm">
           <span className="font-medium text-gray-700">Archivos</span>
-          {archivos.length > 0 && (
-            <ul className="space-y-1">
-              {archivos.map((f, i) => (
-                <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5">
-                  <Paperclip className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                  <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                  <span className="shrink-0 text-xs text-gray-500">{pesoLegible(f.size)}</span>
-                  <button type="button" onClick={() => setArchivos((a) => a.filter((_, j) => j !== i))}
-                    aria-label={`Quitar ${f.name}`} className="rounded p-0.5 text-gray-500 hover:bg-gray-200"><X className="h-3.5 w-3.5" /></button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ArchivosPorEnviar archivos={archivos} onQuitar={(i) => setArchivos((a) => a.filter((_, j) => j !== i))} />
           <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
-            onChange={(e) => agregarArchivos(e.target.files)} />
+            onChange={(e) => agregarArchivos([...(e.target.files ?? [])])} />
           <button type="button" onClick={() => elegir.current?.click()}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50">
             <Paperclip className="h-4 w-4" />Adjuntar fotos, videos o documentos
