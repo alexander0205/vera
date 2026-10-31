@@ -25,7 +25,8 @@ async function metodoDePagoDe(teamId: number) {
   const [team] = await db
     .select({ cliente: teams.stripeCustomerId, suscripcion: teams.stripeSubscriptionId })
     .from(teams).where(eq(teams.id, teamId)).limit(1);
-  if (!team?.cliente) return null;
+  // Sin cliente en Stripe no hay tarjeta posible: eso sí se sabe.
+  if (!team?.cliente) return 'ninguno' as const;
   return cachearPorTag(
     () => estadoDelMetodoDePago(team.cliente, team.suscripcion),
     ['suscripcion-metodo-de-pago', String(teamId)],

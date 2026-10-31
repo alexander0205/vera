@@ -246,9 +246,12 @@ describe('el aviso de prueba según lo que Stripe puede cobrar', () => {
     expect(r.mensaje).toBe('Te quedan 2 días de prueba. Marca tu tarjeta como predeterminada para que se cobre sola.');
   });
 
-  it('sin tarjeta, o si Stripe no contestó, el aviso sigue igual', () => {
+  it('sin tarjeta el aviso sigue igual', () => {
     expect(avisoDePruebaSegunMetodo(porVencer, 'ninguno')).toEqual(porVencer);
-    expect(avisoDePruebaSegunMetodo(porVencer, null)).toEqual(porVencer);
+  });
+
+  it('si Stripe no contestó no se le pide la tarjeta a quien quizá ya la puso', () => {
+    expect(avisoDePruebaSegunMetodo(porVencer, null)).toMatchObject({ avisar: false, mensaje: null, estado: 'prueba-por-vencer' });
   });
 
   it('los demás estados no se tocan', () => {

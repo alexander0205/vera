@@ -275,7 +275,7 @@ export async function estadoDelMetodoDePago(
   if (!customerId) return null;
   try {
     const cliente = await stripe.customers.retrieve(customerId);
-    if (cliente.deleted) return null;
+    if (cliente.deleted) return 'ninguno';
     if (cliente.invoice_settings?.default_payment_method || cliente.default_source) return 'predeterminado';
     if (subscriptionId) {
       const sub = await stripe.subscriptions.retrieve(subscriptionId);
