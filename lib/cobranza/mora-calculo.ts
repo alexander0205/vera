@@ -11,6 +11,18 @@
 
 export type ModoMora = 'porcentaje' | 'fijo';
 
+/**
+ * Tipos de e-CF que nunca generan mora: la nota de crédito (34) resta, no se
+ * debe, y 41/43/47 son compras y gastos, dinero que sale. Antes el motor solo
+ * miraba tipoPago=2, así que una NC a crédito con fecha límite vencida recibía
+ * su ND de mora. Misma lista que `esVentaSql` (lib/administracion-escolar/saldo-factura.ts).
+ */
+export const TIPOS_ECF_SIN_MORA = ['34', '41', '43', '47'] as const;
+
+export function tipoEcfCobraMora(tipoEcf: string): boolean {
+  return !(TIPOS_ECF_SIN_MORA as readonly string[]).includes(tipoEcf);
+}
+
 /** Config efectiva ya resuelta (factura → plan → empresa). */
 export interface ConfigMora {
   modo: ModoMora;
