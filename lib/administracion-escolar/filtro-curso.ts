@@ -18,6 +18,8 @@
  * `tests/unit/filtro-curso.test.ts`.
  */
 
+import { esGradoSinGrado, textoDeCurso } from './sin-grado';
+
 /** Una sección con su grado y su servicio, como la devuelve el catálogo de cursos. */
 export interface CursoFiltrable {
   id: number; nombre: string;
@@ -36,9 +38,15 @@ export interface FiltroGrupo {
   servicioId: number | null;
   gradoId: number | null;
   cursoId: number | null;
+  /**
+   * Los alumnos sin grado de TODOS los servicios (ver `sin-grado.ts`). Va aparte
+   * de los ids porque cruza servicios, y solo existe cuando está puesto.
+   */
+  sinGrado?: boolean;
 }
 
 export const TODOS_LOS_CURSOS: FiltroGrupo = { servicioId: null, gradoId: null, cursoId: null };
+export const SIN_GRADO: FiltroGrupo = { ...TODOS_LOS_CURSOS, sinGrado: true };
 
 type Nivel = 'servicio' | 'grado' | 'seccion';
 
@@ -53,7 +61,7 @@ type Nivel = 'servicio' | 'grado' | 'seccion';
 export function acotarFiltro(filtro: FiltroGrupo, nivel: Nivel, id: number | null): FiltroGrupo {
   if (nivel === 'servicio') return { servicioId: id, gradoId: null, cursoId: null };
   if (nivel === 'grado') return { servicioId: filtro.servicioId, gradoId: id, cursoId: null };
-  return { ...filtro, cursoId: id };
+  return { servicioId: filtro.servicioId, gradoId: filtro.gradoId, cursoId: id };
 }
 
 /**
@@ -67,6 +75,7 @@ export function acotarFiltro(filtro: FiltroGrupo, nivel: Nivel, id: number | nul
 export function normalizarFiltro(
   cursos: CursoFiltrable[], periodoId: number | null, filtro: FiltroGrupo,
 ): FiltroGrupo {
+  if (filtro.sinGrado) return SIN_GRADO;
   const { servicioId, gradoId, cursoId } = filtro;
   const delServicio = cursos.filter((c) => c.periodoId === periodoId && c.servicioId === servicioId);
   if (servicioId == null || delServicio.length === 0) return TODOS_LOS_CURSOS;
@@ -113,6 +122,9 @@ export function completarFiltro(cursos: CursoFiltrable[], filtro: FiltroGrupo): 
 export function seccionesDelFiltro(
   cursos: CursoFiltrable[], periodoId: number | null, filtro: FiltroGrupo,
 ): number[] | null {
+  if (filtro.sinGrado) {
+    return cursos.filter((c) => c.periodoId === periodoId && esGradoSinGrado(c.gradoNombre)).map((c) => c.id);
+  }
   const { servicioId, gradoId, cursoId } = filtro;
   if (servicioId == null && gradoId == null && cursoId == null) return null;
   return cursos
@@ -127,6 +139,8 @@ export interface OpcionesFiltro {
   servicios: { id: number; etiqueta: string }[];
   grados: { id: number; nombre: string }[];
   secciones: { id: number; nombre: string }[];
+  /** ¿Hay este año alguna sección de alumnos sin grado? */
+  haySinGrado: boolean;
 }
 
 /** La tanda va con el nombre: «Primaria» matutina y vespertina son dos servicios. */
@@ -147,15 +161,17 @@ export function opcionesDelFiltro(
   const servicios = new Map<number, { id: number; etiqueta: string }>();
   const grados = new Map<number, { id: number; nombre: string }>();
   const secciones: { id: number; nombre: string }[] = [];
+  let haySinGrado = false;
 
   for (const c of cursos) {
     if (c.periodoId !== periodoId) continue;
+    if (esGradoSinGrado(c.gradoNombre)) haySinGrado = true;
     if (!servicios.has(c.servicioId)) servicios.set(c.servicioId, { id: c.servicioId, etiqueta: etiquetaServicio(c) });
     if (c.servicioId !== filtro.servicioId) continue;
     if (!grados.has(c.gradoId)) grados.set(c.gradoId, { id: c.gradoId, nombre: c.gradoNombre });
     if (c.gradoId === filtro.gradoId) secciones.push({ id: c.id, nombre: c.nombre });
   }
-  return { servicios: [...servicios.values()], grados: [...grados.values()], secciones };
+  return { servicios: [...servicios.values()], grados: [...grados.values()], secciones, haySinGrado };
 }
 
 /**
@@ -167,12 +183,13 @@ export function opcionesDelFiltro(
 export function nombreDelGrupo(
   cursos: CursoFiltrable[], periodoId: number | null, filtro: FiltroGrupo,
 ): string | null {
+  if (filtro.sinGrado) return 'Alumnos sin grado';
   const ids = seccionesDelFiltro(cursos, periodoId, filtro);
   const muestra = ids?.length ? cursos.find((c) => c.id === ids[0]) : undefined;
   if (!muestra) return null;
   const servicio = etiquetaServicio(muestra);
   if (filtro.gradoId == null) return servicio;
-  const grado = filtro.cursoId == null ? muestra.gradoNombre : `${muestra.gradoNombre} ${muestra.nombre}`;
+  const grado = filtro.cursoId == null ? muestra.gradoNombre : textoDeCurso(muestra.gradoNombre, muestra.nombre);
   return `${grado} de ${servicio}`;
 }
 
@@ -201,6 +218,8 @@ export interface ConteoAlumnos {
   porServicio: Record<number, number>;
   porGrado: Record<number, number>;
   porSeccion: Record<number, number>;
+  /** Alumnos sin grado, de todos los servicios. */
+  sinGrado: number;
 }
 
 /**
@@ -227,6 +246,7 @@ export function contarAlumnos(
   const servicios = new Map<number, Set<number>>();
   const grados = new Map<number, Set<number>>();
   const secciones = new Map<number, Set<number>>();
+  const sinGrado = new Set<number>();
   const apuntar = (grupos: Map<number, Set<number>>, grupo: number, alumno: number) => {
     const yaEstan = grupos.get(grupo);
     if (yaEstan) yaEstan.add(alumno); else grupos.set(grupo, new Set([alumno]));
@@ -239,6 +259,7 @@ export function contarAlumnos(
     apuntar(servicios, seccion.servicioId, m.estudianteId);
     apuntar(grados, seccion.gradoId, m.estudianteId);
     apuntar(secciones, seccion.id, m.estudianteId);
+    if (esGradoSinGrado(seccion.gradoNombre)) sinGrado.add(m.estudianteId);
   }
 
   const tamanos = (grupos: Map<number, Set<number>>) => {
@@ -251,6 +272,7 @@ export function contarAlumnos(
     porServicio: tamanos(servicios),
     porGrado: tamanos(grados),
     porSeccion: tamanos(secciones),
+    sinGrado: sinGrado.size,
   };
 }
 
@@ -266,7 +288,7 @@ export function cursoDeCadaAlumno(matriculas: MatriculaActiva[]): Map<number, st
   const salida = new Map<number, string>();
   for (const m of matriculas) {
     if (salida.has(m.estudianteId)) continue;
-    const seccion = m.curso ? [m.grado, m.curso].filter(Boolean).join(' ') : '';
+    const seccion = m.curso ? textoDeCurso(m.grado, m.curso) : '';
     salida.set(m.estudianteId, seccion ? [seccion, m.servicio, m.tanda].filter(Boolean).join(' · ') : '');
   }
   return salida;
@@ -334,20 +356,30 @@ export function preguntasDelFiltro(
     (conteo && grupo ? grupo[id] ?? 0 : null);
   const delServicio = (servicioId: number) => acotarFiltro(TODOS_LOS_CURSOS, 'servicio', servicioId);
 
-  const { servicios, grados } = opcionesDelFiltro(cursos, periodoId, filtro);
-  const grupos: OpcionGrupo[] = servicios.map((s) => ({
+  const { servicios, grados, haySinGrado } = opcionesDelFiltro(cursos, periodoId, filtro);
+  // El servicio automático «Sin grado» ya va dentro de «Alumnos sin grado».
+  const grupos: OpcionGrupo[] = servicios.filter((s) => !esGradoSinGrado(s.etiqueta)).map((s) => ({
     id: `servicio-${s.id}`,
     etiqueta: s.etiqueta,
     filtro: delServicio(s.id),
     alumnos: cuenta(conteo?.porServicio, s.id),
     puesta: elegido && filtro.servicioId === s.id,
   }));
+  if (haySinGrado) {
+    grupos.push({
+      id: 'sin-grado',
+      etiqueta: 'Alumnos sin grado',
+      filtro: SIN_GRADO,
+      alumnos: conteo ? conteo.sinGrado : null,
+      puesta: elegido && filtro.sinGrado === true,
+    });
+  }
   const colegio: OpcionGrupo = {
     id: 'colegio',
     etiqueta: 'Todo el colegio',
     filtro: TODOS_LOS_CURSOS,
     alumnos: conteo ? conteo.total : null,
-    puesta: elegido && filtro.servicioId == null,
+    puesta: elegido && filtro.servicioId == null && !filtro.sinGrado,
   };
 
   const servicioId = filtro.servicioId;
@@ -367,7 +399,7 @@ export function preguntasDelFiltro(
   };
   const opcionDeSeccion = (c: CursoFiltrable): OpcionGrupo => ({
     id: `seccion-${c.id}`,
-    etiqueta: `${c.gradoNombre} ${c.nombre}`,
+    etiqueta: textoDeCurso(c.gradoNombre, c.nombre),
     filtro: acotarFiltro(acotarFiltro(delServicio(servicioId), 'grado', c.gradoId), 'seccion', c.id),
     alumnos: cuenta(conteo?.porSeccion, c.id),
     puesta: filtro.cursoId === c.id,

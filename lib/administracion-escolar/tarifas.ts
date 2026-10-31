@@ -14,11 +14,14 @@ import {
  * El precio NO se guarda por estudiante ni por sección: se guarda una vez en el
  * servicio (o en el grado cuando hay excepción) y se resuelve subiendo el árbol
  *
- *     matrícula → sección → grado → servicio
+ *     matrícula → sección → grado → servicio → todo el colegio
  *
  * quedándose con el primero que tenga tarifa para ese año escolar. Así un
  * colegio configura cuatro números al año en vez de mantener un producto por
  * grado (que es como se termina con treinta "Pago de colegiatura" distintos).
+ *
+ * «Todo el colegio» es para lo que no depende del curso: terapia, almuerzo,
+ * inglés. Lo puede tomar cualquier alumno, esté en el grado que esté.
  *
  * La beca va por encima de todo, pero solo para la mensualidad: es un acuerdo
  * con la familia, no una propiedad del aula. En una misma sección conviven
@@ -28,7 +31,7 @@ import {
  */
 
 /** De dónde salió el monto. Sirve para explicarlo en la UI. */
-export type OrigenTarifa = 'beca' | 'estudiante' | 'seccion' | 'grado' | 'servicio';
+export type OrigenTarifa = 'beca' | 'estudiante' | 'seccion' | 'grado' | 'servicio' | 'colegio';
 
 export interface TarifaResuelta {
   montoCentavos: number;
@@ -43,6 +46,12 @@ export interface TarifaResuelta {
   productId: number | null;
   /** Cuántas cuotas del calendario cobra esta tarifa (las primeras N). null = todas. */
   cuotas?: number | null;
+  /**
+   * El precio sale de «Todo el colegio», aunque la beca le cambie el monto y
+   * `origen` diga 'beca'. Quien lo tenga puede tomarlo, pero no lo paga todo el
+   * mundo: por eso al matricular llega desmarcado (ver `armarPlanDeCobro`).
+   */
+  deTodoElColegio?: boolean;
 }
 
 /**
@@ -62,7 +71,7 @@ export interface ContextoTarifa {
   becaValor: number | null;
   /**
    * El alumno, para su tarifa PERSONAL de un concepto (precio con
-   * `objetivo_tipo='estudiante'`). Gana sobre sección/grado/servicio. `null`
+   * `objetivo_tipo='estudiante'`). Gana sobre sección/grado/servicio/colegio. `null`
    * cuando quien resuelve todavía no tiene alumno (una pantalla de estructura),
    * y entonces no hay excepción individual que aplicar.
    */
@@ -184,8 +193,47 @@ export interface PrecioConfigurado {
 }
 
 /**
- * La cadena de tarifas (alumno → sección → grado → servicio, y la beca por
- * encima), sobre precios que YA están cargados.
+ * Lo más específico gana: el precio propio del alumno tapa el de su sección,
+ * que tapa el del grado, que tapa el del servicio, que tapa el de todo el
+ * colegio. Este último no mira el id: los precios ya vienen de un solo colegio.
+ */
+function tarifaDeLaCadena(
+  precios: Omit<PrecioConfigurado, 'conceptoId'>[],
+  ctx: Pick<ContextoTarifa, 'estudianteId' | 'seccionId' | 'gradoId' | 'servicioId'>,
+): TarifaResuelta | null {
+  const cadena: { tipo: OrigenTarifa; id: number }[] = [
+    ...(ctx.estudianteId ? [{ tipo: 'estudiante' as const, id: ctx.estudianteId }] : []),
+    { tipo: 'seccion',  id: ctx.seccionId },
+    { tipo: 'grado',    id: ctx.gradoId },
+    { tipo: 'servicio', id: ctx.servicioId },
+  ];
+  for (const nivel of cadena) {
+    const hit = precios.find((p) => p.objetivoTipo === nivel.tipo && p.objetivoId === nivel.id);
+    if (hit) {
+      return {
+        montoCentavos: hit.montoCentavos,
+        origen: nivel.tipo,
+        objetivoId: hit.objetivoId,
+        productId: hit.productId,
+        cuotas: hit.cuotas ?? null,
+      };
+    }
+  }
+  const delColegio = precios.find((p) => p.objetivoTipo === 'colegio');
+  if (!delColegio) return null;
+  return {
+    montoCentavos: delColegio.montoCentavos,
+    origen: 'colegio',
+    objetivoId: delColegio.objetivoId,
+    productId: delColegio.productId,
+    cuotas: delColegio.cuotas ?? null,
+    deTodoElColegio: true,
+  };
+}
+
+/**
+ * La cadena de tarifas (alumno → sección → grado → servicio → todo el colegio,
+ * y la beca por encima), sobre precios que YA están cargados.
  *
  * Es el cuerpo de `resolverTarifas` sin las dos consultas. Se separó para que
  * quien necesita resolver la tarifa de cientos de matrículas de una vez —el
@@ -202,31 +250,8 @@ export function resolverTarifasEnMemoria(
 ): Map<number, TarifaResuelta> {
   const resuelto = new Map<number, TarifaResuelta>();
 
-  // Lo más específico gana: el precio propio del alumno tapa el de su sección,
-  // que tapa el del grado, que tapa el del servicio.
-  const cadena: { tipo: OrigenTarifa; id: number }[] = [
-    ...(ctx.estudianteId ? [{ tipo: 'estudiante' as const, id: ctx.estudianteId }] : []),
-    { tipo: 'seccion',  id: ctx.seccionId },
-    { tipo: 'grado',    id: ctx.gradoId },
-    { tipo: 'servicio', id: ctx.servicioId },
-  ];
-
   for (const conceptoId of conceptoIds) {
-    const suyos = precios.filter((p) => p.conceptoId === conceptoId);
-    let tarifa: TarifaResuelta | null = null;
-    for (const nivel of cadena) {
-      const hit = suyos.find((p) => p.objetivoTipo === nivel.tipo && p.objetivoId === nivel.id);
-      if (hit) {
-        tarifa = {
-          montoCentavos: hit.montoCentavos,
-          origen: nivel.tipo,
-          objetivoId: hit.objetivoId,
-          productId: hit.productId,
-          cuotas: hit.cuotas ?? null,
-        };
-        break;
-      }
-    }
+    const tarifa = tarifaDeLaCadena(precios.filter((p) => p.conceptoId === conceptoId), ctx);
 
     // La beca va al final y solo donde el concepto la admite: inscripción,
     // materiales y uniformes se cobran completos aunque el estudiante la tenga.
@@ -244,6 +269,7 @@ export function resolverTarifasEnMemoria(
           productId: tarifa?.productId ?? null,
           // La beca cambia el monto, no cuántos meses se pagan.
           cuotas: tarifa?.cuotas ?? null,
+          ...(tarifa?.deTodoElColegio ? { deTodoElColegio: true } : {}),
         });
         continue;
       }
@@ -303,29 +329,7 @@ export async function resolverTarifa(
       eq(adminEscolarConceptoPrecios.activo, true),
     ));
 
-  // Lo más específico gana: el precio propio del alumno tapa el de su sección,
-  // que tapa el del grado, que tapa el del servicio.
-  const cadena: { tipo: OrigenTarifa; id: number }[] = [
-    ...(ctx.estudianteId ? [{ tipo: 'estudiante' as const, id: ctx.estudianteId }] : []),
-    { tipo: 'seccion',  id: ctx.seccionId },
-    { tipo: 'grado',    id: ctx.gradoId },
-    { tipo: 'servicio', id: ctx.servicioId },
-  ];
-
-  let tarifa: TarifaResuelta | null = null;
-  for (const nivel of cadena) {
-    const hit = precios.find((p) => p.objetivoTipo === nivel.tipo && p.objetivoId === nivel.id);
-    if (hit) {
-      tarifa = {
-        montoCentavos: hit.montoCentavos,
-        origen: nivel.tipo,
-        objetivoId: hit.objetivoId,
-        productId: hit.productId,
-        cuotas: hit.cuotas ?? null,
-      };
-      break;
-    }
-  }
+  const tarifa = tarifaDeLaCadena(precios, ctx);
 
   // La beca se aplica al final y solo donde el concepto la admite: inscripción,
   // materiales y uniformes se cobran completos aunque el estudiante tenga beca.
@@ -352,7 +356,7 @@ export async function resolverTarifa(
         : ctx.becaValor;
 
       if (conBeca != null) {
-        return { montoCentavos: conBeca, origen: 'beca', objetivoId: null, productId: tarifa?.productId ?? null, cuotas: tarifa?.cuotas ?? null };
+        return { montoCentavos: conBeca, origen: 'beca', objetivoId: null, productId: tarifa?.productId ?? null, cuotas: tarifa?.cuotas ?? null, ...(tarifa?.deTodoElColegio ? { deTodoElColegio: true } : {}) };
       }
     }
   }

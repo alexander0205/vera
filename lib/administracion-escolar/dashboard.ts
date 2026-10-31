@@ -600,7 +600,7 @@ export async function dashboardDelPeriodo(
            filtros.conceptoId ? sql` AND co.id = ${filtros.conceptoId}` : sql``}
         CROSS JOIN LATERAL (
           SELECT COALESCE(
-            -- La tarifa PERSONAL del alumno gana sobre sección/grado/servicio.
+            -- La tarifa PERSONAL del alumno gana sobre sección/grado/servicio/colegio.
             (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
               WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
                 AND pr.activo AND pr.objetivo_tipo = 'estudiante' AND pr.objetivo_id = mat.estudiante_id),
@@ -612,7 +612,10 @@ export async function dashboardDelPeriodo(
                 AND pr.activo AND pr.objetivo_tipo = 'grado'    AND pr.objetivo_id = mat.grado_id),
             (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
               WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
-                AND pr.activo AND pr.objetivo_tipo = 'servicio' AND pr.objetivo_id = mat.servicio_id)
+                AND pr.activo AND pr.objetivo_tipo = 'servicio' AND pr.objetivo_id = mat.servicio_id),
+            (SELECT pr.monto_centavos FROM admin_escolar_concepto_precios pr
+              WHERE pr.team_id = ${teamId} AND pr.concepto_id = co.id AND pr.periodo_id = ${periodoId}
+                AND pr.activo AND pr.objetivo_tipo = 'colegio')
           ) AS monto
         ) base
       ),

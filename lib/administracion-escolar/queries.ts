@@ -26,6 +26,7 @@ import {
   ecfDocuments,
   pagosRecibidos,
 } from '@/lib/db/schema';
+import { NOMBRE_SIN_GRADO } from './sin-grado';
 
 /** Estados de cargo que cuentan como deuda viva. */
 export const ESTADOS_DEUDA = ['pendiente', 'parcial', 'vencido'] as const;
@@ -82,6 +83,13 @@ export interface ListarEstudiantesOpts {
   servicioId?: number | null;
   gradoId?: number | null;
   cursoId?: number | null;
+  /**
+   * Los que no tienen grado este año: sin matrícula activa, o con ella en el
+   * «Sin grado» de algún servicio. `periodoId` es el año: una matrícula en un
+   * grado del año pasado no cuenta como tener grado este.
+   */
+  sinGrado?: boolean;
+  periodoId?: number | null;
   /** Tamaño de página (default 25). */
   limit?: number;
   /** Desplazamiento (default 0). */
@@ -154,6 +162,21 @@ export async function listarEstudiantesEnriquecidos(
         opts.cursoId ? eq(adminEscolarMatriculas.cursoId, opts.cursoId) : undefined,
         opts.gradoId ? eq(adminEscolarCursos.gradoId, opts.gradoId) : undefined,
         opts.servicioId ? eq(adminEscolarGrados.servicioId, opts.servicioId) : undefined,
+      ))));
+  }
+  if (opts.sinGrado) {
+    filtros.push(notExists(db.select({ x: sql`1` }).from(adminEscolarMatriculas)
+      .innerJoin(adminEscolarCursos, and(
+        eq(adminEscolarCursos.id, adminEscolarMatriculas.cursoId),
+        eq(adminEscolarCursos.teamId, teamId),
+      ))
+      .innerJoin(adminEscolarGrados, eq(adminEscolarGrados.id, adminEscolarCursos.gradoId))
+      .where(and(
+        eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
+        eq(adminEscolarMatriculas.teamId, teamId),
+        eq(adminEscolarMatriculas.estado, 'activa'),
+        opts.periodoId ? eq(adminEscolarMatriculas.periodoId, opts.periodoId) : undefined,
+        sql`lower(${adminEscolarGrados.nombre}) <> ${NOMBRE_SIN_GRADO.toLowerCase()}`,
       ))));
   }
   const q = opts.q?.trim();
@@ -397,7 +420,7 @@ async function enriquecerPagina(teamId: number, ids: number[]) {
       periodo: adminEscolarPeriodos.nombre,
       // «Primero A · Primaria»: la letra sola («A») no decía de qué grado era.
       curso: sql<string | null>`CASE WHEN ${adminEscolarCursos.id} IS NULL THEN NULL ELSE concat_ws(' · ',
-        nullif(trim(concat_ws(' ', ${adminEscolarGrados.nombre}, ${adminEscolarCursos.nombre})), ''),
+        nullif(trim(CASE WHEN lower(${adminEscolarGrados.nombre}) = ${NOMBRE_SIN_GRADO.toLowerCase()} THEN ${adminEscolarGrados.nombre} ELSE concat_ws(' ', ${adminEscolarGrados.nombre}, ${adminEscolarCursos.nombre}) END), ''),
         nullif(trim(concat_ws(' · ', ${adminEscolarServicios.nombre}, ${adminEscolarServicios.tanda})), '')) END`,
     })
     .from(adminEscolarMatriculas)

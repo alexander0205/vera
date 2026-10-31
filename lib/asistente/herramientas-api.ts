@@ -686,6 +686,7 @@ export function crearHerramientasApi(api: ClienteApi, consultas: ConsultaHecha[]
         const cuotas = new Map(t.conceptos.map((c) => [c.id, c.cuotasCalendario]));
         const nombreC = new Map(conceptos.map((c) => [c.id, c.nombre]));
         const dondeEs = (tipo: string, oid: number) => {
+          if (tipo === 'colegio') return 'todo el colegio';
           if (tipo === 'servicio') return t.servicios.find((s) => s.id === oid)?.nombre ?? `nivel #${oid}`;
           if (tipo === 'grado') return t.grados.find((g) => g.id === oid)?.nombre ?? `grado #${oid}`;
           if (tipo === 'seccion') {

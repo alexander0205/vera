@@ -64,6 +64,8 @@ export async function GET(req: NextRequest) {
       servicioId,
       gradoId,
       cursoId,
+      sinGrado: sp.get('sinGrado') === '1',
+      periodoId: Number(sp.get('periodoId')) || null,
       limit,
       offset,
     }),

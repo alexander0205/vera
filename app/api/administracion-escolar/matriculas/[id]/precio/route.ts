@@ -9,6 +9,7 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
 import { cuotasDeLaTarifa, montosPorCuota, precioEsPorCuota } from '@/lib/administracion-escolar/repartir';
 import { sugerirMontoDelCargo } from '@/lib/administracion-escolar/precio-cargo-individual';
+import { textoDeCurso } from '@/lib/administracion-escolar/sin-grado';
 
 /**
  * GET /api/administracion-escolar/matriculas/[id]/precio?conceptoId=N&mes=M
@@ -112,7 +113,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     : null;
 
   return NextResponse.json({
-    curso: `${matricula.grado} ${matricula.seccion}`.trim(),
+    curso: textoDeCurso(matricula.grado, matricula.seccion),
     sugerencia,
     cuotas: montos
       ? deLaTarifa.map((c, i) => ({ id: c.id, etiqueta: c.etiqueta, montoCentavos: montos[i], cargada: c.cargada }))

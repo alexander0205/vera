@@ -218,7 +218,8 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
         // Marcados los obligatorios: aquí solo aparecen los conceptos con tarifa
         // para este grado, así que ya vienen filtrados por lo que ese grado
         // paga. Los opcionales (uniforme, transporte) llegan sin marcar y se
-        // marcan a quien los use; lo dice el colegio en Conceptos.
+        // marcan a quien los use; lo dice el colegio en Conceptos. Lo que tiene
+        // precio de todo el colegio llega también sin marcar (`armarPlanDeCobro`).
         const ids = new Set(lineas.map((l) => l.conceptoId));
         const ini = inicialRef.current;
         setMarcados(ini?.conceptos
