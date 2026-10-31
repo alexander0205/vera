@@ -15,7 +15,9 @@ import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
 
 // 'estudiante' es la tarifa PERSONAL de un alumno para un concepto: su
 // `objetivo_id` es el id del estudiante, y gana sobre sección/grado/servicio.
-const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion', 'estudiante']);
+// 'colegio' es «Todo el colegio»: lo puede tomar cualquier alumno, sea del grado
+// que sea. Su `objetivo_id` es el del propio colegio, que el cliente no elige.
+const TIPOS_OBJ = new Set(['colegio', 'servicio', 'grado', 'seccion', 'estudiante']);
 
 /** Productos que son venta de mostrador, no cargo escolar. */
 const NO_ES_CARGO = /t-?shirt|camis|uniforme|polo/i;
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
   const t = auth.teamId;
   const { conceptoId, periodoId, objetivoTipo, objetivoId, monto, productId, nuevoProducto, devengar } = await req.json();
 
-  const cId = Number(conceptoId), oId = Number(objetivoId), pId = Number(periodoId);
+  const cId = Number(conceptoId), oId = objetivoTipo === 'colegio' ? t : Number(objetivoId), pId = Number(periodoId);
   if (!cId || !oId || !pId || !TIPOS_OBJ.has(objetivoTipo)) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
   }
@@ -248,7 +250,18 @@ export async function POST(req: NextRequest) {
   const hacerDevengo = objetivoTipo === 'estudiante' ? devengar === true : true;
   let cargosCreados = 0;
   if (hacerDevengo) try {
-    const matriculaIds = await matriculasBajoObjetivo(db, t, pId, objetivoTipo, oId);
+    // En todo el colegio serían cientos de matrículas para nada: solo le toca
+    // a quien ya tiene el concepto en su plan. La lista vacía es la de las
+    // matrículas viejas, que el devengo todavía sigue por sus cargos.
+    const matriculaIds = objetivoTipo === 'colegio'
+      ? (await db.select({ id: adminEscolarMatriculas.id }).from(adminEscolarMatriculas)
+          .where(and(
+            eq(adminEscolarMatriculas.teamId, t),
+            eq(adminEscolarMatriculas.periodoId, pId),
+            sql`(${adminEscolarMatriculas.conceptosIds} @> ${JSON.stringify([cId])}::jsonb
+              OR jsonb_array_length(${adminEscolarMatriculas.conceptosIds}) = 0)`,
+          ))).map((m) => m.id)
+      : await matriculasBajoObjetivo(db, t, pId, objetivoTipo, oId);
     if (matriculaIds.length) {
       // Mismo criterio que el cron: hasta hoy, no hasta fin de mes. Poner el
       // precio no debe adelantar cuotas que todavía no toca emitir.

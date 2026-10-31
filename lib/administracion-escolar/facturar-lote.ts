@@ -696,7 +696,8 @@ export function opcionesDeGrado(alumnos: AlumnoCatalogo[]): { id: number; etique
   const vistos = new Map<number, string>();
   for (const a of alumnos) {
     if (a.gradoId == null || !a.grado || vistos.has(a.gradoId)) continue;
-    vistos.set(a.gradoId, servicios.size > 1 && a.servicio ? `${a.grado} · ${a.servicio}` : a.grado);
+    // El servicio «Sin grado» no aclara nada: se leería «Sin grado · Sin grado».
+    vistos.set(a.gradoId, servicios.size > 1 && a.servicio && a.servicio !== a.grado ? `${a.grado} · ${a.servicio}` : a.grado);
   }
   return [...vistos].map(([id, etiqueta]) => ({ id, etiqueta })).sort((x, y) => alfabetico(x.etiqueta, y.etiqueta));
 }

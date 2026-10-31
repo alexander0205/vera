@@ -229,6 +229,7 @@ export function MatriculaLoteDialog({ open, onClose, onSaved }: Props) {
                   periodoId={Number(periodoId) || null}
                   valor={cursoId}
                   onChange={setCursoId}
+                  onCursoCreado={(c) => setCursos((cs) => [...cs.filter((x) => x.id !== c.id), c])}
                 />
 
                 {listasDoc.length > 0 && (

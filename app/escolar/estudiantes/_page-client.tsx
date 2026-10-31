@@ -167,7 +167,7 @@ export default function EstudiantesClient() {
   const filtroEstr: FiltroGrupo = cursosData
     ? normalizarFiltro(cursos, periodoFiltro, completarFiltro(cursos, filtroCrudo))
     : filtroCrudo;
-  const hayFiltroEstr = filtroEstr.servicioId != null || filtroEstr.gradoId != null || filtroEstr.cursoId != null;
+  const hayFiltroEstr = filtroEstr.servicioId != null || filtroEstr.gradoId != null || filtroEstr.cursoId != null || filtroEstr.sinGrado === true;
 
   // Key del listado — SWR cachea por combinación de filtros+página.
   const params = new URLSearchParams({
@@ -179,6 +179,10 @@ export default function EstudiantesClient() {
   if (filtroEstr.servicioId) params.set('servicioId', String(filtroEstr.servicioId));
   if (filtroEstr.gradoId) params.set('gradoId', String(filtroEstr.gradoId));
   if (filtroEstr.cursoId) params.set('cursoId', String(filtroEstr.cursoId));
+  if (filtroEstr.sinGrado) {
+    params.set('sinGrado', '1');
+    if (periodoFiltro) params.set('periodoId', String(periodoFiltro));
+  }
   const listaKey = `/api/administracion-escolar/estudiantes?${params.toString()}`;
 
   const { data, isLoading, mutate } = useSWR<ListaResp>(listaKey, fetcher, {
@@ -343,6 +347,7 @@ export default function EstudiantesClient() {
                 filtro={filtroEstr}
                 onChange={cambiarEstructura}
                 className="sm:w-40"
+                etiquetaSinGrado="Sin grado o sin matrícula"
               />
               <Select value={filtroEstado} onValueChange={cambiarEstado}>
                 <SelectTrigger className="sm:w-36"><SelectValue placeholder="Estado" /></SelectTrigger>

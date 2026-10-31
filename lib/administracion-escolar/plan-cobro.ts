@@ -227,7 +227,10 @@ export async function armarPlanDeCobro(
       nombre: concepto.nombre,
       tipo: concepto.tipo,
       admiteBeca: concepto.admiteBeca,
-      opcional: concepto.opcional,
+      // Un precio de todo el colegio dice que CUALQUIERA puede tomarlo, no que
+      // todos lo paguen: si llegara marcado, a cada alumno nuevo se le cargaría
+      // la terapia o el almuerzo sin que nadie lo pidiera.
+      opcional: concepto.opcional || tarifa.deTodoElColegio === true,
       precioPorCuota: porCuota,
       montoCentavos: tarifa.montoCentavos,
       origen: tarifa.origen,

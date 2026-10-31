@@ -9,6 +9,7 @@ import { resumirCobro } from '@/lib/administracion-escolar/resumen-cobro';
 import { ResumenCobroFilas } from '@/components/administracion-escolar/ResumenCobro';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { textoDeCurso } from '@/lib/administracion-escolar/sin-grado';
 
 /**
  * La ficha de una matrícula: el mismo patrón que la de estudiante, pero
@@ -119,7 +120,7 @@ export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar
     };
   }, [cargos, m.id]);
 
-  const curso = [m.grado, m.curso].filter(Boolean).join(' — ') || '—';
+  const curso = textoDeCurso(m.grado, m.curso, ' — ') || '—';
   const servicio = m.servicio ? (m.tanda ? `${m.servicio} · ${m.tanda}` : m.servicio) : '—';
 
   return (

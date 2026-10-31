@@ -23,7 +23,10 @@ export function objetivoCubreCadena(
 ): boolean {
   return (objetivoTipo === 'seccion' && objetivoId === cadena.seccionId)
     || (objetivoTipo === 'grado' && objetivoId === cadena.gradoId)
-    || (objetivoTipo === 'servicio' && objetivoId === cadena.servicioId);
+    || (objetivoTipo === 'servicio' && objetivoId === cadena.servicioId)
+    // Cubre a cualquiera: quitar la excepción de un grado no deja huérfano a
+    // quien todavía tiene el precio de todo el colegio.
+    || objetivoTipo === 'colegio';
 }
 
 /**
@@ -277,7 +280,7 @@ export async function eliminarSoloConfig(tx: Tx, teamId: number, conceptoId: num
 
 // ─── Nivel tarifa individual (quitar un precio) ──────────────────────────────
 
-/** Matrículas colgadas de un objetivo (servicio/grado/sección). */
+/** Matrículas colgadas de un objetivo (colegio/servicio/grado/sección). */
 export async function matriculasBajoObjetivo(
   exec: DbOrTx,
   teamId: number,
@@ -296,6 +299,12 @@ export async function matriculasBajoObjetivo(
         eq(adminEscolarMatriculas.periodoId, periodoId),
         eq(adminEscolarMatriculas.estudianteId, objetivoId),
       ));
+    return mats.map((m) => m.id);
+  }
+
+  if (objetivoTipo === 'colegio') {
+    const mats = await exec.select({ id: adminEscolarMatriculas.id }).from(adminEscolarMatriculas)
+      .where(and(eq(adminEscolarMatriculas.teamId, teamId), eq(adminEscolarMatriculas.periodoId, periodoId)));
     return mats.map((m) => m.id);
   }
 
@@ -364,6 +373,7 @@ async function matriculasConCadena(
     : objetivoTipo === 'servicio' ? eq(adminEscolarGrados.servicioId, objetivoId)
     // El precio personal cuelga del alumno: su matrícula es la única del objetivo.
     : objetivoTipo === 'estudiante' ? eq(adminEscolarMatriculas.estudianteId, objetivoId)
+    : objetivoTipo === 'colegio' ? sql`true`
     : sql`false`;
   return base.where(and(
     eq(adminEscolarMatriculas.teamId, teamId),

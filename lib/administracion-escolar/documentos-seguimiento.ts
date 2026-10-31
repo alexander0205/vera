@@ -14,6 +14,7 @@ import {
   adminEscolarTutores,
 } from '@/lib/db/schema';
 import { mismoNivel, type Exigencia, type EstadoDocumento } from './documentos';
+import { textoDeCurso } from './sin-grado';
 
 /**
  * Quién debe qué, en todo el colegio.
@@ -212,7 +213,7 @@ export async function seguimientoDeDocumentos(
       matriculaId: m.id,
       estudianteId: m.estudianteId,
       estudiante: [m.nombres, m.apellidos].filter(Boolean).join(' ').trim() || 'Sin nombre',
-      curso: m.curso ? [m.grado, m.curso].filter(Boolean).join(' ') : null,
+      curso: m.curso ? textoDeCurso(m.grado, m.curso) : null,
       nivel: m.nivel,
       cursoId: m.cursoId,
       gradoId: m.gradoId,

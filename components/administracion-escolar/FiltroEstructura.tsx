@@ -4,8 +4,9 @@ import { useMemo } from 'react';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { esGradoSinGrado } from '@/lib/administracion-escolar/sin-grado';
 import {
-  acotarFiltro, completarFiltro, normalizarFiltro, opcionesDelFiltro,
+  acotarFiltro, completarFiltro, normalizarFiltro, opcionesDelFiltro, SIN_GRADO,
   type CursoFiltrable, type FiltroGrupo,
 } from '@/lib/administracion-escolar/filtro-curso';
 
@@ -27,6 +28,9 @@ import {
  * No guarda nada: lo que se ve es el `filtro` del padre, recortado a lo que
  * existe ese año (un enlace viejo con un grado del año pasado no deja los
  * desplegables mintiendo).
+ *
+ * Quien no tiene grado también se puede pedir: «Sin grado» sale en el nivel y
+ * trae a los de todos los servicios (ver `sin-grado.ts`).
  */
 interface Props {
   /** El catálogo de secciones (`GET /cursos`). Las inactivas se esconden salvo la elegida. */
@@ -36,11 +40,18 @@ interface Props {
   onChange: (filtro: FiltroGrupo) => void;
   /** Clase para cada desplegable (ancho). */
   className?: string;
+  /**
+   * Para las listas donde caben también los que no tienen matrícula, que no
+   * dependen del catálogo: la opción sale siempre y con este nombre. Sin él sale
+   * «Sin grado», y solo si este año hay alguien.
+   */
+  etiquetaSinGrado?: string;
 }
 
 const TODOS = 'todos';
+const VALOR_SIN_GRADO = 'sin-grado';
 
-export function FiltroEstructura({ cursos, periodoId, filtro, onChange, className = 'sm:w-44' }: Props) {
+export function FiltroEstructura({ cursos, periodoId, filtro, onChange, className = 'sm:w-44', etiquetaSinGrado }: Props) {
   const visibles = useMemo(
     () => cursos.filter((c) => c.id === filtro.cursoId
       || (c.activo !== false && c.gradoActivo !== false && c.servicioActivo !== false)),
@@ -50,22 +61,26 @@ export function FiltroEstructura({ cursos, periodoId, filtro, onChange, classNam
     () => normalizarFiltro(visibles, periodoId, completarFiltro(visibles, filtro)),
     [visibles, periodoId, filtro],
   );
-  const { servicios, grados, secciones } = useMemo(
+  const { servicios, grados, secciones, haySinGrado } = useMemo(
     () => opcionesDelFiltro(visibles, periodoId, puesto), [visibles, periodoId, puesto],
   );
 
   const elegir = (nivel: 'servicio' | 'grado' | 'seccion', valor: string) =>
     onChange(acotarFiltro(puesto, nivel, valor === TODOS ? null : Number(valor)));
 
-  if (servicios.length === 0) return null;
+  const ofreceSinGrado = haySinGrado || etiquetaSinGrado != null;
+  if (servicios.length === 0 && !ofreceSinGrado) return null;
 
   return (
     <>
-      <Select value={puesto.servicioId == null ? TODOS : String(puesto.servicioId)} onValueChange={(v) => elegir('servicio', v)}>
+      <Select value={puesto.sinGrado ? VALOR_SIN_GRADO : puesto.servicioId == null ? TODOS : String(puesto.servicioId)}
+        onValueChange={(v) => (v === VALOR_SIN_GRADO ? onChange(SIN_GRADO) : elegir('servicio', v))}>
         <SelectTrigger className={className}><SelectValue placeholder="Nivel" /></SelectTrigger>
         <SelectContent>
           <SelectItem value={TODOS}>Nivel: Todos</SelectItem>
-          {servicios.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.etiqueta}</SelectItem>)}
+          {/* El servicio automático «Sin grado» ya va dentro de la opción de abajo. */}
+          {servicios.filter((s) => !esGradoSinGrado(s.etiqueta)).map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.etiqueta}</SelectItem>)}
+          {ofreceSinGrado && <SelectItem value={VALOR_SIN_GRADO}>{etiquetaSinGrado ?? 'Sin grado'}</SelectItem>}
         </SelectContent>
       </Select>
       {puesto.servicioId != null && grados.length > 1 && (
@@ -119,6 +134,7 @@ export function filtroDeUrl(params: { get(clave: string): string | null }): Filt
     const n = Number(params.get(k));
     return Number.isInteger(n) && n > 0 ? n : null;
   };
+  if (params.get('sinGrado') === '1') return SIN_GRADO;
   return { servicioId: id('servicio'), gradoId: id('grado'), cursoId: id('curso') };
 }
 
@@ -128,5 +144,6 @@ export function filtroAUrl(f: FiltroGrupo): Record<string, string | null> {
     servicio: f.servicioId == null ? null : String(f.servicioId),
     grado: f.gradoId == null ? null : String(f.gradoId),
     curso: f.cursoId == null ? null : String(f.cursoId),
+    sinGrado: f.sinGrado ? '1' : null,
   };
 }

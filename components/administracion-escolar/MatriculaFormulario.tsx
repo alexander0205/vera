@@ -596,6 +596,9 @@ export function MatriculaFormulario({
             periodoId={Number(form.periodoId) || null}
             valor={form.cursoId}
             onChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}
+            onCursoCreado={puedeGestionar
+              ? (c) => setCursos((cs) => [...cs.filter((x) => x.id !== c.id), c])
+              : undefined}
           />
 
           {/* Qué papeles se le piden a esta familia. Se elige a mano porque

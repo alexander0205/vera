@@ -295,7 +295,9 @@ export default function DashboardEscolarClient({ perfilEmpresa }: {
             >
               <option value="">Todos los grados</option>
               {d.opciones.grados.map((g) => (
-                <option key={g.id} value={g.id}>{g.grado} · {g.servicio}{g.tanda ? ` · ${g.tanda}` : ''}</option>
+                <option key={g.id} value={g.id}>
+                  {g.grado === g.servicio ? g.grado : `${g.grado} · ${g.servicio}${g.tanda ? ` · ${g.tanda}` : ''}`}
+                </option>
               ))}
             </NativeSelect>
           </label>

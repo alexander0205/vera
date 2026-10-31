@@ -104,6 +104,6 @@ describe('filtro en la URL', () => {
   });
 
   it('«Todos» no deja nada en la URL', () => {
-    expect(filtroAUrl(TODOS_LOS_CURSOS)).toEqual({ servicio: null, grado: null, curso: null });
+    expect(filtroAUrl(TODOS_LOS_CURSOS)).toEqual({ servicio: null, grado: null, curso: null, sinGrado: null });
   });
 });
