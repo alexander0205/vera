@@ -853,8 +853,8 @@ export function ConceptoDetalle({
               </div>
 
               <p className="text-xs text-gray-500">
-                El SMS se cobra por mensaje: sale antes del recargo y, el día que vence, solo si el WhatsApp
-                no se puede mandar.
+                El SMS se cobra por mensaje: sale siempre antes del recargo y, en los demás avisos, solo si el
+                WhatsApp no se puede mandar.
               </p>
 
               {!algunCanal && (

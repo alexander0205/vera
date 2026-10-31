@@ -362,6 +362,12 @@ describe('despachar: el día que vence, SMS solo si el WhatsApp no sale', () => 
     expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms', 'correo', 'sms']);
   });
 
+  it('el día de la factura un WhatsApp rechazado también pasa a SMS', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(pendientesDe(FAMILIA_PEREZ, '2026-09-28'), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms']);
+  });
+
   it('antes del recargo un WhatsApp rechazado no añade otro SMS', async () => {
     const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
     await despachar(pendientesDe(FAMILIA_PEREZ), opts);
