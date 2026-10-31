@@ -6,7 +6,7 @@ import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import {
   ArrowLeft, Bell, Check, Download, ExternalLink, FileText, Loader2, MessageSquareText, Paperclip, Plus, RotateCcw, ScanSearch,
-  Sparkles, Users, X,
+  Sparkles, Users, Wrench, X,
 } from 'lucide-react';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -82,10 +82,10 @@ const iniciales = (nombre: string) => {
 };
 
 export const COLOR_PUNTO: Record<EstadoTarea, string> = {
-  abierta: 'bg-amber-500', en_revision: 'bg-sky-500', completada: 'bg-emerald-600',
+  abierta: 'bg-amber-500', en_proceso: 'bg-violet-500', en_revision: 'bg-sky-500', completada: 'bg-emerald-600',
 };
 export const COLOR_CHIP: Record<EstadoTarea, string> = {
-  abierta: 'bg-amber-50 text-amber-800', en_revision: 'bg-sky-50 text-sky-800', completada: 'bg-emerald-50 text-emerald-800',
+  abierta: 'bg-amber-50 text-amber-800', en_proceso: 'bg-violet-50 text-violet-800', en_revision: 'bg-sky-50 text-sky-800', completada: 'bg-emerald-50 text-emerald-800',
 };
 
 const pesoLegible = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
@@ -330,6 +330,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                       )}
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
                         {t.de} · {t.asignada}
+                        {t.estado === 'en_proceso' && <span className="rounded bg-violet-50 px-1.5 font-semibold text-violet-800">En proceso</span>}
                         {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 font-semibold text-sky-800">En revisión</span>}
                         <TurnoChip turno={t.turno} />
                         {t.creadaPorIa && <span className="rounded bg-violet-50 px-1.5 font-semibold text-violet-700">Zero AI</span>}
@@ -573,9 +574,16 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                 <Check className="h-4 w-4" />Completar
               </button>
             )}
-            {tarea.estado === 'abierta' && (
+            {(tarea.estado === 'abierta' || tarea.estado === 'en_revision') && (
+              <button type="button" onClick={() => void marcar('tomar')} disabled={ocupado}
+                title="Ya la estamos trabajando: quien la pidió ve que alguien la tomó"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 text-sm font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-50">
+                <Wrench className="h-4 w-4" />En proceso
+              </button>
+            )}
+            {(tarea.estado === 'abierta' || tarea.estado === 'en_proceso') && (
               <button type="button" onClick={() => void marcar('revision')} disabled={ocupado}
-                title="Alguien ya la está viendo o falta que la confirmen: sigue pendiente"
+                title="Ya se hizo y falta que la confirmen: sigue pendiente"
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50">
                 <ScanSearch className="h-4 w-4" />En revisión
               </button>
@@ -584,7 +592,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
               <button type="button" onClick={() => void marcar('reabrir')} disabled={ocupado}
                 title="Vuelve a las abiertas"
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                <RotateCcw className="h-4 w-4" />{tarea.estado === 'completada' ? 'Volver a abrir' : 'Quitar de revisión'}
+                <RotateCcw className="h-4 w-4" />{tarea.estado === 'completada' ? 'Volver a abrir' : tarea.estado === 'en_proceso' ? 'Soltar tarea' : 'Quitar de revisión'}
               </button>
             )}
             <span className="flex-1" />

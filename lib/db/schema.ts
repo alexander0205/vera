@@ -2763,7 +2763,7 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   ecfDocumentId:       integer('ecf_document_id').references(() => ecfDocuments.id, { onDelete: 'set null' }),
   cargoId:             integer('cargo_id').references(() => adminEscolarCargos.id, { onDelete: 'set null' }),
   venceEl:             date('vence_el'),
-  /** abierta | en_revision | completada (0210) */
+  /** abierta | en_proceso | en_revision | completada (0210, 0215) */
   estado:              varchar('estado', { length: 12 }).notNull().default('abierta'),
   creadaPorUserId:     integer('creada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   creadaPorIa:         boolean('creada_por_ia').notNull().default(false),
@@ -3020,6 +3020,8 @@ export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
   clientId:      integer('client_id').references(() => clients.id, { onDelete: 'set null' }),
 
   montoCentavos: integer('monto_centavos').notNull(),
+  /** Lo que confirmó quien aprobó, que puede no ser lo declarado (0215). Ver `montoConfirmado`. */
+  montoAprobadoCentavos: integer('monto_aprobado_centavos'),
   referencia:    varchar('referencia', { length: 120 }),
   bancoOrigen:   varchar('banco_origen', { length: 120 }),
   nota:          text('nota'),

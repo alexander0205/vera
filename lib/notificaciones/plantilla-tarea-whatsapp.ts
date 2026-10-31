@@ -37,6 +37,7 @@ const QUE_PASO: Record<CambioTarea, (autor: string) => string> = {
   creada: (a) => `${a} te asignó una tarea`,
   mensaje: (a) => `${a} respondió`,
   adjunto: (a) => `${a} subió un archivo`,
+  en_proceso: (a) => `${a} tomó la tarea`,
   revision: () => 'La tarea quedó en revisión: revísala y confírmanos',
   completada: () => 'La tarea se completó',
   reabierta: () => 'La tarea se volvió a abrir',

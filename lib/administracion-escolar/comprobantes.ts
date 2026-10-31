@@ -73,6 +73,7 @@ export async function listarComprobantes(
       estado:        adminEscolarComprobantes.estado,
       clientId:      adminEscolarComprobantes.clientId,
       montoCentavos: adminEscolarComprobantes.montoCentavos,
+      montoAprobadoCentavos: adminEscolarComprobantes.montoAprobadoCentavos,
       referencia:    adminEscolarComprobantes.referencia,
       bancoOrigen:   adminEscolarComprobantes.bancoOrigen,
       nota:          adminEscolarComprobantes.nota,
@@ -468,7 +469,14 @@ export async function aprobarComprobante(
    * peticiones se lleva la fila. Es el mismo candado que ya usaba `rechazar`.
    */
   const [c] = await db.update(adminEscolarComprobantes)
-    .set({ estado: 'aprobado', revisadoPor: usuarioId, revisadoEn: new Date(), cuentaBancoId: cuentaElegida?.id ?? null })
+    .set({
+      estado: 'aprobado', revisadoPor: usuarioId, revisadoEn: new Date(), cuentaBancoId: cuentaElegida?.id ?? null,
+      // Junto con el reclamo, no después de cobrar: un fallo aquí tras registrar
+      // los pagos devolvería el comprobante a la cola y se cobraría dos veces.
+      montoAprobadoCentavos: ajustes.montoCentavos != null && ajustes.montoCentavos > 0
+        ? ajustes.montoCentavos
+        : sql`${adminEscolarComprobantes.montoCentavos}`,
+    })
     .where(and(
       eq(adminEscolarComprobantes.id, id),
       eq(adminEscolarComprobantes.teamId, teamId),
@@ -530,7 +538,7 @@ export async function aprobarComprobante(
     };
   } catch (e) {
     await db.update(adminEscolarComprobantes)
-      .set({ estado: 'pendiente', revisadoPor: null, revisadoEn: null, cuentaBancoId: null })
+      .set({ estado: 'pendiente', revisadoPor: null, revisadoEn: null, cuentaBancoId: null, montoAprobadoCentavos: null })
       .where(eq(adminEscolarComprobantes.id, id));
     throw e;
   }

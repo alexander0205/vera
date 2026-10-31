@@ -25,12 +25,12 @@ import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-esc
  * un alumno que se busca en el formulario.
  */
 
-type Vista = 'mias' | 'todas' | 'revision' | 'hechas';
+type Vista = 'mias' | 'todas' | 'proceso' | 'revision' | 'hechas';
 type Origen = 'todas' | 'ia' | 'personas';
 
 interface Respuesta {
   familias: FamiliaConTareas[];
-  cuentas: { mias: number; todas: number; revision: number; hechas: number };
+  cuentas: { mias: number; todas: number; proceso: number; revision: number; hechas: number };
   kpis: { abiertas: number; familias: number; colegio: number; mias: number; ia: number; viejas: number };
 }
 
@@ -161,6 +161,7 @@ export default function PorRevisarClient() {
         <Segmento etiqueta="Qué tareas" valor={vista} onCambio={setVista} opciones={[
           { id: 'mias', texto: `Asignadas a mí${cuentas ? ` · ${cuentas.mias}` : ''}` },
           { id: 'todas', texto: `Todo el colegio${cuentas ? ` · ${cuentas.todas}` : ''}` },
+          { id: 'proceso', texto: `En proceso${cuentas ? ` · ${cuentas.proceso}` : ''}` },
           { id: 'revision', texto: `En revisión${cuentas ? ` · ${cuentas.revision}` : ''}` },
           { id: 'hechas', texto: `Completadas${cuentas ? ` · ${cuentas.hechas}` : ''}` },
         ]} />
@@ -194,7 +195,7 @@ export default function PorRevisarClient() {
       {error && <p className="text-sm text-red-600">No se pudieron leer las tareas.</p>}
       {data && familias.length === 0 && (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
-          {vista === 'mias' ? 'No tienes nada pendiente.' : vista === 'revision' ? 'No hay nada en revisión.' : 'Nada con estos filtros.'}
+          {vista === 'mias' ? 'No tienes nada pendiente.' : vista === 'proceso' ? 'Nadie está trabajando una tarea ahora.' : vista === 'revision' ? 'No hay nada en revisión.' : 'Nada con estos filtros.'}
         </div>
       )}
 
@@ -231,6 +232,7 @@ export default function PorRevisarClient() {
                       <span className={`block text-sm font-semibold ${hecha ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{t.titulo}</span>
                       {t.descripcion && <span className="line-clamp-1 block text-xs text-gray-600">{t.descripcion}</span>}
                       <span className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] text-gray-600">
+                        {t.estado === 'en_proceso' && <span className="rounded bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-800">En proceso</span>}
                         {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 py-0.5 font-semibold text-sky-800">En revisión</span>}
                         <TurnoChip turno={t.turno} />
                         <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.de}</span>

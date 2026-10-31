@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { VistaLinkPago } from '@/lib/administracion-escolar/link-pago';
+import { montoConfirmado } from '@/lib/administracion-escolar/comprobante-confirmado';
 import { ZonaArchivo } from '@/components/shared/ZonaArchivo';
 
 const AZUL = '#1d4ed8';
@@ -412,6 +413,7 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
         {vista.comprobantes.length > 0 && (
           <section style={{ marginBottom: 18 }}>
             {vista.comprobantes.map((c) => {
+              const confirmado = montoConfirmado(c);
               const estilo = c.estado === 'pendiente'
                 ? { bg: '#fffbeb', bd: '#fde68a', fg: '#92400e', icono: '⏳',
                     titulo: 'Transferencia pendiente de aprobación',
@@ -419,7 +421,9 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
                 : c.estado === 'aprobado'
                 ? { bg: '#ecfdf5', bd: '#a7f3d0', fg: '#065f46', icono: '✓',
                     titulo: 'Pago confirmado',
-                    texto: 'El colegio verificó tu transferencia.' }
+                    texto: confirmado === c.montoCentavos
+                      ? 'El colegio verificó tu transferencia.'
+                      : `Enviaste un comprobante por ${dinero(c.montoCentavos)}; el colegio confirmó ${dinero(confirmado)}.` }
                 : { bg: '#fef2f2', bd: '#fecaca', fg: '#991b1b', icono: '✕',
                     titulo: 'Comprobante rechazado',
                     texto: c.motivoRechazo ?? 'El colegio no pudo verificar esta transferencia.' };
@@ -432,7 +436,7 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
                   <span style={{ fontSize: 18, lineHeight: 1.2 }}>{estilo.icono}</span>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 14, fontWeight: 700, color: estilo.fg, margin: '0 0 2px' }}>
-                      {estilo.titulo} · {dinero(c.montoCentavos)}
+                      {estilo.titulo} · {dinero(c.estado === 'aprobado' ? confirmado : c.montoCentavos)}
                     </p>
                     <p style={{ fontSize: 13, color: estilo.fg, margin: 0, lineHeight: 1.55 }}>
                       {estilo.texto}

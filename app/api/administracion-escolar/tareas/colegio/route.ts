@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   const filtro: FiltroColegio = {
-    vista: uno(sp.get('vista'), ['mias', 'todas', 'revision', 'hechas'] as const, 'mias'),
+    vista: uno(sp.get('vista'), ['mias', 'todas', 'proceso', 'revision', 'hechas'] as const, 'mias'),
     origen: uno(sp.get('origen'), ['todas', 'ia', 'personas'] as const, 'todas'),
     asignada: uno(sp.get('asignada'), ['', 'soporte', 'persona'] as const, ''),
     esperando: uno(sp.get('esperando'), ['', 'soporte', 'colegio'] as const, ''),

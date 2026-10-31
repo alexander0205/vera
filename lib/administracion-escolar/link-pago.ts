@@ -147,6 +147,8 @@ export interface CargoPendiente {
 export interface ComprobanteEnEspera {
   id: number;
   montoCentavos: number;
+  /** Lo que confirmó el colegio. Ver `montoConfirmado`. */
+  montoAprobadoCentavos: number | null;
   estado: string;
   creadoEn: string;
   motivoRechazo: string | null;
@@ -448,6 +450,7 @@ export async function resolverLink(
       .select({
         id:            adminEscolarComprobantes.id,
         montoCentavos: adminEscolarComprobantes.montoCentavos,
+        montoAprobadoCentavos: adminEscolarComprobantes.montoAprobadoCentavos,
         estado:        adminEscolarComprobantes.estado,
         creadoEn:      adminEscolarComprobantes.creadoEn,
         motivoRechazo: adminEscolarComprobantes.motivoRechazo,
@@ -520,6 +523,7 @@ export async function resolverLink(
       comprobantes: comprobantesVista.map((c) => ({
         id: c.id,
         montoCentavos: c.montoCentavos,
+        montoAprobadoCentavos: c.montoAprobadoCentavos,
         estado: c.estado,
         creadoEn: c.creadoEn.toISOString(),
         motivoRechazo: c.motivoRechazo,

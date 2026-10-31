@@ -123,7 +123,7 @@ export function notificacionDePagoEnLinea(d: DatosPagoEnLinea): NotificacionNuev
 
 // ── Lo que pasa en una tarea por revisar (personal) ──────────────────────────
 
-export type CambioTarea = 'creada' | 'mensaje' | 'adjunto' | 'revision' | 'completada' | 'reabierta' | 'urgente';
+export type CambioTarea = 'creada' | 'mensaje' | 'adjunto' | 'en_proceso' | 'revision' | 'completada' | 'reabierta' | 'urgente';
 
 export interface DatosTarea {
   cambio: CambioTarea;
@@ -140,6 +140,7 @@ const QUE_HIZO: Record<CambioTarea, string> = {
   creada: 'te asignó una tarea',
   mensaje: 'respondió',
   adjunto: 'subió un archivo',
+  en_proceso: 'tomó la tarea',
   revision: 'pasó a revisión',
   completada: 'completó',
   reabierta: 'volvió a abrir',

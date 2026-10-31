@@ -311,7 +311,7 @@ export async function agregarMensaje(teamId: number, id: number, autor: AutorTar
 }
 
 /**
- * Completar, pasar a revisión o volver a abrir (ver `DESTINO`). Deja su línea
+ * Completar, tomar, pasar a revisión o volver a abrir (ver `DESTINO`). Deja su línea
  * en la conversación. `null` si no existe o ya estaba así.
  */
 export async function cambiarEstadoTarea(teamId: number, id: number, autor: AutorTarea, accion: AccionEstado) {
@@ -327,7 +327,8 @@ export async function cambiarEstadoTarea(teamId: number, id: number, autor: Auto
       .returning({ id: adminEscolarTareas.id });
     if (!fila) return null;
     const texto = a === 'completada' ? textoEvento.completada(autor.nombre)
-      : a === 'en_revision' ? textoEvento.revision(autor.nombre) : textoEvento.reabierta(autor.nombre);
+      : a === 'en_revision' ? textoEvento.revision(autor.nombre)
+      : a === 'en_proceso' ? textoEvento.enProceso(autor.nombre) : textoEvento.reabierta(autor.nombre);
     await tx.insert(adminEscolarTareaMensajes).values({
       teamId, tareaId: id, tipo: 'evento', userId: autor.userId, autor: autor.nombre, texto,
     });
@@ -448,7 +449,7 @@ const sonMias = (yo: QuienMira) => or(
 
 export interface FiltroColegio {
   /** `mias` y `todas` son las pendientes (abiertas y en revisión). */
-  vista: 'mias' | 'todas' | 'revision' | 'hechas';
+  vista: 'mias' | 'todas' | 'proceso' | 'revision' | 'hechas';
   origen: 'todas' | 'ia' | 'personas';
   /** `soporte`, `persona` o vacío para cualquiera. */
   asignada: string;
@@ -494,11 +495,12 @@ const enLista = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0,
 export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroColegio) {
   const t = adminEscolarTareas;
   const mias = sonMias(yo);
-  // «Abiertas» en los números son las pendientes: abiertas y en revisión.
-  const pendiente = sql`${t.estado} in ('abierta', 'en_revision')`;
+  // «Abiertas» en los números son las pendientes: abiertas, en proceso y en revisión.
+  const pendiente = sql`${t.estado} in ('abierta', 'en_proceso', 'en_revision')`;
   const [c] = await db.select({
     abiertas: sql<number>`count(*) filter (where ${pendiente})::int`,
     mias: sql<number>`count(*) filter (where ${pendiente} and ${mias})::int`,
+    proceso: sql<number>`count(*) filter (where ${t.estado} = 'en_proceso')::int`,
     revision: sql<number>`count(*) filter (where ${t.estado} = 'en_revision')::int`,
     hechas: sql<number>`count(*) filter (where ${t.estado} = 'completada')::int`,
     ia: sql<number>`count(*) filter (where ${pendiente} and ${t.creadaPorIa})::int`,
@@ -509,6 +511,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
 
   const condiciones = [eq(t.teamId, teamId)];
   if (f.vista === 'hechas') condiciones.push(eq(t.estado, 'completada'));
+  else if (f.vista === 'proceso') condiciones.push(eq(t.estado, 'en_proceso'));
   else if (f.vista === 'revision') condiciones.push(eq(t.estado, 'en_revision'));
   else condiciones.push(inArray(t.estado, PENDIENTES));
   if (f.vista === 'mias') condiciones.push(mias);
@@ -594,7 +597,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
   // Las del colegio arriba: no tienen ficha a la que ir, y abajo se pierden entre las familias.
   const grupos = [...familias.values()].sort((a, b) => Number(b.clave === CLAVE_COLEGIO) - Number(a.clave === CLAVE_COLEGIO));
   return {
-    cuentas: { mias: c?.mias ?? 0, todas: c?.abiertas ?? 0, revision: c?.revision ?? 0, hechas: c?.hechas ?? 0 },
+    cuentas: { mias: c?.mias ?? 0, todas: c?.abiertas ?? 0, proceso: c?.proceso ?? 0, revision: c?.revision ?? 0, hechas: c?.hechas ?? 0 },
     kpis: { abiertas: c?.abiertas ?? 0, familias: c?.familias ?? 0, colegio: c?.colegio ?? 0, mias: c?.mias ?? 0, ia: c?.ia ?? 0, viejas: c?.viejas ?? 0 },
     familias: grupos,
   };
