@@ -96,7 +96,9 @@ const FAMILIA_GOMEZ = [
   fila({ cargoId: 5, estudianteId: 21, estudiante: 'Teo Gómez', clientId: 2000, email: 'g@x.com', whatsapp: '8095550001', celular: '8095550002' }),
 ];
 
-const VENCER = '2026-10-03';
+// El aviso que sale por los tres canales: antes del recargo.
+const VENCER = '2026-10-06';
+const DIA_QUE_VENCE = '2026-10-03';
 const pendientesDe = (fs: FilaAviso[], hoy = VENCER): AvisoPendiente[] => fs.flatMap((f) => avisosDeHoy(f, hoy));
 
 interface Envio { canal: string; destino: string; texto: string; cobros: number[] }
@@ -310,5 +312,58 @@ describe('despachar: el simulacro', () => {
     await despachar(p, armar().opts);
     const hechos = await despachar(p, armar({ dryRun: true }).opts);
     expect(hechos).toHaveLength(0);
+  });
+});
+
+describe('despachar: el día que vence, SMS solo si el WhatsApp no sale', () => {
+  const delDia = (fs: FilaAviso[]) => pendientesDe(fs, DIA_QUE_VENCE);
+
+  it('si el WhatsApp sale, no se paga el SMS', async () => {
+    const { opts, enviados } = armar();
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'whatsapp']);
+    expect(filas().filter((f) => f.canal === 'sms')).toHaveLength(0);
+  });
+
+  it('si el envío se rechaza, la familia recibe UN SMS en la misma corrida', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    const hechos = await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms']);
+    expect(filas().filter((f) => f.canal === 'whatsapp')).toHaveLength(0);
+    expect(filas().filter((f) => f.canal === 'sms')).toHaveLength(3);
+    expect(hechos.filter((h) => h.canal === 'whatsapp').every((h) => !h.ok)).toBe(true);
+  });
+
+  it('reintentar a los quince minutos no repite el SMS', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.filter((e) => e.canal === 'sms')).toHaveLength(1);
+  });
+
+  it('con la cuota de WhatsApp agotada también sale por SMS', async () => {
+    const { opts, enviados } = armar({ restantePorCanal: { whatsapp: 0 } });
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms']);
+  });
+
+  it('con el SMS apagado en el concepto solo queda el fallo anotado', async () => {
+    const sinSms = FAMILIA_PEREZ.map((f) => ({ ...f, avisoSms: false }));
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    const hechos = await despachar(delDia(sinSms), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo']);
+    expect(hechos.filter((h) => !h.ok)).toHaveLength(3);
+  });
+
+  it('la familia no se parte: el SMS va antes de la siguiente', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(delDia([...FAMILIA_PEREZ, ...FAMILIA_GOMEZ]), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms', 'correo', 'sms']);
+  });
+
+  it('antes del recargo un WhatsApp rechazado no añade otro SMS', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(pendientesDe(FAMILIA_PEREZ), opts);
+    expect(enviados.filter((e) => e.canal === 'sms')).toHaveLength(1);
   });
 });

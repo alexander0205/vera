@@ -12,7 +12,7 @@ import {
 } from './agrupar-avisos';
 import { sumarDias } from './calendario';
 import { CANALES_TODOS_ACTIVOS, type CanalesActivos } from './canales';
-import { CANALES_DEL_AVISO, type Aviso, type Canal } from './ciclo-cobro';
+import { AVISOS_CON_SMS_DE_RESPALDO, CANALES_DEL_AVISO, type Aviso, type Canal } from './ciclo-cobro';
 import { destinoDeContacto } from './destino-canal';
 
 // El texto de un aviso suelto vive en `avisos-texto.ts` para que el de varios
@@ -125,6 +125,8 @@ export interface AvisoPendiente {
    */
   fecha: string;
   canales: Canal[];
+  /** Si el WhatsApp no sale, este cobro se avisa por SMS. Lo decide `avisosDeHoy`. */
+  smsDeRespaldo?: boolean;
 }
 
 /**
@@ -190,6 +192,24 @@ export function canalesVivosDe(
 }
 
 /**
+ * Por qué canales sale este aviso, de los que están encendidos.
+ *
+ * Donde el SMS es de respaldo (`AVISOS_CON_SMS_DE_RESPALDO`) ocupa el lugar del
+ * WhatsApp cuando ya se sabe de antemano que no se puede mandar: apagado, o la
+ * familia sin número. Lo que falla al enviar se resuelve en `despachar`.
+ */
+export function canalesDeAviso(
+  aviso: Aviso,
+  vivos: readonly Canal[],
+  tieneWhatsApp = true,
+): Canal[] {
+  const canales = CANALES_DEL_AVISO[aviso].filter((c) => vivos.includes(c));
+  if (!AVISOS_CON_SMS_DE_RESPALDO.includes(aviso) || !vivos.includes('sms')) return canales;
+  if (canales.includes('whatsapp') && tieneWhatsApp) return canales;
+  return [...canales.filter((c) => c !== 'whatsapp'), 'sms'];
+}
+
+/**
  * Los canales de un aviso cuyo WhatsApp no se puede mandar (no hay plantilla
  * aprobada y asignada): se le quita el WhatsApp y, si el colegio y el concepto
  * tienen el SMS encendido, sale por SMS en su lugar.
@@ -231,7 +251,8 @@ export function avisosDeHoy(
       fecha: s.fecha,
       // El ruteo es fijo; lo que el colegio enciende es el canal. La
       // intersección es lo que de verdad sale.
-      canales: CANALES_DEL_AVISO[s.aviso].filter((c) => canalesVivos.includes(c)),
+      canales: canalesDeAviso(s.aviso, canalesVivos, destinoDelCanal(fila, 'whatsapp') != null),
+      smsDeRespaldo: AVISOS_CON_SMS_DE_RESPALDO.includes(s.aviso) && canalesVivos.includes('sms'),
     }))
     .filter((p) => p.canales.length > 0);
 }
@@ -475,8 +496,12 @@ export async function despachar(
   /** clientId → URL de su enlace de pago, dentro de esta tanda. */
   const enlaces = new Map<number, string>();
 
+  // Una lista y no un recorrido directo: un WhatsApp que no sale puede añadir
+  // aquí mismo el SMS de esa familia, justo detrás, para no partirla.
+  const cola = agruparPendientes(pendientes);
   let familiaActual: string | null = null;
-  for (const g of agruparPendientes(pendientes)) {
+  for (let i = 0; i < cola.length; i++) {
+    const g = cola[i];
     // Se corta la tanda, no se marca nada: lo que queda sigue pendiente para
     // la corrida siguiente. Se corta ENTRE familias y no entre sus canales ni
     // entre sus hijos: a un mismo responsable no se le parte el recado en dos
@@ -493,6 +518,12 @@ export async function despachar(
       cargoId: m.fila.cargoId, aviso: g.aviso, canal, destino: destino ?? null,
       ok, ...(error ? { error } : {}), grupo: g.clave,
     });
+    /** El WhatsApp no salió: quien tiene SMS de respaldo se avisa por ahí. */
+    const pasarASms = (miembros: AvisoPendiente[]) => {
+      if (canal !== 'whatsapp') return;
+      const conRespaldo = miembros.filter((m) => m.smsDeRespaldo);
+      cola.splice(i + 1, 0, ...agruparPendientes(conRespaldo.map((m) => ({ ...m, canales: ['sms'] as Canal[] }))));
+    };
 
     // Cuota del mes agotada en este canal: se salta el canal, NO el aviso.
     // El mismo recordatorio sigue saliendo por los canales que le queden —
@@ -503,6 +534,7 @@ export async function despachar(
     const quedan = restante[canal];
     if (quedan !== undefined && quedan <= 0) {
       for (const m of g.miembros) hechos.push(hecho(m, false, `Cuota mensual de ${canal} agotada`));
+      pasarASms(g.miembros);
       continue;
     }
 
@@ -593,6 +625,7 @@ export async function despachar(
       await liberarReservas(ids);
       const error = err instanceof Error ? err.message : String(err);
       for (const m of miembros) hechos.push(hecho(m, false, error));
+      pasarASms(miembros);
       continue;
     }
 

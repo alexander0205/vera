@@ -35,9 +35,8 @@ import {
 } from '@/lib/db/schema';
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import {
-  canalesVivosDe, fechasDeAviso, type FilaAviso,
+  canalesDeAviso, canalesVivosDe, fechasDeAviso, type FilaAviso,
 } from '@/lib/administracion-escolar/avisos';
-import { CANALES_DEL_AVISO } from '@/lib/administracion-escolar/ciclo-cobro';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { cargarPlan, type PlanCargado } from '@/lib/administracion-escolar/plan-matricula';
 import { esVentaSql, moraFacturaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
@@ -617,7 +616,7 @@ export async function avisosProgramadosDeEstudiante(teamId: number, estudianteId
     if (vivos.length === 0) continue;
 
     for (const s of fechasDeAviso(comoFila)) {
-      const porDonde = CANALES_DEL_AVISO[s.aviso].filter((c) => vivos.includes(c));
+      const porDonde = canalesDeAviso(s.aviso, vivos);
       if (porDonde.length === 0) continue;
       salida.push({
         cargoId: f.cargoId,

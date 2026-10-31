@@ -12,16 +12,20 @@
  * supo. Un fallo que nadie ve es peor que uno ruidoso.
  *
  * Esto vuelve a preguntar por el acuse y, si falló HOY, suelta la reserva para
- * que la corrida siguiente lo reintente.
+ * que la corrida siguiente lo reintente. El aviso con SMS de respaldo no se
+ * suelta: se queda como fallido y la corrida siguiente lo manda por SMS
+ * (`cargosConWhatsAppFallido`).
  */
 
 import 'server-only';
-import { and, eq, gte, isNotNull, ne, or, isNull, inArray } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, ne, or, isNull, inArray, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarAvisosEnviados } from '@/lib/db/schema';
+import { adminEscolarAvisosEnviados, adminEscolarCargos, adminEscolarConceptosPago } from '@/lib/db/schema';
 import { historialMensajes } from '@/lib/whatsapp/client';
 import { resolverRemitente } from '@/lib/whatsapp/config';
 import { aE164 } from '@/lib/whatsapp/telefono';
+import { canalesDelColegio } from './canales';
+import { AVISOS_CON_SMS_DE_RESPALDO, type Aviso } from './ciclo-cobro';
 
 /** Los que ya no van a cambiar: no hace falta volver a preguntar. */
 const FINALES = ['entregado', 'leido'];
@@ -39,6 +43,40 @@ export interface ResultadoReconciliacion {
 function hoyISO(): string {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santo_Domingo' }))
     .toISOString().slice(0, 10);
+}
+
+/** De estos avisos que fallaron, los que el colegio y el concepto dejan pasar a SMS. */
+async function conSmsDeRespaldo(
+  teamId: number,
+  avisos: { id: number; tipo: string; cargoId: number | null }[],
+): Promise<Set<number>> {
+  const candidatos = avisos.filter((a) => a.cargoId != null && AVISOS_CON_SMS_DE_RESPALDO.includes(a.tipo as Aviso));
+  if (candidatos.length === 0 || !(await canalesDelColegio(teamId)).sms) return new Set();
+  const conSms = await db
+    .select({ id: adminEscolarCargos.id })
+    .from(adminEscolarCargos)
+    .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .where(and(
+      inArray(adminEscolarCargos.id, candidatos.map((a) => a.cargoId!)),
+      eq(adminEscolarConceptosPago.avisoSms, true),
+    ));
+  const cargos = new Set(conSms.map((c) => c.id));
+  return new Set(candidatos.filter((a) => cargos.has(a.cargoId!)).map((a) => a.id));
+}
+
+/** Los cobros cuyo WhatsApp de hoy Meta dijo que no llegó y aún le toca el SMS. */
+export async function cargosConWhatsAppFallido(teamId: number, hoy: string): Promise<Set<number>> {
+  const filas = await db
+    .select({ cargoId: adminEscolarAvisosEnviados.cargoId })
+    .from(adminEscolarAvisosEnviados)
+    .where(and(
+      eq(adminEscolarAvisosEnviados.teamId, teamId),
+      eq(adminEscolarAvisosEnviados.canal, 'whatsapp'),
+      eq(adminEscolarAvisosEnviados.estadoEntrega, 'fallido'),
+      inArray(adminEscolarAvisosEnviados.tipo, [...AVISOS_CON_SMS_DE_RESPALDO]),
+      sql`${adminEscolarAvisosEnviados.enviadoAt}::date = ${hoy}::date`,
+    ));
+  return new Set(filas.flatMap((f) => (f.cargoId == null ? [] : [f.cargoId])));
 }
 
 /**
@@ -63,6 +101,8 @@ export async function reconciliarEntregas(
   const pendientes = await db
     .select({
       id:        adminEscolarAvisosEnviados.id,
+      tipo:      adminEscolarAvisosEnviados.tipo,
+      cargoId:   adminEscolarAvisosEnviados.cargoId,
       mensajeId: adminEscolarAvisosEnviados.mensajeId,
       destino:   adminEscolarAvisosEnviados.destino,
       enviadoAt: adminEscolarAvisosEnviados.enviadoAt,
@@ -91,7 +131,7 @@ export async function reconciliarEntregas(
 
   const hoy = hoyISO();
   const errores = new Map<string, number>();
-  const aSoltar: number[] = [];
+  const fallaronHoy: typeof pendientes = [];
   let revisados = 0, entregados = 0, fallidos = 0;
 
   for (const [telefono, avisos] of porTelefono) {
@@ -127,13 +167,17 @@ export async function reconciliarEntregas(
         // antes del recargo» solo es hoy una vez—, así que reintentar el de
         // anteayer mandaría un mensaje que ya no es verdad. Lo viejo se queda
         // anotado para que se vea en el health, pero no vuelve a salir.
-        if (a.enviadoAt.toISOString().slice(0, 10) === hoy) aSoltar.push(a.id);
+        if (a.enviadoAt.toISOString().slice(0, 10) === hoy) fallaronHoy.push(a);
       } else if (FINALES.includes(m.deliveryStatus)) {
         entregados++;
       }
     }
   }
 
+  // Reintentar el WhatsApp de un número que no lo tiene no lo arregla: si hay
+  // SMS de respaldo, la fila se queda y `cargosConWhatsAppFallido` lo manda por ahí.
+  const paraSms = await conSmsDeRespaldo(teamId, fallaronHoy);
+  const aSoltar = fallaronHoy.filter((a) => !paraSms.has(a.id)).map((a) => a.id);
   if (aSoltar.length > 0) {
     await db.delete(adminEscolarAvisosEnviados)
       .where(inArray(adminEscolarAvisosEnviados.id, aSoltar));

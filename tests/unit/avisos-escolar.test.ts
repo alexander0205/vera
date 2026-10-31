@@ -103,12 +103,40 @@ describe('avisosDeHoy', () => {
       expect(avisosDeHoy(fila(), '2026-09-28')[0].canales).toEqual(['correo', 'whatsapp']);
     });
 
-    it('los dos del final salen por los tres canales', () => {
-      // WhatsApp se SUMA aquí, no sustituye a nadie: la ventana de 24h puede
-      // dejarlo fuera y el SMS sigue llegando igual. Antes se excluía por ese
-      // riesgo, y era tratar a WhatsApp como si fuera el único portador.
-      expect(avisosDeHoy(fila(), '2026-10-03')[0].canales).toEqual(['correo', 'whatsapp', 'sms']);
+    it('el día que vence va por correo y WhatsApp; antes del recargo, también por SMS', () => {
+      expect(avisosDeHoy(fila(), '2026-10-03')[0].canales).toEqual(['correo', 'whatsapp']);
       expect(avisosDeHoy(fila(), '2026-10-06')[0].canales).toEqual(['correo', 'whatsapp', 'sms']);
+    });
+
+    describe('el día que vence el SMS es de respaldo', () => {
+      const VENCE = '2026-10-03';
+      const canalesDe = (f: FilaAviso, c?: { correo: boolean; whatsapp: boolean; sms: boolean }) =>
+        avisosDeHoy(f, VENCE, c)[0].canales;
+
+      it('sin número de WhatsApp sale por SMS', () => {
+        expect(canalesDe(fila({ whatsapp: null, celular: '8093334444' }))).toEqual(['correo', 'sms']);
+      });
+
+      it('con WhatsApp apagado, en el concepto o en el colegio, sale por SMS', () => {
+        expect(canalesDe(fila({ avisoWhatsapp: false }))).toEqual(['correo', 'sms']);
+        expect(canalesDe(fila(), { correo: true, whatsapp: false, sms: true })).toEqual(['correo', 'sms']);
+      });
+
+      it('con el SMS apagado nunca entra', () => {
+        expect(canalesDe(fila({ whatsapp: null, avisoSms: false }))).toEqual(['correo', 'whatsapp']);
+        expect(canalesDe(fila({ avisoWhatsapp: false }), { correo: true, whatsapp: true, sms: false })).toEqual(['correo']);
+      });
+
+      it('queda marcado para `despachar` solo en este aviso', () => {
+        expect(avisosDeHoy(fila(), VENCE)[0].smsDeRespaldo).toBe(true);
+        expect(avisosDeHoy(fila({ avisoSms: false }), VENCE)[0].smsDeRespaldo).toBe(false);
+        expect(avisosDeHoy(fila(), '2026-10-06')[0].smsDeRespaldo).toBe(false);
+      });
+
+      it('los otros avisos no cambian', () => {
+        expect(avisosDeHoy(fila({ whatsapp: null }), '2026-10-06')[0].canales).toEqual(['correo', 'whatsapp', 'sms']);
+        expect(avisosDeHoy(fila({ whatsapp: null }), '2026-09-28')[0].canales).toEqual(['correo', 'whatsapp']);
+      });
     });
 
     it('un canal apagado se cae del ruteo', () => {
