@@ -1,7 +1,8 @@
 /**
  * El WhatsApp de quien tiene la sesión, para avisarle de sus tareas.
  *
- *   GET            → { tieneWhatsapp, telefono }  (lo pide «Tareas» para saber si mostrar el aviso)
+ *   GET            → { tieneWhatsapp, telefono }  (lo pide «Tareas» para saber si mostrar el aviso;
+ *                    con los avisos apagados dice que sí, para que no se le pida a nadie)
  *   POST { telefono } → lo guarda en `users.telefono`, ya en el formato del CRM
  *
  * Es el mismo campo que pide el onboarding: el WhatsApp es de la persona, no de
@@ -12,13 +13,14 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { whatsappDeTareasActivo } from '@/lib/notificaciones/whatsapp-tareas';
 import { aE164 } from '@/lib/whatsapp/telefono';
 
 export async function GET() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
   const tel = aE164(user.telefono);
-  return NextResponse.json({ tieneWhatsapp: tel != null, telefono: tel });
+  return NextResponse.json({ tieneWhatsapp: tel != null || !whatsappDeTareasActivo(), telefono: tel });
 }
 
 export async function POST(req: NextRequest) {

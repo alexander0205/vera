@@ -4,9 +4,13 @@
  * y la campana, si guardaron su WhatsApp (`users.telefono`; si no lo tienen,
  * «Tareas» se lo pide).
  *
- * Nunca lanza, y no manda nada si: no es producción, falta la llave de Zero, o
- * Meta todavía no aprobó la plantilla (se pregunta al CRM y se recuerda 10
- * minutos, para no preguntar en cada aviso).
+ * APAGADO por orden del dueño (31-10-2026): al aprobarla Meta empezaron a salir
+ * solos, y llegaron a un número que no era el de la persona. Solo se enciende a
+ * propósito, con `TAREAS_WHATSAPP_ACTIVO=1`, nunca porque Meta apruebe algo.
+ *
+ * Nunca lanza, y no manda nada si: está apagado, no es producción, falta la llave
+ * de Zero, o Meta todavía no aprobó la plantilla (se pregunta al CRM y se recuerda
+ * 10 minutos, para no preguntar en cada aviso).
  */
 
 import 'server-only';
@@ -18,6 +22,8 @@ import { aE164 } from '@/lib/whatsapp/telefono';
 import { primerNombre } from '@/lib/administracion-escolar/tareas-reglas';
 import { PLANTILLA_TAREA_WHATSAPP as P, parametrosTareaWhatsApp } from './plantilla-tarea-whatsapp';
 import type { CambioTarea } from './texto';
+
+export const whatsappDeTareasActivo = () => process.env.TAREAS_WHATSAPP_ACTIVO === '1';
 
 let aprobada: { valor: boolean; hasta: number } | null = null;
 
@@ -38,7 +44,7 @@ export async function avisarTareaPorWhatsApp(userIds: readonly number[], d: {
   colegio: string; cambio: CambioTarea; autor: string; titulo: string; url: string;
 }): Promise<number> {
   try {
-    if (userIds.length === 0) return 0;
+    if (userIds.length === 0 || !whatsappDeTareasActivo()) return 0;
     if (process.env.VERCEL_ENV !== 'production') {
       console.info('[whatsapp tareas] sin enviar (fuera de producción)', { a: userIds.length, cambio: d.cambio });
       return 0;
