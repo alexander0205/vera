@@ -291,6 +291,8 @@ export async function POST(
       cargoId,
       destino: aviso.destino,
       mensajeId: r.messageId ?? null,
+      texto: aviso.texto,
+      conEnlace: aviso.botonUrl != null,
     });
 
     return NextResponse.json({ ok: true, destino: aviso.destino, messageId: r.messageId });

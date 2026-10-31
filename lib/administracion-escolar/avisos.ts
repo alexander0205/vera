@@ -8,7 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { aGsm7 } from '@/lib/sms/mensaje';
 import {
-  agruparPendientes, redactarGrupo, enlaceDeFactura, facturaDelMensaje, type GrupoAviso, type MensajeAviso,
+  agruparPendientes, redactarGrupo, enlaceDeAviso, enlaceDeFactura, facturaDelMensaje, type GrupoAviso, type MensajeAviso,
 } from './agrupar-avisos';
 import { sumarDias } from './calendario';
 import { CANALES_TODOS_ACTIVOS, type CanalesActivos } from './canales';
@@ -444,7 +444,11 @@ export interface OpcionesDespacho {
     // Fuera de la ventana de 24 h WhatsApp solo admite plantillas, y para elegir
     // la plantilla y rellenar sus variables hace falta saber de qué aviso se
     // trata y qué cobros lleva.
-    whatsapp: (destino: string, texto: string, m: MensajeAviso, enlace: string | null) => Promise<string | null>;
+    // Devuelve lo que de verdad salió: en WhatsApp es la plantilla ya rellena,
+    // no el texto que se le pasa, y puede que esa plantilla no lleve enlace.
+    whatsapp: (destino: string, texto: string, m: MensajeAviso, enlace: string | null) => Promise<{
+      mensajeId: string | null; texto: string; conEnlace: boolean;
+    }>;
     sms: (destino: string, texto: string) => Promise<void>;
   };
 }
@@ -568,6 +572,8 @@ export async function despachar(
     salidos++;
 
     let mensajeId: string | null = null;
+    let textoSalido = '';
+    let llevaEnlace = false;
     try {
       // El enlace de pago va pegado al aviso: sin él el padre sabe que debe pero
       // no tiene a dónde ir, y termina llamando al colegio. En el texto largo
@@ -594,6 +600,9 @@ export async function despachar(
           // El de la familia se memoriza; lo que cambia por mensaje es la
           // factura: el aviso lleva a ESA factura, no a toda la deuda.
           enlace = enlaceDeFactura(link, facturaDelMensaje(miembros));
+          // En el SMS no: cada carácter se cobra. Quien lo abra desde ahí se
+          // anota en el último aviso de su familia (`registrarApertura`).
+          if (canal !== 'sms') enlace = enlaceDeAviso(enlace, ids[0]);
         } catch (err) {
           // Que no se pueda crear el enlace no puede impedir el aviso: el padre
           // prefiere enterarse de que debe, aunque sea sin botón.
@@ -605,19 +614,28 @@ export async function despachar(
       const conEnlace = enlace ? `${largo}\n\nPaga o sube tu comprobante aquí: ${enlace}` : largo;
       const mensaje: MensajeAviso = { aviso: g.aviso, hueco: g.hueco, canal, miembros };
 
-      if (canal === 'correo') await opts.enviar.correo(destino, conEnlace, mensaje);
-      else if (canal === 'whatsapp') {
+      if (canal === 'correo') {
+        await opts.enviar.correo(destino, conEnlace, mensaje);
+        textoSalido = conEnlace;
+        llevaEnlace = enlace != null;
+      } else if (canal === 'whatsapp') {
         // Se guarda el id que devuelve el CRM. El 201 solo dice que Meta
         // aceptó la petición; con este id se puede volver a preguntar más
         // tarde si el mensaje LLEGÓ, y soltar la reserva si no.
-        mensajeId = await opts.enviar.whatsapp(destino, conEnlace, mensaje, enlace);
+        const r = await opts.enviar.whatsapp(destino, conEnlace, mensaje, enlace);
+        mensajeId = r.mensajeId;
+        textoSalido = r.texto;
+        llevaEnlace = r.conEnlace;
+      } else {
+        // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
+        // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
+        // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.
+        // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
+        // texto va con su ortografía.
+        textoSalido = aGsm7(corto);
+        await opts.enviar.sms(destino, textoSalido);
+        llevaEnlace = textoSalido.includes('/pagar/');
       }
-      // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
-      // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
-      // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.
-      // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
-      // texto va con su ortografía.
-      else await opts.enviar.sms(destino, aGsm7(corto));
     } catch (err) {
       // Se suelta la reserva de TODO el mensaje para que se pueda reintentar.
       // El fallo más común es un teléfono que no normaliza, y ese no se
@@ -636,17 +654,17 @@ export async function despachar(
     const conjunto = miembros.length > 1
       ? `Enviado en un solo mensaje con ${miembros.length - 1} cobro(s) más`
       : null;
-    if (mensajeId || conjunto) {
-      try {
-        await db.update(adminEscolarAvisosEnviados)
-          .set({
-            ...(mensajeId ? { mensajeId } : {}),
-            ...(conjunto ? { detalle: conjunto } : {}),
-          })
-          .where(inArray(adminEscolarAvisosEnviados.id, ids));
-      } catch (err) {
-        console.error('[avisos] el mensaje salió pero no se pudo anotar su id:', err);
-      }
+    try {
+      await db.update(adminEscolarAvisosEnviados)
+        .set({
+          texto: textoSalido,
+          conEnlace: llevaEnlace,
+          ...(mensajeId ? { mensajeId } : {}),
+          ...(conjunto ? { detalle: conjunto } : {}),
+        })
+        .where(inArray(adminEscolarAvisosEnviados.id, ids));
+    } catch (err) {
+      console.error('[avisos] el mensaje salió pero no se pudo anotar:', err);
     }
 
     // Solo se descuenta lo que de verdad salió: un envío que reventó se

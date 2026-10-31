@@ -10,7 +10,7 @@ import { asuntoDeAviso, datosWhatsAppDeGrupo, sufijoDeBoton } from '@/lib/admini
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import { enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
-import { getPlantillasDeTeam, huecoDe, parametrosDeAviso, plantillaParaEnviar } from '@/lib/whatsapp/plantillas';
+import { cuerposDePlantillas, getPlantillasDeTeam, huecoDe, parametrosDeAviso, plantillaParaEnviar, textoDePlantilla } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
 import { cargosConWhatsAppFallido, reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
@@ -140,6 +140,7 @@ export async function GET(req: NextRequest) {
     // despachar: así el WhatsApp no se reserva, no cuenta como fallo y no se
     // reintenta cada cuarto de hora. El correo del mismo cobro sigue igual.
     const plantillasDelColegio = await getPlantillasDeTeam(teamId);
+    const cuerpos = await cuerposDePlantillas(teamId);
     // Lo que una corrida anterior mandó y Meta dijo que no llegó: ya no se
     // reintenta por WhatsApp, le toca el SMS.
     const whatsappFallido = await cargosConWhatsAppFallido(teamId, hoy);
@@ -195,7 +196,7 @@ export async function GET(req: NextRequest) {
          * factura, la de siempre. `enlace` ya viene en null cuando el cargo no
          * tiene factura —lo decide `despachar`— así que basta con mirarlo.
          */
-        whatsapp: async (destino, _texto, m, enlace) => {
+        whatsapp: async (destino, texto, m, enlace) => {
           // Al CRM siempre con código de país: `8293596602` y `18293596602`
           // le abren DOS conversaciones del mismo padre.
           const numero = aE164(destino) ?? destino;
@@ -207,27 +208,32 @@ export async function GET(req: NextRequest) {
             throw new Error('Sin plantilla de WhatsApp que se pueda mandar: no se envía texto libre.');
           }
 
+          // La MISMA plantilla aprobada con las variables combinadas cuando
+          // son varios cobros (alumno «Ana y Pedro», concepto «Colegiatura
+          // (2)», monto el total). Con uno solo, los valores de siempre.
+          // La fecha del recargo es la del RECARGO y no la del vencimiento,
+          // igual que en `redactar()`: decirle que pague «antes del 3»
+          // cuando el recargo entra el 8 le quita cinco días que tiene.
+          const parametros = parametrosDeAviso(
+            m.hueco,
+            datosWhatsAppDeGrupo(m.miembros, {
+              colegio,
+              telefonoColegio: telefonos.get(teamId) ?? '',
+            }),
+          );
           const r = await enviarWhatsAppPlantilla(teamId, numero, {
             nombre: plantilla.nombre,
             idioma: plantilla.idioma,
             // La {{1}} del botón es el FINAL de la URL (`…/pagar/{{1}}`): el
             // token y la factura, no la URL entera.
             botonUrl: plantilla.conBoton && enlace ? sufijoDeBoton(enlace) : null,
-            // La MISMA plantilla aprobada con las variables combinadas cuando
-            // son varios cobros (alumno «Ana y Pedro», concepto «Colegiatura
-            // (2)», monto el total). Con uno solo, los valores de siempre.
-            // La fecha del recargo es la del RECARGO y no la del vencimiento,
-            // igual que en `redactar()`: decirle que pague «antes del 3»
-            // cuando el recargo entra el 8 le quita cinco días que tiene.
-            parametros: parametrosDeAviso(
-              m.hueco,
-              datosWhatsAppDeGrupo(m.miembros, {
-                colegio,
-                telefonoColegio: telefonos.get(teamId) ?? '',
-              }),
-            ),
+            parametros,
           });
-          return r.messageId ?? null;
+          return {
+            mensajeId: r.messageId ?? null,
+            texto: textoDePlantilla(cuerpos.get(plantilla.nombre), parametros, plantilla.conBoton) ?? texto,
+            conEnlace: plantilla.conBoton,
+          };
         },
         sms: async (destino, texto) => { await enviarSms(teamId, destino, texto); },
       },

@@ -12,7 +12,7 @@
  * aquí quiere salir en un minuto.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { VistaLinkPago } from '@/lib/administracion-escolar/link-pago';
 import { ZonaArchivo } from '@/components/shared/ZonaArchivo';
@@ -101,14 +101,28 @@ function FilaDato({ etiqueta, valor, copiable, destacado }: {
 
 // ─── Pantalla ────────────────────────────────────────────────────────────────
 
-export function PagarClient({ token, facturaId, vista, tarjetaHabilitada }: {
+export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitada }: {
   token: string;
   /** Enlace de UNA factura: se cobra solo ella. `null` es el enlace agregado. */
   facturaId: number | null;
+  /** De qué aviso viene el enlace, si lo dice. */
+  avisoId: number | null;
   vista: VistaLinkPago;
   tarjetaHabilitada: boolean;
 }) {
   const router = useRouter();
+
+  // Desde el navegador y no al pintar en el servidor: así no cuentan los que
+  // solo previsualizan el enlace (ver `registrarApertura`).
+  const abierto = useRef(false);
+  useEffect(() => {
+    if (abierto.current) return;
+    abierto.current = true;
+    void fetch(`/api/pagar/${token}/abierto`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ a: avisoId }), keepalive: true,
+    }).catch(() => {});
+  }, [token, avisoId]);
 
   const [metodo, setMetodo] = useState<'tarjeta' | 'transferencia'>('transferencia');
   const [archivo, setArchivo] = useState<File | null>(null);

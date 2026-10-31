@@ -11,6 +11,8 @@ const estado = vi.hoisted(() => ({
   conSms: [] as { id: number }[],
   smsDelColegio: true,
   borrados: [] as number[],
+  telefonos: [] as string[],
+  acuse: 'fallido',
 }));
 
 vi.mock('drizzle-orm', async (original) => ({
@@ -22,7 +24,7 @@ vi.mock('@/lib/db/drizzle', () => ({
   db: {
     select: () => ({
       from: () => ({
-        where: async () => estado.pendientes,
+        where: () => ({ orderBy: async () => estado.pendientes }),
         innerJoin: () => ({ where: async () => estado.conSms }),
       }),
     }),
@@ -34,15 +36,16 @@ vi.mock('@/lib/db/drizzle', () => ({
 vi.mock('@/lib/whatsapp/config', () => ({ resolverRemitente: async () => ({ apiKey: 'k' }) }));
 vi.mock('@/lib/whatsapp/telefono', () => ({ aE164: (t: string) => t }));
 vi.mock('@/lib/whatsapp/client', () => ({
-  historialMensajes: async () => ({
-    messages: [{ id: 'm1', deliveryStatus: 'fallido', errorDelivery: '131026 sin WhatsApp' }],
-  }),
+  historialMensajes: async (_k: string, tel: string) => {
+    estado.telefonos.push(tel);
+    return { messages: [{ id: 'm1', deliveryStatus: estado.acuse, errorDelivery: '131026 sin WhatsApp' }] };
+  },
 }));
 vi.mock('@/lib/administracion-escolar/canales', () => ({
   canalesDelColegio: async () => ({ correo: true, whatsapp: true, sms: estado.smsDelColegio }),
 }));
 
-import { reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
+import { ACUSES_FINALES, reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
 
 const aviso = (tipo: string) => ({
   id: 7, tipo, cargoId: 40, mensajeId: 'm1', destino: '18095551234', enviadoAt: new Date(),
@@ -53,6 +56,8 @@ beforeEach(() => {
   estado.conSms = [{ id: 40 }];
   estado.smsDelColegio = true;
   estado.borrados = [];
+  estado.telefonos = [];
+  estado.acuse = 'fallido';
 });
 
 describe('reconciliarEntregas: WhatsApp fallido de hoy', () => {
@@ -84,3 +89,36 @@ describe('reconciliarEntregas: WhatsApp fallido de hoy', () => {
     expect(r.reintentables).toBe(1);
   });
 });
+
+describe('reconciliarEntregas: si lo leyeron', () => {
+  it('«entregado» no es final: se vuelve a preguntar hasta que lo lean', () => {
+    expect(ACUSES_FINALES).not.toContain('entregado');
+    expect(ACUSES_FINALES).toContain('leido');
+  });
+
+  it('entregado y leído cuentan como que llegó', async () => {
+    estado.pendientes = [aviso('al-vencer')];
+    estado.acuse = 'leido';
+    expect(await reconciliarEntregas(9)).toMatchObject({ entregados: 1, fallidos: 0 });
+  });
+
+  it('por la tarde no suelta lo que falló: ya no hay otra corrida que lo reintente', async () => {
+    estado.pendientes = [aviso('antes-mora')];
+    const r = await reconciliarEntregas(9, { soltar: false });
+    expect(estado.borrados).toEqual([]);
+    expect(r).toMatchObject({ fallidos: 1, reintentables: 0 });
+  });
+
+  it('respeta el tope de teléfonos por corrida', async () => {
+    estado.pendientes = [1, 2, 3].map((n) => ({ ...aviso('al-vencer'), id: n, destino: `1809555000${n}` }));
+    await reconciliarEntregas(9, { topeTelefonos: 2 });
+    expect(estado.telefonos).toEqual(['18095550001', '18095550002']);
+  });
+
+  it('varios avisos del mismo teléfono son una sola consulta', async () => {
+    estado.pendientes = [1, 2].map((n) => ({ ...aviso('al-vencer'), id: n }));
+    await reconciliarEntregas(9);
+    expect(estado.telefonos).toHaveLength(1);
+  });
+});
+
