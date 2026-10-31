@@ -14,8 +14,9 @@
 
 import { db } from '@/lib/db/drizzle';
 import { teams, ecfDocuments } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, notInArray, sql } from 'drizzle-orm';
 import { generarNotaDebitoMora } from '@/lib/cobranza/nota-debito-mora';
+import { TIPOS_ECF_SIN_MORA } from '@/lib/cobranza/mora-calculo';
 import { hoyRD } from '@/lib/utils/format';
 
 export interface AplicarRecargoOpts {
@@ -44,6 +45,7 @@ export interface AplicarRecargoResult {
  * - tipoPago = 2 (crédito)
  * - fechaLimitePago < hoy y saldo > 0
  * - moraOrigenId IS NULL (no procesar las propias ND de mora)
+ * - tipoEcf fuera de TIPOS_ECF_SIN_MORA (ni NC ni compras/gastos)
  * - estado NOT IN ('ANULADO', 'RECHAZADO')  ← incluye borradores/sin-ncf
  * - diasVencido >= recargoMoraDiasGracia del team
  * - SIN ND de mora previa activa (idempotencia vía generarNotaDebitoMora)
@@ -97,6 +99,8 @@ export async function aplicarRecargosMoraVencidos(
         eq(ecfDocuments.tipoPago, 2),
         // No procesar las propias ND de mora (no mora sobre mora)
         sql`${ecfDocuments.moraOrigenId} IS NULL`,
+        // Ni NC ni compras/gastos: no se deben (ver TIPOS_ECF_SIN_MORA)
+        notInArray(ecfDocuments.tipoEcf, [...TIPOS_ECF_SIN_MORA]),
         // Incluye borradores/sin-ncf: solo se excluyen no-cobrables
         sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
         // Vencida: tiene fecha límite y ya pasó
