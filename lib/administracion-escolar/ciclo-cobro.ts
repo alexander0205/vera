@@ -33,9 +33,9 @@ export type Canal = 'correo' | 'whatsapp' | 'sms';
  *
  * - El correo llega a los tres porque no cuesta nada y queda como constancia.
  * - WhatsApp va a los tres, siempre por plantilla aprobada.
- * - El SMS se paga por mensaje. De ordinario sale solo en `antes-mora`, el que
- *   le ahorra el recargo al padre. El día que vence entra únicamente si el
- *   WhatsApp no se puede mandar (ver `AVISOS_CON_SMS_DE_RESPALDO`).
+ * - El SMS se paga por mensaje. Sale siempre en `antes-mora`, el que le ahorra
+ *   el recargo al padre. En los demás entra únicamente si el WhatsApp no se
+ *   puede mandar (ver `AVISOS_CON_SMS_DE_RESPALDO`).
  *
  * Dejarlo elegir sería dejar al colegio configurar un cobro que no sale.
  */
@@ -47,12 +47,12 @@ export const CANALES_DEL_AVISO: Record<Aviso, readonly Canal[]> = {
 
 /**
  * Los avisos que, si el WhatsApp no se puede mandar, salen por SMS (regla del
- * negocio, 30-10-2026: mandar los dos el día que vence era pagar dos veces por
- * el mismo recado). «No se puede» es cualquiera de estos: WhatsApp apagado, la
- * familia sin número, la cuota agotada, el envío rechazado o Meta diciendo
- * después que no llegó.
+ * negocio, 31-10-2026: solo `antes-mora` va por los tres a la vez; mandar los dos
+ * en los demás era pagar dos veces por el mismo recado). «No se puede» es
+ * cualquiera de estos: WhatsApp apagado, la familia sin número, la cuota agotada,
+ * el envío rechazado o Meta diciendo después que no llegó.
  */
-export const AVISOS_CON_SMS_DE_RESPALDO: readonly Aviso[] = ['al-vencer'];
+export const AVISOS_CON_SMS_DE_RESPALDO: readonly Aviso[] = ['al-emitir', 'al-vencer'];
 
 export function camposCiclo(body: Record<string, unknown>) {
   const entero = (v: unknown, min: number, max: number): number | null => {

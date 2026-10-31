@@ -133,9 +133,16 @@ describe('avisosDeHoy', () => {
         expect(avisosDeHoy(fila(), '2026-10-06')[0].smsDeRespaldo).toBe(false);
       });
 
-      it('los otros avisos no cambian', () => {
+      it('el día de la factura también: WhatsApp, y SMS si no se puede', () => {
+        expect(avisosDeHoy(fila(), '2026-09-28')[0].canales).toEqual(['correo', 'whatsapp']);
+        expect(avisosDeHoy(fila(), '2026-09-28')[0].smsDeRespaldo).toBe(true);
+        expect(avisosDeHoy(fila({ whatsapp: null }), '2026-09-28')[0].canales).toEqual(['correo', 'sms']);
+        expect(avisosDeHoy(fila({ avisoWhatsapp: false }), '2026-09-28')[0].canales).toEqual(['correo', 'sms']);
+      });
+
+      it('antes del recargo salen siempre los tres', () => {
+        expect(avisosDeHoy(fila(), '2026-10-06')[0].canales).toEqual(['correo', 'whatsapp', 'sms']);
         expect(avisosDeHoy(fila({ whatsapp: null }), '2026-10-06')[0].canales).toEqual(['correo', 'whatsapp', 'sms']);
-        expect(avisosDeHoy(fila({ whatsapp: null }), '2026-09-28')[0].canales).toEqual(['correo', 'whatsapp']);
       });
     });
 

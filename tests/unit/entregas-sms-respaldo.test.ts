@@ -82,6 +82,12 @@ describe('reconciliarEntregas: WhatsApp fallido de hoy', () => {
     expect(estado.borrados).toEqual([7]);
   });
 
+  it('el día de la factura tampoco se suelta: le toca el SMS', async () => {
+    estado.pendientes = [aviso('al-emitir')];
+    await reconciliarEntregas(9);
+    expect(estado.borrados).toEqual([]);
+  });
+
   it('los demás avisos se reintentan como siempre', async () => {
     estado.pendientes = [aviso('antes-mora')];
     const r = await reconciliarEntregas(9);
