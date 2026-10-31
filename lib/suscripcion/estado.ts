@@ -272,6 +272,22 @@ function trasElVencimiento(
 }
 
 /**
+ * El aviso de que se acaba la prueba, según lo que Stripe tiene para cobrar. Con
+ * la tarjeta predeterminada no hay nada que pedirle: se cobra solo.
+ */
+export function avisoDePruebaSegunMetodo<T extends {
+  estado: EstadoSuscripcion; avisar: boolean; mensaje: string | null; diasRestantes: number | null;
+}>(s: T, metodo: 'predeterminado' | 'suelta' | 'ninguno' | null): T {
+  if (s.estado !== 'prueba-por-vencer') return s;
+  if (metodo === 'predeterminado') return { ...s, avisar: false, mensaje: null };
+  if (metodo === 'suelta') {
+    const queda = s.diasRestantes === 1 ? 'queda 1 día' : `quedan ${s.diasRestantes} días`;
+    return { ...s, mensaje: `Te ${queda} de prueba. Marca tu tarjeta como predeterminada para que se cobre sola.` };
+  }
+  return s;
+}
+
+/**
  * ¿Este estado deja crear cosas?
  *
  * Se expone aparte de `evaluarSuscripcion` para que un guard pueda preguntar

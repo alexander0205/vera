@@ -255,33 +255,34 @@ export async function crearSuscripcionDePrueba({
 }
 
 /**
- * ¿Este cliente tiene una tarjeta guardada?
+ * Con qué cuenta Stripe para cobrar. Al terminar una prueba Stripe solo cobra el
+ * método PREDETERMINADO (de la suscripción o del cliente): con una tarjeta suelta
+ * pausa la suscripción (`missing_payment_method: 'pause'`). Por eso se distingue:
+ * decir «se cobra solo» con una tarjeta suelta promete un cobro que no ocurre.
  *
- * Se pregunta a Stripe en vez de deducirlo del estado de la suscripción, que
- * es lo que parece obvio y no lo es: en `trialing` puede no haber tarjeta —de
- * hecho lo normal es que no la haya, porque la prueba no la pide— y en `mora`
- * sí la hay, solo que no cobra. Atarlo al estado acaba diciéndole «agrega tu
- * tarjeta» a quien ya la tiene y callándoselo a quien no.
+ * Se pregunta a Stripe y no al estado de la suscripción: durante una prueba lo
+ * normal es no tener tarjeta, y en `mora` sí la hay, solo que no cobra.
  *
- * Devuelve null si no se pudo averiguar. Quien llame decide qué hacer con la
- * duda; lo que NO puede pasar es que una pantalla se caiga porque Stripe tardó.
+ * `null` = no se pudo averiguar. Quien llame decide qué hacer con la duda; lo que
+ * NO puede pasar es que una pantalla se caiga porque Stripe tardó.
  */
-export async function tieneMetodoDePago(customerId: string | null): Promise<boolean | null> {
+export type MetodoDePagoStripe = 'predeterminado' | 'suelta' | 'ninguno';
+
+export async function estadoDelMetodoDePago(
+  customerId: string | null,
+  subscriptionId: string | null,
+): Promise<MetodoDePagoStripe | null> {
   if (!customerId) return null;
   try {
-    const cliente = await stripe.customers.retrieve(customerId, {
-      expand: ['invoice_settings.default_payment_method'],
-    });
+    const cliente = await stripe.customers.retrieve(customerId);
     if (cliente.deleted) return null;
-
-    if (cliente.invoice_settings?.default_payment_method) return true;
-
-    // Sin método por defecto todavía puede haber tarjetas guardadas: Stripe
-    // solo marca una por defecto cuando algo se lo pide.
-    const tarjetas = await stripe.paymentMethods.list({
-      customer: customerId, type: 'card', limit: 1,
-    });
-    return tarjetas.data.length > 0;
+    if (cliente.invoice_settings?.default_payment_method || cliente.default_source) return 'predeterminado';
+    if (subscriptionId) {
+      const sub = await stripe.subscriptions.retrieve(subscriptionId);
+      if (sub.default_payment_method) return 'predeterminado';
+    }
+    const tarjetas = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+    return tarjetas.data.length > 0 ? 'suelta' : 'ninguno';
   } catch (e) {
     console.error('[stripe] no se pudo comprobar el método de pago de', customerId, e);
     return null;
