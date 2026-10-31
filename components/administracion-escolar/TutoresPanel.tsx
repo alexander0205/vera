@@ -437,22 +437,22 @@ export function TutoresPanel({
                   <div className="flex-1 space-y-3">
                     <div className="space-y-1.5">
                       <Label>Nombre *</Label>
-                      <Input value={nuevo.nombre}
+                      <Input value={nuevo.nombre} maxLength={120} autoComplete="off"
                         onChange={(e) => setNuevo((f) => ({ ...f, nombre: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
                       <Label>Cédula *</Label>
-                      <Input value={nuevo.documento} placeholder="000-0000000-0"
+                      <Input value={nuevo.documento} placeholder="000-0000000-0" maxLength={20} inputMode="numeric" autoComplete="off"
                         error={!!error && !nuevo.documento.trim()}
                         onChange={(e) => setNuevo((f) => ({ ...f, documento: e.target.value }))} />
                     </div>
                   </div>
                 </div>
                 {imgError && <p className="text-xs text-red-600">{imgError}</p>}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label>Teléfono</Label>
-                    <Input value={nuevo.telefono} placeholder="809-000-0000"
+                    <Input value={nuevo.telefono} placeholder="809-000-0000" type="tel" inputMode="tel" maxLength={20} autoComplete="off"
                       onChange={(e) => setNuevo((f) => ({ ...f, telefono: e.target.value }))} />
                   </div>
                   {/* Aparte del teléfono a propósito: en muchas casas el fijo y
@@ -460,12 +460,12 @@ export function TutoresPanel({
                       avisos del colegio salen por WhatsApp. */}
                   <div className="space-y-1.5">
                     <Label>WhatsApp</Label>
-                    <Input value={nuevo.whatsapp} placeholder="809-000-0000"
+                    <Input value={nuevo.whatsapp} placeholder="809-000-0000" type="tel" inputMode="tel" maxLength={20} autoComplete="off"
                       onChange={(e) => setNuevo((f) => ({ ...f, whatsapp: e.target.value }))} />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 sm:col-span-2">
                     <Label>Email</Label>
-                    <Input type="email" value={nuevo.email}
+                    <Input type="email" value={nuevo.email} maxLength={120} autoComplete="off" inputMode="email"
                       onChange={(e) => setNuevo((f) => ({ ...f, email: e.target.value }))} />
                   </div>
                 </div>

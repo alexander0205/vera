@@ -253,8 +253,9 @@ export default function SigerdPageClient() {
                 <Input
                   id="sigerd-usuario"
                   value={usuario}
-                  onChange={(e) => setUsuario(e.target.value)}
-                  placeholder=""
+                  onChange={(e) => setUsuario(e.target.value.replace(/[\s-]/g, ''))}
+                  placeholder="00100000000"
+                  maxLength={14} spellCheck={false}
                   inputMode="numeric"
                   autoComplete="username"
                   required
@@ -268,6 +269,7 @@ export default function SigerdPageClient() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  maxLength={128}
                   autoComplete="current-password"
                   required
                 />

@@ -61,6 +61,12 @@ function Input({
           readOnly,
           className,
           style,
+          // Con el foco en un número, la rueda del ratón lo cambia: al hacer
+          // scroll por un formulario largo se alteraban montos y días sin que
+          // nadie lo notara. Se suelta el foco y el scroll sigue su camino.
+          ...(type === 'number' && !htmlInputProps.onWheel
+            ? { onWheel: (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur() }
+            : {}),
         },
       }}
     />

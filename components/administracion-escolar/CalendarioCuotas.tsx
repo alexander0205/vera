@@ -335,7 +335,7 @@ export function CalendarioCuotas({
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
-          <table className="w-full min-w-[34rem] text-sm">
+          <table className="w-full min-w-[38rem] text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs text-gray-500">
                 <th className="w-8 px-2 py-1.5 font-medium">#</th>
@@ -354,12 +354,12 @@ export function CalendarioCuotas({
                     <td className="px-2 py-1.5">
                       <span className="flex items-center gap-1.5">
                         {bloqueada && <Lock className="h-3 w-3 shrink-0 text-gray-400" aria-label="ya facturada" />}
-                        <Input className="h-7 min-w-0" value={f.etiqueta} disabled={bloqueada}
+                        <Input className="h-9 min-w-0" value={f.etiqueta} maxLength={60} disabled={bloqueada}
                           onChange={(e) => editar(i, 'etiqueta', e.target.value)} />
                       </span>
                     </td>
                     <td className="px-2 py-1.5">
-                      <Input type="date" className="h-7 w-[9.5rem]" value={f.fechaEmision} disabled={bloqueada}
+                      <Input type="date" className="h-9 w-44" value={f.fechaEmision} disabled={bloqueada}
                         onChange={(e) => editar(i, 'fechaEmision', e.target.value)} />
                     </td>
                     <td className="px-2 py-1.5 text-xs tabular-nums text-gray-600">
