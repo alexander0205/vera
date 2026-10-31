@@ -25,6 +25,7 @@
  * revísalo»: propone, no decide) y, si el comprobante se parece a otro de la
  * misma familia, un aviso de posible duplicado con un enlace al original.
  */
+import { montoConfirmado } from '@/lib/administracion-escolar/comprobante-confirmado';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -48,6 +49,7 @@ interface CargoSnapshot {
 }
 
 interface Comprobante {
+  montoAprobadoCentavos: number | null;
   id: number;
   estado: string;
   montoCentavos: number;
@@ -445,7 +447,7 @@ export function ComprobantesClient() {
                       {c.bancoOrigen && <> · {c.bancoOrigen}</>}
                     </p>
                   </div>
-                  <p className="text-xl font-bold text-gray-900">{fmtDOP(c.montoCentavos)}</p>
+                  <p className="text-xl font-bold text-gray-900">{fmtDOP(c.estado === 'aprobado' ? montoConfirmado(c) : c.montoCentavos)}</p>
                 </div>
 
                 {c.cargos.length > 0 && (

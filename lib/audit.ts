@@ -86,6 +86,7 @@ export type AuditAction =
   | 'ESCOLAR_TAREA_CREADA'
   | 'ESCOLAR_TAREA_COMPLETADA'
   | 'ESCOLAR_TAREA_REABIERTA'
+  | 'ESCOLAR_TAREA_EN_PROCESO'
   | 'ESCOLAR_TAREA_EN_REVISION'
   | 'ESCOLAR_TAREA_ADJUNTO'
   // Una revisión de Zero AI que puede abrir varias tareas de golpe.

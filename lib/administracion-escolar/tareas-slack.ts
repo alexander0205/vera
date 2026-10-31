@@ -35,6 +35,7 @@ const QUE_PASO: Record<AvisoTarea, { icono: string; verbo: string }> = {
   creada: { icono: '🆕', verbo: 'creó una tarea' },
   mensaje: { icono: '💬', verbo: 'respondió' },
   adjunto: { icono: '📎', verbo: 'subió un archivo' },
+  en_proceso: { icono: '🛠️', verbo: 'tomó' },
   revision: { icono: '🔎', verbo: 'pasó a revisión' },
   completada: { icono: '✅', verbo: 'completó' },
   reabierta: { icono: '↩️', verbo: 'volvió a abrir' },

@@ -58,6 +58,8 @@ function redactar(d: DatosAvisoTarea): { asunto: string; intro: string } {
       return { asunto: `Completada: ${t}`, intro: `${d.autor} marcó como completada una tarea de ${d.colegio}.` };
     case 'reabierta':
       return { asunto: `Abierta de nuevo: ${t}`, intro: `${d.autor} volvió a abrir una tarea de ${d.colegio}.` };
+    case 'en_proceso':
+      return { asunto: `En proceso: ${t}`, intro: `${d.autor} tomó una tarea de ${d.colegio} y la está trabajando.` };
     case 'revision':
       return { asunto: `En revisión: ${t}`, intro: `${d.autor} pasó a revisión una tarea de ${d.colegio}.` };
     case 'adjunto':

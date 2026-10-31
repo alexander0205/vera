@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/email', () => ({ resend: { emails: { send: vi.fn() } }, assertSent: vi.fn() }));
 
 import {
-  ACEPTA_ADJUNTOS, claseDeMime, DESTINO, PENDIENTES, TOPE_ARCHIVO, TOPE_VIDEO, validarAdjunto,
+  ACEPTA_ADJUNTOS, claseDeMime, DESTINO, PENDIENTES, TOPE_ARCHIVO, TOPE_VIDEO, turnoDe, validarAdjunto,
 } from '@/lib/administracion-escolar/tareas-reglas';
 import { armarSlackTarea } from '@/lib/administracion-escolar/tareas-slack';
 import { armarCorreoTarea } from '@/lib/email/escolar-tareas';
@@ -16,12 +16,25 @@ import { armarCorreoTarea } from '@/lib/email/escolar-tareas';
 
 describe('En revisión', () => {
   it('cuenta como pendiente, junto con las abiertas', () => {
-    expect(PENDIENTES).toEqual(['abierta', 'en_revision']);
+    expect(PENDIENTES).toEqual(['abierta', 'en_proceso', 'en_revision']);
   });
   it('se llega desde abierta o completada; completar sirve desde abierta y desde revisión', () => {
-    expect(DESTINO.revision).toEqual({ a: 'en_revision', desde: ['abierta', 'completada'] });
-    expect(DESTINO.completar.desde).toEqual(['abierta', 'en_revision']);
-    expect(DESTINO.reabrir.desde).toEqual(['en_revision', 'completada']);
+    expect(DESTINO.revision).toEqual({ a: 'en_revision', desde: ['abierta', 'en_proceso', 'completada'] });
+    expect(DESTINO.completar.desde).toEqual(['abierta', 'en_proceso', 'en_revision']);
+    expect(DESTINO.reabrir.desde).toEqual(['en_proceso', 'en_revision', 'completada']);
+  });
+});
+
+describe('En proceso', () => {
+  it('se toma desde abierta o desde revisión, y una completada hay que reabrirla primero', () => {
+    expect(DESTINO.tomar).toEqual({ a: 'en_proceso', desde: ['abierta', 'en_revision'] });
+  });
+  it('avisa con palabras, por correo y en Slack', () => {
+    expect(armarCorreoTarea({ ...BASE, aviso: 'en_proceso', texto: null }).asunto).toContain('En proceso');
+    expect(JSON.stringify(armarSlackTarea({ ...BASE, aviso: 'en_proceso', estado: 'en_proceso', texto: null }).blocks)).toContain('tomó');
+  });
+  it('una tarea de Soporte en proceso sigue siendo nuestra, no del colegio', () => {
+    expect(turnoDe({ estado: 'en_proceso', asignadaA: 'soporte', asignadaUserId: null, creadaPorUserId: 7, ultimo: null }).soporte).toBe(true);
   });
 });
 

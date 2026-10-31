@@ -3,7 +3,7 @@
  *
  *   GET                                  → la tarea y sus mensajes (`soporte`: quien mira es
  *                                          del equipo de Zero y ve las plantillas)
- *   PATCH { accion: 'completar' | 'revision' | 'reabrir' } → la marca; deja su línea en la conversación
+ *   PATCH { accion: 'completar' | 'tomar' | 'revision' | 'reabrir' } → la marca; deja su línea en la conversación
  */
 import { NextRequest, NextResponse, after } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
@@ -36,12 +36,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const autor = autorTarea(auth.user);
   const hecho = await cambiarEstadoTarea(auth.teamId, id, autor, accion);
   if (!hecho) return NextResponse.json({ error: 'La tarea no existe o ya estaba así.' }, { status: 409 });
-  const aviso: AvisoTarea = accion === 'completar' ? 'completada' : accion === 'revision' ? 'revision' : 'reabierta';
+  const aviso: AvisoTarea = accion === 'completar' ? 'completada' : accion === 'revision' ? 'revision'
+    : accion === 'tomar' ? 'en_proceso' : 'reabierta';
   after(() => avisarDeTarea(auth.teamId, id, aviso, autor, null));
   logAudit({
     teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email,
     action: accion === 'completar' ? 'ESCOLAR_TAREA_COMPLETADA'
-      : accion === 'revision' ? 'ESCOLAR_TAREA_EN_REVISION' : 'ESCOLAR_TAREA_REABIERTA',
+      : accion === 'revision' ? 'ESCOLAR_TAREA_EN_REVISION'
+      : accion === 'tomar' ? 'ESCOLAR_TAREA_EN_PROCESO' : 'ESCOLAR_TAREA_REABIERTA',
     resource: `tarea:${id}`,
   });
   return NextResponse.json({ ok: true });

@@ -113,22 +113,24 @@ export function validarMensaje(texto: unknown): { ok: true; texto: string } | { 
 }
 
 /**
- * Por dónde pasa una tarea. «En revisión» es que alguien ya la tomó o espera
- * que se la confirmen: todavía no está hecha, así que cuenta como pendiente
- * junto con las abiertas (campana, «Asignadas a mí», el número de la ficha).
+ * Por dónde pasa una tarea. «En proceso» es que alguien la tomó y la está
+ * trabajando; «En revisión», que ya se hizo y falta que la confirmen. Ninguna
+ * está hecha, así que cuentan como pendientes junto con las abiertas (campana,
+ * «Asignadas a mí», el número de la ficha).
  */
-export type EstadoTarea = 'abierta' | 'en_revision' | 'completada';
-export const PENDIENTES: EstadoTarea[] = ['abierta', 'en_revision'];
+export type EstadoTarea = 'abierta' | 'en_proceso' | 'en_revision' | 'completada';
+export const PENDIENTES: EstadoTarea[] = ['abierta', 'en_proceso', 'en_revision'];
 export const ETIQUETA_ESTADO: Record<EstadoTarea, string> = {
-  abierta: 'Abierta', en_revision: 'En revisión', completada: 'Completada',
+  abierta: 'Abierta', en_proceso: 'En proceso', en_revision: 'En revisión', completada: 'Completada',
 };
 
 /** Lo que se puede hacer con el estado, y de dónde se puede llegar. */
-export type AccionEstado = 'completar' | 'revision' | 'reabrir';
+export type AccionEstado = 'completar' | 'tomar' | 'revision' | 'reabrir';
 export const DESTINO: Record<AccionEstado, { a: EstadoTarea; desde: EstadoTarea[] }> = {
-  completar: { a: 'completada', desde: ['abierta', 'en_revision'] },
-  revision: { a: 'en_revision', desde: ['abierta', 'completada'] },
-  reabrir: { a: 'abierta', desde: ['en_revision', 'completada'] },
+  completar: { a: 'completada', desde: ['abierta', 'en_proceso', 'en_revision'] },
+  tomar: { a: 'en_proceso', desde: ['abierta', 'en_revision'] },
+  revision: { a: 'en_revision', desde: ['abierta', 'en_proceso', 'completada'] },
+  reabrir: { a: 'abierta', desde: ['en_proceso', 'en_revision', 'completada'] },
 };
 
 /** Las líneas que deja cada cambio en la conversación. */
@@ -136,6 +138,7 @@ export const textoEvento = {
   creada: (autor: string, asignada: string) => `${autor} creó la tarea y la asignó a ${asignada}`,
   completada: (autor: string) => `${autor} marcó la tarea como completada`,
   reabierta: (autor: string) => `${autor} volvió a abrir la tarea`,
+  enProceso: (autor: string) => `${autor} tomó la tarea y la está trabajando`,
   revision: (autor: string) => `${autor} pasó la tarea a revisión`,
 };
 
@@ -147,7 +150,7 @@ export const TEXTO_CIERRE_AUTOMATICO = 'Se cerró automáticamente: pasaron 24 h
 export const HORAS_SIN_RESPUESTA = 24;
 
 /** `urgente`: 24 horas sin movimiento, a quien le toca contestar (cron `escolar-tareas`). */
-export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'revision' | 'adjunto' | 'urgente';
+export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'en_proceso' | 'revision' | 'adjunto' | 'urgente';
 
 /**
  * A quién le toca contestar una tarea parada, para el correo urgente.
