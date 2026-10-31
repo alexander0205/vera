@@ -18,18 +18,22 @@
  *    Si hay otra de cualquier colegio, se rechaza con `otra-en-curso` → "espera".
  *  - Si SIGERD falla (caído/red/sesión), queda en `error` con mensaje
  *    "continuaremos cuando vuelva SIGERD"; el colegio reintenta luego.
+ *  - Si la descarga termina pero a medias (secciones sin leer, o cero
+ *    estudiantes o empleados donde había), también queda en `error` y se
+ *    conserva la anterior: ver `motivoDescargaIncompleta`.
  *
  * El candado es la fila de `sigerd_importaciones` en estado `corriendo`. Una
  * fila `corriendo` más vieja que `LOCK_TTL_MIN` se considera muerta (crash) y se
  * puede reclamar.
  */
 import 'server-only';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { sigerdImportaciones, sigerdPersonal } from '@/lib/db/schema';
 import { invalidarSigerd } from '@/lib/cache/escolar';
 import type { DumpCentro } from '@/lib/sigerd/descargar';
 import { descargarTodo } from '@/lib/sigerd/descargar';
+import { motivoDescargaIncompleta, type TotalesDescarga } from '@/lib/sigerd/descarga-incompleta';
 import type { SigerdClient } from '@/lib/sigerd/client';
 import { SigerdError } from '@/lib/sigerd/types';
 
@@ -198,10 +202,24 @@ export async function obtenerInformacion(
       conParientes: true,
     });
 
-    // 3) proyección + snapshot en una transacción
-    await guardarMirror(teamId, importacionId, ctx.idRegional, ctx.idDistrito, dump);
+    // 3) Una descarga a medias no pisa una buena: queda en error con el motivo
+    //    y la anterior sigue sirviendo (matricular, personal, cambios). Sin
+    //    anterior se guarda lo que llegó, con el aviso.
+    const anterior = await totalesDeLaUltimaDescarga(teamId);
+    const motivo = motivoDescargaIncompleta(dump.totales, anterior);
+    if (motivo && anterior) {
+      const mensaje = `${motivo} Se conserva la descarga anterior; intenta de nuevo en un rato.`;
+      await db
+        .update(sigerdImportaciones)
+        .set({ estado: 'error', mensaje, updatedAt: new Date() })
+        .where(eq(sigerdImportaciones.id, importacionId));
+      return { estado: 'error', mensaje };
+    }
 
-    // 4) El plan del asistente (`/api/sigerd/plan`) se sirve de caché por
+    // 4) proyección + snapshot en una transacción
+    await guardarMirror(teamId, importacionId, ctx.idRegional, ctx.idDistrito, dump, motivo);
+
+    // 5) El plan del asistente (`/api/sigerd/plan`) se sirve de caché por
     //    etiqueta y solo el cruce la invalidaba. Sin esto, una descarga recién
     //    terminada seguía viéndose como «Todavía no hay nada descargado».
     invalidarSigerd(teamId);
@@ -230,9 +248,25 @@ export async function obtenerInformacion(
 }
 
 /**
+ * Los totales de la descarga buena más reciente del colegio, de cualquier año
+ * (la misma que leen las pantallas: `ultimoDumpSigerd`). Solo el JSON de
+ * totales: el dump entero pesa megas.
+ */
+async function totalesDeLaUltimaDescarga(teamId: number): Promise<Partial<TotalesDescarga> | null> {
+  const [row] = await db
+    .select({ totales: sql<Partial<TotalesDescarga> | null>`${sigerdImportaciones.dump} -> 'totales'` })
+    .from(sigerdImportaciones)
+    .where(and(eq(sigerdImportaciones.teamId, teamId), isNotNull(sigerdImportaciones.dump)))
+    .orderBy(sql`${sigerdImportaciones.completadoEn} DESC NULLS LAST`)
+    .limit(1);
+  return row?.totales ?? null;
+}
+
+/**
  * Guarda el MIRROR: personal desglosado + snapshot fiel. NO toca el módulo
  * escolar (`admin_escolar_*`); eso es el paso aparte de sincronización.
- * Todo en una transacción.
+ * Todo en una transacción. `aviso`: lo que faltó en una primera descarga que
+ * se guarda igual por no haber otra.
  */
 async function guardarMirror(
   teamId: number,
@@ -240,6 +274,7 @@ async function guardarMirror(
   idRegional: number,
   idDistrito: number,
   dump: DumpCentro,
+  aviso: string | null,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     // ── Personal: se reemplaza entero (pocas filas, siempre fresco) ──
@@ -279,7 +314,7 @@ async function guardarMirror(
       .update(sigerdImportaciones)
       .set({
         estado: 'completado',
-        mensaje: null,
+        mensaje: aviso,
         idCentro: dump.contexto.idCentro,
         idRegional,
         idDistrito,
