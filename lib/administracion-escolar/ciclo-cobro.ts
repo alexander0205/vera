@@ -32,33 +32,27 @@ export type Canal = 'correo' | 'whatsapp' | 'sms';
  * Por qué canal sale cada aviso. Fijo en código, no configurable.
  *
  * - El correo llega a los tres porque no cuesta nada y queda como constancia.
- * - El SMS se reserva para los dos que tienen dinero detrás: el que le ahorra
- *   el recargo al padre y el que le dice que ya lo tiene. Se paga por mensaje,
- *   y son los únicos que justifican el gasto.
- * - WhatsApp va también a los tres. Antes solo al primero, y el motivo era
- *   real: la API únicamente deja escribir dentro de las 24 horas siguientes a
- *   la última respuesta del tutor, así que fuera de esa ventana devuelve 422 y
- *   el mensaje no sale. No hay plantillas —`enviarMensaje` manda `{to, text}`
- *   y nada más—, así que eso no se puede sortear.
- *
- *   Pero ese razonamiento se equivocaba de conclusión: trataba a WhatsApp como
- *   si fuera el ÚNICO portador del aviso, y en `al-vencer` y `antes-mora` el
- *   SMS ya va y siempre llega. El WhatsApp ahí no sustituye a nadie, se suma —
- *   y cuando el tutor escribió hace poco, que es lo normal en un colegio con
- *   grupo activo, llega por el canal que de verdad lee.
- *
- *   Un intento fuera de ventana no cuesta nada: el envío que revienta libera
- *   su reserva y NO descuenta del tope («solo se descuenta lo que de verdad
- *   salió», más abajo en avisos.ts). Lo peor que pasa es una línea de error en
- *   el historial junto a un SMS entregado.
+ * - WhatsApp va a los tres, siempre por plantilla aprobada.
+ * - El SMS se paga por mensaje. De ordinario sale solo en `antes-mora`, el que
+ *   le ahorra el recargo al padre. El día que vence entra únicamente si el
+ *   WhatsApp no se puede mandar (ver `AVISOS_CON_SMS_DE_RESPALDO`).
  *
  * Dejarlo elegir sería dejar al colegio configurar un cobro que no sale.
  */
 export const CANALES_DEL_AVISO: Record<Aviso, readonly Canal[]> = {
   'al-emitir':  ['correo', 'whatsapp'],
-  'al-vencer':  ['correo', 'whatsapp', 'sms'],
+  'al-vencer':  ['correo', 'whatsapp'],
   'antes-mora': ['correo', 'whatsapp', 'sms'],
 };
+
+/**
+ * Los avisos que, si el WhatsApp no se puede mandar, salen por SMS (regla del
+ * negocio, 30-10-2026: mandar los dos el día que vence era pagar dos veces por
+ * el mismo recado). «No se puede» es cualquiera de estos: WhatsApp apagado, la
+ * familia sin número, la cuota agotada, el envío rechazado o Meta diciendo
+ * después que no llegó.
+ */
+export const AVISOS_CON_SMS_DE_RESPALDO: readonly Aviso[] = ['al-vencer'];
 
 export function camposCiclo(body: Record<string, unknown>) {
   const entero = (v: unknown, min: number, max: number): number | null => {

@@ -13,7 +13,7 @@ import { enviarWhatsAppPlantilla } from '@/lib/whatsapp/enviar';
 import { getPlantillasDeTeam, huecoDe, parametrosDeAviso, plantillaParaEnviar } from '@/lib/whatsapp/plantillas';
 import { CRM_SOPORTA_BOTONES } from '@/lib/whatsapp/client';
 import { aE164 } from '@/lib/whatsapp/telefono';
-import { reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
+import { cargosConWhatsAppFallido, reconciliarEntregas } from '@/lib/administracion-escolar/entregas';
 import { enviarSms } from '@/lib/sms/enviar';
 import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
 import { equiposConProcesosVivos } from '@/lib/suscripcion/procesos';
@@ -140,9 +140,15 @@ export async function GET(req: NextRequest) {
     // despachar: así el WhatsApp no se reserva, no cuenta como fallo y no se
     // reintenta cada cuarto de hora. El correo del mismo cobro sigue igual.
     const plantillasDelColegio = await getPlantillasDeTeam(teamId);
+    // Lo que una corrida anterior mandó y Meta dijo que no llegó: ya no se
+    // reintenta por WhatsApp, le toca el SMS.
+    const whatsappFallido = await cargosConWhatsAppFallido(teamId, hoy);
     let whatsappSinPlantilla = 0;
     const pendientes: AvisoPendiente[] = crudos.map((p) => {
       if (!p.canales.includes('whatsapp')) return p;
+      if (p.smsDeRespaldo && whatsappFallido.has(p.fila.cargoId)) {
+        return { ...p, canales: canalesSinWhatsApp(p.canales, p.fila, canales) };
+      }
       const hueco = huecoDe(p.aviso, p.fila.cobraMora, p.fila.moraDiasGracia);
       const asignada = plantillasDelColegio.find((x) => x.aviso === hueco) ?? null;
       const hayEnlace = p.fila.clientId != null && p.fila.ecfDocumentId != null;
