@@ -19,7 +19,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes, teams } from '@/lib/db/schema';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { getPlan, tramoPorEstudiantes } from '@/lib/config/plans';
-import { TRAMO_ESCOLAR, evaluarLimite } from '@/lib/config/suscripcion';
+import { pasaDelMargenDelTramo } from '@/lib/config/suscripcion';
 
 export interface EstadoTramo {
   estudiantes: number;
@@ -27,7 +27,7 @@ export interface EstadoTramo {
   tope: number;
   /** ¿Se pasó del tope? */
   excedido: boolean;
-  /** ¿Está cerca (TRAMO_ESCOLAR.avisarDesde) o ya se pasó? */
+  /** ¿Se pasó por más del margen (TRAMO_ESCOLAR.margenSinAviso)? */
   avisar: boolean;
   /** Nombre del tramo que le tocaría. null si se pasa del más alto. */
   tramoSugerido: string | null;
@@ -63,9 +63,8 @@ export const estadoDelTramo = cache(async (teamId: number): Promise<EstadoTramo 
   const estudiantes = c?.n ?? 0;
   const tope = plan.limits.estudiantes;
 
-  const limite = evaluarLimite('estudiantes', estudiantes, tope, 0);
   const excedido = estudiantes > tope;
-  const cerca = estudiantes / tope >= TRAMO_ESCOLAR.avisarDesde;
+  const avisar = pasaDelMargenDelTramo(estudiantes, tope);
 
   // El tramo que de verdad le toca por tamaño. null = se pasó del más alto
   // (800) y ahí no hay plan de catálogo: toca cotizar a mano.
@@ -75,15 +74,13 @@ export const estadoDelTramo = cache(async (teamId: number): Promise<EstadoTramo 
     estudiantes,
     tope,
     excedido,
-    avisar: excedido || cerca,
+    avisar,
     tramoSugerido: sugerido?.name ?? null,
     mensaje:
-      excedido && sugerido
+      !avisar
+        ? null
+      : sugerido
         ? `Tienes ${estudiantes} estudiantes y tu tramo ${plan.name} llega hasta ${tope}. Te corresponde el tramo ${sugerido.name}.`
-      : excedido
-        ? `Tienes ${estudiantes} estudiantes, por encima de todos los tramos del catálogo. Escríbenos para ajustar tu plan.`
-      : cerca
-        ? `Vas por ${estudiantes} de ${tope} estudiantes de tu tramo ${plan.name}.`
-      : limite.mensaje,
+        : `Tienes ${estudiantes} estudiantes, por encima de todos los tramos del catálogo. Escríbenos para ajustar tu plan.`,
   };
 });

@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.stubEnv('NEXT_PUBLIC_BILLING_ENABLED', 'true');
 
 const { avisoDePruebaSegunMetodo, evaluarSuscripcion, permiteEscritura } = await import('@/lib/suscripcion/estado');
-const { evaluarLimite, LIMITES, PRUEBA, MORA, SOLO_LECTURA } =
+const { evaluarLimite, pasaDelMargenDelTramo, LIMITES, PRUEBA, MORA, SOLO_LECTURA } =
   await import('@/lib/config/suscripcion');
 
 const DIA = 24 * 60 * 60 * 1000;
@@ -208,6 +208,15 @@ describe('evaluarLimite', () => {
     expect(r.mensaje).not.toBeNull();
   });
 
+  it('el aviso del tramo solo sale al pasar del 5 % del tope', () => {
+    expect(pasaDelMargenDelTramo(135, 150)).toBe(false);
+    expect(pasaDelMargenDelTramo(150, 150)).toBe(false);
+    expect(pasaDelMargenDelTramo(157, 150)).toBe(false);
+    expect(pasaDelMargenDelTramo(158, 150)).toBe(true);
+    expect(pasaDelMargenDelTramo(315, 300)).toBe(false);
+    expect(pasaDelMargenDelTramo(316, 300)).toBe(true);
+  });
+
   it('whatsapp y sms sí bloquean: cada unidad nos cuesta dinero', () => {
     expect(evaluarLimite('whatsapp', 300, 300).bloqueado).toBe(true);
     expect(evaluarLimite('sms', 300, 300).bloqueado).toBe(true);
@@ -246,9 +255,12 @@ describe('el aviso de prueba según lo que Stripe puede cobrar', () => {
     expect(r.mensaje).toBe('Te quedan 2 días de prueba. Marca tu tarjeta como predeterminada para que se cobre sola.');
   });
 
-  it('sin tarjeta, o si Stripe no contestó, el aviso sigue igual', () => {
+  it('sin tarjeta el aviso sigue igual', () => {
     expect(avisoDePruebaSegunMetodo(porVencer, 'ninguno')).toEqual(porVencer);
-    expect(avisoDePruebaSegunMetodo(porVencer, null)).toEqual(porVencer);
+  });
+
+  it('si Stripe no contestó no se le pide la tarjeta a quien quizá ya la puso', () => {
+    expect(avisoDePruebaSegunMetodo(porVencer, null)).toMatchObject({ avisar: false, mensaje: null, estado: 'prueba-por-vencer' });
   });
 
   it('los demás estados no se tocan', () => {
