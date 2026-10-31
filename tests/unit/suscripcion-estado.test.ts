@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.stubEnv('NEXT_PUBLIC_BILLING_ENABLED', 'true');
 
 const { avisoDePruebaSegunMetodo, evaluarSuscripcion, permiteEscritura } = await import('@/lib/suscripcion/estado');
-const { evaluarLimite, LIMITES, PRUEBA, MORA, SOLO_LECTURA } =
+const { evaluarLimite, pasaDelMargenDelTramo, LIMITES, PRUEBA, MORA, SOLO_LECTURA } =
   await import('@/lib/config/suscripcion');
 
 const DIA = 24 * 60 * 60 * 1000;
@@ -206,6 +206,15 @@ describe('evaluarLimite', () => {
     expect(r.bloqueado).toBe(false);
     expect(r.advertir).toBe(true);
     expect(r.mensaje).not.toBeNull();
+  });
+
+  it('el aviso del tramo solo sale al pasar del 5 % del tope', () => {
+    expect(pasaDelMargenDelTramo(135, 150)).toBe(false);
+    expect(pasaDelMargenDelTramo(150, 150)).toBe(false);
+    expect(pasaDelMargenDelTramo(157, 150)).toBe(false);
+    expect(pasaDelMargenDelTramo(158, 150)).toBe(true);
+    expect(pasaDelMargenDelTramo(315, 300)).toBe(false);
+    expect(pasaDelMargenDelTramo(316, 300)).toBe(true);
   });
 
   it('whatsapp y sms sí bloquean: cada unidad nos cuesta dinero', () => {

@@ -217,9 +217,14 @@ export const TRAMO_ESCOLAR = {
    */
   subeSolo: false,
 
-  /** A partir de qué % del tope avisamos que se le viene el cambio de tramo. */
-  avisarDesde: 0.9,
+  /** Cuánto por ciento se puede pasar del tope sin que se le avise. */
+  margenSinAviso: 5,
 } as const;
+
+/** ¿Pasó del tope por más del margen? En enteros: 150 × 1.05 no da exacto en coma flotante. */
+export function pasaDelMargenDelTramo(estudiantes: number, tope: number): boolean {
+  return estudiantes * 100 > tope * (100 + TRAMO_ESCOLAR.margenSinAviso);
+}
 
 // ─── Cambios de plan ──────────────────────────────────────────────────────────
 
