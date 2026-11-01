@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { VistaLinkPago } from '@/lib/administracion-escolar/link-pago';
-import { montoConfirmado } from '@/lib/administracion-escolar/comprobante-confirmado';
+import { montoDelAviso } from '@/lib/administracion-escolar/comprobante-confirmado';
 import { ZonaArchivo } from '@/components/shared/ZonaArchivo';
 
 const AZUL = '#1d4ed8';
@@ -51,6 +51,15 @@ function etiquetaDocumento(doc: string): string {
 }
 
 // ─── Piezas ──────────────────────────────────────────────────────────────────
+
+function LineaResumen({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, padding: '2px 0' }}>
+      <span style={{ color: '#374151' }}>{etiqueta}</span>
+      <span style={{ fontWeight: 600, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{valor}</span>
+    </div>
+  );
+}
 
 function Copiable({ valor }: { valor: string }) {
   const [copiado, setCopiado] = useState(false);
@@ -141,14 +150,18 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
    *
    * Mirando solo los cargos, una familia que ya pagó la colegiatura pero debe
    * el recargo veía «no tienes pagos pendientes» encima de una mora viva. El
-   * recargo es deuda igual, y con su propio documento.
+   * recargo es deuda igual, y con su propio documento. Y lo mismo la factura
+   * que debe sin tener cargos.
    */
-  const sinDeuda = cargos.length === 0 && moras.length === 0;
+  const facturaSinCargos = vista.facturaSinCargos;
+  const resumen = vista.resumenFactura;
+  const sinDeuda = cargos.length === 0 && moras.length === 0 && !facturaSinCargos;
   // Pagada de verdad: el servidor solo arma `facturaPagada` cuando la factura
   // existe, es de este responsable y su estado de pago es PAGADA. No basta con
   // que no haya cargos: un enlace sin deuda también puede ser una factura cuyo
   // comprobante todavía espera aprobación, y eso NO es un recibo.
   const pagada = Boolean(vista.facturaPagada);
+  const anulada = vista.facturaAnulada;
 
   /**
    * Guarda el archivo y, si es imagen, su miniatura.
@@ -231,9 +244,11 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
       <main style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 16px 56px' }}>
         <h1 style={{
           fontSize: 30, fontWeight: 700, margin: '0 0 6px',
-          color: pagada ? VERDE : AZUL,
+          color: pagada ? VERDE : anulada ? '#b91c1c' : AZUL,
         }}>
-          {pagada ? 'Factura pagada' : vista.facturaScope ? 'Pago de factura' : 'Pagos pendientes'}
+          {pagada ? 'Factura pagada'
+            : anulada ? 'Factura anulada'
+            : vista.facturaScope ? 'Pago de factura' : 'Pagos pendientes'}
         </h1>
         <p style={{ fontSize: 14, color: '#4b5563', margin: '0 0 22px' }}>
           {vista.facturaScope ? (
@@ -241,6 +256,10 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
               ? <>La factura{' '}
                   <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>{' '}
                   está saldada. No hay nada que pagar.</>
+              : anulada
+              ? <>La factura{' '}
+                  <b>{vista.facturaScope.codigo || vista.facturaScope.encf || `#${vista.facturaScope.id}`}</b>{' '}
+                  por <b>{dinero(anulada.montoCentavos)}</b> fue anulada. No hay nada que pagar.</>
               : sinDeuda
                 // Sin saldo pero sin pago confirmado: el comprobante puede estar
                 // esperando aprobación, y eso se ve en el aviso de abajo.
@@ -274,7 +293,7 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
               <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 14, lineHeight: 1.8, color: '#374151' }}>
                 {vista.facturaPagada.lineas.map((l, i) => (
                   <li key={`${l.estudiante}-${l.concepto}-${i}`}>
-                    <b>{l.estudiante}</b> · {l.concepto}
+                    {l.estudiante && <><b>{l.estudiante}</b> · </>}{l.concepto}
                   </li>
                 ))}
               </ul>
@@ -330,6 +349,27 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
           </div>
 
           <div style={{ padding: '18px 20px', borderLeft: `1px solid ${BORDE}` }}>
+            {resumen && (
+              <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: `1px solid ${BORDE}` }}>
+                <LineaResumen etiqueta="Monto de la factura" valor={dinero(resumen.montoTotalCentavos)} />
+                <LineaResumen etiqueta="Abonado" valor={dinero(resumen.abonadoCentavos)} />
+                {resumen.abonos.map((a, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', gap: 12,
+                    fontSize: 12, color: TENUE, padding: '1px 0 1px 10px',
+                  }}>
+                    <span>{fecha(a.fecha)} · {a.metodo}</span>
+                    <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{dinero(a.montoCentavos)}</span>
+                  </div>
+                ))}
+                {resumen.notaCreditoCentavos > 0 && (
+                  <LineaResumen etiqueta="Nota de crédito" valor={dinero(resumen.notaCreditoCentavos)} />
+                )}
+                {resumen.moraCentavos > 0 && (
+                  <LineaResumen etiqueta="Recargo por mora" valor={dinero(resumen.moraCentavos)} />
+                )}
+              </div>
+            )}
             <h2 style={{ fontSize: 14, fontWeight: 600, color: '#374151', margin: '0 0 6px' }}>
               Saldo pendiente total
             </h2>
@@ -370,6 +410,44 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
                     </td>
                   </tr>
                 ))}
+                {/* Como en la factura: el monto completo y, debajo, lo que lo rebaja. */}
+                {facturaSinCargos && (
+                  <>
+                    <tr>
+                      <td style={celda}>
+                        {[...new Set(facturaSinCargos.lineas.map((l) => l.concepto))].map((x) => (
+                          <span key={x} style={{ display: 'block' }}>{x}</span>
+                        ))}
+                        {facturaSinCargos.lineas.length === 0 && (facturaSinCargos.codigo ?? 'Factura')}
+                      </td>
+                      <td style={celda}>
+                        {[...new Set(facturaSinCargos.lineas.map((l) => l.estudiante).filter(Boolean))].join(', ') || '—'}
+                      </td>
+                      <td style={{ ...celda, whiteSpace: 'nowrap', color: facturaSinCargos.vencido ? '#b91c1c' : '#111827' }}>
+                        {fecha(facturaSinCargos.fechaVencimiento)}{facturaSinCargos.vencido ? ' · vencido' : ''}
+                      </td>
+                      <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {dinero(facturaSinCargos.montoTotalCentavos)}
+                      </td>
+                    </tr>
+                    {resumen && resumen.abonadoCentavos > 0 && (
+                      <tr>
+                        <td colSpan={3} style={celda}>Abonado</td>
+                        <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          −{dinero(resumen.abonadoCentavos)}
+                        </td>
+                      </tr>
+                    )}
+                    {resumen && resumen.notaCreditoCentavos > 0 && (
+                      <tr>
+                        <td colSpan={3} style={celda}>Nota de crédito</td>
+                        <td style={{ ...celda, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          −{dinero(resumen.notaCreditoCentavos)}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )}
                 {/*
                   El recargo por mora va en su propia fila, no mezclado con las
                   cuotas: es otro documento (una nota de débito colgada de la
@@ -413,7 +491,6 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
         {vista.comprobantes.length > 0 && (
           <section style={{ marginBottom: 18 }}>
             {vista.comprobantes.map((c) => {
-              const confirmado = montoConfirmado(c);
               const estilo = c.estado === 'pendiente'
                 ? { bg: '#fffbeb', bd: '#fde68a', fg: '#92400e', icono: '⏳',
                     titulo: 'Transferencia pendiente de aprobación',
@@ -421,9 +498,7 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
                 : c.estado === 'aprobado'
                 ? { bg: '#ecfdf5', bd: '#a7f3d0', fg: '#065f46', icono: '✓',
                     titulo: 'Pago confirmado',
-                    texto: confirmado === c.montoCentavos
-                      ? 'El colegio verificó tu transferencia.'
-                      : `Enviaste un comprobante por ${dinero(c.montoCentavos)}; el colegio confirmó ${dinero(confirmado)}.` }
+                    texto: 'El colegio verificó tu transferencia.' }
                 : { bg: '#fef2f2', bd: '#fecaca', fg: '#991b1b', icono: '✕',
                     titulo: 'Comprobante rechazado',
                     texto: c.motivoRechazo ?? 'El colegio no pudo verificar esta transferencia.' };
@@ -436,7 +511,7 @@ export function PagarClient({ token, facturaId, avisoId, vista, tarjetaHabilitad
                   <span style={{ fontSize: 18, lineHeight: 1.2 }}>{estilo.icono}</span>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 14, fontWeight: 700, color: estilo.fg, margin: '0 0 2px' }}>
-                      {estilo.titulo} · {dinero(c.estado === 'aprobado' ? confirmado : c.montoCentavos)}
+                      {estilo.titulo} · {dinero(montoDelAviso(c))}
                     </p>
                     <p style={{ fontSize: 13, color: estilo.fg, margin: 0, lineHeight: 1.55 }}>
                       {estilo.texto}

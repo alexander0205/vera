@@ -36,6 +36,8 @@ import { AvisoDuplicadoComprobante } from '@/components/administracion-escolar/A
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import type { CuentaBancoOpcion } from '@/lib/pagos/bancos';
 import type { Duplicado, LecturaComprobanteIa } from '@/lib/administracion-escolar/comprobante-lectura';
+import { nombreDelDocumento } from '@/lib/administracion-escolar/factura-sin-cargos';
+import type { MoraDelComprobante } from '@/lib/db/schema';
 import {
   CheckCircle2, Clock, FileText, Landmark, Loader2, Paperclip, Sparkles, XCircle, AlertTriangle, ExternalLink, Search,
 } from 'lucide-react';
@@ -62,6 +64,7 @@ interface Comprobante {
   archivoMime: string;
   archivoBytes: number;
   cargos: CargoSnapshot[];
+  moras: MoraDelComprobante[];
   motivoRechazo: string | null;
   creadoEn: string;
   revisadoEn: string | null;
@@ -311,6 +314,7 @@ export function ComprobantesClient() {
     return [
       f.responsable, f.referencia, f.bancoOrigen,
       ...f.cargos.map((c) => c.estudiante),
+      ...f.moras.map((m) => m.detalle),
     ].some((t) => (t ?? '').toLowerCase().includes(q));
   });
 
@@ -450,7 +454,7 @@ export function ComprobantesClient() {
                   <p className="text-xl font-bold text-gray-900">{fmtDOP(c.estado === 'aprobado' ? montoConfirmado(c) : c.montoCentavos)}</p>
                 </div>
 
-                {c.cargos.length > 0 && (
+                {(c.cargos.length > 0 || c.moras.length > 0) && (
                   <div className="rounded-lg bg-gray-50 p-3">
                     <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Lo que debía al subirlo
@@ -470,6 +474,12 @@ export function ComprobantesClient() {
                               </li>
                             ))}
                           </ul>
+                        </div>
+                      ))}
+                      {c.moras.map((m) => (
+                        <div key={m.facturaId} className="flex items-baseline justify-between gap-3">
+                          <span className="truncate text-sm font-semibold text-gray-900">{nombreDelDocumento(m)}</span>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">{fmtDOP(m.montoCentavos)}</span>
                         </div>
                       ))}
                     </div>
