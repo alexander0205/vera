@@ -15,6 +15,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarComprobantes, teams, teamMembers, users } from '@/lib/db/schema';
 import { resolverLink, marcarAcceso } from '@/lib/administracion-escolar/link-pago';
+import { documentosDelComprobante } from '@/lib/administracion-escolar/factura-sin-cargos';
 import { origenPublico } from '@/lib/http/origen-publico';
 import { detectarTipo, ArchivoInvalidoError } from '@/lib/pagos/adjuntos';
 import { s3Disponible, subirComprobante, construirKey } from '@/lib/storage/comprobantes';
@@ -185,13 +186,9 @@ export async function POST(
     })),
     // La mora entra en el total que la página le pidió al padre, así que tiene
     // que entrar también en lo que la aprobación puede cobrar. Sin esto el
-    // dinero de la mora se quedaría sin destino y saldría como «sin aplicar».
-    moras: link.vista.moras.map((m) => ({
-      facturaId: m.facturaId,
-      codigo: m.codigo,
-      origenCodigo: m.origenCodigo,
-      montoCentavos: m.montoCentavos,
-    })),
+    // dinero de la mora se quedaría sin destino y saldría como «sin aplicar». Lo
+    // mismo la factura sin cargos.
+    moras: documentosDelComprobante(link.vista),
   }).returning({ id: adminEscolarComprobantes.id });
 
   await marcarAcceso(link.linkId);

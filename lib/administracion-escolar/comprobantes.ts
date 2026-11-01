@@ -27,6 +27,8 @@ import {
 } from '@/lib/db/schema';
 import { registrarPago } from '@/lib/db/queries';
 import { sincronizarSaldosDesdeFacturas } from './queries';
+import { nombreDelDocumento } from './factura-sin-cargos';
+import { notaDeComprobante } from './comprobante-confirmado';
 import { leerComprobante } from '@/lib/storage/comprobantes';
 import type { CargoDelComprobante, MoraDelComprobante } from '@/lib/db/schema';
 import { cuentasBancoDelEquipo } from '@/lib/pagos/cuentas-banco';
@@ -48,6 +50,7 @@ export interface ComprobanteFila {
   archivoMime: string;
   archivoBytes: number;
   cargos: CargoDelComprobante[];
+  moras: MoraDelComprobante[];
   motivoRechazo: string | null;
   creadoEn: string;
   revisadoEn: string | null;
@@ -82,6 +85,7 @@ export async function listarComprobantes(
       archivoBytes:  adminEscolarComprobantes.archivoBytes,
       archivoHash:   adminEscolarComprobantes.archivoHash,
       cargos:        adminEscolarComprobantes.cargos,
+      moras:         adminEscolarComprobantes.moras,
       motivoRechazo: adminEscolarComprobantes.motivoRechazo,
       creadoEn:      adminEscolarComprobantes.creadoEn,
       revisadoEn:    adminEscolarComprobantes.revisadoEn,
@@ -359,14 +363,12 @@ async function planDeAplicacion(
     e.detalle.push(`${p.concepto} · ${p.nombres}`);
     porFactura.set(k, e);
   }
-  // La mora se nombra por la factura que la causó: «Mora» a secas no dice de
-  // qué mes es, y una familia puede tener cuatro.
   for (const m of moras) {
     if (porFactura.has(m.facturaId)) continue;
     porFactura.set(m.facturaId, {
       encf: null,
       codigo: m.codigo,
-      detalle: [m.origenCodigo ? `Mora de ${m.origenCodigo}` : 'Recargo por mora'],
+      detalle: [nombreDelDocumento(m)],
     });
   }
 
@@ -521,7 +523,7 @@ export async function aprobarComprobante(
         cuenta: cuentaElegida?.etiqueta ?? null,
         cuentaBancoId: cuentaElegida?.id ?? null,
         fechaPago: fecha,
-        notas: `Comprobante #${c.id} aprobado`,
+        notas: notaDeComprobante(c.id),
         createdBy: usuarioId,
         turnoCajaId,
       });

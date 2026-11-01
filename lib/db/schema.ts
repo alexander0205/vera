@@ -2968,14 +2968,19 @@ export interface CargoDelComprobante {
  * factura donde se cobra, y una mora YA es esa factura (una ND tipo 33). Sin
  * esto, el dinero de un padre que transfería la mora a propósito no tenía a
  * dónde ir — la aprobación solo sabía repartir contra facturas de cargos.
+ *
+ * Por la misma razón entra aquí la factura sin cargos del enlace `?f=` (ver
+ * `factura-sin-cargos.ts`): también es ya el documento donde se cobra.
  */
 export interface MoraDelComprobante {
-  /** El id de la nota de débito. Es contra esto que se registra el cobro. */
+  /** El id del documento. Es contra esto que se registra el cobro. */
   facturaId: number;
   codigo: string | null;
   /** La factura que se venció y la causó, para reconocerla en la pantalla. */
   origenCodigo: string | null;
   montoCentavos: number;
+  /** De qué es, cuando no es una mora sino una factura sin cargos. */
+  detalle?: string;
 }
 
 /**

@@ -21,7 +21,13 @@ import { randomBytes } from 'crypto';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
 import { teamHasModule } from '@/lib/auth/modules';
 import { morasPendientesDeResponsable, type MoraPendiente } from './mora-familia';
-import { and, eq, gt, ne, asc, desc } from 'drizzle-orm';
+import { esVentaSql, saldoFacturaSql } from './saldo-factura';
+import {
+  comprobanteEsDeFactura, estaAnulada, lineasDeFactura, resumenDeFactura, seCobraComoFactura,
+  type AbonoDeFactura, type FacturaSinCargos, type LineaDeFactura, type ResumenFactura,
+} from './factura-sin-cargos';
+import { notaDeComprobante, seEnsenaElAviso } from './comprobante-confirmado';
+import { and, eq, gt, ne, or, asc, desc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarLinksPago,
@@ -149,6 +155,8 @@ export interface ComprobanteEnEspera {
   montoCentavos: number;
   /** Lo que confirmó el colegio. Ver `montoConfirmado`. */
   montoAprobadoCentavos: number | null;
+  /** Lo que entró a la factura del `?f=`. Ver `montoDelAviso`. */
+  aplicadoEnFacturaCentavos: number | null;
   estado: string;
   creadoEn: string;
   motivoRechazo: string | null;
@@ -228,6 +236,12 @@ export interface VistaLinkPago {
   facturaScope: { id: number; encf: string | null; codigo: string | null } | null;
   /** Solo con `?f=` y la factura sin saldo: el recibo. */
   facturaPagada: FacturaPagada | null;
+  /** Solo con `?f=` y la factura anulada: no se cobra nada desde su página. */
+  facturaAnulada: { montoCentavos: number } | null;
+  /** Solo con `?f=`: la factura que debe sin cargos vivos. Entra en el total. */
+  facturaSinCargos: FacturaSinCargos | null;
+  /** Solo con `?f=` y la factura debiendo: monto completo y abonado. */
+  resumenFactura: ResumenFactura | null;
 }
 
 /** Contexto interno: lo que las rutas necesitan y la página no enseña. */
@@ -346,56 +360,87 @@ export async function resolverLink(
    * cliente que ya validó `facturaScope`, así que no abre nada nuevo.
    */
   let facturaPagada: FacturaPagada | null = null;
+  let docScope: {
+    monto: number; estado: string | null; estadoPago: string | null; lineasJson: string | null;
+    fechaLimitePago: string | null; esVenta: boolean; saldo: string | number;
+  } | null = null;
+  let lineasScope: LineaDeFactura[] = [];
+  let abonosScope: AbonoDeFactura[] = [];
+  // Lo que entró a la factura y a sus recargos, por la nota de cada comprobante.
+  const aplicadoPorNota = new Map<string, number>();
   if (facturaScope) {
-    const [doc] = await db
-      .select({ monto: ecfDocuments.montoTotal, estadoPago: ecfDocuments.estadoPago })
-      .from(ecfDocuments)
-      .where(eq(ecfDocuments.id, facturaScope.id))
-      .limit(1);
+    const scopeId = facturaScope.id;
+    const [[doc], pagos] = await Promise.all([
+      db
+        .select({
+          monto:           ecfDocuments.montoTotal,
+          estado:          ecfDocuments.estado,
+          estadoPago:      ecfDocuments.estadoPago,
+          lineasJson:      ecfDocuments.lineasJson,
+          fechaLimitePago: ecfDocuments.fechaLimitePago,
+          esVenta:         sql<boolean>`${esVentaSql('ecf_documents')}`,
+          saldo:           sql<string>`${saldoFacturaSql('ecf_documents')}`,
+        })
+        .from(ecfDocuments)
+        .where(eq(ecfDocuments.id, scopeId))
+        .limit(1),
+      db
+        .select({
+          documentoId:   pagosRecibidos.ecfDocumentId,
+          montoCentavos: pagosRecibidos.montoCentavos,
+          metodo:        pagosRecibidos.metodo,
+          fecha:         pagosRecibidos.fechaPago,
+          notas:         pagosRecibidos.notas,
+        })
+        .from(pagosRecibidos)
+        .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
+        .where(and(
+          eq(pagosRecibidos.teamId, link.teamId),
+          or(eq(ecfDocuments.id, scopeId), eq(ecfDocuments.moraOrigenId, scopeId)),
+        ))
+        .orderBy(asc(pagosRecibidos.fechaPago), asc(pagosRecibidos.id)),
+    ]);
+    docScope = doc ?? null;
+    lineasScope = lineasDeFactura(doc?.lineasJson);
+    abonosScope = pagos
+      .filter((p) => p.documentoId === scopeId)
+      .map((p) => ({ montoCentavos: p.montoCentavos, metodo: p.metodo, fecha: String(p.fecha) }));
+    for (const p of pagos) {
+      if (p.notas) aplicadoPorNota.set(p.notas, (aplicadoPorNota.get(p.notas) ?? 0) + p.montoCentavos);
+    }
 
     if (doc && doc.estadoPago === 'PAGADA') {
-      const [lineas, pagos] = await Promise.all([
-        db
-          .select({
-            nombres:   adminEscolarEstudiantes.nombres,
-            apellidos: adminEscolarEstudiantes.apellidos,
-            concepto:  adminEscolarConceptosPago.nombre,
-          })
-          .from(adminEscolarCargos)
-          .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
-          .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
-          .where(and(
-            eq(adminEscolarCargos.teamId, link.teamId),
-            eq(adminEscolarCargos.ecfDocumentId, facturaScope.id),
-          )),
-        db
-          .select({
-            montoCentavos: pagosRecibidos.montoCentavos,
-            metodo:        pagosRecibidos.metodo,
-            fecha:         pagosRecibidos.fechaPago,
-          })
-          .from(pagosRecibidos)
-          .where(and(
-            eq(pagosRecibidos.teamId, link.teamId),
-            eq(pagosRecibidos.ecfDocumentId, facturaScope.id),
-          ))
-          .orderBy(asc(pagosRecibidos.fechaPago)),
-      ]);
+      const lineas = await db
+        .select({
+          nombres:   adminEscolarEstudiantes.nombres,
+          apellidos: adminEscolarEstudiantes.apellidos,
+          concepto:  adminEscolarConceptosPago.nombre,
+        })
+        .from(adminEscolarCargos)
+        .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
+        .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+        .where(and(
+          eq(adminEscolarCargos.teamId, link.teamId),
+          eq(adminEscolarCargos.ecfDocumentId, scopeId),
+        ));
 
       facturaPagada = {
         montoCentavos: Number(doc.monto ?? 0),
-        lineas: lineas.map((l) => ({
-          estudiante: `${l.nombres} ${l.apellidos}`.trim(),
-          concepto: l.concepto,
-        })),
-        pagos: pagos.map((p) => ({
-          montoCentavos: p.montoCentavos,
-          metodo: p.metodo,
-          fecha: String(p.fecha),
-        })),
+        // Sin cargos detrás, lo que dice la propia factura.
+        lineas: lineas.length > 0
+          ? lineas.map((l) => ({
+              estudiante: `${l.nombres} ${l.apellidos}`.trim(),
+              concepto: l.concepto,
+            }))
+          : lineasScope,
+        pagos: abonosScope,
       };
     }
   }
+
+  const facturaAnulada = docScope && estaAnulada(docScope)
+    ? { montoCentavos: Number(docScope.monto ?? 0) }
+    : null;
 
   const [cargos, datos, cuentas, comprobantes] = await Promise.all([
     db
@@ -455,6 +500,7 @@ export async function resolverLink(
         creadoEn:      adminEscolarComprobantes.creadoEn,
         motivoRechazo: adminEscolarComprobantes.motivoRechazo,
         cargos:        adminEscolarComprobantes.cargos,
+        moras:         adminEscolarComprobantes.moras,
       })
       .from(adminEscolarComprobantes)
       .where(eq(adminEscolarComprobantes.linkId, link.id))
@@ -463,20 +509,21 @@ export async function resolverLink(
   ]);
 
   // En la página de una factura, solo sus comprobantes: los que tocaron alguno
-  // de sus cargos. Sin acotar, todos los del responsable (el enlace agregado).
+  // de sus cargos o la factura misma. Sin acotar, todos los del responsable (el
+  // enlace agregado).
   const comprobantesVista = facturaCargoIds
-    ? comprobantes.filter((c) => Array.isArray(c.cargos)
-        && c.cargos.some((x) => facturaCargoIds!.has(x.cargoId)))
+    ? comprobantes.filter((c) => comprobanteEsDeFactura(c, facturaScope?.id ?? null, facturaCargoIds!))
     : comprobantes;
 
   // La mora del responsable, acotada igual que los cargos cuando el enlace
-  // apunta a una factura concreta.
-  const moras = await morasPendientesDeResponsable(
+  // apunta a una factura concreta. De una anulada no se cobra nada: el recargo
+  // tampoco cuenta en las fichas (ver `moraFacturaSql`).
+  const moras = facturaAnulada ? [] : await morasPendientesDeResponsable(
     link.teamId, link.clientId, acotaFactura ? (facturaScope?.id ?? -1) : null,
   );
 
   const hoy = hoyISO();
-  const filas: CargoPendiente[] = cargos.map((c) => ({
+  const filas: CargoPendiente[] = facturaAnulada ? [] : cargos.map((c) => ({
     cargoId: c.cargoId,
     concepto: c.concepto,
     estudiante: `${c.nombres} ${c.apellidos ?? ''}`.trim(),
@@ -484,6 +531,35 @@ export async function resolverLink(
     montoCentavos: c.saldoCentavos,
     vencido: c.fechaVencimiento != null && String(c.fechaVencimiento) < hoy,
   }));
+
+  const saldoScope = Number(docScope?.saldo ?? 0);
+  const facturaSinCargos: FacturaSinCargos | null = facturaScope && docScope
+    && seCobraComoFactura({ cargosVivos: filas.length, esVenta: docScope.esVenta, saldoCentavos: saldoScope })
+    ? {
+        facturaId: facturaScope.id,
+        codigo: facturaScope.codigo ?? facturaScope.encf,
+        lineas: lineasScope,
+        fechaVencimiento: docScope.fechaLimitePago,
+        vencido: docScope.fechaLimitePago != null && docScope.fechaLimitePago < hoy,
+        montoTotalCentavos: Number(docScope.monto ?? 0),
+        montoCentavos: saldoScope,
+      }
+    : null;
+
+  const moraCentavos = moras.reduce((a, m) => a + m.montoCentavos, 0);
+  const totalCentavos = filas.reduce((a, f) => a + f.montoCentavos, 0)
+    + moraCentavos
+    + (facturaSinCargos?.montoCentavos ?? 0);
+  const resumenFactura = docScope
+    ? resumenDeFactura({
+        esVenta: docScope.esVenta,
+        montoTotalCentavos: Number(docScope.monto ?? 0),
+        abonos: abonosScope,
+        saldoCentavos: saldoScope,
+        moraCentavos,
+        totalACobrarCentavos: totalCentavos,
+      })
+    : null;
 
   const d = datos[0];
   const transferencia: DatosTransferencia = {
@@ -514,23 +590,34 @@ export async function resolverLink(
         email: link.email ?? null,
         telefono: link.telefono ?? link.celular ?? null,
       },
-      estudiantes: [...new Set(filas.map((f) => f.estudiante))],
+      // Sin cargos que cobrar, los de la factura: una pagada o anulada también es
+      // de alguien.
+      estudiantes: [...new Set(filas.length > 0
+        ? filas.map((f) => f.estudiante)
+        : (facturaPagada?.lineas ?? lineasScope).map((l) => l.estudiante).filter(Boolean))],
       cargos: filas,
       moras,
-      totalCentavos: filas.reduce((a, f) => a + f.montoCentavos, 0)
-        + moras.reduce((a, m) => a + m.montoCentavos, 0),
+      totalCentavos,
       transferencia,
-      comprobantes: comprobantesVista.map((c) => ({
-        id: c.id,
-        montoCentavos: c.montoCentavos,
-        montoAprobadoCentavos: c.montoAprobadoCentavos,
-        estado: c.estado,
-        creadoEn: c.creadoEn.toISOString(),
-        motivoRechazo: c.motivoRechazo,
-      })),
+      comprobantes: comprobantesVista
+        .map((c) => ({
+          id: c.id,
+          montoCentavos: c.montoCentavos,
+          montoAprobadoCentavos: c.montoAprobadoCentavos,
+          aplicadoEnFacturaCentavos: acotaFactura
+            ? (aplicadoPorNota.get(notaDeComprobante(c.id)) ?? 0)
+            : null,
+          estado: c.estado,
+          creadoEn: c.creadoEn.toISOString(),
+          motivoRechazo: c.motivoRechazo,
+        }))
+        .filter(seEnsenaElAviso),
       hayPendiente: comprobantesVista.some((c) => c.estado === 'pendiente'),
       facturaScope,
       facturaPagada,
+      facturaAnulada,
+      facturaSinCargos,
+      resumenFactura,
     },
   };
 }
