@@ -15,6 +15,9 @@
  * que la corrida siguiente lo reintente. El aviso con SMS de respaldo no se
  * suelta: se queda como fallido y la corrida siguiente lo manda por SMS
  * (`cargosConWhatsAppFallido`).
+ *
+ * «Hoy» es el día de RD. `enviado_at` es un timestamp sin zona guardado en UTC:
+ * de 8 p. m. a medianoche su fecha tal cual ya es la de mañana.
  */
 
 import 'server-only';
@@ -24,6 +27,7 @@ import { adminEscolarAvisosEnviados, adminEscolarCargos, adminEscolarConceptosPa
 import { historialMensajes } from '@/lib/whatsapp/client';
 import { resolverRemitente } from '@/lib/whatsapp/config';
 import { aE164 } from '@/lib/whatsapp/telefono';
+import { fechaRD, hoyRD } from '@/lib/utils/format';
 import { canalesDelColegio } from './canales';
 import { AVISOS_CON_SMS_DE_RESPALDO, type Aviso } from './ciclo-cobro';
 
@@ -62,11 +66,6 @@ export interface ResultadoReconciliacion {
   errores: { motivo: string; cuantos: number }[];
 }
 
-function hoyISO(): string {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Santo_Domingo' }))
-    .toISOString().slice(0, 10);
-}
-
 /** De estos avisos que fallaron, los que el colegio y el concepto dejan pasar a SMS. */
 async function conSmsDeRespaldo(
   teamId: number,
@@ -95,7 +94,10 @@ export async function colegiosConAcusesPendientes(): Promise<number[]> {
   return filas.map((f) => f.teamId);
 }
 
-/** Los cobros cuyo WhatsApp de hoy Meta dijo que no llegó y aún le toca el SMS. */
+/**
+ * Los cobros cuyo WhatsApp de hoy Meta dijo que no llegó y aún le toca el SMS.
+ * `hoy` es la fecha de RD (`hoyRD`).
+ */
 export async function cargosConWhatsAppFallido(teamId: number, hoy: string): Promise<Set<number>> {
   const filas = await db
     .select({ cargoId: adminEscolarAvisosEnviados.cargoId })
@@ -105,7 +107,7 @@ export async function cargosConWhatsAppFallido(teamId: number, hoy: string): Pro
       eq(adminEscolarAvisosEnviados.canal, 'whatsapp'),
       eq(adminEscolarAvisosEnviados.estadoEntrega, 'fallido'),
       inArray(adminEscolarAvisosEnviados.tipo, [...AVISOS_CON_SMS_DE_RESPALDO]),
-      sql`${adminEscolarAvisosEnviados.enviadoAt}::date = ${hoy}::date`,
+      sql`(${adminEscolarAvisosEnviados.enviadoAt} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Santo_Domingo')::date = ${hoy}::date`,
     ));
   return new Set(filas.flatMap((f) => (f.cargoId == null ? [] : [f.cargoId])));
 }
@@ -160,7 +162,7 @@ export async function reconciliarEntregas(
     porTelefono.set(tel, [...(porTelefono.get(tel) ?? []), p]);
   }
 
-  const hoy = hoyISO();
+  const hoy = hoyRD();
   const errores = new Map<string, number>();
   const fallaronHoy: typeof pendientes = [];
   let revisados = 0, entregados = 0, fallidos = 0;
@@ -200,7 +202,7 @@ export async function reconciliarEntregas(
         // antes del recargo» solo es hoy una vez—, así que reintentar el de
         // anteayer mandaría un mensaje que ya no es verdad. Lo viejo se queda
         // anotado para que se vea en el health, pero no vuelve a salir.
-        if (a.enviadoAt.toISOString().slice(0, 10) === hoy) fallaronHoy.push(a);
+        if (fechaRD(a.enviadoAt) === hoy) fallaronHoy.push(a);
       } else if (m.deliveryStatus === 'entregado' || m.deliveryStatus === 'leido') {
         entregados++;
       }

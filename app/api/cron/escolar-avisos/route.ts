@@ -19,6 +19,7 @@ import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
 import { equiposConProcesosVivos } from '@/lib/suscripcion/procesos';
 import { AL_CANCELAR } from '@/lib/config/suscripcion';
 import { llamadaDeCronValida } from '@/lib/seguridad/cron';
+import { hoyRD } from '@/lib/utils/format';
 
 /**
  * Los recordatorios de cobro del módulo escolar.
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
    */
   const pausaMs = Number(process.env.ESCOLAR_AVISOS_PAUSA_MS) || 1100;
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
   const equipos = await equiposConAvisos();
   if (equipos.length === 0) {
     return NextResponse.json({ hoy, dryRun, equipos: 0, avisos: 0, envios: [] });
