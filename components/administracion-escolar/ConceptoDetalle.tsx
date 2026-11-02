@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import {
-  CheckCircle2, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
+  CheckCircle2, Copy, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -280,7 +280,7 @@ function Paso({ n, titulo, extra }: { n: number; titulo: string; extra?: React.R
 }
 
 export function ConceptoDetalle({
-  borrador, setBorrador, guardando, error, onGuardar, onBorrar, calendario, categorias = [],
+  borrador, setBorrador, guardando, error, onGuardar, onBorrar, onDuplicar, calendario, categorias = [],
 }: {
   borrador: Concepto;
   /** Las categorías propias que ya usa el colegio en otros conceptos. */
@@ -290,6 +290,8 @@ export function ConceptoDetalle({
   error: string | null;
   onGuardar: () => void;
   onBorrar: () => void;
+  /** Crear otro concepto con esta configuración y este calendario. */
+  onDuplicar?: () => void;
   /**
    * Buzón del calendario. Lo crea el catálogo, que es quien guarda, para poder
    * mandarle el PUT de las cuotas dentro del mismo «Guardar cambios».
@@ -479,6 +481,13 @@ export function ConceptoDetalle({
                 </div>
               )}
             </div>
+            {onDuplicar && (
+              <Button variant="ghost" size="sm" aria-label="Duplicar concepto" onClick={onDuplicar}
+                title="Duplicar: crea otro concepto con esta configuración y este calendario"
+                className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-zero-600">
+                <Copy className="h-4 w-4" />
+              </Button>
+            )}
             <Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
               className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600">
               <Trash2 className="h-4 w-4" />
