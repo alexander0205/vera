@@ -22,13 +22,14 @@ import {
 } from '@/components/administracion-escolar/PlanCobroSelector';
 import {
   cambioDeMatricula, conConcepto, conPaquete, conPrecio, conceptosDeSeccion, cuentaDe, igualASeccion,
-  seccionConConcepto,
+  seccionConConcepto, type BecaAlumno,
 } from '@/lib/administracion-escolar/matricular-sigerd-plan';
 import {
   Chip, SIN_CURSO, cobraEnSeccion, esMatriculado, esSinCurso, iniciales, norm, rdCorto, titulo, tono,
   type Ajuste, type Alumno, type Grupo, type PasoAlumno, type PlanSeccion,
 } from './_compartido';
 import { RevisarAlumno } from './_revisar-alumno';
+import { BecaAlumnoMatriculado, BecaAlumnoPorMatricular } from './_beca-alumno';
 import { BarraLote, type ConceptoDelLote } from './_barra-lote';
 import { VistaAlumnos } from './_vista-alumnos';
 import { VistaConceptos } from './_vista-conceptos';
@@ -69,7 +70,7 @@ interface Pendientes {
   /** Toda la estructura del año en Zero, para elegirle curso a quien no lo tiene. */
   cursos: CursoZero[];
   /** Alumnos activos de Zero sin matrícula este año que SIGERD no ubica. */
-  sinCurso: Array<{ id: number; nombre: string; sinResponsable: boolean; motivo: string }>;
+  sinCurso: Array<{ id: number; nombre: string; rne: string | null; sinResponsable: boolean; motivo: string }>;
   periodo: { id: number; nombre: string; fechaInicio: string | null } | null;
   anoAcademico: number | null;
   descargadaEl: string | null;
@@ -213,6 +214,20 @@ export default function MatricularDesdeSigerd() {
   const hoy = hoyRD();
   const fecha = fechaElegida ?? datos?.periodo?.fechaInicio ?? hoy;
   const corte = fecha > hoy ? fecha : hoy;
+  /**
+   * «Hasta el mes» del formulario de migración: hasta dónde se anotan pagos
+   * (los meses de después todavía no tocan). Por defecto, el mes en curso.
+   */
+  const [hastaElegido, setHasta] = useState<string | null>(null);
+  const mesesDelAno = useMemo(() => {
+    const [a, m] = fecha.slice(0, 7).split('-').map(Number);
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(Date.UTC(a, m - 1 + i, 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
+  }, [fecha]);
+  const hasta = hastaElegido && mesesDelAno.includes(hastaElegido) ? hastaElegido
+    : mesesDelAno.includes(hoy.slice(0, 7)) ? hoy.slice(0, 7) : mesesDelAno[mesesDelAno.length - 1];
 
   const cargar = useCallback(async () => {
     setErrorCarga(null);
@@ -240,7 +255,7 @@ export default function MatricularDesdeSigerd() {
     const cursos = new Map(datos.cursos.map((c) => [c.cursoId, c]));
     const sinUbicar: Alumno[] = [];
     for (const e of datos.sinCurso) {
-      const alumno: Alumno = { id: e.id, nombre: e.nombre, sinResponsable: e.sinResponsable, origen: 'zero', motivoSinCurso: e.motivo };
+      const alumno: Alumno = { id: e.id, nombre: e.nombre, rne: e.rne, sinResponsable: e.sinResponsable, origen: 'zero', motivoSinCurso: e.motivo };
       const c = cursos.get(ubicados.get(e.id) ?? SIN_CURSO);
       if (!c) { sinUbicar.push(alumno); continue; }
       let g = porCurso.get(c.cursoId);
@@ -480,7 +495,7 @@ export default function MatricularDesdeSigerd() {
         if (esMatriculado(e)) continue;
         const conceptos = conceptosDe(e.id, g.cursoId) ?? [];
         // Con lo de otros grados que se le haya dado en «Ver más».
-        m.set(e.id, cuentaDe([...p.lineas, ...p.otros], conceptos, ajustes.get(e.id)?.precios ?? [], corte));
+        m.set(e.id, cuentaDe([...p.lineas, ...p.otros], conceptos, ajustes.get(e.id)?.precios ?? [], corte, ajustes.get(e.id)?.beca));
       }
     }
     return m;
@@ -609,7 +624,10 @@ export default function MatricularDesdeSigerd() {
     if (lista.length === 0) return;
     setAjustes((m) => {
       const n = new Map(m);
-      for (const { alumnoId, cursoId, ajuste } of lista) {
+      for (const { alumnoId, cursoId, ajuste: nuevo } of lista) {
+        // Sin `beca`, la que ya tuviera: los cambios en lote no la tocan.
+        const beca = nuevo.beca === undefined ? n.get(alumnoId)?.beca : nuevo.beca;
+        const ajuste: Ajuste = { conceptos: nuevo.conceptos, precios: nuevo.precios, ...(beca ? { beca } : {}) };
         if (igualASeccion(guardados.get(alumnoId) ?? deSeccion(cursoId), ajuste)) n.delete(alumnoId); else n.set(alumnoId, ajuste);
       }
       return n;
@@ -717,6 +735,8 @@ export default function MatricularDesdeSigerd() {
     if (v && VISTAS.some((x) => x.id === v)) setVista(v as Vista);
     const en = q.get('en');
     if (en) setAlcance(en);
+    const hastaUrl = q.get('hasta');
+    if (hastaUrl && /^\d{4}-\d{2}$/.test(hastaUrl)) setHasta(hastaUrl);
     const pasoUrl = q.get('paso');
     if (pasoUrl === 'familia' || pasoUrl === 'pagos' || pasoUrl === 'revisar') setPaso(pasoUrl);
     const alumno = Number(q.get('alumno'));
@@ -740,11 +760,12 @@ export default function MatricularDesdeSigerd() {
     poner('en', alcance);
     poner('alumno', editando ? String(editando.alumno.id) : null);
     poner('paso', editando && paso !== 'conceptos' ? paso : null);
+    poner('hasta', hastaElegido);
     const destino = `${window.location.pathname}${q.size ? `?${q}` : ''}`;
     if (destino !== window.location.pathname + window.location.search) {
       window.history.replaceState(window.history.state, '', destino);
     }
-  }, [urlLista, vista, alcance, editando, paso]);
+  }, [urlLista, vista, alcance, editando, paso, hastaElegido]);
 
   /** Cada alumno con su sección entera, para encontrarlo por id. */
   const grupoDe = useMemo(() => {
@@ -819,6 +840,7 @@ export default function MatricularDesdeSigerd() {
               estudianteId: e.id,
               conceptos: conceptosDe(e.id, g.cursoId) ?? [],
               precios: ajustes.get(e.id)?.precios ?? [],
+              beca: ajustes.get(e.id)?.beca ?? null,
             })),
           }),
         });
@@ -1031,9 +1053,11 @@ export default function MatricularDesdeSigerd() {
       periodoId={datos.periodo.id}
       fecha={fecha}
       corte={corte}
+      hasta={hasta}
       inicial={{
         conceptos: conceptosDe(editando.alumno.id, editando.grupo.cursoId) ?? undefined,
         precios: ajustes.get(editando.alumno.id)?.precios ?? [],
+        beca: ajustes.get(editando.alumno.id)?.beca ?? null,
       }}
       // A los ya matriculados solo se les pone precio a lo que se les da de
       // otros grados: lo suyo ya tiene cargos y se cambia en Tarifas.
@@ -1101,13 +1125,27 @@ export default function MatricularDesdeSigerd() {
             <EstadoBorrador b={borrador} hayCambios={!estaVacio(estadoLote)} onDescartar={descartarBorrador} />
           </div>
         </div>
-        <label className="flex flex-col gap-1 self-start lg:self-auto">
-          <span className="text-xs font-medium text-gray-600">Fecha de inscripción</span>
-          <input type="date" value={fecha} max="2100-12-31"
-            onChange={(e) => { if (e.target.value) setFecha(e.target.value); }}
-            className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
-          <span className="text-[11px] text-gray-500">Desde esta fecha se le cobran las cuotas; lo ya vencido se carga hoy</span>
-        </label>
+        <div className="flex flex-col gap-1 self-start lg:self-auto">
+          <div className="flex flex-wrap gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-600">Desde (inscripción)</span>
+              <input type="date" value={fecha} max="2100-12-31"
+                onChange={(e) => { if (e.target.value) setFecha(e.target.value); }}
+                className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-600">Hasta el mes</span>
+              <select value={hasta} onChange={(e) => setHasta(e.target.value)}
+                className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100">
+                {mesesDelAno.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}
+              </select>
+            </label>
+          </div>
+          <span className="max-w-sm text-[11px] text-gray-500">
+            Se trabajarán {mesesDelAno.indexOf(hasta) + 1} mes(es): de {nombreMes(fecha.slice(0, 7))} a {nombreMes(hasta)}.
+            Las cuotas se cobran desde la inscripción; en «Pagos» salen los meses hasta el elegido.
+          </span>
+        </div>
       </div>
 
       {/* Sin tarjetas de resumen: cuántos alumnos, en cuántas secciones y
@@ -1701,7 +1739,7 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
-  alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
+  alumno, grupo, periodoId, fecha, corte, hasta, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
   paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio, formulario, ubicacion,
 }: {
   alumno: Alumno;
@@ -1709,7 +1747,9 @@ function EditorAlumno({
   periodoId: number;
   fecha: string;
   corte: string;
-  inicial: { conceptos?: number[]; precios: Ajuste['precios'] };
+  /** «Hasta el mes» (`AAAA-MM`): los pagos se anotan hasta ahí. */
+  hasta: string;
+  inicial: { conceptos?: number[]; precios: Ajuste['precios']; beca: BecaAlumno | null };
   puedePrecios: boolean;
   conCambios: boolean;
   /** Cambia al cerrar «Conceptos y tarifas»: el selector vuelve a pedir el plan. */
@@ -1755,12 +1795,17 @@ function EditorAlumno({
   const [conceptos, setConceptos] = useState<number[]>([]);
   const [precios, setPrecios] = useState<Ajuste['precios']>(inicial.precios);
   const [inicialFijo] = useState(inicial);
+  // La beca no pasa por el selector: se guarda con lo demás (solo por matricular).
+  const [beca, setBeca] = useState<BecaAlumno | null>(inicial.beca);
+  const becaValida = !beca || (Number.isInteger(beca.porcentaje) && beca.porcentaje >= 1 && beca.porcentaje <= 100);
 
   // Lo que había al abrir, para saber si se tocó algo. El selector avisa del
   // plan (`onPlan`) ANTES de mandar la primera lista de conceptos y precios,
   // así que lo primero que llega después de cargar es el punto de partida.
   const cargadoRef = useRef(false);
-  const base = useRef<{ conceptos: string | null; precios: string | null }>({ conceptos: null, precios: null });
+  const base = useRef<{ conceptos: string | null; precios: string | null; beca: string }>({
+    conceptos: null, precios: null, beca: claveBeca(inicial.beca),
+  });
 
   const alLlegarPlan = useCallback(() => { cargadoRef.current = true; setCargado(true); }, []);
   const alCambiar = useCallback((ids: number[]) => {
@@ -1776,6 +1821,7 @@ function EditorAlumno({
   const sucio = cargado && base.current.conceptos !== null && (
     claveIds(conceptos) !== base.current.conceptos
     || (base.current.precios !== null && clavePrecios(precios) !== base.current.precios)
+    || claveBeca(beca) !== base.current.beca
   );
   useEffect(() => { onSucio?.(sucio); }, [sucio, onSucio]);
   const [pagosVisto, setPagosVisto] = useState(paso === 'pagos');
@@ -1791,8 +1837,8 @@ function EditorAlumno({
    */
   const guardarYSeguir = () => {
     if (sucio) {
-      onGuardar({ conceptos, precios }, true);
-      base.current = { conceptos: claveIds(conceptos), precios: clavePrecios(precios) };
+      onGuardar({ conceptos, precios, beca }, true);
+      base.current = { conceptos: claveIds(conceptos), precios: clavePrecios(precios), beca: claveBeca(beca) };
     }
     onPaso('pagos');
   };
@@ -1816,6 +1862,7 @@ function EditorAlumno({
           <h2 className={`truncate font-semibold text-gray-900 ${formulario ? 'text-xl' : 'text-base'}`}>{alumno.nombre}</h2>
           <p className="text-xs text-gray-500">
             {formulario && `${grupo.servicio}, `}{titulo(grupo)}{grupo.tanda ? ` · ${grupo.tanda}` : ''}
+            {formulario && `. RNE: ${alumno.rne || 'no registrado'}`}
           </p>
           {formulario && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -1905,7 +1952,7 @@ function EditorAlumno({
       {(pasoVisto === 'pagos' || pagosVisto) && (
         <div className={`flex-1 overflow-y-auto px-5 py-4 ${pasoVisto === 'pagos' ? '' : 'hidden'}`}>
           {alumno.matriculaId != null ? (
-            <PagosDelAlumno estudianteId={alumno.id} matriculaId={alumno.matriculaId} />
+            <PagosDelAlumno estudianteId={alumno.id} matriculaId={alumno.matriculaId} periodoId={periodoId} hasta={hasta} />
           ) : (
             <p className="text-sm text-gray-500">
               Sus cargos nacen al matricularlo. Matricúlalo y vuelve aquí para anotar lo que ya pagó.
@@ -1918,7 +1965,7 @@ function EditorAlumno({
       {formulario && pasoVisto === 'revisar' && (
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <RevisarAlumno alumno={alumno} lineas={formulario.lineas} conceptos={conceptos} precios={precios}
-            corte={corte} sinGuardar={sucio} conCambios={conCambios} onPaso={onPaso} />
+            beca={beca} corte={corte} sinGuardar={sucio} conCambios={conCambios} onPaso={onPaso} />
         </div>
       )}
 
@@ -1953,11 +2000,16 @@ function EditorAlumno({
             conOtros
             preciosSoloOtros={esMatriculado(alumno)}
             recargar={recargar}
+            beca={beca && becaValida ? beca.porcentaje : null}
             onPlan={alLlegarPlan}
             onCambio={alCambiar}
             onPrecios={puedePrecios ? alCambiarPrecios : undefined}
           />
         )}
+        {/* La beca cambia lo que se cobra: la pone quien puede tocar Tarifas. */}
+        {puedePrecios && !esSinCurso(grupo) && (esMatriculado(alumno)
+          ? <BecaAlumnoMatriculado matriculaId={alumno.matriculaId!} />
+          : <BecaAlumnoPorMatricular beca={beca} onCambio={setBeca} />)}
         {onAbrirConceptos && (
           <button type="button" onClick={onAbrirConceptos}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:text-zero-800">
@@ -1999,7 +2051,7 @@ function EditorAlumno({
                 <Button className="bg-zero-600 hover:bg-zero-700" onClick={() => onPaso('conceptos')}>Siguiente: cargos del año</Button>
               )}
               {pasoVisto === 'conceptos' && (
-                <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado} onClick={guardarYSeguir}>
+                <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado || !becaValida} onClick={guardarYSeguir}>
                   {sucio ? 'Guardar y seguir: pagos' : 'Siguiente: pagos'}
                 </Button>
               )}
@@ -2031,8 +2083,8 @@ function EditorAlumno({
               Siguiente: cargos del año
             </Button>
           ) : (
-            <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado}
-              onClick={() => onGuardar({ conceptos, precios })}>
+            <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado || !becaValida}
+              onClick={() => onGuardar({ conceptos, precios, beca })}>
               Guardar
             </Button>
           )}
@@ -2142,6 +2194,7 @@ function Kpi({ icono, etiqueta, valor, nota, destacado }: {
   );
 }
 
+const claveBeca = (b: BecaAlumno | null) => (b ? `${b.porcentaje}|${b.motivo ?? ''}` : '');
 const claveIds = (ids: number[]) => [...ids].sort((a, b) => a - b).join(',');
 const clavePrecios = (ps: { conceptoId: number; montoCentavos: number }[]) =>
   ps.map((p) => `${p.conceptoId}:${p.montoCentavos}`).sort().join(',');
@@ -2175,3 +2228,8 @@ function EstadoBorrador({ b, hayCambios, onDescartar }: {
     </p>
   );
 }
+
+const MESES_LARGOS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto',
+  'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+/** «2026-08» → «Agosto 2026». */
+const nombreMes = (aaaamm: string) => `${MESES_LARGOS[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(0, 4)}`;

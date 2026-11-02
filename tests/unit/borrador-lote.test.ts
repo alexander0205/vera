@@ -33,6 +33,16 @@ describe('borrador del lote', () => {
     expect(deBorrador({ version: 1, fuera: [] }, vigentes)!.ubicados.size).toBe(0);
   });
 
+  it('la beca del alumno va y vuelve; una beca fuera de 1–100 se descarta', () => {
+    const b = JSON.parse(JSON.stringify(aBorrador({ ...estado(), ajustes: new Map([
+      [10, { conceptos: [45], precios: [], beca: { porcentaje: 50, motivo: 'hermanos' } }],
+      [12, { conceptos: [45], precios: [], beca: { porcentaje: 150 } }],
+    ]) })));
+    const e = deBorrador(b, vigentes)!;
+    expect(e.ajustes.get(10)?.beca).toEqual({ porcentaje: 50, motivo: 'hermanos' });
+    expect(e.ajustes.get(12)?.beca).toBeUndefined();
+  });
+
   it('descarta alumnos y secciones que ya no están', () => {
     const b = aBorrador(estado());
     const e = deBorrador(b, { alumnos: new Set([99]), secciones: new Set([6]) })!;

@@ -73,7 +73,10 @@ export function deBorrador(datos: unknown, vigentes: { alumnos: Set<number>; sec
         .map((p) => ({ conceptoId: Number(p?.conceptoId), montoCentavos: Number(p?.montoCentavos) }))
         .filter((p) => Number.isInteger(p.conceptoId) && Number.isFinite(p.montoCentavos) && p.montoCentavos >= 0)
       : [];
-    ajustes.set(id, { conceptos: enteros(a.conceptos), precios });
+    const pct = Number((a as AjusteAlumno).beca?.porcentaje);
+    const beca = Number.isFinite(pct) && pct > 0 && pct <= 100
+      ? { porcentaje: pct, motivo: typeof a.beca?.motivo === 'string' ? a.beca.motivo : null } : undefined;
+    ajustes.set(id, { conceptos: enteros(a.conceptos), precios, ...(beca ? { beca } : {}) });
   }
 
   const cambiadosSeccion = new Map<number, Set<number>>();

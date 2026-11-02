@@ -49,12 +49,19 @@ export async function POST(req: NextRequest) {
             conceptoId: Number(p?.conceptoId), montoCentavos: Number(p?.montoCentavos),
           })).filter((p) => Number.isInteger(p.conceptoId) && Number.isFinite(p.montoCentavos))
         : [],
+      beca: (() => {
+        const b = a?.beca as { porcentaje?: unknown; motivo?: unknown } | null | undefined;
+        const pct = Math.round(Number(b?.porcentaje));
+        return b && pct >= 1 && pct <= 100
+          ? { porcentaje: pct, motivo: typeof b.motivo === 'string' ? b.motivo.slice(0, 200) : null } : null;
+      })(),
     }))
     .filter((a) => Number.isInteger(a.estudianteId) && a.estudianteId > 0);
 
-  // Un precio propio es una tarifa: lo pone quien puede tocar Tarifas, igual
-  // que desde «Nueva matrícula» (que lo guarda por `POST /concepto-precios`).
-  if (alumnos.some((a) => a.precios.length > 0)) {
+  // Un precio propio es una tarifa, y la beca cambia lo que se cobra: lo pone
+  // quien puede tocar Tarifas, igual que desde «Nueva matrícula» (que guarda
+  // el precio por `POST /concepto-precios`).
+  if (alumnos.some((a) => a.precios.length > 0 || a.beca)) {
     const tarifas = await requireModuleAndPermission(
       'escolar', 'administracion-escolar:configurar', { escritura: true },
     );

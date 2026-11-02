@@ -12,6 +12,8 @@ export { cobraEnSeccion } from '@/lib/administracion-escolar/matricular-sigerd-p
 
 export interface Alumno {
   id: number; nombre: string; sinResponsable: boolean;
+  /** Su RNE, si lo tiene: lo que identifica al alumno en SIGERD. */
+  rne?: string | null;
   /** Ya tiene matrícula activa este año: sale para cambiarle lo que lleva. */
   matriculaId?: number;
   /** Lo que su matrícula cobra hoy (solo si ya está matriculado). */

@@ -46,6 +46,8 @@ export interface GrupoSigerd {
   estudiantes: Array<{
     id: number;
     nombre: string;
+    /** Su RNE (Registro Nacional del Estudiante), si lo tiene. */
+    rne: string | null;
     /**
      * Sin «facturar a»: sus cargos nacen, pero la facturación automática los
      * salta y los avisos no tienen a quién llegar. Se avisa antes de matricular.
@@ -85,6 +87,7 @@ export interface CursoZero {
 export interface SinCursoZero {
   id: number;
   nombre: string;
+  rne: string | null;
   sinResponsable: boolean;
   /** Por qué no tiene curso: «No está en SIGERD», o dónde lo tiene el portal. */
   motivo: string;
@@ -283,7 +286,7 @@ export async function pendientesDesdeSigerd(
       motivoSinLugar.set(est.id, `En SIGERD: ${ubicacion} (sin enlazar a una sección de Zero)`);
       continue;
     }
-    grupoDe(curso).estudiantes.push({ id: est.id, nombre, sinResponsable: est.facturarA == null, origen: 'sigerd' });
+    grupoDe(curso).estudiantes.push({ id: est.id, nombre, rne: est.rne, sinResponsable: est.facturarA == null, origen: 'sigerd' });
   }
 
   // Lo que tiene Zero y SIGERD no ubica: activos sin matrícula este año. Se
@@ -293,6 +296,7 @@ export async function pendientesDesdeSigerd(
     .map((e) => ({
       id: e.id,
       nombre: `${e.nombres} ${e.apellidos}`.trim(),
+      rne: e.rne,
       sinResponsable: e.facturarA == null,
       motivo: motivoSinLugar.get(e.id) ?? (arbol ? 'No está en la descarga de SIGERD' : 'Sin datos de SIGERD'),
     }))
@@ -308,6 +312,7 @@ export async function pendientesDesdeSigerd(
       conceptosIds: adminEscolarMatriculas.conceptosIds,
       nombres: adminEscolarEstudiantes.nombres,
       apellidos: adminEscolarEstudiantes.apellidos,
+      rne: adminEscolarEstudiantes.codigoRne,
       facturarA: adminEscolarEstudiantes.facturarAClientId,
     })
       .from(adminEscolarMatriculas)
@@ -325,6 +330,7 @@ export async function pendientesDesdeSigerd(
       grupoDe(curso).estudiantes.push({
         id: m.estudianteId,
         nombre: `${m.nombres} ${m.apellidos}`.trim(),
+        rne: m.rne,
         sinResponsable: m.facturarA == null,
         matriculaId: m.matriculaId,
         conceptos: (m.conceptosIds ?? []).map(Number),
@@ -383,6 +389,8 @@ export interface AlumnoDesdeSigerd {
    * Queda como su tarifa del año: la usan también los cargos de cada mes.
    */
   precios: Array<{ conceptoId: number; montoCentavos: number }>;
+  /** Su beca en porcentaje (1–100), sobre lo que admite beca. */
+  beca?: { porcentaje: number; motivo?: string | null } | null;
 }
 
 export interface ResultadoSeccionSigerd {
@@ -451,7 +459,7 @@ export async function matricularSeccionDesdeSigerd(teamId: number, entrada: {
       cursoId,
       estudianteIds: alumnos.map((a) => a.estudianteId),
       conceptos: 'todos',
-      porEstudiante: new Map(alumnos.map((a) => [a.estudianteId, { conceptos: a.conceptos }])),
+      porEstudiante: new Map(alumnos.map((a) => [a.estudianteId, { conceptos: a.conceptos, beca: a.beca ?? null }])),
       fechaInscripcion: fecha,
       // Con la inscripción al inicio del año, lo ya vencido (agosto, septiembre…)
       // se carga ahora como pendiente; lo que viene lo crea el devengo.

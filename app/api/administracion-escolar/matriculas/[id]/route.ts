@@ -44,6 +44,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       notas: adminEscolarMatriculas.notas,
       conceptosIds: adminEscolarMatriculas.conceptosIds,
       conceptoMensualidadId: adminEscolarMatriculas.conceptoMensualidadId,
+      // Para volver a enseñarla donde se edita (Matricular desde SIGERD).
+      becaTipo: adminEscolarMatriculas.becaTipo,
+      becaValor: adminEscolarMatriculas.becaValor,
+      becaMotivo: adminEscolarMatriculas.becaMotivo,
     })
     .from(adminEscolarMatriculas)
     .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))

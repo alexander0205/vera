@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Ban, Check, ChevronDown, Link2, Loader2, Wallet } from 'lucide-react';
+import { Ban, Check, ChevronDown, Link2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { fmtDOP, hoyRD, parseDOPaCentavos } from '@/lib/utils/format';
@@ -15,18 +15,21 @@ import { VincularFacturaDialog } from './VincularFacturaDialog';
  * Lo que la familia ya pagó, mes a mes, de un alumno que ya tiene matrícula:
  * el paso «Pagos» del formulario de migración.
  *
- * Por concepto, cada mes con su monto y cómo está. A un mes que nadie ha
- * facturado se le puede:
- *  - anotar lo que pagó: se escribe cuánto, y el estado sale solo (pagó todo o
- *    abono); con su fecha, su forma de pago y, si lo tiene, el NCF —se elige el
- *    prefijo y se teclea solo el final—. Debajo es una factura histórica con su
- *    pago (`/cargos/[id]/pago-anterior`);
+ * Por concepto, cada mes con su monto y cómo está, como en el formulario de
+ * migración. A un mes que nadie ha facturado se le indica:
+ *  - «Pagó todo» o «Abonó»: con su fecha, su forma de pago y, si lo tiene, el
+ *    NCF —se elige el prefijo y se teclea solo el final—. Debajo es una factura
+ *    histórica con su pago (`/cargos/[id]/pago-anterior`);
+ *  - «Debe todo»: no se anota nada, el cargo ya está debiendo; solo queda la
+ *    marca de que se revisó (compartida, en el borrador del año);
  *  - vincular una factura que ya está en Zero (la de Alegra, por ejemplo);
  *  - no cobrarlo (entró en septiembre: agosto no le toca). Es anular el cargo.
  *
- * Lo que no pagó no se anota: ya está debiendo. La mora la pone el sistema
- * sobre la factura vencida y aquí solo se enseña.
+ * «Pagó todo hasta [mes]» anota de una vez los meses completos de un concepto,
+ * con la forma de pago de siempre y NCF seguidos. Arriba, el contador de meses
+ * indicados; `hasta` deja fuera los meses posteriores.
  *
+ * La mora la pone el sistema sobre la factura vencida y aquí solo se enseña.
  * Cada concepto se cierra con «Completar» cuando se terminó de revisar.
  */
 
@@ -59,45 +62,103 @@ function estadoDe(c: CargoFicha): { etiqueta: string; tono: string } {
   return { etiqueta: c.ecfDocumentId ? 'Facturado, debe' : 'Debe', tono: 'bg-orange-50 text-orange-800' };
 }
 
-export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: number; matriculaId: number }) {
+/** Preferencias de quien migra, en su navegador: cómo suelen venir los pagos. */
+const CLAVE_NCF_DEFECTO = 'zero-migracion-ncf-defecto';
+const CLAVE_FORMA = 'zero-migracion-forma';
+function leerPref(clave: string): string | null {
+  try { return localStorage.getItem(clave); } catch { return null; }
+}
+function guardarPref(clave: string, valor: string) {
+  try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento: no se recuerda */ }
+}
+
+/** Un mes con algo dicho: pagado (todo o en parte), facturado, no se cobra, o «debe todo». */
+const indicado = (c: CargoFicha, debe: Set<number>) =>
+  c.estado === 'anulado' || c.ecfDocumentId != null || c.saldoCentavos < c.montoCentavos || debe.has(c.id);
+/** A un mes que nadie ha facturado ni pagado se le puede anotar algo. */
+const anotable = (c: CargoFicha) => c.estado !== 'anulado' && c.ecfDocumentId == null && c.saldoCentavos === c.montoCentavos;
+const claveMes = (c: CargoFicha) => (c.anio ?? 0) * 100 + (c.mes ?? 0);
+
+export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, onIndicados }: {
+  estudianteId: number;
+  matriculaId: number;
+  /** Con el año, «Debe todo» se guarda (compartido) y cuenta como mes indicado. */
+  periodoId?: number;
+  /** «Hasta el mes» de la migración (`AAAA-MM`): los meses de después no salen. */
+  hasta?: string;
+  /** Cuántos meses ya se indicaron de cuántos: el contador del formulario. */
+  onIndicados?: (hechos: number, total: number) => void;
+}) {
   const [cargos, setCargos] = useState<CargoFicha[] | null>(null);
   const [clienteId, setClienteId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cerrados, setCerrados] = useState<Set<number>>(new Set());
-  const [anotando, setAnotando] = useState<number | null>(null);
+  const [anotando, setAnotando] = useState<{ id: number; abono: boolean } | null>(null);
   const [vinculando, setVinculando] = useState<CargoFicha | null>(null);
   const [noCobrar, setNoCobrar] = useState<CargoFicha | null>(null);
   const [anulando, setAnulando] = useState(false);
+  const [debe, setDebe] = useState<Set<number>>(new Set());
+  // Si ya se anotó algún NCF, lo normal es que los pagos lo lleven.
+  const [conNcf, setConNcf] = useState(() => (leerPref(CLAVE_NCF_DEFECTO) ?? (leerUltimoNcf() ? '1' : '0')) === '1');
+  const [forma, setForma] = useState(() => leerPref(CLAVE_FORMA) ?? 'efectivo');
+  const [hastaPago, setHastaPago] = useState<{ conceptoId: number; nombre: string; meses: CargoFicha[] } | null>(null);
+  const [pagandoLote, setPagandoLote] = useState(false);
 
   const cargar = useCallback(async () => {
     setError(null);
     try {
-      const [c, e] = await Promise.all([
+      const [c, e, d] = await Promise.all([
         fetch(`/api/administracion-escolar/estudiantes/${estudianteId}/cargos`).then((r) => r.json()),
         fetch(`/api/administracion-escolar/estudiantes/${estudianteId}`).then((r) => r.json()),
+        periodoId
+          ? fetch(`/api/administracion-escolar/matriculas/desde-sigerd/completados?periodoId=${periodoId}`)
+            .then((r) => (r.ok ? r.json() : { debe: [] }))
+          : Promise.resolve({ debe: [] }),
       ]);
       setCargos(((c.cargos ?? []) as CargoFicha[]).filter((x) => x.matriculaId === matriculaId));
       setClienteId(e.estudiante?.responsable?.clientId ?? null);
+      setDebe(new Set((d.debe ?? []) as number[]));
     } catch {
       setError('No se pudieron leer los cargos del alumno');
     }
-  }, [estudianteId, matriculaId]);
+  }, [estudianteId, matriculaId, periodoId]);
   useEffect(() => { void cargar(); }, [cargar]);
+
+  // Solo los meses que se trabajan: hasta «Hasta el mes». El pago único sale siempre.
+  const visibles = useMemo(() => {
+    const tope = hasta ? Number(hasta.replace('-', '')) : null;
+    return (cargos ?? []).filter((c) => tope == null || c.mes == null || claveMes(c) <= tope);
+  }, [cargos, hasta]);
 
   // Por concepto, cada uno con sus meses en orden. Lo de mora no es un concepto
   // del plan: se enseña en el mes del que salió.
   const porConcepto = useMemo(() => {
     const m = new Map<number, { nombre: string; cargos: CargoFicha[] }>();
-    for (const c of cargos ?? []) {
+    for (const c of visibles) {
       const g = m.get(c.conceptoId) ?? { nombre: c.concepto, cargos: [] };
       g.cargos.push(c);
       m.set(c.conceptoId, g);
     }
-    for (const g of m.values()) {
-      g.cargos.sort((a, b) => ((a.anio ?? 0) - (b.anio ?? 0)) || ((a.mes ?? 0) - (b.mes ?? 0)) || a.id - b.id);
-    }
+    for (const g of m.values()) g.cargos.sort((a, b) => claveMes(a) - claveMes(b) || a.id - b.id);
     return [...m.entries()];
-  }, [cargos]);
+  }, [visibles]);
+
+  const hechos = visibles.filter((c) => indicado(c, debe)).length;
+  useEffect(() => { if (cargos) onIndicados?.(hechos, visibles.length); }, [cargos, hechos, visibles.length, onIndicados]);
+
+  async function marcarDebe(c: CargoFicha) {
+    if (!periodoId) return;
+    const si = !debe.has(c.id);
+    setDebe((s) => { const n = new Set(s); if (si) n.add(c.id); else n.delete(c.id); return n; });
+    const r = await fetch('/api/administracion-escolar/matriculas/desde-sigerd/completados', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ periodoId, cargoId: c.id, debe: si }),
+    }).catch(() => null);
+    if (!r?.ok) {
+      setDebe((s) => { const n = new Set(s); if (si) n.delete(c.id); else n.add(c.id); return n; });
+      setError('No se pudo guardar «Debe todo»');
+    }
+  }
 
   async function anular() {
     if (!noCobrar) return;
@@ -116,21 +177,72 @@ export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: nu
     }
   }
 
+  /**
+   * «Pagó todo hasta»: cada mes, completo, con su fecha de vencimiento (o hoy
+   * si aún no vence), la forma de pago de arriba y, si los pagos llevan NCF,
+   * los que siguen al último anotado. Se para en el primero que falle.
+   */
+  async function pagarHasta() {
+    if (!hastaPago) return;
+    setPagandoLote(true); setError(null);
+    let ncf = conNcf ? siguienteNcfPropuesto() : null;
+    try {
+      for (const c of hastaPago.meses) {
+        const fecha = c.fechaVencimiento && c.fechaVencimiento < hoyRD() ? c.fechaVencimiento : hoyRD();
+        const r = await fetch(`/api/administracion-escolar/cargos/${c.id}/pago-anterior`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pagadoCentavos: c.montoCentavos, fechaPago: fecha, metodo: forma, ncf }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(`${mesDe(c)}: ${d.error ?? 'no se pudo anotar el pago'}`);
+        if (ncf) { guardarUltimoNcf(ncf); ncf = siguienteNcf(ncf); }
+      }
+      setHastaPago(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron anotar los pagos');
+      setHastaPago(null);
+    } finally {
+      setPagandoLote(false);
+      await cargar();
+    }
+  }
+
   if (!cargos) {
     return error
       ? <p className="text-sm text-red-600">{error}</p>
       : <p className="flex items-center gap-2 py-4 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" />Cargando sus cargos…</p>;
   }
-  if (cargos.length === 0) {
-    return <p className="py-4 text-sm text-gray-500">Todavía no tiene cargos este año: no hay pagos que anotar.</p>;
+  if (visibles.length === 0) {
+    return <p className="py-4 text-sm text-gray-500">No tiene cargos en los meses que se trabajan: no hay pagos que anotar.</p>;
   }
 
+  const propuestoLote = conNcf ? siguienteNcfPropuesto() : null;
   return (
     <div className="space-y-3">
-      <p className="text-xs text-gray-500">
-        Anota lo que la familia ya pagó antes de Zero. Lo que no pagó no se toca: ya sale debiendo.
-        {!clienteId && <span className="font-medium text-amber-800"> Falta el responsable de pago: ponlo en «Familia» para poder anotar.</span>}
-      </p>
+      <div>
+        <h3 className="text-base font-semibold text-gray-900">Pagos y moras, mes a mes</h3>
+        <p className="text-xs text-gray-500">
+          Por cada mes indique si <b>pagó todo</b>, si <b>abonó</b> una parte o si <b>debe todo</b>. Cuando pagó, anote
+          cuánto, la fecha, la forma de pago y el NCF. Lo que debe ya sale debiendo; la mora la pone el sistema.
+        </p>
+        {!clienteId && <p className="mt-1 text-xs font-medium text-amber-800">Falta el responsable de pago: ponlo en «Familia» para poder anotar.</p>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+        <label className="inline-flex items-center gap-1.5">
+          <input type="checkbox" checked={conNcf}
+            onChange={(e) => { setConNcf(e.target.checked); guardarPref(CLAVE_NCF_DEFECTO, e.target.checked ? '1' : '0'); }} />
+          Los pagos suelen llevar NCF
+        </label>
+        <label className="inline-flex items-center gap-1.5">
+          Forma de pago de siempre
+          <select value={forma} onChange={(e) => { setForma(e.target.value); guardarPref(CLAVE_FORMA, e.target.value); }}
+            className="h-7 rounded-md border border-gray-300 bg-white px-1.5 text-xs">
+            {METODOS_PAGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </label>
+        <span className="ml-auto"><b className="tabular-nums">{hechos} de {visibles.length}</b> meses indicados</span>
+      </div>
       {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
       {porConcepto.map(([conceptoId, g]) => {
@@ -138,12 +250,13 @@ export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: nu
         const vivos = g.cargos.filter((c) => c.estado !== 'anulado');
         const pagado = vivos.reduce((s, c) => s + (c.montoCentavos - Math.max(0, c.saldoCentavos)), 0);
         const total = vivos.reduce((s, c) => s + c.montoCentavos, 0);
+        const porPagar = g.cargos.filter(anotable);
         const alternar = () => setCerrados((s) => {
           const n = new Set(s); if (n.has(conceptoId)) n.delete(conceptoId); else n.add(conceptoId); return n;
         });
         return (
           <section key={conceptoId} className={`rounded-lg border ${cerrado ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200'}`}>
-            <header className="flex items-center gap-2 px-3 py-2">
+            <header className="flex flex-wrap items-center gap-2 px-3 py-2">
               <button type="button" onClick={alternar} aria-expanded={!cerrado}
                 className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
                 <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${cerrado ? '-rotate-90' : ''}`} />
@@ -153,6 +266,20 @@ export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: nu
               <span className="shrink-0 text-xs tabular-nums text-gray-500">
                 pagado {fmtDOP(pagado)} de {fmtDOP(total)}
               </span>
+              {!cerrado && porPagar.length > 1 && clienteId && (
+                <label className="inline-flex shrink-0 items-center gap-1 text-xs text-gray-600">
+                  Pagó todo hasta
+                  <select value="" aria-label={`Pagó todo hasta, ${g.nombre}`}
+                    onChange={(e) => {
+                      const tope = Number(e.target.value);
+                      if (tope) setHastaPago({ conceptoId, nombre: g.nombre, meses: porPagar.filter((c) => claveMes(c) <= tope) });
+                    }}
+                    className="h-7 rounded-md border border-gray-300 bg-white px-1.5 text-xs">
+                    <option value="">elegir…</option>
+                    {porPagar.map((c) => <option key={c.id} value={claveMes(c)}>{mesDe(c)}</option>)}
+                  </select>
+                </label>
+              )}
               {!cerrado && (
                 <Button variant="outline" size="sm" onClick={alternar}>Completar</Button>
               )}
@@ -162,17 +289,20 @@ export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: nu
                 <tbody>
                   {g.cargos.map((c) => {
                     const est = estadoDe(c);
-                    const anotable = c.estado !== 'anulado' && c.ecfDocumentId == null && c.saldoCentavos === c.montoCentavos;
+                    const marcadoDebe = debe.has(c.id) && anotable(c);
+                    const seg = 'px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40';
                     return (
                       <Fragment key={c.id}>
                         <tr className="border-b border-gray-50 align-top last:border-0">
                           <td className="py-2 pl-3 pr-2">
-                            <span className={c.estado === 'anulado' ? 'text-gray-400 line-through' : 'text-gray-900'}>{mesDe(c)}</span>
+                            <span className={c.estado === 'anulado' ? 'text-gray-400 line-through' : 'font-medium text-gray-900'}>{mesDe(c)}</span>
                             {c.facturaEncf && <span className="block text-[11px] text-gray-400">Factura {c.facturaEncf}</span>}
                           </td>
                           <td className="px-2 py-2 text-right tabular-nums text-gray-700">{fmtDOP(c.montoCentavos)}</td>
                           <td className="px-2 py-2">
-                            <span className={`rounded px-1.5 py-0.5 text-[11px] ${est.tono}`}>{est.etiqueta}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[11px] ${marcadoDebe ? 'bg-orange-50 text-orange-800' : est.tono}`}>
+                              {marcadoDebe ? 'Debe todo' : est.etiqueta}
+                            </span>
                             {c.moraSaldoCentavos > 0 && (
                               <span className="ml-1 rounded bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700">
                                 mora {fmtDOP(c.moraSaldoCentavos)}
@@ -180,29 +310,46 @@ export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: nu
                             )}
                           </td>
                           <td className="py-1.5 pr-2 text-right">
-                            {anotable && anotando !== c.id && (
-                              <div className="flex justify-end gap-1">
-                                <Button variant="outline" size="sm" disabled={!clienteId} onClick={() => setAnotando(c.id)}>
-                                  <Wallet className="mr-1 h-3.5 w-3.5" />Pagó
-                                </Button>
+                            {anotable(c) && (
+                              <div className="flex flex-wrap justify-end gap-1">
+                                <div role="group" aria-label={`Qué pasó con ${mesDe(c)}`}
+                                  className="inline-flex overflow-hidden rounded-md border border-gray-200">
+                                  <button type="button" disabled={!clienteId} aria-pressed={anotando?.id === c.id && !anotando.abono}
+                                    onClick={() => setAnotando({ id: c.id, abono: false })}
+                                    className={`${seg} ${anotando?.id === c.id && !anotando.abono ? 'bg-emerald-600 text-white' : 'text-gray-700 hover:bg-emerald-50'}`}>
+                                    Pagó todo
+                                  </button>
+                                  <button type="button" disabled={!clienteId} aria-pressed={anotando?.id === c.id && anotando.abono}
+                                    onClick={() => setAnotando({ id: c.id, abono: true })}
+                                    className={`${seg} border-l border-gray-200 ${anotando?.id === c.id && anotando.abono ? 'bg-amber-500 text-white' : 'text-gray-700 hover:bg-amber-50'}`}>
+                                    Abonó
+                                  </button>
+                                  <button type="button" disabled={!periodoId} aria-pressed={marcadoDebe}
+                                    title={periodoId ? 'No pagó nada: ya sale debiendo' : undefined}
+                                    onClick={() => { setAnotando(null); void marcarDebe(c); }}
+                                    className={`${seg} border-l border-gray-200 ${marcadoDebe ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-orange-50'}`}>
+                                    Debe todo
+                                  </button>
+                                </div>
                                 <button type="button" title="Vincular una factura que ya está en Zero" aria-label="Vincular factura"
                                   disabled={!clienteId} onClick={() => setVinculando(c)}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">
+                                  className="inline-flex h-[26px] w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">
                                   <Link2 className="h-3.5 w-3.5" />
                                 </button>
                                 <button type="button" title="No cobrar este mes" aria-label="No cobrar este mes"
                                   onClick={() => setNoCobrar(c)}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600">
+                                  className="inline-flex h-[26px] w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600">
                                   <Ban className="h-3.5 w-3.5" />
                                 </button>
                               </div>
                             )}
                           </td>
                         </tr>
-                        {anotando === c.id && (
+                        {anotando?.id === c.id && (
                           <tr className="border-b border-gray-100 bg-zero-50/40">
                             <td colSpan={4} className="px-3 pb-3 pt-1">
-                              <AnotarPago cargo={c} onCancelar={() => setAnotando(null)}
+                              <AnotarPago key={`${c.id}-${anotando.abono}`} cargo={c} abono={anotando.abono}
+                                conNcf={conNcf} forma={forma} onCancelar={() => setAnotando(null)}
                                 onHecho={async () => { setAnotando(null); await cargar(); }} />
                             </td>
                           </tr>
@@ -238,20 +385,46 @@ export function PagosDelAlumno({ estudianteId, matriculaId }: { estudianteId: nu
         loading={anulando}
         onConfirm={() => void anular()}
       />
+      <ConfirmDialog
+        open={!!hastaPago}
+        onOpenChange={(o) => { if (!o && !pagandoLote) setHastaPago(null); }}
+        title={hastaPago ? `¿Pagó todo ${hastaPago.nombre} hasta ${mesDe(hastaPago.meses[hastaPago.meses.length - 1])}?` : ''}
+        description={hastaPago
+          ? `Se anotan ${hastaPago.meses.length} mes(es) completos por ${fmtDOP(hastaPago.meses.reduce((s, c) => s + c.montoCentavos, 0))}, `
+            + `cada uno con su fecha de vencimiento y pagados en ${METODOS_PAGO.find((m) => m.value === forma)?.label ?? forma}. `
+            + (propuestoLote ? `Con NCF seguidos desde ${propuestoLote}.` : 'Sin NCF.')
+          : ''}
+        confirmLabel="Sí, anotar"
+        loading={pagandoLote}
+        onConfirm={() => void pagarHasta()}
+      />
     </div>
   );
 }
 
-/** El formulario de un mes: cuánto pagó, cuándo, cómo y con qué comprobante. */
-function AnotarPago({ cargo, onCancelar, onHecho }: {
-  cargo: CargoFicha; onCancelar: () => void; onHecho: () => Promise<void>;
-}) {
+/** El NCF que toca: el que sigue al último anotado en este navegador. */
+function siguienteNcfPropuesto(): string | null {
   const ultimo = leerUltimoNcf();
-  const propuesto = ultimo ? siguienteNcf(ultimo) : null;
-  const [monto, setMonto] = useState((cargo.montoCentavos / 100).toFixed(2));
+  return ultimo ? siguienteNcf(ultimo) : null;
+}
+
+/** El formulario de un mes: cuánto pagó, cuándo, cómo y con qué comprobante. */
+function AnotarPago({ cargo, abono, conNcf, forma, onCancelar, onHecho }: {
+  cargo: CargoFicha;
+  /** «Abonó»: se escribe cuánto; «Pagó todo» ya trae el mes entero. */
+  abono: boolean;
+  /** Los pagos suelen llevar NCF: viene propuesto el que sigue al último. */
+  conNcf: boolean;
+  /** La forma de pago de siempre. */
+  forma: string;
+  onCancelar: () => void; onHecho: () => Promise<void>;
+}) {
+  const propuesto = conNcf ? siguienteNcfPropuesto() : null;
+  const [monto, setMonto] = useState(abono ? '' : (cargo.montoCentavos / 100).toFixed(2));
   const [fecha, setFecha] = useState(cargo.fechaVencimiento && cargo.fechaVencimiento < hoyRD() ? cargo.fechaVencimiento : hoyRD());
-  const [metodo, setMetodo] = useState('efectivo');
-  const [prefijo, setPrefijo] = useState<string>(propuesto?.slice(0, 3) ?? '');
+  const [metodo, setMetodo] = useState(forma);
+  // Con NCF y ninguno anotado todavía, B02 (consumidor final) es lo más común.
+  const [prefijo, setPrefijo] = useState<string>(propuesto?.slice(0, 3) ?? (conNcf ? 'B02' : ''));
   const [cola, setCola] = useState(propuesto ? String(Number(propuesto.slice(3))) : '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);

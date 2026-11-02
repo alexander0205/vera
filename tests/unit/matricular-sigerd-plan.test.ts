@@ -83,6 +83,24 @@ describe('cuánto se le carga a un alumno', () => {
     expect(cuentaDe([tarde], [2], [], CORTE)).toEqual({ hoy: 1_500_000, cargos: 1, anio: 8 * 1_500_000 });
   });
 
+  it('con beca del 50 %: solo en lo que admite beca, y sobre su precio propio si lo tiene', () => {
+    const conBecaTalleres = PLAN.map((l) => (l.conceptoId === 2 ? { ...l, admiteBeca: true } : l));
+    // Avance entero; talleres a la mitad.
+    expect(cuentaDe(conBecaTalleres, [1, 2], [], CORTE, { porcentaje: 50 })).toEqual({
+      hoy: 3_000_000 + 3 * 750_000, cargos: 4, anio: 3_000_000 + 10 * 750_000,
+    });
+    // Precio propio de RD$12,000 y la beca encima: RD$6,000.
+    const c = cuentaDe(conBecaTalleres, [2], [{ conceptoId: 2, montoCentavos: 1_200_000 }], CORTE, { porcentaje: 50 });
+    expect(c.hoy).toBe(3 * 600_000);
+    // Sin beca, o con beca y nada que la admita, no cambia nada.
+    expect(cuentaDe(PLAN, [1, 2], [], CORTE, { porcentaje: 50 })).toEqual(cuentaDe(PLAN, [1, 2], [], CORTE));
+  });
+
+  it('con beca ya no es «igual a su sección»', () => {
+    expect(igualASeccion([1, 2], { conceptos: [1, 2], precios: [], beca: { porcentaje: 25 } })).toBe(false);
+    expect(igualASeccion([1, 2], { conceptos: [1, 2], precios: [], beca: null })).toBe(true);
+  });
+
   it('la suma de la vista por concepto es la cuenta del alumno', () => {
     const conceptos = [1, 2, 3, 4, 5];
     const precios = [{ conceptoId: 3, montoCentavos: 400_000 }, { conceptoId: 2, montoCentavos: 1_200_000 }];
@@ -156,6 +174,15 @@ describe('dar o quitar conceptos', () => {
     const de = seccionConConcepto(PLAN, r.cambiados, new Map([[10, r.ajustes.get(10)!]]), 3, false)!;
     expect([...de.cambiados]).toEqual([]);
     expect(de.ajustes.get(10)).toEqual({ conceptos: [1, 2], precios: [{ conceptoId: 2, montoCentavos: 1_200_000 }] });
+  });
+
+  it('cambiar lo de la sección no le quita la beca a nadie', () => {
+    const ajustes = new Map<number, AjusteAlumno>([
+      [12, { conceptos: [1, 2], precios: [], beca: { porcentaje: 50, motivo: 'hermanos' } }],
+    ]);
+    const r = seccionConConcepto(PLAN, undefined, ajustes, 3, true)!;
+    // Con almuerzo es igual a la sección, pero la beca lo mantiene aparte.
+    expect(r.ajustes.get(12)).toEqual({ conceptos: [1, 2, 3], precios: [], beca: { porcentaje: 50, motivo: 'hermanos' } });
   });
 
   it('un concepto sin tarifa en la sección no se toca', () => {

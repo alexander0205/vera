@@ -244,6 +244,7 @@ function FilaAlumno({ e, activo, hecho, excluido, sinCurso, onAbrir, onIncluir }
         className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full border-2 ${hecho ? 'border-zero-600 bg-zero-600' : 'border-gray-300'}`} />
       <button type="button" onClick={onAbrir} aria-pressed={activo} className="min-w-0 flex-1 text-left">
         <span className={`block text-sm leading-snug ${excluido ? 'text-gray-400 line-through' : 'font-medium text-gray-900'}`}>{e.nombre}</span>
+        <span className="block font-mono text-[10px] text-gray-400">{e.rne || 'Sin RNE'}</span>
         <span className="block text-[11px] text-gray-500">
           {e.origen && (
             // De dónde sale su sección: el portal, o Zero (su matrícula o el curso elegido aquí).

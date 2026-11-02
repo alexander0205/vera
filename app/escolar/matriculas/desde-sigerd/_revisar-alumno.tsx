@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import type { LineaPlan } from '@/components/administracion-escolar/PlanCobroSelector';
 import type { TutorVinculo } from '@/components/administracion-escolar/TutoresPanel';
-import { cuentaDe } from '@/lib/administracion-escolar/matricular-sigerd-plan';
+import { cuentaDe, type BecaAlumno } from '@/lib/administracion-escolar/matricular-sigerd-plan';
 import { fmtDOP } from '@/lib/utils/format';
 import { esMatriculado, precioDeLinea, type Ajuste, type Alumno, type PasoAlumno } from './_compartido';
 
@@ -21,12 +21,14 @@ interface Cargo {
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-export function RevisarAlumno({ alumno, lineas, conceptos, precios, corte, sinGuardar, conCambios, onPaso }: {
+export function RevisarAlumno({ alumno, lineas, conceptos, precios, beca, corte, sinGuardar, conCambios, onPaso }: {
   alumno: Alumno;
   /** Lo que cobra su sección y lo de otros grados («Ver más»); `null` mientras llega. */
   lineas: LineaPlan[] | null;
   conceptos: number[];
   precios: Ajuste['precios'];
+  /** La beca que se le pone al matricularlo (la del matriculado está en su matrícula). */
+  beca?: BecaAlumno | null;
   corte: string;
   /** En «Cargos del año» hay cambios sin «Guardar». */
   sinGuardar: boolean;
@@ -61,7 +63,7 @@ export function RevisarAlumno({ alumno, lineas, conceptos, precios, corte, sinGu
     return (lineas ?? []).filter((l) => conceptos.includes(l.conceptoId))
       .map((l) => ({ l, propio: propios.get(l.conceptoId) }));
   }, [lineas, conceptos, precios]);
-  const cuenta = lineas && !esMatriculado(alumno) ? cuentaDe(lineas, conceptos, precios, corte) : null;
+  const cuenta = lineas && !esMatriculado(alumno) ? cuentaDe(lineas, conceptos, precios, corte, beca) : null;
 
   const pagos = useMemo(() => {
     if (!cargos) return null;
@@ -143,6 +145,11 @@ export function RevisarAlumno({ alumno, lineas, conceptos, precios, corte, sinGu
               </li>
             ))}
           </ul>
+        )}
+        {beca && !esMatriculado(alumno) && (
+          <p className="mt-1.5 text-xs font-medium text-zero-700">
+            Con beca del {beca.porcentaje} %{beca.motivo ? ` (${beca.motivo})` : ''}: se descuenta de lo que admite beca.
+          </p>
         )}
         {cuenta && (
           <p className="mt-1.5 text-xs text-gray-500">

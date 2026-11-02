@@ -83,6 +83,18 @@ export function aplicarPreciosPropios<L extends LineaPlan>(plan: L[], propios: M
   });
 }
 
+/**
+ * El plan con una beca en porcentaje, como la pone el servidor
+ * (`resolverTarifas`): sobre la tarifa —la propia si la tiene— y solo en lo
+ * que admite beca. Lo que cambia queda con origen «beca».
+ */
+export function conBeca<L extends LineaPlan>(plan: L[], porcentaje: number | null | undefined): L[] {
+  if (!porcentaje || porcentaje <= 0) return plan;
+  const con = aplicarPreciosPropios(plan, new Map(plan.filter((l) => l.admiteBeca)
+    .map((l) => [l.conceptoId, Math.round(l.montoCentavos * (100 - porcentaje) / 100)])));
+  return con.map((l) => (l.admiteBeca ? { ...l, origen: 'beca' } : l));
+}
+
 /** Lo de cada cuota que queda, si todas pagan lo mismo; `null` si varía. */
 export function porCuotaDe(l: LineaPlan): number | null {
   const vivas = l.cuotas.filter((c) => !c.omitida);
@@ -140,7 +152,7 @@ function cuandoSeCobra(l: LineaPlan): string {
 export const obligatoriosPrimero = <L extends Pick<LineaPlan, 'opcional'>>(lineas: L[]): L[] =>
   [...lineas.filter((l) => !l.opcional), ...lineas.filter((l) => l.opcional)];
 
-export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, conOtros, preciosSoloOtros, recargar, onPlan, onCambio, onPrecios }: {
+export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudianteId, inicial, conOtros, preciosSoloOtros, recargar, beca, onPlan, onCambio, onPrecios }: {
   periodoId: string;
   cursoId: string;
   /** Fecha de inscripción: decide qué cuotas entran ya y cuáles esperan su mes. */
@@ -158,6 +170,12 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
    * nacía con otro.
    */
   estudianteId?: number | null;
+  /**
+   * Beca en porcentaje que se le va a poner al matricular: se enseña ya
+   * descontada. Solo se enseña: los precios propios se siguen informando sin
+   * ella, porque el servidor la pone encima al crear los cargos.
+   */
+  beca?: number | null;
   /**
    * Lo que ya se había decidido para este alumno, para volver a enseñarlo al
    * reabrirlo: qué conceptos llevaba marcados y qué precios propios. Sin esto
@@ -291,7 +309,7 @@ export function PlanCobroSelector({ periodoId, cursoId, desde, corte, estudiante
 
   /** La sección y, debajo, lo de otros grados: todo lo que se puede marcar. */
   const completo = useMemo(() => [...plan, ...otros], [plan, otros]);
-  const planEfectivo = useMemo(() => aplicarPreciosPropios(completo, propios), [completo, propios]);
+  const planEfectivo = useMemo(() => conBeca(aplicarPreciosPropios(completo, propios), beca), [completo, propios, beca]);
 
   // Solo los que de verdad cambian algo: si alguien escribe el mismo precio que
   // ya tenía, no hay excepción que guardar.
