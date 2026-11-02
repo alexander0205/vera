@@ -73,6 +73,11 @@ describe('cuotasDeLaCopia', () => {
     assert.equal(f.etiqueta, 'Evaluación final');
   });
 
+  test('un nombre largo cabe en la etiqueta de la cuota', () => {
+    const [f] = cuotasDeLaCopia(origen, [cuota({})], 30, 'x'.repeat(LARGO_NOMBRE));
+    assert.equal(f.etiqueta, 'x'.repeat(60));
+  });
+
   test('una etiqueta escrita a mano se respeta', () => {
     const [f] = cuotasDeLaCopia(origen, [cuota({ etiqueta: 'Pago de evaluación' })], 30, 'Evaluación final');
     assert.equal(f.etiqueta, 'Pago de evaluación');

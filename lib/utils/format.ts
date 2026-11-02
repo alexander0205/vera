@@ -186,8 +186,8 @@ export function formatTelefonoDO(input: string): string {
  *
  * Llegan al copiar y pegar de WhatsApp, PDFs o el portal, y como no se ven
  * nadie los puede corregir: un tutor con un U+200E delante de la cédula no se
- * podía hacer responsable de pago porque «40212926592» fallaba como documento
- * inválido.
+ * podía hacer responsable de pago porque la cédula, bien escrita, fallaba como
+ * documento inválido.
  */
 export function sinInvisibles(s: string): string {
   return s.replace(/\p{Cf}/gu, '');

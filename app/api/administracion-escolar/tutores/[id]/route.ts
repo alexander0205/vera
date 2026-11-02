@@ -11,6 +11,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { teamId } = auth;
   const { id } = await params;
   const { nombre, documento, telefono, whatsapp, email, direccion, clientId, imagen } = await req.json();
+  const nombreLimpio = textoLimpio(nombre);
+  if (nombre !== undefined && !nombreLimpio) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
   // clientId: null desvincula; si viene un id, debe pertenecer al team.
   if (clientId !== undefined && clientId !== null) {
@@ -24,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .set({
       // Todo sin invisibles (ver `textoLimpio`). Editar al tutor y volver a
       // escribir la cédula es como se arregla uno que ya entró sucio.
-      ...(nombre !== undefined ? { nombre: textoLimpio(nombre) ?? '' } : {}),
+      ...(nombreLimpio ? { nombre: nombreLimpio } : {}),
       ...(documento !== undefined ? { documento: textoLimpio(documento) } : {}),
       ...(telefono !== undefined ? { telefono: textoLimpio(telefono) } : {}),
       // Por donde se le escribe de verdad. Se perdia: el formulario lo mandaba

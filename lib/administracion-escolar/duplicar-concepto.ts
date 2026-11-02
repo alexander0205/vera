@@ -27,6 +27,9 @@ type Cuota = typeof adminEscolarConceptoCuotas.$inferSelect;
 /** Mismo largo que la columna `nombre`. */
 export const LARGO_NOMBRE = 80;
 
+/** Mismo largo que la columna `etiqueta` de la cuota, más corta que el nombre. */
+const LARGO_ETIQUETA = 60;
+
 /** Lo que se inserta como concepto nuevo. */
 export function valoresDeLaCopia(origen: Concepto, nombre: string, orden: number) {
   const {
@@ -48,7 +51,8 @@ export function cuotasDeLaCopia(origen: Concepto, cuotas: Cuota[], conceptoId: n
     conceptoId,
     periodoId: c.periodoId,
     numero: c.numero,
-    etiqueta: origen.frecuencia === 'unico' && c.etiqueta === origen.nombre ? nombre : c.etiqueta,
+    etiqueta: origen.frecuencia === 'unico' && c.etiqueta === origen.nombre
+      ? nombre.slice(0, LARGO_ETIQUETA) : c.etiqueta,
     mes: c.mes,
     fechaEmision: c.fechaEmision,
     porcentajeMilesimas: c.porcentajeMilesimas,

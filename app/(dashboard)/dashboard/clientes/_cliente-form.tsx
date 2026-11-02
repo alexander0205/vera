@@ -186,6 +186,12 @@ export default function ClienteForm({
   const [loading, setLoading] = useState(isEdit);   // edición: carga datos primero
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  // El aviso va arriba y el botón de guardar al final: en el modal quedaba fuera
+  // de la vista y pulsar «Crear cliente» parecía no hacer nada.
+  const avisoError = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) avisoError.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [error]);
 
   // Dependientes
   const [dependientes, setDependientes]   = useState<Dependiente[]>([]);
@@ -425,7 +431,7 @@ export default function ClienteForm({
       )}
 
       {error && (
-        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
+        <Box ref={avisoError} sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
           {error}
         </Box>
       )}

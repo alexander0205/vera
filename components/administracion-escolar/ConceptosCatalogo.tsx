@@ -235,7 +235,9 @@ export function ConceptosCatalogo() {
    * el diálogo avisa cuando hay cambios sin guardar en vez de llevárselos.
    */
   async function duplicar() {
-    if (!duplicando) return;
+    // Enter repetido: el nombre se comprueba antes de crear, así que dos envíos
+    // seguidos dejarían dos conceptos iguales.
+    if (!duplicando || enviandoCopia) return;
     setEnviandoCopia(true);
     setErrorCopia(null);
     try {
@@ -251,6 +253,8 @@ export function ConceptosCatalogo() {
       // Directo a la copia, sin pasar por el aviso de cambios sin guardar: el
       // diálogo ya lo dijo, y quien duplica va a editar la copia.
       setSelId(json.concepto.id);
+    } catch {
+      setErrorCopia('No se pudo duplicar. Revisa tu conexión e inténtalo de nuevo.');
     } finally {
       setEnviandoCopia(false);
     }
