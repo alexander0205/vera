@@ -179,3 +179,21 @@ export function formatTelefonoDO(input: string): string {
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
+
+/**
+ * Quita los caracteres de formato invisibles (Unicode `Cf`: U+200E, U+200B,
+ * U+FEFF…).
+ *
+ * Llegan al copiar y pegar de WhatsApp, PDFs o el portal, y como no se ven
+ * nadie los puede corregir: un tutor con un U+200E delante de la cédula no se
+ * podía hacer responsable de pago porque la cédula, bien escrita, fallaba como
+ * documento inválido.
+ */
+export function sinInvisibles(s: string): string {
+  return s.replace(/\p{Cf}/gu, '');
+}
+
+/** Texto para guardar: sin invisibles ni espacios en los bordes; vacío o ausente → null. */
+export function textoLimpio(v: string | null | undefined): string | null {
+  return typeof v === 'string' ? sinInvisibles(v).trim() || null : null;
+}

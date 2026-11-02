@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import {
-  CheckCircle2, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
+  CheckCircle2, Copy, Loader2, Mail, MessageCircle, Percent, PiggyBank, Receipt, Smartphone, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -280,7 +280,7 @@ function Paso({ n, titulo, extra }: { n: number; titulo: string; extra?: React.R
 }
 
 export function ConceptoDetalle({
-  borrador, setBorrador, guardando, error, onGuardar, onBorrar, calendario, categorias = [],
+  borrador, setBorrador, guardando, error, onGuardar, onBorrar, onDuplicar, calendario, categorias = [],
 }: {
   borrador: Concepto;
   /** Las categorías propias que ya usa el colegio en otros conceptos. */
@@ -290,6 +290,8 @@ export function ConceptoDetalle({
   error: string | null;
   onGuardar: () => void;
   onBorrar: () => void;
+  /** Crear otro concepto con esta configuración y este calendario. */
+  onDuplicar?: () => void;
   /**
    * Buzón del calendario. Lo crea el catálogo, que es quien guarda, para poder
    * mandarle el PUT de las cuotas dentro del mismo «Guardar cambios».
@@ -432,8 +434,11 @@ export function ConceptoDetalle({
         {/* ── 1. Qué es y cada cuánto ───────────────────────────────────── */}
         <div className="border-b border-gray-100 p-4">
           <Paso n={1} titulo="¿Qué es y cada cuánto se cobra?" />
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1 space-y-1.5">
+          {/* En pantalla angosta el nombre va en su línea y el tipo con los
+              botones debajo. Sin `flex-wrap`, el tipo con su ancho completo
+              dejaba el campo del nombre en cero y las dos etiquetas se montaban. */}
+          <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap">
+            <div className="w-full min-w-0 space-y-1.5 sm:w-auto sm:flex-1">
               <Label>Nombre</Label>
               <Input value={borrador.nombre} onChange={(e) => editar('nombre', e.target.value)} />
             </div>
@@ -444,7 +449,7 @@ export function ConceptoDetalle({
                 pantalla —lo escribía a escondidas el interruptor de abajo— y
                 todo lo que se repetía durante el año acababa contando como
                 colegiatura. */}
-            <div className="w-full min-w-0 space-y-1.5 sm:w-56">
+            <div className="min-w-0 flex-1 space-y-1.5 sm:w-56 sm:flex-none">
               <Label htmlFor="concepto-tipo">¿Qué es este cobro?</Label>
               {nuevaCategoria === null ? (
                 <NativeSelect id="concepto-tipo" value={borrador.categoria ? `cat:${borrador.categoria}` : tipoDelBorrador}
@@ -479,6 +484,13 @@ export function ConceptoDetalle({
                 </div>
               )}
             </div>
+            {onDuplicar && (
+              <Button variant="ghost" size="sm" aria-label="Duplicar concepto" onClick={onDuplicar}
+                title="Duplicar: crea otro concepto con esta configuración y este calendario"
+                className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-zero-600">
+                <Copy className="h-4 w-4" />
+              </Button>
+            )}
             <Button variant="ghost" size="sm" aria-label="Eliminar concepto" onClick={onBorrar}
               className="mt-6 h-9 w-9 shrink-0 p-0 text-gray-400 hover:text-red-600">
               <Trash2 className="h-4 w-4" />

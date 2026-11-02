@@ -9,10 +9,11 @@
  */
 
 import { z } from 'zod';
+import { sinInvisibles } from '@/lib/utils/format';
 
 // Cadena opcional: vacío o solo espacios → null.
 const optStr = (max = 500) =>
-  z.string().max(max).optional().nullable()
+  z.string().max(max, `Máximo ${max} caracteres`).optional().nullable()
     .transform(v => (typeof v === 'string' && v.trim() === '' ? null : v ?? null));
 
 // Documento de identidad: RNC (9 dígitos), cédula (11 dígitos) o pasaporte (alfanumérico 5-20).
@@ -31,12 +32,20 @@ const rncSchema = z.preprocess(
   ),
 );
 
-export const clienteSchema = z.object({
+/** Cada texto del cuerpo sin los caracteres invisibles (ver `sinInvisibles`), antes de validar. */
+const limpiarTextos = (v: unknown) =>
+  v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.entries(v).map(([k, x]) =>
+        [k, typeof x === 'string' ? sinInvisibles(x) : x]))
+    : v;
+
+export const clienteSchema = z.preprocess(limpiarTextos, z.object({
   razonSocial: z.string().min(1, 'El nombre es obligatorio').max(255).transform(v => v.trim()),
   rnc:         rncSchema,
-  // email: vacío o null → null; con valor debe ser email válido
+  // email: vacío o null → null; con valor debe ser email válido. Se recorta
+  // antes de validar: un espacio pegado al final no hace inválido el correo.
   email: z.preprocess(
-    v => (typeof v === 'string' && v.trim() === '' ? null : v),
+    v => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v),
     z.string().email('Correo electrónico inválido').nullable().optional()
   ),
   telefono:    optStr(30),
@@ -46,6 +55,6 @@ export const clienteSchema = z.object({
   whatsapp:    optStr(30),
   direccion:   optStr(500),
   descripcion: optStr(2000),
-});
+}));
 
 export type ClienteInput = z.infer<typeof clienteSchema>;

@@ -14,7 +14,7 @@ import { crearMatriculaConCargos } from '@/lib/administracion-escolar/matricula-
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
-import { eq, and, desc, count, ilike, or, sql } from 'drizzle-orm';
+import { eq, and, desc, count, ilike, inArray, or, sql } from 'drizzle-orm';
 import { armarPagina, leerPaginacion } from '@/lib/api/paginacion';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
@@ -30,6 +30,16 @@ export async function GET(req: NextRequest) {
   const where = [eq(adminEscolarMatriculas.teamId, teamId)];
   if (periodoId) where.push(eq(adminEscolarMatriculas.periodoId, parseInt(periodoId)));
   if (estado && ESTADOS.includes(estado)) where.push(eq(adminEscolarMatriculas.estado, estado));
+
+  // Nivel, grado o sección: llegan ya convertidos en las secciones que entran
+  // (`seccionesDelFiltro`, lo mismo que manda «Cobrar a grupo»). Si viene el
+  // parámetro sin ningún id válido es un grupo sin secciones ese año, y no
+  // encuentra a nadie: tomarlo como «sin filtro» enseñaría el colegio entero.
+  const cursoIdsParam = req.nextUrl.searchParams.get('cursoIds');
+  if (cursoIdsParam != null) {
+    const ids = cursoIdsParam.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    where.push(ids.length ? inArray(adminEscolarMatriculas.cursoId, ids) : sql`false`);
+  }
 
   // La búsqueda va aquí y no en el cliente: filtrar la página ya cargada solo
   // encuentra dentro de los cincuenta que se bajaron, así que buscar a un alumno

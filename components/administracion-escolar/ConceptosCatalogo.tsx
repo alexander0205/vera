@@ -11,6 +11,9 @@ import { ConceptoDetalle, type Concepto } from './ConceptoDetalle';
 import { type ApiCalendario } from './CalendarioCuotas';
 import { Agarradera } from './arbol';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
+import { ModalHeader } from '@/components/ui/modal-header';
+import { LARGO_NOMBRE, nombreSugerido } from '@/lib/administracion-escolar/duplicar-concepto';
 
 /**
  * El catálogo de conceptos: qué cobra el colegio y con qué ritmo.
@@ -78,6 +81,10 @@ export function ConceptosCatalogo() {
   const [impacto, setImpacto] = useState<ImpactoConcepto | null>(null);
   const [borrando, setBorrando] = useState(false);
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
+  /** El concepto que se está duplicando y el nombre que lleva la copia. `null` = cerrado. */
+  const [duplicando, setDuplicando] = useState<{ origen: Concepto; nombre: string } | null>(null);
+  const [enviandoCopia, setEnviandoCopia] = useState(false);
+  const [errorCopia, setErrorCopia] = useState<string | null>(null);
   const [arrastre, setArrastre] = useState<number | null>(null);
   const [sobre, setSobre] = useState<{ id: number; lado: 'arriba' | 'abajo' } | null>(null);
   const router = useRouter();
@@ -218,6 +225,38 @@ export function ConceptosCatalogo() {
       }
     } finally {
       setCreando(false);
+    }
+  }
+
+  /**
+   * Crea la copia del concepto y la deja abierta para cambiarle lo que difiera.
+   *
+   * Se copia lo GUARDADO, no el borrador: la copia sale del servidor. Por eso
+   * el diálogo avisa cuando hay cambios sin guardar en vez de llevárselos.
+   */
+  async function duplicar() {
+    // Enter repetido: el nombre se comprueba antes de crear, así que dos envíos
+    // seguidos dejarían dos conceptos iguales.
+    if (!duplicando || enviandoCopia) return;
+    setEnviandoCopia(true);
+    setErrorCopia(null);
+    try {
+      const res = await fetch(`/api/administracion-escolar/conceptos/${duplicando.origen.id}/duplicar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: duplicando.nombre }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.concepto) { setErrorCopia(json.error ?? 'No se pudo duplicar'); return; }
+      setDuplicando(null);
+      await mutate();
+      // Directo a la copia, sin pasar por el aviso de cambios sin guardar: el
+      // diálogo ya lo dijo, y quien duplica va a editar la copia.
+      setSelId(json.concepto.id);
+    } catch {
+      setErrorCopia('No se pudo duplicar. Revisa tu conexión e inténtalo de nuevo.');
+    } finally {
+      setEnviandoCopia(false);
     }
   }
 
@@ -434,9 +473,54 @@ export function ConceptosCatalogo() {
           error={error}
           onGuardar={() => void guardar()}
           onBorrar={() => { if (borrador) void pedirBorrado(borrador); }}
+          onDuplicar={() => {
+            if (!seleccionado) return;
+            setErrorCopia(null);
+            setDuplicando({ origen: seleccionado, nombre: nombreSugerido(seleccionado.nombre, conceptos.map((c) => c.nombre)) });
+          }}
           calendario={calendario}
         />
       )}
+
+      {/* Duplicar: solo pregunta el nombre. Lo demás se cambia después en la
+          copia, que queda abierta, con los mismos controles de siempre. */}
+      <Dialog open={duplicando !== null} onOpenChange={(o: boolean) => { if (!o && !enviandoCopia) setDuplicando(null); }}>
+        <DialogContent className="max-w-md">
+          <ModalHeader title="Duplicar concepto"
+            subtitle={duplicando ? `Un concepto nuevo con lo que ya tiene «${duplicando.origen.nombre}».` : undefined} />
+          {duplicando && (
+            <div className="space-y-3 px-6 py-4 text-sm">
+              <div className="space-y-1.5">
+                <label htmlFor="nombre-copia" className="text-sm font-medium text-gray-700">Nombre del concepto nuevo</label>
+                <Input id="nombre-copia" autoFocus value={duplicando.nombre} maxLength={LARGO_NOMBRE}
+                  onChange={(e) => setDuplicando((d) => d && { ...d, nombre: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && duplicando.nombre.trim()) void duplicar(); }} />
+              </div>
+              <ul className="space-y-1 text-gray-600">
+                <li>✓ Se copian la configuración y el calendario de cuotas.</li>
+                <li>✗ No se copian los precios ni el producto de facturación: la copia no le cobra a nadie
+                  hasta que le pongas precio en <b>Tarifas</b>.</li>
+              </ul>
+              {(conceptoSucio || calendario.current?.sucio) && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Tienes cambios sin guardar en «{duplicando.origen.nombre}». La copia sale de lo guardado:
+                  guárdalos primero si quieres que vayan en ella.
+                </p>
+              )}
+              {errorCopia && (
+                <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{errorCopia}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDuplicando(null)} disabled={enviandoCopia}>Cancelar</Button>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={() => void duplicar()}
+              disabled={enviandoCopia || !duplicando?.nombre.trim()}>
+              {enviandoCopia ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Duplicando…</> : 'Duplicar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {porBorrar && (() => {
         const cargando = !impacto && !errorBorrado;
